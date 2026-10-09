@@ -4,9 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { BLEND, BLEND_CONTAINER, FONT, BLEND_LABEL } from "@/components/blend/tokens";
 import { BlendSection } from "@/components/blend/BlendShell";
-import { BlendChipRail } from "@/components/blend/BlendRail";
 import { BlendTicker } from "@/components/blend/BlendTicker";
-import { BlendVitals } from "@/components/blend/BlendVitals";
 import { BlendScopeInline } from "@/components/blend/BlendScope";
 import { CarveUpPanel } from "@/components/elections/primary/CarveUpPanel";
 import { PrimaryCampaignControls } from "@/components/elections/primary/PrimaryCampaignControls";
@@ -17,6 +15,9 @@ import { PresidentialStage, presidentialTitle } from "./PresidentialStage";
 import { PresidentialMap } from "./presMap/PresidentialMap";
 import type { PresMapModel, PresMapState } from "./presMap/presMapModel";
 import { STATE_NAMES } from "./presMap/usStates";
+import { mixToward } from "./presMap/dataViews";
+import { readableInk } from "@/lib/elections/marginTierShade";
+import { useBlendGround } from "@/components/blend/useBlendGround";
 import {
   buildPrimaryBlendViewModel,
   type PrimaryBlendVM,
@@ -360,7 +361,8 @@ export function PrimaryBlendView({
     [election, partyId, wire, detail, selectedStateId]
   );
 
-  const primaryMapModel = useMemo(() => primaryMapModelFromBoard(vm), [vm]);
+  const ground = useBlendGround();
+  const primaryMapModel = useMemo(() => primaryMapModelFromBoard(vm, ground), [vm, ground]);
 
   const campaignLink = vm.campaignHref ? (
     <Link
@@ -518,207 +520,8 @@ export function PrimaryBlendView({
 
   return (
     <>
-      {/* Mobile */}
-      <div className="lg:hidden" style={{ background: BLEND.page, color: BLEND.ink }}>
-        <div
-          style={{
-            position: "sticky",
-            top: 0,
-            zIndex: 5,
-            background: BLEND.rail,
-            borderBottom: `1px solid ${BLEND.hairline}`,
-            padding: "14px 16px",
-          }}
-        >
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              paddingBottom: 9,
-              borderBottom: `1px solid ${BLEND.hairline}`,
-              fontFamily: FONT.sans,
-              fontSize: 10,
-              letterSpacing: ".2em",
-              textTransform: "uppercase",
-              color: BLEND.muted,
-            }}
-          >
-            <span>Primary season</span>
-            <span style={{ fontFamily: FONT.mono, letterSpacing: ".06em" }}>
-              {vm.closesIn != null ? `${vm.closesIn} TURNS` : ""}
-            </span>
-          </div>
-          <div
-            style={{
-              marginTop: 11,
-              fontFamily: FONT.sans,
-              fontSize: 22,
-              fontWeight: 600,
-              letterSpacing: "-0.02em",
-            }}
-          >
-            {vm.headline}
-          </div>
-          <BlendChipRail
-            items={vm.parties.map((p) => ({ id: p.id, label: p.shortName }))}
-            selectedId={partyId ?? undefined}
-            onSelect={setPartyId}
-            fontSize={11}
-          />
-        </div>
-
-        <BlendTicker tag="RETURNS" tagColor={BLEND.caution} tagInk="#14141c" items={vm.wire} />
-        <BlendVitals cells={vm.vitals} variant="mobile" />
-
-        <div style={{ padding: "18px 16px" }}>
-          {/* Without this, a reader on another party's primary sees a dash in
-              the vitals and no reason for it; the rail that carries the
-              explanation on desktop is hidden here. */}
-          {vm.standingNote ? (
-            <p
-              style={{
-                margin: "0 0 18px",
-                fontFamily: FONT.sans,
-                fontSize: 13.5,
-                lineHeight: 1.55,
-                color: BLEND.muted,
-              }}
-            >
-              {vm.standingNote}
-            </p>
-          ) : null}
-
-          {vm.delegateRace ? (
-            <>
-              <h2
-                style={{
-                  margin: "0 0 12px",
-                  fontFamily: FONT.sans,
-                  fontSize: 20,
-                  fontWeight: 600,
-                }}
-              >
-                Projected delegate race
-              </h2>
-              <DelegateRace vm={vm} height={30} />
-            </>
-          ) : null}
-
-          {vm.board.length > 0 ? (
-            <>
-              <h2
-                style={{
-                  margin: "24px 0 4px",
-                  fontFamily: FONT.sans,
-                  fontSize: 20,
-                  fontWeight: 600,
-                }}
-              >
-                The state board
-              </h2>
-              <p
-                style={{
-                  margin: "0 0 12px",
-                  fontFamily: FONT.sans,
-                  fontSize: 13.5,
-                  lineHeight: 1.55,
-                  color: BLEND.muted,
-                }}
-              >
-                Coloured by whoever leads. States that have voted are settled; the rest are
-                projected.
-              </p>
-              <StateBoard vm={vm} columns={6} onSelect={selectState} />
-            </>
-          ) : null}
-
-          {/* The calendar sits with the board because the two drive the same
-              selection. Without it here, mobile had no schedule at all and the
-              board was the only way to reach a state. */}
-          {vm.calendar.length > 0 ? (
-            <>
-              <h2
-                style={{
-                  margin: "24px 0 8px",
-                  fontFamily: FONT.sans,
-                  fontSize: 20,
-                  fontWeight: 600,
-                }}
-              >
-                The calendar
-              </h2>
-              <CalendarWaves vm={vm} onSelect={selectState} />
-            </>
-          ) : null}
-
-          {vm.campaign ? (
-            <div style={{ marginTop: 24 }}>
-              <CampaignBlock
-                vm={vm}
-                electionId={electionId}
-                onChanged={() => setReloadCount((n) => n + 1)}
-              />
-            </div>
-          ) : null}
-
-          <h2
-            style={{ margin: "24px 0 8px", fontFamily: FONT.sans, fontSize: 20, fontWeight: 600 }}
-          >
-            The field
-          </h2>
-          {vm.field.map((c) => (
-            <div
-              key={c.id}
-              style={{ padding: "12px 0", borderBottom: "1px solid rgba(42,42,61,.6)" }}
-            >
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "baseline",
-                  justifyContent: "space-between",
-                  gap: 8,
-                }}
-              >
-                <span style={{ fontFamily: FONT.sans, fontSize: 16, fontWeight: 600 }}>
-                  {c.name}
-                </span>
-                <span style={{ fontFamily: FONT.mono, fontSize: 14 }}>{c.pct}%</span>
-              </div>
-              <div style={{ marginTop: 7, height: 4, background: BLEND.hairline }}>
-                <i
-                  style={{
-                    display: "block",
-                    height: "100%",
-                    width: `${c.barPct}%`,
-                    background: c.color,
-                    opacity: c.advancing ? 1 : 0.5,
-                  }}
-                />
-              </div>
-              <div
-                style={{
-                  marginTop: 5,
-                  display: "flex",
-                  justifyContent: "space-between",
-                  fontSize: 11,
-                  color: BLEND.mutedDim,
-                }}
-              >
-                <span style={{ fontFamily: FONT.sans }}>{c.statusText}</span>
-                <span style={{ fontFamily: FONT.mono }}>
-                  {c.delegates
-                    ? `${c.delegates} proj.${c.delegatesAwarded ? ` · ${c.delegatesAwarded} won` : ""}`
-                    : ""}
-                </span>
-              </div>
-            </div>
-          ))}
-          {campaignLink}
-        </div>
-      </div>
-
-      {/* Desktop: the full-screen map stage, then the field below it. */}
-      <div className="hidden lg:block">
+      {/* The map stage, then the field below it. */}
+      <div>
         <PresidentialStage
           title={stageTitle}
           kicker={
@@ -942,9 +745,19 @@ export function PrimaryBlendView({
                   <span style={{ letterSpacing: ".1em" }}>
                     {(vm.parties.find((p) => p.selected)?.name ?? "Primary").toUpperCase()}:
                   </span>
-                  <span>Coloured by whoever leads each state</span>
-                  <span>{"\u2713"} = voted and settled</span>
-                  <span>Dark = not on this party&apos;s calendar</span>
+                  {vm.board.length > 0 ? (
+                    <>
+                      <span>Coloured by whoever leads each state</span>
+                      <span>{"\u2713"} = voted and settled</span>
+                      <span>Dark = not on this party&apos;s calendar</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>Shaded by when each state votes</span>
+                      <span style={{ color: BLEND.caution }}>Yellow = next wave</span>
+                      <span>Sign in to see who leads each state</span>
+                    </>
+                  )}
                 </div>
               }
             />
@@ -953,7 +766,56 @@ export function PrimaryBlendView({
 
         <div className={BLEND_CONTAINER} style={{ background: BLEND.page }}>
           <BlendSection title="The field" ruled={false}>
-            {fieldRows}
+            <div className="hidden lg:block">{fieldRows}</div>
+            <div className="lg:hidden">
+              {vm.field.map((c) => (
+                <div
+                  key={c.id}
+                  style={{ padding: "12px 0", borderBottom: "1px solid rgba(42,42,61,.6)" }}
+                >
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "baseline",
+                      justifyContent: "space-between",
+                      gap: 8,
+                    }}
+                  >
+                    <span style={{ fontFamily: FONT.sans, fontSize: 16, fontWeight: 600 }}>
+                      {c.name}
+                    </span>
+                    <span style={{ fontFamily: FONT.mono, fontSize: 14 }}>{c.pct}%</span>
+                  </div>
+                  <div style={{ marginTop: 7, height: 4, background: BLEND.hairline }}>
+                    <i
+                      style={{
+                        display: "block",
+                        height: "100%",
+                        width: `${c.barPct}%`,
+                        background: c.color,
+                        opacity: c.advancing ? 1 : 0.5,
+                      }}
+                    />
+                  </div>
+                  <div
+                    style={{
+                      marginTop: 5,
+                      display: "flex",
+                      justifyContent: "space-between",
+                      fontSize: 11,
+                      color: BLEND.mutedDim,
+                    }}
+                  >
+                    <span style={{ fontFamily: FONT.sans }}>{c.statusText}</span>
+                    <span style={{ fontFamily: FONT.mono }}>
+                      {c.delegates
+                        ? `${c.delegates} proj.${c.delegatesAwarded ? ` · ${c.delegatesAwarded} won` : ""}`
+                        : ""}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
           </BlendSection>
         </div>
       </div>
@@ -967,8 +829,31 @@ export function PrimaryBlendView({
  * the country is left in the fog colour. There are no electoral votes in a
  * primary, so the label figure is a tick once the state has voted.
  */
-function primaryMapModelFromBoard(vm: PrimaryBlendVM): PresMapModel {
+function primaryMapModelFromBoard(vm: PrimaryBlendVM, ground: string): PresMapModel {
   const states: Record<string, PresMapState> = {};
+  // No board (signed out, or the party's projection has not loaded): the map
+  // still shows the calendar, shading each state by when its wave votes.
+  if (vm.board.length === 0) {
+    const nextWave = vm.calendar.findIndex((w) => w.statusText !== "COMPLETE");
+    vm.calendar.forEach((w, i) => {
+      const done = w.statusText === "COMPLETE";
+      const fill = done
+        ? mixToward(ground, "#8f8f9d", 0.55)
+        : i === nextWave
+          ? mixToward(ground, "#eab308", 0.5)
+          : mixToward(ground, "#8f8f9d", Math.max(0.1, 0.32 - 0.05 * (i - nextWave)));
+      for (const st of w.states) {
+        states[st.id] = calendarState(
+          st.id,
+          st.name,
+          fill,
+          `${w.label}, ${w.statusText.toLowerCase()}`,
+          done
+        );
+      }
+    });
+    return { states, candidates: {}, legendCandidates: [] };
+  }
   for (const t of vm.board) {
     states[t.stateId] = {
       id: t.stateId,
@@ -999,4 +884,41 @@ function primaryMapModelFromBoard(vm: PrimaryBlendVM): PresMapModel {
     };
   }
   return { states, candidates: {}, legendCandidates: [] };
+}
+
+/** A state shaded by its calendar wave, for the signed-out primary map. */
+function calendarState(
+  id: string,
+  name: string,
+  fill: string,
+  caption: string,
+  voted: boolean
+): PresMapState {
+  return {
+    id,
+    name: name || STATE_NAMES[id] || id,
+    ev: 0,
+    evLabel: voted ? "\u2713" : null,
+    leaderId: "",
+    leaderName: "",
+    leaderColor: fill,
+    margin: 0,
+    tier: "safe",
+    fill,
+    ink: readableInk(fill),
+    shares: [],
+    totalVotes: 0,
+    trend: {
+      status: "none",
+      candidateId: null,
+      name: null,
+      color: null,
+      shiftPp: 0,
+      windowTurns: 0,
+      series: [],
+    },
+    sinceTurn: null,
+    turnsAgo: null,
+    caption,
+  };
 }

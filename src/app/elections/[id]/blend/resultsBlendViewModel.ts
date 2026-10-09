@@ -10,7 +10,7 @@
 import type { ElectionResultsResponse, ResultsUnit } from "@/lib/elections/liveResults/types";
 import { readableInk, shadeColorForTier } from "@/lib/elections/marginTierShade";
 import { classifyMarginTier } from "@/lib/elections/generalViewModel";
-import { BLEND } from "@/components/blend/tokens";
+import { BLEND, BLEND_HEX } from "@/components/blend/tokens";
 
 export type ResultsRoute = "concluded" | "dashboard";
 export type ResultsRail = "overview" | "college" | "board" | "states";
@@ -22,6 +22,8 @@ export interface ResultsBlendInput {
   rail: ResultsRail;
   sortBy: StateSortKey;
   sortDesc: boolean;
+  /** Page ground the tier shades fade toward; the theme's, as hex. */
+  ground?: string;
 }
 
 export interface ResultsTicketVM {
@@ -136,10 +138,12 @@ export function buildResultsBlendViewModel(inp: ResultsBlendInput): ResultsBlend
     .map((u) => {
       const leaderId = unitLeader(u);
       const leader = leaderId ? byId.get(leaderId) : undefined;
-      const color = leader?.partyColor ?? BLEND.mutedDimmer;
+      const color = leader?.partyColor ?? BLEND_HEX.mutedDimmer;
       const tier = classifyMarginTier(u.leaderMarginPct);
       const background =
-        u.totalVotes === 0 ? BLEND.track : shadeColorForTier(color, tier, BLEND.page);
+        u.totalVotes === 0
+          ? BLEND.track
+          : shadeColorForTier(color, tier, inp.ground ?? BLEND_HEX.page);
       const ink = readableInk(background);
       return {
         stateId: u.id,
@@ -156,7 +160,7 @@ export function buildResultsBlendViewModel(inp: ResultsBlendInput): ResultsBlend
   const rows: ResultsStateRowVM[] = units.map((u) => {
     const leaderId = unitLeader(u);
     const leader = leaderId ? byId.get(leaderId) : undefined;
-    const color = leader?.partyColor ?? BLEND.mutedDimmer;
+    const color = leader?.partyColor ?? BLEND_HEX.mutedDimmer;
     return {
       id: u.id,
       name: u.name,

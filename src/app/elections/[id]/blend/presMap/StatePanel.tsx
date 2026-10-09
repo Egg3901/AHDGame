@@ -327,7 +327,7 @@ function Sparkline({ trend, colors }: { trend: PresMapTrend; colors: Record<stri
         <polyline
           key={id}
           fill="none"
-          stroke={colors[id] ?? BLEND.muted}
+          style={{ stroke: colors[id] ?? BLEND.muted }}
           strokeWidth={1.6}
           vectorEffect="non-scaling-stroke"
           points={series
