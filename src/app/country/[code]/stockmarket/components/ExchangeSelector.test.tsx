@@ -28,6 +28,16 @@ function openMobileDropdown() {
 }
 
 describe("ExchangeSelector mobile dropdown", () => {
+  it("keeps the desktop exchange row scrollable when many venues are enabled", () => {
+    const { getByRole } = render(
+      <ExchangeSelector exchangeMeta={META} exchangeFilter="global" onSelect={() => {}} />
+    );
+
+    const desktopGroup = getByRole("group", { name: "Stock exchange" });
+    expect(desktopGroup.className).toContain("overflow-x-auto");
+    expect(within(desktopGroup).getByRole("button", { name: "SSE" })).toBeTruthy();
+  });
+
   it("lists every exchange, including the last one (SSE)", () => {
     render(<ExchangeSelector exchangeMeta={META} exchangeFilter="global" onSelect={() => {}} />);
 
