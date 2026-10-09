@@ -172,6 +172,19 @@ describe("buildCountryEconomyOutlook", () => {
     expect(result.sectorMix.length).toBeGreaterThan(0);
   });
 
+  it("shows the live budget growth figure, which moves between turns, over the hourly history", async () => {
+    const budget = await db.collectionMocks.federalBudget.findOne();
+    db.collectionMocks.federalBudget.findOne.mockResolvedValue({
+      ...budget,
+      economicFactors: { ...budget.economicFactors, gdpGrowth: 2.37 },
+    });
+    const { buildCountryEconomyOutlook } = await import("./countryEconomyOutlook");
+    const result = await buildCountryEconomyOutlook(db as unknown as Db, "US");
+
+    expect(result.pulse.gdpGrowth.value).toBe(2.37);
+    expect(result.pulse.gdpGrowth.history.at(-1)?.rate).toBe(1.9);
+  });
+
   it("degrades to nulls when the central bank and budget are missing", async () => {
     db.collectionMocks.centralBanks.findOne.mockResolvedValue(null);
     db.collectionMocks.federalBudget.findOne.mockResolvedValue(null);

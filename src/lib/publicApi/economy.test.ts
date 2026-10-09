@@ -146,6 +146,28 @@ describe("queryCountryEconomy", () => {
     expect(result!.inflation).toBe(2.2);
   });
 
+  it("prefers the live budget growth figure over the hourly history", async () => {
+    db.collectionMocks.centralBanks!.findOne.mockResolvedValue({
+      _id: "US",
+      countryId: "US",
+      inflationHistory: [],
+      interestRateHistory: [],
+      gdpGrowthHistory: [{ turn: 1, rate: 1.5 }],
+    });
+    db.collectionMocks.federalBudget!.findOne.mockResolvedValue({
+      economicFactors: { gdpGrowth: 1.62 },
+    });
+    db.collectionMocks.stockExchangeSnapshots!.findOne.mockResolvedValue(null);
+
+    const { queryCountryEconomy } = await import("./economy");
+    const withBudget = await queryCountryEconomy(db as unknown as Db, "US");
+    expect(withBudget!.gdpGrowth).toBe(1.62);
+
+    db.collectionMocks.federalBudget!.findOne.mockResolvedValue({});
+    const withoutBudget = await queryCountryEconomy(db as unknown as Db, "US");
+    expect(withoutBudget!.gdpGrowth).toBe(1.5);
+  });
+
   it("returns the budget rate for a country that has no central bank", async () => {
     // BAL, BLR and UKR each hold a budget but no centralBanks document, so the
     // old bank-only read returned null while the site showed a real rate.
