@@ -37,6 +37,7 @@ export const intakeFrameSchema = z.object({
     .refine((value) => intakePageUrl(value) !== null)
     .nullable()
     .optional(),
+  pageDescription: nullableText(500),
   platformLabel: nullableText(200),
   gameVersion: version,
   clientVersion: version,
@@ -100,7 +101,7 @@ export function seedIntake(frame: IntakeFrame): TicketIntake {
     cardMessageId: frame.cardMessageId ?? "",
     receiptUrl: frame.receiptUrl ?? null,
     candidatePageUrl: frame.candidatePageUrl ? intakePageUrl(frame.candidatePageUrl) : null,
-    pageDescription: null,
+    pageDescription: frame.candidatePageUrl ? null : (frame.pageDescription ?? null),
     platformLabel: frame.platformLabel ?? null,
     gameVersion: frame.gameVersion ?? null,
     clientVersion: frame.clientVersion ?? null,
