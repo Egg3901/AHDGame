@@ -8,6 +8,10 @@ export interface GeneralBlendViewProps {
   electionId: string;
   wire: string[];
   onRefresh: () => void;
+  /** Desktop stage headline; defaults to "The <year> Presidential Election". */
+  stageTitle?: string;
+  /** Previous / next cycle links for the top of the stage's left rail. */
+  stageNav?: ReactNode;
 }
 
 export function EvBar({

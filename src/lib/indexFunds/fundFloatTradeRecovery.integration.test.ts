@@ -292,12 +292,12 @@ describe("fund float sale policies", () => {
       }>("equityMarketPools")
       .insertOne({
         _id: "USD",
-        cashLocal: 490,
-        targetCashLocal: 490,
+        cashLocal: 495,
+        targetCashLocal: 495,
         lifetime: { salesOut: 0 },
       });
     const result = await sellFundHoldingShares(f.db, f.fund, f.corpId, 10, { turn: 7 });
-    expect(result).toMatchObject({ sharesSold: 5, cashRaisedAnchor: 490 });
+    expect(result).toMatchObject({ sharesSold: 5, cashRaisedAnchor: 495 });
     expect(
       await f.db
         .collection<{
@@ -307,13 +307,13 @@ describe("fund float sale policies", () => {
           lifetime?: { salesOut: number };
         }>("equityMarketPools")
         .findOne({ _id: "USD" })
-    ).toMatchObject({ cashLocal: 0, lifetime: { salesOut: 490 } });
+    ).toMatchObject({ cashLocal: 0, lifetime: { salesOut: 495 } });
     expect(await f.db.collection("corporations").findOne({ _id: f.corpId })).toMatchObject({
       liquidCapital: 1000,
     });
     expect(
       await f.db.collection("financialTxLog").find({ subjectType: "fund" }).toArray()
-    ).toMatchObject([{ amount: 490, anchorAmount: 490 }]);
+    ).toMatchObject([{ amount: 495, anchorAmount: 495 }]);
   });
   it("keeps an explicit issuer buyout at mid with a depleted pool", async () => {
     const f = fixture("sell");

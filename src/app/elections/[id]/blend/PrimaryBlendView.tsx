@@ -2,9 +2,9 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { BLEND, FONT, BLEND_LABEL } from "@/components/blend/tokens";
-import { BlendShell, BlendHeader, BlendSection } from "@/components/blend/BlendShell";
-import { BlendRail, BlendChipRail } from "@/components/blend/BlendRail";
+import { BLEND, BLEND_CONTAINER, FONT, BLEND_LABEL } from "@/components/blend/tokens";
+import { BlendSection } from "@/components/blend/BlendShell";
+import { BlendChipRail } from "@/components/blend/BlendRail";
 import { BlendTicker } from "@/components/blend/BlendTicker";
 import { BlendVitals } from "@/components/blend/BlendVitals";
 import { BlendScopeInline } from "@/components/blend/BlendScope";
@@ -13,6 +13,10 @@ import { PrimaryCampaignControls } from "@/components/elections/primary/PrimaryC
 import type { PrimaryPartyDetail } from "@/lib/elections/dto/primaryPartyDetail";
 import type { ElectionDetail } from "../components/ElectionDetailTypes";
 import { PrimaryTileBoard } from "./PrimaryTileBoard";
+import { PresidentialStage, presidentialTitle } from "./PresidentialStage";
+import { PresidentialMap } from "./presMap/PresidentialMap";
+import type { PresMapModel, PresMapState } from "./presMap/presMapModel";
+import { STATE_NAMES } from "./presMap/usStates";
 import {
   buildPrimaryBlendViewModel,
   type PrimaryBlendVM,
@@ -22,6 +26,10 @@ import {
 export interface PrimaryBlendViewProps {
   election: ElectionDetail;
   wire: string[];
+  /** Desktop stage headline; defaults to "The <year> Presidential Election". */
+  stageTitle?: string;
+  /** Previous / next cycle links for the top of the stage's left rail. */
+  stageNav?: React.ReactNode;
 }
 
 function PartyButton({ p, onSelect }: { p: PrimaryPartyVM; onSelect: () => void }) {
@@ -280,7 +288,12 @@ function WaveStates({
 }
 
 /** The Blend primary-election screen (Proposal D). */
-export function PrimaryBlendView({ election, wire }: PrimaryBlendViewProps) {
+export function PrimaryBlendView({
+  election,
+  wire,
+  stageTitle = presidentialTitle(election.electionYear),
+  stageNav,
+}: PrimaryBlendViewProps) {
   const [partyId, setPartyId] = useState<string | null>(
     // Open on the reader's own party where they have a candidate.
     election.byParty.find((p) => p.candidates.some((c) => c.isYou))?.partyId ??
@@ -312,6 +325,7 @@ export function PrimaryBlendView({ election, wire }: PrimaryBlendViewProps) {
   const selectState = (stateId: string) => {
     if (key) setSelection({ key, stateId });
   };
+  const clearState = () => setSelection(null);
 
   useEffect(() => {
     if (!key || !partyId) return;
@@ -345,6 +359,8 @@ export function PrimaryBlendView({ election, wire }: PrimaryBlendViewProps) {
       }),
     [election, partyId, wire, detail, selectedStateId]
   );
+
+  const primaryMapModel = useMemo(() => primaryMapModelFromBoard(vm), [vm]);
 
   const campaignLink = vm.campaignHref ? (
     <Link
@@ -701,38 +717,67 @@ export function PrimaryBlendView({ election, wire }: PrimaryBlendViewProps) {
         </div>
       </div>
 
-      {/* Desktop */}
+      {/* Desktop: the full-screen map stage, then the field below it. */}
       <div className="hidden lg:block">
-        <BlendShell
+        <PresidentialStage
+          title={stageTitle}
+          kicker={
+            <>
+              Primary season
+              <span style={{ marginLeft: 12, color: BLEND.caution }}>{vm.closesText}</span>
+            </>
+          }
+          deck={vm.headline}
+          ticker={
+            <BlendTicker tag="RETURNS" tagColor={BLEND.caution} tagInk="#14141c" items={vm.wire} />
+          }
+          nav={stageNav}
           left={
-            <BlendRail
-              eyebrow="Primary phase"
-              // Country comes from the payload; presidential races exist
-              // outside the US and the rail must not assert otherwise.
-              title={`${election.countryId} President${election.electionYear ? ` ${election.electionYear}` : ""}`}
-              titleSize={18}
-              status={{ text: vm.closesText, color: BLEND.caution }}
-            >
-              <div style={{ padding: "14px 10px" }}>
-                <div style={{ ...BLEND_LABEL, padding: "0 8px 9px" }}>Parties</div>
+            <>
+              <div style={{ ...BLEND_LABEL, paddingBottom: 9 }}>Parties</div>
+              <div style={{ margin: "0 -8px" }}>
                 {vm.parties.map((p) => (
                   <PartyButton key={p.id} p={p} onSelect={() => setPartyId(p.id)} />
                 ))}
               </div>
-            </BlendRail>
+              {vm.delegateRace ? (
+                <div
+                  style={{
+                    marginTop: 18,
+                    paddingTop: 16,
+                    borderTop: `1px solid ${BLEND.hairline}`,
+                  }}
+                >
+                  <div style={BLEND_LABEL}>Projected delegate race</div>
+                  <p
+                    style={{
+                      margin: "6px 0 12px",
+                      fontSize: 12.5,
+                      lineHeight: 1.45,
+                      color: BLEND.muted,
+                    }}
+                  >
+                    {vm.delegateRace.lede}
+                  </p>
+                  <DelegateRace vm={vm} height={28} />
+                </div>
+              ) : null}
+              {vm.standfirst ? (
+                <p
+                  style={{
+                    margin: "18px 0 0",
+                    fontSize: 13.5,
+                    lineHeight: 1.5,
+                    color: BLEND.muted,
+                  }}
+                >
+                  {vm.standfirst}
+                </p>
+              ) : null}
+            </>
           }
-          rightWidth={296}
           right={
-            <aside
-              style={{
-                borderLeft: `1px solid ${BLEND.hairline}`,
-                background: BLEND.rail,
-                padding: "20px 18px",
-                display: "flex",
-                flexDirection: "column",
-                gap: 22,
-              }}
-            >
+            <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
               <div>
                 <div style={BLEND_LABEL}>Your standing</div>
 
@@ -831,39 +876,127 @@ export function PrimaryBlendView({ election, wire }: PrimaryBlendViewProps) {
                   />
                 </div>
               ) : null}
-            </aside>
+            </div>
           }
-        >
-          <BlendHeader
-            kicker="Primary season"
-            readout={vm.turnReadout}
-            headline={vm.headline}
-            standfirst={vm.standfirst}
-            headlineSize={32}
-          />
-          <BlendTicker tag="RETURNS" tagColor={BLEND.caution} tagInk="#14141c" items={vm.wire} />
-          <BlendVitals cells={vm.vitals} />
+          squares={<StateBoard vm={vm} columns={11} onSelect={selectState} />}
+          map={
+            <PresidentialMap
+              variant="stage"
+              counties={false}
+              model={primaryMapModel}
+              electionId={electionId}
+              countryId={election.countryId}
+              turn={null}
+              onSelectState={(id) => (id ? selectState(id) : clearState())}
+              renderPanel={(state, onClose) => (
+                <div>
+                  <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
+                    <h3 style={{ flex: 1, margin: 0, fontSize: 21, fontWeight: 600 }}>
+                      {state.name}
+                    </h3>
+                    <button
+                      type="button"
+                      onClick={onClose}
+                      aria-label="Close"
+                      style={{
+                        width: 30,
+                        height: 30,
+                        cursor: "pointer",
+                        color: BLEND.ink,
+                        background: "transparent",
+                        border: `1px solid ${BLEND.hairlineStrong}`,
+                      }}
+                    >
+                      &times;
+                    </button>
+                  </div>
+                  {vm.carveUp && vm.carveUp.stateId === state.id ? (
+                    <div style={{ marginTop: 12 }}>
+                      <BlendScopeInline>
+                        <CarveUpPanel
+                          stateName={vm.carveUp.stateName}
+                          stateId={vm.carveUp.stateId}
+                          slices={vm.carveUp.slices}
+                          detailHref={vm.carveUp.detailHref}
+                        />
+                      </BlendScopeInline>
+                    </div>
+                  ) : (
+                    <p style={{ marginTop: 8, fontSize: 13, color: BLEND.muted }}>
+                      {state.caption}
+                    </p>
+                  )}
+                </div>
+              )}
+              legend={
+                <div
+                  style={{
+                    display: "flex",
+                    flexWrap: "wrap",
+                    gap: "6px 18px",
+                    fontFamily: FONT.mono,
+                    fontSize: 10,
+                    color: BLEND.mutedDim,
+                  }}
+                >
+                  <span style={{ letterSpacing: ".1em" }}>
+                    {(vm.parties.find((p) => p.selected)?.name ?? "Primary").toUpperCase()}:
+                  </span>
+                  <span>Coloured by whoever leads each state</span>
+                  <span>{"\u2713"} = voted and settled</span>
+                  <span>Dark = not on this party&apos;s calendar</span>
+                </div>
+              }
+            />
+          }
+        />
 
-          {vm.delegateRace ? (
-            <BlendSection title="Projected delegate race" lede={vm.delegateRace.lede}>
-              <DelegateRace vm={vm} height={36} />
-            </BlendSection>
-          ) : null}
-
-          {vm.board.length > 0 ? (
-            <BlendSection
-              title="The state board"
-              lede="Coloured by whoever leads. States that have voted are settled; the rest are projected."
-            >
-              <StateBoard vm={vm} columns={11} onSelect={selectState} />
-            </BlendSection>
-          ) : null}
-
+        <div className={BLEND_CONTAINER} style={{ background: BLEND.page }}>
           <BlendSection title="The field" ruled={false}>
             {fieldRows}
           </BlendSection>
-        </BlendShell>
+        </div>
       </div>
     </>
   );
+}
+
+/**
+ * The selected party's state board as a national map model. Every tile is a
+ * state on that party's calendar, coloured by whoever leads it; the rest of
+ * the country is left in the fog colour. There are no electoral votes in a
+ * primary, so the label figure is a tick once the state has voted.
+ */
+function primaryMapModelFromBoard(vm: PrimaryBlendVM): PresMapModel {
+  const states: Record<string, PresMapState> = {};
+  for (const t of vm.board) {
+    states[t.stateId] = {
+      id: t.stateId,
+      name: t.name || STATE_NAMES[t.stateId] || t.stateId,
+      ev: 0,
+      evLabel: t.voted ? "\u2713" : null,
+      leaderId: t.leaderId ?? "",
+      leaderName: t.leaderName ?? "",
+      leaderColor: t.background,
+      margin: 0,
+      tier: "safe",
+      fill: t.background,
+      ink: t.ink,
+      shares: [],
+      totalVotes: 0,
+      trend: {
+        status: "none",
+        candidateId: null,
+        name: null,
+        color: null,
+        shiftPp: 0,
+        windowTurns: 0,
+        series: [],
+      },
+      sinceTurn: null,
+      turnsAgo: null,
+      caption: t.title,
+    };
+  }
+  return { states, candidates: {}, legendCandidates: [] };
 }

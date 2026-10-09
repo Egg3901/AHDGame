@@ -11,10 +11,21 @@ export interface StateGeo {
   /** Bounding box width and height in map units, used to decide label fit. */
   width: number;
   height: number;
+  /** Top-left corner of the bounding box in map units. */
+  x0: number;
+  y0: number;
 }
 
 export const MAP_WIDTH = 960;
 export const MAP_HEIGHT = 600;
+
+/**
+ * The county files (`src/data/counties`) were projected with d3's default
+ * `geoAlbersUsa()`, which centres on y = 250, while this map centres on
+ * y = 300 at the same scale. Shifting county paths down by the difference
+ * puts them exactly under their states.
+ */
+export const COUNTY_OFFSET_Y = MAP_HEIGHT / 2 - 250;
 
 /** Same TopoJSON the other US maps read, with the bundled copy as the fallback. */
 const LOCAL_URL = "/us-states-10m.json";
@@ -75,6 +86,8 @@ export function loadUsStateGeo(): Promise<StateGeo[]> {
         ],
         width: x1 - x0,
         height: y1 - y0,
+        x0,
+        y0,
       });
     }
     return out;

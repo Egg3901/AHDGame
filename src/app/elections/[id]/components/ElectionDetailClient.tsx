@@ -2,6 +2,7 @@
 
 import { BgFoundingConstituencyPicker } from "./BgFoundingConstituencyPicker";
 import { Hu1991ConstituencyPicker } from "./Hu1991ConstituencyPicker";
+import Link from "next/link";
 import React, { useState, useEffect, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useToast } from "@/contexts/ToastContext";
@@ -26,6 +27,7 @@ import type { ElectionDetail } from "./ElectionDetailTypes";
 import BackButton from "@/components/BackButton";
 import { PrimaryBlendView } from "../blend/PrimaryBlendView";
 import { GeneralBlendView } from "../blend/GeneralBlendView";
+import { presidentialTitle } from "../blend/PresidentialStage";
 import { ResultsBlendView } from "../blend/ResultsBlendView";
 import type { ElectionResultsResponse } from "@/lib/elections/liveResults/types";
 import { BLEND } from "@/components/blend/tokens";
@@ -484,6 +486,99 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
 
   const currentResults = results?.election.id === election.id ? results : null;
 
+  // The presidential stage's left rail opens with the cycle navigation, the
+  // reader's own action on the race, and the two guides. These used to sit in
+  // the old page header below the stage, which the desktop no longer renders.
+  const stageRailTop = (
+    <div>
+      <ElectionNavigation election={election} />
+      {canEnter &&
+        (election.bulgarianFoundingRound?.round === 1 ||
+          Boolean(election.bulgarianFoundingRound?.newNominationDistrictIds?.length)) && (
+          <BgFoundingConstituencyPicker
+            allowedDistrictIds={election.bulgarianFoundingRound?.newNominationDistrictIds}
+            regionId={election.state}
+            value={huDistrictId}
+            onChange={setHuDistrictId}
+          />
+        )}
+      {canEnter && election.hungarianAssemblyRound?.round === 1 && (
+        <Hu1991ConstituencyPicker
+          allowedDistrictIds={election.hungarianAssemblyRound?.vacancyDistrictIds}
+          regionId={election.state}
+          value={huDistrictId}
+          onChange={setHuDistrictId}
+        />
+      )}
+      {election.myCharId && !localIsEnded && (canEnter || canWithdraw) ? (
+        <div className="mb-3 flex gap-2">
+          {canEnter && (
+            <button
+              onClick={handleEnter}
+              disabled={actionLoading}
+              className="flex-1 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-primary/90 disabled:opacity-50"
+            >
+              {actionLoading ? "…" : "Enter race"}
+            </button>
+          )}
+          {canWithdraw && (
+            <button
+              onClick={handleWithdraw}
+              disabled={actionLoading}
+              className="flex-1 rounded-lg border border-error/50 bg-error/10 px-4 py-2 text-sm font-semibold text-error transition-colors hover:bg-error/20 disabled:opacity-50"
+            >
+              {actionLoading ? "…" : "Withdraw"}
+            </button>
+          )}
+        </div>
+      ) : null}
+      <p className="mb-1 text-xs text-muted">
+        <Link href="/wiki/reference-offices" className="text-primary hover:underline">
+          What the presidency can do
+        </Link>
+        {" · "}
+        <Link href="/guides/running-for-office" className="text-primary hover:underline">
+          How to run for president
+        </Link>
+      </p>
+    </div>
+  );
+
+  // Below the desktop stage only what the stage does not already show: the
+  // admin tools, for admins. Everything else under "Also on this race" (the old
+  // header, a second map, the trends, the schedule, a second results table) is
+  // the phone layout's, and stays there.
+  const desktopTail = election.isAdmin ? (
+    <div className="mx-auto hidden max-w-7xl px-4 pb-10 sm:px-6 lg:block lg:px-8">
+      <AdminSection
+        electionId={id}
+        electionType={election.electionType}
+        isAdmin={election.isAdmin}
+        adminOpen={adminOpen}
+        localInPrimary={localInPrimary}
+        localIsEnded={localIsEnded}
+        candidates={election.allCandidates}
+        onToggleAdmin={() => setAdminOpen((o) => !o)}
+        onSuccess={fetchElection}
+      />
+    </div>
+  ) : null;
+
+  // The primary's campaign tooling is not on the stage anywhere, so the
+  // desktop keeps it below the field.
+  const primaryCampaignTools =
+    election.countryId === "US" ? (
+      <div className="mx-auto hidden max-w-7xl px-4 pb-12 sm:px-6 lg:block lg:px-8">
+        {!!election.myCharId && (
+          <section id="state-org" className="mt-6 scroll-mt-6">
+            <StateOrganizationTab showHubLink />
+          </section>
+        )}
+        <CampaignsListPanel electionId={id} />
+        {!!election.myCharId && <CampaignManagerTab electionId={id} />}
+      </div>
+    ) : null;
+
   if (nightWatch.pending) return <ElectionDetailSkeleton />;
   if (nightWatch.hold.show && nightWatch.data) {
     return (
@@ -505,32 +600,41 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
   if (election.electionType === "president" && localIsEnded && currentResults) {
     return (
       <div className="min-h-screen" style={{ background: BLEND.page, color: BLEND.ink }}>
-        {blendNav}
+        <div className="lg:hidden">{blendNav}</div>
         {confirmDialogNode}
-        <ResultsBlendView data={currentResults} route="concluded" />
+        <ResultsBlendView
+          data={currentResults}
+          route="concluded"
+          election={election}
+          stageTitle={presidentialTitle(electionYear)}
+          stageNav={stageRailTop}
+        />
 
-        <BlendScope title="Also on this race">
-          <GeneralPhaseView
-            election={election}
-            electionId={id}
-            localInPrimary={localInPrimary}
-            localIsEnded={localIsEnded}
-            amInRace={amInRace}
-            onSuccess={fetchElection}
-          />
+        <div className="lg:hidden">
+          <BlendScope title="Also on this race">
+            <GeneralPhaseView
+              election={election}
+              electionId={id}
+              localInPrimary={localInPrimary}
+              localIsEnded={localIsEnded}
+              amInRace={amInRace}
+              onSuccess={fetchElection}
+            />
 
-          <AdminSection
-            electionId={id}
-            electionType={election.electionType}
-            isAdmin={election.isAdmin}
-            adminOpen={adminOpen}
-            localInPrimary={localInPrimary}
-            localIsEnded={localIsEnded}
-            candidates={election.allCandidates}
-            onToggleAdmin={() => setAdminOpen((o) => !o)}
-            onSuccess={fetchElection}
-          />
-        </BlendScope>
+            <AdminSection
+              electionId={id}
+              electionType={election.electionType}
+              isAdmin={election.isAdmin}
+              adminOpen={adminOpen}
+              localInPrimary={localInPrimary}
+              localIsEnded={localIsEnded}
+              candidates={election.allCandidates}
+              onToggleAdmin={() => setAdminOpen((o) => !o)}
+              onSuccess={fetchElection}
+            />
+          </BlendScope>
+        </div>
+        {desktopTail}
       </div>
     );
   }
@@ -547,92 +651,97 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
   ) {
     return (
       <div className="min-h-screen" style={{ background: BLEND.page, color: BLEND.ink }}>
-        {blendNav}
+        <div className="lg:hidden">{blendNav}</div>
         {confirmDialogNode}
         <GeneralBlendView
           election={election}
           electionId={id}
           wire={wire}
           onRefresh={fetchElection}
+          stageTitle={presidentialTitle(electionYear)}
+          stageNav={stageRailTop}
         />
 
         {/* Everything the hero above does not already say. The college bar, the
             per-ticket tally and the deadline strip all appear up there, so the
             blocks below are asked to leave them out rather than print the same
             standing twice on one page. */}
-        <BlendScope
-          title="Also on this race"
-          lede="Trends, state drivers, turnout and the factor ledger."
-        >
-          {canEnter &&
-            (election.bulgarianFoundingRound?.round === 1 ||
-              Boolean(election.bulgarianFoundingRound?.newNominationDistrictIds?.length)) && (
-              <BgFoundingConstituencyPicker
-                allowedDistrictIds={election.bulgarianFoundingRound?.newNominationDistrictIds}
+        <div className="lg:hidden">
+          <BlendScope
+            title="Also on this race"
+            lede="Trends, state drivers, turnout and the factor ledger."
+          >
+            {canEnter &&
+              (election.bulgarianFoundingRound?.round === 1 ||
+                Boolean(election.bulgarianFoundingRound?.newNominationDistrictIds?.length)) && (
+                <BgFoundingConstituencyPicker
+                  allowedDistrictIds={election.bulgarianFoundingRound?.newNominationDistrictIds}
+                  regionId={election.state}
+                  value={huDistrictId}
+                  onChange={setHuDistrictId}
+                />
+              )}
+            {canEnter && election.hungarianAssemblyRound?.round === 1 && (
+              <Hu1991ConstituencyPicker
+                allowedDistrictIds={election.hungarianAssemblyRound?.vacancyDistrictIds}
                 regionId={election.state}
                 value={huDistrictId}
                 onChange={setHuDistrictId}
               />
             )}
-          {canEnter && election.hungarianAssemblyRound?.round === 1 && (
-            <Hu1991ConstituencyPicker
-              allowedDistrictIds={election.hungarianAssemblyRound?.vacancyDistrictIds}
-              regionId={election.state}
-              value={huDistrictId}
-              onChange={setHuDistrictId}
+            <ElectionHeader
+              election={election}
+              electionYear={electionYear}
+              localInPrimary={localInPrimary}
+              localIsEnded={localIsEnded}
+              localIsUpcoming={localIsUpcoming}
+              canEnter={canEnter}
+              canWithdraw={canWithdraw}
+              actionLoading={actionLoading}
+              onEnter={handleEnter}
+              onWithdraw={handleWithdraw}
             />
-          )}
-          <ElectionHeader
-            election={election}
-            electionYear={electionYear}
-            localInPrimary={localInPrimary}
-            localIsEnded={localIsEnded}
-            localIsUpcoming={localIsUpcoming}
-            canEnter={canEnter}
-            canWithdraw={canWithdraw}
-            actionLoading={actionLoading}
-            onEnter={handleEnter}
-            onWithdraw={handleWithdraw}
-          />
 
-          <GeneralPhaseView
-            election={election}
-            electionId={id}
-            localInPrimary={localInPrimary}
-            localIsEnded={localIsEnded}
-            amInRace={amInRace}
-            onSuccess={fetchElection}
-            showCollegeSummary={false}
-            showNationalMood={false}
-            showDemocraticHealth={false}
-            tabbedDetail
-          />
+            <GeneralPhaseView
+              election={election}
+              electionId={id}
+              localInPrimary={localInPrimary}
+              localIsEnded={localIsEnded}
+              amInRace={amInRace}
+              onSuccess={fetchElection}
+              showCollegeSummary={false}
+              showNationalMood={false}
+              showDemocraticHealth={false}
+              tabbedDetail
+            />
 
-          <ElectionScheduleCard
-            election={election}
-            localIsUpcoming={localIsUpcoming}
-            localInPrimary={localInPrimary}
-            localIsEnded={localIsEnded}
-            showStatusStrip={false}
-          />
+            <ElectionScheduleCard
+              election={election}
+              localIsUpcoming={localIsUpcoming}
+              localInPrimary={localInPrimary}
+              localIsEnded={localIsEnded}
+              showStatusStrip={false}
+            />
 
-          <AdminSection
-            electionId={id}
-            electionType={election.electionType}
-            isAdmin={election.isAdmin}
-            adminOpen={adminOpen}
-            localInPrimary={localInPrimary}
-            localIsEnded={localIsEnded}
-            candidates={election.allCandidates}
-            onToggleAdmin={() => setAdminOpen((o) => !o)}
-            onSuccess={fetchElection}
-          />
+            <AdminSection
+              electionId={id}
+              electionType={election.electionType}
+              isAdmin={election.isAdmin}
+              adminOpen={adminOpen}
+              localInPrimary={localInPrimary}
+              localIsEnded={localIsEnded}
+              candidates={election.allCandidates}
+              onToggleAdmin={() => setAdminOpen((o) => !o)}
+              onSuccess={fetchElection}
+            />
 
-          {/* Campaign operations used to close this block as their own list.
+            {/* Campaign operations used to close this block as their own list.
               They are columns of the tickets table in the hero above now, so
               each ticket's funds, actions, levels and campaign link sit beside
               its standing. */}
-        </BlendScope>
+          </BlendScope>
+        </div>
+        {desktopTail}
       </div>
     );
   }
@@ -648,83 +757,92 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
   ) {
     return (
       <div className="min-h-screen" style={{ background: BLEND.page, color: BLEND.ink }}>
-        {blendNav}
+        <div className="lg:hidden">{blendNav}</div>
         {confirmDialogNode}
-        <PrimaryBlendView election={election} wire={wire} />
+        <PrimaryBlendView
+          election={election}
+          wire={wire}
+          stageTitle={presidentialTitle(electionYear)}
+          stageNav={stageRailTop}
+        />
 
-        <BlendScope
-          title="Also on this race"
-          lede="Filing, the state map, and your campaign operations."
-        >
-          {canEnter &&
-            (election.bulgarianFoundingRound?.round === 1 ||
-              Boolean(election.bulgarianFoundingRound?.newNominationDistrictIds?.length)) && (
-              <BgFoundingConstituencyPicker
-                allowedDistrictIds={election.bulgarianFoundingRound?.newNominationDistrictIds}
+        <div className="lg:hidden">
+          <BlendScope
+            title="Also on this race"
+            lede="Filing, the state map, and your campaign operations."
+          >
+            {canEnter &&
+              (election.bulgarianFoundingRound?.round === 1 ||
+                Boolean(election.bulgarianFoundingRound?.newNominationDistrictIds?.length)) && (
+                <BgFoundingConstituencyPicker
+                  allowedDistrictIds={election.bulgarianFoundingRound?.newNominationDistrictIds}
+                  regionId={election.state}
+                  value={huDistrictId}
+                  onChange={setHuDistrictId}
+                />
+              )}
+            {canEnter && election.hungarianAssemblyRound?.round === 1 && (
+              <Hu1991ConstituencyPicker
+                allowedDistrictIds={election.hungarianAssemblyRound?.vacancyDistrictIds}
                 regionId={election.state}
                 value={huDistrictId}
                 onChange={setHuDistrictId}
               />
             )}
-          {canEnter && election.hungarianAssemblyRound?.round === 1 && (
-            <Hu1991ConstituencyPicker
-              allowedDistrictIds={election.hungarianAssemblyRound?.vacancyDistrictIds}
-              regionId={election.state}
-              value={huDistrictId}
-              onChange={setHuDistrictId}
+            <ElectionHeader
+              election={election}
+              electionYear={electionYear}
+              localInPrimary={localInPrimary}
+              localIsEnded={localIsEnded}
+              localIsUpcoming={localIsUpcoming}
+              canEnter={canEnter}
+              canWithdraw={canWithdraw}
+              actionLoading={actionLoading}
+              onEnter={handleEnter}
+              onWithdraw={handleWithdraw}
             />
-          )}
-          <ElectionHeader
-            election={election}
-            electionYear={electionYear}
-            localInPrimary={localInPrimary}
-            localIsEnded={localIsEnded}
-            localIsUpcoming={localIsUpcoming}
-            canEnter={canEnter}
-            canWithdraw={canWithdraw}
-            actionLoading={actionLoading}
-            onEnter={handleEnter}
-            onWithdraw={handleWithdraw}
-          />
 
-          {/* The primary masthead already reads "CLOSES IN N TURNS", so the
+            {/* The primary masthead already reads "CLOSES IN N TURNS", so the
               strip restated the countdown in a box of its own, exactly as it
               did on the general screen. */}
-          <ElectionScheduleCard
-            election={election}
-            localIsUpcoming={localIsUpcoming}
-            localInPrimary={localInPrimary}
-            localIsEnded={localIsEnded}
-            showStatusStrip={false}
-          />
+            <ElectionScheduleCard
+              election={election}
+              localIsUpcoming={localIsUpcoming}
+              localInPrimary={localInPrimary}
+              localIsEnded={localIsEnded}
+              showStatusStrip={false}
+            />
 
-          <PrimaryMapPills election={election} activeParties={activeParties} />
+            <PrimaryMapPills election={election} activeParties={activeParties} />
 
-          <AdminSection
-            electionId={id}
-            electionType={election.electionType}
-            isAdmin={election.isAdmin}
-            adminOpen={adminOpen}
-            localInPrimary={localInPrimary}
-            localIsEnded={localIsEnded}
-            candidates={election.allCandidates}
-            onToggleAdmin={() => setAdminOpen((o) => !o)}
-            onSuccess={fetchElection}
-          />
+            <AdminSection
+              electionId={id}
+              electionType={election.electionType}
+              isAdmin={election.isAdmin}
+              adminOpen={adminOpen}
+              localInPrimary={localInPrimary}
+              localIsEnded={localIsEnded}
+              candidates={election.allCandidates}
+              onToggleAdmin={() => setAdminOpen((o) => !o)}
+              onSuccess={fetchElection}
+            />
 
-          {election.countryId === "US" && !!election.myCharId && (
-            <section id="state-org" className="mt-6 scroll-mt-6">
-              <StateOrganizationTab showHubLink />
-            </section>
-          )}
+            {election.countryId === "US" && !!election.myCharId && (
+              <section id="state-org" className="mt-6 scroll-mt-6">
+                <StateOrganizationTab showHubLink />
+              </section>
+            )}
 
-          {election.countryId === "US" && (
-            <>
-              <CampaignsListPanel electionId={id} />
-              {!!election.myCharId && <CampaignManagerTab electionId={id} />}
-            </>
-          )}
-        </BlendScope>
+            {election.countryId === "US" && (
+              <>
+                <CampaignsListPanel electionId={id} />
+                {!!election.myCharId && <CampaignManagerTab electionId={id} />}
+              </>
+            )}
+          </BlendScope>
+        </div>
+        {desktopTail}
+        {primaryCampaignTools}
       </div>
     );
   }

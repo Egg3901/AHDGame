@@ -212,7 +212,13 @@ describe.each([
       holdings: o.holdings.map((h) => h.slice(1)),
       corps: o.corps.map((c) => [c[1], c[2], c[3], (c[4] as unknown[][]).map((s) => s.slice(1))]),
     });
-    expect(strip(batched)).toEqual(strip(sequential));
+    // Summation order differs between the paths, so compare money to the cent
+    // rather than to the last float bit.
+    const settle = (value: unknown): unknown =>
+      JSON.parse(
+        JSON.stringify(value, (_k, v) => (typeof v === "number" ? Math.round(v * 1e6) / 1e6 : v))
+      );
+    expect(settle(strip(batched))).toEqual(settle(strip(sequential)));
     await expectConserved(a, opening);
   });
 

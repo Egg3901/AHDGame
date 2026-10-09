@@ -1,7 +1,25 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type PointerEvent, type RefObject } from "react";
-import { IDENTITY_VIEW, panBy, wheelFactor, zoomAt, zoomStep, type MapView } from "./mapView";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type PointerEvent,
+  type RefObject,
+} from "react";
+import {
+  clampView,
+  panBy,
+  restingView,
+  viewForBox,
+  wheelFactor,
+  zoomAt,
+  zoomStep,
+  type MapFrame,
+  type MapView,
+} from "./mapView";
 
 /** Pointer travel before a press counts as a drag rather than a click. */
 const DRAG_THRESHOLD_PX = 4;
@@ -14,6 +32,8 @@ interface Options {
   scale: number;
   width: number;
   height: number;
+  /** Frame size and zoom cap when the frame is not the map's own shape (the stage). */
+  frame?: MapFrame;
 }
 
 /**
@@ -21,8 +41,19 @@ interface Options {
  * own scrolling is attached only while `enabled`, so a locked map never
  * intercepts a wheel or a touch.
  */
-export function usePanZoom({ svgRef, enabled, scale, width, height }: Options) {
-  const [view, setView] = useState<MapView>(IDENTITY_VIEW);
+export function usePanZoom({ svgRef, enabled, scale, width, height, frame }: Options) {
+  const frameWidth = frame?.frameWidth;
+  const frameHeight = frame?.frameHeight;
+  const maxZoom = frame?.maxZoom;
+  // Rebuilt from primitives so a caller passing a fresh object each render
+  // does not re-attach the wheel listener every time.
+  const f = useMemo<MapFrame>(
+    () => ({ frameWidth, frameHeight, maxZoom }),
+    [frameWidth, frameHeight, maxZoom]
+  );
+  const rest = useMemo(() => restingView(width, height, f), [width, height, f]);
+  const [view, setView] = useState<MapView>(rest);
+
   const [dragging, setDragging] = useState(false);
   const pointers = useRef(new Map<number, { x: number; y: number }>());
   const gesture = useRef({ startX: 0, startY: 0, moved: false, pinch: 0 });
@@ -36,11 +67,11 @@ export function usePanZoom({ svgRef, enabled, scale, width, height }: Options) {
       const rect = svg.getBoundingClientRect();
       const px = (e.clientX - rect.left) / scale;
       const py = (e.clientY - rect.top) / scale;
-      setView((v) => zoomAt(v, wheelFactor(e.deltaY, e.deltaMode), px, py, width, height));
+      setView((v) => zoomAt(v, wheelFactor(e.deltaY, e.deltaMode), px, py, width, height, f));
     };
     svg.addEventListener("wheel", onWheel, { passive: false });
     return () => svg.removeEventListener("wheel", onWheel);
-  }, [svgRef, enabled, scale, width, height]);
+  }, [svgRef, enabled, scale, width, height, f]);
 
   const onPointerDown = useCallback(
     (e: PointerEvent<SVGSVGElement>) => {
@@ -78,7 +109,7 @@ export function usePanZoom({ svgRef, enabled, scale, width, height }: Options) {
           const mx = ((a.x + b.x) / 2 - rect.left) / scale;
           const my = ((a.y + b.y) / 2 - rect.top) / scale;
           const factor = dist / g.pinch;
-          setView((v) => zoomAt(v, factor, mx, my, width, height));
+          setView((v) => zoomAt(v, factor, mx, my, width, height, f));
         }
         g.pinch = dist;
         return;
@@ -91,9 +122,9 @@ export function usePanZoom({ svgRef, enabled, scale, width, height }: Options) {
       }
       const dx = (e.clientX - prev.x) / scale;
       const dy = (e.clientY - prev.y) / scale;
-      setView((v) => panBy(v, dx, dy, width, height));
+      setView((v) => panBy(v, dx, dy, width, height, f));
     },
-    [enabled, scale, width, height]
+    [enabled, scale, width, height, f]
   );
 
   const endPointer = useCallback((e: PointerEvent<SVGSVGElement>) => {
@@ -114,16 +145,26 @@ export function usePanZoom({ svgRef, enabled, scale, width, height }: Options) {
   }, []);
 
   const zoomBy = useCallback(
-    (direction: 1 | -1) => setView((v) => zoomStep(v, direction, width, height)),
-    [width, height]
+    (direction: 1 | -1) => setView((v) => zoomStep(v, direction, width, height, f)),
+    [width, height, f]
   );
-  const reset = useCallback(() => setView(IDENTITY_VIEW), []);
+  const reset = useCallback(() => setView(rest), [rest]);
+  /** Bring a box (map units) into view, e.g. a double-clicked state. */
+  const zoomToBox = useCallback(
+    (box: { x0: number; y0: number; x1: number; y1: number }, insetRight = 0) =>
+      setView(viewForBox(box, width, height, f, undefined, insetRight)),
+    [width, height, f]
+  );
 
   return {
     // A locked map always shows the whole country.
-    view: enabled ? view : IDENTITY_VIEW,
+    // Clamped on read, so a resized frame re-fits the view: centred when zoomed
+    // out, kept in bounds when zoomed in.
+    view: enabled ? clampView(view, width, height, f) : rest,
+    rest,
     dragging,
     zoomBy,
+    zoomToBox,
     reset,
     consumeDrag,
     handlers: {

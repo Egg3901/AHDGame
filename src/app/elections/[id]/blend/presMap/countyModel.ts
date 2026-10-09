@@ -19,6 +19,10 @@ export interface CountyApiResponse {
     margin: number;
     winner: string;
   }[];
+  /** The tally's own candidate names and parties, keyed by the ids above. */
+  candidateNames?: Record<string, string>;
+  candidateParties?: Record<string, string>;
+  partyColors?: Record<string, string>;
 }
 
 export interface CountyRow {
@@ -40,13 +44,34 @@ export type SortDir = "asc" | "desc";
 
 const NEUTRAL_FILL = "#1f1f2c";
 
+/**
+ * The caller's lookup knows the race's candidates by the ids the election
+ * payload uses; the tally behind the county route can key them differently.
+ * Where the caller's lookup does not know an id, the route's own names and
+ * party colours stand in, so a county never renders as an unnamed grey.
+ */
+function resolveCandidate(
+  data: CountyApiResponse,
+  candidate: (id: string) => { name: string; color: string } | undefined,
+  id: string
+): { name: string; color: string } | null {
+  const known = candidate(id);
+  if (known && known.name !== "Unknown") return known;
+  const name = data.candidateNames?.[id];
+  const party = data.candidateParties?.[id];
+  const color = party ? data.partyColors?.[party] : undefined;
+  if (name || color)
+    return { name: name ?? known?.name ?? "Unknown", color: color ?? known?.color ?? NEUTRAL_FILL };
+  return known ?? null;
+}
+
 export function buildCountyRows(
   data: CountyApiResponse,
-  candidate: (id: string) => { name: string; color: string }
+  candidate: (id: string) => { name: string; color: string } | undefined
 ): CountyRow[] {
   return data.subdivisions.map((sub) => {
     const tier = classifyMarginTier(sub.margin);
-    const winner = sub.winner ? candidate(sub.winner) : null;
+    const winner = sub.winner ? resolveCandidate(data, candidate, sub.winner) : null;
     return {
       id: sub.id,
       name: sub.name,

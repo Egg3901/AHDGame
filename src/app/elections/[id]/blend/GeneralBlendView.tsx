@@ -4,9 +4,9 @@ import { apiErrorText } from "@/lib/errors/catalog";
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { Avatar } from "@/components/Avatar";
-import { BLEND, FONT, BLEND_LABEL } from "@/components/blend/tokens";
-import { BlendShell, BlendHeader, BlendSection } from "@/components/blend/BlendShell";
-import { BlendRail, BlendChipRail } from "@/components/blend/BlendRail";
+import { BLEND, FONT, BLEND_LABEL, BLEND_CONTAINER } from "@/components/blend/tokens";
+import { BlendSection } from "@/components/blend/BlendShell";
+import { BlendChipRail } from "@/components/blend/BlendRail";
 import { BlendTicker } from "@/components/blend/BlendTicker";
 import { useElectionCampaigns } from "../components/useElectionCampaigns";
 import { ContingentRiskBanner } from "../components/ContingentRiskBanner";
@@ -19,6 +19,8 @@ import {
 import { TicketCards, TicketsTable } from "./GeneralTicketsTable";
 import { DemocraticHealthBlock } from "./DemocraticHealthBlock";
 import { PresidentialMap } from "./presMap/PresidentialMap";
+import { StateSquares } from "./presMap/StateSquares";
+import { PresidentialStage, presidentialTitle } from "./PresidentialStage";
 import { buildPresMapModel } from "./presMap/presMapModel";
 import {
   buildGeneralBlendViewModel,
@@ -37,7 +39,14 @@ export type { GeneralBlendViewProps } from "./GeneralBlendParts";
 type ContextPanel = "mood" | "health" | "why";
 
 /** The Blend general-election screen (Proposal D). */
-export function GeneralBlendView({ election, electionId, wire, onRefresh }: GeneralBlendViewProps) {
+export function GeneralBlendView({
+  election,
+  electionId,
+  wire,
+  onRefresh,
+  stageTitle = presidentialTitle(election.electionYear),
+  stageNav,
+}: GeneralBlendViewProps) {
   const [rail, setRail] = useState<GeneralRail>("overview");
   const [busy, setBusy] = useState<string | null>(null);
   /** Why the last endorsement was refused, or null. */
@@ -740,110 +749,179 @@ export function GeneralBlendView({ election, electionId, wire, onRefresh }: Gene
         </div>
       </div>
 
-      {/* Desktop */}
+      {/* Desktop: the full-screen map stage, then the tickets table below it. */}
       <div className="hidden lg:block">
-        <BlendShell
-          fullBleed
-          rightWidth={300}
-          left={
-            <BlendRail
-              eyebrow="General election"
-              title={`${election.countryId} President${election.electionYear ? ` ${election.electionYear}` : ""}`}
-              titleSize={18}
-              status={{ text: vm.liveText, color: BLEND.positive, pulse: true }}
-              items={vm.railItems}
-              selectedId={rail}
-              onSelect={(id) => setRail(id as GeneralRail)}
-            />
+        <PresidentialStage
+          title={stageTitle}
+          kicker={
+            <>
+              <span>{vm.kicker}</span>
+              <span style={{ marginLeft: 12, color: BLEND.positive }}>{vm.liveText}</span>
+            </>
           }
-          right={
-            <aside
-              style={{
-                borderLeft: `1px solid ${BLEND.hairline}`,
-                background: BLEND.rail,
-                padding: "20px 18px",
-                display: "flex",
-                flexDirection: "column",
-                gap: 22,
-              }}
-            >
+          deck={vm.headline}
+          ticker={<BlendTicker tag="CALLS" items={vm.wire} />}
+          nav={stageNav}
+          left={
+            <>
+              {closeLine ? <div style={{ marginBottom: 16 }}>{closeLine}</div> : null}
+              {heroPairTickets.length > 0 ? (
+                <>
+                  {heroPager}
+                  {heroPair(
+                    {
+                      name: 15,
+                      party: 9,
+                      mate: 12,
+                      label: 8,
+                      votes: 32,
+                      share: 11,
+                      projection: 19,
+                      columnGap: 14,
+                      marginBottom: 14,
+                      avatarSize: "h-8 w-8",
+                    },
+                    heroPairTickets
+                  )}
+                  <EvBar vm={vm} height={28} error={endorseError} />
+                  {contingentBanner ? (
+                    <div style={{ marginTop: 14 }}>{contingentBanner}</div>
+                  ) : null}
+                </>
+              ) : null}
+              {vm.tickets.length > 0 ? (
+                <div style={{ marginTop: heroPairTickets.length > 0 ? 22 : 4 }}>
+                  <div style={{ ...BLEND_LABEL, marginBottom: 6 }}>The field</div>
+                  {vm.tickets.map((c) => (
+                    <div
+                      key={c.id}
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: "10px minmax(0,1fr) auto auto",
+                        alignItems: "center",
+                        gap: 10,
+                        padding: "8px 0",
+                        borderBottom: `1px solid ${BLEND.hairline}`,
+                      }}
+                    >
+                      <i style={{ width: 10, height: 10, display: "block", background: c.color }} />
+                      <div style={{ minWidth: 0 }}>
+                        <Link
+                          href={c.href}
+                          style={{
+                            display: "block",
+                            fontSize: 14,
+                            fontWeight: 600,
+                            color: BLEND.ink,
+                          }}
+                        >
+                          {c.name}
+                          {c.isYou ? (
+                            <span style={{ marginLeft: 6, fontSize: 11, color: BLEND.accentInk }}>
+                              YOU
+                            </span>
+                          ) : null}
+                        </Link>
+                        <div
+                          style={{
+                            fontSize: 11.5,
+                            color: BLEND.mutedDim,
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {c.party}
+                          {c.mate ? ` / ${c.mate}` : ""}
+                        </div>
+                      </div>
+                      <span style={{ fontFamily: FONT.mono, fontSize: 12.5, color: BLEND.muted }}>
+                        {c.pct}%
+                      </span>
+                      <span
+                        style={{
+                          fontFamily: FONT.mono,
+                          fontSize: 13,
+                          fontWeight: 600,
+                          color: c.color,
+                          minWidth: 44,
+                          textAlign: "right",
+                        }}
+                      >
+                        {c.ev} EV
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+              {vm.standfirst ? (
+                <p
+                  style={{
+                    margin: "18px 0 0",
+                    fontSize: 13.5,
+                    lineHeight: 1.5,
+                    color: BLEND.muted,
+                  }}
+                >
+                  {vm.standfirst}
+                </p>
+              ) : null}
               {vm.yourTicket ? (
-                <div>
+                <div
+                  style={{
+                    marginTop: 20,
+                    paddingTop: 18,
+                    borderTop: `1px solid ${BLEND.hairline}`,
+                  }}
+                >
                   <div style={BLEND_LABEL}>Your ticket</div>
                   <YourTicketBlock vm={vm} campaignLink={campaignLink} />
                 </div>
               ) : null}
-
-              {vm.mood ? (
-                <div style={{ paddingTop: 20, borderTop: `1px solid ${BLEND.hairline}` }}>
-                  <div style={BLEND_LABEL}>National mood</div>
-                  <NationalMoodBlock vm={vm} />
-                </div>
-              ) : null}
-
-              {election.democraticHealth ? (
-                <div style={{ paddingTop: 20, borderTop: `1px solid ${BLEND.hairline}` }}>
-                  <div style={BLEND_LABEL}>Democratic health</div>
-                  <DemocraticHealthBlock data={election.democraticHealth} />
-                </div>
-              ) : null}
-
-              {vm.drivers.length + vm.coattailDrivers.length > 0 ? (
-                <div style={{ paddingTop: 20, borderTop: `1px solid ${BLEND.hairline}` }}>
-                  <div style={BLEND_LABEL}>Why it moved</div>
-                  <WhyItMovedBlock vm={vm} />
-                </div>
-              ) : null}
-            </aside>
+            </>
           }
-        >
-          <BlendHeader
-            kicker={vm.kicker}
-            readout={vm.turnReadout}
-            headline={vm.headline}
-            standfirst={vm.standfirst}
-            headlineSize={34}
-          />
-          {closeLine ? (
-            <div style={{ padding: "10px 26px 0", background: BLEND.page }}>{closeLine}</div>
-          ) : null}
-          <BlendTicker tag="CALLS" items={vm.wire} />
+          right={
+            vm.mood ||
+            election.democraticHealth ||
+            vm.drivers.length + vm.coattailDrivers.length > 0 ? (
+              <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
+                {vm.mood ? (
+                  <div>
+                    <div style={BLEND_LABEL}>National mood</div>
+                    <NationalMoodBlock vm={vm} />
+                  </div>
+                ) : null}
+                {election.democraticHealth ? (
+                  <div style={{ paddingTop: 20, borderTop: `1px solid ${BLEND.hairline}` }}>
+                    <div style={BLEND_LABEL}>Democratic health</div>
+                    <DemocraticHealthBlock data={election.democraticHealth} />
+                  </div>
+                ) : null}
+                {vm.drivers.length + vm.coattailDrivers.length > 0 ? (
+                  <div style={{ paddingTop: 20, borderTop: `1px solid ${BLEND.hairline}` }}>
+                    <div style={BLEND_LABEL}>Why it moved</div>
+                    <WhyItMovedBlock vm={vm} />
+                  </div>
+                ) : null}
+              </div>
+            ) : undefined
+          }
+          map={
+            <PresidentialMap
+              variant="stage"
+              model={mapModel}
+              electionId={electionId}
+              countryId={election.countryId}
+              turn={election.gameState?.currentTurn ?? null}
+            />
+          }
+          squares={
+            <StateSquares model={mapModel} electionId={electionId} countryId={election.countryId} />
+          }
+        />
 
-          {vm.showCollege && heroPairTickets.length > 0 ? (
-            <section
-              style={{ padding: "24px 26px", borderBottom: `1px solid ${BLEND.hairlineStrong}` }}
-            >
-              {heroPager}
-              {heroPair(
-                {
-                  name: 19,
-                  party: 10,
-                  mate: 13,
-                  label: 9,
-                  votes: 46,
-                  share: 12,
-                  projection: 25,
-                  columnGap: 24,
-                  marginBottom: 18,
-                  avatarSize: "h-9 w-9",
-                },
-                heroPairTickets
-              )}
-              <EvBar vm={vm} height={34} error={endorseError} />
-              {contingentBanner ? <div style={{ marginTop: 16 }}>{contingentBanner}</div> : null}
-            </section>
-          ) : null}
-
-          {vm.showBoard && vm.tiles.length > 0 ? (
-            <BlendSection
-              title="The electoral map"
-              lede="Shaded by margin tier in the leader's colour. Select a state for its detail."
-            >
-              {presidentialMap}
-            </BlendSection>
-          ) : null}
-
-          {vm.showTickets && vm.showTicketsTable ? (
+        {vm.showTicketsTable ? (
+          <div className={BLEND_CONTAINER} style={{ background: BLEND.page }}>
             <BlendSection
               title="The tickets"
               lede="Projected electoral votes, vote share, and each campaign's operations."
@@ -857,8 +935,8 @@ export function GeneralBlendView({ election, electionId, wire, onRefresh }: Gene
                 endorseButton={endorseButton}
               />
             </BlendSection>
-          ) : null}
-        </BlendShell>
+          </div>
+        ) : null}
       </div>
     </>
   );
