@@ -124,6 +124,9 @@ const nextConfig: NextConfig = {
     ? {
         output: "standalone" as const,
         experimental: {
+          ...(process.env.CI === "true"
+            ? { webpackMemoryOptimizations: true, webpackBuildWorker: true }
+            : {}),
           // Next preloads every page and route module right after "Ready"
           // (1,300+ API routes, 200+ pages) with synchronous requires, and no
           // request is answered until that finishes: measured at 4s on Linux
