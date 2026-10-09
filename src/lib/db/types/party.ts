@@ -268,6 +268,23 @@ export interface PoliticalParty {
    * have never named a shadow cabinet.
    */
   shadowCabinet?: Record<string, ShadowCabinetAppointment>;
+  /**
+   * Chair-set flavor overrides for the party's three national leadership
+   * titles (chair / vice-chair / treasurer). Display / roleplay only — the
+   * stored `chairId` / `viceChairId` / `treasurerId` fields and every engine
+   * permission check still key on the canonical role, so renaming a title
+   * changes how the office is labelled across the site without altering who
+   * holds it or what they can do.
+   *
+   * Any key left undefined falls back to the country-scoped label from
+   * `getPartyRoleLabel`. Absent on parties that have never overridden a title.
+   * See `getPartyRoleLabel` / `getPartyDisplayRoleLabel`.
+   */
+  officerTitleOverrides?: {
+    chair?: string;
+    viceChair?: string;
+    treasurer?: string;
+  };
 }
 
 /**

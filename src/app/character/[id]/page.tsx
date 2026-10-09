@@ -65,7 +65,7 @@ import {
   buildPartyTenures,
   type PartyTenure,
 } from "@/lib/parties/historyQuery";
-import { getPartyRoleLabel } from "@/lib/parties/partyRoleLabels";
+import { getPartyDisplayRoleLabel } from "@/lib/parties/partyRoleLabels";
 import { getAuthUserWithCharacter } from "@/lib/auth";
 import { getOfficeLabel } from "@/lib/utils/politics";
 import { gameDateAnchorFromState } from "@/lib/utils/gameDate";
@@ -842,11 +842,11 @@ export default async function CharacterPage({ params }: PageProps) {
   const nationalPartyRole =
     party && character.party !== "independent"
       ? party.chairId?.equals(character._id)
-        ? getPartyRoleLabel(party.countryId, "chair")
+        ? getPartyDisplayRoleLabel(party, party.countryId, "chair")
         : party.viceChairId?.equals(character._id)
-          ? getPartyRoleLabel(party.countryId, "viceChair")
+          ? getPartyDisplayRoleLabel(party, party.countryId, "viceChair")
           : party.treasurerId?.equals(character._id)
-            ? getPartyRoleLabel(party.countryId, "treasurer")
+            ? getPartyDisplayRoleLabel(party, party.countryId, "treasurer")
             : null
       : null;
   const statePartyRole =

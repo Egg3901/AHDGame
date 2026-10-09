@@ -21,7 +21,7 @@ interface PartyOverviewPanelProps {
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export function PartyOverviewPanel({ party }: PartyOverviewPanelProps) {
-  const positionLabels = getPositionLabels(party.countryId);
+  const positionLabels = getPositionLabels(party.countryId, party.officerTitleOverrides);
   const strengthPercent =
     party.effectivePsCap > 0
       ? Math.min(100, Math.max(0, ((party.politicalStrength ?? 0) / party.effectivePsCap) * 100))

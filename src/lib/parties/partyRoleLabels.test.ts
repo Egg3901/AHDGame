@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { getPartyRoleLabel } from "./partyRoleLabels";
+import { getPartyRoleLabel, getPartyDisplayRoleLabel } from "./partyRoleLabels";
 
 describe("getPartyRoleLabel", () => {
   it("returns the default English label for a country with no overrides (US)", () => {
@@ -27,5 +27,31 @@ describe("getPartyRoleLabel", () => {
   it("falls back to default labels for an unknown country id", () => {
     expect(getPartyRoleLabel("ZZ", "chair")).toBe("National Chair");
     expect(getPartyRoleLabel("", "committee")).toBe("National Committee");
+  });
+});
+
+describe("getPartyDisplayRoleLabel", () => {
+  it("uses the party's override when set", () => {
+    expect(
+      getPartyDisplayRoleLabel(
+        { officerTitleOverrides: { chair: "Chairman" } },
+        "US",
+        "chair"
+      )
+    ).toBe("Chairman");
+  });
+
+  it("falls back to the country label when no override", () => {
+    expect(getPartyDisplayRoleLabel({}, "US", "viceChair")).toBe("National Vice Chair");
+  });
+
+  it("treats a blank override as absent", () => {
+    expect(
+      getPartyDisplayRoleLabel({ officerTitleOverrides: { treasurer: "   " } }, "US", "treasurer")
+    ).toBe("National Treasurer");
+  });
+
+  it("respects a country override when the party sets nothing", () => {
+    expect(getPartyDisplayRoleLabel({}, "CN", "chair")).toBe("General Secretary");
   });
 });

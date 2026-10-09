@@ -1,4 +1,5 @@
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
+import type { PoliticalParty } from "@/lib/db/types";
 
 export type PartyRoleLabelKey = "chair" | "viceChair" | "treasurer" | "committee";
 
@@ -20,4 +21,19 @@ export function getPartyRoleLabel(countryId: string, key: PartyRoleLabelKey): st
   const config = COUNTRY_CONFIGS[countryId.toUpperCase() as CountryId];
   const override = config?.partyRoleLabels?.[key];
   return override ?? DEFAULT_PARTY_ROLE_LABELS[key];
+}
+
+/**
+ * Display label for one of a party's three national leadership offices, with
+ * the party's own chair-set flavor override (`PoliticalParty.officerTitleOverrides`)
+ * taking precedence over the country-scoped label. `committee` is not overridable
+ * and always falls through to the country label.
+ */
+export function getPartyDisplayRoleLabel(
+  party: Pick<PoliticalParty, "officerTitleOverrides">,
+  countryId: string,
+  key: Exclude<PartyRoleLabelKey, "committee">
+): string {
+  const override = party.officerTitleOverrides?.[key];
+  return override && override.trim() ? override : getPartyRoleLabel(countryId, key);
 }

@@ -24,11 +24,14 @@ export const POSITION_LABELS: Record<NationalPosition, string> = {
 };
 
 /** Country-aware label map for the three national positions. */
-export function getPositionLabels(countryId: string): Record<NationalPosition, string> {
+export function getPositionLabels(
+  countryId: string,
+  overrides?: { chair?: string; viceChair?: string; treasurer?: string } | null
+): Record<NationalPosition, string> {
   return {
-    chair: getPartyRoleLabel(countryId, "chair"),
-    viceChair: getPartyRoleLabel(countryId, "viceChair"),
-    treasurer: getPartyRoleLabel(countryId, "treasurer"),
+    chair: overrides?.chair?.trim() || getPartyRoleLabel(countryId, "chair"),
+    viceChair: overrides?.viceChair?.trim() || getPartyRoleLabel(countryId, "viceChair"),
+    treasurer: overrides?.treasurer?.trim() || getPartyRoleLabel(countryId, "treasurer"),
   };
 }
 export const POSITION_DESC: Record<NationalPosition, string> = {

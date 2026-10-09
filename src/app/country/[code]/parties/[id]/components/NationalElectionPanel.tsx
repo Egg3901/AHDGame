@@ -31,6 +31,7 @@ export function NationalElectionPanel({
   isCandidateElsewhere,
   currentTurn,
   electionMethod,
+  officerTitleOverrides,
   onRefresh,
 }: {
   election: NationalElectionEntry | null;
@@ -48,6 +49,7 @@ export function NationalElectionPanel({
   currentTurn: number;
   /** How national leadership elections are tallied; absent/undefined means "party" (one-person one-vote). */
   electionMethod?: "party" | "committee" | "influence";
+  officerTitleOverrides?: { chair?: string; viceChair?: string; treasurer?: string } | null;
   onRefresh: () => void;
 }) {
   const [loading, setLoading] = useState(false);
@@ -72,7 +74,7 @@ export function NationalElectionPanel({
     }
   };
 
-  const label = getPositionLabels(country)[position];
+  const label = getPositionLabels(country, officerTitleOverrides)[position];
 
   const useInfluence = electionMethod === "influence";
 

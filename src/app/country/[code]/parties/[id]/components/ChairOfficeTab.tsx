@@ -32,6 +32,54 @@ export function ChairOfficeTab({ party, countryId, characterId, onUpdate }: Chai
   const [msg, setMsg] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const [titles, setTitles] = useState<Record<"chair" | "viceChair" | "treasurer", string>>({
+    chair: party.officerTitleOverrides?.chair ?? "",
+    viceChair: party.officerTitleOverrides?.viceChair ?? "",
+    treasurer: party.officerTitleOverrides?.treasurer ?? "",
+  });
+  const [savingTitles, setSavingTitles] = useState(false);
+  const [titleMsg, setTitleMsg] = useState("");
+
+  useEffect(() => {
+    setTitles({
+      chair: party.officerTitleOverrides?.chair ?? "",
+      viceChair: party.officerTitleOverrides?.viceChair ?? "",
+      treasurer: party.officerTitleOverrides?.treasurer ?? "",
+    });
+  }, [party.officerTitleOverrides]);
+
+  const defaultTitle = (key: "chair" | "viceChair" | "treasurer") =>
+    getPartyRoleLabel(countryId, key);
+
+  const handleTitlesSave = async () => {
+    setSavingTitles(true);
+    setTitleMsg("");
+    try {
+      const res = await fetch(`${partyApiUrl(countryId, party.id)}/settings`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          officerTitleOverrides: {
+            chair: titles.chair.trim() ? titles.chair.trim() : null,
+            viceChair: titles.viceChair.trim() ? titles.viceChair.trim() : null,
+            treasurer: titles.treasurer.trim() ? titles.treasurer.trim() : null,
+          },
+        }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setTitleMsg("✓ Officer titles updated");
+        onUpdate();
+      } else {
+        setTitleMsg(`✗ ${data.error}`);
+      }
+    } catch {
+      setTitleMsg("✗ Network error");
+    } finally {
+      setSavingTitles(false);
+    }
+  };
+
   const [showPurgeModal, setShowPurgeModal] = useState(false);
   const [selectedMemberId, setSelectedMemberId] = useState("");
   const [purging, setPurging] = useState(false);
@@ -351,6 +399,40 @@ export function ChairOfficeTab({ party, countryId, characterId, onUpdate }: Chai
                 ? "Enter a valid Discord invite URL such as https://discord.gg/your-invite or https://discord.com/invite/your-invite."
                 : "Add your party's Discord invite link here. This is shown on the national parties page and only supports Discord invite URLs."}
             </p>
+          </div>
+
+          {/* Officer Titles */}
+          <div className="mt-8 space-y-4 border-t border-card-border pt-6">
+            <h3 className="text-sm font-semibold text-muted">Officer titles</h3>
+            <p className="text-xs text-muted">
+              Rename your party's three leadership offices for flavor. Leave a field blank to use
+              the default title ({defaultTitle("chair")}, {defaultTitle("viceChair")},{" "}
+              {defaultTitle("treasurer")}). This changes only how the office is labelled, never
+              who holds it or what they can do.
+            </p>
+            {(["chair", "viceChair", "treasurer"] as const).map((key) => (
+              <div key={key} className="flex flex-col gap-1.5 sm:flex-row sm:items-center">
+                <span className="w-24 shrink-0 text-xs text-muted">{defaultTitle(key)}</span>
+                <input
+                  type="text"
+                  value={titles[key]}
+                  onChange={(e) => setTitles((prev) => ({ ...prev, [key]: e.target.value }))}
+                  maxLength={30}
+                  placeholder={defaultTitle(key)}
+                  className="flex-1 rounded-lg border border-card-border bg-card px-3 py-2 text-sm"
+                />
+              </div>
+            ))}
+            {titleMsg && (
+              <div className={`rounded-lg p-3 text-sm ${getMessageStyle(titleMsg)}`}>{titleMsg}</div>
+            )}
+            <button
+              onClick={handleTitlesSave}
+              disabled={savingTitles}
+              className="rounded-lg border border-primary/40 bg-primary/10 px-4 py-2 text-sm font-medium text-primary hover:bg-primary/20 disabled:opacity-50"
+            >
+              {savingTitles ? "Saving..." : "Save Titles"}
+            </button>
           </div>
 
           {/* Preview */}

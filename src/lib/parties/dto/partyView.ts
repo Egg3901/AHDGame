@@ -144,6 +144,11 @@ export interface PartyData {
    * fail-open branch so the client does not re-derive the rule.
    */
   frontierRegions?: string[] | null;
+  /**
+   * Chair-set flavor overrides for the three national leadership titles
+   * (suggestion #???). Absent key = use the country-scoped `getPartyRoleLabel`.
+   */
+  officerTitleOverrides?: { chair?: string; viceChair?: string; treasurer?: string } | null;
   membershipMode?: "open" | "approval";
   /**
    * Pending join requests while `membershipMode` is "approval". Surfaced to

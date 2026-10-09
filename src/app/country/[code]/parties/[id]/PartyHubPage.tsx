@@ -1194,6 +1194,7 @@ function NationalPartyHub({ scope }: { scope: Extract<PartyHubScope, { kind: "na
                       canRun={electionData.canRun}
                       runCooldownUntil={electionData.runCooldownUntil}
                       electionMethod={electionData.leadershipElectionMethod}
+                      officerTitleOverrides={party.officerTitleOverrides}
                       userVote={electionData.userVotes[pos]}
                       isCandidate={electionData.isCandidate[pos]}
                       isCandidateElsewhere={

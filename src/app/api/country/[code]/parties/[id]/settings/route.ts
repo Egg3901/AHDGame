@@ -18,6 +18,14 @@ import type { PoliticalParty } from "@/lib/db/types";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { normalizeDiscordInviteUrl } from "@/lib/discord/invite";
 import { canActAsChair } from "@/lib/parties/actingChair";
+import { containsBlockedName } from "@/lib/moderation";
+
+const officerTitleSchema = z
+  .string()
+  .trim()
+  .min(1, "Title must be at least 1 character")
+  .max(30, "Title must be 30 characters or less")
+  .refine((value) => !containsBlockedName(value), { message: "Title contains prohibited language" });
 
 const updateSchema = z.object({
   color: z
@@ -28,6 +36,15 @@ const updateSchema = z.object({
   // Membership gate (suggestion #72): "open" = immediate joins, "approval" =
   // joins file a pending request for a leader to accept/decline.
   membershipMode: z.enum(["open", "approval"]).optional(),
+  // Chair-set flavor overrides for the three national leadership titles.
+  // A null value clears that title back to the country default.
+  officerTitleOverrides: z
+    .object({
+      chair: z.union([officerTitleSchema, z.null()]).optional(),
+      viceChair: z.union([officerTitleSchema, z.null()]).optional(),
+      treasurer: z.union([officerTitleSchema, z.null()]).optional(),
+    })
+    .optional(),
 });
 
 export async function PATCH(
@@ -96,6 +113,27 @@ export async function PATCH(
 
     if (parsed.data.membershipMode !== undefined) {
       updates.membershipMode = parsed.data.membershipMode;
+    }
+
+    if (parsed.data.officerTitleOverrides !== undefined) {
+      const submitted = parsed.data.officerTitleOverrides;
+      const merged: { chair?: string; viceChair?: string; treasurer?: string } = {
+        ...(party.officerTitleOverrides ?? {}),
+      };
+      let touched = false;
+      for (const key of ["chair", "viceChair", "treasurer"] as const) {
+        const value = submitted[key];
+        if (value === undefined) continue;
+        touched = true;
+        if (value === null) {
+          delete merged[key];
+        } else {
+          merged[key] = value;
+        }
+      }
+      if (touched) {
+        updates.officerTitleOverrides = Object.keys(merged).length > 0 ? merged : {};
+      }
     }
 
     if (Object.keys(updates).length <= 1) {

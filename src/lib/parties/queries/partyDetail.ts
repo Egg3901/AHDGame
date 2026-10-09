@@ -363,6 +363,7 @@ export async function getPartyDetail(db: Db, party: PoliticalParty): Promise<Par
     id: String(party.sequentialId),
     name: party.name,
     frontierRegions,
+    officerTitleOverrides: party.officerTitleOverrides ?? null,
     abbreviation: party.abbreviation,
     color: getPartyHex(String(party.sequentialId), party.color),
     discordInviteUrl: party.discordInviteUrl ?? null,
