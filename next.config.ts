@@ -242,13 +242,19 @@ const nextConfig: NextConfig = {
         source: "/(.*)",
         headers: [
           { key: "X-Content-Type-Options", value: "nosniff" },
-          // SAMEORIGIN (not DENY) so same-origin pages can embed each other in
-          // iframes — the Political Operations dashboard frames the same-origin
-          // /campaign/[id] page in its Campaign Manager tab. DENY blocks ALL
-          // framing including same-origin, which rendered that iframe as the
-          // browser's "refused to connect" placeholder. Cross-origin framing
-          // (the actual clickjacking vector) is still blocked.
-          { key: "X-Frame-Options", value: "SAMEORIGIN" },
+          // Enforcing framing policy (replaces X-Frame-Options, which cannot
+          // allowlist origins). 'self' keeps same-origin framing working: the
+          // Political Operations dashboard frames the same-origin
+          // /campaign/[id] page in its Campaign Manager tab. *.itch.io (the game
+          // page) and *.hwcdn.net (itch.io's CDN that serves the uploaded
+          // index.html inside an iframe) are allowlisted for the official
+          // itch.io embed. Every other origin is still blocked from framing.
+          // Only frame-ancestors is enforced here; the report-only policy below
+          // is unchanged.
+          {
+            key: "Content-Security-Policy",
+            value: "frame-ancestors 'self' https://*.itch.io https://*.hwcdn.net",
+          },
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
           { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
           { key: "Strict-Transport-Security", value: "max-age=31536000; includeSubDomains" },
