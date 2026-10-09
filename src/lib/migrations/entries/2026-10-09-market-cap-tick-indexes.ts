@@ -13,12 +13,18 @@ export const migration: Migration = {
           { exchange: 1, at: 1 },
           { name: "marketCapTicks_exchange_at", background: true }
         );
+      await db
+        .collection("marketCapTicks")
+        .createIndex(
+          { exchange: 1, turn: 1, at: 1 },
+          { name: "marketCapTicks_exchange_turn_at", background: true }
+        );
     }
     return {
       documentsScanned: 0,
-      documentsUpdated: ctx.dryRun ? 0 : 1,
+      documentsUpdated: ctx.dryRun ? 0 : 2,
       notes: [
-        `${ctx.dryRun ? "would create" : "created/verified"} marketCapTicks.marketCapTicks_exchange_at`,
+        `${ctx.dryRun ? "would create" : "created/verified"} marketCapTicks.marketCapTicks_exchange_at and marketCapTicks_exchange_turn_at`,
       ],
     };
   },
