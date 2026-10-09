@@ -50,6 +50,8 @@ export interface ReferralBoardData {
 }
 
 export interface ContestsPageData {
+  /** Server clock when the page data was read, for countdowns. */
+  loadedAt: number;
   contests: ContestCardData[];
   past: PastRoundData[];
   referrals: ReferralBoardData;
@@ -101,6 +103,7 @@ export async function loadContestsPage(
   }
 
   return {
+    loadedAt: Date.now(),
     contests,
     past: past.map((r) => ({
       id: r._id,

@@ -6,7 +6,7 @@
     "endsAt": "Round {round} ends",
     "entrants": "{count, plural, =0 {No entries yet} one {# entry} other {# entries}}",
     "noRound": "The next round opens after the coming turn.",
-    "noLeaders": "No one is ahead yet. Standings update every turn.",
+    "noLeaders": "No one is ahead yet. Any gain takes the lead.",
     "rank": "#",
     "entry": "Entry",
     "score": "Change",
@@ -65,8 +65,17 @@
       "formerPlayer": "Former player",
       "iterationTitle": "Iteration referrals"
     },
-    "prize": "Prize: {prize} to the winner",
     "referralsHeading": "Referrals",
-    "iterationPrize": "Prize: the top 3 get Supporter for the whole next iteration"
+    "iterationPrize": "Supporter for the whole next iteration",
+    "poolLabel": "Prize pool this week",
+    "prizeLabel": "Prize",
+    "prizeLabelTop3": "Top 3 win",
+    "leading": "Leading",
+    "youLead": "You are in the lead",
+    "gapBehind": "{gap} behind the leader",
+    "countdown": "Round {round} ends in",
+    "timeLeft": "{days}d {hours}h {minutes}m",
+    "settling": "Settling after the next turn",
+    "tiedLead": "tied with the leader"
   }
 }
