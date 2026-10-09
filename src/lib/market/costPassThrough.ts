@@ -11,7 +11,7 @@
  * out, because nothing connected what a farm pays to what food sells for.
  *
  * The mechanism: each commodity's producing sector(s) have an input recipe
- * (SECTOR_DEMAND). The recipe's rate-weighted average of LAGGED price ratios is
+ * (SECTOR_DEMAND). The recipe's rate-weighted average of damped LAGGED price factors is
  * the producer's input-cost index. When that index is above 1 (inputs dearer
  * than base), the commodity's effective base price is lifted by a damped share
  * of the excess before supply/demand pressure applies:
@@ -22,6 +22,9 @@
  *  - FLOOR AT 1: cheap inputs never discount the price below what the
  *    supply/demand engine says — gluts still clear, only cost SQUEEZES are
  *    transmitted. Pass-through is a floor-lifter, not a price-setter.
+ *  - Realized price factors, using the physical input bill's exponent and clamp.
+ *    A raw quote beyond the billed price ceiling cannot keep lifting cost pressure.
+ *    Existing commodity price adjustment eases the new target in over turns.
  *  - LAGGED ratios (prior turn's prices) — the same one-turn lag the input
  *    bill itself uses, so there is no same-turn circularity.
  *  - BETA 0.5: producers eat half the squeeze, pass half. Chained recipes
@@ -33,6 +36,7 @@
 import type { CommodityType } from "@/lib/constants/commodities";
 import { SECTOR_DEMAND, SECTOR_SUPPLY } from "@/lib/constants/commodities";
 import type { OperatingSectorType } from "@/lib/constants/corporations";
+import { producerInputCostIndex } from "./rules/producerInputCostIndex";
 
 /** Share of a producer's input-cost excess passed into its output price. */
 export const COST_PASS_THROUGH_BETA = 0.5;
@@ -40,7 +44,7 @@ export const COST_PASS_THROUGH_BETA = 0.5;
 export const COST_PASS_THROUGH_CAP = 1.75;
 
 /**
- * Rate-weighted average input price ratio for a sector type. 1 when the sector
+ * Rate-weighted realized input cost index for a sector type. 1 when the sector
  * has no recipe or every ratio is missing (missing ratio = at base = 1).
  */
 export function sectorInputCostIndex(
@@ -49,15 +53,7 @@ export function sectorInputCostIndex(
 ): number {
   const recipe = SECTOR_DEMAND[sectorType];
   if (!recipe || recipe.length === 0) return 1;
-  let weighted = 0;
-  let totalRate = 0;
-  for (const { commodity, rate } of recipe) {
-    if (!(rate > 0)) continue;
-    const ratio = priceRatios.get(commodity);
-    weighted += rate * (Number.isFinite(ratio) && (ratio as number) > 0 ? (ratio as number) : 1);
-    totalRate += rate;
-  }
-  return totalRate > 0 ? weighted / totalRate : 1;
+  return producerInputCostIndex(recipe, priceRatios);
 }
 
 /** commodity -> its producing sector types, weighted by output rate. */

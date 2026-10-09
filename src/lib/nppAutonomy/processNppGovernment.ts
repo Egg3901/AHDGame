@@ -64,6 +64,7 @@ import {
   applyGovernmentPerformanceNudge,
 } from "./governmentPerformance";
 import { computeFiscalStance, computePlanStance, deriveCommandStance } from "./fiscalStance";
+import { fiscalBalanceGdpShare } from "./rules/fiscalDeficitPressure";
 import { getEraMonetaryBaseline } from "@/lib/constants/monetaryEra";
 import { MONETARY_BASELINES } from "@/lib/constants/currencies";
 import { formNppCabinet } from "./formNppCabinet";
@@ -333,6 +334,9 @@ async function computeAndPersistGoverningAgenda(
     {
       projection: {
         debtToGdpRatio: 1,
+        gdp: 1,
+        "revenue.total": 1,
+        "spending.total": 1,
         "economicFactors.shortageIndex": 1,
         "economicFactors.monetaryOverhang": 1,
       },
@@ -413,6 +417,11 @@ async function computeAndPersistGoverningAgenda(
           getEraMonetaryBaseline(countryId, currentYear)?.targetInflation ??
           MONETARY_BASELINES[countryId]?.targetInflation,
         debtToGdpRatio: typeof budget?.debtToGdpRatio === "number" ? budget.debtToGdpRatio : 0,
+        fiscalBalanceGdpShare: fiscalBalanceGdpShare({
+          gdp: budget?.gdp,
+          revenueTotal: budget?.revenue?.total,
+          spendingTotal: budget?.spending?.total,
+        }),
         personality: headNpp.personality,
         currentTurn,
       });
