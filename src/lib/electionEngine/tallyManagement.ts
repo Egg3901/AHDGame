@@ -51,6 +51,7 @@ import {
 } from "./singleSeatIncumbency";
 import { getFundsByPartyForElection } from "./fundsByParty";
 import { TALLY_WITH_SNAPSHOT_TURNS_ONLY } from "./tallyProjections";
+import { planTurnSlice, sameTurnSliceParts } from "./rules/turnSlice";
 import { accumulateHuBallots } from "@/lib/countries/hu/rules/accumulateBallots2014";
 import { allocateHuListTurnVotes } from "@/lib/countries/hu/rules/listBallots2014";
 import {
@@ -199,21 +200,19 @@ export async function accumulateVoteTurn(
   // A turn may be split in two: the half-hour results tick banks an "early"
   // half ahead of the turn, and the turn then banks the "rest". Each half is
   // counted once; a whole or "rest" snapshot means the turn is fully counted.
-  const sameTurn = tally.turnSnapshots?.filter((s) => s.turn === turnNumber) ?? [];
-  if (
-    options?.slice === "early" ? sameTurn.length > 0 : sameTurn.some((s) => s.slicePart !== "early")
-  )
-    return;
-  const slicePart: VoteTurnSnapshot["slicePart"] =
-    options?.slice === "early" ? "early" : sameTurn.length > 0 ? "rest" : undefined;
-  const sliceFraction = slicePart ? 0.5 : 1;
+  const slicePlan = planTurnSlice(
+    sameTurnSliceParts(tally.turnSnapshots, turnNumber),
+    options?.slice
+  );
+  if (!slicePlan) return;
+  const { slicePart, fraction: sliceFraction } = slicePlan;
 
   const election =
     options?.election ?? (await db.collection<Election>("elections").findOne({ _id: electionId }));
   if (!election || !election.endTime) return;
+  // Ranked ballots split cleanly: each half casts its own first-preference
+  // increments, and identical rankings merge by adding weights.
   const isPrStv = tally.countingMethod === "pr_stv";
-  // Ranked ballots are drawn whole per turn; they keep the hourly path.
-  if (isPrStv && slicePart === "early") return;
   if (isPrStv) {
     if (election.countryId !== "IE" || !["dail", "localCouncil"].includes(election.electionType))
       throw new Error("Ranked PR-STV is supported only for Irish Dail and local council races");
@@ -569,12 +568,10 @@ export async function accumulateVoteTurn(
     election.countryId === "RU" &&
     election.electionType === "federationCouncilMember" &&
     election.russianCouncilRound != null;
-  // Bespoke national ballot systems keep the hourly path.
-  if (
-    slicePart === "early" &&
-    (isBgOrdinary || isHuBound || isJapanMixed || isBgFounding || isBoundDuma || isBoundCouncil)
-  )
-    return;
+  // Bespoke national ballot systems split like the rest: every per-slice
+  // clamp below is against the cumulative register (so two halves clamp to
+  // the same total as one slice), and their per-district, list and ledger
+  // maps add each half's increments.
   const alreadyCast = isPrStv
     ? Object.values(tally.totalVotes).reduce((sum, votes) => sum + votes, 0)
     : isBoundCouncil
@@ -1227,14 +1224,24 @@ export async function accumulateVoteTurn(
     $push: { turnSnapshots: snapshot } as never,
   };
   // STV totals and original ballots must commit together, and a concurrent
-  // replay must not overwrite another turn's ballot receipt.
+  // replay must not overwrite another turn's ballot receipt. The rest of a
+  // split turn lands only beside that turn's early half.
   const tallyFilter = isPrStv
-    ? {
-        electionId,
-        finalized: false,
-        "turnSnapshots.turn": { $ne: turnNumber },
-        turnSnapshots: { $size: tally.turnSnapshots.length },
-      }
+    ? slicePart === "rest"
+      ? {
+          electionId,
+          finalized: false,
+          turnSnapshots: {
+            $size: tally.turnSnapshots.length,
+            $not: { $elemMatch: { turn: turnNumber, slicePart: { $ne: "early" } } },
+          },
+        }
+      : {
+          electionId,
+          finalized: false,
+          "turnSnapshots.turn": { $ne: turnNumber },
+          turnSnapshots: { $size: tally.turnSnapshots.length },
+        }
     : { electionId };
   if (options?.tallyWrites) {
     options.tallyWrites.push({ updateOne: { filter: tallyFilter, update: tallyUpdate } });
