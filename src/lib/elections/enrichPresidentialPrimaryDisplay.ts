@@ -1,4 +1,6 @@
 import { primaryWinMomentumFromTally } from "@/lib/elections/primaryRegional/rules";
+import { loadPrimaryFieldOffices } from "@/lib/elections/primaryRegional/fieldOffices";
+import { getGameTime } from "@/lib/time/gameTime";
 import { usesCampaignAds } from "@/lib/campaignTargeting/rules";
 import { loadCampaignProjectionContext } from "@/lib/campaignTargeting/audience";
 import type { Db } from "mongodb";
@@ -144,6 +146,18 @@ export async function applyPresidentialPrimaryDisplay(
     homeStateByNppId: homeStateByNppIdForBonuses,
   });
 
+  // Field offices lift a candidate's vote in the states they are in, in the
+  // live wave and so in every projection of it. Loaded once for the race.
+  const electionId = candidates[0]?.electionId;
+  const fieldOffices = electionId
+    ? await loadPrimaryFieldOffices(
+        db,
+        { _id: electionId, countryId },
+        candidates,
+        (await getGameTime()).currentTurn
+      )
+    : undefined;
+
   for (const [rawPartyId, candidateIds] of rawCandidateIdsByParty.entries()) {
     const party = partyMap.get(rawPartyId);
     if (candidateIds.length === 0) continue;
@@ -212,6 +226,7 @@ export async function applyPresidentialPrimaryDisplay(
       // Same seed as the live wave, so the projection sees the same state swing.
       regionalSeed: candidates[0]?.electionId ? String(candidates[0].electionId) : undefined,
       winMomentum: primaryWinMomentumFromTally(tally),
+      fieldOffices,
       campaignContext,
       candidates: projectionCandidates,
       candidateMeta,

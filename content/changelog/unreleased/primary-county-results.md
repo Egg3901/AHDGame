@@ -14,3 +14,4 @@ areas: [fullstack]
 - Counted results are shown where a state has voted and projections elsewhere. Candidates further left than their rivals do better in a state's left-leaning counties, and the reverse for the right.
 - Hover a county for its leader, margin and votes.
 - Winning presidential primaries now builds momentum: every state a candidate wins gives them a moderate boost in the waves that follow. Older wins count for less, and the boost tops out at 8%.
+- Field offices now count in presidential primaries, the same way they do in the general election: offices in a state lift the candidate's vote there, and on the county map their votes concentrate in the counties where the offices sit.

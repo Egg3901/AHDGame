@@ -17,6 +17,7 @@
  */
 
 import { primaryWinMomentumFromTally } from "@/lib/elections/primaryRegional/rules";
+import { loadPrimaryFieldOffices } from "@/lib/elections/primaryRegional/fieldOffices";
 import { usesCampaignAds } from "@/lib/campaignTargeting/rules";
 import { loadCampaignProjectionContext } from "@/lib/campaignTargeting/audience";
 
@@ -310,6 +311,7 @@ export async function loadPrimaryPartyData(
     // Same seed as the live wave, so the projection sees the same state swing.
     regionalSeed: String(election._id),
     winMomentum: primaryWinMomentumFromTally(tally),
+    fieldOffices: await loadPrimaryFieldOffices(db, election, candidates, gameTime.currentTurn),
     campaignContext,
     candidates: enriched,
     candidateMeta,

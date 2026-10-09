@@ -13,6 +13,15 @@ vi.mock("@/lib/elections/electionParamResolution", () => ({
 }));
 vi.mock("@/lib/elections/primaryPartyDetail", () => ({ loadPrimaryPartyData: vi.fn() }));
 vi.mock("@/lib/maps/subdivisionData", () => ({ loadSubdivisionFile: vi.fn() }));
+vi.mock("@/lib/db/collections/gameState", () => ({
+  getGameStatePresetOrDefault: vi.fn().mockResolvedValue("2027"),
+}));
+vi.mock("@/lib/time/gameTime", () => ({
+  getGameTime: vi.fn().mockResolvedValue({ currentTurn: 10 }),
+}));
+vi.mock("@/lib/campaigns/fieldOffices/engine", () => ({
+  loadFieldOfficesForElection: vi.fn().mockResolvedValue([]),
+}));
 
 const ELECTION_OID = new ObjectId();
 const C1 = new ObjectId();
@@ -89,6 +98,28 @@ describe("GET primary county results", () => {
     expect(right.winner).toBe(C2.toString());
     expect(body.candidateColors[C2.toString()]).toBe("#16a34a");
     expect(body.voted).toBe(true);
+  });
+
+  it("pulls a candidate's votes toward a county with their field office", async () => {
+    const { loadPrimaryPartyData } = await import("@/lib/elections/primaryPartyDetail");
+    vi.mocked(loadPrimaryPartyData).mockResolvedValue(
+      partyData({ IA: { [C1.toString()]: 1000, [C2.toString()]: 1000 } }) as never
+    );
+    const base = await (await call("IA")).json();
+    const { loadFieldOfficesForElection } = await import("@/lib/campaigns/fieldOffices/engine");
+    vi.mocked(loadFieldOfficesForElection).mockResolvedValueOnce([
+      {
+        candidateId: CH2,
+        regionId: "IA",
+        subdivisionId: "19001",
+        openedTurn: 1,
+        yieldFactor: 1,
+      },
+    ] as never);
+    const boosted = await (await call("IA")).json();
+    const c2In = (b: { subdivisions: { id: string; votes: Record<string, number> }[] }) =>
+      b.subdivisions.find((s) => s.id === "19001")!.votes[C2.toString()];
+    expect(c2In(boosted)).toBeGreaterThan(c2In(base));
   });
 
   it("404s a state with no primary result yet", async () => {

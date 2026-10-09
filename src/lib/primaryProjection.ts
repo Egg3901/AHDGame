@@ -83,6 +83,11 @@ export interface ProjectPrimaryInput {
    * momentum-assisted result reads as an upset. Omitted → no momentum.
    */
   winMomentum?: Readonly<Record<string, number>>;
+  /**
+   * Field offices: `(candidateId, stateId) → multiplier`, from
+   * `loadPrimaryFieldOffices`. Must match the live wave's. Omitted → none.
+   */
+  fieldOffices?: (candidateId: string, stateId: string) => number;
   campaignContext?: CampaignProjectionContext;
   /** Intra-party candidates (already enriched: policies, fav, NPI, etc.) */
   candidates: EnrichedCandidate[];
@@ -356,6 +361,8 @@ export function projectPrimaryByState(input: ProjectPrimaryInput): ProjectionRes
       votes *= supportMoodMultiplier(meta?.support);
       // Win momentum from states already won (matches stagger).
       votes *= input.winMomentum?.[ec.candidateId] ?? 1;
+      // Field offices in this state (matches stagger).
+      votes *= input.fieldOffices?.(ec.candidateId, stateId) ?? 1;
       if (hasPlayerInPartyPrimary && ec.isNPP) {
         votes *= NPP_STAGGER_EXTRA_MULTIPLIER;
       }

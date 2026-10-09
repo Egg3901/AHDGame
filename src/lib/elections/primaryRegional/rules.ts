@@ -115,8 +115,8 @@ export function homeDivisionMultiplier(
  * moves their share between a state's left- and right-leaning counties.
  */
 export const PRIMARY_COUNTY_LEAN_BETA = 0.15;
-/** County lean (PVI-like points) that counts as one unit of "more left / more right". */
-export const PRIMARY_COUNTY_LEAN_SCALE = 25;
+/** County lean (Cook PVI points) that counts as one unit of "more left / more right". */
+export const PRIMARY_COUNTY_LEAN_SCALE = 12;
 /** Fixed per-county texture, smaller than the state swing. */
 export const PRIMARY_COUNTY_SWING_SIGMA = 0.08;
 
@@ -151,7 +151,13 @@ export function distributePrimaryCounties(
   stateVotes: Record<string, number>,
   econByCandidate: Record<string, number>,
   seed: string,
-  stateId: string
+  stateId: string,
+  /**
+   * Extra pull per county per candidate (countyId → candidateId → multiplier),
+   * e.g. a field office. Moves a candidate's state votes toward those counties;
+   * the state totals do not change.
+   */
+  countyBoost?: Readonly<Record<string, Readonly<Record<string, number>>>>
 ): PrimaryCountyResult[] {
   const ids = Object.keys(stateVotes).filter((id) => stateVotes[id] > 0);
   const totalVotes = ids.reduce((s, id) => s + stateVotes[id], 0);
@@ -175,7 +181,8 @@ export function distributePrimaryCounties(
       // the state: exp(0.15 * 2 * 2), about 1.8x before normalisation.
       const tilt = Math.exp(PRIMARY_COUNTY_LEAN_BETA * rel * dLean);
       const texture = primaryStateSwing(seed, `${stateId}:${c.id}`, id, PRIMARY_COUNTY_SWING_SIGMA);
-      raw[id] = (stateVotes[id] / totalVotes) * tilt * texture;
+      const boost = countyBoost?.[c.id]?.[id] ?? 1;
+      raw[id] = (stateVotes[id] / totalVotes) * tilt * texture * boost;
       rawTotal += raw[id];
     }
     const votes: Record<string, number> = {};

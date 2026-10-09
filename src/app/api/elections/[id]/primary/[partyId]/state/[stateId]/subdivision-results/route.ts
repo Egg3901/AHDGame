@@ -8,6 +8,12 @@ import { resolveElectionRouteParam } from "@/lib/elections/electionParamResoluti
 import { loadPrimaryPartyData } from "@/lib/elections/primaryPartyDetail";
 import { loadSubdivisionFile } from "@/lib/maps/subdivisionData";
 import { distributePrimaryCounties } from "@/lib/elections/primaryRegional/rules";
+import { getGameStatePresetOrDefault } from "@/lib/db/collections/gameState";
+import { loadFieldOfficesForElection } from "@/lib/campaigns/fieldOffices/engine";
+import { fieldOfficeRamp } from "@/lib/campaigns/fieldOffices/effects";
+import { getFieldOfficeRules } from "@/lib/campaigns/fieldOffices/rules";
+import { campaignStrengthLookupKey } from "@/lib/campaigns/suspendEndorseLifecycle";
+import { getGameTime } from "@/lib/time/gameTime";
 
 interface RouteParams {
   params: Promise<{ id: string; partyId: string; stateId: string }>;
@@ -68,7 +74,10 @@ export async function GET(request: Request, { params }: RouteParams) {
       return errorResponse(404, "No primary result for this state yet");
     }
 
-    const file = await loadSubdivisionFile("counties", regionId);
+    // County leans follow the world's era, as on the general county map.
+    const file = await loadSubdivisionFile("counties", regionId, {
+      preset: await getGameStatePresetOrDefault(db),
+    });
     if (!file) return errorResponse(404, "County data not available for this state");
 
     // Each candidate's economic position: the character's, or the NPP's.
@@ -82,6 +91,29 @@ export async function GET(request: Request, { params }: RouteParams) {
       if (typeof econ === "number") econByCandidate[key] = econ;
     }
 
+    // Field offices pull a candidate's votes toward the counties they sit in,
+    // by the same in-county lift the vote engines use.
+    const countyBoost: Record<string, Record<string, number>> = {};
+    const officeRules = getFieldOfficeRules("US");
+    if (officeRules) {
+      const electionCandidateByCampaignKey = new Map(
+        data.candidates.map((c) => [campaignStrengthLookupKey(c), c._id.toString()])
+      );
+      const { currentTurn } = await getGameTime();
+      for (const office of await loadFieldOfficesForElection(db, election._id)) {
+        if (office.regionId?.toUpperCase() !== regionId || !office.subdivisionId) continue;
+        const candidateId = electionCandidateByCampaignKey.get(office.candidateId.toString());
+        if (!candidateId) continue;
+        const lift =
+          (fieldOfficeRamp(office.openedTurn, currentTurn) *
+            officeRules.subdivisionPct *
+            (office.yieldFactor ?? 1)) /
+          100;
+        const row = (countyBoost[office.subdivisionId] ??= {});
+        row[candidateId] = (row[candidateId] ?? 1) * (1 + lift);
+      }
+    }
+
     const rows = distributePrimaryCounties(
       file.subdivisions.map((s) => ({
         id: s.id,
@@ -92,7 +124,8 @@ export async function GET(request: Request, { params }: RouteParams) {
       stateVotes,
       econByCandidate,
       String(election._id),
-      regionId
+      regionId,
+      countyBoost
     );
     const pathById = new Map(file.subdivisions.map((s) => [s.id, s.path]));
 
