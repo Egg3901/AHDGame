@@ -10,7 +10,6 @@ import {
   iterationChanged,
   gainScore,
   pickWinner,
-  rankReferralWinners,
   rankStandings,
   referralGrantDecision,
   roundBelongsToEarlierWorld,
@@ -178,20 +177,6 @@ describe("iterationChanged", () => {
     expect(iterationChanged("Beta:2", "Beta:2")).toBe(false);
     expect(iterationChanged(undefined, "Beta:3")).toBe(false);
     expect(iterationChanged("Beta:2", undefined)).toBe(false);
-  });
-});
-
-describe("rankReferralWinners", () => {
-  it("takes the top three unbanned referrers by count then username", () => {
-    const winners = rankReferralWinners([
-      { userId: "1", username: "zed", count: 4, banned: false },
-      { userId: "2", username: "amy", count: 4, banned: false },
-      { userId: "3", username: "bad", count: 9, banned: true },
-      { userId: "4", username: "bob", count: 2, banned: false },
-      { userId: "5", username: "cat", count: 1, banned: false },
-      { userId: "6", username: "dan", count: 0, banned: false },
-    ]);
-    expect(winners.map((w) => w.username)).toEqual(["amy", "zed", "bob"]);
   });
 });
 

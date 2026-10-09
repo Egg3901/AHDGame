@@ -6,6 +6,11 @@ import * as Sentry from "@sentry/nextjs";
 import { scrubPushRequest } from "@/lib/nativePush/telemetry";
 import { scrubSentryEvent } from "@/lib/observability/scrubSentryEvent";
 import { isNextRenderStreamDisconnect } from "@/lib/observability/sentryFilters";
+import {
+  dropSentryLog,
+  SENTRY_DATA_COLLECTION,
+  SENTRY_TRACE_LIFECYCLE,
+} from "@/lib/observability/sentryPrivacy";
 import { describeSentryIngest, formatSentryIngestLog } from "@/lib/observability/sentryIngest";
 
 // RAILWAY_ENVIRONMENT_NAME is injected on all Railway deployments.
@@ -36,6 +41,8 @@ Sentry.init({
 
   // Define how likely traces are sampled. Adjust this value in production, or use tracesSampler for greater control.
   tracesSampleRate: isProduction ? 0.1 : 1,
+  // Keeps ignoreTransactions and beforeSendTransaction effective under v11.
+  traceLifecycle: SENTRY_TRACE_LIFECYCLE,
 
   // SSE at /api/events holds connections open for minutes — excluding avoids skewing Performance stats
   ignoreTransactions: [
@@ -49,11 +56,11 @@ Sentry.init({
 
   // SaaS logs are usage-billed. Keep errors and sampled traces as the initial
   // signal, then enable logs only after a volume and cost review.
-  enableLogs: false,
+  beforeSendLog: dropSentryLog,
 
-  // Disable sending user PII (Personally Identifiable Information) to error tracking
-  // https://docs.sentry.io/platforms/javascript/guides/nextjs/configuration/options/#sendDefaultPii
-  sendDefaultPii: false,
+  // Do not collect user identity, cookies, headers, bodies, query strings,
+  // database payloads or local variables.
+  dataCollection: SENTRY_DATA_COLLECTION,
 
   beforeSendTransaction: scrubPushRequest,
 

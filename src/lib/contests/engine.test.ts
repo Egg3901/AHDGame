@@ -17,7 +17,7 @@ vi.mock("./prize", () => ({
   }),
 }));
 
-import { runContests } from "./engine";
+import { ensureContestsOpen, runContests } from "./engine";
 import { payContestPrize } from "./prize";
 import { getHeadOfGovernmentCharacterIds } from "@/lib/api/headOfGovernment";
 import { applyPatreonStatus } from "@/lib/patreon/service";
@@ -124,6 +124,9 @@ function fakeDb(seed: Record<string, Doc[]>) {
           },
         };
         return cursor;
+      },
+      async countDocuments(filter: Doc = {}) {
+        return docs.filter((d) => matches(d, filter)).length;
       },
       async findOne(filter: Doc) {
         const doc = docs.find((d) => matches(d, filter));
@@ -306,6 +309,42 @@ describe("runContests: opening rounds", () => {
   });
 });
 
+describe("opening without waiting for a turn", () => {
+  it("fills standings the moment a round opens", async () => {
+    const { db, data } = fakeDb(
+      world(10, { small: 400_000, mid: 2e6, big: 3e7 }, { alice: 5, bob: 9, carol: 1 })
+    );
+
+    await runContests(db, 10, now);
+
+    const influence = rounds(data).find((r) => r.kind === "influence_gain")!;
+    expect(influence.standings).toHaveLength(3);
+    expect(influence.standings.every((s) => s.score === 0)).toBe(true);
+    expect(influence.refreshedAt).toEqual(now);
+  });
+
+  it("opens missing rounds from a page view, at most once a minute per process", async () => {
+    const { db, data } = fakeDb(
+      world(10, { small: 400_000, mid: 2e6, big: 3e7 }, { alice: 0, bob: 0, carol: 0 })
+    );
+    data.gameState[0].currentTurn = 12;
+    globalThis._ahdContestsOpenCheckedAt = undefined;
+
+    await ensureContestsOpen(db, now);
+    const opened = rounds(data).filter((r) => r.kind !== "referrals_iteration");
+    expect(opened).toHaveLength(5);
+    expect(opened.every((r) => r.startTurn === 12)).toBe(true);
+
+    // A second view inside the minute does nothing, even with a round missing.
+    data.contestRounds = data.contestRounds.filter((r) => r.kind !== "approval_gain");
+    await ensureContestsOpen(db, new Date(now.getTime() + 30_000));
+    expect(rounds(data).some((r) => r.kind === "approval_gain")).toBe(false);
+
+    await ensureContestsOpen(db, new Date(now.getTime() + 61_000));
+    expect(rounds(data).some((r) => r.kind === "approval_gain")).toBe(true);
+  });
+});
+
 describe("runContests: standings and settlement", () => {
   async function openedWorld() {
     const seed = world(
@@ -467,24 +506,34 @@ describe("runContests: referrals", () => {
     );
   });
 
-  it("adopts the running referral window on first run, then awards it when the iteration changes", async () => {
+  it("counts the iteration from the world's start, realigning an older window", async () => {
     const { db, data } = await openedWorld();
-    const opening = rounds(data).find((r) => r.kind === "referrals_iteration")!;
-    expect(opening).toMatchObject({
-      status: "active",
-      iterationKey: "Beta:2",
-      startedAt: new Date("2026-09-01T00:00:00Z"),
-    });
+    const worldStart = new Date(now.getTime() - 3 * 24 * 3_600_000);
+    data.gameState[0].worldEpochStartedAt = worldStart;
+    // A window carried over from before this world.
+    const round = rounds(data).find((r) => r.kind === "referrals_iteration")!;
+    round.startedAt = new Date("2026-08-09T00:00:00Z");
+    newPlayer(data, userA, new Date(worldStart.getTime() - 60_000)); // previous world
+    newPlayer(data, userA, new Date(worldStart.getTime() + 60_000));
+    newPlayer(data, userB, new Date(worldStart.getTime() + 120_000));
+    newPlayer(data, userB, new Date(worldStart.getTime() + 180_000));
 
-    // Counts accrued over the iteration; Carol won last time and did not place now.
-    const counts: Array<[ObjectId, number]> = [
-      [userA, 6],
-      [userB, 4],
-      [userBanned, 9],
-    ];
-    for (const [id, n] of counts) {
-      data.users.find((u) => String(u._id) === id.toString())!.referralContestCount = n;
-    }
+    await runContests(db, 11, new Date(now.getTime() + 3_600_000));
+
+    const updated = rounds(data).find((r) => r._id === round._id)!;
+    expect(updated.startedAt).toEqual(worldStart);
+    expect(updated.standings.map((s) => [s.characterName, s.score])).toEqual([
+      ["Bob", 2],
+      ["Alice", 1],
+    ]);
+  });
+
+  it("awards the standings stored before the reset when the iteration changes", async () => {
+    const { db, data } = await openedWorld();
+    const during = new Date(now.getTime() + 60_000);
+    for (let i = 0; i < 3; i++) newPlayer(data, userA, during);
+    for (let i = 0; i < 2; i++) newPlayer(data, userB, during);
+    newPlayer(data, userBanned, during);
     Object.assign(
       data.users.find((u) => String(u._id) === userC.toString())!,
       {
@@ -493,33 +542,37 @@ describe("runContests: referrals", () => {
         patreonExpiresAt: null,
       }
     );
-
-    // Same iteration: nothing is awarded.
     await runContests(db, 11, new Date(now.getTime() + 3_600_000));
     expect(applyPatreonStatus).not.toHaveBeenCalled();
+    const first = rounds(data).find((r) => r.kind === "referrals_iteration")!;
 
+    // Reset: the old world's newcomers retire, a new iteration and world begin.
+    data.characters = data.characters.filter((c) => c.name !== "New");
+    const newWorld = new Date(now.getTime() + 7_000_000);
     data.gameState[0].iteration = { type: "Beta", number: 3 };
-    const reset = new Date(now.getTime() + 7_200_000);
-    const summary = await runContests(db, 1, reset);
+    data.gameState[0].worldEpochStartedAt = newWorld;
+    newPlayer(data, userB, new Date(newWorld.getTime() + 60_000)); // before the first turn
+    const summary = await runContests(db, 1, new Date(newWorld.getTime() + 3_600_000));
 
     expect(summary.referrals).toBe("awarded");
     const granted = vi.mocked(applyPatreonStatus).mock.calls.map((c) => c[1]);
     expect(granted.map((g) => g.userId.toString())).toEqual([userA, userB].map(String));
     expect(granted[0]).toMatchObject({ tier: "supporter", expiresAt: null, provider: "contest" });
-    // Last iteration's winner loses contest Supporter; the banned leader got nothing.
     expect(data.users.find((u) => String(u._id) === userC.toString())).toMatchObject({
       patreonTier: null,
       supporterProvider: null,
     });
-    expect(data.users.every((u) => (u.referralContestCount ?? 0) === 0)).toBe(true);
-    const settled = rounds(data).find((r) => r._id === opening._id)!;
-    expect(settled.status).toBe("settled");
+    const settled = rounds(data).find((r) => r._id === first._id)!;
     expect(settled.winners.map((w) => [w.rank, w.characterName, w.score])).toEqual([
-      [1, "Alice", 6],
-      [2, "Bob", 4],
+      [1, "Alice", 3],
+      [2, "Bob", 2],
     ]);
-    expect(
-      rounds(data).find((r) => r.kind === "referrals_iteration" && r.status === "active")
-    ).toMatchObject({ iterationKey: "Beta:3", startedAt: reset });
+    // The next contest counts from the new world's start, including the
+    // referral made before its first turn.
+    const next = rounds(data).find(
+      (r) => r.kind === "referrals_iteration" && r.status === "active"
+    )!;
+    expect(next).toMatchObject({ iterationKey: "Beta:3", startedAt: newWorld });
+    expect(next.standings.map((s) => [s.characterName, s.score])).toEqual([["Bob", 1]]);
   });
 });

@@ -35,9 +35,10 @@ import {
   altPairKey,
   countWeeklyReferrals,
   REFERRAL_ALT_LINK_THRESHOLD,
+  iterationChanged,
   type CorpOpening,
 } from "./rules";
-import { runIterationReferrals } from "./referralAward";
+import { awardReferralContest } from "./referralAward";
 import { payContestPrize } from "./prize";
 import { getContestRoundsCollection } from "./collection";
 
@@ -51,6 +52,8 @@ interface ContestWorld {
   now: Date;
   preset: string | undefined;
   iterationKey: string | undefined;
+  /** When the current world was reset into being; the iteration contest counts from here. */
+  epochStartedAt: Date | undefined;
   players: Map<string, PlayerCharacter>;
   /** Player character by user id. */
   playersByUser: Map<string, PlayerCharacter>;
@@ -275,28 +278,37 @@ async function openRounds(db: Db, world: ContestWorld, kinds: ContestKind[]): Pr
   for (const kind of kinds) {
     const roundNumber = (lastNumber.get(kind) ?? 0) + 1;
     const opening = baselines.get(kind) ?? { baselines: [] };
+    const round: ContestRound = {
+      _id: contestRoundId(kind, roundNumber),
+      kind,
+      roundNumber,
+      status: "active",
+      startedAt: world.now,
+      endsAt: new Date(world.now.getTime() + CONTEST_ROUND_MS),
+      startTurn: world.turn,
+      ...(world.iterationKey ? { iterationKey: world.iterationKey } : {}),
+      ...(opening.tierBoundaryAnchor !== undefined
+        ? { tierBoundaryAnchor: opening.tierBoundaryAnchor }
+        : {}),
+      baselines: opening.baselines,
+      standings: [],
+      winners: [],
+    };
     try {
-      await contestRounds(db).insertOne({
-        _id: contestRoundId(kind, roundNumber),
-        kind,
-        roundNumber,
-        status: "active",
-        startedAt: world.now,
-        endsAt: new Date(world.now.getTime() + CONTEST_ROUND_MS),
-        startTurn: world.turn,
-        ...(world.iterationKey ? { iterationKey: world.iterationKey } : {}),
-        ...(opening.tierBoundaryAnchor !== undefined
-          ? { tierBoundaryAnchor: opening.tierBoundaryAnchor }
-          : {}),
-        baselines: opening.baselines,
-        standings: [],
-        winners: [],
-      });
+      await contestRounds(db).insertOne(round);
       opened++;
     } catch (err) {
       // Duplicate id: another process opened this round first.
       if ((err as { code?: number }).code !== 11000) throw err;
+      continue;
     }
+    // Standings exist from the moment a round opens, so the field shows
+    // straight away instead of an empty card until the next turn.
+    const { standings } = await computeStandings(db, world, round);
+    await contestRounds(db).updateOne(
+      { _id: round._id, status: "active" },
+      { $set: { standings, standingsTurn: world.turn, refreshedAt: world.now } }
+    );
   }
   return opened;
 }
@@ -368,7 +380,10 @@ async function computeStandings(
   }
 
   if (kind === "referrals_weekly") {
-    return { standings: await weeklyReferralStandings(db, world, round.startedAt), baselines };
+    return {
+      standings: await referralStandings(db, world.playersByUser, round.startedAt),
+      baselines,
+    };
   }
 
   // approval_gain
@@ -399,12 +414,13 @@ async function computeStandings(
 }
 
 /**
- * Referrers ranked by new players who created a character since the round
- * opened. Strong alt links between referrer and referee do not count.
+ * Referrers ranked by new players who created a character since `since`.
+ * Banned referees and strong alt links between referrer and referee do not
+ * count. Weekly rounds and the iteration contest both use this.
  */
-async function weeklyReferralStandings(
+export async function referralStandings(
   db: Db,
-  world: ContestWorld,
+  playersByUser: ReadonlyMap<string, PlayerCharacter>,
   since: Date
 ): Promise<ContestStanding[]> {
   const fresh = await db
@@ -445,13 +461,13 @@ async function weeklyReferralStandings(
       referrerUserId: r.referredBy!.toString(),
       refereeBanned: r.isBanned === true,
     })),
-    new Set(world.playersByUser.keys()),
+    new Set(playersByUser.keys()),
     altPairs
   );
 
   const standings: ContestStanding[] = [];
   for (const [referrerUserId, count] of counts) {
-    const character = world.playersByUser.get(referrerUserId);
+    const character = playersByUser.get(referrerUserId);
     if (!character) continue;
     standings.push({
       subjectId: referrerUserId,
@@ -529,6 +545,122 @@ async function settleRound(db: Db, world: ContestWorld, round: ContestRound): Pr
   return true;
 }
 
+// ── Iteration referral contest ──────────────────────────────────────────────
+
+const ITERATION_KIND = "referrals_iteration" as const;
+
+async function openIterationRound(db: Db, world: ContestWorld, startedAt: Date): Promise<void> {
+  const last = await contestRounds(db)
+    .find({ kind: ITERATION_KIND }, { projection: { roundNumber: 1 } })
+    .sort({ roundNumber: -1 })
+    .limit(1)
+    .toArray();
+  const roundNumber = (last[0]?.roundNumber ?? 0) + 1;
+  try {
+    await contestRounds(db).insertOne({
+      _id: contestRoundId(ITERATION_KIND, roundNumber),
+      kind: ITERATION_KIND,
+      roundNumber,
+      status: "active",
+      startedAt,
+      endsAt: startedAt,
+      startTurn: world.turn,
+      ...(world.iterationKey ? { iterationKey: world.iterationKey } : {}),
+      baselines: [],
+      standings: await referralStandings(db, world.playersByUser, startedAt),
+      refreshedAt: world.now,
+      winners: [],
+    });
+  } catch (err) {
+    // Duplicate id: another process opened this round first.
+    if ((err as { code?: number }).code !== 11000) throw err;
+  }
+}
+
+/**
+ * Keep the iteration referral contest current. It counts from the moment the
+ * world started, refreshes its standings every run, and when the world reports
+ * a new iteration it awards the standings stored before the reset (the old
+ * world's characters are retired by then) and opens the next contest from the
+ * new world's start.
+ */
+async function runIterationReferrals(
+  db: Db,
+  world: ContestWorld
+): Promise<"opened" | "awarded" | "running"> {
+  const worldStart = world.epochStartedAt ?? world.now;
+  const active = await contestRounds(db).findOne({ kind: ITERATION_KIND, status: "active" });
+
+  if (!active) {
+    await openIterationRound(db, world, worldStart);
+    return "opened";
+  }
+
+  if (iterationChanged(active.iterationKey, world.iterationKey)) {
+    await awardReferralContest(db, { awardedBy: "system", now: world.now });
+    await openIterationRound(db, world, worldStart);
+    return "awarded";
+  }
+
+  // A contest never starts before its world: a window carried over from an
+  // older world is moved up to this world's start.
+  const startedAt =
+    world.epochStartedAt && active.startedAt < world.epochStartedAt
+      ? world.epochStartedAt
+      : active.startedAt;
+  await contestRounds(db).updateOne(
+    { _id: active._id, status: "active" },
+    {
+      $set: {
+        startedAt,
+        ...(!active.iterationKey && world.iterationKey ? { iterationKey: world.iterationKey } : {}),
+        standings: await referralStandings(db, world.playersByUser, startedAt),
+        refreshedAt: world.now,
+      },
+    }
+  );
+  return "running";
+}
+
+/**
+ * Staff override: award the iteration referral contest now on fresh
+ * standings, then start the next one from this moment.
+ */
+export async function awardIterationReferralsNow(db: Db, awardedBy: string, now = new Date()) {
+  const [gameState, players] = await Promise.all([
+    db
+      .collection<GameState>("gameState")
+      .findOne({ _id: "current" } as never, { projection: { iteration: 1, currentTurn: 1 } }),
+    loadPlayers(db),
+  ]);
+  const world: ContestWorld = {
+    turn: gameState?.currentTurn ?? 0,
+    now,
+    preset: undefined,
+    iterationKey: gameState?.iteration
+      ? `${gameState.iteration.type}:${gameState.iteration.number}`
+      : undefined,
+    epochStartedAt: undefined,
+    players,
+    playersByUser: new Map([...players.values()].map((c) => [c.userId.toString(), c])),
+  };
+  const active = await contestRounds(db).findOne({ kind: ITERATION_KIND, status: "active" });
+  if (active) {
+    await contestRounds(db).updateOne(
+      { _id: active._id, status: "active" },
+      {
+        $set: {
+          standings: await referralStandings(db, world.playersByUser, active.startedAt),
+          refreshedAt: now,
+        },
+      }
+    );
+  }
+  const result = await awardReferralContest(db, { awardedBy, now });
+  await openIterationRound(db, world, now);
+  return result;
+}
+
 // ── Entry point ─────────────────────────────────────────────────────────────
 
 export interface ContestRunSummary {
@@ -541,6 +673,7 @@ export interface ContestRunSummary {
 
 declare global {
   var _ahdContestsRunning: boolean | undefined;
+  var _ahdContestsOpenCheckedAt: number | undefined;
 }
 
 /**
@@ -555,9 +688,9 @@ export async function runContests(
 ): Promise<ContestRunSummary> {
   const summary: ContestRunSummary = { settled: 0, voided: 0, refreshed: 0, opened: 0 };
   const [gameState, players] = await Promise.all([
-    db
-      .collection<GameState>("gameState")
-      .findOne({ _id: "current" } as never, { projection: { preset: 1, iteration: 1 } }),
+    db.collection<GameState>("gameState").findOne({ _id: "current" } as never, {
+      projection: { preset: 1, iteration: 1, worldEpochStartedAt: 1 },
+    }),
     loadPlayers(db),
   ]);
   const world: ContestWorld = {
@@ -567,6 +700,7 @@ export async function runContests(
     iterationKey: gameState?.iteration
       ? `${gameState.iteration.type}:${gameState.iteration.number}`
       : undefined,
+    epochStartedAt: gameState?.worldEpochStartedAt ?? undefined,
     players,
     playersByUser: new Map([...players.values()].map((c) => [c.userId.toString(), c])),
   };
@@ -605,7 +739,7 @@ export async function runContests(
   // The iteration referral award is separate state: its failure must not
   // stop the weekly rounds, which have already been written.
   try {
-    summary.referrals = await runIterationReferrals(db, world.iterationKey, now);
+    summary.referrals = await runIterationReferrals(db, world);
   } catch (err) {
     summary.referrals = "failed";
     Sentry.captureException(err, { tags: { area: "contests", step: "iterationReferrals" } });
@@ -628,6 +762,39 @@ export async function runContestsAfterTurn(db: Db, turn: number): Promise<void> 
   } catch (err) {
     Sentry.captureException(err, { tags: { area: "contests" } });
     console.error("[contests] post-turn run failed", err);
+  } finally {
+    globalThis._ahdContestsRunning = false;
+  }
+}
+
+/** How often one process may check for missing rounds from a page view. */
+const OPEN_CHECK_INTERVAL_MS = 60_000;
+
+/**
+ * Open any missing weekly rounds without waiting for a turn: called from the
+ * Contests page so a fresh deploy or a reset world has live contests on the
+ * first visit. Throttled per process, never throws, and shares the turn hook's
+ * in-process guard; round ids keep it safe against the turn worker.
+ */
+export async function ensureContestsOpen(db: Db, now: Date = new Date()): Promise<void> {
+  const last = globalThis._ahdContestsOpenCheckedAt ?? 0;
+  if (now.getTime() - last < OPEN_CHECK_INTERVAL_MS) return;
+  globalThis._ahdContestsOpenCheckedAt = now.getTime();
+  if (globalThis._ahdContestsRunning) return;
+  globalThis._ahdContestsRunning = true;
+  try {
+    const active = await contestRounds(db).countDocuments({
+      status: "active",
+      kind: { $in: [...CONTEST_KINDS] },
+    });
+    if (active >= CONTEST_KINDS.length) return;
+    const gameState = await db
+      .collection<GameState>("gameState")
+      .findOne({ _id: "current" } as never, { projection: { currentTurn: 1 } });
+    await runContests(db, gameState?.currentTurn ?? 0, now);
+  } catch (err) {
+    Sentry.captureException(err, { tags: { area: "contests", step: "ensureOpen" } });
+    console.error("[contests] opening rounds from the page failed", err);
   } finally {
     globalThis._ahdContestsRunning = false;
   }

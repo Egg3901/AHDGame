@@ -1,3 +1,4 @@
+import { getFieldOfficeScope } from "@/lib/campaigns/fieldOffices/rules";
 import {
   loadCampaignCurrencyRates,
   loadCampaignPriceLevel,
@@ -296,6 +297,8 @@ export async function getCampaignDetail(
           senateClass: election.senateClass ?? null,
           electionYear: election.electionYear ?? null,
           isEnded: election.status === "completed",
+          fieldOfficeScope: getFieldOfficeScope(election.countryId),
+          fieldOfficeCount: campaign.fieldOfficeCount ?? 0,
         }
       : null,
     ...(partyTreasuryAccess ? { partyTreasuryAccess } : {}),

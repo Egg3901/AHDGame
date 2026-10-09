@@ -5,6 +5,8 @@ import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 import type { AuthUser } from "@/lib/auth";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
+const checkBillSponsoredAchievements = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
+vi.mock("@/lib/achievements/triggers", () => ({ checkBillSponsoredAchievements }));
 vi.mock("@/lib/gameState", () => ({
   getGameState: vi.fn().mockResolvedValue({ currentTurn: 5 }),
 }));
@@ -13,9 +15,6 @@ vi.mock("@/lib/countryState", () => ({
 }));
 vi.mock("@/lib/countryAccess", () => ({
   getEnabledCountryIds: vi.fn().mockResolvedValue(["CN", "US"]),
-}));
-vi.mock("@/lib/achievements/triggers", () => ({
-  checkBillSponsoredAchievements: vi.fn().mockResolvedValue(undefined),
 }));
 
 import { proposeNationalBill } from "./proposeNationalBill";
@@ -108,6 +107,46 @@ describe("proposeNationalBill — origin/current chamber storage", () => {
     const bill = insertedBill();
     expect(bill.originChamber).toBe("npc");
     expect(bill.currentChamber).toBe("npc");
+  });
+
+  it("keeps a landed bill and its cost when the achievement check throws", async () => {
+    const { authUser } = seatDelegate({ countryId: "CN", officeType: "npcDelegate" });
+    checkBillSponsoredAchievements.mockRejectedValueOnce(new Error("achievements down"));
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const result = await proposeNationalBill(db as unknown as Db, "CN", authUser, {
+      title: "Public Security and Criminal Justice Reform Act",
+      summary: "A test bill.",
+      chamber: "npc",
+      category: "general",
+      provisions: [],
+    });
+
+    expect(result.status).toBe(201);
+    expect(insertedBill()).toBeDefined();
+    // No refund: the only character write is the proposal's own debit.
+    const refunds = db.collectionMocks.characters.updateOne.mock.calls.filter(([, update]) => {
+      const inc = (update as { $inc?: { actions?: number } }).$inc;
+      return typeof inc?.actions === "number" && inc.actions > 0;
+    });
+    expect(refunds).toHaveLength(0);
+    errors.mockRestore();
+  });
+
+  it("checks the first-bill achievement for a non-US sponsor (ticket 1387)", async () => {
+    const { authUser, charId } = seatDelegate({ countryId: "CN", officeType: "npcDelegate" });
+
+    const result = await proposeNationalBill(db as unknown as Db, "CN", authUser, {
+      title: "Public Security and Criminal Justice Reform Act",
+      summary: "A test bill.",
+      chamber: "npc",
+      category: "general",
+      provisions: [],
+    });
+
+    expect(result.status).toBe(201);
+    expect(checkBillSponsoredAchievements).toHaveBeenCalledTimes(1);
+    expect(checkBillSponsoredAchievements.mock.calls[0]![1]).toEqual(charId);
   });
 
   it("leaves a US House member's bill under chamber key 'house' (identity mapping unchanged)", async () => {

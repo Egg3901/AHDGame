@@ -2,7 +2,7 @@ export const campaignManagerContent = `# Campaign Manager
 
 Eligible candidacies get a dedicated **campaign page** at \`/campaign/[id]\`. This is where your candidate's campaign lives: budget, upgrades, operations, activity log, endorsements, and manager assignments. It's separate from your character's profile and has its own action and money pools.
 
-**Eligibility:** US president, senate, governor, house, and state senate races all run the Campaign Manager. Non-US races (UK / JP / DE / IE) currently fall back to a lighter election-detail page, because their country-specific campaign-finance models (UK statutory expense limits, JP mixed FPTP/PR, DE party-list, IE STV) need a separate audit and adaptation pass before the Manager turns on.
+**Eligibility:** US president, senate, governor, house, and state senate races run the Campaign Manager, as do UK Commons races and Japanese House of Representatives, House of Councillors, and governor races. German and Irish races still use the lighter election-detail page until their list and STV systems are mapped onto per-candidate campaigns.
 
 This page describes what the campaign page does and how to use it. For upgrade tables, maintenance math, and tactical priorities see [Campaign Strategy](/wiki/campaign-strategy).
 
@@ -43,12 +43,26 @@ Four **branch trees**, each with its own card, replacing the old flat-level upgr
 
 - **Fundraising**: starter passive income, then branches (Grassroots, Bundlers, Direct Mail) that add more.
 - **Media Spending**: starter passive Favorability gain, then Broadcast and Television branches that add more, plus a Rapid Response branch.
-- **Ground Game**: starter turnout bonus in your race's competitive areas (swing states for president, swing counties for senate / gov, swing precincts for house / state senate), then Field Offices, Get-Out-The-Vote, and Volunteer Corps branches.
+- **Ground Game**: starter turnout bonus in your race's competitive areas (swing states for president, swing counties for senate / gov, swing precincts for house / state senate), then Swing Canvassing, Get-Out-The-Vote, and Volunteer Corps branches. Ground Game now moves votes in every race type, not just the presidency.
 - **Opposition Research**: starter drain to one target, then Dossier, Scandal Leak, and Counter-Intel branches that add or amplify drain. Retargetable.
 
 Each card shows the starter node and its branches, next-branch cost (both money and campaign actions), and current per-turn effect.
 
 **General-phase cost multiplier:** All upgrade costs are **1.5× higher** once the election enters the general phase. Front-load upgrades in the primary.
+
+### Field offices
+
+The **Field offices** tab is where the campaign puts staff on the ground.
+
+- **United States:** pick a county on the state map and open an office. The map shades each county by its partisan lean; switch to **Opportunity** to shade by what a new office there would add.
+- An office raises your turnout in its county, weighted by how big the county is and how strong your side is there, and adds a smaller boost across the whole state. The statewide part has diminishing returns, so the tenth office in a state adds much less than the first.
+- **United Kingdom and Japan:** offices work by region rather than county. Up to three per region, each adding a smaller turnout boost.
+- Offices take three turns to reach full strength, so early ground beats late ground.
+- Each office costs money to open (plus campaign actions) and upkeep every turn. If the war chest cannot cover upkeep, the newest offices close first.
+- How many offices a campaign can hold depends on the race: a presidential campaign can run dozens, a House campaign only a handful.
+- Office locations are public. Anyone viewing the campaign can see where it is organising.
+
+County leans start from the real county results of your world's era: a 1991 world uses 1984 and 1988, a 1953 world uses 1948 and 1952, and a 2027 world uses 2020 and 2024 plus the 2025 governor races. As your world holds its own presidential elections, every county shifts with its state's swing from one election to the next, damped so one wild cycle cannot erase the era's map.
 
 ### The ledger
 

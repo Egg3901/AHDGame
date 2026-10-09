@@ -6,6 +6,11 @@
  * with a group yields a larger share of that group's votes.
  */
 
+import {
+  homeDivisionMultiplier,
+  primaryStateSwing,
+  sharpenPrimaryAppeal,
+} from "@/lib/elections/primaryRegional/rules";
 import type { DemographicCategory, StateDemographics } from "@/lib/db/types";
 import { calcAppeal, approvalScalar } from "@/lib/utils/demographicAppeal";
 import { normalizeNPI, normalizeNationalReachPresidentialPrimary } from "@/lib/utils/normalizeNPI";
@@ -113,7 +118,7 @@ export function distributeVotesByGroupLevelAllocation(
         const influenceForAppeal = options?.useNationalInfluenceForReach
           ? ec.nationalInfluence
           : ec.politicalInfluence;
-        const appeal = calcAppeal(
+        const rawAppeal = calcAppeal(
           demoEP,
           demoSP,
           posEP,
@@ -123,6 +128,12 @@ export function distributeVotesByGroupLevelAllocation(
           ec.partyEcon,
           ec.partySocial
         );
+        // Presidential primary: ideology fit counts for more, so a state's
+        // primary voters can actually prefer one same-party rival over another
+        // (see primaryRegional/rules.ts).
+        const appeal = options?.presidentialPrimaryNationalReach
+          ? sharpenPrimaryAppeal(rawAppeal)
+          : rawAppeal;
         const archetypeApproval = ec.archetypeApprovals?.[group.id] ?? 0;
         // State-scoped favourability adjustment (local attacks). Clamped into
         // the same 0..100 band favorability itself lives in, so a stacked
@@ -213,6 +224,16 @@ export function distributeVotesByGroupLevelAllocation(
               1 + (options.isGeneralElection ? HOME_STATE_BONUS_GENERAL : HOME_STATE_BONUS_PRIMARY);
           }
         }
+        // Presidential primary regional variation: a fixed per-state swing for
+        // this race and a pull across the home census division. Both are 1
+        // outside the presidential primary (see primaryRegional/rules.ts).
+        const regionalMult = options?.presidentialPrimaryNationalReach
+          ? primaryStateSwing(options.primaryRegionalSeed, options.currentStateId, ec.candidateId) *
+            homeDivisionMultiplier(
+              options.homeStateByCandidate?.get(ec.candidateId),
+              options.currentStateId
+            )
+          : 1;
         // Party influence — presidential primary only. Uses the candidate's
         // raw accumulated party influence (no chair multiplier). Mirrors the
         // snapshot score's party-influence lever.
@@ -249,6 +270,7 @@ export function distributeVotesByGroupLevelAllocation(
             partyFit *
             stateOrgMult *
             homeStateMult *
+            regionalMult *
             partyInfluenceMult *
             manifestoMult *
             (1 + (ec.targetedAdBonuses?.[group.id] ?? 0))

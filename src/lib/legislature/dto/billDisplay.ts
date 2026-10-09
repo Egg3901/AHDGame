@@ -16,6 +16,8 @@ export interface BillDisplay {
   /** Prefer for `/character/{id}` links when present. */
   sponsorSequentialId?: number;
   sponsorName: string;
+  /** Sponsor profile picture; absent when the sponsor has none or is not a player. */
+  sponsorAvatarUrl?: string;
   sponsorParty: string;
   sponsorPartyName: string;
   sponsorPartyColor: string;

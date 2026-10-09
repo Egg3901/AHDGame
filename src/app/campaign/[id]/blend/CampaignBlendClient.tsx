@@ -1,5 +1,6 @@
 "use client";
 
+import { useSearchParams } from "next/navigation";
 import { apiErrorText } from "@/lib/errors/catalog";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { CampaignData } from "@/lib/campaigns/dto/campaignView";
@@ -19,6 +20,7 @@ import {
 } from "./campaignBlendViewModel";
 import { BlendOpsSection } from "./BlendOpsSection";
 import { BlendMoneySection } from "./BlendMoneySection";
+import { FieldOfficesSection } from "../fieldOffices/FieldOfficesSection";
 import { BlendLedger } from "./BlendLedger";
 import { BlendSidebar, ManagersBlock, RunningMateBlock, SupportBlock } from "./BlendSidebar";
 import { BlendScopeInline } from "@/components/blend/BlendScope";
@@ -61,7 +63,14 @@ export function CampaignBlendClient({
   onRefreshMe,
   onRetarget,
 }: CampaignBlendClientProps) {
-  const [rail, setRail] = useState<CampaignRail>("overview");
+  // Deep link from the presidential map: `?tab=field&region=OH` opens the
+  // field offices section on that state.
+  const searchParams = useSearchParams();
+  const linkedRegion = searchParams?.get("region")?.toUpperCase() ?? null;
+  const fieldRegion = linkedRegion && /^[A-Z]{2,3}$/.test(linkedRegion) ? linkedRegion : null;
+  const [rail, setRail] = useState<CampaignRail>(
+    searchParams?.get("tab") === "field" ? "field" : "overview"
+  );
   const [expanded, setExpanded] = useState<UpgradeCategory | null>(null);
   const [ledgerPage, setLedgerPage] = useState(0);
   const [ledgerTab, setLedgerTab] = useState<LedgerTab>("activity");
@@ -244,6 +253,12 @@ export function CampaignBlendClient({
   const showOps = rail === "overview" || rail === "ops";
   const showMoney = rail === "overview" || rail === "money";
   const showLog = rail === "overview" || rail === "log";
+  const showField =
+    (rail === "overview" || rail === "field") && !!campaign.electionInfo?.fieldOfficeScope;
+  const refreshAfterField = () => {
+    onRefresh();
+    onRefreshMe();
+  };
 
   const body = (
     <>
@@ -298,6 +313,14 @@ export function CampaignBlendClient({
             onRefreshMe();
             setReloadOps((n) => n + 1);
           }}
+        />
+      ) : null}
+
+      {showField ? (
+        <FieldOfficesSection
+          campaignId={campaign.id}
+          onChanged={refreshAfterField}
+          initialRegion={fieldRegion}
         />
       ) : null}
 
@@ -591,6 +614,14 @@ export function CampaignBlendClient({
               onRefreshMe();
               setReloadOps((n) => n + 1);
             }}
+          />
+        ) : null}
+        {showField ? (
+          <FieldOfficesSection
+            campaignId={campaign.id}
+            onChanged={refreshAfterField}
+            variant="mobile"
+            initialRegion={fieldRegion}
           />
         ) : null}
         {showMoney && vm.money ? (

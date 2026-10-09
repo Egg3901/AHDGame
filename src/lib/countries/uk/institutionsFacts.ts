@@ -36,6 +36,9 @@ export const UK_CONFIG: CountryConfig = {
   executiveRealmPhrase: "the United Kingdom",
   governmentType: "parliamentaryMonarchy",
   governmentTypeLabel: "Constitutional Monarchy",
+  campaignManagerNonPresidentialEnabled: true,
+  campaignRaceFamilies: ["commons", "special_commons"],
+  fieldOfficeScope: "region",
   coalitionThreshold: 326,
   legislature: {
     name: "Parliament",

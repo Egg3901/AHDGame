@@ -5,7 +5,10 @@ import type { CampaignData } from "@/lib/campaigns/dto/campaignView";
 import { CampaignBlendClient } from "./CampaignBlendClient";
 
 // The state-presence controls in the rail navigate on success.
-vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ refresh: vi.fn() }),
+  useSearchParams: () => new URLSearchParams(),
+}));
 
 beforeEach(() => {
   vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => ({}) }));

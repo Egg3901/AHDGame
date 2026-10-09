@@ -612,6 +612,7 @@ export const RUNTIME: CollectionEntry[] = [
   { name: "newsPosts", category: "runtime" },
   { name: "newsReactions", category: "runtime" },
   { name: "campaigns", category: "runtime" },
+  { name: "campaignFieldOffices", category: "runtime" },
   { name: "notifications", category: "runtime" },
   { name: "eventInstances", category: "runtime" },
   { name: "eventCooldownLedger", category: "runtime" },
@@ -640,6 +641,8 @@ export const RUNTIME: CollectionEntry[] = [
 
   // Misc gameplay
   { name: "blackjackPendingWagers", category: "runtime" },
+  { name: "casinoHighLowSessions", category: "runtime" },
+  { name: "casinoRounds", category: "runtime" },
   { name: "actionLogs", category: "runtime" },
   {
     name: "activityLog",

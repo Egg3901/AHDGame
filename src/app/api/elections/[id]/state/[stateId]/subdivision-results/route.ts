@@ -13,6 +13,7 @@ import {
 import { allocateSeats } from "@/lib/turn/election/seatAllocation";
 import type { ElectionVoteTally, PoliticalParty } from "@/lib/db/types";
 import { getPartyHex } from "@/lib/utils/politics";
+import { getGameStatePresetOrDefault } from "@/lib/db/collections/gameState";
 
 // GET /api/elections/[id]/state/[stateId]/subdivision-results — sub-region
 // vote distribution + seat-consistent winners for a region in an election.
@@ -45,14 +46,31 @@ export async function GET(
       return errorResponse(404, "Subdivision map data is not available for this election");
     }
 
-    const data = await loadSubdivisionFile(modeEntry.config.dataDir, regionId);
+    // County leans follow the world's era (a 1991 world starts from 1984/1988).
+    const data = await loadSubdivisionFile(modeEntry.config.dataDir, regionId, {
+      preset: await getGameStatePresetOrDefault(db),
+    });
     if (!data) {
       return errorResponse(404, "Subdivision data not available for this region");
     }
 
-    const tally = await db
-      .collection<ElectionVoteTally>("electionVoteTallies")
-      .findOne({ electionId: election._id });
+    // Projected: a presidential tally carries per-turn snapshots for every
+    // state and runs to megabytes; this route needs one state's slice. The map
+    // requests a state at a time as the reader zooms, so the full read made
+    // every county load crawl.
+    const tally = await db.collection<ElectionVoteTally>("electionVoteTallies").findOne(
+      { electionId: election._id },
+      {
+        projection: {
+          state: 1,
+          totalVotes: 1,
+          [`totalVotesByUnit.${regionId}`]: 1,
+          candidateNames: 1,
+          candidateParties: 1,
+          seatsEstimate: 1,
+        },
+      }
+    );
     if (!tally) return errorResponse(404, "No tally found");
     // Presidential tallies span all regions (aggregated below); everything else
     // must be the requested region's own tally — legacy county-results behavior.

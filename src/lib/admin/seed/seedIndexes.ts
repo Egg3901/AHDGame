@@ -16,6 +16,7 @@ import { seedCommodityPriceIndexes } from "./indexes/commodityPrices";
 import { seedIndexFundIndexes } from "./indexes/indexFunds";
 import { seedApiAccessIndexes } from "./indexes/apiAccess";
 import { seedCrisisInteractionIndexes } from "./indexes/crisisInteractions";
+import { seedCasinoIndexes } from "./indexes/casino";
 import { seedCrisisIndexes } from "./indexes/crises";
 import { seedActionAuditLogIndexes } from "./indexes/actionAuditLog";
 import { seedAltDetectionIndexes } from "./indexes/altDetection";
@@ -26,6 +27,7 @@ import { seedNavairIndexes } from "./indexes/navair";
 import { seedBankingIndexes } from "./indexes/banking";
 import { seedSettlementIndexes } from "./indexes/settlement";
 import { seedProductVentureIndexes } from "./indexes/productVentures";
+import { seedCampaignFieldOfficeIndexes } from "./indexes/campaignFieldOffices";
 import { seedIntelligenceIndexes } from "./indexes/intelligence";
 import { seedIdentityHistoryIndexes } from "./indexes/identityHistory";
 import { seedTelemetryIndexes } from "./indexes/telemetry";
@@ -80,10 +82,12 @@ const INDEX_RUNNERS: Record<IndexTargetId, IndexModule> = {
   indexesBanking: seedBankingIndexes,
   indexesSettlement: seedSettlementIndexes,
   indexesProductVentures: seedProductVentureIndexes,
+  indexesCampaignFieldOffices: seedCampaignFieldOfficeIndexes,
   indexesIntelligence: seedIntelligenceIndexes,
   indexesIdentityHistory: seedIdentityHistoryIndexes,
   indexesTelemetry: seedTelemetryIndexes,
   indexesMoneyFlow: seedMoneyFlowIndexes,
+  indexesCasino: seedCasinoIndexes,
 };
 
 export interface IndexModuleEntry extends Omit<IndexTargetMeta, "id"> {
@@ -151,6 +155,7 @@ export {
   seedIndexFundIndexes,
   seedApiAccessIndexes,
   seedCrisisInteractionIndexes,
+  seedCasinoIndexes,
   seedCrisisIndexes,
   seedActionAuditLogIndexes,
   seedAltDetectionIndexes,
@@ -160,4 +165,5 @@ export {
   seedBankingIndexes,
   seedSettlementIndexes,
   seedProductVentureIndexes,
+  seedCampaignFieldOfficeIndexes,
 };

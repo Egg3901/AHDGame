@@ -369,6 +369,7 @@ export async function proposeNationalBill(
     };
     try {
       const result = await db.collection<Omit<Bill, "_id">>("bills").insertOne(natBill);
+      if (!usingAdminOverride) await awardBillSponsored(authUser.userId, character._id);
       if (usingSovereignOverride) {
         await enactSingleplayerDecree(db, { ...natBill, _id: result.insertedId } as Bill);
       }
@@ -688,23 +689,9 @@ export async function proposeNationalBill(
 
   try {
     const result = await db.collection<Omit<Bill, "_id">>("bills").insertOne(bill);
+    if (!usingAdminOverride) await awardBillSponsored(authUser.userId, character._id);
     if (usingSovereignOverride) {
       await enactSingleplayerDecree(db, { ...bill, _id: result.insertedId } as Bill);
-    }
-    if (isUsCongress) {
-      try {
-        const { checkBillSponsoredAchievements } = await import("@/lib/achievements/triggers");
-        await checkBillSponsoredAchievements(new ObjectId(authUser.userId), character._id);
-      } catch (error) {
-        console.error(
-          JSON.stringify({
-            error: "achievement_check_failed",
-            operation: "bill_sponsored_achievement",
-            timestamp: new Date().toISOString(),
-            details: error instanceof Error ? error.message : "Unknown error",
-          })
-        );
-      }
     }
     return {
       status: 201,
@@ -730,5 +717,26 @@ export async function proposeNationalBill(
       );
     }
     throw error;
+  }
+}
+
+/**
+ * Non-throwing: the first-bill achievement must never fail a proposal that
+ * already landed (a throw here would reach the caller's catch and refund the
+ * sponsor's actions for a bill that exists).
+ */
+async function awardBillSponsored(userId: string, characterId: ObjectId): Promise<void> {
+  try {
+    const { checkBillSponsoredAchievements } = await import("@/lib/achievements/triggers");
+    await checkBillSponsoredAchievements(new ObjectId(userId), characterId);
+  } catch (error) {
+    console.error(
+      JSON.stringify({
+        error: "achievement_check_failed",
+        operation: "bill_sponsored_achievement",
+        timestamp: new Date().toISOString(),
+        details: error instanceof Error ? error.message : "Unknown error",
+      })
+    );
   }
 }

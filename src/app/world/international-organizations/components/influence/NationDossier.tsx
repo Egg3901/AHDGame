@@ -250,6 +250,7 @@ function CommitPlayForm({
         weight: view.channel.weight,
         effectiveness: view.blocStress?.effectiveness ?? 1,
         turnCap,
+        rivalPressure: target.rivalPressure,
       })
     : 0;
   const overBalance = typed > view.fundBalanceLocal;
@@ -341,6 +342,12 @@ function CommitPlayForm({
               : overTurnCap
                 ? t("overTurn", { cap: turnCap })
                 : null}
+        </p>
+      )}
+
+      {hasPreview && target.rivalPressure && (
+        <p className="text-body-sm text-muted">
+          {t("rivalPressure", { points: formatShare(target.rivalPressure.points) })}
         </p>
       )}
 

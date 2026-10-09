@@ -7,10 +7,10 @@ import type { Election } from "@/lib/db/types";
  *
  * Phase 5.5 extension: previously president-only, now also enables US
  * statewide (senate / governor) and US district (house / state senate)
- * races. Non-US races remain explicitly ineligible per Phase 5.5 D4 — UK /
- * JP / DE / IE all have country-specific campaign-finance models that
- * don't map cleanly to the per-candidate fundraising loop, so they need a
- * separate audit + adaptation pass before turning Campaign Manager on.
+ * races. Other countries opt in per chamber through
+ * `CountryConfig.campaignRaceFamilies` (UK commons, JP shugiin / sangiin /
+ * governor). DE / IE stay off until their list-PR and STV races are mapped
+ * onto the per-candidate loop.
  *
  * The presidential path stays future-proof: any country whose
  * `isDirectElection(config)` automatically qualifies for
@@ -60,18 +60,12 @@ export function isCampaignEligibleElection(
 
   // Non-presidential races — gated by the country's
   // `campaignManagerNonPresidentialEnabled` flag (Phase 5.5 D2 / D4).
-  // Currently only US has this flag set to true; UK / JP / DE / IE keep
-  // it unset until their campaign-finance models are adapted.
+  // A country's own `campaignRaceFamilies` replaces the US default set, so
+  // UK `commons` and JP `shugiin` opt in by name without inheriting US races.
   const config = getCountryConfig(countryId as CountryId);
-  if (
-    config.campaignManagerNonPresidentialEnabled === true &&
-    NON_PRESIDENTIAL_RACE_FAMILIES.has(electionType)
-  ) {
-    return true;
-  }
-
-  // Non-US deferred per Phase 5.5 D4 — UK statutory expense limits,
-  // JP mixed FPTP/PR, DE party-list PR, IE STV all need separate audit.
-  // Falling through to `false` is intentional and documented.
-  return false;
+  if (config.campaignManagerNonPresidentialEnabled !== true) return false;
+  const families = config.campaignRaceFamilies ?? NON_PRESIDENTIAL_RACE_FAMILIES;
+  return families instanceof Set
+    ? families.has(electionType)
+    : (families as readonly string[]).includes(electionType);
 }

@@ -20,6 +20,8 @@ import { PresidentialMap } from "./presMap/PresidentialMap";
 import type { PresMapModel, PresMapState } from "./presMap/presMapModel";
 import { STATE_NAMES } from "./presMap/usStates";
 import { mixToward } from "./presMap/dataViews";
+import type { CountySource } from "./presMap/countyStore";
+import { MyCampaignStateBlock, useMyCampaign } from "./useMyCampaign";
 import { readableInk } from "@/lib/elections/marginTierShade";
 import { useBlendGround } from "@/components/blend/useBlendGround";
 import {
@@ -35,6 +37,8 @@ export interface PrimaryBlendViewProps {
   stageTitle?: string;
   /** Previous / next cycle links for the top of the stage's left rail. */
   stageNav?: React.ReactNode;
+  /** A state to open on arrival (`?state=OH`). */
+  initialFocus?: string | null;
 }
 
 function PartyButton({
@@ -303,6 +307,7 @@ export function PrimaryBlendView({
   wire,
   stageTitle = presidentialTitle(election.electionYear),
   stageNav,
+  initialFocus,
 }: PrimaryBlendViewProps) {
   const [partyId, setPartyId] = useState<string | null>(
     // Open on the reader's own party where they have a candidate.
@@ -328,7 +333,13 @@ export function PrimaryBlendView({
   // player camped or surged.
   const [reloadCount, setReloadCount] = useState(0);
   const [loaded, setLoaded] = useState<{ key: string; detail: PrimaryPartyDetail } | null>(null);
-  const [selection, setSelection] = useState<{ key: string; stateId: string } | null>(null);
+  const [selection, setSelection] = useState<{ key: string; stateId: string } | null>(() =>
+    initialFocus && key ? { key, stateId: initialFocus } : null
+  );
+  const focusRequest = useMemo(
+    () => (initialFocus ? { stateId: initialFocus, nonce: 0 } : null),
+    [initialFocus]
+  );
 
   const detail = loaded && loaded.key === key ? loaded.detail : null;
   const selectedStateId = selection && selection.key === key ? selection.stateId : null;
@@ -358,6 +369,15 @@ export function PrimaryBlendView({
     };
   }, [electionId, partyId, key, reloadCount]);
 
+  // Primary night: re-read the party's board every minute while a wave is
+  // being counted, so returns climb on screen.
+  const counting = Boolean(loaded?.detail.night && Object.keys(loaded.detail.night).length > 0);
+  useEffect(() => {
+    if (!counting) return;
+    const id = window.setInterval(() => setReloadCount((n) => n + 1), 60_000);
+    return () => window.clearInterval(id);
+  }, [counting]);
+
   const vm = useMemo(
     () =>
       buildPrimaryBlendViewModel({
@@ -370,7 +390,27 @@ export function PrimaryBlendView({
     [election, partyId, wire, detail, selectedStateId]
   );
 
+  // The reader's own campaign in this race: presence by state on the map, and
+  // building it from the state overview.
+  const myCandidate = election.allCandidates.find((c) => c.isYou) ?? null;
+  const mine = useMyCampaign({
+    enabled: Boolean(myCandidate) && election.countryId === "US",
+    campaignId: myCandidate?.campaignId ?? null,
+    color: myCandidate?.campaignColor ?? myCandidate?.partyColor ?? "#4F8EF7",
+  });
   const ground = useBlendGround();
+  // The selected party's primary, by county, for the map's county layer.
+  const countySource = useMemo<CountySource | undefined>(
+    () =>
+      partyId
+        ? {
+            id: `primary:${partyId}:${reloadCount}`,
+            url: (stateId: string) =>
+              `/api/elections/${electionId}/primary/${partyId}/state/${stateId}/subdivision-results`,
+          }
+        : undefined,
+    [electionId, partyId, reloadCount]
+  );
   const primaryMapModel = useMemo(() => primaryMapModelFromBoard(vm, ground), [vm, ground]);
 
   const campaignLink = vm.campaignHref ? (
@@ -725,11 +765,20 @@ export function PrimaryBlendView({
           map={
             <PresidentialMap
               variant="stage"
-              counties={false}
+              // County results need the party's board, which is sign-in only.
+              counties={vm.board.length > 0 && election.countryId === "US"}
+              countySource={countySource}
+              focusRequest={focusRequest}
+              presence={mine ? { levels: mine.levels, color: mine.color } : null}
+              panelExtra={
+                mine
+                  ? (stateId) => <MyCampaignStateBlock mine={mine} stateId={stateId} />
+                  : undefined
+              }
               model={primaryMapModel}
               electionId={electionId}
               countryId={election.countryId}
-              turn={null}
+              turn={election.gameState?.currentTurn ?? null}
               onSelectState={(id) => (id ? selectState(id) : clearState())}
               renderPanel={(state, onClose) => (
                 <div>
@@ -899,7 +948,13 @@ function primaryMapModelFromBoard(vm: PrimaryBlendVM, ground: string): PresMapMo
       id: t.stateId,
       name: t.name || STATE_NAMES[t.stateId] || t.stateId,
       ev: 0,
-      evLabel: t.voted ? "\u2713" : null,
+      // On primary night the label is the count; otherwise a tick once voted.
+      evLabel:
+        t.night && t.night.status !== "polls_open"
+          ? `${Math.round(t.night.reportingPct)}%`
+          : t.voted
+            ? "\u2713"
+            : null,
       leaderId: t.leaderId ?? "",
       leaderName: t.leaderName ?? "",
       leaderColor: t.background,
@@ -921,6 +976,11 @@ function primaryMapModelFromBoard(vm: PrimaryBlendVM, ground: string): PresMapMo
       sinceTurn: null,
       turnsAgo: null,
       caption: t.title,
+      // Counting, with a leader but no call: hatched in the leader's colour,
+      // the general election night's "not yet called" look.
+      ...(t.night && !t.night.called && t.leaderColor
+        ? { overlay: { kind: "hatch" as const, base: t.background, colors: [t.leaderColor] } }
+        : {}),
     };
   }
   return { states, candidates: {}, legendCandidates: [] };

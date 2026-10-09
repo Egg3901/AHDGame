@@ -1,9 +1,7 @@
 "use client";
 
 import { forwardRef, useCallback, type ReactNode } from "react";
-import Link from "next/link";
 import { BLEND, BLEND_LABEL, FONT } from "@/components/blend/tokens";
-import { electionRegionUrl } from "@/lib/urls";
 import {
   describeTrend,
   formatPollChange,
@@ -32,7 +30,7 @@ export interface StatePanelProps {
  * sheet) is the caller's; this is only the content.
  */
 export const StatePanel = forwardRef<HTMLDivElement, StatePanelProps>(function StatePanel(
-  { state, model, electionId, countryId, turn, onClose },
+  { state, model, electionId, countryId: _countryId, turn, onClose },
   ref
 ) {
   // Colour and name for any candidate id the county API returns.
@@ -41,7 +39,6 @@ export const StatePanel = forwardRef<HTMLDivElement, StatePanelProps>(function S
     [model]
   );
 
-  const href = electionRegionUrl(electionId, countryId, state.id);
   const hint = pollChangeHint(state.turnsAgo, state.sinceTurn);
 
   return (
@@ -233,23 +230,6 @@ export const StatePanel = forwardRef<HTMLDivElement, StatePanelProps>(function S
           candidate={candidate}
         />
       </PanelBlock>
-
-      <Link
-        href={href}
-        style={{
-          marginTop: 16,
-          display: "block",
-          textAlign: "center",
-          padding: "9px 12px",
-          border: `1px solid ${BLEND.hairlineStrong}`,
-          color: BLEND.ink,
-          textDecoration: "none",
-          fontSize: 13.5,
-          fontWeight: 500,
-        }}
-      >
-        Open full {state.name} page
-      </Link>
     </div>
   );
 });

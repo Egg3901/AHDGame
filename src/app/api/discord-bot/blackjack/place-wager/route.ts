@@ -2,17 +2,18 @@ import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
-import { handleRouteError, errorResponse } from "@/lib/api/errors";
-import { requireBotToken } from "@/lib/api/requireBotToken";
-import { checkRateLimit, rateLimitResponse, BOT_BLACKJACK_LIMITS } from "@/lib/api/rateLimit";
+import { errorResponse, handleRouteError } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/validate";
-import type { Character, User } from "@/lib/db/types";
-import { isForexEnabled } from "@/lib/currency/featureFlag";
-import { getTotalPersonalWealth, getHomeCurrency } from "@/lib/currency/characterFunds";
+import type { Character } from "@/lib/db/types";
+import { getTotalPersonalWealth } from "@/lib/currency/characterFunds";
 import {
-  atomicallyDebitCharacterCash,
-  refundCharacterCash,
-} from "@/lib/financialTxLog/atomicCashGuard";
+  houseLimits,
+  loadHouse,
+  resolveCasinoPlayer,
+  returnStake,
+  takeStake,
+} from "@/lib/casino/house";
+import { casinoFailure, guardCasinoPlayer, guardCasinoRequest } from "@/lib/casino/routeSupport";
 
 const placeWagerSchema = z.object({
   discordId: z.string().min(1, "discordId is required"),
@@ -20,117 +21,67 @@ const placeWagerSchema = z.object({
   gameId: z.string().optional(),
 });
 
-// POST /api/discord-bot/blackjack/place-wager — Places a wager by deducting from player's LC.
-// This should be called when the game starts, before the result is known.
-// Auth: requireAdminOrApiKey (via X-Bot-Token header)
-// Errors: 400 (invalid request), 401 (unauthorized), 404 (user/character not found), 402 (insufficient funds)
+// POST /api/discord-bot/blackjack/place-wager — Takes the stake from the player's home-currency
+// wallet when the hand is dealt. The hand settles through /resolve against the casino house.
+// Auth: X-Bot-Token. Errors: 400 (invalid or over the table limit), 402 (insufficient funds), 403, 404.
 export async function POST(request: Request) {
   try {
-    if (!requireBotToken(request, false)) {
-      return errorResponse(401, "Unauthorized");
-    }
-
-    const rateLimit = checkRateLimit(
-      "discord-bot:blackjack-place-wager",
-      BOT_BLACKJACK_LIMITS.maxRequests,
-      BOT_BLACKJACK_LIMITS.windowMs
-    );
-    if (!rateLimit.ok) return rateLimitResponse(rateLimit.retryAfter);
-
+    const denied = guardCasinoRequest(request);
+    if (denied) return denied;
     const parsed = await parseJsonBody(request, placeWagerSchema);
     if (!parsed.success) {
       return errorResponse(parsed.status, parsed.error);
     }
-    const { discordId, wagerAmount: rawWagerAmount, gameId: bodyGameId } = parsed.data;
+    const { discordId, gameId: bodyGameId } = parsed.data;
+    const limited = guardCasinoPlayer(discordId);
+    if (limited) return limited;
 
-    const wagerAmount = Math.floor(rawWagerAmount);
+    const wagerAmount = Math.floor(parsed.data.wagerAmount);
     const gameId = bodyGameId || new ObjectId().toString();
-
     const db = await getDb();
 
-    // Look up user by Discord ID
-    const user = await db.collection<User>("users").findOne({ discordId });
-    if (!user) {
-      return errorResponse(404, "No user found with that Discord ID", { extra: { discordId } });
-    }
+    const resolved = await resolveCasinoPlayer(db, discordId);
+    if (!resolved.ok) return casinoFailure(resolved);
+    const { player } = resolved;
 
-    // Look up character by user ID
-    const character = await db.collection<Character>("characters").findOne({ userId: user._id });
+    const limits = houseLimits((await loadHouse(db)).anchorBalance);
+    const taken = await takeStake(db, player, wagerAmount, limits);
+    if (!taken.ok) return casinoFailure(taken);
 
-    if (!character) {
-      return errorResponse(404, "User has no character. Create a character first.", {
-        extra: { discordId },
-      });
-    }
-
-    // Check if user is banned
-    if (user.isBanned) {
-      return errorResponse(403, "This account is banned", { extra: { discordId } });
-    }
-
-    // Check liquid capital
-    const forexEnabled = await isForexEnabled();
-    const homeCurrency = getHomeCurrency(character);
-
-    // Atomic balance-gated wager debit. Pre-fix path read currentCash with
-    // getTotalPersonalWealth and ran a separate naïve $inc — race-prone.
-    const debitResult = await atomicallyDebitCharacterCash(
-      db,
-      character._id,
-      homeCurrency,
-      wagerAmount,
-      forexEnabled
-    );
-    if (!debitResult.ok) {
-      const currentCash = getTotalPersonalWealth(character, forexEnabled);
-      return errorResponse(402, "Insufficient funds", {
-        extra: {
-          message: `You need ${wagerAmount.toLocaleString()} to wager, but you only have ${Math.floor(currentCash).toLocaleString()} in liquid capital.`,
-          currentCash,
-          requiredAmount: wagerAmount,
-          shortAmount: wagerAmount - currentCash,
-        },
-      });
-    }
-
-    const now = new Date();
-
-    // Store pending wager in a separate collection for tracking. If the insert
-    // fails after the debit, refund the wager immediately so cash cannot be lost.
+    // If the pending row cannot be written the hand cannot settle, so return the stake.
     try {
       await db.collection("blackjackPendingWagers").insertOne({
         gameId,
         discordId,
-        characterId: character._id,
+        characterId: player.characterId,
         wagerAmount,
-        currency: homeCurrency,
-        placedAt: now,
+        currency: player.currency,
+        rate: player.rate,
+        placedAt: new Date(),
         status: "pending",
       });
     } catch (error) {
-      await refundCharacterCash(db, character._id, homeCurrency, wagerAmount, forexEnabled);
+      await returnStake(db, player, wagerAmount);
       throw error;
     }
 
-    // Cache pre-debit value for the response. The atomic primitive
-    // returned newBalance for the home-currency wallet, but the caller
-    // expects total liquid wealth for the response — re-derive from the
-    // pre-debit snapshot since the credited side is unchanged.
-    const previousCash = getTotalPersonalWealth(character, forexEnabled);
-    const newCash = previousCash - wagerAmount;
+    const character = await db
+      .collection<Character>("characters")
+      .findOne({ _id: player.characterId });
+    const newCash = character ? getTotalPersonalWealth(character, true) : 0;
 
     return NextResponse.json({
       success: true,
       gameId,
       discordId,
-      characterId: character._id.toString(),
-      characterName: character.name,
-      countryId: character.countryId,
-      currency: homeCurrency,
+      characterId: player.characterId.toString(),
+      characterName: player.characterName,
+      countryId: player.countryId,
+      currency: player.currency,
       wagerAmount,
-      previousCash,
+      previousCash: newCash + wagerAmount,
       newCash,
-      message: `Wager of ${wagerAmount.toLocaleString()} ${homeCurrency} placed. Good luck!`,
+      message: `Wager of ${wagerAmount.toLocaleString()} ${player.currency} placed. Good luck!`,
     });
   } catch (error) {
     return handleRouteError(error);

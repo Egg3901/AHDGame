@@ -106,7 +106,7 @@ describe("computeAutoDowngrade — branch trees", () => {
   });
 
   it("demotes a maintenance-bearing branch tier when insolvent", () => {
-    // Ground starter + Field Offices (a) L2 carries maintenance; force a cut.
+    // Ground starter + Swing Canvassing (a) L2 carries maintenance; force a cut.
     const c = treeCampaign({ groundGameTree: { starter: true, a: 2, b: 0, c: 0 } });
     const result = computeAutoDowngrade(c, { funds: 0, income: 0 });
     expect(result.downgrades.length).toBeGreaterThan(0);
@@ -118,7 +118,7 @@ describe("computeAutoDowngrade — branch trees", () => {
   });
 
   it("keeps a partially-solvent branch investment instead of shedding everything", () => {
-    // Field Offices L2 upkeep is $12k+$30k=$42k over starter $5.5k. With income
+    // Swing Canvassing L2 upkeep is $12k+$30k=$42k over starter $5.5k. With income
     // that covers the starter + L1 but not L2, only the top tier should shed.
     const c = treeCampaign({ groundGameTree: { starter: true, a: 2, b: 0, c: 0 } });
     const result = computeAutoDowngrade(c, { funds: 0, income: 20_000 });

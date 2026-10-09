@@ -387,6 +387,13 @@ export interface DistributeVotesOptions {
    */
   currentStateId?: string;
   /**
+   * Presidential primary: identifies the race for the fixed per-state swing
+   * (see `primaryRegional/rules.ts`). Every caller scoring the same race must
+   * pass the same seed, or the projection and the live wave disagree. Absent:
+   * no swing.
+   */
+  primaryRegionalSeed?: string;
+  /**
    * Factor-ledger sink (see `factorLedger.ts`). When present the swing-flow
    * TEES its already-computed per-cell appeal decomposition, swing, and spoiler
    * values into the sink — pure observation, byte-identical vote math. Undefined
