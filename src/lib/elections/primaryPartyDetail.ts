@@ -16,6 +16,7 @@
  * point: the carve-up on either screen is the same carve-up.
  */
 
+import { primaryWinMomentumFromTally } from "@/lib/elections/primaryRegional/rules";
 import { usesCampaignAds } from "@/lib/campaignTargeting/rules";
 import { loadCampaignProjectionContext } from "@/lib/campaignTargeting/audience";
 
@@ -308,6 +309,7 @@ export async function loadPrimaryPartyData(
   const projection = projectPrimaryByState({
     // Same seed as the live wave, so the projection sees the same state swing.
     regionalSeed: String(election._id),
+    winMomentum: primaryWinMomentumFromTally(tally),
     campaignContext,
     candidates: enriched,
     candidateMeta,

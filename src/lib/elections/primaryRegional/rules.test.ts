@@ -5,6 +5,8 @@ import {
   PRIMARY_STATE_SWING_Z_CAP,
   US_CENSUS_DIVISION,
   distributePrimaryCounties,
+  primaryWinMomentum,
+  primaryWinMomentumFromTally,
   hashNormal,
   hashUnit,
   homeDivisionMultiplier,
@@ -116,5 +118,41 @@ describe("primary county spread", () => {
 
   it("returns nothing for an empty state", () => {
     expect(distributePrimaryCounties(counties, {}, econ, "race", "OH")).toEqual([]);
+  });
+});
+
+describe("primary win momentum", () => {
+  const votes = {
+    IA: { a: 600, b: 400 },
+    NH: { a: 300, b: 700 },
+    NV: { a: 550, b: 450 },
+    SC: { a: 500, b: 500 },
+  };
+
+  it("adds a moderate boost per state won, older waves counting less", () => {
+    const m = primaryWinMomentum(
+      [{ statesVoted: ["IA"] }, { statesVoted: ["NH", "NV", "SC"] }],
+      votes
+    );
+    // a: IA one wave back (1.5 * 0.85) + NV this wave (1.5); SC is a tie.
+    expect(m.a).toBeCloseTo(1 + (1.5 * 0.85 + 1.5) / 100);
+    expect(m.b).toBeCloseTo(1 + 1.5 / 100);
+  });
+
+  it("caps the boost", () => {
+    const many = Object.fromEntries(
+      Array.from({ length: 20 }, (_, i) => [`S${i}`, { a: 2, b: 1 }])
+    );
+    const m = primaryWinMomentum([{ statesVoted: Object.keys(many) }], many);
+    expect(m.a).toBeCloseTo(1.08);
+  });
+
+  it("is empty before any wave and merges parties from a tally", () => {
+    expect(primaryWinMomentumFromTally(null)).toEqual({});
+    const m = primaryWinMomentumFromTally({
+      primaryWaveHistory: [{ statesVoted: ["IA"] }],
+      primaryStateVotes: { "1": { IA: { a: 2, b: 1 } }, "2": { IA: { x: 1, y: 3 } } },
+    });
+    expect(Object.keys(m).sort()).toEqual(["a", "y"]);
   });
 });

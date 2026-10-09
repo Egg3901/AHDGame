@@ -14,6 +14,7 @@
  * Called from `primaryResolution.ts` before the existing primary-end check.
  */
 
+import { primaryWinMomentumFromTally } from "@/lib/elections/primaryRegional/rules";
 import { turnoutForElection, usesCampaignAds } from "@/lib/campaignTargeting/rules";
 
 import { loadDemographicCategories } from "@/lib/demographics/categoryCatalog";
@@ -507,6 +508,7 @@ export async function runPrimaryStaggerWaveIfDue(
     const { stateWinners, byState } = projectPrimaryByState({
       // Same seed as the live wave, so the projection sees the same state swing.
       regionalSeed: String(election._id),
+      winMomentum: primaryWinMomentumFromTally(tally),
       // Suppression is applied to the EXPECTED share as well as to the result.
       // Without this the target would be punished twice: fewer votes on the
       // night, and a momentum penalty for "missing" an expectation that never
@@ -566,6 +568,11 @@ export async function runPrimaryStaggerWaveIfDue(
   // Vote-share momentum carried INTO this wave (accumulated from prior waves).
   // Read-only here; the new accumulated value is computed after the wave votes.
   // partyId -> candidateId -> points.
+  // Win momentum: states won in earlier waves boost a candidate's vote in this
+  // one (moderate, decayed, capped; see primaryRegional/rules.ts). Read from
+  // the tally before this wave's results are merged in.
+  const winMomentum = primaryWinMomentumFromTally(tally);
+
   const priorMomentum: Record<string, Record<string, number>> = momentumEnabled
     ? structuredCloneOr(tally.primaryMomentum ?? {})
     : {};
@@ -823,6 +830,16 @@ export async function runPrimaryStaggerWaveIfDue(
         if (mood !== 1) {
           votesPerCandidate[ec.candidateId] = Math.round(
             (votesPerCandidate[ec.candidateId] ?? 0) * mood
+          );
+        }
+      }
+
+      // Win momentum from states already won. The projection applies the same.
+      for (const ec of partyCandidates) {
+        const mult = winMomentum[ec.candidateId] ?? 1;
+        if (mult !== 1) {
+          votesPerCandidate[ec.candidateId] = Math.round(
+            (votesPerCandidate[ec.candidateId] ?? 0) * mult
           );
         }
       }

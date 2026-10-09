@@ -191,3 +191,78 @@ export function distributePrimaryCounties(
   }
   return rows;
 }
+
+// ── Win momentum ─────────────────────────────────────────────────────────────
+
+/**
+ * Winning primaries builds momentum: each state a candidate has won in an
+ * earlier wave adds a moderate vote boost in later waves. Older wins count for
+ * less, and the total is capped, so momentum tips close states without
+ * flattening the regional swing.
+ */
+/** Percent of vote per state won, in the wave just gone. */
+export const PRIMARY_WIN_MOMENTUM_PER_STATE = 1.5;
+/** Weight of a win per wave of age: a win two waves back counts 0.85^2. */
+export const PRIMARY_WIN_MOMENTUM_DECAY = 0.85;
+/** Ceiling on the boost, in percent. */
+export const PRIMARY_WIN_MOMENTUM_CAP = 8;
+
+/**
+ * Momentum multiplier per candidate, from the waves already run.
+ *
+ * `waves` is the wave history in order (oldest first), each the states that
+ * voted in it; `stateVotes` is stateId → candidateId → votes for one party (or
+ * several, since candidate ids are unique across parties). A state counts as a
+ * win for its top vote-getter; ties and empty states count for nobody.
+ */
+export function primaryWinMomentum(
+  waves: readonly { statesVoted: readonly string[] }[],
+  stateVotes: Readonly<Record<string, Readonly<Record<string, number>>>>,
+  {
+    perState = PRIMARY_WIN_MOMENTUM_PER_STATE,
+    decay = PRIMARY_WIN_MOMENTUM_DECAY,
+    cap = PRIMARY_WIN_MOMENTUM_CAP,
+  }: { perState?: number; decay?: number; cap?: number } = {}
+): Record<string, number> {
+  const points: Record<string, number> = {};
+  const last = waves.length - 1;
+  waves.forEach((wave, i) => {
+    const weight = Math.pow(decay, last - i);
+    for (const stateId of wave.statesVoted) {
+      const ranked = Object.entries(stateVotes[stateId] ?? {})
+        .filter(([, v]) => v > 0)
+        .sort((a, b) => b[1] - a[1]);
+      if (ranked.length === 0) continue;
+      if (ranked.length > 1 && ranked[0][1] === ranked[1][1]) continue;
+      const winner = ranked[0][0];
+      points[winner] = (points[winner] ?? 0) + perState * weight;
+    }
+  });
+  const out: Record<string, number> = {};
+  for (const [id, pts] of Object.entries(points)) out[id] = 1 + Math.min(cap, pts) / 100;
+  return out;
+}
+
+/**
+ * Win momentum for every candidate in a race, from its vote tally. Merges all
+ * parties (candidate ids are unique across them). Empty before the first wave.
+ */
+export function primaryWinMomentumFromTally(
+  tally:
+    | {
+        primaryWaveHistory?: readonly { statesVoted: readonly string[] }[];
+        primaryStateVotes?: Readonly<
+          Record<string, Readonly<Record<string, Readonly<Record<string, number>>>>>
+        >;
+      }
+    | null
+    | undefined
+): Record<string, number> {
+  const waves = tally?.primaryWaveHistory ?? [];
+  if (waves.length === 0) return {};
+  const out: Record<string, number> = {};
+  for (const byState of Object.values(tally?.primaryStateVotes ?? {})) {
+    Object.assign(out, primaryWinMomentum(waves, byState));
+  }
+  return out;
+}

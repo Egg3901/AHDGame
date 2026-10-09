@@ -13,3 +13,4 @@ areas: [fullstack]
 - When you are signed in, the presidential primary map shows the selected party's primary by county once you zoom in or click a state, the same way the general election map does.
 - Counted results are shown where a state has voted and projections elsewhere. Candidates further left than their rivals do better in a state's left-leaning counties, and the reverse for the right.
 - Hover a county for its leader, margin and votes.
+- Winning presidential primaries now builds momentum: every state a candidate wins gives them a moderate boost in the waves that follow. Older wins count for less, and the boost tops out at 8%.

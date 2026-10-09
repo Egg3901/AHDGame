@@ -14,6 +14,7 @@
  * Safe to call any time. Does not mutate state.
  */
 
+import { primaryWinMomentumFromTally } from "@/lib/elections/primaryRegional/rules";
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";
@@ -221,6 +222,7 @@ export async function GET(req: Request) {
     const projection = projectPrimaryByState({
       // Same seed as the live wave, so the projection sees the same state swing.
       regionalSeed: String(election._id),
+      winMomentum: primaryWinMomentumFromTally(tally),
       candidates: enriched,
       candidateMeta,
       stateIds: ALL_STATE_IDS,
