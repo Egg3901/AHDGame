@@ -84,7 +84,7 @@ export function evaluateNppEntry(input: NppEntryEvaluationInput): NppEntryEvalua
   // and pauses when the current logistics strength cannot support another site.
   // A critical shortage may use corporate credit on that same cohort slot.
   const existingBuckets = new Set(
-    sectors.map((s) => bucketKey(s.stateId, s.sectorType, s.industryModel))
+    sectors.map((s) => bucketKey(s.stateId, s.sectorType, s.industryModel, s.mediaDiscriminator))
   );
   const frontierStates = expansionFrontierStates(corp.countryId, corp.headquartersState, sectors);
   const candidateExclusions = blankNppCandidateExclusions();

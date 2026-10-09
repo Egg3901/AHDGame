@@ -10,6 +10,7 @@ describe("1991 opening fiscal ownership", () => {
     expect(Object.values(grants.JP).reduce((sum, amount) => sum + amount, 0)).toBe(
       15_872_000_000_000
     );
+    expect(Object.values(grants.IE).reduce((sum, amount) => sum + amount, 0)).toBe(0);
   });
 
   it("reconciles law families and unsplit predecessor obligations exactly", () => {
@@ -18,7 +19,8 @@ describe("1991 opening fiscal ownership", () => {
     expect(owned.US.continuityOwned).toBe(144_993_226_307);
     expect(owned.UK.continuityOwned).toBe(35_680_556_447);
     expect(owned.JP.continuityOwned).toBe(1_736_000_000_000);
-    for (const country of ["US", "UK", "JP"] as const) {
+    expect(owned.IE.continuityOwned).toBe(0);
+    for (const country of ["US", "UK", "JP", "IE"] as const) {
       expect(owned[country].familyOwned + owned[country].continuityOwned).toBe(
         owned[country].operating
       );

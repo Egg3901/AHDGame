@@ -24,7 +24,7 @@ import { resumeTreasuryReserveTransfer } from "@/lib/budget/treasuryReserveTrans
  *    Publishing is the caller's job because the caller knows the actor.
  */
 
-import { type Db, type Document } from "mongodb";
+import { type Collection, type Db, type Document, type Filter } from "mongodb";
 import {
   MONEY_MOVE_COLLECTION,
   applyMoneyMove,
@@ -93,6 +93,14 @@ interface JournalProjectionRecord {
  * Retry enters the publication protocol: inserts use their id, while updates
  * require protected target proof and a fresh journal/generation check.
  */
+/** Append-only receipt collections: written by settlements, never read back mid-pass. */
+const RECEIPT_COLLECTIONS: ReadonlySet<string> = new Set([
+  "ledgerEntries",
+  "financialTxLog",
+  "actionAuditLog",
+  "indexFundTransactions",
+]);
+
 function safeToRetryBlind(_projection: TransitionProjection): boolean {
   return true;
 }
@@ -135,6 +143,7 @@ function toMoneyLeg(leg: TransitionLeg): MoneyMoveLeg {
     ...(leg.filter ? { filter: reviveObjectIds(leg.filter) } : {}),
     ...(leg.path ? { path: leg.path } : {}),
     ...(leg.set ? { set: reviveObjectIds(leg.set) } : {}),
+    ...(leg.inc ? { inc: leg.inc } : {}),
     note: leg.note,
   };
 }
@@ -417,6 +426,59 @@ interface FinishOptions {
   force?: boolean;
 }
 
+/**
+ * MongoDB refuses an update that pulls from and pushes to the same array in
+ * one write ("would create a conflict"), so a record frozen with such a
+ * projection can never finish. Before any part of it applies, split it in the
+ * journal: the update without its conflicting $push, then the $push alone
+ * under its own receipt. The CAS on the whole list means a racing settler
+ * sees either the old list or the split one, never half of each.
+ */
+async function splitConflictingProjections(
+  journal: Collection<{ _id: string } & JournalExtension>,
+  key: string,
+  records: JournalProjectionRecord[]
+): Promise<JournalProjectionRecord[]> {
+  const conflicting = (record: JournalProjectionRecord) => {
+    if (record.applied || record.appliedAt || !isUpdateProjection(record.projection)) return [];
+    const raw: unknown = (record.projection as { update?: unknown }).update;
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) return [];
+    const update = raw as Record<string, Record<string, unknown> | undefined>;
+    const pulled = Object.keys(update.$pull ?? {});
+    return Object.keys(update.$push ?? {}).filter((path) => pulled.includes(path));
+  };
+  if (!records.some((record) => conflicting(record).length > 0)) return records;
+  const split = records.flatMap((record) => {
+    const paths = conflicting(record);
+    if (!paths.length || !isUpdateProjection(record.projection)) return [record];
+    const update = { ...(record.projection.update as Record<string, Record<string, unknown>>) };
+    const push = { ...update.$push };
+    const moved = Object.fromEntries(paths.map((path) => [path, push[path]]));
+    for (const path of paths) delete push[path];
+    if (Object.keys(push).length) update.$push = push;
+    else delete update.$push;
+    return [
+      { ...record, projection: { ...record.projection, update } },
+      {
+        receiptProtocol: "protected_v1" as const,
+        collection: record.collection,
+        note: `${record.note} (array add)`,
+        claimedAt: null,
+        appliedAt: null,
+        applied: false,
+        projection: { ...record.projection, update: { $push: moved } },
+      },
+    ];
+  });
+  const replaced = await journal.updateOne(
+    { _id: key, projections: records } as Filter<{ _id: string } & JournalExtension>,
+    { $set: { projections: split } }
+  );
+  if (replaced.matchedCount === 1) return split;
+  const fresh = await journal.findOne({ _id: key });
+  return fresh?.projections ?? records;
+}
+
 async function finishProjections(
   db: Db,
   transition: BankingTransition,
@@ -437,6 +499,8 @@ async function finishProjections(
   const existing =
     ownedRecords === undefined ? await journal.findOne({ _id: transition.key }) : null;
   let records = ownedRecords ?? existing?.projections;
+  if (existing && records)
+    records = await splitConflictingProjections(journal, transition.key, records);
   if (records === undefined) {
     records = transition.projections.map((projection) => ({
       receiptProtocol: "protected_v1",
@@ -478,7 +542,38 @@ async function finishProjections(
     ownsAllProjections = claim.matchedCount === 1;
   }
 
+  // When this pass owns every projection, its inserts into append-only
+  // receipt collections (fixed ids, read by no settlement logic) are written
+  // together; the loop below records each outcome in its usual place. Inserts
+  // that create business documents, such as loan tranches, and every update
+  // projection keep their strict order, so a failure still leaves nothing
+  // after it.
+  const preInserted = new Map<number, { ok: true } | { ok: false; error: string }>();
+  if (ownsAllProjections) {
+    const inserts = records.flatMap((record, i) =>
+      !record.appliedAt &&
+      !record.applied &&
+      !isUpdateProjection(record.projection) &&
+      RECEIPT_COLLECTIONS.has(record.projection.collection)
+        ? [i]
+        : []
+    );
+    if (inserts.length > 1) {
+      const outcomes = await Promise.all(
+        inserts.map((i) =>
+          applyProjection(db, records[i].projection, projectionStamp(transition.key, i))
+        )
+      );
+      inserts.forEach((i, k) => preInserted.set(i, outcomes[k]));
+    }
+  }
+
   let stuck: string | undefined;
+  // Insert projections carry fixed ids, so replaying one after a crash is a
+  // duplicate-key no-op. Their "applied" marks therefore ride on the next
+  // journal write this pass makes instead of costing one write each.
+  const insertMarks: Record<string, unknown> = {};
+  let failed: { index: number; projection: TransitionProjection; error: string } | undefined;
   for (let i = 0; i < records.length; i += 1) {
     const record = records[i];
     if (record?.appliedAt || record?.applied) {
@@ -522,55 +617,65 @@ async function finishProjections(
 
     const outcome = isUpdateProjection(projection)
       ? await applyProtectedProjection(db, transition.key, i, projection)
-      : await applyProjection(db, projection, projectionStamp(transition.key, i));
+      : (preInserted.get(i) ??
+        (await applyProjection(db, projection, projectionStamp(transition.key, i))));
     if (!outcome.ok) {
-      // Keep update claims intact: a legacy ambiguity must never become a
-      // fresh admission on the next recovery attempt. New protocols may retry
-      // their original guard without losing the protected outcome.
-      result.status = "partial";
-      result.error = outcome.error;
-      if (Number.isFinite(transition.turn)) {
-        countBankingEvent(db, transition.turn, "partialSettlements");
-      }
-      await journal.updateOne(
-        { _id: transition.key, [`projections.${i}.applied`]: { $ne: true } },
-        {
-          $set: {
-            status: "partial",
-            error: outcome.error,
-            ...(!isUpdateProjection(projection) ? { [`projections.${i}.claimedAt`]: null } : {}),
-          },
-        }
-      );
-      return result;
+      failed = { index: i, projection, error: outcome.error };
+      break;
     }
     result.appliedProjections.push(i);
     if (!("newlyApplied" in outcome) || outcome.newlyApplied)
       result.newlyAppliedProjections.push(i);
     if (isUpdateProjection(projection)) continue;
+    insertMarks[`projections.${i}.appliedAt`] = new Date();
+    insertMarks[`projections.${i}.applied`] = true;
+  }
+
+  if (failed) {
+    // Keep update claims intact: a legacy ambiguity must never become a
+    // fresh admission on the next recovery attempt. New protocols may retry
+    // their original guard without losing the protected outcome.
+    result.status = "partial";
+    result.error = failed.error;
+    if (Number.isFinite(transition.turn)) {
+      countBankingEvent(db, transition.turn, "partialSettlements");
+    }
     await journal.updateOne(
-      { _id: transition.key },
+      { _id: transition.key, [`projections.${failed.index}.applied`]: { $ne: true } },
       {
         $set: {
-          [`projections.${i}.appliedAt`]: new Date(),
-          [`projections.${i}.applied`]: true,
+          ...insertMarks,
+          status: "partial",
+          error: failed.error,
+          ...(!isUpdateProjection(failed.projection)
+            ? { [`projections.${failed.index}.claimedAt`]: null }
+            : {}),
         },
       }
     );
+    return result;
   }
 
   if (stuck) {
     result.status = "partial";
     result.error = stuck;
-    await journal.updateOne({ _id: transition.key }, { $set: { status: "partial", error: stuck } });
+    await journal.updateOne(
+      { _id: transition.key },
+      { $set: { ...insertMarks, status: "partial", error: stuck } }
+    );
     return result;
   }
 
   if (result.appliedProjections.length === records.length) {
     await journal.updateOne(
       { _id: transition.key },
-      { $set: { projectionsCompletedAt: new Date(), status: "applied" }, $unset: { error: "" } }
+      {
+        $set: { ...insertMarks, projectionsCompletedAt: new Date(), status: "applied" },
+        $unset: { error: "" },
+      }
     );
+  } else if (Object.keys(insertMarks).length) {
+    await journal.updateOne({ _id: transition.key }, { $set: insertMarks });
   }
   return result;
 }

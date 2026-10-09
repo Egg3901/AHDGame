@@ -73,23 +73,24 @@ export async function ensureJPElections(now: Date, inFlightTurn?: number): Promi
     })
     .toArray();
   const liveShugiin = new Set(liveElections.map((e) => e.state));
-  // Legacy 1991 races were opened before the method snapshot existed. Fix
-  // active/upcoming races once, then leave the frozen rule alone across reforms.
+  // Keep pre-reform active/upcoming races on the current era allocator. This
+  // also heals 1991 races frozen with the former candidate-limited SNTV model.
+  // Mixed-reform races own their district/list counter and stay untouched.
   const eraMethod = getElectionMethod("JP", "shugiin", ctx.preset);
-  if (eraMethod === "sntv") {
+  if (eraMethod) {
     const methodHealOps = liveElections
       .filter(
         (e) =>
-          e.japanShugiinRules?.ruleVersion !== "mixed-1994-v1" &&
-          (e.allocationMethod == null || (e.status === "upcoming" && e.allocationMethod !== "sntv"))
+          e.japanShugiinRules?.ruleVersion !== "mixed-1994-v1" && e.allocationMethod !== eraMethod
       )
       .map((e): AnyBulkWriteOperation<Election> => ({
         updateOne: {
           filter: {
             _id: e._id,
-            ...(e.allocationMethod == null
+            ...(e.allocationMethod === undefined
               ? { allocationMethod: { $exists: false } }
-              : { allocationMethod: e.allocationMethod, status: "upcoming" }),
+              : { allocationMethod: e.allocationMethod }),
+            status: { $in: ["active", "upcoming"] as ElectionStatus[] },
             "japanShugiinRules.ruleVersion": { $ne: "mixed-1994-v1" },
           },
           update: { $set: { allocationMethod: eraMethod, updatedAt: now } },

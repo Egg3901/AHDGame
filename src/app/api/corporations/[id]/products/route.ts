@@ -1,12 +1,9 @@
 import { NextResponse } from "next/server";
-import { ObjectId, type Db } from "mongodb";
-import { z } from "zod";
+import { type Db } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { getGameState } from "@/lib/gameState";
 import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
-import { parseJsonBody } from "@/lib/api/validate";
-import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { resolveCorporation, requireCeo } from "@/lib/api/corporations/resolveQuery";
 import { marketAtLeast, getMarketSystemMode } from "@/lib/market/featureFlag";
 import type { GameConfig } from "@/lib/db/types/gameConfig";
@@ -18,20 +15,13 @@ import {
   allocationsForPlantCapacity,
   isLegalManufacturingProductForPlant,
   legalManufacturingProductKinds,
-  validateProductAllocations,
   type ManufacturingPlant,
-  type ProductPlantAllocation,
 } from "@/lib/products/rules/manufacturingEligibility";
 import {
   MANUFACTURING_PRODUCT_KINDS,
   getManufacturingProductKind,
 } from "@/lib/products/manufacturingCatalog";
 import { SECTOR_STRATEGIES } from "@/lib/constants/sectorStrategies";
-import {
-  MANUFACTURING_DEVELOPMENT_ELAPSED_TURNS,
-  manufacturingDevelopmentThresholdAnchor,
-  allocatedManufacturingCapitalAnchor,
-} from "@/lib/products/rules/manufacturingRules";
 import {
   MANUFACTURING_PRODUCT_PROJECTS_V2,
   type ManufacturingProductProject,
@@ -60,19 +50,6 @@ type ManufacturingPlantSector = Pick<
 >;
 
 const noStore = { "Cache-Control": "private, no-store" };
-const startProjectSchema = z.object({
-  kindId: z.string().min(1).max(80),
-  advertisingAllocationShare: z.number().finite().min(0).max(1).default(0),
-  allocations: z
-    .array(
-      z.object({
-        sectorId: z.string().min(1).max(80),
-        share: z.number().finite().gt(0).lte(1),
-      })
-    )
-    .min(1)
-    .max(50),
-});
 
 async function productLinesAvailable(db: Db): Promise<boolean> {
   const config = await db
@@ -267,141 +244,13 @@ export async function GET(_request: Request, { params }: RouteParams) {
   }
 }
 
-export async function POST(request: Request, { params }: RouteParams) {
-  try {
-    const auth = await requireBasicAuth();
-    if (!auth.ok) return auth.response;
-    const limit = checkRateLimit(auth.user.userId, 20, 60_000);
-    if (!limit.ok) return rateLimitResponse(limit.retryAfter);
-    const parsed = await parseJsonBody(request, startProjectSchema);
-    if (!parsed.success) {
-      return errorResponse(parsed.status, parsed.error);
-    }
-    if (!validateProductAllocations(parsed.data.allocations)) {
-      return errorResponse(400, "Invalid plant allocations");
-    }
-
-    const { id } = await params;
-    const db = await getDb();
-    const resolved = await resolveCorporation(db, id);
-    if (!resolved.ok) return resolved.response;
-    const corporation = resolved.corporation;
-    const ceoError = requireCeo(corporation, auth.user.userId);
-    if (ceoError) return ceoError;
-    if (!(await productLinesAvailable(db))) {
-      return errorResponse(409, "Manufacturing product lines are not enabled");
-    }
-
-    const kind = getManufacturingProductKind(parsed.data.kindId);
-    if (!kind) return errorResponse(400, "Unknown product kind");
-    const gameState = await getGameState(db);
-    const sectors = await db
-      .collection<CorporateSector>("corporateSectors")
-      .find({ corporationId: corporation._id })
-      .project<ManufacturingPlantSector>({
-        _id: 1,
-        corporationId: 1,
-        sectorType: 1,
-        industryModel: 1,
-        strategyId: 1,
-        capitalStock: 1,
-        capacityBookAnchor: 1,
-        plantCount: 1,
-        mothballed: 1,
-      })
-      .toArray();
-    const plants = sectors.map((sector) => ({
-      ...manufacturingPlant(sector),
-      developmentCapitalAnchor: sectorCapacityBookAnchor(
-        sector,
-        gameState?.currentYear,
-        getEraUnitScale(gameState?.preset)
-      ),
-    }));
-    const plantById = new Map(plants.map((plant) => [plant.sectorId, plant]));
-    const legalKindIds = new Set(
-      legalManufacturingProductKinds(plants, {
-        currentYear: gameState?.currentYear,
-        techTreesEnabled: gameState?.sectorTechTreesEnabled === true,
-        unlockedTechNodeIds: corporation.unlockedTechNodeIds,
-        techDecadeLane: corporation.techDecadeLane,
-      }).map((legalKind) => legalKind.id)
-    );
-    if (!legalKindIds.has(kind.id)) {
-      return errorResponse(400, "This product is not unlocked by any owned active plant");
-    }
-    const selectedPlants = parsed.data.allocations.map((allocation) =>
-      plantById.get(allocation.sectorId)
-    );
-    if (
-      selectedPlants.some(
-        (plant) =>
-          !plant ||
-          !isLegalManufacturingProductForPlant(kind.id, plant, {
-            currentYear: gameState?.currentYear,
-            techTreesEnabled: gameState?.sectorTechTreesEnabled === true,
-            unlockedTechNodeIds: corporation.unlockedTechNodeIds,
-            techDecadeLane: corporation.techDecadeLane,
-          })
-      )
-    ) {
-      return errorResponse(
-        400,
-        "Every allocated plant must have real capacity and a legal strategy for this product"
-      );
-    }
-    const allocatedCapacity = parsed.data.allocations.reduce((sum, allocation) => {
-      const plant = plantById.get(allocation.sectorId);
-      return sum + (plant ? plant.capitalStock * allocation.share : 0);
-    }, 0);
-    if (!(allocatedCapacity > 0) || !Number.isFinite(allocatedCapacity)) {
-      return errorResponse(400, "The project requires positive owned plant capacity");
-    }
-
-    const activeProject = await db
-      .collection<ManufacturingProductProject>(MANUFACTURING_PRODUCT_PROJECTS_V2)
-      .findOne({ activeCorporationId: corporation._id.toString() }, { projection: { _id: 1 } });
-    if (activeProject) {
-      return errorResponse(409, "This corporation already has an active product project");
-    }
-
-    const currentTurn = await getCurrentTurn(db);
-    const projectId = new ObjectId().toString();
-    const project: ManufacturingProductProject = {
-      _id: projectId,
-      corporationId: corporation._id.toString(),
-      activeCorporationId: corporation._id.toString(),
-      kindId: kind.id,
-      stage: "development",
-      stageStartedTurn: currentTurn,
-      allocations: parsed.data.allocations as ProductPlantAllocation[],
-      startedTurn: currentTurn,
-      developmentPaidAnchor: 0,
-      advertisingAllocationShare: parsed.data.advertisingAllocationShare,
-      developmentAdvertisingAnchor: 0,
-      developmentAdvertisingTurns: 0,
-      productBrand: 0,
-      paidThresholdAnchor: manufacturingDevelopmentThresholdAnchor(
-        allocatedManufacturingCapitalAnchor(plants, parsed.data.allocations)
-      ),
-      elapsedDevelopmentTurns: 0,
-      elapsedThresholdTurns: MANUFACTURING_DEVELOPMENT_ELAPSED_TURNS,
-    };
-    try {
-      await db
-        .collection<ManufacturingProductProject>(MANUFACTURING_PRODUCT_PROJECTS_V2)
-        .insertOne(project);
-    } catch (error) {
-      if (typeof error === "object" && error !== null && "code" in error && error.code === 11000) {
-        return errorResponse(409, "This corporation already has an active product project");
-      }
-      throw error;
-    }
-    return NextResponse.json(
-      { activeProject: projectView(project), currentYear: gameState?.currentYear },
-      { status: 201 }
-    );
-  } catch (error) {
-    return handleRouteError(error);
-  }
+/**
+ * New product projects are started in the product studio (`/ventures`).
+ * Projects already in flight keep running and can still be read and retired.
+ */
+export async function POST() {
+  return errorResponse(
+    410,
+    "Starting products here has moved to the product studio. Use the ventures endpoint."
+  );
 }

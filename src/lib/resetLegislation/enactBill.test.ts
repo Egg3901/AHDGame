@@ -152,7 +152,12 @@ describe("applyResetLawBillEnactment", () => {
     const partition = buildOpeningDepartmentFundingPartition(
       buildOpeningDepartmentBoards1991(worldId, 1),
       DEPARTMENT_DEFINITIONS,
-      { US: fiscal.US.grants, UK: fiscal.UK.grants, JP: fiscal.JP.grants },
+      {
+        US: fiscal.US.grants,
+        UK: fiscal.UK.grants,
+        JP: fiscal.JP.grants,
+        IE: fiscal.IE.grants,
+      },
       openingNamedGrantClaims1991()
     );
     const account = partition.accounts.find(

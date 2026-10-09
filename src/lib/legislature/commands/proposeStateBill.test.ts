@@ -3,12 +3,16 @@ import type { Db } from "mongodb";
 import { ObjectId } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 import type { AuthUserWithCharacter } from "@/lib/auth";
+import { BILL_PROPOSE_ACTION_COST, getProvisionCostTotal } from "@shared/constants/legislation";
 
 vi.mock("@/lib/countryState", () => ({
   getCountryState: vi.fn().mockResolvedValue({ governmentType: "onePartyState" }),
 }));
 vi.mock("@/lib/gameState", () => ({
   getGameState: vi.fn().mockResolvedValue({ currentTurn: 100 }),
+}));
+vi.mock("@/lib/resetLegislation/loadReviewedCatalog", () => ({
+  loadReviewedLawCatalog: vi.fn(),
 }));
 
 const characterId = new ObjectId();
@@ -119,6 +123,29 @@ describe("proposeStateBill — custom (flavor) bills", () => {
     db.collection("stateBills").insertOne.mockResolvedValue({ insertedId: new ObjectId() });
   });
 
+  it("rejects stale reviewed drafts instead of silently stripping their provisions", async () => {
+    const { getGameState } = await import("@/lib/gameState");
+    vi.mocked(getGameState).mockResolvedValueOnce({ currentTurn: 100 } as never);
+    const { proposeStateBill } = await import("./proposeStateBill");
+    const res = await proposeStateBill(db as unknown as Db, "CN", "XB", authUser(), {
+      title: "Education and Health Act",
+      summary: "A reviewed draft from an outdated form.",
+      category: "custom",
+      provisions: [
+        {
+          type: "reset_law",
+          familyId: "education.core",
+          scope: "regional",
+          regionId: "XB",
+          choice: "center",
+        },
+      ],
+    });
+    expect(res.status).toBe(409);
+    expect(db.collection("stateBills").insertOne).not.toHaveBeenCalled();
+    expect(db.collection("characters").updateOne).not.toHaveBeenCalled();
+  });
+
   it("stores a custom state bill with empty provisions, stripping client input", async () => {
     const { proposeStateBill } = await import("./proposeStateBill");
     const res = await proposeStateBill(db as unknown as Db, "CN", "xb", authUser(), {
@@ -224,6 +251,193 @@ describe("proposeStateBill — US state tax sliders (ticket #1106)", () => {
     expect(res.body).toMatchObject({ error: expect.stringMatching(/at least/) });
     expect(db.collection("stateBills").insertOne).not.toHaveBeenCalled();
   });
+
+  it("rejects the same reviewed regional tax instrument twice", async () => {
+    const { getGameState } = await import("@/lib/gameState");
+    vi.mocked(getGameState).mockResolvedValue({
+      _id: "current",
+      currentTurn: 100,
+      resetWorldId: "world-1",
+      metricsSystemVersion: "v2",
+      legislationSystemVersion: "v2",
+      resetVersionSeeds: {
+        metrics: {
+          worldId: "world-1",
+          revision: 3,
+          sourceTurn: 1,
+          completedAt: "2026-10-04T00:00:00.000Z",
+          verificationHash: "metrics",
+        },
+        legislation: {
+          worldId: "world-1",
+          revision: 6,
+          sourceTurn: 1,
+          completedAt: "2026-10-04T00:00:00.000Z",
+          verificationHash: "legislation",
+        },
+      },
+    } as never);
+    const { proposeStateBill } = await import("./proposeStateBill");
+
+    const res = await proposeStateBill(db as unknown as Db, "US", "NC", authUser(), {
+      title: "Duplicated Income Tax Act",
+      summary: "Attempts to set the same tax twice.",
+      category: "tax",
+      provisions: [
+        { legislationTypeId: "us.tax.stateIncomeTax", proposedRate: 7 },
+        { legislationTypeId: "us.tax.stateIncomeTax", proposedRate: 8 },
+      ],
+    });
+
+    expect(res).toMatchObject({
+      status: 400,
+      body: { error: "A v2 bill cannot repeat a tax instrument." },
+    });
+    expect(db.collection("stateBills").insertOne).not.toHaveBeenCalled();
+  });
+
+  it("stores both reviewed education and health provisions in a custom UK regional bill", async () => {
+    const { getGameState } = await import("@/lib/gameState");
+    const { loadReviewedLawCatalog } = await import("@/lib/resetLegislation/loadReviewedCatalog");
+    const gameState = {
+      currentTurn: 100,
+      resetWorldId: "world-1",
+      startingYear: 1991,
+      metricsSystemVersion: "v2",
+      legislationSystemVersion: "v2",
+      resetVersionSeeds: Object.fromEntries(
+        [
+          ["metrics", 3],
+          ["legislation", 6],
+        ].map(([key, revision]) => [
+          key,
+          {
+            worldId: "world-1",
+            revision,
+            sourceTurn: 1,
+            completedAt: "2026-10-04T00:00:00.000Z",
+            verificationHash: String(key),
+          },
+        ])
+      ),
+    };
+    vi.mocked(getGameState).mockResolvedValueOnce(gameState as never);
+    db.collection("gameState").findOne.mockResolvedValue(gameState);
+    db.collection("politicalParties").findOne.mockResolvedValue({
+      sequentialId: 1,
+      countryId: "UK",
+      _id: "test-party",
+    });
+    db.collection("electedOfficials").findOne.mockResolvedValue({
+      countryId: "UK",
+      state: "SCO",
+      officeType: "regionalCouncil",
+      characterId,
+    });
+    vi.mocked(loadReviewedLawCatalog).mockResolvedValueOnce(
+      ["L10", "L19"].map((familyId) => ({
+        familyId,
+        currentLaw: "Current law",
+        currentLawDescription: "Current description",
+        options: [
+          {
+            option: { familyId, choice: "center_left" },
+            currentChoice: "center",
+            title: `${familyId} proposal`,
+            description: "Proposed description",
+          },
+        ],
+      })) as never
+    );
+    const { proposeStateBill } = await import("./proposeStateBill");
+    const result = await proposeStateBill(db as unknown as Db, "UK", "SCO", authUser(), {
+      title: "Education and Health Act",
+      summary: "Improve education and health services.",
+      category: "custom",
+      provisions: ["L10", "L19"].map((familyId) => ({
+        type: "reset_law",
+        familyId,
+        scope: "regional",
+        regionId: "SCO",
+        choice: "center_left",
+      })),
+    });
+    expect(result).toMatchObject({ status: 200 });
+    expect(db.collection("characters").updateOne).toHaveBeenCalledWith(
+      expect.objectContaining({ _id: characterId }),
+      expect.objectContaining({
+        $inc: { actions: -BILL_PROPOSE_ACTION_COST, nationalInfluence: -getProvisionCostTotal(2) },
+      })
+    );
+    expect(db.collection("stateBills").insertOne).toHaveBeenCalledWith(
+      expect.objectContaining({
+        category: "custom",
+        proposalNpiCost: getProvisionCostTotal(2),
+        proposalActionCost: BILL_PROPOSE_ACTION_COST,
+        countryId: "UK",
+        stateId: "SCO",
+        provisions: ["L10", "L19"].map((familyId) =>
+          expect.objectContaining({
+            type: "reset_law",
+            familyId,
+            titleSnapshot: `${familyId} proposal`,
+            choice: "center_left",
+          })
+        ),
+      })
+    );
+  });
+
+  it.each(["education", "custom"])(
+    "validates reviewed %s provisions instead of stripping them",
+    async (category) => {
+      const { getGameState } = await import("@/lib/gameState");
+      vi.mocked(getGameState).mockResolvedValue({
+        _id: "current",
+        currentTurn: 100,
+        resetWorldId: "world-1",
+        metricsSystemVersion: "v2",
+        legislationSystemVersion: "v2",
+        resetVersionSeeds: {
+          metrics: {
+            worldId: "world-1",
+            revision: 3,
+            sourceTurn: 1,
+            completedAt: "2026-10-04T00:00:00.000Z",
+            verificationHash: "metrics",
+          },
+          legislation: {
+            worldId: "world-1",
+            revision: 6,
+            sourceTurn: 1,
+            completedAt: "2026-10-04T00:00:00.000Z",
+            verificationHash: "legislation",
+          },
+        },
+      } as never);
+      const { proposeStateBill } = await import("./proposeStateBill");
+
+      const res = await proposeStateBill(db as unknown as Db, "US", "NC", authUser(), {
+        title: "Malformed Regional Law Act",
+        summary: "Omits the region from a reviewed regional law selection.",
+        category,
+        provisions: [
+          {
+            type: "reset_law",
+            familyId: "education.core",
+            scope: "regional",
+            choice: "center",
+          },
+        ],
+      });
+
+      expect(res).toMatchObject({
+        status: 400,
+        body: { error: expect.stringMatching(/identify its family and region/i) },
+      });
+      expect(db.collection("stateBills").insertOne).not.toHaveBeenCalled();
+    }
+  );
 });
 
 describe("proposeStateBill — provision snapshots", () => {

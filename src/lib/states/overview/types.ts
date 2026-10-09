@@ -151,8 +151,8 @@ export interface EconomySummary {
    * secondary) so the card always has something to show.
    *
    * `specializationBonus` flags entries that match the state's seed
-   * `sectorSpecializations` — `"primary"` carries the +10pp regional
-   * margin bonus, `"secondary"` carries +5pp.
+   * `sectorSpecializations` — `"primary"` carries the +5pp regional
+   * margin bonus, `"secondary"` carries +2.5pp.
    */
   topSectors: Array<{
     id: string;
@@ -184,7 +184,7 @@ export interface StateOverviewResult {
     parties: Array<{ id: string; abbr: string; name: string; color: string; regPct: number }>;
     independent: number;
     unregistered: number;
-    /** True once at least one party has a real Reg value in this state. */
+    /** True when this country's state registration pool exists, even with no party Reg. */
     seeded: boolean;
   };
   regionalExecutive: RegionalExecutive | null;

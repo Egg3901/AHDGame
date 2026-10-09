@@ -65,6 +65,9 @@ export const DEFAULT_DURATIONS: Record<
   // RU Soviet of Nationalities — same-day sibling of the Union election;
   // shares the ruSupremeSoviet anchor.
   nationalitiesDeputy: { durationHours: 48, primaryDurationHours: 24, generalDurationHours: 24 },
+  // RU 1991 Soviet Congress of People's Deputies — per-region multi-seat
+  // delegate election (5-year cycle via the canonicalCycle table, 48h window).
+  unionCongressDeputy: { durationHours: 48, primaryDurationHours: 24, generalDurationHours: 24 },
   // RU republic Supreme Soviets — sub-national chamber per region.
   republicSupremeSoviet: { durationHours: 48, primaryDurationHours: 24, generalDurationHours: 24 },
   // DD Volkskammer — GDR single-list National Front deputies (4-year cycle via

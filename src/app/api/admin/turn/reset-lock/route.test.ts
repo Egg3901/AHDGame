@@ -53,6 +53,8 @@ describe("POST /api/admin/turn/reset-lock", () => {
       findOne: vi.fn().mockResolvedValue({
         _id: "current",
         isProcessing: true,
+        currentTurn: 87,
+        processingKind: "turn",
         processingPhase: "voteAccumulation",
         processingTargetTurn: 88,
         processingHeartbeatAt: staleHeartbeat,
@@ -77,6 +79,12 @@ describe("POST /api/admin/turn/reset-lock", () => {
     assertCalledWithFilter(db.collectionMocks.gameState.updateOne, {
       _id: "current",
       isProcessing: true,
+      processingKind: "turn",
+      processingAbandonedAt: null,
+      processingStartedAt: staleHeartbeat,
+      processingTargetTurn: 88,
+      processingPhase: "voteAccumulation",
+      processingHeartbeatAt: staleHeartbeat,
     });
     assertSetFields(db.collectionMocks.gameState.updateOne, {
       isProcessing: false,
@@ -95,6 +103,121 @@ describe("POST /api/admin/turn/reset-lock", () => {
         adminUsername: "admin-user",
       })
     );
+  });
+
+  it("releases a lock immediately when its holder marked it abandoned", async () => {
+    const freshHeartbeat = new Date(Date.now() - 30 * 1000);
+    const abandonedAt = new Date(Date.now() - 5 * 1000);
+    db.collectionMocks.gameState = {
+      ...db.collection("gameState"),
+      findOne: vi.fn().mockResolvedValue({
+        _id: "current",
+        isProcessing: true,
+        currentTurn: 87,
+        processingKind: "turn",
+        processingPhase: "turn_bootstrap",
+        processingTargetTurn: 88,
+        processingAbandonedAt: abandonedAt,
+        processingHeartbeatAt: freshHeartbeat,
+        processingStartedAt: freshHeartbeat,
+        updatedAt: abandonedAt,
+      }),
+      updateOne: vi.fn().mockResolvedValue({ matchedCount: 1, modifiedCount: 1 }),
+    };
+
+    const response = await POST();
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body).toMatchObject({ success: true, modified: true });
+    assertCalledWithFilter(db.collectionMocks.gameState.updateOne, {
+      _id: "current",
+      isProcessing: true,
+      processingKind: "turn",
+      processingAbandonedAt: abandonedAt,
+      processingStartedAt: freshHeartbeat,
+      processingTargetTurn: 88,
+      processingPhase: "turn_bootstrap",
+      processingHeartbeatAt: freshHeartbeat,
+    });
+  });
+
+  it("releases a stale lock without erasing applied turn recovery evidence", async () => {
+    const staleHeartbeat = new Date(Date.now() - 21 * 60 * 1000);
+    const phaseStatuses = {
+      fundGeneration: {
+        status: "completed",
+        startedAt: staleHeartbeat,
+        updatedAt: staleHeartbeat,
+        completedAt: staleHeartbeat,
+        reason: null,
+        message: null,
+      },
+    };
+    db.collectionMocks.gameState = {
+      ...db.collection("gameState"),
+      findOne: vi.fn().mockResolvedValue({
+        _id: "current",
+        isProcessing: true,
+        currentTurn: 87,
+        processingKind: "turn",
+        processingPhase: "corporationTurn",
+        processingTargetTurn: 88,
+        processingPhaseStatuses: phaseStatuses,
+        processingHeartbeatAt: staleHeartbeat,
+        processingStartedAt: staleHeartbeat,
+        updatedAt: staleHeartbeat,
+      }),
+      updateOne: vi.fn().mockResolvedValue({ matchedCount: 1, modifiedCount: 1 }),
+    };
+
+    const response = await POST();
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body).toMatchObject({
+      success: true,
+      modified: true,
+      message:
+        "Processing lock released. Existing turn recovery evidence was preserved for the next cron tick.",
+    });
+    const update = db.collectionMocks.gameState.updateOne.mock.calls[0]?.[1];
+    expect(update?.$set).not.toHaveProperty("processingTargetTurn");
+    expect(update?.$set).not.toHaveProperty("processingPhase");
+    expect(update?.$set).not.toHaveProperty("processingPhaseStatuses");
+    expect(update?.$set).not.toHaveProperty("processingPhaseResults");
+  });
+
+  it("does not clear a lock that changed after the stale snapshot was read", async () => {
+    const staleHeartbeat = new Date(Date.now() - 21 * 60 * 1000);
+    db.collectionMocks.gameState = {
+      ...db.collection("gameState"),
+      findOne: vi.fn().mockResolvedValue({
+        _id: "current",
+        isProcessing: true,
+        currentTurn: 87,
+        processingKind: "turn",
+        processingPhase: "corporationTurn",
+        processingTargetTurn: 88,
+        processingHeartbeatAt: staleHeartbeat,
+        processingStartedAt: staleHeartbeat,
+        updatedAt: staleHeartbeat,
+      }),
+      updateOne: vi.fn().mockResolvedValue({ matchedCount: 0, modifiedCount: 0 }),
+    };
+
+    const { createAdminLog } = await import("@/lib/adminLog");
+    const { invalidateGameStateCache } = await import("@/lib/gameState");
+    const response = await POST();
+    const body = await response.json();
+
+    expect(response.status).toBe(409);
+    expect(body).toMatchObject({
+      error:
+        "Processing lock changed while the reset was in progress. Nothing was cleared; refresh and try again.",
+    });
+    expect(createAdminLog).not.toHaveBeenCalled();
+    expect(invalidateGameStateCache).not.toHaveBeenCalled();
   });
 
   it("refuses to clear a fresh active lock", async () => {

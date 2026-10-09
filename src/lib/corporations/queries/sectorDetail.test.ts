@@ -102,6 +102,52 @@ describe("getCorporationSectorDetail", () => {
     expect(data.financialVisibility).toEqual({ hidden: true, reason: "signed-out" });
   });
 
+  it("shows a private subsidiary's books to the CEO of its controlling parent", async () => {
+    const parentId = new ObjectId();
+    const subId = new ObjectId();
+    const parentCeoUserId = new ObjectId();
+    const sectorId = new ObjectId();
+    const { getAuthUser } = await import("@/lib/auth");
+    vi.mocked(getAuthUser).mockResolvedValueOnce({
+      userId: parentCeoUserId.toHexString(),
+    } as Awaited<ReturnType<typeof getAuthUser>>);
+
+    db.collectionMocks.corporations.findOne.mockImplementation(async (query: { _id?: ObjectId }) =>
+      query?._id && query._id.equals(parentId)
+        ? { _id: parentId, userId: parentCeoUserId, ceoVacant: false }
+        : {
+            _id: subId,
+            sequentialId: 8,
+            name: "Wholly Owned Sub",
+            userId: new ObjectId("000000000000000000000000"),
+            ceoType: "npp",
+            isPrivate: true,
+            totalShares: 1_000,
+            shareholders: [{ corporationId: parentId, shares: 1_000 }],
+            countryId: "US",
+            liquidCurrencyCode: "USD",
+          }
+    );
+    db.collectionMocks.corporateSectors.findOne.mockResolvedValue({
+      _id: sectorId,
+      corporationId: subId,
+      stateId: "CA",
+      countryId: "US",
+      sectorType: "technology",
+      revenue: 1_000_000,
+    });
+
+    const response = await getCorporationSectorDetail(
+      new Request(`http://localhost/api/corporations/8/sectors/${sectorId.toHexString()}`),
+      { params: Promise.resolve({ id: "8", sectorId: sectorId.toHexString() }) }
+    );
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(data.sector.revenue).not.toBeNull();
+    expect(data.financialVisibility).toEqual({ hidden: false, reason: "visible" });
+  });
+
   it("fogs live financials for a public corp's sector from a non-insider viewer, but keeps identity/CEO info visible", async () => {
     const corporationId = new ObjectId();
     const ownerUserId = new ObjectId();

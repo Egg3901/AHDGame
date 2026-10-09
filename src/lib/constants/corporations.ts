@@ -68,6 +68,53 @@ export const FOUNDABLE_CORPORATION_TYPES = CORPORATION_TYPES.filter(
   (t): t is Exclude<CorporationType, RetiredCorporationType> => !isRetiredCorporationType(t)
 ) as readonly Exclude<CorporationType, RetiredCorporationType>[];
 
+/**
+ * Sector focus options for a picker: foundable types only, plus the saved
+ * value when it is a retired legacy type, so an old automobiles or
+ * entertainment corporation still renders its own focus without the retired
+ * type being offered to anyone else.
+ */
+export function sectorFocusOptions(saved?: string | null): CorporationType[] {
+  const options: CorporationType[] = [...FOUNDABLE_CORPORATION_TYPES];
+  if (
+    saved &&
+    !options.includes(saved as CorporationType) &&
+    (CORPORATION_TYPES as readonly string[]).includes(saved)
+  ) {
+    options.push(saved as CorporationType);
+  }
+  return options;
+}
+
+/** Canonical sector a retired type was folded into by the 1.12 taxonomy. */
+const FOLDED_INTO: Record<RetiredCorporationType, CorporationType> = {
+  automobiles: "manufacturing",
+  entertainment: "media",
+};
+
+/**
+ * Whether a sector-scoped policy target (subsidy, tariff) covers a sector,
+ * given the sector's OPERATING type (vehicle plants operate as "automobiles",
+ * entertainment media lanes as "entertainment"; see getOperatingSectorType).
+ *
+ * - A legacy "automobiles"/"entertainment" target still reaches the converted
+ *   vehicle and entertainment lanes, so laws enacted before the merger keep
+ *   working.
+ * - A "manufacturing"/"media" target covers the whole canonical sector,
+ *   folded lanes included, since that is the only choice pickers now offer.
+ * - Ordinary manufacturing/media is never reached by a retired target.
+ */
+export function sectorPolicyTargetMatches(
+  target: string | null | undefined,
+  operatingSectorType: string
+): boolean {
+  if (!target) return false;
+  if (target === operatingSectorType) return true;
+  return (
+    isRetiredCorporationType(operatingSectorType) && FOLDED_INTO[operatingSectorType] === target
+  );
+}
+
 /** Specialized production models that belong to the manufacturing taxonomy. */
 export type ManufacturingIndustryModel = "vehicles";
 
@@ -294,13 +341,13 @@ export function calcMarketingGrowth(dailyBudget: number, currentStrength: number
 }
 
 /** Profit margin bonus (%) for sectors in corporation's home state */
-export const HOME_STATE_MARGIN_BONUS = 10;
+export const HOME_STATE_MARGIN_BONUS = 5;
 /** Profit margin bonus (%) for sectors in corporation's home nation (same country, different state) */
-export const HOME_NATION_MARGIN_BONUS = 5;
+export const HOME_NATION_MARGIN_BONUS = 2.5;
 /** Profit margin bonus (%) for a state/region's primary sector specialization */
-export const STATE_PRIMARY_SECTOR_MARGIN_BONUS = 10;
+export const STATE_PRIMARY_SECTOR_MARGIN_BONUS = 5;
 /** Profit margin bonus (%) for a state/region's secondary sector specialization */
-export const STATE_SECONDARY_SECTOR_MARGIN_BONUS = 5;
+export const STATE_SECONDARY_SECTOR_MARGIN_BONUS = 2.5;
 
 /** Default profit margin for new sectors (%) */
 export const DEFAULT_PROFIT_MARGIN = 35;
@@ -1385,8 +1432,8 @@ export function getExpropriationRiskMarginModifier(
 
 /**
  * Profit margin bonus for home state/nation. International sectors get 0.
- * - Home state (sector in HQ state): +10%
- * - Home nation (same country, different state): +5%
+ * - Home state (sector in HQ state): +5%
+ * - Home nation (same country, different state): +2.5%
  * - International (different country): 0%
  */
 export function getHomeLocationMarginBonus(
@@ -1407,8 +1454,8 @@ export interface StateSectorSpecialization {
 
 /**
  * Profit margin bonus for state/region sector specializations.
- * - Primary sector: +10 percentage points
- * - Secondary sector: +5 percentage points
+ * - Primary sector: +5 percentage points
+ * - Secondary sector: +2.5 percentage points
  */
 export function getStateSectorSpecializationMarginBonus(
   specialization: StateSectorSpecialization | null | undefined,
@@ -1737,6 +1784,15 @@ export function getSprawlModifier(
   return Math.floor(excess / 2) * effectivePenalty;
 }
 
+/**
+ * Logistics sectors are the network that carries the sprawl, so they never pay
+ * the sprawl penalty on their own margin. They still count toward the
+ * corporation's sector total, so every other sector's penalty is unchanged.
+ */
+export function isSprawlExemptSectorType(sectorType: string): boolean {
+  return sectorType === "logistics";
+}
+
 export interface MarginModifiers {
   unemploymentModifier: number;
   gridReliabilityModifier: number;
@@ -1906,7 +1962,7 @@ export function computeAllMarginModifiers(
       ? 0
       : getSectorTypeMatchModifier(sectorType, corporationType, secondaryType);
   const sprawlMod =
-    stateOwned || totalSectors == null
+    stateOwned || totalSectors == null || isSprawlExemptSectorType(sectorType)
       ? 0
       : getSprawlModifier(totalSectors, logisticsStrength, !!secondaryType);
 

@@ -1,5 +1,6 @@
 "use client";
 
+import { MARKET_POLLING_TEARDOWN } from "@/lib/observability/sentryFilters";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { marketTurnLabel } from "@/lib/stockExchange/rules/calendar";
 import type { GameDateAnchor } from "@/lib/utils/gameDate";
@@ -10,7 +11,11 @@ import {
   getExchangeApiKey,
   getExchangeLabel,
 } from "@/lib/constants/exchangeRegistry";
-import { CORPORATION_TYPE_LABELS, type CorporationType } from "@/lib/constants/corporations";
+import {
+  CORPORATION_TYPE_LABELS,
+  FOUNDABLE_CORPORATION_TYPES,
+  type CorporationType,
+} from "@/lib/constants/corporations";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import type { ExchangeFilter } from "../types";
 import type { ExchangeMetaEntry } from "../stockMarketRouting";
@@ -355,7 +360,7 @@ export function MarketOverview({
     const timer = window.setInterval(refresh, 60_000);
     document.addEventListener("visibilitychange", refresh);
     return () => {
-      controller.abort();
+      controller.abort(new DOMException(MARKET_POLLING_TEARDOWN, "AbortError"));
       window.clearInterval(timer);
       document.removeEventListener("visibilitychange", refresh);
     };
@@ -569,8 +574,7 @@ export function MarketOverview({
     [exchangeApi, exchangeMeta]
   );
   const sectorOptions = useMemo(
-    () =>
-      exchangeApi === "global" ? (Object.keys(CORPORATION_TYPE_LABELS) as CorporationType[]) : [],
+    () => (exchangeApi === "global" ? [...FOUNDABLE_CORPORATION_TYPES] : []),
     [exchangeApi]
   );
 
@@ -815,3 +819,6 @@ export function MarketOverview({
     </div>
   );
 }
+
+/** The candle chart under a name that does not clash with the hub overview. */
+export { MarketOverview as StockMarketChart };

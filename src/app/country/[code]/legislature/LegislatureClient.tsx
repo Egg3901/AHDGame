@@ -2,6 +2,7 @@
 
 import { Suspense, type ComponentType } from "react";
 import dynamic from "next/dynamic";
+import { useTranslations } from "next-intl";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 
 import { LegislatureSkeleton } from "./LegislatureSkeleton";
@@ -85,6 +86,7 @@ export default function LegislatureClient({
   romanianElectoralDecision,
   bulgarianConstitutionalDecision,
 }: Props) {
+  const t = useTranslations("worldConflicts.russianLegislature");
   const config = COUNTRY_CONFIGS[countryId];
   const displayedName = legislatureName ?? config.legislature.name;
   const PageComponent = LEGISLATURE_COMPONENTS[countryId];
@@ -97,13 +99,25 @@ export default function LegislatureClient({
     );
   }
 
-  if (countryId === "CS" || countryId === "YU" || (countryId === "RU" && generic)) {
+  if (countryId === "RU" && generic) {
     return (
-      <>
-        {countryId === "RU" && <RussianConstitutionalDecisionPanel />}
-        <FederationDecisionPanel countryId={countryId} legislatureName={displayedName} />
-      </>
+      <main className="min-h-screen bg-background px-4 py-6 text-foreground sm:px-6 lg:px-8">
+        <div className="mx-auto max-w-3xl space-y-6">
+          <header className="space-y-3 rounded-xl border border-card-border bg-card p-5 sm:p-6">
+            <p className="text-sm font-medium text-muted">{t("eyebrow")}</p>
+            <h1 className="text-2xl font-bold">{displayedName}</h1>
+            <p className="text-sm leading-relaxed text-muted">{t("overview")}</p>
+            <p className="text-sm leading-relaxed text-muted">{t("eligibility")}</p>
+          </header>
+          <RussianConstitutionalDecisionPanel />
+          <FederationDecisionPanel countryId={countryId} legislatureName={displayedName} embedded />
+        </div>
+      </main>
     );
+  }
+
+  if (countryId === "CS" || countryId === "YU") {
+    return <FederationDecisionPanel countryId={countryId} legislatureName={displayedName} />;
   }
 
   if (countryId === "BG" && bulgarianConstitutionalDecision)

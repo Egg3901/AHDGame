@@ -2,6 +2,7 @@ import type { ElectionVoteTally } from "@/lib/db/types";
 import type { CountryId } from "@/lib/constants/countries";
 import type {
   ContingentElectionDisplay,
+  ContingentProjectionDisplay,
   PresidentialResolutionMode,
 } from "@/lib/elections/presidentialResolutionDisplay";
 import type { FactorLedgerSnapshot } from "@/lib/electionEngine/factorLedger";
@@ -126,6 +127,7 @@ export interface VoteTurnSnapshot {
   sharesPct: Record<string, number>;
   /** Multi-seat general elections: projected seats at this turn (same method as `seatsEstimate`). */
   seatsEstimate?: Record<string, number>;
+  participation?: import("@/lib/demographics/v2/rules").ParticipationSummary;
 }
 
 /** Per-state map data for presidential electoral map (stateId -> display data) */
@@ -164,6 +166,8 @@ export interface GeneralVotes {
   resolutionMode?: PresidentialResolutionMode;
   /** President only: House/Senate contingent breakdown when no EV majority */
   contingentResult?: ContingentElectionDisplay;
+  /** President only, live race: projected contingent ballot when no EV majority is projected */
+  contingentProjection?: ContingentProjectionDisplay;
   /** President only: contingent ballot failed and will retry next turn */
   contingentResolutionPending?: boolean;
   /** President only: tally finalized but executive seating incomplete */

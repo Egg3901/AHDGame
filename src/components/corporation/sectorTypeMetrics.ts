@@ -129,7 +129,11 @@ export function typeMarketShare(sectors: SectorDetail[]): number | null {
  * file still counted it.
  */
 export function resolveSectorStrategy(sector: SectorDetail) {
-  const type = getOperatingSectorType(sector.sectorType, sector.industryModel) as CorporationType;
+  const type = getOperatingSectorType(
+    sector.sectorType,
+    sector.industryModel,
+    sector.mediaDiscriminator
+  ) as CorporationType;
   if (!SECTOR_STRATEGIES[type]?.length) return null;
   // `corporationDetail` already normalises an absent id to "standard", so this
   // only matters for a row that arrives with one; kept so the function is
@@ -137,7 +141,8 @@ export function resolveSectorStrategy(sector: SectorDetail) {
   return getStrategyForOperatingModel(
     sector.sectorType,
     sector.strategyId ?? "standard",
-    sector.industryModel
+    sector.industryModel,
+    sector.mediaDiscriminator
   );
 }
 
@@ -371,7 +376,7 @@ function buildMetric(
         label: "Sprawl relief",
         value: `${relief.toFixed(2)} pp`,
         sub: "of penalty bought back",
-        help: "Margin your logistics strength is currently returning to every sector the corporation owns, against the penalty you would carry with no logistics at all.",
+        help: "Margin your logistics strength is currently returning to every non-logistics sector the corporation owns (logistics sectors never pay sprawl), against the penalty you would carry with no logistics at all.",
       };
     }
     case "growthTarget": {

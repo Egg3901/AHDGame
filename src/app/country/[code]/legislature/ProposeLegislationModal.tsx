@@ -1,6 +1,7 @@
 "use client";
 
 import { useWorldFlags } from "@/hooks/useWorldFlags";
+import { LegislationSystemGate } from "@/components/legislation/LegislationSystemGate";
 import { EuropeanTreatyProvisionEditor } from "@/components/bills/EuropeanTreatyProvisionEditor";
 import { useState, useEffect, useMemo } from "react";
 import { ladderBounds } from "@/lib/legislature/policyLadder";
@@ -1288,9 +1289,10 @@ export function ProposeLegislationModal(
   props: Parameters<typeof LegacyProposeLegislationModal>[0]
 ) {
   const flags = useWorldFlags();
+  if (!flags.loaded || flags.failed) {
+    return <LegislationSystemGate failed={flags.failed} onClose={props.onClose} />;
+  }
   const useV2 =
-    flags.loaded &&
-    !flags.failed &&
     flags.resetSystemVersions.legislation === "v2" &&
     flags.resetV2Countries.includes(props.countryId);
   if (useV2) {

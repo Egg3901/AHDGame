@@ -38,6 +38,10 @@ import {
   getOperatingSectorType,
   applyPlannedEconomyOutputMix,
 } from "./sectorStrategies";
+import {
+  energyProductivityMultiplier,
+  plantUtilizationForInputs,
+} from "@/lib/corporations/rules/energyProductivityRamp";
 import { getOutputMultiplier, getInputMultiplier } from "@/lib/utils/productionPolicy";
 import { TRADE_EMBARGO_EXPORT_LOSS_SHARE } from "@/lib/trade/constants";
 
@@ -1202,7 +1206,7 @@ export function computeRateEnvironmentMultiplier(primeRate: number): number {
 export interface FinancialServicesDemandInput {
   /** Country's central bank prime rate */
   primeRate: number;
-  /** Recent debt issuance dollars over the current demand window: stateId → issuance */
+  /** Recent debt issuance in ₳ over the current demand window: stateId → issuance */
   stateDebtIssuance: Map<string, number>;
 }
 
@@ -1219,8 +1223,8 @@ export function computeLatentFinancialDemand(
   const basePrice = COMMODITY_BASE_PRICES["financial_services"];
   const result = new Map<string, number>();
 
-  for (const [stateId, issuanceDollars] of input.stateDebtIssuance) {
-    const baseDemandDollars = issuanceDollars * FINANCIAL_DEMAND_ISSUANCE_FRACTION;
+  for (const [stateId, issuanceAnchor] of input.stateDebtIssuance) {
+    const baseDemandDollars = issuanceAnchor * FINANCIAL_DEMAND_ISSUANCE_FRACTION;
     const adjustedDemandDollars = baseDemandDollars * rateMultiplier;
     const units = adjustedDemandDollars / basePrice;
     if (units > 0) {
@@ -1702,14 +1706,18 @@ export const SECTOR_DEMAND: Partial<Record<CorporationType, CommodityFlow[]>> = 
     { commodity: "network_services", rate: 0.1 },
   ],
   energy: [
-    { commodity: "steel", rate: 0.15 },
+    // Vehicles & machinery cut 0.1 to 0.03 and steel raised 0.15 to 0.22: a power
+    // plant's ongoing draw is structural steel and fuel, not fleet machinery.
+    // Vehicles run chronically short and were the binding input on most energy
+    // plants, so the energy shortage could never pay for new capacity.
+    { commodity: "steel", rate: 0.22 },
     { commodity: "coal", rate: 0.15 },
     // Reduced oil 0.1 to 0.07 and rare_earth (covers copper) 0.07 to 0.04: energy plants are not primary oil
     // consumers (fuel switching to gas/coal is realistic), and rare_earth is already
     // severely scarce. Reduced inputs improve energy sector viability without
     // distorting the commodity signal.
     { commodity: "oil", rate: 0.07 },
-    { commodity: "vehicles", rate: 0.1 },
+    { commodity: "vehicles", rate: 0.03 },
     { commodity: "construction_services", rate: 0.05 },
     { commodity: "rare_earth", rate: 0.04 },
     { commodity: "natural_gas", rate: 0.08 },
@@ -2320,12 +2328,18 @@ export function computeRawSupplyDemand(
         : null;
     // Utilization scales INPUT demand: producedUnits / capacity. A plant running
     // at 60% of nameplate consumes ~60% of its inputs rather than 100%.
+    // The energy productivity ramp lifts the cap with the output gain, so a plant
+    // that makes more from the same capacity buys proportionally more inputs.
     const plantsUtilization =
       plantsEnabled &&
       typeof sector.producedUnits === "number" &&
       typeof sector.capacityUnits === "number" &&
       sector.capacityUnits > 0
-        ? Math.max(0, Math.min(1, sector.producedUnits / sector.capacityUnits))
+        ? plantUtilizationForInputs(
+            sector.producedUnits,
+            sector.capacityUnits,
+            energyProductivityMultiplier(sector.sectorType, currentTurn, preset)
+          )
         : 1;
     const plantsSupplyRates: Partial<Record<CommodityType, number>> | null =
       plantsSupplyUnits != null ? Object.fromEntries(supplyEntries) : null;

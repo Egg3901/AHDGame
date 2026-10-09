@@ -1,7 +1,7 @@
 import type { Db } from "mongodb";
 import type { GameState } from "@/lib/db/types/gameState";
 import { RESET_V2_READY } from "@/lib/resetVersions/availability";
-import { resetSystemVersionsForCountry, type ResetSystem } from "@/lib/resetVersions/rules";
+import { resetSystemVersionsForCountry, type ResetV2Readiness } from "@/lib/resetVersions/rules";
 import { buildResetMetricSnapshot, type ResetMetricSnapshot } from "./rules/snapshot";
 
 export type ResetMetricBoardRead =
@@ -14,7 +14,7 @@ export async function readResetMetricBoard(
   db: Db,
   countryId: string,
   regionId?: string,
-  ready: Record<ResetSystem, boolean> = RESET_V2_READY
+  ready: ResetV2Readiness = RESET_V2_READY
 ): Promise<ResetMetricBoardRead> {
   const gameState = await db.collection<GameState>("gameState").findOne(
     { _id: "current" },

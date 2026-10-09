@@ -145,6 +145,7 @@ export type FinancialTxType =
   // Admin / system
   | "admin_transfer"
   | "onboarding_reward" // one-time new-player checklist completion payout
+  | "contest_prize" // weekly contest winner's cash prize
   // Remediation ledger payback: a registered defect crediting value a shipped
   // bug destroyed. Always references its source row in `meta`, so the shadow
   // ledger books an attributed mint instead of unexplained money.

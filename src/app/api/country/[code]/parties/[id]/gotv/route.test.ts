@@ -112,6 +112,97 @@ describe("POST /api/country/[code]/parties/[id]/gotv", () => {
     );
   });
 
+  it("accepts a country-specific census bucket shown on the region demographics page", async () => {
+    const chairId = new ObjectId();
+
+    const { requireAuthWithCharacter } = await import("@/lib/api/requireAuth");
+    vi.mocked(requireAuthWithCharacter).mockResolvedValue({
+      ok: true,
+      user: {
+        userId: new ObjectId().toString(),
+        username: "chair",
+        isAdmin: false,
+        character: { _id: chairId, name: "Chair" },
+      },
+    } as never);
+
+    const { findPartyBySequentialId } = await import("@/lib/db/partyLookup");
+    vi.mocked(findPartyBySequentialId).mockResolvedValue({
+      sequentialId: 1,
+      countryId: "UK",
+      name: "Test Party",
+      treasury: 50000,
+      chairId,
+      viceChairId: new ObjectId(),
+      treasurerId: new ObjectId(),
+    } as never);
+
+    db.collection("gameState").findOne.mockResolvedValue({
+      _id: "current",
+      preset: "1953-default",
+    });
+    db.collectionMocks["partyBudget"]!.findOne.mockResolvedValue(null);
+
+    const { POST } = await import("./route");
+    const response = await POST(
+      makeRequest({
+        gotvBudgetPercent: 10,
+        gotvTargetCategory: "ethnicity",
+        gotvTargetGroup: "white_british",
+      }),
+      { params: Promise.resolve({ code: "uk", id: "1" }) }
+    );
+
+    expect(response.status).toBe(200);
+    expect(db.collectionMocks["partyBudget"]!.updateOne).toHaveBeenCalledWith(
+      expect.objectContaining({ countryId: "UK", partyId: "1", scope: "national" }),
+      expect.objectContaining({
+        $set: expect.objectContaining({
+          gotvTargetCategory: "ethnicity",
+          gotvTargetGroup: "white_british",
+        }),
+      }),
+      { upsert: true }
+    );
+  });
+
+  it("rejects a target that is not available for the selected country", async () => {
+    db.collection("gameState").findOne.mockResolvedValue({
+      _id: "current",
+      preset: "1953-default",
+    });
+
+    const { POST } = await import("./route");
+    const response = await POST(
+      makeRequest({
+        gotvBudgetPercent: 10,
+        gotvTargetCategory: "race",
+        gotvTargetGroup: "white_british",
+      }),
+      { params: Promise.resolve({ code: "uk", id: "1" }) }
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
+      error: "Select a demographic target available in this country",
+    });
+    expect(db.collectionMocks["partyBudget"]!.updateOne).not.toHaveBeenCalled();
+  });
+
+  it("rejects a partial target pair", async () => {
+    const { POST } = await import("./route");
+    const response = await POST(
+      makeRequest({ gotvBudgetPercent: 10, gotvTargetCategory: "race" }),
+      { params: Promise.resolve({ code: "us", id: "1" }) }
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
+      error: "Target category and group must be provided together",
+    });
+    expect(db.collectionMocks["partyBudget"]!.updateOne).not.toHaveBeenCalled();
+  });
+
   it("resets all budgets to 0 and returns 400 when treasury is negative and percent > 0", async () => {
     const chairId = new ObjectId();
 

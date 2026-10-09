@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useMemo, useState, type ReactNode } from "react";
 import { getCountryConfig, type CountryId } from "@/lib/constants/countries";
 import { useRuntimeCountryConfig } from "@/hooks/useRuntimeCountryConfig";
@@ -31,6 +32,7 @@ export function WhipTabsLayout({
   renderCabinet,
   preferredBillChamberKey,
 }: WhipTabsLayoutProps) {
+  const t = useTranslations("parties.whips");
   const config = getCountryConfig(countryId.toUpperCase() as CountryId);
   const { config: runtime } = useRuntimeCountryConfig(countryId);
 
@@ -70,7 +72,11 @@ export function WhipTabsLayout({
   const targets: Array<{ key: WhipSubTarget; label: string; show: boolean }> = [
     { key: "bills", label: "Bills", show: true },
     { key: "leadership", label: "Leadership", show: true },
-    { key: "cabinet", label: "Cabinet", show: showCabinet },
+    {
+      key: "cabinet",
+      label: config.id === "US" ? t("nominationsTab") : "Cabinet",
+      show: showCabinet,
+    },
   ];
 
   return (

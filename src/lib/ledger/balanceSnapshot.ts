@@ -380,19 +380,24 @@ export async function writeBalanceSnapshot(
       db,
       opts.treasuryCashLedgerEnabled === true
     );
-    const doc: BalanceSnapshot = {
-      _id: new ObjectId(),
-      turn,
-      createdAt: new Date(),
-      balances,
-      anchorRates,
-      accountValuations,
-      ...(opts.rebaselined ? { rebaselined: true } : {}),
-    };
-    // Idempotent per turn — re-running a turn replaces its snapshot.
-    await db
-      .collection<BalanceSnapshot>(BALANCE_SNAPSHOTS_COLLECTION)
-      .replaceOne({ turn }, doc, { upsert: true });
+    const now = new Date();
+    // Keep the stored identity on replay. A replacement carrying a new _id is
+    // rejected by Mongo as an immutable-field change.
+    await db.collection<BalanceSnapshot>(BALANCE_SNAPSHOTS_COLLECTION).updateOne(
+      { turn },
+      {
+        $set: {
+          createdAt: now,
+          balances,
+          anchorRates,
+          accountValuations,
+          ...(opts.rebaselined ? { rebaselined: true } : {}),
+        },
+        ...(opts.rebaselined ? {} : { $unset: { rebaselined: "" } }),
+        $setOnInsert: { _id: new ObjectId() },
+      },
+      { upsert: true }
+    );
     return Object.keys(balances).length;
   } catch (err) {
     Sentry.captureException(err, { extra: { phase: "writeBalanceSnapshot", turn } });
@@ -415,17 +420,15 @@ export async function writePreForexBalanceCheckpoint(
       db,
       opts.treasuryCashLedgerEnabled === true
     );
-    const doc: BalanceSnapshot = {
-      _id: new ObjectId(),
-      turn,
-      createdAt: new Date(),
-      balances,
-      anchorRates,
-      accountValuations,
-    };
-    await db
-      .collection<BalanceSnapshot>(BALANCE_CHECKPOINTS_COLLECTION)
-      .replaceOne({ turn }, doc, { upsert: true });
+    const now = new Date();
+    await db.collection<BalanceSnapshot>(BALANCE_CHECKPOINTS_COLLECTION).updateOne(
+      { turn },
+      {
+        $set: { createdAt: now, balances, anchorRates, accountValuations },
+        $setOnInsert: { _id: new ObjectId() },
+      },
+      { upsert: true }
+    );
     return Object.keys(balances).length;
   } catch (err) {
     Sentry.captureException(err, { extra: { phase: "writePreForexBalanceCheckpoint", turn } });

@@ -43,7 +43,15 @@ export function evalNode(
   // mirroring gdpGrowth.ts's `prevSectorBaseline ?? rawGdpGrowth` subtrahend.
   const prevRaw = ctx.prevSimBaseline[node.id];
   const prevSimBaseline = Number.isFinite(prevRaw) ? prevRaw : simTarget;
-  const rawDelta = prevValue - prevSimBaseline;
+  const decimals = node.decimals ?? 3;
+  const baselineDecimals = node.baselineDecimals ?? decimals;
+  // A finer baseline grain (#3394): the written value is the baseline plus
+  // delta rounded to `decimals`, so compare at that grain. Against the raw
+  // baseline, last turn's rounding residue would come back as a policy delta
+  // and pin the value in place.
+  const deltaReference =
+    baselineDecimals !== decimals ? roundTo(prevSimBaseline, decimals) : prevSimBaseline;
+  const rawDelta = prevValue - deltaReference;
   const cap = node.maxPolicyDelta ?? Infinity;
   // S8: opt-in per-turn delta decay. Because next turn's rawDelta is exactly
   // this turn's written delta (value − simBaseline round-trips through
@@ -53,7 +61,6 @@ export function evalNode(
   const decay = node.policyDeltaDecay ?? 1;
   const policyDelta = Math.max(-cap, Math.min(cap, rawDelta)) * decay;
 
-  const decimals = node.decimals ?? 3;
   // Era envelope: bound the PERSISTED baseline too (a prior above-cap baseline
   // — e.g. the window just tightened — must not survive the EMA).
   const emaBaseline = node.inertia * prevSimBaseline + (1 - node.inertia) * simTarget;
@@ -62,7 +69,7 @@ export function evalNode(
       envelopeCap != null ? Math.min(emaBaseline, envelopeCap) : emaBaseline,
       node.bounds
     ),
-    decimals
+    baselineDecimals
   );
   // Era envelope: clamp the FINAL value as well — policy deltas from bills or
   // cabinet effects hitting a pre-window metric must not leak past the cap.

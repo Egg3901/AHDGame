@@ -81,6 +81,11 @@ import {
 import { loadDemocraticHealth } from "@/lib/governanceStyle/loadDemocraticHealth";
 import { democraticHealthSovereignSpread } from "@/lib/governanceStyle/rules/democraticConsequences";
 import { settleSovereignPublicFloatDisposition } from "./publicFloatSovereignNovation";
+import {
+  FORCED_ROLLOVER_MATURITY,
+  rollOverUnfundedSovereignPoolFloat,
+} from "./forcedSovereignRollover";
+import { publicFloatNovationShare } from "./rules/publicFloatNovation";
 
 export const SOVEREIGN_ISSUANCE_INTERVAL_TURNS = 12;
 export const SOVEREIGN_BOND_MATURITY_TURNS: BondMaturityTurns = 48;
@@ -517,27 +522,49 @@ export async function calculateSovereignRolloverAmount(
     })
     .toArray();
   const budget = await db
-    .collection<Pick<FederalBudget, "_id" | "debt">>("federalBudget")
-    .findOne({ _id: getNationalBudgetId(countryId) }, { projection: { debt: 1 } });
-  return sovereignRolloverFromBonds(activeBonds, budget?.debt?.principal, turn);
+    .collection<Pick<FederalBudget, "_id" | "debt" | "countryId" | "currencyCode">>("federalBudget")
+    .findOne(
+      { _id: getNationalBudgetId(countryId) },
+      { projection: { debt: 1, countryId: 1, currencyCode: 1 } }
+    );
+  // The pool exchanges its maturing float at par for fresh 48-turn paper
+  // (publicFloatSovereignNovation.ts), so that share never needs cash. Only
+  // the share that maturity will actually pay out is worth prefunding.
+  const currency =
+    (budget ? resolveCountryCurrencyCode(budget) : null) ?? COUNTRY_CURRENCY_MAP[countryId];
+  const pool = currency ? await readPoolForPrimary(db, currency) : null;
+  const novationShare = publicFloatNovationShare(pool?.appetiteByCountry?.[countryId]);
+  return sovereignRolloverFromBonds(activeBonds, budget?.debt?.principal, turn, novationShare);
 }
 
 /**
  * Rollover for a country from its live (unmatured, undefaulted) sovereign
  * bonds and its budget principal. Pure, so a caller holding both for many
  * countries at once gets the same figure without a read per country.
+ *
+ * `novationShare` (0..1) is the share of each maturing public float the pool
+ * will take in kind at par. A novated unit is already refinanced by the
+ * exchange: it leaves principal unchanged, so issuing cash for it as well
+ * counts the same debt twice and parks the proceeds in the Treasury. Default 0
+ * keeps the gross maturing face, which is what default-risk callers want.
  */
 export function sovereignRolloverFromBonds(
-  activeBonds: ReadonlyArray<Pick<Bond, "maturityTurn" | "totalIssued">>,
+  activeBonds: ReadonlyArray<Pick<Bond, "maturityTurn" | "totalIssued"> & { publicFloat?: number }>,
   principal: unknown,
-  turn: number
+  turn: number,
+  novationShare = 0
 ): number {
   const maturingSoon = activeBonds.filter(
     (bond) =>
       bond.maturityTurn >= turn && bond.maturityTurn < turn + SOVEREIGN_ISSUANCE_INTERVAL_TURNS
   );
 
-  const maturingFace = maturingSoon.reduce((sum, bond) => sum + (bond.totalIssued ?? 0), 0);
+  const share = Math.min(1, Math.max(0, novationShare));
+  const maturingFace = maturingSoon.reduce((sum, bond) => {
+    const face = bond.totalIssued ?? 0;
+    const novated = Math.min(face, (bond.publicFloat ?? 0) * BOND_UNIT_FACE_VALUE) * share;
+    return sum + (face - novated);
+  }, 0);
   const activeFace = activeBonds.reduce((sum, bond) => sum + (bond.totalIssued ?? 0), 0);
 
   // Rollover refinances debt that still exists. A country that has paid its
@@ -994,6 +1021,28 @@ export async function settleSovereignBondMaturity(
   return landed.matchedCount === 1 ? { amountLocal: repaymentLocal, currencyCode } : null;
 }
 
+/** Coupon a fresh sovereign bond would carry now: prime, term, rating, credibility, democracy. */
+async function marketSovereignRolloverCoupon(db: Db, countryId: CountryId): Promise<number> {
+  const [budget, centralBank, democraticSpreadPp] = await Promise.all([
+    db
+      .collection<FederalBudget>("federalBudget")
+      .findOne({ _id: getNationalBudgetId(countryId) }, { projection: { creditRating: 1 } }),
+    db
+      .collection<CentralBank>("centralBanks")
+      .findOne({ _id: getBankId(countryId) }, { projection: { primeRate: 1, chairInfamy: 1 } }),
+    loadDemocraticSovereignSpread(db, countryId),
+  ]);
+  const primeRate =
+    centralBank?.primeRate ?? getCountryConfig(countryId).centralBank.defaultPrimeRate;
+  return getSovereignCouponRate(
+    primeRate,
+    FORCED_ROLLOVER_MATURITY,
+    (centralBank ? sovereignCredibilitySpread(centralBank.chairInfamy ?? 0) : 0) +
+      democraticSpreadPp,
+    sovereignCreditSpreadPp(budget?.creditRating)
+  );
+}
+
 export interface SovereignMaturityCashLeg {
   collection: string;
   filter: Record<string, unknown>;
@@ -1262,7 +1311,24 @@ export async function settleFundedSovereignBondMaturity(
         { _id: budgetId, ...frozenBudgetIdentity },
         { projection: { treasuryCashLocal: 1 } }
       );
-    if ((currentBudget?.treasuryCashLocal ?? 0) < cashAmountLocal) return null;
+    if ((currentBudget?.treasuryCashLocal ?? 0) < cashAmountLocal) {
+      // An unfundable maturity rolls its pool holding into a par replacement
+      // bond rather than sitting unpaid forever. Retry once on the rebased claim.
+      if (quote.forcedRollover || !bond.countryId) return null;
+      const rolled = await rollOverUnfundedSovereignPoolFloat(db, {
+        bond: (await db.collection<Bond>("bonds").findOne({ _id: bond._id })) ?? bond,
+        claim: quote,
+        turn,
+        now,
+        couponRate: await marketSovereignRolloverCoupon(db, bond.countryId),
+        budgetId,
+        client: transactionClient,
+      });
+      if (!rolled) return null;
+      const rebased = await db.collection<Bond>("bonds").findOne({ _id: bond._id });
+      if (!rebased?.sovereignMaturityClaim?.forcedRollover) return null;
+      return settleFundedSovereignBondMaturity(db, { ...input, bond: rebased });
+    }
     if (quote.fundingAttemptTurn !== turn) {
       const priorAttemptTurn = quote.fundingAttemptTurn;
       const reservation = await db.collection<Bond>("bonds").updateOne(
@@ -1649,8 +1715,12 @@ async function fundSovereignSeries(
     (sum, doc) => sum + Math.floor(doc.totalIssued / BOND_UNIT_FACE_VALUE),
     0
   );
+  // Funded Treasury cash forbids minting (#3401): the gap stays unsold and
+  // places later as pool cash allows, with no face, principal or coupon now.
   let monetaryCapacity =
-    args.centralBank?.chairMode === "npp" && args.centralBank.chairControlsLocked !== true
+    args.accounting.treasuryCashLedgerEnabled !== true &&
+    args.centralBank?.chairMode === "npp" &&
+    args.centralBank.chairControlsLocked !== true
       ? planSovereignMonetization({
           unsoldUnits: requested,
           gdpLocal: args.budget.gdpSmoothed || args.budget.gdp,

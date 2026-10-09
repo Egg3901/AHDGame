@@ -1,5 +1,11 @@
 "use client";
 
+import {
+  accountEventProperties,
+  getAnalyticsAccount,
+  isAnalyticsGenerationCurrent,
+  setAnalyticsAccount,
+} from "./accountContext";
 import { getStoredConsent } from "@/components/CookieConsent";
 import { captureAmplitudeEvent, stopAmplitudeCapture } from "./amplitudeClient";
 import { capturePostHogEvent, stopPostHogCapture } from "./posthogClient";
@@ -94,7 +100,12 @@ export async function captureProductEvent(
   event: string,
   properties?: Record<string, string | number | boolean>
 ): Promise<void> {
+  const identity = getAnalyticsAccount();
+  if (!identity.account || getStoredConsent() !== "accepted") return;
+  const accountProperties = accountEventProperties(identity.account);
   const context = getStoredConsent() === "accepted" ? await getProductEventContext() : null;
+  if (!isAnalyticsGenerationCurrent(identity.generation) || getStoredConsent() !== "accepted")
+    return;
   const eventProperties = properties ? { ...properties } : undefined;
   const eventNationId = eventProperties?.nation_id;
   const safeEventNationId =
@@ -113,6 +124,7 @@ export async function captureProductEvent(
   const enrichedProperties = context
     ? {
         ...eventProperties,
+        ...accountProperties,
         iteration_id: suppliedContextIsValid ? eventProperties!.iteration_id : context.iteration_id,
         turn_number: suppliedContextIsValid ? eventProperties!.turn_number : context.turn_number,
         ...(safeEventNationId
@@ -132,6 +144,7 @@ export async function captureProductEvent(
 
 /** Withdrawing consent stops every destination, not just the daily driver. */
 export async function stopAnalyticsCapture(): Promise<void> {
+  setAnalyticsAccount(null);
   await Promise.allSettled([stopPostHogCapture(), stopAmplitudeCapture()]);
 }
 
@@ -180,22 +193,31 @@ function readFirstMeaningfulActionAnchors(): Record<string, FirstMeaningfulActio
 }
 
 /** Carry a successful signup across the mandatory full-page login navigation. */
-export function rememberAccountCreated(): void {
-  if (getStoredConsent() !== "accepted") return;
+export function rememberAccountCreated(accountId: string): void {
+  if (getStoredConsent() !== "accepted" || typeof accountId !== "string" || !accountId) return;
   try {
-    window.localStorage.setItem(ACCOUNT_CREATED_KEY, "1");
+    window.localStorage.setItem(ACCOUNT_CREATED_KEY, accountId);
   } catch {
     // Analytics storage is optional.
   }
 }
 
 export async function capturePendingAccountCreated(): Promise<void> {
+  const { account, generation } = getAnalyticsAccount();
+  if (!account) return;
   if (getStoredConsent() !== "accepted" || accountCaptureInFlight) return;
   accountCaptureInFlight = true;
   try {
-    if (window.localStorage.getItem(ACCOUNT_CREATED_KEY) !== "1") return;
+    const pendingAccount = window.localStorage.getItem(ACCOUNT_CREATED_KEY);
+    if (!pendingAccount) return;
+    if (pendingAccount !== getAnalyticsAccount().account?.id) {
+      window.localStorage.removeItem(ACCOUNT_CREATED_KEY);
+      return;
+    }
     if (getStoredConsent() !== "accepted") return;
+    if (!isAnalyticsGenerationCurrent(generation)) return;
     await captureProductEvent("account_created");
+    if (!isAnalyticsGenerationCurrent(generation)) return;
     window.localStorage.removeItem(ACCOUNT_CREATED_KEY);
   } catch {
     // Retry on a later navigation.
@@ -231,6 +253,8 @@ export async function captureFirstMeaningfulAction(
   characterId: string,
   action: { action_domain: string; action_type: string }
 ): Promise<void> {
+  const { account, generation } = getAnalyticsAccount();
+  if (!account) return;
   if (
     getStoredConsent() !== "accepted" ||
     !characterId ||
@@ -249,17 +273,20 @@ export async function captureFirstMeaningfulAction(
     });
     if (!response.ok || getStoredConsent() !== "accepted") return;
     const result = (await response.json()) as { activation?: Record<string, unknown> | null };
+    if (!isAnalyticsGenerationCurrent(generation)) return;
     const activation = result.activation;
     firstMeaningfulActionChecked.add(characterId);
     if (!activation || typeof activation.turns_since_character_creation !== "number") return;
     if (anchors[characterId]) {
       anchors[characterId] = { ...anchors[characterId], captured: true };
       try {
+        if (!isAnalyticsGenerationCurrent(generation)) return;
         window.localStorage.setItem(FIRST_MEANINGFUL_ACTION_KEY, JSON.stringify(anchors));
       } catch {
         // The durable claim already owns this event; optional storage cannot suppress it.
       }
     }
+    if (!isAnalyticsGenerationCurrent(generation)) return;
     await captureProductEvent("first_meaningful_action", {
       ...action,
       iteration_id:
@@ -284,6 +311,8 @@ export async function captureFirstMeaningfulAction(
 }
 
 export async function capturePendingCharacterCreated(characterId: string): Promise<void> {
+  const { account, generation } = getAnalyticsAccount();
+  if (!account) return;
   if (getStoredConsent() !== "accepted" || characterCaptureInFlight.has(characterId)) return;
   characterCaptureInFlight.add(characterId);
   try {
@@ -296,7 +325,9 @@ export async function capturePendingCharacterCreated(characterId: string): Promi
     };
     if (anchor.characterId !== characterId || anchor.creationCaptured) return;
     if (getStoredConsent() !== "accepted") return;
+    if (!isAnalyticsGenerationCurrent(generation)) return;
     await captureProductEvent("character_created");
+    if (!isAnalyticsGenerationCurrent(generation)) return;
     window.localStorage.setItem(
       FIRST_TURN_KEY,
       JSON.stringify({ ...anchor, creationCaptured: true })
@@ -310,6 +341,8 @@ export async function capturePendingCharacterCreated(characterId: string): Promi
 
 /** A completed world turn after creation is the onboarding funnel's final step. */
 export async function captureFirstTurnIfReady(characterId: string): Promise<void> {
+  const { account, generation } = getAnalyticsAccount();
+  if (!account) return;
   if (getStoredConsent() !== "accepted" || firstTurnCaptureInFlight.has(characterId)) return;
   firstTurnCaptureInFlight.add(characterId);
   let anchor: { characterId: string; createdTurn: number } | null = null;
@@ -335,9 +368,12 @@ export async function captureFirstTurnIfReady(characterId: string): Promise<void
       status.currentTurn <= anchor.createdTurn
     )
       return;
+    if (!isAnalyticsGenerationCurrent(generation)) return;
     await capturePendingCharacterCreated(characterId);
     if (getStoredConsent() !== "accepted") return;
+    if (!isAnalyticsGenerationCurrent(generation)) return;
     await captureProductEvent("first_turn_completed");
+    if (!isAnalyticsGenerationCurrent(generation)) return;
     window.localStorage.removeItem(FIRST_TURN_KEY);
   } catch {
     // A later visit or navigation can retry.
@@ -353,6 +389,8 @@ export async function capturePendingWarDeclaration(
   accountId: string,
   force = false
 ): Promise<void> {
+  const { account, generation } = getAnalyticsAccount();
+  if (!account || account.id !== accountId) return;
   if (getStoredConsent() !== "accepted" || warDeclarationCaptureInFlight.has(accountId)) return;
   warDeclarationCaptureInFlight.add(accountId);
   try {
@@ -373,16 +411,19 @@ export async function capturePendingWarDeclaration(
       conflicts?: Array<{ declaredByBillId?: string }>;
     };
     if (!payload.conflicts?.some((conflict) => conflict.declaredByBillId === pending.billId)) {
+      if (!isAnalyticsGenerationCurrent(generation)) return;
       window.localStorage.setItem(
         "ahd:pending-war-declaration",
         JSON.stringify({ ...pending, lastCheckedAt: Date.now() })
       );
       return;
     }
+    if (!isAnalyticsGenerationCurrent(generation)) return;
     await captureProductEvent("war_declared", {
       attacker_nation: pending.declarer ?? "unknown",
       defender_nation: pending.defender ?? "unknown",
     });
+    if (!isAnalyticsGenerationCurrent(generation)) return;
     window.localStorage.removeItem("ahd:pending-war-declaration");
   } catch {
     // A later turn can retry.

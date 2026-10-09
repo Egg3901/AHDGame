@@ -99,7 +99,6 @@ import { migration as repairDuplicateCorporationSequentialIds } from "./entries/
 import { migration as normalizeShareCorporateActions } from "./entries/2026-09-18-normalize-share-corporate-actions";
 
 import { migration as turnClockIndexes } from "./entries/2026-09-20-turn-clock-indexes";
-import { migration as legislativeAdministrationMetadata } from "./entries/2026-09-21-legislative-administration-metadata";
 import { migration as activatePendingNppDefenceContracts } from "./entries/2026-09-24-activate-pending-npp-defence-contracts";
 import { migration as backfillNppTechBaselines } from "./entries/2026-09-24-backfill-npp-tech-baselines";
 import { migration as longHorizonTelemetryIndexes } from "./entries/2026-09-30-long-horizon-telemetry-indexes";
@@ -108,10 +107,14 @@ import { migration as appleProviderIdentityIndex } from "./entries/2026-09-30-ap
 import { migration as reconcileSeedIndexes } from "./entries/2026-10-01-reconcile-seed-indexes";
 import { migration as bankLoanCharterEpoch } from "./entries/2026-10-04-bank-loan-charter-epoch";
 import { migration as manufacturingProductProjectsV2Index } from "./entries/2026-10-04-manufacturing-product-projects-v2-index";
+import { migration as productVentureIndexes } from "./entries/2026-10-08-product-venture-indexes";
+import { migration as campaignFieldOfficeIndexes } from "./entries/2026-10-09-campaign-field-office-indexes";
+import { migration as backfillSpinOffTechBaselines } from "./entries/2026-10-08-backfill-spinoff-tech-baselines";
 import { migration as mediaProductProjectsV1Index } from "./entries/2026-10-04-media-product-projects-v1-index";
 import { migration as bankTreasuryTradeIndexes } from "./entries/2026-10-04-bank-treasury-trade-indexes";
 import { migration as underwritingRecoveryIndexes } from "./entries/2026-10-04-underwriting-recovery-indexes";
 import { migration as advertisingAgreementIndexes } from "./entries/2026-10-05-advertising-agreement-indexes";
+import { migration as activateLiveDemographicsV2 } from "./entries/2026-10-07-activate-live-demographics-v2";
 
 export const MIGRATIONS: Migration[] = [
   // v0.2.6 currency cutover (declarative — shipped via standalone scripts)
@@ -311,7 +314,6 @@ export const MIGRATIONS: Migration[] = [
   marketChartIndexes,
   unionProsecutionBarIndex,
   turnClockIndexes,
-  legislativeAdministrationMetadata,
   // True NPP-owned suppliers never had a player who could answer an offer, so
   // awards made before automatic activation shipped remain pending forever.
   // Activate those legacy rows while preserving offers to player-owned corps
@@ -348,6 +350,10 @@ export const MIGRATIONS: Migration[] = [
   underwritingRecoveryIndexes,
   bankFailurePoliticsIndex,
   advertisingAgreementIndexes,
+  productVentureIndexes,
+  campaignFieldOfficeIndexes,
+  // Suggestion #363: spin-offs were created with no tech. Additive heal.
+  backfillSpinOffTechBaselines,
 ];
 
 // D13 rollback drill — registered but deliberately OUTSIDE the normal chain.
@@ -377,7 +383,12 @@ export const ROLLBACK_MIGRATIONS: Migration[] = [restoreCapitalModeFromShadow];
 //     TRADE-OFF: `poolConservationResidual` returns NaN without `seedLocal`, so
 //     the per-turn conservation warning is INERT until this is run. Run it as
 //     soon as the write is approved, or the monitoring half of the fix is dead.
-export const HELD_MIGRATIONS: Migration[] = [equityPoolSeedBackfill];
+export const HELD_MIGRATIONS: Migration[] = [
+  equityPoolSeedBackfill,
+  // #2159: explicit live-world promotion. The dedicated script targets
+  // MONGODB_URI_LIVE, defaults to dry-run, and requires the current world id.
+  activateLiveDemographicsV2,
+];
 
 // Deferred to follow-up (need bootstrap-marker pass on production first):
 //   - 2026-04-22-reverse-split-victim-reparations  (no marker writer in script)

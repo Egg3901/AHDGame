@@ -11,6 +11,7 @@ import type {
 } from "@/lib/db/types";
 import type { StatePartyOrg } from "@/lib/db/types";
 import type { CountryId } from "@/lib/constants/countries";
+import type { RegionDemographics } from "@/lib/db/types/regionDemographics";
 
 export interface EnrichedCandidate {
   targetedAds?: import("@/lib/campaignTargeting/rules").TargetedAd[];
@@ -216,12 +217,6 @@ export interface DistributeVotesOptions {
    * (never presidential, never the executive's own race).
    */
   govModifierByParty?: Map<string, number>;
-  /**
-   * Unused by the distribution engines. Callers pick
-   * `distributeVotesBySwingFlow` vs the legacy allocator themselves.
-   * `accumulateVoteTurn` always uses swing-flow for generals.
-   */
-  useSwingFlowModel?: boolean;
   /**
    * Per-party presidential-coattail nominal-share multiplier. Only the
    * sitting President's party carries an entry (e.g. 1.09 at high national
@@ -434,6 +429,18 @@ export interface AccumulateVoteTurnPreload {
    * read.
    */
   incumbentSeatShareByElection?: Map<string, Map<string, number>>;
+  /** US Senate incumbency, resolved for the sweep without per-race history reads. */
+  legislativeIncumbentByElection?: Map<
+    string,
+    { incumbentPartyId: string; tenureTerms: number } | null
+  >;
+  /** US House candidate tenure maps, resolved for the sweep without N+1 history reads. */
+  houseIncumbentTenuresByElection?: Map<string, Map<string, number>>;
+  /** Runtime vote configuration assigned per election by the turn shell. */
+  enrichmentCountryConfigByElection?: Map<
+    string,
+    import("./candidateEnrichment").EnrichmentCountryConfig
+  >;
   /** gameState.preset — selects the era-correct census bundle for Layer-1 turnout derivation. */
   preset?: string;
   /**
@@ -458,6 +465,12 @@ export interface AccumulateVoteTurnPreload {
    * granular substrate to fold legislation-driven lean drift onto cells.
    */
   demographicDefaultsByState?: Map<string, StateDemographics>;
+  /** Live age vectors loaded once for the phase when Demographics v2 is active. */
+  regionDemographicsByState?: Map<string, RegionDemographics>;
+  /** Countries whose reset-scoped Demographics v2 receipt is active. */
+  demographicsV2Countries?: Set<string>;
+  /** Resolved legal voting age per country for live age-bucket derivation. */
+  votingAgeByCountry?: Map<string, number>;
   /**
    * Per-region registration pools, for the registered-voter gate: the
    * unregistered slice of a region's electorate cannot cast a general ballot,

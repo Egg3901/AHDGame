@@ -5,7 +5,10 @@
 
 import * as Sentry from "@sentry/nextjs";
 
-import { isValuelessNonErrorRejection } from "@/lib/observability/sentryFilters";
+import {
+  isMarketPollingTeardown,
+  isValuelessNonErrorRejection,
+} from "@/lib/observability/sentryFilters";
 import { scrubSentryEvent } from "@/lib/observability/scrubSentryEvent";
 
 export function initSentryClient(): typeof Sentry.captureRouterTransitionStart {
@@ -94,6 +97,7 @@ export function initSentryClient(): typeof Sentry.captureRouterTransitionStart {
     // Filter out errors from browser extensions and third-party scripts
     beforeSend(event: Sentry.ErrorEvent, hint) {
       const message = event.exception?.values?.[0]?.value ?? "";
+      if (isMarketPollingTeardown(event)) return null;
 
       // Value-less non-Error promise rejections (GlitchTip AHD-89, 98 events):
       // a promise rejected with no reason (undefined/null/empty), so the SDK

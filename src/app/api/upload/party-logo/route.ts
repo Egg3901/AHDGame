@@ -1,12 +1,11 @@
 import { NextResponse } from "next/server";
-import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
-import { requireBasicAuth } from "@/lib/api/requireAuth";
+import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
 import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { findPartyBySequentialId, getPartyIdString, parseCountryParam } from "@/lib/db/partyLookup";
 import { canActAsChair } from "@/lib/parties/actingChair";
-import type { Character, PoliticalParty } from "@/lib/db/types";
+import type { PoliticalParty } from "@/lib/db/types";
 import { optimizeImage, IMAGE_PRESETS } from "@/lib/imageOptimize";
 import { isR2Enabled, uploadFile, deleteByPrefix } from "@/lib/r2";
 import { parseFormData } from "@/lib/api/validate";
@@ -20,13 +19,16 @@ const ALLOWED_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/g
 const MAX_SIZE = 2 * 1024 * 1024; // 2 MB
 
 // POST /api/upload/party-logo — Uploads a party logo image; only the party Chair is authorized to upload.
-// Auth: requireBasicAuth
+// Auth: requireAuthWithCharacter
 // Errors: 400, 401, 403, 404, 429
 export async function POST(request: Request) {
   try {
-    const auth = await requireBasicAuth();
+    const auth = await requireAuthWithCharacter();
     if (!auth.ok) return auth.response;
     const authUser = auth.user;
+    // The active character, not the first character found by userId, so an
+    // account with more than one character is checked as the one it plays.
+    const character = authUser.character;
 
     const rateLimit = checkRateLimit(authUser.userId, 10, 60000);
     if (!rateLimit.ok) return rateLimitResponse(rateLimit.retryAfter);
@@ -60,14 +62,6 @@ export async function POST(request: Request) {
     }
 
     const db = await getDb();
-
-    // Verify user is the party Chair
-    const character = await db.collection<Character>("characters").findOne({
-      userId: new ObjectId(authUser.userId),
-    });
-    if (!character) {
-      return errorResponse(400, "No character found");
-    }
 
     const party = await findPartyBySequentialId(db, partyId, countryId);
     if (!party) {

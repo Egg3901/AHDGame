@@ -412,6 +412,12 @@ export interface GameState {
   processingPhase?: string | null;
   /** Per-phase lifecycle state for the active turn; used to debug skips, failures, and stalls */
   processingPhaseStatuses?: TurnPhaseTelemetryMap | null;
+  /**
+   * Bounded results of completed phases a later phase consumes, written with the
+   * phase's completed status so a crash resume can restore them (#3429). Keys are
+   * limited to `turnPhaseResumeResults.ts`.
+   */
+  processingPhaseResults?: Record<string, Record<string, unknown>> | null;
   /** Master gate for the automatic sector seeding system (fires every 48 turns). */
   autoSectorSeedEnabled?: boolean;
   autoSectorSeedEnabledBy?: string;
@@ -514,6 +520,10 @@ export interface GameState {
   cabinetSystemVersion?: "v1" | "v2";
   cabinetSystemVersionBy?: string;
   cabinetSystemVersionAt?: string;
+  /** Unified live-population electorate, participation ledger, and issue salience. */
+  demographicsSystemVersion?: "v1" | "v2";
+  demographicsSystemVersionBy?: string;
+  demographicsSystemVersionAt?: string;
   /**
    * Master gate for the new-player onboarding checklist (profile checklist
    * card, page-visit step tracking, welcome mail, completion reward). When
@@ -679,6 +689,14 @@ export interface GameState {
    * medianIncome scoring (band = anchor × shape × index).
    */
   incomeBandIndexByCountry?: Partial<Record<string, number>>;
+  /**
+   * Per-country income vintage provenance: the start-year vintage id this
+   * world's median incomes were seeded or migrated with. Written only by the
+   * seed writer that writes those values (or a reviewed migration that rewrites
+   * them); medianIncome scoring uses the vintage anchor only on a match, and
+   * absent means legacy data on the legacy anchor. Cleared on reset.
+   */
+  incomeStartVintages?: Partial<Record<string, string>>;
   /**
    * Player-facing decade era id ("2000s"), stamped by the era-crossing turn
    * phase at decade rollover. Display/news only — scoring never reads it

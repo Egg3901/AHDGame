@@ -125,7 +125,9 @@ export async function processJPRegionalBudgets(
   db: import("mongodb").Db,
   turnNumber: number,
   regionalFinanceEnabled = false,
-  settlementCadence = 1
+  settlementCadence = 1,
+  resetLegislationV2Enabled = false,
+  resetWorldId?: string
 ): Promise<{ regionsProcessed: number }> {
   const jpRegions = await db.collection<State>("states").find({ countryId: "JP" }).toArray();
   if (jpRegions.length === 0) return { regionsProcessed: 0 };
@@ -138,21 +140,29 @@ export async function processJPRegionalBudgets(
     .collection<StatePolicy>("statePolicies")
     .find({ stateId: { $in: regionIds } })
     .toArray();
-  const resetPrograms = await db
-    .collection<ResetLawProgramDocument>("resetLawPrograms")
-    .find(
-      { country: "JP", scope: "regional", regionId: { $in: regionIds } },
-      {
-        projection: {
-          _id: 1,
-          regionId: 1,
-          familyId: 1,
-          choice: 1,
-          annualAgencyAllocation: 1,
-        },
-      }
-    )
-    .toArray();
+  const resetPrograms =
+    resetLegislationV2Enabled && resetWorldId
+      ? await db
+          .collection<ResetLawProgramDocument>("resetLawPrograms")
+          .find(
+            {
+              country: "JP",
+              worldId: resetWorldId,
+              scope: "regional",
+              regionId: { $in: regionIds },
+            },
+            {
+              projection: {
+                _id: 1,
+                regionId: 1,
+                familyId: 1,
+                choice: 1,
+                annualAgencyAllocation: 1,
+              },
+            }
+          )
+          .toArray()
+      : [];
   const resetProgramsByRegion = new Map<string, ResetLawProgramDocument[]>();
   for (const program of resetPrograms) {
     if (!program.regionId) continue;

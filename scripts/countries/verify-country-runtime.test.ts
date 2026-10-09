@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { CONVERTED } from "@/lib/countries/singleCountryData";
+import { ALL_COUNTRY_IDS } from "@/lib/constants/countries";
 import { verify } from "./verify-country-runtime";
 
 /**
@@ -35,6 +36,7 @@ describe("country folders forward to their registries", () => {
    * nothing.
    */
   it("checks every converted country", () => {
-    expect([...CONVERTED].length).toBeGreaterThanOrEqual(29);
+    expect(new Set(CONVERTED).size).toBe(CONVERTED.length);
+    expect([...CONVERTED].sort()).toEqual([...ALL_COUNTRY_IDS].sort());
   });
 });

@@ -4,11 +4,24 @@
 interface StreamErrorEvent {
   exception?: {
     values?: Array<{
+      type?: string;
       value?: string;
       mechanism?: { type?: string };
-      stacktrace?: { frames?: Array<{ filename?: string; in_app?: boolean }> };
+      stacktrace?: { frames?: Array<{ filename?: string; function?: string; in_app?: boolean }> };
     }>;
   };
+}
+
+export const MARKET_POLLING_TEARDOWN = "Market polling stopped after view cleanup";
+
+/** Only cancellations explicitly tagged by our market cleanup callbacks are expected. */
+export function isMarketPollingTeardown(event: StreamErrorEvent): boolean {
+  const values = event.exception?.values;
+  return (
+    values?.length === 1 &&
+    values[0].type === "AbortError" &&
+    values[0].value === MARKET_POLLING_TEARDOWN
+  );
 }
 
 /** Next.js reports a render-stream close when its HTTP client disconnects. */

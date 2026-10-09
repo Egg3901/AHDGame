@@ -13,6 +13,18 @@ vi.mock("@/lib/mongodb", () => ({
   getDb: vi.fn(),
 }));
 
+// Membership validation is exercised with the real frontier in character.partyFrontier.test.ts.
+vi.mock("@/lib/db/partyLookup", () => ({
+  findPartyBySequentialId: vi.fn(async (_db, id, countryId) => ({
+    sequentialId: Number(id),
+    countryId,
+    name: "Synthetic Party",
+  })),
+}));
+vi.mock("@/lib/parties/partyFrontier", () => ({
+  canCharacterJoinParty: vi.fn().mockResolvedValue({ ok: true }),
+}));
+
 vi.mock("next/headers", () => ({
   cookies: vi.fn(),
 }));
@@ -118,7 +130,7 @@ function creationRequest(): Request {
       name: "John Smith",
       homeState: "CA",
       countryId: "US",
-      party: "democrat",
+      party: "1",
       policies: { economic: -2, social: -1 },
       demographics: {
         race: "white",

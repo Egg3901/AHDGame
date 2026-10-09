@@ -222,6 +222,10 @@ describe("processNppInsolventCorpDissolution", () => {
     expect(vi.mocked(executeCorporationBondDefaultDissolution).mock.calls[0][1]).toMatchObject({
       _id: zombie._id,
     });
+    // The exit record is tagged so the corporation's disappearance has a cause.
+    expect(vi.mocked(executeCorporationBondDefaultDissolution).mock.calls[0][2]).toMatchObject({
+      exitReason: "npp_insolvency",
+    });
   });
 
   it("clears the clock (and does not dissolve) when a stamped corp recovers", async () => {
@@ -285,5 +289,51 @@ describe("processNppInsolventCorpDissolution", () => {
     });
     // Sanity: grace constant is exported and sane.
     expect(LINGERING_DEFAULT_GRACE_TURNS).toBeGreaterThan(0);
+  });
+
+  describe("materiality floor on the insolvency clock", () => {
+    const clockSets = (bulkWrites: { updateOne: { update: Record<string, unknown> } }[]) =>
+      bulkWrites.filter(
+        (op) => "$set" in op.updateOne.update && !("$unset" in op.updateOne.update)
+      );
+
+    it("does not stamp a profitable corp sitting a dust amount below zero", async () => {
+      const dust = corp({ liquidCapital: -0.31, earningsHistory: [11_000_000] });
+      const { db, bulkWrites } = makeDb([dust]);
+      await processNppInsolventCorpDissolution(db, TURN);
+      expect(clockSets(bulkWrites)).toHaveLength(0);
+    });
+
+    it("clears an existing stamp that no longer qualifies", async () => {
+      const dust = corp({
+        liquidCapital: -2600,
+        earningsHistory: [53_000_000],
+        nppInsolventSinceTurn: TURN - 5,
+      });
+      const { db, bulkWrites } = makeDb([dust]);
+      await processNppInsolventCorpDissolution(db, TURN);
+      expect(bulkWrites).toHaveLength(1);
+      expect(bulkWrites[0].updateOne.update).toHaveProperty("$unset");
+    });
+
+    it("still stamps a material shortfall, and any shortfall without earnings", async () => {
+      const material = corp({ liquidCapital: -50_000, earningsHistory: [11_000_000] });
+      const loss = corp({ liquidCapital: -0.31, earningsHistory: [-1_000_000] });
+      const noHistory = corp({ liquidCapital: -0.31 });
+      const { db, bulkWrites } = makeDb([material, loss, noHistory]);
+      await processNppInsolventCorpDissolution(db, TURN);
+      expect(clockSets(bulkWrites)).toHaveLength(3);
+    });
+
+    it("does not dissolve a dust-negative profitable corp past the grace window", async () => {
+      const dust = corp({
+        liquidCapital: -0.31,
+        earningsHistory: [11_000_000],
+        nppInsolventSinceTurn: TURN - PERSISTENT_INSOLVENCY_GRACE_TURNS - 1,
+      });
+      const { db } = makeDb([dust]);
+      const res = await processNppInsolventCorpDissolution(db, TURN);
+      expect(res.dissolved).toBe(0);
+    });
   });
 });

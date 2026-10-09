@@ -50,7 +50,8 @@ is the default".** 51 of the 74 country registries are
 `Partial<Record<CountryId, X>>`, read through `?.` and `??`, and the fallback
 branch is frequently the US value written as a default rather than as a `US:`
 key. Japan never appears as anyone's default, so this distinction never arose
-while Japan was the only country moved.
+while Japan was the only country moved. It remains historical context for why
+the snapshot workflow treats defaults as authored evidence rather than absence.
 
 The eleven registries with no US entry, each traced to its consumer by hand:
 
@@ -74,8 +75,9 @@ this table for each country; do not inherit this one.
 
 ## The registry list was incomplete, and the fixture could not have shown it
 
-Japan's emitter carried 77 registries. `verify-jp-runtime.ts` asserts the folder
-owns **15 more** — `GROUPS.JP`, `MECHANICS_BY_COUNTRY.JP`, `ORDERS_BY_COUNTRY.JP`,
+Japan's emitter carried 77 registries. The generalized
+`verify-country-runtime.ts` harness asserts the folder owns **15 more** —
+`GROUPS.JP`, `MECHANICS_BY_COUNTRY.JP`, `ORDERS_BY_COUNTRY.JP`,
 `MAJOR_DEFAULT_PARTIES.JP`, `UNION_NAMES_BY_ERA`, `COUNTRY_READINESS_EXPECTATIONS`
 and the rest are all in its identity block, compared with `===` — and not one of
 them was ever snapshotted.

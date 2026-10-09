@@ -13,7 +13,11 @@ import {
 import { resolveGameYear } from "@/lib/era/era";
 import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
 import { RESET_V2_READY } from "@/lib/resetVersions/availability";
-import { RESET_V2_COUNTRIES, resetSystemVersionsFrom } from "@/lib/resetVersions/rules";
+import {
+  RESET_V2_COUNTRIES,
+  resetSystemVersionsForCountry,
+  resetSystemVersionsFrom,
+} from "@/lib/resetVersions/rules";
 import { FOUNDING_GENERAL_HOURS, FOUNDING_PRIMARY_HOURS } from "@/lib/elections/canonicalCycle";
 
 /**
@@ -44,10 +48,12 @@ export async function GET() {
         currentEraId: 1,
         startingYear: 1,
         incomeBandIndexByCountry: 1,
+        incomeStartVintages: 1,
         liveElectionResultsEnabled: 1,
         metricsSystemVersion: 1,
         legislationSystemVersion: 1,
         cabinetSystemVersion: 1,
+        demographicsSystemVersion: 1,
         resetWorldId: 1,
         resetVersionSeeds: 1,
         startingPartiesMode: 1,
@@ -71,6 +77,10 @@ export async function GET() {
       })
   );
   const eraOn = gs?.eraSystemEnabled ?? false;
+  const resetSystemVersions = resetSystemVersionsFrom(gs, RESET_V2_READY);
+  const resetV2Countries = RESET_V2_COUNTRIES.filter(
+    (countryId) => resetSystemVersionsForCountry(gs, RESET_V2_READY, countryId).metrics === "v2"
+  );
   return NextResponse.json(
     {
       preset: gs?.preset ?? DEFAULT_SEED_PRESET,
@@ -87,9 +97,10 @@ export async function GET() {
       // so client scoring falls back to the full legacy band.
       startingYear: eraOn ? (gs?.startingYear ?? null) : null,
       incomeBandIndexByCountry: eraOn ? (gs?.incomeBandIndexByCountry ?? null) : null,
+      incomeStartVintages: eraOn ? (gs?.incomeStartVintages ?? null) : null,
       liveElectionResultsEnabled: gs?.liveElectionResultsEnabled === true,
-      resetV2Countries: RESET_V2_COUNTRIES,
-      resetSystemVersions: resetSystemVersionsFrom(gs, RESET_V2_READY),
+      resetV2Countries,
+      resetSystemVersions,
       startingPartiesMode: gs?.startingPartiesMode ?? "default",
       foundingRound: foundingRound(gs),
     },

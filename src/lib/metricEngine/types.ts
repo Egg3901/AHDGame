@@ -62,6 +62,15 @@ export interface RegistryNode {
   inertia: number;
   /** Decimal places for the written value + simBaseline (default 3). gdpGrowth=3, unemployment=2. */
   decimals?: number;
+  /**
+   * Decimal places for the persisted simBaseline only, when it needs a finer
+   * grain than the written value. A per-turn step below half a value unit
+   * (e.g. 1% a year on a 1,884 CNY income) otherwise rounds away every turn.
+   * The policy delta is then measured against the baseline at value
+   * precision, so the rounding residue never reads back as a policy delta.
+   * Default: `decimals`.
+   */
+  baselineDecimals?: number;
   /** Optional cap on |policyDelta| preserved across smoothing (gdpGrowth MAX_POLICY_DELTA=8). Use 0 for value-EMA metrics with no policy-delta preservation (e.g. unemployment). */
   maxPolicyDelta?: number;
   /**

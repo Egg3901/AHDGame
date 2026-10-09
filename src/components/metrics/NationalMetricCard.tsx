@@ -54,8 +54,14 @@ export function NationalMetricCard({
   detailHref,
 }: NationalMetricCardProps) {
   const [open, setOpen] = useState(false);
-  const { preset, eraSystemEnabled, currentYear, startingYear, incomeBandIndexByCountry } =
-    useWorldFlags();
+  const {
+    preset,
+    eraSystemEnabled,
+    currentYear,
+    startingYear,
+    incomeBandIndexByCountry,
+    incomeStartVintages,
+  } = useWorldFlags();
   // Live year for era-aware score bands; null while the flag is off (legacy path).
   const eraYear = eraSystemEnabled ? currentYear : null;
   const incomeIndex = eraYear != null ? (incomeBandIndexByCountry?.[countryId] ?? null) : null;
@@ -63,7 +69,16 @@ export function NationalMetricCard({
   const name = def ? getEraMetricName(def, eraYear) : metricId;
   const isHigherBetter = def?.isHigherBetter ?? true;
   const value = summary.populationWeightedAverage;
-  const score = scoreMetric(metricId, value, countryId, preset, eraYear, incomeIndex, startingYear);
+  const score = scoreMetric(
+    metricId,
+    value,
+    countryId,
+    preset,
+    eraYear,
+    incomeIndex,
+    startingYear,
+    incomeStartVintages
+  );
   const badge = score !== null ? getMetricBadge(score) : null;
   // Era existence gate: inactive metrics render nothing (self-hiding card).
   if (!isMetricActive(metricId, countryId, eraYear)) return null;
@@ -78,7 +93,8 @@ export function NationalMetricCard({
     preset,
     eraYear,
     incomeIndex,
-    startingYear
+    startingYear,
+    incomeStartVintages
   );
 
   const decimals = def?.decimals ?? 1;
@@ -234,8 +250,16 @@ export function NationalMetricCard({
               <RegionRankingList
                 ranked={ranked}
                 scoreOf={(v) =>
-                  scoreMetric(metricId, v, countryId, preset, eraYear, incomeIndex, startingYear) ??
-                  0
+                  scoreMetric(
+                    metricId,
+                    v,
+                    countryId,
+                    preset,
+                    eraYear,
+                    incomeIndex,
+                    startingYear,
+                    incomeStartVintages
+                  ) ?? 0
                 }
                 fmt={fmt}
               />

@@ -556,7 +556,7 @@ export function SectorRow({
             {plantCount.toLocaleString("en-US")}
           </div>
 
-          <div className="flex flex-col items-end">
+          <div className="flex min-w-0 flex-col items-end">
             <FillChip fill={sector.fillRate} band={sector.fillRateBand} />
             <DeliveryLimitedPill
               fraction={deliveryLimited}
@@ -855,6 +855,8 @@ export function SectorRow({
         <div className="px-2 pb-3 pt-1">
           <StrategyChangeConfirm
             sectorType={sector.sectorType as CorporationType}
+            industryModel={sector.industryModel}
+            mediaDiscriminator={sector.mediaDiscriminator}
             currentStrategyId={currentId}
             targetStrategyId={pendingChange.targetStrategyId}
             dailyRevenue={sector.revenue}

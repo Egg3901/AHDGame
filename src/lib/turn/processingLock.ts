@@ -4,9 +4,11 @@ export const TURN_LOCK_STALE_MS = 20 * 60 * 1000;
 export const TURN_LOCK_HEARTBEAT_MS = 30_000;
 
 /**
- * Hard ceiling on a single turn phase. `runPhase` races every phase against
- * this and rejects when it is exceeded, which fails the phase and aborts the
- * turn.
+ * Failure threshold for a single turn phase. `runPhase` races every phase against
+ * this and records the phase as failed when it is exceeded. The timeout cannot
+ * cancel the phase function, so the runtime then holds the turn, with its lock
+ * and heartbeat, until that function settles; no later phase starts while it
+ * is still writing (#3385).
  *
  * Lives here rather than in turnPhaseRuntime so the admin health check can
  * measure phases against the same number the runtime enforces, instead of
@@ -14,11 +16,11 @@ export const TURN_LOCK_HEARTBEAT_MS = 30_000;
  * dependency-light (types only) so route handlers can import it freely.
  *
  * Sizing note (2026-08-28): corporationTurn is the phase closest to this
- * ceiling. It costs ~6ms per corporateSector and the sector population grows
+ * threshold. It costs ~6ms per corporateSector and the sector population grows
  * with NPP expansion, so its cost rises with the world rather than with any
- * code change. Raising this constant is NOT the remedy for that — it is the
- * backstop that turns an unbounded phase into a failed turn instead of a
- * wedged one.
+ * code change. Raising this constant is not the remedy. It reports failure
+ * promptly while the drain barrier prevents later work from overlapping the
+ * timed-out phase. A permanently hung function requires process recovery.
  */
 export const PHASE_TIMEOUT_MS = 4 * 60 * 1000;
 

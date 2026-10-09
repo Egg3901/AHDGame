@@ -11,6 +11,18 @@ vi.mock("@/lib/mongodb", () => ({
   getDb: vi.fn(),
 }));
 
+// Membership validation is exercised with the real frontier in character.partyFrontier.test.ts.
+vi.mock("@/lib/db/partyLookup", () => ({
+  findPartyBySequentialId: vi.fn(async (_db, id, countryId) => ({
+    sequentialId: Number(id),
+    countryId,
+    name: "Synthetic Party",
+  })),
+}));
+vi.mock("@/lib/parties/partyFrontier", () => ({
+  canCharacterJoinParty: vi.fn().mockResolvedValue({ ok: true }),
+}));
+
 vi.mock("next/headers", () => ({
   cookies: vi.fn(),
 }));
@@ -152,7 +164,7 @@ describe("POST /api/auth/character — forex enabled (JP)", () => {
         name: "Tanaka Test",
         homeState: "jp_tokyo",
         countryId: "JP",
-        party: "ldp",
+        party: "1",
         policies: { economic: 1, social: 1 },
         demographics: {
           race: "asian",
@@ -185,7 +197,7 @@ describe("POST /api/auth/character — forex enabled (JP)", () => {
         name: "Tanaka Test",
         homeState: "jp_tokyo",
         countryId: "JP",
-        party: "ldp",
+        party: "1",
         policies: { economic: 1, social: 1 },
         demographics: {
           race: "asian",
@@ -218,7 +230,7 @@ describe("POST /api/auth/character — forex enabled (JP)", () => {
         name: "Tanaka Test",
         homeState: "jp_tokyo",
         countryId: "JP",
-        party: "ldp",
+        party: "1",
         policies: { economic: 1, social: 1 },
         demographics: {
           race: "asian",
@@ -253,7 +265,7 @@ describe("POST /api/auth/character — forex enabled (JP)", () => {
         name: "Tanaka Rich",
         homeState: "jp_tokyo",
         countryId: "JP",
-        party: "ldp",
+        party: "1",
         policies: { economic: 1, social: 1 },
         demographics: {
           race: "asian",
@@ -345,7 +357,7 @@ describe("POST /api/auth/character — forex enabled (JP)", () => {
         name: "John Smith",
         homeState: "CA",
         countryId: "US",
-        party: "democrat",
+        party: "1",
         policies: { economic: -1, social: -1 },
         demographics: {
           race: "white",

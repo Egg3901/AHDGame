@@ -5,6 +5,7 @@
  * interest and dividends (up to MAX_DIVIDEND_RATE), accrues R&D score
  * (rdMoraleFactor, computeRdDemandFactor), and converts each sector from its host currency.
  */
+import { formalizedSubsidiaryCountByParentId } from "@/lib/corporations/subsidiaries/helpers";
 import type { AnyBulkWriteOperation, ObjectId } from "mongodb";
 import type { Bond, Corporation, MediaProductAdvertisingObligationV1 } from "@/lib/db/types";
 import type { CurrencyCode } from "@/lib/constants/currencies";
@@ -1530,6 +1531,7 @@ export function processSectors(
   // Currency note: the formula operates ENTIRELY in ₳ — previousSharePrice is
   // normalized to ₳ on the way in, and finalPrices comes back in ₳;
   // re-denominate to home currency only at the persistence boundary below.
+  const subsidiaryCountByParentId = formalizedSubsidiaryCountByParentId(lookups.corporations);
   const sharePriceInputs: SharePriceInput[] = lookups.corporations.map((corp, i) => {
     const s = corpSnapshots[i];
     const id = corp._id.toString();
@@ -1587,6 +1589,7 @@ export function processSectors(
       // Suggestion #62: index-fund ownership earns a bounded price premium.
       indexFundOwnershipFraction: indexFundOwnershipFraction(corp),
       isPrivate: corp.isPrivate ?? false,
+      subsidiaryCount: subsidiaryCountByParentId.get(id) ?? 0,
       techAssetValueAnchor: computeTechAssetValueAnchor(corp, currentYear),
     };
   });

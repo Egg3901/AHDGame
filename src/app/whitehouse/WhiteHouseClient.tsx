@@ -616,7 +616,7 @@ export default function WhiteHouseClient({ countryId = "US" }: { countryId?: Cou
                 identity={getExecutiveIdentity(countryId)}
                 plaques={[
                   {
-                    title: "President",
+                    title: data.president?.isActing ? "Acting President" : "President",
                     sealGlyph: "P",
                     holder: data.president
                       ? {

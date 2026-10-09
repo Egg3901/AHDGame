@@ -37,13 +37,18 @@ function makeDemographics(
   };
 }
 
-function makeTurnout(id: string, modifiers: StateDemographicTurnout["modifiers"]) {
+function makeTurnout(
+  id: string,
+  modifiers: StateDemographicTurnout["modifiers"],
+  overrides: Partial<StateDemographicTurnout> = {}
+) {
   return {
     _id: id,
     countryId: "IE",
     modifiers,
     lastDecayApplied: new Date("1953-01-02"),
     lastUpdated: new Date("1953-01-03"),
+    ...overrides,
   } as StateDemographicTurnout;
 }
 
@@ -147,6 +152,20 @@ describe("buildNationwideElectoratePreload", () => {
     expect(preload!.turnout.modifiers.class.workers).toBeCloseTo(1.1, 10);
     expect(preload!.turnout.lastUpdated).toEqual(new Date("1953-01-03"));
     expect(preload!.turnout.lastDecayApplied).toEqual(new Date("1953-01-02"));
+  });
+
+  it("preserves weighted campaign contact for nationwide Method 4 receipts", () => {
+    const preload = buildNationwideElectoratePreload(
+      "IE",
+      [bigState, smallState],
+      [bigDemo, smallDemo],
+      [
+        makeTurnout("IE-L", {}, { campaignContactModifiers: { age: { young: 4 } } }),
+        makeTurnout("IE-M", {}, { campaignContactModifiers: { age: { young: 1 } } }),
+      ],
+      []
+    );
+    expect(preload!.turnout.campaignContactModifiers?.age.young).toBeCloseTo(3, 10);
   });
 
   it("folds party orgs into one national row per party", () => {

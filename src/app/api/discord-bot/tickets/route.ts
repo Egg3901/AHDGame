@@ -1,3 +1,4 @@
+import { TICKET_PLATFORM_VALUES, platformFromDescriptionPrefix } from "@/lib/tickets/platform";
 import { NextResponse } from "next/server";
 import { ObjectId, type Filter } from "mongodb";
 import { z } from "zod";
@@ -87,6 +88,8 @@ const createSchema = z.object({
   // .trim() before .min(1) so whitespace-only titles/descriptions are rejected.
   title: z.string().trim().min(1).max(200),
   description: z.string().trim().min(1).max(5000),
+  /** Bot platform picker value (adhd-bot ticketPlatform.ts). */
+  platform: z.enum(TICKET_PLATFORM_VALUES).optional(),
   discordChannelId: z.string().max(64).optional(),
   discordUserId: z.string().max(64).optional(),
   discordUsername: z.string().max(64).optional(),
@@ -270,6 +273,10 @@ export async function POST(request: Request) {
     });
     const imageUrls = firstMessage.imageUrls ? [...firstMessage.imageUrls] : [];
 
+    // The bot sends the picker answer as a field once updated; until then it
+    // prepends "Platform: <label>" to the description, so recover it there.
+    const platform = body.platform ?? platformFromDescriptionPrefix(body.description.trim());
+
     const doc: Omit<Ticket, "_id"> = {
       ticketNumber,
       source: "discord",
@@ -284,6 +291,7 @@ export async function POST(request: Request) {
       userId,
       ...(reporter ? { reporter } : {}),
       category: body.category,
+      ...(platform ? { platform } : {}),
       title: body.title.trim().slice(0, 200),
       description: body.description.trim().slice(0, 5000),
       messages: [firstMessage],

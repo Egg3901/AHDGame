@@ -7,6 +7,67 @@ const board = buildOpeningMetricSnapshots1991("test-world", 1).find(
 )!;
 
 describe("reset metric owner refresh", () => {
+  it("recovers a missed health cadence with current readings and replays exactly", () => {
+    const opening = buildOpeningMetricSnapshots1991("test-world", 1).find(
+      (row) => row._id === "US:CT"
+    )!;
+    const stalled = { ...opening, asOfTurn: 12 };
+    const missing = refreshResetMetricBoard({
+      board: stalled,
+      turn: 14,
+      updates: {},
+      cohortDue: true,
+      electionDue: false,
+      allowCatchUp: true,
+    });
+    expect(missing.missingDueIds).toEqual(expect.arrayContaining(["16", "18"]));
+    const updates = Object.fromEntries(
+      missing.dueIds.map((id) => [
+        id,
+        { ...opening.observations[id]!, source: "current owner at turn 14" },
+      ])
+    );
+    const recovered = refreshResetMetricBoard({
+      board: stalled,
+      turn: 14,
+      updates,
+      cohortDue: true,
+      electionDue: false,
+      allowCatchUp: true,
+    });
+    expect(recovered.missingDueIds).toEqual([]);
+    expect(recovered.board.asOfTurn).toBe(14);
+    expect(recovered.board.lastRefreshFromTurn).toBe(12);
+    expect(recovered.board.history).toEqual(stalled.history);
+    expect(
+      refreshResetMetricBoard({
+        board: recovered.board,
+        turn: 14,
+        updates,
+        cohortDue: true,
+        electionDue: false,
+      }).replayed
+    ).toBe(true);
+    expect(() =>
+      refreshResetMetricBoard({
+        board: recovered.board,
+        turn: 14,
+        updates: { ...updates, "16": { ...updates["16"]!, value: 99 } },
+        cohortDue: true,
+        electionDue: false,
+      })
+    ).toThrow("replay differs");
+    expect(() =>
+      refreshResetMetricBoard({
+        board: recovered.board,
+        turn: 13,
+        updates: {},
+        cohortDue: true,
+        electionDue: false,
+        allowCatchUp: true,
+      })
+    ).toThrow("exactly one turn");
+  });
   it("marks an unrefreshed due owner as missing instead of silently treating opening data as live", () => {
     const result = refreshResetMetricBoard({
       board,

@@ -18,7 +18,11 @@ interface SystemMailParams {
  * No fromCharacterId — these messages come from game systems, not players.
  */
 export async function sendSystemMail(db: Db, params: SystemMailParams): Promise<void> {
-  const mail: Omit<PlayerMail, "_id"> = {
+  await db.collection<Omit<PlayerMail, "_id">>("playerMail").insertOne(toMail(params));
+}
+
+function toMail(params: SystemMailParams): Omit<PlayerMail, "_id"> {
+  return {
     fromCharacterName: params.senderName ?? "Forex Market",
     toUserId: params.toUserId,
     toCharacterId: params.toCharacterId,
@@ -31,6 +35,12 @@ export async function sendSystemMail(db: Db, params: SystemMailParams): Promise<
     deletedBySender: false,
     createdAt: new Date(),
   };
+}
 
-  await db.collection<Omit<PlayerMail, "_id">>("playerMail").insertOne(mail);
+/** Send system mail to many recipients with one database write. */
+export async function sendSystemMails(db: Db, recipients: SystemMailParams[]): Promise<void> {
+  if (recipients.length === 0) return;
+  await db
+    .collection<Omit<PlayerMail, "_id">>("playerMail")
+    .insertMany(recipients.map(toMail), { ordered: false });
 }

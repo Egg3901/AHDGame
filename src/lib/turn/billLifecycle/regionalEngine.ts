@@ -1,10 +1,10 @@
 import type { Filter } from "mongodb";
 import { northernIrelandAssemblySuspended } from "@/lib/countries/uk/northernIreland/service";
 import { getDb } from "@/lib/mongodb";
-import type { StateBill, State, ElectedOfficial, Character } from "@/lib/db/types";
+import type { StateBill, State, ElectedOfficial, Character, GameState } from "@/lib/db/types";
+import type { ScopedVoteOfficial } from "@/lib/congress/billVoting";
 import { createNotifications, type NotificationInput } from "@/lib/notifications";
-import { onBillEnacted } from "@/lib/billEnactment";
-import { applyLegislationEffect } from "@/lib/legislationEffects";
+import { applyEnactedBillEffects } from "@/lib/legislature/commands/applyEnactedBillEffects";
 import { getGameState } from "@/lib/gameState";
 import type { CountryId } from "@/lib/constants/countries";
 import { didPass } from "@/lib/billLifecycleHelpers";
@@ -12,6 +12,7 @@ import { resolvePhaseVotes } from "./resolvePhaseVotes";
 import { REGIONAL_LIFECYCLE_CONFIG, type RegionalLifecycleConfig } from "./configs/regional";
 import { validateStateBudgetImpact } from "@/lib/budget/validation";
 import { captureBillStatusChanged } from "@/lib/analytics/billStatusAnalytics";
+import type { BillLifecycleRuntimeContext } from "./types";
 
 /**
  * Regional (state) bill-lifecycle walker — the engine's `level: "regional"`
@@ -32,6 +33,87 @@ import { captureBillStatusChanged } from "@/lib/analytics/billStatusAnalytics";
  */
 
 type DbConn = Awaited<ReturnType<typeof getDb>>;
+type NotificationCharacter = Pick<Character, "_id" | "userId">;
+type LifecycleGameState = Pick<GameState, "currentTurn" | "preset">;
+interface RegionalResolutionCache {
+  rosters: Map<string, ScopedVoteOfficial[]>;
+  states: Map<string, State | null>;
+  executives: Map<string, ElectedOfficial | null>;
+  characters: Map<string, NotificationCharacter | null>;
+}
+
+async function loadRegionalRoster(
+  db: DbConn,
+  cache: RegionalResolutionCache,
+  countryId: CountryId,
+  stateId: string,
+  officeType: string
+): Promise<ScopedVoteOfficial[]> {
+  const key = `${countryId}:${stateId}:${officeType}`;
+  const cached = cache.rosters.get(key);
+  if (cached) return cached;
+  const officials = await db
+    .collection<ElectedOfficial>("electedOfficials")
+    .find({ countryId, state: stateId, officeType })
+    .project<ScopedVoteOfficial>({
+      characterId: 1,
+      countryId: 1,
+      nppId: 1,
+      officeType: 1,
+      seatsHeld: 1,
+    })
+    .toArray();
+  cache.rosters.set(key, officials);
+  return officials;
+}
+
+async function loadRegionalState(
+  db: DbConn,
+  cache: RegionalResolutionCache,
+  countryId: CountryId | undefined,
+  stateId: string
+): Promise<State | null> {
+  const key = `${countryId ?? ""}:${stateId}`;
+  if (cache.states.has(key)) return cache.states.get(key) ?? null;
+  const state = await db
+    .collection<State>("states")
+    .findOne({ _id: stateId, ...(countryId ? { countryId } : {}) });
+  cache.states.set(key, state);
+  return state;
+}
+
+async function loadRegionalExecutive(
+  db: DbConn,
+  cache: RegionalResolutionCache,
+  countryId: CountryId,
+  stateId: string,
+  officeType: string
+): Promise<ElectedOfficial | null> {
+  const key = `${countryId}:${stateId}:${officeType}`;
+  if (cache.executives.has(key)) return cache.executives.get(key) ?? null;
+  const official = await db.collection<ElectedOfficial>("electedOfficials").findOne({
+    countryId,
+    officeType,
+    state: stateId,
+    characterId: { $ne: null },
+  });
+  cache.executives.set(key, official);
+  return official;
+}
+
+async function loadNotificationCharacter(
+  db: DbConn,
+  cache: RegionalResolutionCache,
+  characterId: Character["_id"]
+): Promise<NotificationCharacter | null> {
+  const key = characterId.toString();
+  if (cache.characters.has(key)) return cache.characters.get(key) ?? null;
+  const character = await db
+    .collection<Character>("characters")
+    .findOne({ _id: characterId }, { projection: { _id: 1, userId: 1 } });
+  cache.characters.set(key, character);
+  return character;
+}
 
 async function recordStateBillStatusChange(
   db: DbConn,
@@ -163,17 +245,10 @@ export async function finalizeStateBillEnactment(
     return { enacted: false, rejection };
   }
 
-  await applyLegislationEffect(db, {
-    _id: bill._id,
-    provisions: bill.provisions,
-    stateId: bill.stateId,
-    countryId: bill.countryId,
-    legislationTypeId: bill.legislationTypeId,
-    effectDirection: bill.effectDirection,
-  }).catch((err) => console.error("applyLegislationEffect failed (state bill):", err));
-  await onBillEnacted(db, bill, currentTurn).catch((err) =>
-    console.error("Bill enactment hook failed (state bill):", err)
-  );
+  await applyEnactedBillEffects(db, bill, currentTurn, {
+    effect: "applyLegislationEffect failed (state bill):",
+    enactment: "Bill enactment hook failed (state bill):",
+  });
   return { enacted: true };
 }
 
@@ -186,13 +261,22 @@ export interface StateBillTimerResult {
  */
 export async function processStateBillTimers(
   now: Date,
-  config: RegionalLifecycleConfig = REGIONAL_LIFECYCLE_CONFIG
+  config: RegionalLifecycleConfig = REGIONAL_LIFECYCLE_CONFIG,
+  context?: BillLifecycleRuntimeContext
 ): Promise<StateBillTimerResult> {
-  const db = await getDb();
-  const gameStateGov = await getGameState();
+  const db = context?.db ?? (await getDb());
+  const gameStateGov: LifecycleGameState | null = context
+    ? { currentTurn: context.currentTurn, preset: context.preset }
+    : await getGameState();
   const currentTurnGov = gameStateGov?.currentTurn ?? 1;
   let billsProcessed = 0;
   const notificationInputs: NotificationInput[] = [];
+  const resolutionCache: RegionalResolutionCache = {
+    rosters: new Map(),
+    states: new Map(),
+    executives: new Map(),
+    characters: new Map(),
+  };
   const { chamberVote, executiveAssent, override } = config.stages;
   const authorityFilter: Filter<StateBill> = (await northernIrelandAssemblySuspended(db))
     ? { $nor: [{ countryId: "UK", stateId: "NIR" }] }
@@ -220,7 +304,15 @@ export async function processStateBillTimers(
     // pass/fail against the "active" precondition correctly.
     const bill: StateBill = { ...claimed, status: chamberVote.status };
     try {
-      await resolveStateBillVoting(db, config, bill, now, notificationInputs);
+      await resolveStateBillVoting(
+        db,
+        config,
+        bill,
+        now,
+        notificationInputs,
+        gameStateGov,
+        resolutionCache
+      );
     } catch (err) {
       // Resolver threw mid-way — revert the transient claim so the bill is
       // re-picked next turn instead of stranding in vote_closing forever. The
@@ -303,7 +395,15 @@ export async function processStateBillTimers(
     if (!claimed) break;
     const bill: StateBill = { ...claimed, status: override.status };
     try {
-      await resolveOverrideVoting(db, config, bill, now, notificationInputs);
+      await resolveOverrideVoting(
+        db,
+        config,
+        bill,
+        now,
+        notificationInputs,
+        gameStateGov,
+        resolutionCache
+      );
     } catch (err) {
       // Revert the transient override claim on failure so it re-resolves next
       // turn instead of stranding in override_closing. (#2991)
@@ -327,19 +427,20 @@ async function resolveStateBillVoting(
   config: RegionalLifecycleConfig,
   bill: StateBill,
   now: Date,
-  notificationInputs: NotificationInput[]
+  notificationInputs: NotificationInput[],
+  gameState: LifecycleGameState | null,
+  cache: RegionalResolutionCache
 ): Promise<void> {
   const { chamberVote, executiveAssent } = config.stages;
-  const state = await db
-    .collection<State>("states")
-    .findOne({ _id: bill.stateId, countryId: bill.countryId });
+  const state = await loadRegionalState(db, cache, bill.countryId, bill.stateId);
   const countryId = (state?.countryId ?? bill.countryId ?? "US") as CountryId;
 
   // Get current turn for snapshot + enactment tracking. Read BEFORE sizing the
   // chamber: `chamberSeatsFor` needs the preset for era-sized chambers (#3779).
-  const gameState = await getGameState();
   const currentTurn = gameState?.currentTurn ?? 1;
   const totalSeats = state ? config.chamberSeatsFor(countryId, state, gameState?.preset) : 40;
+  const officeType = config.officeTypeFor(countryId);
+  const officials = await loadRegionalRoster(db, cache, countryId, bill.stateId, officeType);
 
   // Scope votes to the chamber's CURRENT seat holders before deciding pass/fail
   // (bug #0836) and freeze the result the decision used so a later sub-national
@@ -352,9 +453,10 @@ async function resolveStateBillVoting(
     bill,
     {
       voteField: "votes",
-      officeType: config.officeTypeFor(countryId),
+      officeType,
       countryId,
       stateId: bill.stateId,
+      officials,
     },
     currentTurn
   );
@@ -386,11 +488,13 @@ async function resolveStateBillVoting(
       now.getTime() + executiveAssent.windowHours * 3_600_000
     );
 
-    const governor = await db.collection<ElectedOfficial>("electedOfficials").findOne({
-      officeType: executiveOfficeKey,
-      state: bill.stateId,
-      characterId: { $ne: null },
-    });
+    const governor = await loadRegionalExecutive(
+      db,
+      cache,
+      countryId,
+      bill.stateId,
+      executiveOfficeKey
+    );
 
     if (governor && governor.characterId) {
       const advanced = await db.collection<StateBill>(config.collection).updateOne(
@@ -417,9 +521,7 @@ async function resolveStateBillVoting(
         );
       }
 
-      const govChar = await db
-        .collection<Character>("characters")
-        .findOne({ _id: governor.characterId }, { projection: { _id: 1, userId: 1 } });
+      const govChar = await loadNotificationCharacter(db, cache, governor.characterId);
       if (govChar) {
         notificationInputs.push({
           userId: govChar.userId,
@@ -472,9 +574,7 @@ async function resolveStateBillVoting(
 
     // Notify sponsor that bill passed
     if (bill.sponsorId && !budgetGateRejected) {
-      const sponsor = await db
-        .collection<Character>("characters")
-        .findOne({ _id: bill.sponsorId }, { projection: { _id: 1, userId: 1 } });
+      const sponsor = await loadNotificationCharacter(db, cache, bill.sponsorId);
       if (sponsor) {
         notificationInputs.push({
           userId: sponsor.userId,
@@ -519,9 +619,7 @@ async function resolveStateBillVoting(
 
     // Notify sponsor that bill failed
     if (bill.sponsorId) {
-      const sponsor = await db
-        .collection<Character>("characters")
-        .findOne({ _id: bill.sponsorId }, { projection: { _id: 1, userId: 1 } });
+      const sponsor = await loadNotificationCharacter(db, cache, bill.sponsorId);
       if (sponsor) {
         notificationInputs.push({
           userId: sponsor.userId,
@@ -549,17 +647,14 @@ async function resolveOverrideVoting(
   config: RegionalLifecycleConfig,
   bill: StateBill,
   now: Date,
-  notificationInputs: NotificationInput[]
+  notificationInputs: NotificationInput[],
+  gameState: LifecycleGameState | null,
+  cache: RegionalResolutionCache
 ): Promise<void> {
   const { override } = config.stages;
-  const state = await db
-    .collection<State>("states")
-    .findOne({ _id: bill.stateId, countryId: bill.countryId });
+  const state = await loadRegionalState(db, cache, bill.countryId, bill.stateId);
   const countryId = (state?.countryId ?? bill.countryId ?? "US") as CountryId;
-  const overrideGameState = await getGameState();
-  const totalSeats = state
-    ? config.chamberSeatsFor(countryId, state, overrideGameState?.preset)
-    : 40;
+  const totalSeats = state ? config.chamberSeatsFor(countryId, state, gameState?.preset) : 40;
   const supermajority = Math.ceil((totalSeats * 2) / 3);
 
   const executiveTitle = config.executiveTitleFor(countryId, bill.stateId);
@@ -568,16 +663,19 @@ async function resolveOverrideVoting(
   // the override outcome (#0836) and freeze the result (#0982) — same shared
   // vote-core + faithfulness rule as the origin vote: the scoped map when
   // survivors exist, else the stored aggregate + raw override map.
-  // (`overrideGameState` is read above — the chamber size needs its preset.)
-  const currentTurnOverride = overrideGameState?.currentTurn ?? 1;
+  // The shared lifecycle context supplies the preset used to size the chamber.
+  const currentTurnOverride = gameState?.currentTurn ?? 1;
+  const officeType = config.officeTypeFor(countryId);
+  const officials = await loadRegionalRoster(db, cache, countryId, bill.stateId, officeType);
   const { totals: overrideTotals, snapshot: overrideVoteSnapshot } = await resolvePhaseVotes(
     db,
     bill,
     {
       voteField: "overrideVotes",
-      officeType: config.officeTypeFor(countryId),
+      officeType,
       countryId,
       stateId: bill.stateId,
+      officials,
     },
     currentTurnOverride
   );
@@ -619,9 +717,7 @@ async function resolveOverrideVoting(
     // Notify sponsor of override success (skipped when the budget gate blocked
     // enactment — the gate already notified the sponsor of the rejection).
     if (bill.sponsorId && overrideOutcome.enacted) {
-      const sponsor = await db
-        .collection<Character>("characters")
-        .findOne({ _id: bill.sponsorId }, { projection: { userId: 1 } });
+      const sponsor = await loadNotificationCharacter(db, cache, bill.sponsorId);
       if (sponsor) {
         notificationInputs.push({
           userId: sponsor.userId,
@@ -666,9 +762,7 @@ async function resolveOverrideVoting(
 
     // Notify sponsor of override failure
     if (bill.sponsorId) {
-      const sponsor = await db
-        .collection<Character>("characters")
-        .findOne({ _id: bill.sponsorId }, { projection: { userId: 1 } });
+      const sponsor = await loadNotificationCharacter(db, cache, bill.sponsorId);
       if (sponsor) {
         notificationInputs.push({
           userId: sponsor.userId,

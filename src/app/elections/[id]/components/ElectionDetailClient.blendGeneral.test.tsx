@@ -53,7 +53,9 @@ vi.mock("./PresidentialMapWithStateDetail", () => ({
 }));
 vi.mock("./ElectionHeader", () => ({ ElectionHeader: () => null }));
 vi.mock("./AdminSection", () => ({ AdminSection: () => null }));
-vi.mock("./CampaignsListPanel", () => ({ CampaignsListPanel: () => null }));
+vi.mock("./CampaignsListPanel", () => ({
+  CampaignsListPanel: () => <div data-testid="campaigns-list" />,
+}));
 vi.mock("./CampaignManagerTab", () => ({
   CampaignManagerTab: () => <div data-testid="campaign-manager" />,
 }));
@@ -94,24 +96,14 @@ beforeEach(() => {
 });
 
 describe("the Blend general page does not print the same standing twice", () => {
-  it("renders the hero and the blocks below it", () => {
-    const { getByTestId } = renderPage();
+  it("renders the stage and none of the old page below it", () => {
+    // The old "Also on this race" block repeated the stage: a second map, the
+    // trends, the schedule. The stage carries the race now.
+    const { getByTestId, queryByTestId } = renderPage();
     expect(getByTestId("hero")).toBeTruthy();
-    expect(getByTestId("general-phase")).toBeTruthy();
-    expect(getByTestId("schedule")).toBeTruthy();
-  });
-
-  it("tells the general phase view to leave out the college bar and the tally", () => {
-    renderPage();
-    expect(generalPhaseProps).toHaveLength(1);
-    expect(generalPhaseProps[0].showCollegeSummary).toBe(false);
-  });
-
-  it("asks the general phase view to fold its detail views into tabs", () => {
-    // The map, campaign presence, the trends chart, the state drivers and the
-    // factor ledger used to run down the page one after another.
-    renderPage();
-    expect(generalPhaseProps[0].tabbedDetail).toBe(true);
+    expect(queryByTestId("general-phase")).toBeNull();
+    expect(queryByTestId("schedule")).toBeNull();
+    expect(generalPhaseProps).toHaveLength(0);
   });
 
   it("drops the Your Campaign card, which the campaigns list already covers", () => {
@@ -121,18 +113,11 @@ describe("the Blend general page does not print the same standing twice", () => 
     expect(queryByTestId("campaign-manager")).toBeNull();
   });
 
-  it("tells the general phase view to leave out the national mood gauge", () => {
-    // The rail states the same figure and now carries the same components, so
-    // the card below repeated a number whose neighbouring bars were a
-    // different quantity entirely.
-    renderPage();
-    expect(generalPhaseProps[0].showNationalMood).toBe(false);
-  });
-
-  it("tells the schedule card to leave out its deadline strip", () => {
-    renderPage();
-    expect(scheduleProps).toHaveLength(1);
-    expect(scheduleProps[0].showStatusStrip).toBe(false);
+  it("leaves campaign operations to the hero's tickets table", () => {
+    // They were a separate list at the foot of this block, restating the
+    // tickets above it. They are columns of that table now.
+    const { queryByTestId } = renderPage();
+    expect(queryByTestId("campaigns-list")).toBeNull();
   });
 
   it("leaves both blocks whole on a race with no Blend hero above them", () => {

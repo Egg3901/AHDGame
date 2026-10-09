@@ -5,9 +5,11 @@ import {
 } from "@/lib/countries/us/data/usStateMetrics1991";
 import { ukStateMetrics } from "@/lib/countries/uk/data/ukStateMetrics";
 import { jpStateMetrics } from "@/lib/countries/jp/data/jpStateMetrics";
+import { ieStateMetrics } from "@/lib/countries/ie/data/ieStateMetrics";
 import { states1991 } from "@/lib/countries/us/data/usStates1991";
 import { ukRegions1991 } from "@/lib/countries/uk/data/ukRegions1991";
 import { jpRegions1991 } from "@/lib/countries/jp/data/jpRegions1991";
+import { ieRegions1991 } from "@/lib/countries/ie/data/ieRegions1991";
 import { getRegionCensusData } from "@/lib/seeds/regionCensusData";
 import { COUNTRY_CONFIGS } from "@/lib/constants/countries";
 import { synthesizeAgeSexVector } from "@/lib/demographics/seedSynthesis";
@@ -32,27 +34,35 @@ import {
 } from "./rules/openingObservation";
 import type { StateMetrics } from "@/lib/db/types/stateMetrics";
 
-type Country = "US" | "UK" | "JP";
+type Country = "US" | "UK" | "JP" | "IE";
 const bundles = {
   US: stateMetrics1991,
   UK: ukStateMetrics.map(applyEra1991Adjustments),
   JP: jpStateMetrics.map(applyEra1991Adjustments),
+  IE: ieStateMetrics.map(applyEra1991Adjustments),
 } as const;
-const regions = { US: states1991, UK: ukRegions1991, JP: jpRegions1991 } as const;
+const regions = {
+  US: states1991,
+  UK: ukRegions1991,
+  JP: jpRegions1991,
+  IE: ieRegions1991,
+} as const;
 const delayProxyPath: Record<Country, string | null> = {
   US: null,
   UK: "healthcare.nhsWaitingTime",
   JP: null,
+  IE: "healthcare.hseWaitingListMonths",
 };
 // Design's 1991 national TFR anchors: US CDC 2.07, UK ONS 1.82, JP Statistics
 // Bureau 1.53. This rebase affects v2 observations only, not v1 seed writers.
-const openingNationalTfr: Record<Country, number> = { US: 2.07, UK: 1.82, JP: 1.53 };
+const openingNationalTfr: Record<Country, number> = { US: 2.07, UK: 1.82, JP: 1.53, IE: 2.09 };
 
 /** Gameplay assumptions, not reconstructed 1991 national energy accounts. */
 export const opening1991FuelAssumptions: Readonly<Record<Country, ProvisionalFuelOpeningInput>> = {
   US: { importExposurePercent: 40, emergencyBufferDays: 85, sourceDiversity: 62 },
   UK: { importExposurePercent: 12, emergencyBufferDays: 90, sourceDiversity: 65 },
   JP: { importExposurePercent: 88, emergencyBufferDays: 110, sourceDiversity: 43 },
+  IE: { importExposurePercent: 70, emergencyBufferDays: 80, sourceDiversity: 55 },
 };
 
 function rawValue(row: StateMetrics, path: string): number | null {
@@ -126,7 +136,9 @@ export function openingLifeCalibration1991(): Record<
           ? ukStateMetrics
           : country === COUNTRY_CONFIGS.JP.id
             ? jpStateMetrics
-            : stateMetrics1991;
+            : country === "IE"
+              ? ieStateMetrics
+              : stateMetrics1991;
       const rawById = new Map(shapeRows.map((row) => [String(row._id), row]));
       const populationById = new Map(
         regions[country].map((region) => [region._id, region.population])
@@ -318,7 +330,10 @@ export function auditOpeningNationalMetricSources1991(): Record<
     getInitialNationalBudgetsForPreset("1991-default")
       .filter(
         (budget) =>
-          budget.countryId === "US" || budget.countryId === "UK" || budget.countryId === "JP"
+          budget.countryId === "US" ||
+          budget.countryId === "UK" ||
+          budget.countryId === "JP" ||
+          budget.countryId === "IE"
       )
       .map((budget) => [budget.countryId, budget.economicFactors.inflationRate])
   );
@@ -343,7 +358,7 @@ export function auditOpeningNationalMetricSources1991(): Record<
     }),
     "58": provisionalFuelOpening(opening1991FuelAssumptions[country]),
   });
-  return { US: forCountry("US"), UK: forCountry("UK"), JP: forCountry("JP") };
+  return { US: forCountry("US"), UK: forCountry("UK"), JP: forCountry("JP"), IE: forCountry("IE") };
 }
 
 export function auditOpeningMetricSources(): MetricSeedAuditRow[] {
@@ -367,7 +382,9 @@ export function auditOpeningMetricSources(): MetricSeedAuditRow[] {
         ? ukStateMetrics
         : country === COUNTRY_CONFIGS.JP.id
           ? jpStateMetrics
-          : stateMetrics1991;
+          : country === "IE"
+            ? ieStateMetrics
+            : stateMetrics1991;
     const lifeShapeById = new Map(lifeShapeRows.map((row) => [String(row._id), row]));
     const adjustedRows = bundles[country].map((raw) => {
       const overlay = getRegionMetricPresets(country, String(raw._id), "1991-default");

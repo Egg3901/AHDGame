@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { recordCorporationExit } from "@/lib/corporations/exits/recordCorporationExit";
 import { ObjectId, type AnyBulkWriteOperation } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
@@ -563,6 +564,10 @@ export async function POST(_request: Request, { params }: RouteParams) {
         await db
           .collection<Corporation>("corporations")
           .deleteOne({ _id: refreshedCorporation._id });
+        await recordCorporationExit(db, refreshedCorporation, {
+          reason: "voluntary_closure",
+          now,
+        });
 
         logWireEvent(
           "corporation_dissolved",

@@ -9,7 +9,7 @@ import type { FederalBudget } from "@/lib/db/types/budget";
 import type { GameState } from "@/lib/db/types/gameState";
 import { runRequiredTransaction } from "@/lib/db/runRequiredTransaction";
 import { RESET_V2_READY } from "@/lib/resetVersions/availability";
-import { resetSystemVersionsForCountry } from "@/lib/resetVersions/rules";
+import { isResetV2Country, resetSystemVersionsForCountry } from "@/lib/resetVersions/rules";
 import { resetCabinetActions } from "@/lib/resetCabinet/catalog";
 import { useCabinetAction as activateCabinetAction } from "@/lib/resetCabinet/rules/actions";
 import type { ResetCabinetActionState } from "@/lib/resetCabinet/rules/actionState";
@@ -19,8 +19,6 @@ import type { CountryId } from "@/lib/constants/countries";
 import { DEFENSE_POSITION_BY_COUNTRY } from "@/lib/constants/military";
 
 const bodySchema = z.object({ actionId: z.string().min(1).max(120) }).strict();
-const supported = new Set(["US", "UK", "JP"]);
-
 interface RouteParams {
   params: Promise<{ code: string; positionId: string }>;
 }
@@ -33,7 +31,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     if (!parsed.success) return errorResponse(parsed.status, parsed.error);
     const { code, positionId } = await params;
     const countryId = code.toUpperCase();
-    if (!supported.has(countryId)) {
+    if (!isResetV2Country(countryId)) {
       return errorResponse(404, "Cabinet v2 is not available for this country");
     }
     const action = resetCabinetActions.find(

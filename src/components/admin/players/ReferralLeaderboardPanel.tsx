@@ -22,6 +22,8 @@ type RefereeRow = {
 
 type ViewMode = "allTime" | "contest";
 
+type AwardedRow = { rank: number; name: string; count: number; alreadySupporter: boolean };
+
 export function ReferralLeaderboardPanel() {
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
@@ -31,6 +33,7 @@ export function ReferralLeaderboardPanel() {
   const [contestStartedAt, setContestStartedAt] = useState<string | null>(null);
   const [allTime, setAllTime] = useState<LeaderRow[]>([]);
   const [contest, setContest] = useState<LeaderRow[]>([]);
+  const [awarded, setAwarded] = useState<AwardedRow[] | null>(null);
 
   const [expandedUserId, setExpandedUserId] = useState<string | null>(null);
   const [refereesByKey, setRefereesByKey] = useState<Record<string, RefereeRow[]>>({});
@@ -170,6 +173,38 @@ export function ReferralLeaderboardPanel() {
     }
   };
 
+  const handleAwardContest = async () => {
+    if (
+      !window.confirm(
+        "Award the iteration contest now? The top 3 referrers get Supporter until the next award, earlier contest winners lose theirs, and the count restarts from zero. This also happens automatically when a new iteration starts."
+      )
+    ) {
+      return;
+    }
+    setActionLoading(true);
+    setError("");
+    try {
+      const res = await fetch("/api/admin/referrals/leaderboard", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "award-and-restart" }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(typeof data.error === "string" ? data.error : "Could not award contest");
+        return;
+      }
+      setAwarded(Array.isArray(data.winners) ? (data.winners as AwardedRow[]) : []);
+      setContestMode(!!data.contestMode);
+      setContestStartedAt(typeof data.contestStartedAt === "string" ? data.contestStartedAt : null);
+      await fetchData();
+    } catch {
+      setError("Network error");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="rounded-xl border border-card-border bg-card p-6 shadow-card">
@@ -251,6 +286,35 @@ export function ReferralLeaderboardPanel() {
           Contest (rolling)
         </button>
       </div>
+
+      {contestMode && (
+        <div className="mb-4 flex flex-col gap-2 rounded-lg border border-card-border bg-background/40 p-3 sm:flex-row sm:items-end">
+          <Button variant="primary" onClick={handleAwardContest} isLoading={actionLoading}>
+            Award top 3 now
+          </Button>
+          <p className="text-xs text-muted sm:ml-2 sm:self-center">
+            Runs automatically when a new iteration starts: the top 3 get Supporter for the whole
+            next iteration. Paying supporters keep their own plan.
+          </p>
+        </div>
+      )}
+
+      {awarded && (
+        <div className="mb-4 rounded-lg border border-card-border bg-card-muted/30 p-3 text-sm">
+          {awarded.length === 0 ? (
+            <p className="text-muted">No qualifying referrers. The contest restarted.</p>
+          ) : (
+            <ul className="space-y-1">
+              {awarded.map((w) => (
+                <li key={w.rank} className="text-foreground">
+                  #{w.rank} {w.name}: {w.count} referrals
+                  {w.alreadySupporter ? " (already a supporter, no change)" : ""}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
 
       {error ? <p className="mb-4 text-body-sm text-error">{error}</p> : null}
 

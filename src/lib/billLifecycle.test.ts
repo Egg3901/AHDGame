@@ -448,7 +448,11 @@ describe("processBillLifecycle", () => {
       const { createNotifications } = await import("@/lib/notifications");
       const { awardAchievement } = await import("@/lib/achievements");
 
-      expect(applyLegislationEffect).toHaveBeenCalledWith(expect.anything(), bill);
+      expect(applyLegislationEffect).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining(bill),
+        10
+      );
       // The lifecycle hands onBillEnacted the bill enriched with this chamber's
       // fresh tally and vote snapshot, because the in-memory copy predates them
       // and the Discord vote chart reads them (see turn/billLifecycle/engine).
@@ -622,10 +626,14 @@ describe("processBillLifecycle", () => {
 
       // Legislation effect and enactment hook should be called
       const { applyLegislationEffect } = await import("@/lib/legislationEffects");
-      expect(applyLegislationEffect).toHaveBeenCalledWith(expect.anything(), {
-        ...bill,
-        countryId: "US",
-      });
+      expect(applyLegislationEffect).toHaveBeenCalledWith(
+        expect.anything(),
+        {
+          ...bill,
+          countryId: "US",
+        },
+        10
+      );
       const { onBillEnacted } = await import("@/lib/billEnactment");
       expect(onBillEnacted).toHaveBeenCalledWith(
         expect.anything(),

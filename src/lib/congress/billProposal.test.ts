@@ -16,6 +16,215 @@ beforeEach(() => {
   db.collection("bankMoneyMoves");
 });
 
+describe("validateBillProvisions: reset version isolation", () => {
+  it("rejects legacy provisions when legislation v2 is active", async () => {
+    db.collectionMocks.gameState.findOne.mockResolvedValue({
+      _id: "current",
+      resetWorldId: "world-1",
+      metricsSystemVersion: "v2",
+      legislationSystemVersion: "v2",
+      resetVersionSeeds: {
+        metrics: {
+          worldId: "world-1",
+          revision: 3,
+          sourceTurn: 1,
+          completedAt: "2026-10-04T00:00:00.000Z",
+          verificationHash: "metrics",
+        },
+        legislation: {
+          worldId: "world-1",
+          revision: 6,
+          sourceTurn: 1,
+          completedAt: "2026-10-04T00:00:00.000Z",
+          verificationHash: "legislation",
+        },
+      },
+    });
+
+    const result = await validateBillProvisions(
+      db as unknown as Db,
+      [{ type: "tariff", scopeType: "economy_wide", rate: 10 }],
+      "trade",
+      "US"
+    );
+
+    expect(result).toMatchObject({ ok: false, status: 409 });
+    if (!result.ok) expect(result.error).toMatch(/only reviewed legislation v2/i);
+  });
+
+  it("rejects a null reviewed provision without throwing", async () => {
+    db.collectionMocks.gameState.findOne.mockResolvedValue({
+      _id: "current",
+      resetWorldId: "world-1",
+      metricsSystemVersion: "v2",
+      legislationSystemVersion: "v2",
+      resetVersionSeeds: {
+        metrics: {
+          worldId: "world-1",
+          revision: 3,
+          sourceTurn: 1,
+          completedAt: "2026-10-04T00:00:00.000Z",
+          verificationHash: "metrics",
+        },
+        legislation: {
+          worldId: "world-1",
+          revision: 6,
+          sourceTurn: 1,
+          completedAt: "2026-10-04T00:00:00.000Z",
+          verificationHash: "legislation",
+        },
+      },
+    });
+
+    const result = await validateBillProvisions(db as unknown as Db, [null], "custom", "JP");
+
+    expect(result).toMatchObject({
+      ok: false,
+      status: 400,
+      error: "Each provision must have a legislation type.",
+    });
+  });
+
+  it("accepts an exact-rate JP tax from the reviewed v2 tax catalog", async () => {
+    db.collectionMocks.gameState.findOne.mockResolvedValue({
+      _id: "current",
+      resetWorldId: "world-1",
+      metricsSystemVersion: "v2",
+      legislationSystemVersion: "v2",
+      resetVersionSeeds: {
+        metrics: {
+          worldId: "world-1",
+          revision: 3,
+          sourceTurn: 1,
+          completedAt: "2026-10-04T00:00:00.000Z",
+          verificationHash: "metrics",
+        },
+        legislation: {
+          worldId: "world-1",
+          revision: 6,
+          sourceTurn: 1,
+          completedAt: "2026-10-04T00:00:00.000Z",
+          verificationHash: "legislation",
+        },
+      },
+    });
+    db.collectionMocks.legislationTypes.find.mockReturnValue({
+      toArray: async () => [
+        {
+          _id: "jp_foreign_corporation_tax",
+          name: "Foreign Corporation Tax Act",
+          countryScope: "jp",
+          policyDomain: "tax",
+          taxRateChange: { scope: "federal", taxType: "foreignCorporateTax" },
+          policyOptions: [
+            { id: "zero", name: "0%", rate: 0 },
+            { id: "maximum", name: "65%", rate: 65 },
+          ],
+        },
+      ],
+    });
+    db.collection("federalBudget");
+    db.collectionMocks.federalBudget.findOne.mockResolvedValue({
+      _id: "JP",
+      taxRates: { foreignCorporateTax: 23 },
+    });
+
+    const result = await validateBillProvisions(
+      db as unknown as Db,
+      [
+        {
+          legislationTypeId: "jp_foreign_corporation_tax",
+          proposedRate: 27.25,
+          effectDirection: 0,
+        },
+      ],
+      "tax",
+      "JP"
+    );
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.policyProvisions).toEqual([
+        expect.objectContaining({
+          legislationTypeId: "jp_foreign_corporation_tax",
+          proposedRate: 27.25,
+          policyOptionId: "rate:27.25",
+          currentPolicyOptionNameSnapshot: "Rate: 23%",
+          policyOptionNameSnapshot: "Rate: 27.25%",
+        }),
+      ]);
+    }
+  });
+
+  it("rejects the same reviewed tax instrument twice in one bill", async () => {
+    db.collectionMocks.gameState.findOne.mockResolvedValue({
+      _id: "current",
+      resetWorldId: "world-1",
+      metricsSystemVersion: "v2",
+      legislationSystemVersion: "v2",
+      resetVersionSeeds: {
+        metrics: {
+          worldId: "world-1",
+          revision: 3,
+          sourceTurn: 1,
+          completedAt: "2026-10-04T00:00:00.000Z",
+          verificationHash: "metrics",
+        },
+        legislation: {
+          worldId: "world-1",
+          revision: 6,
+          sourceTurn: 1,
+          completedAt: "2026-10-04T00:00:00.000Z",
+          verificationHash: "legislation",
+        },
+      },
+    });
+    db.collectionMocks.legislationTypes.find.mockReturnValue({
+      toArray: async () => [
+        {
+          _id: "jp_foreign_corporation_tax",
+          name: "Foreign Corporation Tax Act",
+          countryScope: "jp",
+          policyDomain: "tax",
+          taxRateChange: { scope: "federal", taxType: "foreignCorporateTax" },
+          policyOptions: [
+            { id: "zero", name: "0%", rate: 0 },
+            { id: "maximum", name: "65%", rate: 65 },
+          ],
+        },
+      ],
+    });
+    db.collection("federalBudget").findOne.mockResolvedValue({
+      _id: "JP",
+      taxRates: { foreignCorporateTax: 23 },
+    });
+
+    const result = await validateBillProvisions(
+      db as unknown as Db,
+      [
+        {
+          legislationTypeId: "jp_foreign_corporation_tax",
+          proposedRate: 27.25,
+          effectDirection: 0,
+        },
+        {
+          legislationTypeId: "jp_foreign_corporation_tax",
+          proposedRate: 28,
+          effectDirection: 0,
+        },
+      ],
+      "tax",
+      "JP"
+    );
+
+    expect(result).toMatchObject({
+      ok: false,
+      status: 400,
+      error: "A v2 bill cannot repeat a tax instrument.",
+    });
+  });
+});
+
 describe("validateBillProvisions — embargo", () => {
   it("accepts a block embargo in a trade bill", async () => {
     const result = await validateBillProvisions(
@@ -126,11 +335,15 @@ describe("validateBillProvisions: media ownership availability", () => {
   };
 
   it("rejects ownership legislation until delivered concentration exceeds the trigger", async () => {
-    db.collectionMocks.legislationTypes.findOne.mockResolvedValue({
-      _id: "us_media_communications",
-      name: "Media and Communications Regulation Act",
-      policyDomain: "mediaInformation",
-      policyOptions: [],
+    db.collectionMocks.legislationTypes.find.mockReturnValue({
+      toArray: async () => [
+        {
+          _id: "us_media_communications",
+          name: "Media and Communications Regulation Act",
+          policyDomain: "mediaInformation",
+          policyOptions: [],
+        },
+      ],
     });
     db.collectionMocks.gameState.findOne.mockResolvedValue({
       _id: "current",
@@ -175,11 +388,15 @@ describe("validateBillProvisions: media ownership availability", () => {
   });
 
   it("does not load sector concentration data with regulation disabled", async () => {
-    db.collectionMocks.legislationTypes.findOne.mockResolvedValue({
-      _id: "us_media_communications",
-      name: "Media and Communications Regulation Act",
-      policyDomain: "mediaInformation",
-      policyOptions: [],
+    db.collectionMocks.legislationTypes.find.mockReturnValue({
+      toArray: async () => [
+        {
+          _id: "us_media_communications",
+          name: "Media and Communications Regulation Act",
+          policyDomain: "mediaInformation",
+          policyOptions: [],
+        },
+      ],
     });
     db.collectionMocks.gameState.findOne.mockResolvedValue({
       _id: "current",
@@ -196,7 +413,8 @@ describe("validateBillProvisions: media ownership availability", () => {
     expect(db.collectionMocks.corporateSectors.find).not.toHaveBeenCalled();
     expect(db.collectionMocks.gameConfig.findOne).not.toHaveBeenCalled();
     expect(db.collectionMocks.bankMoneyMoves.find).not.toHaveBeenCalled();
-    expect(db.collectionMocks.gameState.findOne).toHaveBeenCalledOnce();
+    // Era context and reset-version isolation each use a narrow game-state read.
+    expect(db.collectionMocks.gameState.findOne).toHaveBeenCalledTimes(2);
   });
 });
 
@@ -351,11 +569,15 @@ describe("declare-war provisions are refused on the legislator path", () => {
 
 describe("validateBillProvisions — policy axis zeros (ticket #1116)", () => {
   it("omits economic and social when they are missing or zero", async () => {
-    db.collectionMocks.legislationTypes.findOne.mockResolvedValue({
-      _id: "uk_healthcare",
-      name: "Healthcare",
-      policyDomain: "healthcare",
-      policyOptions: [{ id: "a", name: "A", effectDirection: -1, economic: -2, social: 0 }],
+    db.collectionMocks.legislationTypes.find.mockReturnValue({
+      toArray: async () => [
+        {
+          _id: "uk_healthcare",
+          name: "Healthcare",
+          policyDomain: "healthcare",
+          policyOptions: [{ id: "a", name: "A", effectDirection: -1, economic: -2, social: 0 }],
+        },
+      ],
     });
     const result = await validateBillProvisions(
       db as unknown as Db,
@@ -372,11 +594,15 @@ describe("validateBillProvisions — policy axis zeros (ticket #1116)", () => {
   });
 
   it("keeps a non-zero axis and still omits a zero axis", async () => {
-    db.collectionMocks.legislationTypes.findOne.mockResolvedValue({
-      _id: "uk_healthcare",
-      name: "Healthcare",
-      policyDomain: "healthcare",
-      policyOptions: [{ id: "a", name: "A", effectDirection: -1, economic: -2, social: 0 }],
+    db.collectionMocks.legislationTypes.find.mockReturnValue({
+      toArray: async () => [
+        {
+          _id: "uk_healthcare",
+          name: "Healthcare",
+          policyDomain: "healthcare",
+          policyOptions: [{ id: "a", name: "A", effectDirection: -1, economic: -2, social: 0 }],
+        },
+      ],
     });
     const result = await validateBillProvisions(
       db as unknown as Db,

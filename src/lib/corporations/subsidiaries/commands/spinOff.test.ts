@@ -13,6 +13,7 @@ vi.mock("@/lib/nationalization/treasury", () => ({
 import { emitTx } from "@/lib/financialTxLog/emit";
 import { creditTreasuryProceeds } from "@/lib/nationalization/treasury";
 import { spinOff } from "./spinOff";
+import { autoGrantedNodeIds } from "@/lib/constants/techTree";
 
 const parentId = new ObjectId();
 const callerUserId = new ObjectId(); // parent owner + parent CEO's user
@@ -109,6 +110,19 @@ describe("spinOff", () => {
     // CEO is the appointed human, userId is that human (not the parent).
     expect(doc.ceoType).toBe("character");
     expect(doc.userId.equals(candidateUserId)).toBe(true);
+  });
+
+  it("grants the passed-decade baseline tech a newly founded corp gets (S#363)", async () => {
+    db.collection("gameState").findOne = vi
+      .fn()
+      .mockResolvedValue({ _id: "current", sectorTechTreesEnabled: true, currentYear: 1991 });
+    const result = await spinOff(db as unknown as Db, { parent: parentCorp(), ...baseInput });
+    expect(result.ok).toBe(true);
+    const doc = (db.collection("corporations").insertOne as ReturnType<typeof vi.fn>).mock
+      .calls[0][0] as Corporation;
+    const expected = autoGrantedNodeIds("technology", 1991);
+    expect(expected.length).toBeGreaterThan(0);
+    expect(doc.unlockedTechNodeIds).toEqual(expected);
   });
 
   it("pays the incorporation fee to the treasury and ledgers both legs", async () => {

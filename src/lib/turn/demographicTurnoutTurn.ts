@@ -1,3 +1,8 @@
+/**
+ * Party turnout and registration budgets spend treasury each turn.
+ * processPartyGOTV applies funded turnout campaigns and registration drives;
+ * registration drives reach only regions with live party presence.
+ */
 import { resolveCampaignPriceLevel } from "@/lib/campaigns/rules/priceLevel";
 import {
   getStateDemographicTurnoutCollection,
@@ -14,6 +19,7 @@ import type {
   OrgRegLedger,
   NPP,
   GameConfig,
+  ElectedOfficial,
 } from "@/lib/db/types";
 import { POOL_SENTINEL_PARTY_ID } from "@/lib/db/types";
 import { decayTurnout, canvassingBoost } from "@/lib/campaignTargeting/rules";
@@ -39,6 +45,7 @@ import {
   calculateCanvassingBoost,
 } from "./demographicTurnoutCalculations";
 import { resolveCanvassGroup } from "@/lib/demographics/countryDemographics";
+import { resolvePartyTurnoutTargetLean } from "@/lib/demographics/partyTurnoutTargetResolver";
 import {
   calculateRegistrationDriveBoost,
   planRegistrationDriveSourcing,
@@ -54,6 +61,10 @@ import {
 import type { FinancialTxLogEntry } from "@/lib/db/types/financialTxLog";
 import { isPartyTreasuryNegative, resetPartyBudgetSpending } from "@/lib/partyBudgetGuards";
 import { logger } from "../observability/logger";
+import {
+  buildRegistrationPresence,
+  registrationPresenceKey,
+} from "@/lib/parties/rules/registrationPresence";
 
 type StoredPartyBudget = PartyBudget & { countryId?: CountryId };
 
@@ -93,6 +104,9 @@ export async function applyDecayToAllStates(
 
   for (const state of turnoutData) {
     state.campaignModifiers = decayTurnout(state.campaignModifiers ?? state.modifiers);
+    if (state.campaignContactModifiers) {
+      state.campaignContactModifiers = decayTurnout(state.campaignContactModifiers);
+    }
     const modifiers = state.modifiers;
 
     // Apply decay to all categories.
@@ -123,6 +137,9 @@ export async function applyDecayToAllStates(
             $set: {
               modifiers: state.modifiers,
               ...(state.campaignModifiers ? { campaignModifiers: state.campaignModifiers } : {}),
+              ...(state.campaignContactModifiers
+                ? { campaignContactModifiers: state.campaignContactModifiers }
+                : {}),
               lastDecayApplied: state.lastDecayApplied,
               lastUpdated: state.lastUpdated,
             },
@@ -347,6 +364,7 @@ export async function processPartyGOTV(
   const registrationPoolUnregDrawn = new Map<string, number>(); // pool._id -> pp drawn from unregistered
   const registrationPoolIndepDrawn = new Map<string, number>(); // pool._id -> pp drawn from independent
   const registrationLedgerRows: Omit<OrgRegLedger, "_id">[] = [];
+  let registrationPresence = new Set<string>();
   const budgetsToReset: PartyBudget[] = [];
   const budgetCountryBackfills = new Map<string, CountryId>();
 
@@ -509,6 +527,18 @@ export async function processPartyGOTV(
     // feature is opt-in (default 0%), so unused worlds keep the prior query set.
     const anyRegistrationBudget = partyBudgets.some((b) => (b.registrationBudgetPercent ?? 0) > 0);
     if (anyRegistrationBudget) {
+      // Reuse the already loaded rosters. One projected officeholder read per
+      // phase, not one presence query per party/region. Cached flags can be stale.
+      const officials = await db
+        .collection<ElectedOfficial>("electedOfficials")
+        .find({}, { projection: { countryId: 1, party: 1, state: 1 } })
+        .toArray();
+      registrationPresence = buildRegistrationPresence(
+        statePartyOrgs,
+        allCharacters,
+        allNPPs,
+        officials
+      );
       const pools = await db
         .collection<StateRegistrationPool>("stateRegistrationPool")
         .find({})
@@ -609,11 +639,14 @@ export async function processPartyGOTV(
       const targetGroup = budget.gotvTargetGroup;
 
       if (targetCategory && targetGroup) {
-        // Country-aware lean lookup: non-US parties target voter-group
-        // categories (e.g. UK uk_voterGroups) absent from the US-only
-        // LAYER1 table, which used to collapse their alignment to the 0.1
-        // fallback (ticket #1265).
-        const lean = resolveCanvassGroup(budgetCountryId, targetCategory, targetGroup);
+        // Party targeting now accepts the same Layer-1 bucket catalog as the
+        // region Demographics tab while preserving established targets.
+        const lean = resolvePartyTurnoutTargetLean(
+          budgetCountryId,
+          targetCategory,
+          targetGroup,
+          revenueCtx?.preset
+        );
         const alignMult = lean
           ? calculateAlignmentMultiplier(
               position.economic,
@@ -621,9 +654,10 @@ export async function processPartyGOTV(
               lean.economicLean,
               lean.socialLean
             )
-          : 0.1;
+          : null;
+        let applied = false;
 
-        if (budget.scope === "national") {
+        if (alignMult !== null && budget.scope === "national") {
           // National: divide spend across this country's regions only. The
           // collection holds every country's docs, so the unfiltered length
           // diluted non-US parties (UK: 12 regions split ~127 ways) and
@@ -638,25 +672,41 @@ export async function processPartyGOTV(
             alignMult
           );
           for (const state of inScopeTurnout) {
-            applyBoost(state, { category: targetCategory, group: targetGroup }, boost);
-            state.lastUpdated = new Date();
+            if (
+              applyBoost(state, { category: targetCategory, group: targetGroup }, boost, boost, {
+                initializeMissingCategory: true,
+              })
+            ) {
+              state.lastUpdated = new Date();
+              applied = true;
+            }
           }
-        } else {
+        } else if (alignMult !== null && budget.scope === "state") {
           // State: full spend in one state
           const state = stateTurnout.find((s) => s._id === budget.stateId);
           if (state) {
             const boost = calculateStateGOTVBoost(gotvSpend, DOLLARS_PER_TURNOUT_POINT, alignMult);
-            applyBoost(state, { category: targetCategory, group: targetGroup }, boost);
-            state.lastUpdated = new Date();
+            applied = applyBoost(
+              state,
+              { category: targetCategory, group: targetGroup },
+              boost,
+              boost,
+              { initializeMissingCategory: true }
+            );
+            if (applied) state.lastUpdated = new Date();
           }
         }
-        totalSpend += gotvSpend;
-        availableTreasury -= gotvSpend;
-        if (budget.scope === "national") {
-          nationalPartyGotvDeductions.set(
-            treasuryKey,
-            (nationalPartyGotvDeductions.get(treasuryKey) ?? 0) + gotvSpend
-          );
+        // Invalid stale targets and scopes with no turnout document cannot
+        // produce an effect, so they must not consume treasury.
+        if (applied) {
+          totalSpend += gotvSpend;
+          availableTreasury -= gotvSpend;
+          if (budget.scope === "national") {
+            nationalPartyGotvDeductions.set(
+              treasuryKey,
+              (nationalPartyGotvDeductions.get(treasuryKey) ?? 0) + gotvSpend
+            );
+          }
         }
       }
       // If no target group selected, GOTV does nothing (group selection required)
@@ -678,7 +728,12 @@ export async function processPartyGOTV(
       ) {
         // Suppression targets a specific demographic with a negative boost
         // Alignment multiplier is inverted: further groups are EASIER to suppress
-        const supLean = resolveCanvassGroup(budgetCountryId, supCategory, supGroup);
+        const supLean = resolvePartyTurnoutTargetLean(
+          budgetCountryId,
+          supCategory,
+          supGroup,
+          revenueCtx?.preset
+        );
         const alignMult = supLean
           ? calculateAlignmentMultiplier(
               position.economic,
@@ -686,9 +741,10 @@ export async function processPartyGOTV(
               supLean.economicLean,
               supLean.socialLean
             )
-          : 0.5;
+          : null;
+        let applied = false;
 
-        if (budget.scope === "national") {
+        if (alignMult !== null && budget.scope === "national") {
           const inScopeTurnout = stateTurnout.filter((s) =>
             isTurnoutDocInCountry(s, budgetCountryId)
           );
@@ -699,10 +755,16 @@ export async function processPartyGOTV(
             alignMult
           );
           for (const state of inScopeTurnout) {
-            applyBoost(state, { category: supCategory, group: supGroup }, -negBoost);
-            state.lastUpdated = new Date();
+            if (
+              applyBoost(state, { category: supCategory, group: supGroup }, -negBoost, -negBoost, {
+                initializeMissingCategory: true,
+              })
+            ) {
+              state.lastUpdated = new Date();
+              applied = true;
+            }
           }
-        } else {
+        } else if (alignMult !== null && budget.scope === "state") {
           const state = stateTurnout.find((s) => s._id === budget.stateId);
           if (state) {
             const negBoost = calculateStateGOTVBoost(
@@ -710,17 +772,25 @@ export async function processPartyGOTV(
               DOLLARS_PER_TURNOUT_POINT,
               alignMult
             );
-            applyBoost(state, { category: supCategory, group: supGroup }, -negBoost);
-            state.lastUpdated = new Date();
+            applied = applyBoost(
+              state,
+              { category: supCategory, group: supGroup },
+              -negBoost,
+              -negBoost,
+              { initializeMissingCategory: true }
+            );
+            if (applied) state.lastUpdated = new Date();
           }
         }
-        totalSpend += suppressionSpend;
-        availableTreasury -= suppressionSpend;
-        if (budget.scope === "national") {
-          nationalPartySuppressionDeductions.set(
-            treasuryKey,
-            (nationalPartySuppressionDeductions.get(treasuryKey) ?? 0) + suppressionSpend
-          );
+        if (applied) {
+          totalSpend += suppressionSpend;
+          availableTreasury -= suppressionSpend;
+          if (budget.scope === "national") {
+            nationalPartySuppressionDeductions.set(
+              treasuryKey,
+              (nationalPartySuppressionDeductions.get(treasuryKey) ?? 0) + suppressionSpend
+            );
+          }
         }
       }
     }
@@ -740,13 +810,27 @@ export async function processPartyGOTV(
           const rows =
             statePartyRowsByCountryParty.get(`${budgetCountryId}:${budget.partyId}`) ?? [];
           for (const spo of rows) {
+            if (
+              !registrationPresence.has(
+                registrationPresenceKey(spo.countryId, spo.partyId, spo.stateId)
+              )
+            )
+              continue;
             const pool = registrationPoolMap.get(`${spo.countryId}:${spo.stateId}`);
             if (pool) targets.push({ spo, pool });
           }
         } else {
           const spo = statePartyOrgMap.get(`${budget.stateId}_${budget.partyId}`);
           const pool = spo ? registrationPoolMap.get(`${spo.countryId}:${spo.stateId}`) : undefined;
-          if (spo && pool) targets.push({ spo, pool });
+          if (
+            spo &&
+            pool &&
+            spo.countryId === budgetCountryId &&
+            registrationPresence.has(
+              registrationPresenceKey(spo.countryId, spo.partyId, spo.stateId)
+            )
+          )
+            targets.push({ spo, pool });
         }
 
         if (targets.length > 0) {
@@ -1120,6 +1204,9 @@ export async function processPartyGOTV(
             $set: {
               modifiers: state.modifiers,
               ...(state.campaignModifiers ? { campaignModifiers: state.campaignModifiers } : {}),
+              ...(state.campaignContactModifiers
+                ? { campaignContactModifiers: state.campaignContactModifiers }
+                : {}),
               lastUpdated: state.lastUpdated,
             },
           },
@@ -1289,6 +1376,9 @@ export async function processPlayerCanvassing(
             $set: {
               modifiers: state.modifiers,
               ...(state.campaignModifiers ? { campaignModifiers: state.campaignModifiers } : {}),
+              ...(state.campaignContactModifiers
+                ? { campaignContactModifiers: state.campaignContactModifiers }
+                : {}),
               lastUpdated: state.lastUpdated,
             },
           },

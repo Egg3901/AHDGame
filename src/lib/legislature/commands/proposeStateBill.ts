@@ -8,12 +8,14 @@ import {
 import type { AuthUserWithCharacter } from "@/lib/auth";
 import {
   checkDuplicateProvisions,
+  checkDuplicateResetLawFamilies,
   checkCurrentPolicyLevel,
   STATE_TERMINAL_STATUSES,
 } from "@/lib/congress/billProposalLimits";
 import type {
   Character,
   ElectedOfficial,
+  LegislationType,
   PoliticalParty,
   ResetLawProvision,
   StateBill,
@@ -37,10 +39,12 @@ import { stampTaxSliderProvisions } from "@/lib/politicalLegislation/taxSlider";
 import { snapshotPolicyProvisionsInPlace } from "@/lib/legislature/provisionEnrichment";
 import type { GameState } from "@/lib/db/types/gameState";
 import { RESET_V2_READY } from "@/lib/resetVersions/availability";
-import { resetSystemVersionsForCountry } from "@/lib/resetVersions/rules";
+import { isResetV2Country, resetSystemVersionsForCountry } from "@/lib/resetVersions/rules";
 import { loadReviewedLawCatalog } from "@/lib/resetLegislation/loadReviewedCatalog";
 import type { ResetCountry } from "@/lib/resetLegislation/fundingOwner";
 import type { LawChoice } from "@/lib/resetLegislation/rules/eligibility";
+import { resetTaxesFor } from "@/lib/resetLegislation/taxCatalog";
+import { resolveResetTaxProvisionFields } from "@/lib/resetLegislation/resolveTaxProvision";
 
 const VOTING_DURATION_HOURS = 24;
 
@@ -87,10 +91,6 @@ export async function proposeStateBill(
   if (!character) {
     return { status: 400, body: { error: "No character found" } };
   }
-
-  // Custom (flavor/roleplay) bills carry no provisions and have no mechanical
-  // effect. Drop any client-supplied provisions so they cannot smuggle effects.
-  const effectiveProvisions = category === "custom" ? [] : provisions;
 
   // One-party-state guard: banned parties cannot propose bills.
   // Reads runtime governmentType so post-Stage-4 conversion immediately
@@ -151,15 +151,35 @@ export async function proposeStateBill(
   const votingEndsAt = new Date(now.getTime() + VOTING_DURATION_HOURS * 3_600_000);
   const gameStateForTurn = await getGameState(db);
   const votingEndsOnTurn = (gameStateForTurn?.currentTurn ?? 0) + VOTING_DURATION_HOURS;
+  const resetLegislationV2 =
+    resetSystemVersionsForCountry(gameStateForTurn, RESET_V2_READY, countryId).legislation === "v2";
+  if (
+    !resetLegislationV2 &&
+    provisions?.some(
+      (provision) =>
+        typeof provision === "object" &&
+        provision !== null &&
+        "type" in provision &&
+        provision.type === "reset_law"
+    )
+  ) {
+    return {
+      status: 409,
+      body: { error: "Reviewed legislation is unavailable. Refresh the page before proposing." },
+    };
+  }
+  // Reviewed v2 bills deliberately use `custom` for multi-domain drafts. Legacy
+  // custom bills remain flavor-only and cannot smuggle mechanical provisions.
+  const effectiveProvisions = category === "custom" && !resetLegislationV2 ? [] : provisions;
   const rawResetSelections = (Array.isArray(effectiveProvisions) ? effectiveProvisions : []).filter(
     (
       provision
     ): provision is {
       type: "reset_law";
-      familyId: string;
-      scope: "regional";
-      regionId: string;
-      choice: LawChoice;
+      familyId?: unknown;
+      scope?: unknown;
+      regionId?: unknown;
+      choice?: unknown;
     } =>
       typeof provision === "object" &&
       provision !== null &&
@@ -168,8 +188,36 @@ export async function proposeStateBill(
   );
   const validatedResetLawProvisions: ResetLawProvision[] = [];
   if (rawResetSelections.length > 0) {
-    if (!["US", "UK", "JP"].includes(countryId)) {
+    if (!isResetV2Country(countryId)) {
       return { status: 400, body: { error: "Legislation v2 is unavailable in this country." } };
+    }
+    const resetSelections: Array<{
+      type: "reset_law";
+      familyId: string;
+      scope: "regional";
+      regionId: string;
+      choice: LawChoice;
+    }> = [];
+    for (const selection of rawResetSelections) {
+      if (
+        selection.scope !== "regional" ||
+        typeof selection.regionId !== "string" ||
+        selection.regionId.toUpperCase() !== stateId ||
+        typeof selection.familyId !== "string" ||
+        typeof selection.choice !== "string"
+      ) {
+        return {
+          status: 400,
+          body: { error: "Each v2 regional law selection must identify its family and region." },
+        };
+      }
+      resetSelections.push({
+        type: "reset_law",
+        familyId: selection.familyId,
+        scope: "regional",
+        regionId: selection.regionId,
+        choice: selection.choice as LawChoice,
+      });
     }
     const gameState = await db.collection<GameState>("gameState").findOne(
       { _id: "current" },
@@ -199,12 +247,8 @@ export async function proposeStateBill(
       year: gameState.currentYear ?? gameState.startingYear ?? 1991,
     });
     const seen = new Set<string>();
-    for (const selection of rawResetSelections) {
-      if (
-        selection.scope !== "regional" ||
-        selection.regionId.toUpperCase() !== stateId ||
-        seen.has(selection.familyId)
-      ) {
+    for (const selection of resetSelections) {
+      if (seen.has(selection.familyId)) {
         return {
           status: 400,
           body: { error: "Each v2 regional law family may appear once for this region." },
@@ -267,6 +311,27 @@ export async function proposeStateBill(
         provision.type === "reset_law"
       )
   );
+  const regionalResetTaxes = isResetV2Country(countryId)
+    ? resetTaxesFor(countryId as ResetCountry, "regional")
+    : [];
+  const regionalResetTaxIds = new Set(
+    regionalResetTaxes.map((tax) => tax.existingLegislationTypeId)
+  );
+  if (
+    resetLegislationV2 &&
+    legacyEffectiveProvisions.some((provision) => {
+      const legislationTypeId =
+        typeof provision === "object" && provision !== null && "legislationTypeId" in provision
+          ? String(provision.legislationTypeId)
+          : "";
+      return !regionalResetTaxIds.has(legislationTypeId);
+    })
+  ) {
+    return {
+      status: 409,
+      body: { error: "This world accepts only reviewed regional law and tax provisions." },
+    };
+  }
   const sanitizedProvisions: StateBillProvision[] | undefined = Array.isArray(effectiveProvisions)
     ? legacyEffectiveProvisions.map((provision) => {
         if (
@@ -355,12 +420,50 @@ export async function proposeStateBill(
     : undefined;
 
   if (sanitizedProvisions && sanitizedProvisions.length > 0) {
-    const stamped = await stampTaxSliderProvisions(db, sanitizedProvisions, countryId, stateId);
-    if (!stamped.ok) {
-      return { status: 400, body: { error: stamped.error } };
+    if (resetLegislationV2) {
+      const reviewedTaxes = sanitizedProvisions.flatMap((provision, index) =>
+        "legislationTypeId" in provision ? [{ index, provision }] : []
+      );
+      if (
+        new Set(reviewedTaxes.map(({ provision }) => provision.legislationTypeId)).size !==
+        reviewedTaxes.length
+      ) {
+        return { status: 400, body: { error: "A v2 bill cannot repeat a tax instrument." } };
+      }
+      const legislationTypes = await db
+        .collection<LegislationType>("legislationTypes")
+        .find({
+          _id: { $in: reviewedTaxes.map(({ provision }) => provision.legislationTypeId) },
+        })
+        .toArray();
+      const legislationTypeById = new Map(legislationTypes.map((type) => [type._id, type]));
+      for (const { index, provision } of reviewedTaxes) {
+        const legislationType = legislationTypeById.get(provision.legislationTypeId);
+        if (!legislationType) {
+          return { status: 400, body: { error: "Unknown reviewed tax instrument." } };
+        }
+        const resolved = await resolveResetTaxProvisionFields(
+          db,
+          legislationType,
+          provision.proposedRate,
+          provision.policyOptionId,
+          countryId as ResetCountry,
+          "regional",
+          stateId
+        );
+        if (!resolved.ok) {
+          return { status: 400, body: { error: resolved.error } };
+        }
+        sanitizedProvisions[index] = { ...provision, ...resolved.fields };
+      }
+    } else {
+      const stamped = await stampTaxSliderProvisions(db, sanitizedProvisions, countryId, stateId);
+      if (!stamped.ok) {
+        return { status: 400, body: { error: stamped.error } };
+      }
+      sanitizedProvisions.length = 0;
+      sanitizedProvisions.push(...stamped.provisions);
     }
-    sanitizedProvisions.length = 0;
-    sanitizedProvisions.push(...stamped.provisions);
   }
   sanitizedProvisions?.push(...validatedResetLawProvisions);
 
@@ -447,6 +550,16 @@ export async function proposeStateBill(
   );
   if (duplicateCheck) {
     return { status: 409, body: { error: duplicateCheck.error } };
+  }
+
+  const resetLawDuplicateCheck = await checkDuplicateResetLawFamilies(
+    db,
+    "stateBills",
+    { stateId, status: { $nin: STATE_TERMINAL_STATUSES } },
+    validatedResetLawProvisions
+  );
+  if (resetLawDuplicateCheck) {
+    return { status: 409, body: { error: resetLawDuplicateCheck.error } };
   }
 
   const currentLevelCheck = await checkCurrentPolicyLevel(db, stateId, policyProvisionsForCheck);

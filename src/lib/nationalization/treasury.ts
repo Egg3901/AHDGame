@@ -17,8 +17,9 @@ import {
   type TreasuryCashFlow,
   type TreasuryCashOptions,
 } from "./treasuryLedger";
-import type { BankingTransition } from "@/lib/banking/rules/boundary";
+import type { BankingTransition, TransitionProjection } from "@/lib/banking/rules/boundary";
 import { resumeSettlement, settleTransition } from "@/lib/banking/settlementJournal";
+import { MONEY_MOVE_COLLECTION, type MoneyMoveRecordLeg } from "@/lib/banking/moneyMove";
 
 /**
  * Opt-in government-side witness for an event-driven caller whose own rows do
@@ -69,6 +70,58 @@ async function witnessTreasuryLeg(
  */
 
 /**
+ * The durable receipt for a funded Treasury expense: a guarded debit of
+ * spendable cash, the burn that settles it outside Treasury, the signed fiscal
+ * projection, and any noncash effects the expense buys. Effects ride the same
+ * receipt, so a refused or replayed debit can never apply them unpaid or twice.
+ */
+function fundedTreasuryExpenseTransition(input: {
+  countryId: CountryId;
+  amount: number;
+  currency: CurrencyCode;
+  turn: number;
+  now: Date;
+  witness: TreasuryWitness & { key: string };
+  effects?: TransitionProjection[];
+}): BankingTransition {
+  const { countryId, amount, witness } = input;
+  return {
+    key: `treasury-nationalization:${witness.key}`,
+    kind: "treasury_funded_expense",
+    turn: input.turn,
+    currency: input.currency,
+    legs: [
+      {
+        kind: "debit",
+        amount,
+        collection: "federalBudget",
+        filter: { countryId, treasuryCashLocal: { $gte: amount } },
+        path: "treasuryCashLocal",
+        note: "Fund the nationalization or SOE expense from spendable Treasury cash",
+      },
+      { kind: "burn", amount, note: "Settle the expense outside Treasury cash" },
+    ],
+    projections: [
+      {
+        collection: "federalBudget",
+        filter: { countryId },
+        update: { $inc: { treasuryBalance: -amount }, $set: { updatedAt: input.now } },
+        note: "Update signed fiscal position after the funded expense",
+      },
+      ...(input.effects ?? []),
+    ],
+    event: {
+      kind: "monetary.executed",
+      command: witness.site ?? "nationalization.treasury",
+      subjectType: "government",
+      subjectId: countryId,
+      amount,
+      meta: { flow: witness.flow },
+    },
+  };
+}
+
+/**
  * Move `delta` (signed, country-local currency) on the country's treasury balance.
  *
  * Every nationalization/SOE/privatization cash flow funnels through here as a
@@ -92,43 +145,17 @@ async function incTreasuryBalance(
       );
     }
     if (!witness?.key) throw new Error("Funded Treasury movement requires a stable receipt key");
-    const amount = Math.abs(delta);
     const currency =
       ledger.context.treasuryCurrencies.get(countryId) ??
       (await loadTreasuryCurrency(db, countryId));
-    const transition: BankingTransition = {
-      key: `treasury-nationalization:${witness.key}`,
-      kind: "treasury_funded_expense",
-      turn: ledger.context.turn,
+    const transition = fundedTreasuryExpenseTransition({
+      countryId,
+      amount: Math.abs(delta),
       currency,
-      legs: [
-        {
-          kind: "debit",
-          amount,
-          collection: "federalBudget",
-          filter: { countryId, treasuryCashLocal: { $gte: amount } },
-          path: "treasuryCashLocal",
-          note: "Fund the nationalization or SOE expense from spendable Treasury cash",
-        },
-        { kind: "burn", amount, note: "Settle the expense outside Treasury cash" },
-      ],
-      projections: [
-        {
-          collection: "federalBudget",
-          filter: { countryId },
-          update: { $inc: { treasuryBalance: delta }, $set: { updatedAt: now } },
-          note: "Update signed fiscal position after the funded expense",
-        },
-      ],
-      event: {
-        kind: "monetary.executed",
-        command: witness.site ?? "nationalization.treasury",
-        subjectType: "government",
-        subjectId: countryId,
-        amount,
-        meta: { flow: witness.flow },
-      },
-    };
+      turn: ledger.context.turn,
+      now,
+      witness: { ...witness, key: witness.key },
+    });
     const result = await settleTransition(db, transition);
     if (result.status === "rejected" || result.status === "partial") {
       throw new Error(result.error ?? "Funded Treasury expense is incomplete");
@@ -535,9 +562,10 @@ export async function coverSoeOperatingLoss(
  * state pays the builder and the enterprise receives PLANT, so the grant cannot
  * be diverted into a discretionary build order — which is what keeps the P3b
  * anti-exploit ("an SOE cannot have the treasury fund an unbounded build")
- * closed. Unconditional debit, exactly like {@link coverSoeOperatingLoss}: an
- * unaffordable grant pushes the treasury into debt rather than being refused.
- * Returns the local amount debited.
+ * closed. Without funded Treasury cash the debit is unconditional, exactly like
+ * {@link coverSoeOperatingLoss}: an unaffordable grant pushes the signed balance
+ * into debt. With funded cash a grant that buys capacity goes through
+ * {@link settleFundedSoeCapexGrant} instead. Returns the local amount debited.
  */
 export async function debitTreasurySoeCapex(
   db: Db,
@@ -573,6 +601,65 @@ export async function debitTreasurySoeCapex(
     });
   }
   return local;
+}
+
+/**
+ * Settle one country's state capex grant from funded Treasury cash. The debit
+ * and every capacity write it buys share one durable receipt: the capacity
+ * lands only once the cash has, a retry of the same turn finishes the original
+ * plan without paying again, and a Treasury that cannot cover the whole grant
+ * buys nothing. That refusal is a funding constraint, not a failure, so the
+ * caller keeps processing every other country and corporation.
+ */
+export async function settleFundedSoeCapexGrant(
+  db: Db,
+  input: {
+    countryId: CountryId;
+    grantAnchor: number;
+    fxByCurrency: ReadonlyMap<CurrencyCode, number>;
+    now: Date;
+    ledger: TreasuryCashOptions;
+    treasuryCurrency?: CurrencyCode;
+    key: string;
+    capacity: TransitionProjection[];
+  }
+): Promise<{ status: "paid" | "unfunded" | "pending"; amountLocal: number; error?: string }> {
+  const context = input.ledger.context;
+  if (!context?.treasuryCashLedgerEnabled) {
+    throw new Error("Funded SOE capex grant requires the Treasury cash ledger");
+  }
+  if (!(input.grantAnchor > 0) || input.capacity.length === 0) {
+    return { status: "unfunded", amountLocal: 0 };
+  }
+  const currency =
+    input.treasuryCurrency ??
+    context.treasuryCurrencies.get(input.countryId) ??
+    (await loadTreasuryCurrency(db, input.countryId));
+  const rate = input.fxByCurrency.get(currency) ?? 1;
+  const amountLocal = Math.round(writeGovBudgetLocal(input.grantAnchor, currency, rate));
+  if (amountLocal <= 0) return { status: "unfunded", amountLocal: 0 };
+  const result = await settleTransition(
+    db,
+    fundedTreasuryExpenseTransition({
+      countryId: input.countryId,
+      amount: amountLocal,
+      currency,
+      turn: context.turn,
+      now: input.now,
+      witness: { flow: "soe_capex_grant", key: input.key, site: "treasury:debitTreasurySoeCapex" },
+      effects: input.capacity,
+    })
+  );
+  if (result.status === "rejected") {
+    return { status: "unfunded", amountLocal: 0, error: result.error };
+  }
+  if (result.status === "partial") {
+    throw new Error(result.error ?? "Funded SOE capex grant is incomplete");
+  }
+  if (result.status === "replayed" && result.error) {
+    return { status: "pending", amountLocal: 0, error: result.error };
+  }
+  return { status: "paid", amountLocal: result.status === "applied" ? amountLocal : 0 };
 }
 
 /**
@@ -616,14 +703,24 @@ export async function remitToTreasury(
   db: Db,
   input: TreasuryTransferInput,
   now: Date,
-  ledger?: TreasuryCashOptions
+  ledger?: TreasuryCashOptions,
+  receipts?: SoeRemittanceReceipts
 ): Promise<number> {
   const amount = Math.round(input.amountLocal);
-  if (amount <= 0) return 0;
+  // A preloaded receipt is resumed even when this attempt's quote is zero.
+  if (amount <= 0 && !receipts) return 0;
 
   const options = await resolveTreasuryCashOptions(db, ledger);
   if (options.context?.treasuryCashLedgerEnabled) {
     const context = options.context;
+    const key = soeRemittanceKey(context.turn, input.corpId);
+    // The receipt an earlier attempt froze owns this key. Its amount and rates
+    // stand; the live quote below is only priced when no receipt exists.
+    const receipt = receipts
+      ? receipts.get(key)
+      : ((await loadSoeRemittanceReceipts(db, context.turn, [input.corpId])).get(key) ?? null);
+    if (receipt) return resumeSoeRemittanceReceipt(db, receipt, input, context.turn);
+    if (amount <= 0) return 0;
     const treasuryCurrency =
       context.treasuryCurrencies.get(input.countryId) ??
       COUNTRY_CURRENCY_MAP[input.countryId] ??
@@ -641,7 +738,6 @@ export async function remitToTreasury(
       .collection<FederalBudget>("federalBudget")
       .findOne({ countryId: input.countryId }, { projection: { _id: 1 } });
     if (!treasury) throw new Error(`Treasury for ${input.countryId} is unavailable`);
-    const key = `treasury-soe-remittance:${context.turn}:${input.corpId.toString()}`;
     const settled = await settleTransition(db, {
       key,
       kind: "soe_profit_remittance",
@@ -690,12 +786,14 @@ export async function remitToTreasury(
       },
     });
     if (settled.status === "replayed" && !settled.error) return 0;
+    if (settled.status === "rejected" && (await refusedBeforeAnyCashMoved(db, key))) return 0;
     if (settled.status !== "applied") {
       throw new Error(settled.error ?? "Funded SOE remittance is incomplete");
     }
     return amount;
   }
 
+  if (amount <= 0) return 0;
   const debited = await db
     .collection<Corporation>("corporations")
     .updateOne(
@@ -708,6 +806,158 @@ export async function remitToTreasury(
     treasury: credited ? amount : 0,
   });
   return amount;
+}
+
+/** The settlement journal key of one enterprise's remittance in one turn. */
+export function soeRemittanceKey(turn: number, corpId: ObjectId): string {
+  return `treasury-soe-remittance:${turn}:${corpId.toString()}`;
+}
+
+/** A remittance receipt as the settlement journal froze it. */
+export interface SoeRemittanceReceipt {
+  _id: string;
+  kind?: string;
+  transitionKind?: string;
+  turn?: number;
+  status?: string;
+  error?: string;
+  legs?: MoneyMoveRecordLeg[];
+  projections?: { applied?: boolean; appliedAt?: Date | null }[];
+  event?: { command?: string; subjectId?: string };
+}
+
+/** Receipts keyed by journal key; a missing key means no earlier attempt claimed it. */
+export type SoeRemittanceReceipts = ReadonlyMap<string, SoeRemittanceReceipt>;
+
+/** One read for every enterprise the sweep may remit for this turn. */
+export async function loadSoeRemittanceReceipts(
+  db: Db,
+  turn: number,
+  corpIds: readonly ObjectId[]
+): Promise<Map<string, SoeRemittanceReceipt>> {
+  if (corpIds.length === 0) return new Map();
+  const rows = await db
+    .collection<SoeRemittanceReceipt>(MONEY_MOVE_COLLECTION)
+    .find(
+      { _id: { $in: corpIds.map((id) => soeRemittanceKey(turn, id)) } },
+      {
+        projection: {
+          kind: 1,
+          transitionKind: 1,
+          turn: 1,
+          status: 1,
+          error: 1,
+          legs: 1,
+          projections: 1,
+          event: 1,
+        },
+      }
+    )
+    .toArray();
+  return new Map(rows.map((row) => [row._id, row]));
+}
+
+function validFrozenLeg(
+  leg: MoneyMoveRecordLeg | undefined,
+  kind: "debit" | "credit",
+  collection: string,
+  path: string
+): leg is MoneyMoveRecordLeg & { valuation: { currencyCode: string; localPerAnchor: number } } {
+  return (
+    leg?.kind === kind &&
+    leg.collection === collection &&
+    leg.path === path &&
+    Number.isFinite(leg.amount) &&
+    leg.amount > 0 &&
+    typeof leg.valuation?.currencyCode === "string" &&
+    Number.isFinite(leg.valuation.localPerAnchor) &&
+    leg.valuation.localPerAnchor > 0
+  );
+}
+
+/**
+ * Why `receipt` is not this enterprise's remittance for this turn, or null when
+ * it is. Anything unreadable fails closed: the receipt is never repriced,
+ * resumed or skipped on a guess.
+ */
+function soeRemittanceOwnershipError(
+  receipt: SoeRemittanceReceipt,
+  input: TreasuryTransferInput,
+  turn: number
+): string | null {
+  const corpId = input.corpId.toString();
+  const [debit, credit] = receipt.legs ?? [];
+  if (receipt.kind !== "soe_profit_remittance" || receipt.transitionKind !== receipt.kind)
+    return "is not an SOE remittance";
+  if (receipt.turn !== turn) return "belongs to another turn";
+  if (receipt.legs?.length !== 2) return "does not have the remittance legs";
+  if (
+    !validFrozenLeg(debit, "debit", "corporations", "liquidCapital") ||
+    String(debit.filter?._id) !== corpId ||
+    debit.valuation.currencyCode !== input.corpCurrency
+  )
+    return "does not debit this enterprise's cash";
+  if (
+    !validFrozenLeg(credit, "credit", "federalBudget", "treasuryCashLocal") ||
+    credit.filter?.countryId !== input.countryId
+  )
+    return "does not credit this country's Treasury cash";
+  if (receipt.event?.command !== "turn.soe.remittance" || receipt.event.subjectId !== corpId)
+    return "does not name this enterprise";
+  return null;
+}
+
+/**
+ * Finish, or honour, the remittance an earlier attempt of this turn froze.
+ *
+ * Returns the enterprise cash this call debited, so the caller folds it into
+ * its turn-start snapshot exactly once: zero for a receipt that already
+ * settled or was refused before any cash moved, and the frozen debit when a
+ * receipt that stopped before its debit is finished here.
+ */
+async function resumeSoeRemittanceReceipt(
+  db: Db,
+  receipt: SoeRemittanceReceipt,
+  input: TreasuryTransferInput,
+  turn: number
+): Promise<number> {
+  const ownership = soeRemittanceOwnershipError(receipt, input, turn);
+  if (ownership) throw new Error(`SOE remittance receipt ${receipt._id} ${ownership}`);
+  const legs = receipt.legs ?? [];
+  const projectionsDone = (receipt.projections ?? []).every((p) => p.applied || p.appliedAt);
+  if (receipt.status === "applied" && legs.every((leg) => leg.applied) && projectionsDone) return 0;
+  if (receipt.status === "rejected") {
+    if (await refusedBeforeAnyCashMoved(db, receipt._id)) return 0;
+    throw new Error(receipt.error ?? `SOE remittance receipt ${receipt._id} was rejected`);
+  }
+  const resumed = await resumeSettlement(db, receipt._id);
+  if (resumed.status === "rejected" && (await refusedBeforeAnyCashMoved(db, receipt._id))) return 0;
+  if (resumed.status !== "applied") {
+    throw new Error(resumed.error ?? `SOE remittance receipt ${receipt._id} is incomplete`);
+  }
+  // An operator-reconciled `applied` receipt already moved its cash.
+  return receipt.status === "applied" || legs[0]?.applied ? 0 : (legs[0]?.amount ?? 0);
+}
+
+/**
+ * True only when the journal under `key` is terminally rejected because its
+ * guarded debit refused, with no leg landed. Nothing moved, so the remittance
+ * is simply not paid this turn, on the first attempt and on every replay of
+ * the same key. Partial receipts and malformed transitions do not qualify.
+ */
+async function refusedBeforeAnyCashMoved(db: Db, key: string): Promise<boolean> {
+  const receipt = await db
+    .collection<{ _id: string; status?: string; legs?: MoneyMoveRecordLeg[] }>(
+      MONEY_MOVE_COLLECTION
+    )
+    .findOne({ _id: key }, { projection: { status: 1, legs: 1 } });
+  const legs = receipt?.legs ?? [];
+  return (
+    receipt?.status === "rejected" &&
+    legs.length > 0 &&
+    legs.every((leg) => !leg.applied) &&
+    legs.some((leg) => leg.kind === "debit" && typeof leg.refusal === "string")
+  );
 }
 
 /** A treasury and enterprise transfer; `corpCurrency` is the enterprise's ledger account currency. */

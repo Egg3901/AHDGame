@@ -153,11 +153,25 @@ describe("v2 metrics page", () => {
   });
 
   it("compares the supported national v2 registries in common condition scores", async () => {
-    const values = { US: 5, UK: 7, JP: 2.2 } as const;
+    const values = { US: 5, UK: 7, JP: 2.2, IE: 6.8 } as const;
     const fetchMock = vi.fn(async (input: string | URL | Request) => {
       const url = String(input);
-      const country = (url.match(/country\/(US|UK|JP)\/reset-metrics/)?.[1] ?? "US") as
-        "US" | "UK" | "JP";
+      if (url === "/api/world/flags") {
+        return {
+          ok: true,
+          json: async () => ({
+            resetV2Countries: ["US", "UK", "JP", "IE"],
+            resetSystemVersions: {
+              metrics: "v2",
+              legislation: "v2",
+              cabinet: "v2",
+              demographics: "v1",
+            },
+          }),
+        };
+      }
+      const country = (url.match(/country\/(US|UK|JP|IE)\/reset-metrics/)?.[1] ??
+        "US") as keyof typeof values;
       return {
         ok: true,
         json: async () => ({
@@ -183,6 +197,7 @@ describe("v2 metrics page", () => {
     expect(await screen.findByText("Compare national registries")).toBeTruthy();
     expect((await screen.findAllByText("United Kingdom")).length).toBeGreaterThan(0);
     expect((await screen.findAllByText("Japan")).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText("Ireland")).length).toBeGreaterThan(0);
     fireEvent.click(screen.getByRole("button", { name: "Show Economic metrics" }));
     expect(await screen.findByText("7% of labor force")).toBeTruthy();
     expect(fetchMock).toHaveBeenCalledWith(

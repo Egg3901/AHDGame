@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { BLEND, FONT, OPS_LEVER_COLOR, blendSegments } from "./tokens";
+import {
+  BLEND_HEX as BLEND,
+  BLEND as BLEND_VARS,
+  FONT,
+  OPS_LEVER_COLOR,
+  blendSegments,
+} from "./tokens";
 
 // The Blend palette is transcribed from the Claude Design canvas (Proposal D).
 // These assertions pin the exact values so a later refactor cannot silently
@@ -34,6 +40,13 @@ describe("BLEND palette", () => {
   });
 });
 
+describe("BLEND theme variables", () => {
+  it("paints through a per-theme variable with the dark value as the fallback", () => {
+    expect(BLEND_VARS.page).toBe("var(--blend-page, #0c0c12)");
+    expect(BLEND_VARS.ink).toBe("var(--blend-ink, #e8e8ee)");
+  });
+});
+
 describe("FONT stacks", () => {
   it("routes through the next/font CSS variables already registered in layout", () => {
     expect(FONT.mono).toContain("var(--font-jetbrains-mono)");
@@ -65,13 +78,13 @@ describe("blendSegments", () => {
     const segs = blendSegments(3, 10, "#60a5fa");
     expect(segs).toHaveLength(10);
     for (let i = 0; i < 3; i++) expect(segs[i].background).toBe("#60a5fa");
-    for (let i = 3; i < 10; i++) expect(segs[i].background).toBe(BLEND.hairlineStrong);
+    for (let i = 3; i < 10; i++) expect(segs[i].background).toBe(BLEND_VARS.hairlineStrong);
   });
 
   it("handles the fully empty and fully filled ends", () => {
-    expect(blendSegments(0, 3, "#fbbf24").every((s) => s.background === BLEND.hairlineStrong)).toBe(
-      true
-    );
+    expect(
+      blendSegments(0, 3, "#fbbf24").every((s) => s.background === BLEND_VARS.hairlineStrong)
+    ).toBe(true);
     expect(blendSegments(3, 3, "#fbbf24").every((s) => s.background === "#fbbf24")).toBe(true);
   });
 
@@ -84,7 +97,7 @@ describe("blendSegments", () => {
   it("never emits a negative or fractional segment count", () => {
     expect(blendSegments(-2, 5, "#fbbf24")).toHaveLength(5);
     expect(
-      blendSegments(-2, 5, "#fbbf24").every((s) => s.background === BLEND.hairlineStrong)
+      blendSegments(-2, 5, "#fbbf24").every((s) => s.background === BLEND_VARS.hairlineStrong)
     ).toBe(true);
   });
 

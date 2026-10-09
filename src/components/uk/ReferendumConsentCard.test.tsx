@@ -13,6 +13,7 @@ function ref(over: Partial<ConsentReferendum> = {}): ConsentReferendum {
     status: "requested",
     campaignCloseTurn: null,
     conversionDeadlineTurn: null,
+    dailConsentRequired: true,
     yesShare: 50,
     desire: 90,
     ...over,
@@ -70,7 +71,7 @@ describe("ReferendumConsentCard", () => {
     );
     // Blurb explains the decision and the dual-consent requirement.
     expect(screen.getByText(/petitioned for a referendum/i)).toBeTruthy();
-    expect(screen.getByText(/both the Commons and the Dáil consent/i)).toBeTruthy();
+    expect(screen.getByText(/both the Commons and the Dáil must consent/i)).toBeTruthy();
     // Live desire readout, labelled for the reunification case.
     expect(screen.getByText(/Reunification desire/i)).toBeTruthy();
     expect(screen.getByText("90%")).toBeTruthy();
@@ -138,6 +139,27 @@ describe("ReferendumConsentCard", () => {
     const call = fetchMock.mock.calls[0];
     expect(call[0]).toBe("/api/admin/referendum/r1/actuate");
     expect(JSON.parse(call[1].body)).toEqual({ action: "block" });
+  });
+
+  it("shows the single-bill path when Ireland was not player enabled", () => {
+    render(
+      <ReferendumConsentCard
+        countryId="UK"
+        currentTurn={300}
+        referendums={[
+          ref({
+            status: "actuating",
+            conversionDeadlineTurn: 324,
+            dailConsentRequired: false,
+          }),
+        ]}
+        isPM={false}
+        isAdmin={false}
+        onChanged={() => {}}
+      />
+    );
+    expect(screen.getByText(/Westminster must consent/i)).toBeTruthy();
+    expect(screen.getByText(/bill's vote closes in 24 turns/i)).toBeTruthy();
   });
 
   it("hides the convert/block controls from non-admins on an actuating referendum", () => {

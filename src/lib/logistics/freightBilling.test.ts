@@ -1,6 +1,10 @@
 import { describe, it, expect } from "vitest";
 import type { CommodityType } from "@/lib/constants/commodities";
-import { apportionFreightBilling, type FreightBillingSectorUnits } from "./freightBilling";
+import {
+  apportionFreightBilling,
+  FREIGHT_BILL_MAX_SHARE_OF_GOODS_VALUE,
+  type FreightBillingSectorUnits,
+} from "./freightBilling";
 
 const demand = (entries: Partial<Record<CommodityType, number>>): Map<CommodityType, number> => {
   const m = new Map<CommodityType, number>();
@@ -24,9 +28,108 @@ const charges = (
   new Map(Object.entries(entries).map(([stateId, byCommodity]) => [stateId, demand(byCommodity)]));
 
 describe("apportionFreightBilling — charges", () => {
+  it("leaves household and unowned input freight off a tiny corporate buyer's bill", () => {
+    const r = apportionFreightBilling({
+      freightChargesByDestState: charges({ WA: { vehicles: 698_000 } }),
+      haulRevenueByOriginState: new Map(),
+      freightSupplyUnitsByOriginState: new Map(),
+      demandUnitsByDestState: charges({ WA: { vehicles: 10_000 } }),
+      sectors: [sector({ stateId: "WA", demandUnitsByCommodity: demand({ vehicles: 2 }) })],
+    });
+    expect(r.chargeBySectorId.get("s1")).toBeCloseTo(139.6);
+    expect(r.unapportionedCharges).toBeCloseTo(697_860.4);
+  });
+
+  it("bounds a sector's bill at a share of the value of the goods it demands", () => {
+    const r = apportionFreightBilling({
+      freightChargesByDestState: charges({ WA: { oil: 100_000 } }),
+      haulRevenueByOriginState: new Map(),
+      freightSupplyUnitsByOriginState: new Map(),
+      demandUnitsByDestState: charges({ WA: { oil: 1_000 } }),
+      unitPriceByDestState: charges({ WA: { oil: 100 } }),
+      sectors: [sector({ stateId: "WA", demandUnitsByCommodity: demand({ oil: 1_000 }) })],
+    });
+    // Goods worth 100 * 1000 = 100k; the 100k raw bill is capped at 15% of it.
+    expect(r.chargeBySectorId.get("s1")).toBeCloseTo(
+      100_000 * FREIGHT_BILL_MAX_SHARE_OF_GOODS_VALUE
+    );
+    expect(r.unapportionedCharges).toBeCloseTo(
+      100_000 * (1 - FREIGHT_BILL_MAX_SHARE_OF_GOODS_VALUE)
+    );
+  });
+
+  it("leaves a bill under the goods-value bound untouched", () => {
+    const r = apportionFreightBilling({
+      freightChargesByDestState: charges({ WA: { oil: 5_000 } }),
+      haulRevenueByOriginState: new Map(),
+      freightSupplyUnitsByOriginState: new Map(),
+      demandUnitsByDestState: charges({ WA: { oil: 1_000 } }),
+      unitPriceByDestState: charges({ WA: { oil: 100 } }),
+      sectors: [sector({ stateId: "WA", demandUnitsByCommodity: demand({ oil: 1_000 }) })],
+    });
+    expect(r.chargeBySectorId.get("s1")).toBeCloseTo(5_000);
+    expect(r.unapportionedCharges).toBeCloseTo(0);
+  });
+
+  it("applies no bound when the destination has no price for the commodity", () => {
+    const r = apportionFreightBilling({
+      freightChargesByDestState: charges({ WA: { oil: 100_000 } }),
+      haulRevenueByOriginState: new Map(),
+      freightSupplyUnitsByOriginState: new Map(),
+      demandUnitsByDestState: charges({ WA: { oil: 1_000 } }),
+      unitPriceByDestState: charges({ WA: { iron: 100 } }),
+      sectors: [sector({ stateId: "WA", demandUnitsByCommodity: demand({ oil: 1_000 }) })],
+    });
+    expect(r.chargeBySectorId.get("s1")).toBeCloseTo(100_000);
+  });
+
+  it("puts sector inputs on the sourcing book's calibrated demand basis", () => {
+    const r = apportionFreightBilling({
+      freightChargesByDestState: charges({ WA: { iron: 698_000 } }),
+      haulRevenueByOriginState: new Map(),
+      demandUnitsByDestState: charges({ WA: { iron: 4_500 } }),
+      demandCalibrationByCommodity: demand({ iron: 0.45 }),
+      freightSupplyUnitsByOriginState: new Map(),
+      sectors: [sector({ stateId: "WA", demandUnitsByCommodity: demand({ iron: 2 }) })],
+    });
+    expect(r.chargeBySectorId.get("s1")).toBeCloseTo(139.6);
+    expect(r.unapportionedCharges).toBeCloseTo(697_860.4);
+  });
+
+  it("does not shift missing, invalid or stale demand coverage onto corporate buyers", () => {
+    for (const total of [undefined, 0, -1, NaN, Infinity]) {
+      const r = apportionFreightBilling({
+        freightChargesByDestState: charges({ WA: { vehicles: 698_000 } }),
+        haulRevenueByOriginState: new Map(),
+        demandUnitsByDestState: total == null ? new Map() : charges({ WA: { vehicles: total } }),
+        freightSupplyUnitsByOriginState: new Map(),
+        sectors: [sector({ stateId: "WA", demandUnitsByCommodity: demand({ vehicles: 2 }) })],
+      });
+      expect(r.chargeBySectorId.size).toBe(0);
+      expect(r.unapportionedCharges).toBe(698_000);
+    }
+  });
+
+  it("bounds sector growth against a lagged demand snapshot and preserves the money total", () => {
+    const r = apportionFreightBilling({
+      freightChargesByDestState: charges({ WA: { vehicles: 300 } }),
+      haulRevenueByOriginState: new Map(),
+      demandUnitsByDestState: charges({ WA: { vehicles: 1 } }),
+      freightSupplyUnitsByOriginState: new Map(),
+      sectors: [
+        sector({ sectorId: "a", stateId: "WA", demandUnitsByCommodity: demand({ vehicles: 2 }) }),
+        sector({ sectorId: "b", stateId: "WA", demandUnitsByCommodity: demand({ vehicles: 4 }) }),
+      ],
+    });
+    expect(r.chargeBySectorId.get("a")).toBe(100);
+    expect(r.chargeBySectorId.get("b")).toBe(200);
+    expect(r.unapportionedCharges).toBe(0);
+  });
   it("splits a state's charge proportional to sector demand for the commodity", () => {
     const r = apportionFreightBilling({
       freightChargesByDestState: charges({ "US-NY": { steel: 300 } }),
+      demandUnitsByDestState: charges({ "US-NY": { steel: 30 } }),
+      freightSupplyUnitsByOriginState: new Map(),
       haulRevenueByOriginState: new Map(),
       sectors: [
         sector({ sectorId: "a", demandUnitsByCommodity: demand({ steel: 10 }) }),
@@ -48,6 +151,11 @@ describe("apportionFreightBilling — charges", () => {
     });
     const r = apportionFreightBilling({
       freightChargesByDestState: stateCharges,
+      demandUnitsByDestState: charges({
+        "US-NY": { steel: 12.8, coal: 5.4 },
+        "US-CA": { steel: 2 },
+      }),
+      freightSupplyUnitsByOriginState: new Map(),
       haulRevenueByOriginState: new Map(),
       sectors: [
         sector({ sectorId: "a", demandUnitsByCommodity: demand({ steel: 3.7, coal: 1 }) }),
@@ -71,6 +179,8 @@ describe("apportionFreightBilling — charges", () => {
   it("zero demand: the whole charge lands in the unapportioned remainder", () => {
     const r = apportionFreightBilling({
       freightChargesByDestState: charges({ "US-NY": { steel: 300 } }),
+      demandUnitsByDestState: charges({ "US-NY": { steel: 30 } }),
+      freightSupplyUnitsByOriginState: new Map(),
       haulRevenueByOriginState: new Map(),
       sectors: [
         // In the state, but demands none of the charged commodity.
@@ -89,9 +199,22 @@ describe("apportionFreightBilling — charges", () => {
 });
 
 describe("apportionFreightBilling — haul revenue", () => {
+  it("credits only the corporate share of a network that also has unowned hauliers", () => {
+    const r = apportionFreightBilling({
+      freightChargesByDestState: new Map(),
+      demandUnitsByDestState: new Map(),
+      haulRevenueByOriginState: new Map([["WA", 1_000]]),
+      freightSupplyUnitsByOriginState: new Map([["WA", 100]]),
+      sectors: [sector({ stateId: "WA", freightSupplyUnits: 2 })],
+    });
+    expect(r.creditBySectorId.get("s1")).toBe(20);
+    expect(r.unapportionedHaulRevenue).toBe(980);
+  });
   it("splits a state's haul revenue proportional to freight supply share", () => {
     const r = apportionFreightBilling({
       freightChargesByDestState: new Map(),
+      demandUnitsByDestState: new Map(),
+      freightSupplyUnitsByOriginState: new Map([["US-TX", 90]]),
       haulRevenueByOriginState: new Map([["US-TX", 900]]),
       sectors: [
         sector({ sectorId: "hauler1", stateId: "US-TX", freightSupplyUnits: 60 }),
@@ -116,6 +239,11 @@ describe("apportionFreightBilling — haul revenue", () => {
     ]);
     const r = apportionFreightBilling({
       freightChargesByDestState: new Map(),
+      demandUnitsByDestState: new Map(),
+      freightSupplyUnitsByOriginState: new Map([
+        ["US-TX", 11],
+        ["US-NY", 1],
+      ]),
       haulRevenueByOriginState: haulRevenue,
       sectors: [
         sector({ sectorId: "t1", stateId: "US-TX", freightSupplyUnits: 3.3 }),
@@ -134,6 +262,8 @@ describe("apportionFreightBilling — haul revenue", () => {
   it("zero supply: the whole revenue lands in the unapportioned remainder", () => {
     const r = apportionFreightBilling({
       freightChargesByDestState: new Map(),
+      demandUnitsByDestState: new Map(),
+      freightSupplyUnitsByOriginState: new Map([["US-TX", 90]]),
       haulRevenueByOriginState: new Map([["US-TX", 900]]),
       sectors: [sector({ sectorId: "mill", stateId: "US-TX", freightSupplyUnits: 0 })],
     });
@@ -144,6 +274,8 @@ describe("apportionFreightBilling — haul revenue", () => {
   it("a sector can both owe charges and earn haul revenue", () => {
     const r = apportionFreightBilling({
       freightChargesByDestState: charges({ "US-TX": { steel: 100 } }),
+      demandUnitsByDestState: charges({ "US-TX": { steel: 5 } }),
+      freightSupplyUnitsByOriginState: new Map([["US-TX", 10]]),
       haulRevenueByOriginState: new Map([["US-TX", 50]]),
       sectors: [
         sector({

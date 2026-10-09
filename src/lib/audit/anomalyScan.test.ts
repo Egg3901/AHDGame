@@ -11,6 +11,7 @@ import {
   detectPreElectionFundingSurge,
   detectOffHoursPrivilegedAction,
   runAuditAnomalyScan,
+  anomalyCandidateFilter,
   ANOMALY_SCAN_DEFAULTS,
   SYSTEM_SETTLEMENT_ACTIONS,
   type AnomalyAuditRow,
@@ -25,6 +26,16 @@ const captureException = vi.fn();
 vi.mock("@sentry/nextjs", () => ({
   captureException: (...a: unknown[]) => captureException(...a),
 }));
+
+/** A find() cursor the scan can stream with `for await`. */
+function streamCursor(docs: unknown[] | Error) {
+  return {
+    async *[Symbol.asyncIterator]() {
+      if (docs instanceof Error) throw docs;
+      yield* docs;
+    },
+  };
+}
 
 // ── Fixture helper ─────────────────────────────────────────────────────
 let rowSeq = 0;
@@ -892,7 +903,7 @@ describe("runAuditAnomalyScan", () => {
 
     db.collectionMocks.actionAuditLog = {
       ...db.collection("actionAuditLog"),
-      find: vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue(docs) }),
+      find: vi.fn().mockReturnValue(streamCursor(docs)),
       bulkWrite: vi.fn().mockResolvedValue({ modifiedCount: 4 }),
     } as never;
     // Narrow elections lookup — no upcoming election, so pre-election-only
@@ -943,7 +954,7 @@ describe("runAuditAnomalyScan", () => {
   it("is a no-op when the window has no rows", async () => {
     db.collectionMocks.actionAuditLog = {
       ...db.collection("actionAuditLog"),
-      find: vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue([]) }),
+      find: vi.fn().mockReturnValue(streamCursor([])),
     } as never;
 
     const result = await runAuditAnomalyScan(db as unknown as Db, 100);
@@ -951,36 +962,145 @@ describe("runAuditAnomalyScan", () => {
     expect(result).toBeNull();
   });
 
-  it("projects the transfer identity fields used to pair ledger legs", async () => {
+  it("streams only candidate rows with the transfer identity fields projected", async () => {
     db.collectionMocks.actionAuditLog = {
       ...db.collection("actionAuditLog"),
-      find: vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue([]) }),
+      find: vi.fn().mockReturnValue(streamCursor([])),
     } as never;
 
     await runAuditAnomalyScan(db as unknown as Db, 100);
 
-    expect(vi.mocked(db.collectionMocks.actionAuditLog!.find)).toHaveBeenCalledWith(
-      { turn: { $gte: 95 } },
-      {
-        projection: expect.objectContaining({
-          traceId: 1,
-          seq: 1,
-          "meta.agreementId": 1,
-        }),
-      }
+    const [filter, options] = vi.mocked(db.collectionMocks.actionAuditLog!.find).mock.calls[0];
+    expect(filter).toEqual(anomalyCandidateFilter(95, false));
+    expect(options).toEqual(
+      expect.objectContaining({
+        batchSize: expect.any(Number),
+        projection: expect.objectContaining({ traceId: 1, seq: 1, "meta.agreementId": 1 }),
+      })
     );
+    // Names, refs, net and the rest of meta are never read by a detector.
+    expect(options.projection).not.toHaveProperty("actor");
+    expect(options.projection).not.toHaveProperty("meta");
+    expect(options.projection).not.toHaveProperty("refs");
+  });
+
+  it("counts filtered system money rows into the fan-out exclusion detail", async () => {
+    const docs: ActionAuditRecord[] = Array.from({ length: 5 }, (_, k) => ({
+      _id: new ObjectId(),
+      ts: new Date(Date.UTC(2026, 0, 1, 12, 0, k * 10)),
+      turn: 100,
+      traceId: `f${k}`,
+      seq: 0,
+      source: "api",
+      action: "wire.send",
+      category: "money",
+      actor: { kind: "player", userId: new ObjectId() },
+      subject: { type: "character", id: "A" },
+      counterparty: { type: "character", id: `R${k}` },
+      amount: -500,
+      outcome: "ok",
+      expiresAt: new Date(),
+    }));
+    // Same sender across all five, so it is one fan-out hub.
+    for (const doc of docs) doc.actor.userId = docs[0].actor.userId;
+    const countDocuments = vi.fn().mockResolvedValue(600_000);
+    db.collectionMocks.actionAuditLog = {
+      ...db.collection("actionAuditLog"),
+      find: vi.fn().mockReturnValue(streamCursor(docs)),
+      countDocuments,
+      bulkWrite: vi.fn().mockResolvedValue({ modifiedCount: 5 }),
+    } as never;
+
+    const result = await runAuditAnomalyScan(db as unknown as Db, 100);
+
+    const fan = result?.findings.find((f) => f.type === "wire_fanin_fanout");
+    expect(fan?.detail).toContain("600000 routine or system settlement row(s) excluded");
+    expect(countDocuments).toHaveBeenCalledWith({
+      turn: { $gte: 95 },
+      category: "money",
+      $nor: anomalyCandidateFilter(95, false).$or,
+    });
   });
 
   it("captures to Sentry and rethrows when the underlying query fails", async () => {
     db.collectionMocks.actionAuditLog = {
       ...db.collection("actionAuditLog"),
-      find: vi.fn().mockReturnValue({
-        toArray: vi.fn().mockRejectedValue(new Error("boom")),
-      }),
+      find: vi.fn().mockReturnValue(streamCursor(new Error("boom"))),
     } as never;
 
     await expect(runAuditAnomalyScan(db as unknown as Db, 100)).rejects.toThrow("boom");
     expect(captureException).toHaveBeenCalled();
+  });
+});
+
+// The scan filters in Mongo. These are the rows the filter drops: system
+// actor, no user or character key, not admin, not party funding. Adding any
+// number of them must not change what a detector returns.
+describe("anomalyCandidateFilter", () => {
+  it("drops only rows no detector can act on", () => {
+    const at = (s: number) => new Date(Date.UTC(2026, 0, 1, 3, 0, s));
+    const kept: AnomalyAuditRow[] = [
+      ...Array.from({ length: 9 }, (_, k) =>
+        row({ ts: at(k), action: "vote.cast", category: "governance", actorKey: "u:b" })
+      ),
+      row({ ts: at(20), action: "admin.ban", category: "admin", actorKind: "admin" }),
+      ...Array.from({ length: 5 }, (_, k) =>
+        row({
+          ts: at(30 + k * 10),
+          action: "wire.send",
+          actorKind: "player",
+          actorKey: "u:a",
+          subjectId: "A",
+          counterpartyId: `R${k}`,
+          amount: -500,
+        })
+      ),
+    ];
+    const dropped: AnomalyAuditRow[] = Array.from({ length: 200 }, (_, k) =>
+      row({
+        ts: at(k % 60),
+        action: k % 2 ? "corp.salary" : "money.fund_debit",
+        category: "money",
+        actorKind: "system",
+        actorKey: null,
+        subjectType: "corporation",
+        subjectId: `C${k % 7}`,
+        counterpartyType: "character",
+        counterpartyId: `N${k}`,
+        amount: -1000 * (k + 1),
+      })
+    );
+    const all = [...kept, ...dropped];
+    const ids = (r: { flaggedIds: Set<string> }) => [...r.flaggedIds].sort();
+    expect(ids(detectRapidRepeat(all))).toEqual(ids(detectRapidRepeat(kept)));
+    expect(ids(detectCircularWire(all))).toEqual(ids(detectCircularWire(kept)));
+    expect(ids(detectWireFanInFanOut(all))).toEqual(ids(detectWireFanInFanOut(kept)));
+    expect(detectWireFanInFanOut(all).finding).toEqual(
+      detectWireFanInFanOut(kept, ANOMALY_SCAN_DEFAULTS, {
+        additionalExcludedSettlementRows: dropped.length,
+      }).finding
+    );
+    expect(ids(detectWashTrade(all))).toEqual(ids(detectWashTrade(kept)));
+    expect(ids(detectOffHoursPrivilegedAction(all))).toEqual(
+      ids(detectOffHoursPrivilegedAction(kept))
+    );
+    const surge = { isPreElectionWindow: true, ...ANOMALY_SCAN_DEFAULTS };
+    expect(ids(detectPreElectionFundingSurge(all, surge))).toEqual(
+      ids(detectPreElectionFundingSurge(kept, surge))
+    );
+  });
+
+  it("adds party funding money rows only inside a pre-election window", () => {
+    const outside = anomalyCandidateFilter(95, false).$or as unknown[];
+    const inside = anomalyCandidateFilter(95, true).$or as unknown[];
+    expect(inside).toHaveLength(outside.length + 1);
+    expect(inside.at(-1)).toEqual({
+      category: "money",
+      $or: [
+        { action: { $in: ["party.donate", "party.transfer"] } },
+        { "counterparty.type": "party" },
+      ],
+    });
   });
 });
 
@@ -996,5 +1116,59 @@ describe("ANOMALY_SCAN_DEFAULTS", () => {
     expect(ANOMALY_SCAN_DEFAULTS.offHoursEndUtcHour).not.toBe(
       ANOMALY_SCAN_DEFAULTS.offHoursStartUtcHour
     );
+  });
+});
+
+describe("circular wire on related-party supply agreements", () => {
+  const base = Date.parse("2026-10-01T00:00:00Z");
+  const settle = (
+    offset: number,
+    turn: number,
+    agreementId: string,
+    payer: string,
+    payee: string
+  ) =>
+    row({
+      ts: new Date(base + offset),
+      turn,
+      actorKind: "system",
+      actorKey: null,
+      action: "corp.supply_agreement",
+      category: "money",
+      subjectId: payer,
+      counterpartyId: payee,
+      agreementId,
+      amount: -500,
+    });
+  // Premium A->B on turn 1, damages B->A on turn 2: the ring shape.
+  const rows = [settle(0, 1, "ag-1", "A", "B"), settle(60_000, 2, "ag-1", "B", "A")];
+
+  it("keeps ordinary supply settlement exempt", () => {
+    expect(detectCircularWire(rows).flaggedIds.size).toBe(0);
+  });
+
+  it("flags the round trip once the agreement is known to be related", () => {
+    const { flaggedIds, finding } = detectCircularWire(rows, {
+      relatedAgreementIds: new Set(["ag-1"]),
+    });
+    expect(flaggedIds.size).toBe(2);
+    expect(finding?.type).toBe("circular_wire");
+  });
+
+  it("does not extend the exemption lift to other agreements or other actions", () => {
+    expect(
+      detectCircularWire(rows, { relatedAgreementIds: new Set(["ag-2"]) }).flaggedIds.size
+    ).toBe(0);
+    const dividends = rows.map((r) => ({ ...r, action: "corp.dividends" }));
+    expect(
+      detectCircularWire(dividends, { relatedAgreementIds: new Set(["ag-1"]) }).flaggedIds.size
+    ).toBe(0);
+  });
+
+  it("pulls related settlement rows into the candidate filter only when some exist", () => {
+    const none = anomalyCandidateFilter(95, false).$or as unknown[];
+    const some = anomalyCandidateFilter(95, false, new Set(["ag-1"])).$or as unknown[];
+    expect(some.length).toBe(none.length + 1);
+    expect(some[some.length - 1]).toMatchObject({ action: "corp.supply_agreement" });
   });
 });

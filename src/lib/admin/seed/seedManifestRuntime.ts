@@ -348,6 +348,12 @@ export const RUNTIME: CollectionEntry[] = [
       "Media product slates and their paid development state belong to the current world. Reset with their corporations and sectors.",
   },
   {
+    name: "productVentures",
+    category: "runtime",
+    notes:
+      "Funded product ventures (development, released boost windows). Reset with their corporations; per-turn debit receipts are embedded on corporations and wiped with those rows.",
+  },
+  {
     name: "pendingNationalizations",
     category: "runtime",
     notes: "Legislative takings in their notice window; resolved/cleared in the corp turn.",
@@ -387,6 +393,7 @@ export const RUNTIME: CollectionEntry[] = [
   { name: "financialCrisisFiscalActions", category: "runtime" },
   { name: "financialCrisisCreditHistory", category: "runtime" },
   { name: "bankMoneyMoves", category: "runtime" },
+  { name: "sovereignCouponClaims", category: "runtime" },
   { name: "bankLiquidityOperations", category: "runtime" },
   { name: "monetaryOperationCommands", category: "runtime" },
   { name: "reservePoolTransferCommands", category: "runtime" },
@@ -605,6 +612,7 @@ export const RUNTIME: CollectionEntry[] = [
   { name: "newsPosts", category: "runtime" },
   { name: "newsReactions", category: "runtime" },
   { name: "campaigns", category: "runtime" },
+  { name: "campaignFieldOffices", category: "runtime" },
   { name: "notifications", category: "runtime" },
   { name: "eventInstances", category: "runtime" },
   { name: "eventCooldownLedger", category: "runtime" },
@@ -1047,6 +1055,11 @@ export const RUNTIME: CollectionEntry[] = [
     name: "mergerReviews",
     category: "runtime",
     notes: "Merger decisions reference world-specific corporations.",
+  },
+  {
+    name: "corporationExits",
+    category: "runtime",
+    notes: "Exit records reference world-specific corporations that were deleted.",
   },
   {
     name: "indexListingPetitions",

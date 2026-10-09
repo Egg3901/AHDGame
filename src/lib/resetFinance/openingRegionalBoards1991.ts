@@ -10,7 +10,7 @@ export function buildOpeningRegionalBoards1991(
   sourceTurn: number
 ): ResetRegionalOpeningBoard[] {
   const ownership = openingRegionalFiscalOwnership1991();
-  const boards = (["US", "UK", "JP"] as const).flatMap((countryId) =>
+  const boards = (["US", "UK", "JP", "IE"] as const).flatMap((countryId) =>
     ownership[countryId].regions.map((region) => ({
       _id: `${countryId}:${region.regionId}`,
       worldId,

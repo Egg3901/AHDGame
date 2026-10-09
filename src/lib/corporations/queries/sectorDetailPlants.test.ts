@@ -154,6 +154,20 @@ describe("buildSectorPlantsSection", () => {
     expect(s.idleCauses).toEqual([{ cause: "demand", units: 900 }]);
   });
 
+  it("calls a sold-out throttled plant ramping, not demand limited (ticket 1393)", () => {
+    const s = buildSectorPlantsSection({
+      eraUnitScale: 1,
+      ...BASE_ARGS,
+      sector: {
+        ...sectorFixture({ capitalStock: 1_000, producedUnits: 336, soldUnits: 336 }),
+        demandThrottleFactor: 0.336,
+      } as CorporateSector,
+    });
+
+    expect(s.fillRate).toBe(1);
+    expect(s.idleCauses.map((c) => c.cause)).toEqual(["ramping"]);
+  });
+
   it("reports a mothballed sector's whole capacity as idle under one cause", () => {
     const s = buildSectorPlantsSection({
       eraUnitScale: 1,
@@ -434,6 +448,26 @@ describe("buildSectorPlantsSection", () => {
 });
 
 describe("sector investment quote context", () => {
+  it("keeps the measured sizing limit distinct from the weighted expansion signal", () => {
+    const result = buildSectorPlantsSection({
+      ...BASE_ARGS,
+      eraUnitScale: 1,
+      sector: sectorFixture(),
+      demandGapUnits: 10000,
+      measuredDemandGapUnits: 120,
+    });
+    expect(result.demandGapUnits).toBe(10000);
+    expect(result.measuredDemandGapUnits).toBe(120);
+    const idle = buildSectorPlantsSection({
+      ...BASE_ARGS,
+      eraUnitScale: 1,
+      sector: sectorFixture({ demandThrottleFactor: 0.5 }),
+      demandGapUnits: 10000,
+      measuredDemandGapUnits: 120,
+    });
+    expect(idle.measuredDemandGapUnits).toBe(0);
+  });
+
   it("quotes cold upkeep using the same capped maintenance basis as the turn", () => {
     const result = buildSectorPlantsSection({
       ...BASE_ARGS,

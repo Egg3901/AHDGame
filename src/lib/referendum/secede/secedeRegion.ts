@@ -36,6 +36,7 @@ import { expandToSubRegions } from "./expandToSubRegions";
 import { promoteEconomyToNational } from "./promoteEconomyToNational";
 import { splitParties } from "./splitParties";
 import { carryOverOfficials } from "./carryOverOfficials";
+import { promoteResetV2ForIndependence } from "./promoteResetV2";
 
 // Spawn the full devolved election slate at secession — chamber + regional
 // governors + regional councils. The chamber alone is not enough: the
@@ -77,7 +78,10 @@ export async function secedeRegion(db: Db, args: SecedeRegionArgs): Promise<Sece
   const capital = await db
     .collection<State>("states")
     .findOne({ _id: CAPITAL_SUBREGION[toCountryId] });
-  if (capital) return { ok: true, skipped: "already-seceded" };
+  if (capital) {
+    await promoteResetV2ForIndependence(db, toCountryId);
+    return { ok: true, skipped: "already-seceded" };
+  }
   if (!aggregate) return { ok: false, skipped: "region-not-found" };
 
   // 1. Register the country at runtime.
@@ -86,6 +90,7 @@ export async function secedeRegion(db: Db, args: SecedeRegionArgs): Promise<Sece
   // 2-3. Stand up the data + economy.
   const expanded = await expandToSubRegions(db, toCountryId);
   await promoteEconomyToNational(db, fromCountryId, toCountryId);
+  await promoteResetV2ForIndependence(db, toCountryId);
 
   // 4-5. Government: parties then officials (officials consume the split idMap).
   const split = await splitParties(db, regionId, fromCountryId, toCountryId);

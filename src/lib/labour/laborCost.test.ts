@@ -308,6 +308,32 @@ describe("getSectorLaborShare", () => {
     );
   });
 
+  it("bills service sectors at roughly 35 to 45% of nameplate revenue in 1991", () => {
+    // Realized revenue runs above nameplate (price realization) and wage
+    // multipliers sit below 1 with automation, so realized payroll lands near
+    // 30 to 40% of revenue.
+    for (const type of ["technology", "financial", "healthcare", "real_estate"]) {
+      const share = getSectorLaborShare(type, 1991);
+      expect(share).toBeGreaterThanOrEqual(0.35);
+      expect(share).toBeLessThanOrEqual(0.45);
+    }
+    // Goods sectors are untouched.
+    expect(getSectorLaborShare("manufacturing", 1991)).toBeCloseTo(0.18 * 1.1, 9);
+    expect(getSectorLaborShare("retail", 1991)).toBeCloseTo(0.22 * 1.1, 9);
+  });
+
+  it("charges a technology sector a larger payroll than before at the same revenue", () => {
+    const share = getSectorLaborShare("technology", 1991);
+    const { laborCost } = computeSectorLaborCost({
+      hourlyRevenue: 1000,
+      grossMaintenance: 1000,
+      laborShare0: share,
+      wageMultiplier: 0.8,
+    });
+    expect(laborCost).toBeCloseTo(1000 * 0.4 * 1.1 * 0.8, 6);
+    expect(laborCost / 1000).toBeGreaterThan(0.3 * 1.1 * 0.8 + 0.05);
+  });
+
   it("falls back to the default share for unknown sector types", () => {
     expect(getSectorLaborShare("nonexistent_sector", 2019)).toBeCloseTo(
       LABOUR_DEFAULT_LABOR_SHARE,

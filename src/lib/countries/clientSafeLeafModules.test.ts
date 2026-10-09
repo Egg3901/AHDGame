@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync, readdirSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { createHash } from "node:crypto";
+import { dirname, join, relative, resolve } from "node:path";
+import { CONVERTED } from "./singleCountryData";
 
 /**
  * Leaf modules that client-reachable registries read must stay weightless.
@@ -39,17 +41,20 @@ const CLIENT_SAFE_MODULES = [
  * that way until `COUNTRY_COMMAND_FLAVOR` -- read by `SituationBoardClient` --
  * started importing all 29 `identity.ts` modules.
  */
+const COUNTRY_DIRS = readdirSync("src/lib/countries")
+  .filter((cc) => statSync(join("src/lib/countries", cc)).isDirectory())
+  .filter((cc) => /^[a-z]{2,3}$/.test(cc));
+
 const CLIENT_SAFE = [
-  ...readdirSync("src/lib/countries")
-    .filter((cc) => statSync(join("src/lib/countries", cc)).isDirectory())
-    .flatMap((cc) => CLIENT_SAFE_MODULES.map((m) => `src/lib/countries/${cc}/${m}`))
-    .filter((file) => {
-      try {
-        return statSync(file).isFile();
-      } catch {
-        return false;
-      }
-    }),
+  ...COUNTRY_DIRS.flatMap((cc) =>
+    CLIENT_SAFE_MODULES.map((m) => `src/lib/countries/${cc}/${m}`)
+  ).filter((file) => {
+    try {
+      return statSync(file).isFile();
+    } catch {
+      return false;
+    }
+  }),
   "src/lib/countries/ru/russian1991Config.ts",
 ];
 
@@ -68,8 +73,66 @@ const CLIENT_SAFE = [
  */
 const INHERENTLY_HEAVY = ["src/lib/seeds/regionCensusData.ts"];
 
+/**
+ * Exact boundary inherited by the transitive graph walk when it was added.
+ * The list is hashed so a new edge cannot hide inside a broad allowlist, while
+ * keeping 200-plus historical source/target pairs out of this test file.
+ */
+const LEGACY_TRANSITIVE_COUNTRY_BOUNDARY = {
+  count: 205,
+  sha256: "b679a1aa1ee7e2ac28969af4791cdb55532b66dffdfa14ee86421fe3d085be6e",
+} as const;
+
 /** `import ... from` that is not `import type ... from`, and not a bare side-effect import. */
 const VALUE_IMPORT = /^import\s+(?!type\s)[^;]*?from\s+["'][^"']+["']/gm;
+
+const STATIC_MODULE_REFERENCE =
+  /(?:^|\n)\s*(?:(?:import|export)\s+(?!type\b)[^;]*?\sfrom\s+["']([^"']+)["']|import\s+["']([^"']+)["'])/g;
+const DYNAMIC_MODULE_REFERENCE = /\bimport\(\s*["']([^"']+)["']\s*\)/g;
+
+function sourceFiles(dir: string): string[] {
+  let entries: string[];
+  try {
+    entries = readdirSync(dir);
+  } catch {
+    return [];
+  }
+  return entries.flatMap((entry) => {
+    const full = join(dir, entry);
+    if (statSync(full).isDirectory()) return sourceFiles(full);
+    return /\.tsx?$/.test(entry) && !entry.includes(".test.") ? [full] : [];
+  });
+}
+
+function moduleSpecifiers(source: string): string[] {
+  const specs: string[] = [];
+  for (const match of source.matchAll(STATIC_MODULE_REFERENCE)) {
+    specs.push(match[1] ?? match[2]);
+  }
+  for (const match of source.matchAll(DYNAMIC_MODULE_REFERENCE)) specs.push(match[1]);
+  return specs;
+}
+
+function resolveLocalModule(fromFile: string, specifier: string): string | null {
+  let base: string;
+  if (specifier.startsWith("@/")) base = join("src", specifier.slice(2));
+  else if (specifier.startsWith(".")) base = resolve(dirname(fromFile), specifier);
+  else return null;
+
+  const candidates = /\.tsx?$/.test(base)
+    ? [base]
+    : [`${base}.ts`, `${base}.tsx`, join(base, "index.ts"), join(base, "index.tsx")];
+  for (const candidate of candidates) {
+    try {
+      if (statSync(candidate).isFile()) {
+        return relative(resolve("."), resolve(candidate)).split("\\").join("/");
+      }
+    } catch {
+      // Try the next supported TypeScript module shape.
+    }
+  }
+  return null;
+}
 
 describe("client-reachable country leaf modules carry no runtime imports", () => {
   it.each(CLIENT_SAFE)("%s has no value imports", (file) => {
@@ -91,9 +154,17 @@ describe("client-reachable country leaf modules carry no runtime imports", () =>
    * the real assertion pass while checking nothing.
    */
   it("checks every listed module, and every listed module exists", () => {
-    // 29 countries x 4 always-present modules; the floor catches a discovery
-    // walk that silently returns nothing.
-    expect(CLIENT_SAFE.length).toBeGreaterThanOrEqual(29 * 4);
+    expect([...COUNTRY_DIRS].sort()).toEqual(CONVERTED.map((cc) => cc.toLowerCase()).sort());
+    for (const cc of COUNTRY_DIRS) {
+      for (const leafModule of [
+        "geographyFacts.ts",
+        "institutionsFacts.ts",
+        "economy.ts",
+        "identity.ts",
+      ]) {
+        expect(CLIENT_SAFE).toContain(`src/lib/countries/${cc}/${leafModule}`);
+      }
+    }
     for (const file of CLIENT_SAFE) {
       expect(statSync(file).isFile(), `${file} is missing`).toBe(true);
     }
@@ -105,75 +176,52 @@ describe("client-reachable country leaf modules carry no runtime imports", () =>
    * module. This finds that case by walking the registries that client code
    * imports and checking what they pull out of the folder.
    */
-  it("finds no client-reachable registry importing a heavy folder module", () => {
+  it("does not change the exact legacy transitive heavy-module boundary", () => {
     const CLIENT_ROOTS = ["src/app", "src/components", "src/hooks", "src/contexts"];
-    const walk = (dir: string): string[] => {
-      let entries: string[];
-      try {
-        entries = readdirSync(dir);
-      } catch {
-        return [];
-      }
-      return entries.flatMap((entry) => {
-        const full = join(dir, entry);
-        if (statSync(full).isDirectory()) return walk(full);
-        return /\.tsx?$/.test(entry) && !entry.includes(".test.") ? [full] : [];
-      });
-    };
+    const clientEntries = CLIENT_ROOTS.flatMap(sourceFiles)
+      .map((file) => file.split("\\").join("/"))
+      .filter((file) => /^\s*["']use client["']/.test(readFileSync(file, "utf8")));
 
-    const clientSources = CLIENT_ROOTS.flatMap(walk)
-      .map((file) => readFileSync(file, "utf8"))
-      .filter((source) => /^\s*["']use client["']/.test(source));
-
-    // Every `@/lib/...` module a client component imports directly.
+    // Walk the complete local runtime-import graph from every client entry.
+    // Stopping after one hop missed client -> helper -> registry -> folder.
     const reachable = new Set<string>();
-    for (const source of clientSources) {
-      for (const [, spec] of source.matchAll(/from\s+["'](@\/lib\/[^"']+)["']/g)) {
-        reachable.add(`src/${spec.slice("@/".length)}.ts`);
-      }
-    }
-
-    const offenders: string[] = [];
-    for (const file of reachable) {
+    const offenders = new Set<string>();
+    const pending = [...clientEntries];
+    while (pending.length > 0) {
+      const file = pending.pop();
+      if (!file || reachable.has(file)) continue;
+      reachable.add(file);
       if (INHERENTLY_HEAVY.includes(file)) continue;
-      let source: string;
-      try {
-        source = readFileSync(file, "utf8");
-      } catch {
-        continue; // .tsx, a directory index, or a path we do not resolve -- not ours to police
-      }
-      // ⚠️ ONE capture group, deliberately. An earlier draft wrapped the whole
-      // statement in a second group and destructured `[stmt, spec]`, which
-      // binds `spec` to the STATEMENT rather than the path. Every lookup then
-      // threw, hit the `catch` below, and this assertion silently checked
-      // nothing while reporting green. Mutation-testing the guard found it;
-      // reading it did not.
-      for (const match of source.matchAll(
-        /(?:^|\n)import\s+(?!type\s)[^;]*?from\s+["'](@\/lib\/countries\/[a-z]{2,3}\/[^"']+)["']/g
-      )) {
-        const stmt = match[0];
-        const spec = match[1];
-        const target = `src/${spec.slice("@/".length)}.ts`;
-        if (CLIENT_SAFE.includes(target)) continue;
-        let targetSource: string;
-        try {
-          targetSource = readFileSync(target, "utf8");
-        } catch {
+      const source = readFileSync(file, "utf8");
+      for (const specifier of moduleSpecifiers(source)) {
+        const target = resolveLocalModule(file, specifier);
+        if (!target) continue;
+        if (/^src\/lib\/countries\/[a-z]{2,3}\//.test(target)) {
+          // Inspect the boundary edge, then stop. Once a heavy country module
+          // is entered, reporting every descendant obscures the registry that
+          // actually pulled it into the client graph.
+          if (!CLIENT_SAFE.includes(target)) {
+            const heavy = (readFileSync(target, "utf8").match(VALUE_IMPORT) ?? []).length;
+            if (heavy > 0) offenders.add(`${file}\n    -> ${target} (${heavy} value imports)`);
+          }
           continue;
         }
-        const heavy = (targetSource.match(VALUE_IMPORT) ?? []).length;
-        if (heavy > 0) {
-          offenders.push(`${file}\n    -> ${target} (${heavy} value imports)\n    ${stmt.trim()}`);
-        }
+        if (!reachable.has(target)) pending.push(target);
       }
     }
 
+    const offenderList = [...offenders].sort();
+    const boundary = {
+      count: offenderList.length,
+      sha256: createHash("sha256").update(offenderList.join("\n")).digest("hex"),
+    };
+
     expect(
-      offenders,
-      `\n${offenders.length} client-reachable registr(y/ies) forward to a heavy folder module:\n\n` +
-        offenders.map((o) => `  ${o}`).join("\n\n") +
-        `\n\nEither move the value to a sibling module with no value imports and\n` +
-        `add it to CLIENT_SAFE, or stop the client from reaching this registry.\n`
-    ).toEqual([]);
+      boundary,
+      `\nThe client-reachable heavy country-module boundary changed:\n\n` +
+        offenderList.map((o) => `  ${o}`).join("\n\n") +
+        `\n\nIf an edge was removed, update the exact baseline. If one was added,\n` +
+        `move the value to a client-safe leaf or stop the client from reaching it.\n`
+    ).toEqual(LEGACY_TRANSITIVE_COUNTRY_BOUNDARY);
   });
 });

@@ -2,20 +2,57 @@ import { describe, expect, it, vi } from "vitest";
 import { ObjectId, type Db } from "mongodb";
 import { createMockDb } from "@/lib/test-utils/mockDb";
 import {
+  calculateNppCeiling,
   calculatePartyNppCapacity,
   getPartyNppCapacity,
   NPP_ACTIVE_MEMBER_MIN_ACTIONS,
-  PARTY_NPP_HARD_CAP,
   partyNppCapacityError,
 } from "./partyCapacity";
 
 describe("party NPP capacity", () => {
-  it("allows five NPPs per active member and stops at 25", () => {
+  it("gives five NPPs per member for small parties, then tapers with no ceiling", () => {
     expect(calculatePartyNppCapacity(0)).toBe(0);
     expect(calculatePartyNppCapacity(1)).toBe(5);
     expect(calculatePartyNppCapacity(3)).toBe(15);
-    expect(calculatePartyNppCapacity(5)).toBe(PARTY_NPP_HARD_CAP);
-    expect(calculatePartyNppCapacity(20)).toBe(PARTY_NPP_HARD_CAP);
+    expect(calculatePartyNppCapacity(5)).toBe(25);
+    expect(calculatePartyNppCapacity(6)).toBe(29);
+    expect(calculatePartyNppCapacity(10)).toBe(45);
+    expect(calculatePartyNppCapacity(20)).toBe(75);
+    expect(calculatePartyNppCapacity(40)).toBe(115);
+  });
+
+  it("never lets an extra active member lower or freeze capacity", () => {
+    for (let n = 1; n <= 200; n++) {
+      const gain = calculatePartyNppCapacity(n) - calculatePartyNppCapacity(n - 1);
+      expect(gain).toBeGreaterThanOrEqual(2);
+      expect(gain).toBeLessThanOrEqual(5);
+    }
+  });
+
+  it("scales the ceiling at 3 per region with a floor of 25", () => {
+    expect(calculateNppCeiling(0)).toBe(25);
+    expect(calculateNppCeiling(5)).toBe(25);
+    expect(calculateNppCeiling(12)).toBe(36);
+    expect(calculateNppCeiling(24)).toBe(72);
+    expect(calculateNppCeiling(51)).toBe(153);
+  });
+
+  it("clamps member capacity to the country ceiling", () => {
+    expect(calculatePartyNppCapacity(40, calculateNppCeiling(12))).toBe(36);
+    expect(calculatePartyNppCapacity(40, calculateNppCeiling(51))).toBe(115);
+    expect(calculatePartyNppCapacity(3, calculateNppCeiling(5))).toBe(15);
+    expect(calculatePartyNppCapacity(100, calculateNppCeiling(5))).toBe(25);
+  });
+
+  it("names the country ceiling when capacity is reached", () => {
+    expect(
+      partyNppCapacityError({ activeMemberCount: 40, maxNpps: 36, ceiling: 36 }, 36)
+    ).toContain("up to 36 in this country");
+  });
+
+  it("treats negative or fractional member counts safely", () => {
+    expect(calculatePartyNppCapacity(-3)).toBe(0);
+    expect(calculatePartyNppCapacity(5.9)).toBe(25);
   });
 
   it("counts only non-banned members with two recent meaningful actions", async () => {
@@ -44,10 +81,13 @@ describe("party NPP capacity", () => {
     });
 
     const now = new Date("2026-09-12T12:00:00Z");
+    db.collection("states").countDocuments.mockResolvedValue(51);
     await expect(getPartyNppCapacity(db as unknown as Db, "US", "10", now)).resolves.toEqual({
       activeMemberCount: 1,
       maxNpps: 5,
+      ceiling: 153,
     });
+    expect(db.collectionMocks.states.countDocuments).toHaveBeenCalledWith({ countryId: "US" });
 
     expect(db.collectionMocks.activityLog.aggregate).toHaveBeenCalledWith(
       expect.arrayContaining([
@@ -64,10 +104,12 @@ describe("party NPP capacity", () => {
   });
 
   it("explains when a party has reached its capacity without removing existing NPPs", () => {
-    expect(partyNppCapacityError({ activeMemberCount: 1, maxNpps: 5 }, 4)).toBeNull();
-    expect(partyNppCapacityError({ activeMemberCount: 1, maxNpps: 5 }, 5)).toContain(
+    expect(partyNppCapacityError({ activeMemberCount: 1, maxNpps: 5, ceiling: 25 }, 4)).toBeNull();
+    expect(partyNppCapacityError({ activeMemberCount: 1, maxNpps: 5, ceiling: 25 }, 5)).toContain(
       "capacity reached"
     );
-    expect(partyNppCapacityError({ activeMemberCount: 1, maxNpps: 5 }, 9)).toContain("9/5");
+    expect(partyNppCapacityError({ activeMemberCount: 1, maxNpps: 5, ceiling: 25 }, 9)).toContain(
+      "9/5"
+    );
   });
 });

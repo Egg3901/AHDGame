@@ -2,6 +2,19 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
+/** Bound best-effort image uploads so a hung request never prevents navigation. */
+export function settleWithin(work: Promise<unknown>, ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(resolve, ms);
+    void work
+      .catch(() => {})
+      .then(() => {
+        clearTimeout(timer);
+        resolve();
+      });
+  });
+}
+
 /** Mirrors the server-side guards on the avatar / profile-header upload routes. */
 export const ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
 

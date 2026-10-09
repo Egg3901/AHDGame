@@ -75,3 +75,45 @@
     animation: none;
   }
 }
+
+/*
+ * Election night: the outline that flashes around a state when it is called.
+ * Replays whenever the element is remounted under a new key.
+ */
+@keyframes ahdcallpulse {
+  0% {
+    stroke-opacity: 1;
+    stroke-width: 5px;
+  }
+  100% {
+    stroke-opacity: 0;
+    stroke-width: 1px;
+  }
+}
+
+.callPulse {
+  animation: ahdcallpulse 2.4s ease-out 2;
+  animation-fill-mode: forwards;
+}
+
+@keyframes ahdalertin {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.alertIn {
+  animation: ahdalertin 0.28s ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .callPulse,
+  .alertIn {
+    animation: none;
+  }
+}

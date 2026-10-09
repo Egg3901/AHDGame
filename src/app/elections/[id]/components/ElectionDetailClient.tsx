@@ -2,6 +2,7 @@
 
 import { BgFoundingConstituencyPicker } from "./BgFoundingConstituencyPicker";
 import { Hu1991ConstituencyPicker } from "./Hu1991ConstituencyPicker";
+import Link from "next/link";
 import React, { useState, useEffect, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useToast } from "@/contexts/ToastContext";
@@ -26,15 +27,20 @@ import type { ElectionDetail } from "./ElectionDetailTypes";
 import BackButton from "@/components/BackButton";
 import { PrimaryBlendView } from "../blend/PrimaryBlendView";
 import { GeneralBlendView } from "../blend/GeneralBlendView";
+import { presidentialTitle } from "../blend/PresidentialStage";
+import { presidentialResultsLive } from "../blend/liveState";
 import { ResultsBlendView } from "../blend/ResultsBlendView";
 import type { ElectionResultsResponse } from "@/lib/elections/liveResults/types";
 import { BLEND } from "@/components/blend/tokens";
-import { BlendScope } from "@/components/blend/BlendScope";
+import { NightBroadcast } from "../night/NightBroadcast";
+import { useNightWatch } from "../night/useNightBroadcast";
+import { isNightWindow } from "../night/nightModel";
 import { buildWithdrawalConfirmMessage } from "@/lib/elections/withdrawalWarning";
 import { captureProductEvent } from "@/lib/analytics/capture";
 import { getStoredConsent } from "@/components/CookieConsent";
 import { huDistrictIds } from "@/lib/countries/hu/rules/constituencies2014";
 import { apiErrorText } from "@/lib/errors/catalog";
+import { useConfirmDialog } from "@/hooks/useConfirmDialog";
 
 interface ElectionDetailClientProps {
   id: string;
@@ -48,6 +54,7 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
   const searchParams = useSearchParams();
   const cycle = searchParams.get("cycle");
   const { showToast } = useToast();
+  const { confirm: confirmDialog, dialog: confirmDialogNode } = useConfirmDialog();
 
   const [election, setElection] = useState<ElectionDetail | null>(initialElection);
   const [wire, setWire] = useState<string[]>([]);
@@ -69,6 +76,15 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
     startingYear: larpBaseYear,
     preset: turnStatus?.preset ?? DEFAULT_CYCLE_ANCHOR_CONTEXT.preset,
   };
+
+  // US presidential final hour: from the last turn interval the page watches
+  // the results payload and hands the whole screen to the election-night
+  // broadcast while `night` is present. `pending` holds the normal screen back
+  // until the first payload lands, so no pre-night projection flashes.
+  const nightWatch = useNightWatch(
+    election?.id ?? null,
+    election != null && isNightWindow(election)
+  );
 
   const fetchElection = useCallback(async () => {
     try {
@@ -311,7 +327,14 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
         return;
       }
     }
-    if (!confirm("Enter this race? This will register your character as a candidate.")) return;
+    if (
+      !(await confirmDialog({
+        title: "Enter this race?",
+        message: "This will register your character as a candidate.",
+        confirmLabel: "Enter race",
+      }))
+    )
+      return;
     setActionLoading(true);
     try {
       const res = await fetch(`/api/elections/${id}/enter`, {
@@ -365,7 +388,15 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
       : election.isEnded
         ? "unknown"
         : "general";
-    if (!confirm(buildWithdrawalConfirmMessage(phase))) return;
+    if (
+      !(await confirmDialog({
+        title: "Confirm withdrawal",
+        message: buildWithdrawalConfirmMessage(phase),
+        confirmLabel: "Withdraw",
+        destructive: true,
+      }))
+    )
+      return;
     setActionLoading(true);
     try {
       const res = await fetch(`/api/elections/${id}/withdraw`, {
@@ -437,23 +468,115 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
   // without the field fall back to 1.
   const advancingCount = election.primaryAdvanceCount ?? 1;
 
-  // Previous/Next for the three Blend screens below.
-  //
-  // Each of them is an early return that bypasses the legacy layout at the
-  // bottom of this file, which is the only place ElectionNavigation was ever
-  // rendered. That is how presidential races lost their history: the buttons
-  // went with the rebuild, and /elections lists only upcoming and active races,
-  // so a concluded cycle had no route in at all.
-  //
-  // Toned for the dark Blend page rather than reusing the light card styling
-  // the legacy layout gives it.
-  const blendNav = (
-    <div className="mx-auto max-w-6xl px-4 pt-4 sm:px-6" style={{ color: BLEND.ink }}>
-      <ElectionNavigation election={election} />
+  const currentResults = results?.election.id === election.id ? results : null;
+
+  // The presidential stage's left rail opens with the cycle navigation, the
+  // reader's own action on the race, and the two guides. These used to sit in
+  // the old page header below the stage, which the desktop no longer renders.
+  const stageRailTop = (
+    <div>
+      <ElectionNavigation election={election} showLiveLink={presidentialResultsLive(election)} />
+      {canEnter &&
+        (election.bulgarianFoundingRound?.round === 1 ||
+          Boolean(election.bulgarianFoundingRound?.newNominationDistrictIds?.length)) && (
+          <BgFoundingConstituencyPicker
+            allowedDistrictIds={election.bulgarianFoundingRound?.newNominationDistrictIds}
+            regionId={election.state}
+            value={huDistrictId}
+            onChange={setHuDistrictId}
+          />
+        )}
+      {canEnter && election.hungarianAssemblyRound?.round === 1 && (
+        <Hu1991ConstituencyPicker
+          allowedDistrictIds={election.hungarianAssemblyRound?.vacancyDistrictIds}
+          regionId={election.state}
+          value={huDistrictId}
+          onChange={setHuDistrictId}
+        />
+      )}
+      {election.myCharId && !localIsEnded && (canEnter || canWithdraw) ? (
+        <div className="mb-3 flex gap-2">
+          {canEnter && (
+            <button
+              onClick={handleEnter}
+              disabled={actionLoading}
+              className="flex-1 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-primary/90 disabled:opacity-50"
+            >
+              {actionLoading ? "…" : "Enter race"}
+            </button>
+          )}
+          {canWithdraw && (
+            <button
+              onClick={handleWithdraw}
+              disabled={actionLoading}
+              className="flex-1 rounded-lg border border-error/50 bg-error/10 px-4 py-2 text-sm font-semibold text-error transition-colors hover:bg-error/20 disabled:opacity-50"
+            >
+              {actionLoading ? "…" : "Withdraw"}
+            </button>
+          )}
+        </div>
+      ) : null}
+      <p className="mb-1 text-xs text-muted">
+        <Link href="/wiki/reference-offices" className="text-primary hover:underline">
+          What the presidency can do
+        </Link>
+        {" · "}
+        <Link href="/guides/running-for-office" className="text-primary hover:underline">
+          How to run for president
+        </Link>
+      </p>
     </div>
   );
 
-  const currentResults = results?.election.id === election.id ? results : null;
+  // Below the stage only what the stage does not already show: the admin
+  // tools, for admins. The old "Also on this race" block (the old header, a
+  // second map, the trends, the schedule, a second results table) repeated the
+  // stage and is gone.
+  const desktopTail = election.isAdmin ? (
+    <div className="mx-auto max-w-7xl px-4 pb-10 sm:px-6 lg:px-8">
+      <AdminSection
+        electionId={id}
+        electionType={election.electionType}
+        isAdmin={election.isAdmin}
+        adminOpen={adminOpen}
+        localInPrimary={localInPrimary}
+        localIsEnded={localIsEnded}
+        candidates={election.allCandidates}
+        onToggleAdmin={() => setAdminOpen((o) => !o)}
+        onSuccess={fetchElection}
+      />
+    </div>
+  ) : null;
+
+  // The primary's campaign tooling is not on the stage anywhere, so it stays
+  // below the field.
+  const primaryCampaignTools =
+    election.countryId === "US" ? (
+      <div className="mx-auto max-w-7xl px-4 pb-12 sm:px-6 lg:px-8">
+        {!!election.myCharId && (
+          <section id="state-org" className="mt-6 scroll-mt-6">
+            <StateOrganizationTab showHubLink />
+          </section>
+        )}
+        <CampaignsListPanel electionId={id} />
+        {!!election.myCharId && <CampaignManagerTab electionId={id} />}
+      </div>
+    ) : null;
+
+  if (nightWatch.pending) return <ElectionDetailSkeleton />;
+  if (nightWatch.hold.show && nightWatch.data) {
+    return (
+      <div className="min-h-screen" style={{ background: BLEND.page, color: BLEND.ink }}>
+        {confirmDialogNode}
+        <NightBroadcast
+          data={nightWatch.data}
+          contingent={{ result: election.generalVotes?.contingentResult }}
+          concludedHref={`/elections/${election.id}`}
+          onContinue={nightWatch.hold.dismiss}
+        />
+      </div>
+    );
+  }
 
   // Concluded presidential race: the same Blend results screen the live
   // dashboard uses, chipped "Concluded". Falls through to the existing view
@@ -461,31 +584,16 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
   if (election.electionType === "president" && localIsEnded && currentResults) {
     return (
       <div className="min-h-screen" style={{ background: BLEND.page, color: BLEND.ink }}>
-        {blendNav}
-        <ResultsBlendView data={currentResults} route="concluded" />
+        {confirmDialogNode}
+        <ResultsBlendView
+          data={currentResults}
+          route="concluded"
+          election={election}
+          stageTitle={presidentialTitle(electionYear)}
+          stageNav={stageRailTop}
+        />
 
-        <BlendScope title="Also on this race">
-          <GeneralPhaseView
-            election={election}
-            electionId={id}
-            localInPrimary={localInPrimary}
-            localIsEnded={localIsEnded}
-            amInRace={amInRace}
-            onSuccess={fetchElection}
-          />
-
-          <AdminSection
-            electionId={id}
-            electionType={election.electionType}
-            isAdmin={election.isAdmin}
-            adminOpen={adminOpen}
-            localInPrimary={localInPrimary}
-            localIsEnded={localIsEnded}
-            candidates={election.allCandidates}
-            onToggleAdmin={() => setAdminOpen((o) => !o)}
-            onSuccess={fetchElection}
-          />
-        </BlendScope>
+        {desktopTail}
       </div>
     );
   }
@@ -502,91 +610,21 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
   ) {
     return (
       <div className="min-h-screen" style={{ background: BLEND.page, color: BLEND.ink }}>
-        {blendNav}
+        {confirmDialogNode}
         <GeneralBlendView
           election={election}
           electionId={id}
           wire={wire}
           onRefresh={fetchElection}
+          stageTitle={presidentialTitle(electionYear)}
+          stageNav={stageRailTop}
         />
 
         {/* Everything the hero above does not already say. The college bar, the
             per-ticket tally and the deadline strip all appear up there, so the
             blocks below are asked to leave them out rather than print the same
             standing twice on one page. */}
-        <BlendScope
-          title="Also on this race"
-          lede="The full map, the trends, and your campaign operations."
-        >
-          {canEnter &&
-            (election.bulgarianFoundingRound?.round === 1 ||
-              Boolean(election.bulgarianFoundingRound?.newNominationDistrictIds?.length)) && (
-              <BgFoundingConstituencyPicker
-                allowedDistrictIds={election.bulgarianFoundingRound?.newNominationDistrictIds}
-                regionId={election.state}
-                value={huDistrictId}
-                onChange={setHuDistrictId}
-              />
-            )}
-          {canEnter && election.hungarianAssemblyRound?.round === 1 && (
-            <Hu1991ConstituencyPicker
-              allowedDistrictIds={election.hungarianAssemblyRound?.vacancyDistrictIds}
-              regionId={election.state}
-              value={huDistrictId}
-              onChange={setHuDistrictId}
-            />
-          )}
-          <ElectionHeader
-            election={election}
-            electionYear={electionYear}
-            localInPrimary={localInPrimary}
-            localIsEnded={localIsEnded}
-            localIsUpcoming={localIsUpcoming}
-            canEnter={canEnter}
-            canWithdraw={canWithdraw}
-            actionLoading={actionLoading}
-            onEnter={handleEnter}
-            onWithdraw={handleWithdraw}
-          />
-
-          <GeneralPhaseView
-            election={election}
-            electionId={id}
-            localInPrimary={localInPrimary}
-            localIsEnded={localIsEnded}
-            amInRace={amInRace}
-            onSuccess={fetchElection}
-            showCollegeSummary={false}
-            showNationalMood={false}
-            showDemocraticHealth={false}
-            tabbedDetail
-          />
-
-          <ElectionScheduleCard
-            election={election}
-            localIsUpcoming={localIsUpcoming}
-            localInPrimary={localInPrimary}
-            localIsEnded={localIsEnded}
-            showStatusStrip={false}
-          />
-
-          <AdminSection
-            electionId={id}
-            electionType={election.electionType}
-            isAdmin={election.isAdmin}
-            adminOpen={adminOpen}
-            localInPrimary={localInPrimary}
-            localIsEnded={localIsEnded}
-            candidates={election.allCandidates}
-            onToggleAdmin={() => setAdminOpen((o) => !o)}
-            onSuccess={fetchElection}
-          />
-
-          {/* "Your Campaign" used to follow this, repeating the funds, actions
-              and levels the list already shows against your own row, behind a
-              second link to the same page. */}
-          {election.countryId === "US" && <CampaignsListPanel electionId={id} />}
-        </BlendScope>
+        {desktopTail}
       </div>
     );
   }
@@ -602,82 +640,16 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
   ) {
     return (
       <div className="min-h-screen" style={{ background: BLEND.page, color: BLEND.ink }}>
-        {blendNav}
-        <PrimaryBlendView election={election} wire={wire} />
+        {confirmDialogNode}
+        <PrimaryBlendView
+          election={election}
+          wire={wire}
+          stageTitle={presidentialTitle(electionYear)}
+          stageNav={stageRailTop}
+        />
 
-        <BlendScope
-          title="Also on this race"
-          lede="Filing, the state map, and your campaign operations."
-        >
-          {canEnter &&
-            (election.bulgarianFoundingRound?.round === 1 ||
-              Boolean(election.bulgarianFoundingRound?.newNominationDistrictIds?.length)) && (
-              <BgFoundingConstituencyPicker
-                allowedDistrictIds={election.bulgarianFoundingRound?.newNominationDistrictIds}
-                regionId={election.state}
-                value={huDistrictId}
-                onChange={setHuDistrictId}
-              />
-            )}
-          {canEnter && election.hungarianAssemblyRound?.round === 1 && (
-            <Hu1991ConstituencyPicker
-              allowedDistrictIds={election.hungarianAssemblyRound?.vacancyDistrictIds}
-              regionId={election.state}
-              value={huDistrictId}
-              onChange={setHuDistrictId}
-            />
-          )}
-          <ElectionHeader
-            election={election}
-            electionYear={electionYear}
-            localInPrimary={localInPrimary}
-            localIsEnded={localIsEnded}
-            localIsUpcoming={localIsUpcoming}
-            canEnter={canEnter}
-            canWithdraw={canWithdraw}
-            actionLoading={actionLoading}
-            onEnter={handleEnter}
-            onWithdraw={handleWithdraw}
-          />
-
-          {/* The primary masthead already reads "CLOSES IN N TURNS", so the
-              strip restated the countdown in a box of its own, exactly as it
-              did on the general screen. */}
-          <ElectionScheduleCard
-            election={election}
-            localIsUpcoming={localIsUpcoming}
-            localInPrimary={localInPrimary}
-            localIsEnded={localIsEnded}
-            showStatusStrip={false}
-          />
-
-          <PrimaryMapPills election={election} activeParties={activeParties} />
-
-          <AdminSection
-            electionId={id}
-            electionType={election.electionType}
-            isAdmin={election.isAdmin}
-            adminOpen={adminOpen}
-            localInPrimary={localInPrimary}
-            localIsEnded={localIsEnded}
-            candidates={election.allCandidates}
-            onToggleAdmin={() => setAdminOpen((o) => !o)}
-            onSuccess={fetchElection}
-          />
-
-          {election.countryId === "US" && !!election.myCharId && (
-            <section id="state-org" className="mt-6 scroll-mt-6">
-              <StateOrganizationTab showHubLink />
-            </section>
-          )}
-
-          {election.countryId === "US" && (
-            <>
-              <CampaignsListPanel electionId={id} />
-              {!!election.myCharId && <CampaignManagerTab electionId={id} />}
-            </>
-          )}
-        </BlendScope>
+        {desktopTail}
+        {primaryCampaignTools}
       </div>
     );
   }
@@ -686,6 +658,7 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
     <div className="min-h-screen bg-background">
       <main className="mx-auto max-w-6xl overflow-x-hidden px-4 py-6 sm:px-6 sm:py-8">
         <ElectionNavigation election={election} />
+        {confirmDialogNode}
 
         {canEnter &&
           (election.bulgarianFoundingRound?.round === 1 ||

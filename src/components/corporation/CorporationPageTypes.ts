@@ -489,11 +489,17 @@ export interface CEO {
 }
 
 export interface Financials {
+  /** CEO-only cash balances, not daily income figures. */
+  arrears?: { turn: number; paidLastTurn: number; remaining: number };
   totalRevenue: number;
   /** Sector maintenance, shown NET of labour when the labour system is on. */
   maintenanceCosts: number;
   /** Labour/wage cost across sectors, carved out of maintenance (0 when wages are disabled). */
   laborCosts: number;
+  /** Recorded inbound shipping bill, daily, in the corporation currency. */
+  freightCosts?: number;
+  /** Recorded haul revenue, already included in totalRevenue. */
+  freightIncome?: number;
   growthCosts: number;
   marketingCosts: number;
   logisticsCosts: number;
@@ -669,6 +675,12 @@ export interface SectorDetail {
   domesticTariffMalus: number;
   /** Margin bonus from unlocked tech-tree nodes (pp). Null when zero or tech trees disabled. */
   techMarginBonus?: number | null;
+  /** State enterprise efficiency (pp, <= 0). 0 for private corps. */
+  soeEfficiencyModifier?: number;
+  /** Expropriation-risk drag from low investor confidence (pp). 0 for state enterprises. */
+  expropriationRiskModifier?: number;
+  /** Fit with the host country's economic model (pp, signed). */
+  economicModelAlignmentModifier?: number;
   stateMetricsModifier?: number;
   legacyStateMetricsModifier?: number;
   /** Named regional conditions (Economic Boom, Recession, …) stacked margin swing. */

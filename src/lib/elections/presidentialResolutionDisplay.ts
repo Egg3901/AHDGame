@@ -54,6 +54,30 @@ export function assessContingentEvRisk(
   };
 }
 
+/** Live-race projection of the contingent ballot, built server-side by `contingentProjection`. */
+export interface ContingentProjectionDisplay {
+  /**
+   * `founding`: no Congress seated yet, the chambers being elected now vote.
+   * `incoming`: every House delegation comes from a race resolving first.
+   * `mixed`: some delegations are sitting members with no race in the window.
+   * `sitting`: no chamber race resolves first; the seated Congress votes.
+   */
+  basis: "founding" | "incoming" | "mixed" | "sitting";
+  presidentWinnerId: string;
+  /** True when no candidate reached the delegation majority and the EV tiebreak decided. */
+  houseDeadlocked: boolean;
+  houseVoteTotals: Record<string, number>;
+  houseThreshold: number;
+  /** Delegations that would cast a vote (non-empty, not tied). */
+  delegationsVoting: number;
+  houseRacesProjected: number;
+  vicePresidentWinnerId: string | null;
+  vicePresidentWinnerName: string | null;
+  senateVoteTotals: Record<string, number>;
+  senateThreshold: number;
+  senateDeadlocked: boolean;
+}
+
 export function isContingentResolutionMode(
   mode: PresidentialResolutionMode | undefined
 ): mode is "contingent" | "contingent_deadlock" {
@@ -71,6 +95,8 @@ export function resolvePresidentialWinnerCandidateId(
   evNeeded = PRESIDENTIAL_EV_NEEDED
 ): string | null {
   if (isContingentResolutionMode(resolutionMode)) {
+    // A deadlocked House has elected nobody; an acting president serves.
+    if (contingentResult?.houseDeadlocked) return null;
     return contingentResult?.presidentWinnerId ?? null;
   }
   if (!electoralVotesByCandidate) return null;

@@ -95,6 +95,11 @@ export interface JurisdictionState {
   chairSelectionPending: boolean;
   fxCommitment: FxCommitment | null;
   commandEconomy: boolean;
+  /**
+   * Inflation minus target (pp) for the anchor country, when the shell knows
+   * it. Drives the widened hike cap; absent means the ordinary cap applies.
+   */
+  inflationGap?: number | null;
   lastVacancyNoticeAtTurn: number | null;
 }
 

@@ -6,7 +6,7 @@
  *   granted     → campaigning              (next turn after the PM grants)
  *   campaigning → polling                  (when the campaign window closes)
  *   polling     → actuating | settled      (resolve the public vote)
- *   actuating   → completed | cancelled    (both consent bills pass / either fails)
+ *   actuating   → completed | cancelled    (all required consent bills pass / one fails)
  *
  * Registered as the `referendumLifecycle` turn phase, after
  * `independenceDesireDrift` so a settled No-vote dampens the just-updated
@@ -236,17 +236,17 @@ export async function processReferendumLifecycle(
     }
 
     if (ref.status === "actuating") {
-      // Reunification gates on BOTH consent bills (Westminster releases NI, the
-      // Dáil admits it). Order-independent: poll each bill's resolved status —
-      //   both passed → convert; EITHER failed/withdrawn/missing → cancel (no
-      //   cooldown, the popular vote stands); otherwise (still voting) → wait.
-      //   Admins can resolve/block out-of-band via the admin route. Independence
-      //   (no bills) awaits the secession engine in Phases 2–3.
-      if (ref.kind === "reunification" && ref.westminsterBillId != null && ref.dailBillId != null) {
+      // Reunification always gates on Westminster. An Ireland that was already
+      // open to players when the referendum passed also gets a Dáil consent
+      // bill; a dormant Ireland does not block the UK-side process.
+      if (ref.kind === "reunification" && ref.westminsterBillId != null) {
         const [westminster, dail] = await Promise.all([
           db.collection<Bill>("bills").findOne({ _id: ref.westminsterBillId }),
-          db.collection<Bill>("bills").findOne({ _id: ref.dailBillId }),
+          ref.dailBillId != null
+            ? db.collection<Bill>("bills").findOne({ _id: ref.dailBillId })
+            : Promise.resolve(null),
         ]);
+        const dailRequired = ref.dailBillId != null;
         const billPassed = (b: Bill | null) =>
           b != null && (b.status === "signed" || b.enactedAt != null);
         const billFailed = (b: Bill | null) =>
@@ -278,7 +278,7 @@ export async function processReferendumLifecycle(
             announce.westminsterBillAnnounced = true;
           }
         }
-        if (!ref.dailBillAnnounced) {
+        if (dailRequired && !ref.dailBillAnnounced) {
           if (billPassed(dail)) {
             await announceConsentBillResolved(ref, "dail", true);
             await recordConsent("Dáil", true);
@@ -293,14 +293,14 @@ export async function processReferendumLifecycle(
           await refs.updateOne({ _id: ref._id }, { $set: { ...announce, updatedAt: now } });
         }
 
-        if (billPassed(westminster) && billPassed(dail)) {
+        if (billPassed(westminster) && (!dailRequired || billPassed(dail))) {
           const res = await runReferendumActuation(db, ref, currentTurn);
           if (res.ok) {
             transitions.push({ referendumId: id, from, to: "completed" });
           } else {
             console.error(`${ref.regionId} auto-conversion failed: ${res.error}`);
           }
-        } else if (billFailed(westminster) || billFailed(dail)) {
+        } else if (billFailed(westminster) || (dailRequired && billFailed(dail))) {
           await cancelReferendum(db, ref, currentTurn, { cooldown: false });
           transitions.push({ referendumId: id, from, to: "cancelled" });
         }

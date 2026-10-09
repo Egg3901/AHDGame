@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @import "./animations.css";
+@import "./interface-modes.css";
 
 /* Default theme — premium dark, slightly warmed graphite.
    Surfaces tuned to separate cards from page without a dashboardy feel:
@@ -49,6 +50,77 @@
   --track: #27272a;
   --overlay: rgba(0, 0, 0, 0.2);
   --modal-backdrop: rgba(0, 0, 0, 0.6);
+}
+
+/* Blend (the presidential and campaign screens) follows the active theme.
+   Every theme gets its surfaces and ink from its own palette; the default
+   theme (and a page before any theme is applied) pins the exact Blend values
+   the design was signed off in. Order matters: `:root` and `[data-theme]` tie
+   on specificity, so the generic block must come after `:root`. */
+:root {
+  --blend-page: #0c0c12;
+  --blend-rail: #101018;
+  --blend-inset: #11111a;
+  --blend-track: #1a1a25;
+  --blend-trackAlt: #1d1d2a;
+  --blend-field: #14141c;
+  --blend-hairline: #22222f;
+  --blend-hairlineStrong: #2a2a3d;
+  --blend-chipBorder: #26263a;
+  --blend-ink: #e8e8ee;
+  --blend-muted: #8f8f9d;
+  --blend-mutedDim: #6b6b7a;
+  --blend-mutedDimmer: #5f5f70;
+  --blend-accent: #dc2626;
+  --blend-accentInk: #f0a0a0;
+  --blend-positive: #22c55e;
+  --blend-caution: #eab308;
+  --blend-gold: #d4af37;
+  --blend-negative: #ef4444;
+}
+
+[data-theme] {
+  --blend-page: var(--background);
+  --blend-rail: var(--card-muted);
+  --blend-inset: var(--card-muted);
+  --blend-track: var(--track);
+  --blend-trackAlt: var(--card-elevated);
+  --blend-field: var(--card);
+  --blend-hairline: var(--card-border);
+  --blend-hairlineStrong: color-mix(in srgb, var(--card-border) 78%, var(--foreground));
+  --blend-chipBorder: var(--card-border);
+  --blend-ink: var(--foreground);
+  --blend-muted: var(--muted);
+  --blend-mutedDim: color-mix(in srgb, var(--muted) 82%, var(--background));
+  --blend-mutedDimmer: color-mix(in srgb, var(--muted) 68%, var(--background));
+  --blend-accent: var(--primary);
+  --blend-accentInk: var(--primary);
+  --blend-positive: var(--success);
+  --blend-caution: var(--warning);
+  --blend-gold: var(--gold);
+  --blend-negative: var(--error);
+}
+
+[data-theme="default"] {
+  --blend-page: #0c0c12;
+  --blend-rail: #101018;
+  --blend-inset: #11111a;
+  --blend-track: #1a1a25;
+  --blend-trackAlt: #1d1d2a;
+  --blend-field: #14141c;
+  --blend-hairline: #22222f;
+  --blend-hairlineStrong: #2a2a3d;
+  --blend-chipBorder: #26263a;
+  --blend-ink: #e8e8ee;
+  --blend-muted: #8f8f9d;
+  --blend-mutedDim: #6b6b7a;
+  --blend-mutedDimmer: #5f5f70;
+  --blend-accent: #dc2626;
+  --blend-accentInk: #f0a0a0;
+  --blend-positive: #22c55e;
+  --blend-caution: #eab308;
+  --blend-gold: #d4af37;
+  --blend-negative: #ef4444;
 }
 
 /* Light theme — clean, airy, and professional */

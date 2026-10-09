@@ -2418,8 +2418,12 @@ const NATIONAL_BUDGET_SEED_CONFIGS_1991: NationalBudgetSeedConfig[] = [
       ceilingLastRaisedYear: 1991,
     },
     creditRating: "B", // crisis-era
+    // Authored composition, not the opening size: the 1991 preset fills the
+    // receipts-plus-small-deficit envelope with this mix (see
+    // AUTHORED_MIX_OPENING_1991). Keys match brLegislationTypes categories;
+    // the former `health` key matched no law and was silently dropped.
     baselineSpendingByCategory: {
-      health: 25_000_000_000,
+      healthcare: 25_000_000_000,
       education: 30_000_000_000,
       socialSecurity: 90_000_000_000,
       defense: 10_000_000_000,
@@ -5795,11 +5799,42 @@ export function getAuthoredNationalSpending1991(countryId: string): Record<strin
   return config ? { ...config.baselineSpendingByCategory } : null;
 }
 
+/**
+ * 1991 legacy-ladder countries whose authored category mix is the fiscal
+ * truth. BR: the ladder was calibrated to 1953 and booked 28.7B BRL of
+ * programs (3.2% of GDP) against an authored 300B; the authored 300B at
+ * opening receipts would run a ~17% of GDP deficit, so the mix is kept and
+ * the total is set by the envelope instead.
+ */
+const AUTHORED_MIX_OPENING_1991 = new Set(["BR"]);
+
 /** 1991 player budgets resize active programs while preserving receipts and historic debt. */
 export function getNationalBudgetSeedConfigsForPreset(preset: string): NationalBudgetSeedConfig[] {
   const configs = getUncalibratedNationalBudgetSeedConfigsForPreset(preset);
   if (preset !== "1991-default") return configs;
   return configs.map(calibrateOpeningInflation1991).map((config) => {
+    if (AUTHORED_MIX_OPENING_1991.has(config.countryId)) {
+      // The legacy ladder prices this book on 1953 anchors, and its
+      // 1953-only category pins never reach 1991. Keep the authored 1991
+      // relative mix and size it to receipts after coupons, the same
+      // coupon-inclusive opening balance the player countries use.
+      const budget = buildNationalBudgetSeed(config);
+      const envelope = fitOpeningFiscalEnvelope({
+        gdp: config.gdp,
+        annualRevenue: budget.revenue.total,
+        annualDebtService: budget.spending.debtInterest,
+        byCategory: config.baselineSpendingByCategory,
+        stateGrants: config.baselineStateGrants,
+        maximumDeficitGdpShare: PLAYER_RESET_DEFICIT_GDP_SHARE_1991,
+        fillEnvelope: true,
+      });
+      return {
+        ...config,
+        baselineSpendingByCategory: envelope.byCategory,
+        baselineStateGrants: envelope.stateGrants,
+        calibratedSpendingBaseline: true,
+      };
+    }
     if (!["US", "UK", "JP"].includes(config.countryId)) {
       // The shared primary-source anchors own both nominal GDP and any
       // available historical debt/expenditure totals. Pin their authored
@@ -5829,7 +5864,7 @@ export function getNationalBudgetSeedConfigsForPreset(preset: string): NationalB
       if (config.countryId !== "IE") return rebased;
       // CSO's gross debt stock is an absolute EUR observation restored to IEP.
       // Preserve the authored ceiling headroom, not the stale 133.3% debt share.
-      return {
+      const ireland = {
         ...rebased,
         debt: {
           ...rebased.debt,
@@ -5837,6 +5872,26 @@ export function getNationalBudgetSeedConfigsForPreset(preset: string): NationalB
           ceiling:
             IRISH_GROSS_GOVERNMENT_DEBT_1991_IEP * (rebased.debt.ceiling / rebased.debt.principal),
         },
+      };
+      // The seeded Irish law book is rescaled to this baseline (deriveEnactedLaws),
+      // and enacted laws are what calculateFederalSpending prices every turn, so
+      // the baseline is what Ireland spends. The derived book runs about 46% of GDP before about 9% of debt
+      // service against 42% receipts, a 13% of GDP deficit no 1991 Irish
+      // government ran. Size it to receipts after debt service like the other
+      // openings; the mix is kept and the book only shrinks.
+      const irelandBudget = buildNationalBudgetSeed(ireland);
+      const envelope = fitOpeningFiscalEnvelope({
+        gdp: ireland.gdp,
+        annualRevenue: irelandBudget.revenue.total,
+        annualDebtService: irelandBudget.spending.debtInterest,
+        byCategory: ireland.baselineSpendingByCategory,
+        stateGrants: ireland.baselineStateGrants,
+        maximumDeficitGdpShare: PLAYER_RESET_DEFICIT_GDP_SHARE_1991,
+      });
+      return {
+        ...ireland,
+        baselineSpendingByCategory: envelope.byCategory,
+        baselineStateGrants: envelope.stateGrants,
       };
     }
     const budget = buildNationalBudgetSeed(config);

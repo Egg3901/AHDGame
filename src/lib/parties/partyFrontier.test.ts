@@ -6,6 +6,7 @@ import {
   getPartyPresenceStates,
   getPartyFrontier,
   canCharacterJoinParty,
+  getPartyFrontiers,
 } from "@/lib/parties/partyFrontier";
 
 describe("expandFrontier", () => {
@@ -39,6 +40,41 @@ describe("expandFrontier", () => {
     const f = expandFrontier("US", ["NY", "NY"]);
     expect(f.has("NY")).toBe(true);
     expect([...f].length).toBe(new Set([...f]).size);
+  });
+});
+
+describe("batched party frontiers", () => {
+  beforeEach(resetMocks);
+  it("unions members, officials and active NPPs without queries per party", async () => {
+    const db = makeDb();
+    setMockCollection("states", {
+      find: vi.fn(() => ({ toArray: async () => [{ _id: "NY" }, { _id: "CA" }, { _id: "OR" }] })),
+    });
+    setMockCollection("characters", {
+      find: vi.fn(() => ({ toArray: async () => [{ party: "1", homeState: "NY" }] })),
+    });
+    setMockCollection("electedOfficials", {
+      find: vi.fn(() => ({ toArray: async () => [{ party: "1", state: "CA" }] })),
+    });
+    setMockCollection("npps", {
+      find: vi.fn(() => ({ toArray: async () => [{ party: "2", homeState: "OR" }] })),
+    });
+    const result = await getPartyFrontiers(db, "US", ["1", "2", "3"]);
+    expect(result.get("1")).toContain("NY");
+    expect(result.get("1")).toContain("OR");
+    expect(result.get("1")).not.toContain("TX");
+    expect(result.get("2")).toContain("WA");
+    expect(result.get("3")).toBeNull();
+    expect(mockCollections.npps.find).toHaveBeenCalledExactlyOnceWith(
+      {
+        $or: [{ countryId: "US" }, { countryId: { $exists: false } }],
+        party: { $in: ["1", "2", "3"] },
+        homeState: { $in: ["NY", "CA", "OR"] },
+        retiredAt: null,
+      },
+      { projection: { party: 1, homeState: 1 } }
+    );
+    expect(db.collection).toHaveBeenCalledTimes(4);
   });
 });
 
@@ -132,7 +168,7 @@ describe("getPartyPresenceStates", () => {
     expect([...presence]).toEqual(["NY"]);
   });
 
-  it("scopes every query by the region set rather than by countryId", async () => {
+  it("scopes every query by region and country while retaining legacy rows", async () => {
     const db = makeDb();
     seedRegions(["NY"]);
     const npps = setMockCollection("npps", { distinct: vi.fn().mockResolvedValue([]) });
@@ -142,7 +178,10 @@ describe("getPartyPresenceStates", () => {
     const [field, filter] = npps.distinct.mock.calls[0];
     expect(field).toBe("homeState");
     expect(filter).toMatchObject({ party: "1", retiredAt: null, homeState: { $in: ["NY"] } });
-    expect(filter).not.toHaveProperty("countryId");
+    expect(filter.$or).toEqual([{ countryId: "US" }, { countryId: { $exists: false } }]);
+    for (const name of ["characters", "electedOfficials"]) {
+      expect(mockCollections[name].distinct.mock.calls[0][1].$or).toEqual(filter.$or);
+    }
   });
 
   it("reuses caller-supplied regionIds without re-reading states", async () => {

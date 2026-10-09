@@ -158,10 +158,11 @@ const mixedSectors = [
 
 /** Pick a division from the sector type select. */
 function pickType(value: string) {
-  // The select value is the full model-aware identity. These fixtures are
-  // legacy-shaped sectors, so their canonical model discriminator is empty.
+  // The select value is the full model-aware identity
+  // (sectorType:industryModel:mediaDiscriminator). These fixtures are
+  // legacy-shaped sectors, so both model fields are empty.
   fireEvent.change(screen.getByLabelText("Sector type"), {
-    target: { value: value.includes(":") ? value : `${value}:` },
+    target: { value: value.includes(":") ? value : `${value}::` },
   });
 }
 
@@ -201,7 +202,7 @@ describe("SectorsTab type select and dossier", () => {
 
     expect(screen.getByRole("heading", { name: "Manufacturing plants" })).toBeTruthy();
     expect((screen.getByLabelText("Sector type") as HTMLSelectElement).value).toBe(
-      "manufacturing:"
+      "manufacturing::"
     );
   });
 
@@ -224,16 +225,12 @@ describe("SectorsTab type select and dossier", () => {
     expect(screen.getByTestId("expand-modal").getAttribute("data-sector-type")).toBe("energy");
   });
 
-  it("leaves the proposed type levers on screen but disabled", () => {
+  it("shows no placeholder levers for controls the game does not have", () => {
     render(<SectorsTab {...baseProps} sectors={mixedSectors} isCeo />);
     pickType("manufacturing");
 
-    for (const button of screen.getAllByRole("button", { name: "Retool line" })) {
-      expect((button as HTMLButtonElement).disabled).toBe(true);
-    }
-    expect((screen.getByRole("button", { name: "Switch ▾" }) as HTMLButtonElement).disabled).toBe(
-      true
-    );
+    expect(screen.queryByRole("button", { name: "Retool line" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Switch ▾" })).toBeNull();
   });
 
   it("offers exactly one build button, pointed at the open division", () => {
@@ -311,7 +308,9 @@ describe("SectorsTab type select and dossier", () => {
     ).toBeTruthy();
 
     pickType("shipbuilding");
-    expect((screen.getByLabelText("Sector type") as HTMLSelectElement).value).toBe("shipbuilding:");
+    expect((screen.getByLabelText("Sector type") as HTMLSelectElement).value).toBe(
+      "shipbuilding::"
+    );
     expect(screen.getAllByText("Bath Yards").length).toBeGreaterThan(0);
     expect(screen.queryAllByText("Cleveland Works")).toHaveLength(0);
     // No dossier and no strategy panel: there is nothing known to describe.
@@ -327,5 +326,36 @@ describe("SectorsTab type select and dossier", () => {
     expect(screen.queryByRole("button", { name: "Switch ▾" })).toBeNull();
     // The dossier is not CEO-only: an outsider still gets the briefing.
     expect(screen.getByText("Manufacturing division")).toBeTruthy();
+  });
+});
+
+describe("SectorsTab folded media lanes", () => {
+  afterEach(() => {
+    cleanup();
+  });
+
+  const mediaSectors = [
+    sector({ _id: "m1", sectorType: "media", displayName: "Daily Courier" }),
+    sector({
+      _id: "m2",
+      sectorType: "media",
+      mediaDiscriminator: "entertainment",
+      displayName: "Lakeshore Studios",
+    }),
+  ];
+
+  it("groups entertainment media apart from ordinary media with its own label", () => {
+    render(<SectorsTab {...baseProps} sectors={mediaSectors} isCeo />);
+    const select = screen.getByLabelText("Sector type") as HTMLSelectElement;
+    expect(within(select).getByRole("option", { name: /Entertainment media/ })).toBeTruthy();
+    expect(within(select).getByRole("option", { name: /^Media/ })).toBeTruthy();
+
+    pickType("media::entertainment");
+    expect(screen.getAllByText("Lakeshore Studios").length).toBeGreaterThan(0);
+    expect(screen.queryAllByText("Daily Courier")).toHaveLength(0);
+
+    pickType("media::");
+    expect(screen.getAllByText("Daily Courier").length).toBeGreaterThan(0);
+    expect(screen.queryAllByText("Lakeshore Studios")).toHaveLength(0);
   });
 });

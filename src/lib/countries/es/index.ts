@@ -14,7 +14,7 @@ import { ES_ERAS } from "./eras";
  * MongoDB driver into the browser. Client surfaces take `./identity` or
  * `./geographyFacts`, never this file and never `./geography`.
  */
-export const ES: CountryFolder = {
+export const ES: CountryFolder<"ES"> = {
   id: "ES",
   identity: ES_IDENTITY,
   institutions: ES_INSTITUTIONS,

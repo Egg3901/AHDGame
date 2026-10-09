@@ -10,6 +10,7 @@ import { useToast } from "@/contexts/ToastContext";
 import { useCharacterStats } from "@/contexts/CharacterStatsContext";
 import { ACTION_CAP, ACTION_HOARDING_THRESHOLD } from "@/lib/actions/recommendationsConstants";
 import { useAuthMe } from "@/contexts/AuthDataContext";
+import { useInterface } from "@/contexts/InterfaceContext";
 import { buildClientStatusUrl } from "@/lib/statusBar/clientStatusRequest";
 import { Navbar } from "./Navbar";
 import { ExperimentalNavbar } from "./ExperimentalNavbar";
@@ -26,6 +27,7 @@ const ALLOWED_WITHOUT_CHARACTER = [
   "/create-character",
   "/profile",
   "/help",
+  "/contests",
   "/guides",
   "/feedback",
   "/admin",
@@ -249,6 +251,7 @@ export function NavbarWrapper({
   /** Type the site name in on load, in mono (1991 worlds). */
   typedWordmark?: boolean;
 }) {
+  const { mode: interfaceMode } = useInterface();
   const t = useTranslations("nav");
   const pathname = usePathname();
   const useLightweightNav = !singleplayer && isLightweightLayoutPath(pathname);
@@ -263,7 +266,7 @@ export function NavbarWrapper({
     !useLightweightNav &&
     !isExcludedPath &&
     !!navData?.hasCharacter &&
-    navData?.user?.enableExperimentalUI !== false;
+    interfaceMode === "modern";
   const demographicsToastShown = useRef(false);
   const statusLoadedRef = useRef(false);
   const [state, dispatch] = useReducer(navbarWrapperReducer, initialState);
@@ -569,10 +572,10 @@ export function NavbarWrapper({
 
   const navBootLoading = state.isLoading && !useLightweightNav;
 
-  // The redesigned navbar is the default; users can opt back to the classic
-  // chrome in Settings → Appearance (enableExperimentalUI === false). Lightweight
-  // layouts always use the classic chrome regardless of the preference.
-  const useExperimentalNav = !useLightweightNav && navData?.user?.enableExperimentalUI !== false;
+  // The modern navbar is the default. InterfaceProvider switches the complete
+  // presentation, including this chrome, from Settings → Appearance.
+  // Lightweight layouts always use the classic chrome regardless of preference.
+  const useExperimentalNav = !useLightweightNav && interfaceMode === "modern";
 
   return (
     <>
@@ -659,6 +662,7 @@ export function NavbarWrapper({
               feedbackCapturing={state.capturingFeedback}
               adminCharacters={useLightweightNav ? undefined : (state.adminCharacters ?? undefined)}
               myCorporationId={useLightweightNav ? undefined : (state.myCorporationId ?? undefined)}
+              myUnionId={useLightweightNav ? undefined : (state.myUnionId ?? undefined)}
               imperialCharacter={
                 useLightweightNav ? undefined : (state.imperialCharacter ?? undefined)
               }
@@ -666,6 +670,7 @@ export function NavbarWrapper({
               wikiDisabled={useLightweightNav ? false : state.wikiDisabled}
               conflictsEnabled={useLightweightNav ? false : state.conflictsEnabled}
               unionsEnabled={useLightweightNav ? false : state.unionsEnabled}
+              settlementCrisisLive={useLightweightNav ? false : state.settlementCrisisLive}
               initialPageCountry={initialPageCountry}
             />
           )}

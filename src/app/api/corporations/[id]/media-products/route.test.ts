@@ -29,7 +29,6 @@ function request(body?: unknown) {
 
 describe("/api/corporations/[id]/media-products", () => {
   const corporationId = new ObjectId("507f1f77bcf86cd799439011");
-  const sectorId = new ObjectId("507f1f77bcf86cd799439012");
   const corporation = {
     _id: corporationId,
     userId: "user-1",
@@ -89,69 +88,10 @@ describe("/api/corporations/[id]/media-products", () => {
     expect(sectorFind).not.toHaveBeenCalled();
   });
 
-  it("starts an owned title only on its already unlocked operating model", async () => {
-    collections.corporateSectors = {
-      find: sectorFind,
-      findOne: vi.fn().mockResolvedValue({
-        _id: sectorId,
-        corporationId,
-        sectorType: "media",
-        mediaDiscriminator: null,
-        strategyId: "newspaper",
-        capitalStock: 500,
-        capacityBookAnchor: 500,
-      }),
-    };
+  it("no longer starts titles here and points to the studio", async () => {
     const { POST } = await import("./route");
-    const response = await POST(
-      request({
-        kindId: "newspaper_edition",
-        sectorId: sectorId.toString(),
-        title: "The Evening Record",
-        allocationShare: 0.4,
-      }),
-      { params: Promise.resolve({ id: "1" }) }
-    );
-
-    expect(response.status).toBe(201);
-    expect(insertOne).toHaveBeenCalledWith(
-      expect.objectContaining({
-        corporationId: corporationId.toString(),
-        sectorId: sectorId.toString(),
-        kindId: "newspaper_edition",
-        allocationShare: 0.4,
-        paidThresholdAnchor: 25,
-        activeDevelopmentCorporationId: corporationId.toString(),
-      })
-    );
-    expect(projectFind).not.toHaveBeenCalled();
-  });
-
-  it("rejects development without a monetary capacity basis", async () => {
-    collections.corporateSectors = {
-      find: sectorFind,
-      findOne: vi.fn().mockResolvedValue({
-        _id: sectorId,
-        corporationId,
-        sectorType: "media",
-        mediaDiscriminator: null,
-        strategyId: "newspaper",
-        capitalStock: 0,
-        capacityBookAnchor: 0,
-      }),
-    };
-    const { POST } = await import("./route");
-    const response = await POST(
-      request({
-        kindId: "newspaper_edition",
-        sectorId: sectorId.toString(),
-        title: "The Evening Record",
-        allocationShare: 0.4,
-      }),
-      { params: Promise.resolve({ id: "1" }) }
-    );
-
-    expect(response.status).toBe(409);
+    const response = await POST();
+    expect(response.status).toBe(410);
     expect(insertOne).not.toHaveBeenCalled();
   });
 });

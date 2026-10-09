@@ -3,11 +3,11 @@
  * proposeNationalBill resolves current offices, preserves proposal costs and rejects a dissolved chamber.
  */
 import { getNationalDocId } from "@/lib/constants/nationalScope";
-import type { Db } from "mongodb";
+import { ObjectId, type Db } from "mongodb";
 import type { AuthUser } from "@/lib/auth";
 import { getCharacterByUserId } from "@/lib/db/characterLookup";
 import { getEnabledCountryIds } from "@/lib/countryAccess";
-import { type CountryId } from "@/lib/constants/countries";
+import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { CORPORATION_TYPES, type CorporationType } from "@/lib/constants/corporations";
 import {
   checkDuplicateProvisions,
@@ -51,6 +51,8 @@ import {
 import { hasBillLifecycle } from "@/lib/legislature/hasBillLifecycle";
 import { mayRuleByDecree } from "@/lib/singleplayerHeadOfState";
 import { enactSingleplayerDecree } from "./enactSingleplayerDecree";
+import { RESET_V2_READY } from "@/lib/resetVersions/availability";
+import { isResetV2Country, resetSystemVersionsForCountry } from "@/lib/resetVersions/rules";
 
 const VOTING_DURATION_HOURS = 24;
 const VOTING_DURATION_MS = VOTING_DURATION_HOURS * 60 * 60 * 1000;
@@ -88,6 +90,8 @@ export async function proposeNationalBill(
   const gameState = await getGameState(db);
   const preset = gameState?.preset;
   const { config } = await loadRuntimeCountryOffices(db, countryId, preset);
+  const usCountryId = COUNTRY_CONFIGS.US.id;
+  const isUsCongress = countryId === usCountryId;
   if (
     config.legislature.lowerChamber.elected === false ||
     config.legislature.lowerChamber.seats < 1
@@ -103,11 +107,12 @@ export async function proposeNationalBill(
   // bills; UK Lords / DE Bundesrat are `bicameral: false` and stay lower-only
   // (#912 — NG senators got a 403 "must be a seated member of the House").
   // Era-aware: TR 1953 is unicameral (no Senato).
-  const allowedOriginKeys: string[] =
+  const memberOriginKeys: string[] =
     config.legislature.bicameral && upperKey ? [lowerKey, upperKey] : [lowerKey];
+  const allowedOriginKeys = isUsCongress ? [...memberOriginKeys, "joint"] : memberOriginKeys;
 
   // Resolve chamber keys to office types for DB queries (e.g. CN "npc" → "npcDelegate")
-  const allowedOriginOfficeTypes = allowedOriginKeys.map((k) =>
+  const allowedOriginOfficeTypes = memberOriginKeys.map((k) =>
     getOfficeTypeForChamber(countryId, k, preset, config)
   );
 
@@ -126,16 +131,43 @@ export async function proposeNationalBill(
     confirmElectionRisk,
   } = input;
 
+  if (!allowedOriginKeys.includes(chamber)) {
+    return {
+      status: 400,
+      body: { error: `Invalid chamber for the ${config.name} legislature.` },
+    };
+  }
+
   // Custom (flavor/roleplay) bills carry no provisions and have no mechanical
   // effect. Force the provision list empty so a client cannot smuggle real
   // effects in under category:"custom".
-  const rawProvisions = category === "custom" ? [] : clientProvisions;
+  const resetLegislationV2 =
+    resetSystemVersionsForCountry(gameState, RESET_V2_READY, countryId).legislation === "v2";
+  const rawProvisions = category === "custom" && !resetLegislationV2 ? [] : clientProvisions;
+  if (
+    isUsCongress &&
+    rawProvisions.some(
+      (provision) =>
+        (provision as { type?: unknown }).type === "central_bank_independence" ||
+        (provision as { type?: unknown }).type === "economic_system_reform"
+    )
+  ) {
+    return {
+      status: 400,
+      body: {
+        error:
+          "Central-bank independence and economic-system reform are proposed through the country legislature, not this chamber.",
+      },
+    };
+  }
 
   const isAdmin = authUser.isAdmin === true;
   const officialFilter: Record<string, unknown> = {
     characterId: character._id,
     officeType: { $in: allowedOriginOfficeTypes },
-    countryId,
+    ...(isUsCongress
+      ? { $or: [{ countryId: usCountryId }, { countryId: { $exists: false } }] }
+      : { countryId }),
   };
   const official = await db.collection<ElectedOfficial>("electedOfficials").findOne(officialFilter);
   const usingAdminOverride = isAdmin && !official;
@@ -148,8 +180,7 @@ export async function proposeNationalBill(
   // getChamberKeyForOfficeType. Storing the raw officeType hid CN bills from the
   // NPC page and wedged sponsors (Bug #0734).
   let sponsorChamberKey: string = lowerKey;
-  if ((usingAdminOverride || usingSovereignOverride) && allowedOriginKeys.includes(chamber))
-    sponsorChamberKey = chamber;
+  if (usingAdminOverride || usingSovereignOverride) sponsorChamberKey = chamber;
   if (!isAdmin && !usingSovereignOverride) {
     if (!official) {
       const chamberLabels =
@@ -163,7 +194,22 @@ export async function proposeNationalBill(
         },
       };
     }
-    sponsorChamberKey = getChamberKeyForOfficeType(countryId, official.officeType, preset, config);
+    const memberChamberKey = getChamberKeyForOfficeType(
+      countryId,
+      official.officeType,
+      preset,
+      config
+    );
+    if (isUsCongress && chamber === "joint") {
+      sponsorChamberKey = "joint";
+    } else if (chamber !== memberChamberKey) {
+      return {
+        status: 403,
+        body: { error: `Only members of the ${memberChamberKey} chamber can propose this bill.` },
+      };
+    } else {
+      sponsorChamberKey = memberChamberKey;
+    }
   }
 
   // One-party-state guard: banned parties cannot propose bills. Admin
@@ -300,7 +346,7 @@ export async function proposeNationalBill(
       summary: summary.trim(),
       ...(fullText?.trim() ? { fullText: fullText.trim() } : {}),
       originChamber: chamberKey,
-      currentChamber: chamberKey,
+      currentChamber: isUsCongress && chamberKey === "joint" ? "house" : chamberKey,
       sponsorId: character._id,
       sponsorName: character.name,
       sponsorParty: character.party ?? undefined,
@@ -323,6 +369,7 @@ export async function proposeNationalBill(
     };
     try {
       const result = await db.collection<Omit<Bill, "_id">>("bills").insertOne(natBill);
+      if (!usingAdminOverride) await awardBillSponsored(authUser.userId, character._id);
       if (usingSovereignOverride) {
         await enactSingleplayerDecree(db, { ...natBill, _id: result.insertedId } as Bill);
       }
@@ -355,7 +402,7 @@ export async function proposeNationalBill(
 
   const enabledCountryIds = new Set(await getEnabledCountryIds());
   const administrationEnabled =
-    gameState?.lawAdministrationEnabled === true && ["US", "UK", "JP"].includes(countryId);
+    gameState?.lawAdministrationEnabled === true && isResetV2Country(countryId);
   const validation = await validateBillProvisions(db, rawProvisions, category, countryId, {
     enabled: administrationEnabled,
   });
@@ -614,7 +661,7 @@ export async function proposeNationalBill(
     summary: summary.trim(),
     ...(fullText?.trim() ? { fullText: fullText.trim() } : {}),
     originChamber: chamberKey,
-    currentChamber: chamberKey,
+    currentChamber: isUsCongress && chamberKey === "joint" ? "house" : chamberKey,
     sponsorId: character._id,
     sponsorName: character.name,
     sponsorParty: character.party ?? undefined,
@@ -642,8 +689,24 @@ export async function proposeNationalBill(
 
   try {
     const result = await db.collection<Omit<Bill, "_id">>("bills").insertOne(bill);
+    if (!usingAdminOverride) await awardBillSponsored(authUser.userId, character._id);
     if (usingSovereignOverride) {
       await enactSingleplayerDecree(db, { ...bill, _id: result.insertedId } as Bill);
+    }
+    if (isUsCongress) {
+      try {
+        const { checkBillSponsoredAchievements } = await import("@/lib/achievements/triggers");
+        await checkBillSponsoredAchievements(new ObjectId(authUser.userId), character._id);
+      } catch (error) {
+        console.error(
+          JSON.stringify({
+            error: "achievement_check_failed",
+            operation: "bill_sponsored_achievement",
+            timestamp: new Date().toISOString(),
+            details: error instanceof Error ? error.message : "Unknown error",
+          })
+        );
+      }
     }
     return {
       status: 201,
@@ -670,4 +733,10 @@ export async function proposeNationalBill(
     }
     throw error;
   }
+}
+
+/** Non-throwing: the first-bill achievement must never fail a proposal that already landed. */
+async function awardBillSponsored(userId: string, characterId: ObjectId): Promise<void> {
+  const { checkBillSponsoredAchievements } = await import("@/lib/achievements/triggers");
+  await checkBillSponsoredAchievements(new ObjectId(userId), characterId);
 }

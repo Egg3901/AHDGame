@@ -29,6 +29,7 @@ import {
 } from "@/components/bills/BillAutoFailWarning";
 import type { BillProposalAutoFailWarning } from "@/lib/legislature/billAutoFailWarning";
 import { useWorldFlags } from "@/hooks/useWorldFlags";
+import { LegislationSystemGate } from "@/components/legislation/LegislationSystemGate";
 import { GuidedLegislationModal } from "@/components/legislation/GuidedLegislationModal";
 import { apiErrorText } from "@/lib/errors/catalog";
 
@@ -435,9 +436,10 @@ export function JPCabinetProposeBillModal(
   props: Parameters<typeof LegacyJPCabinetProposeBillModal>[0]
 ) {
   const flags = useWorldFlags();
+  if (!flags.loaded || flags.failed) {
+    return <LegislationSystemGate failed={flags.failed} onClose={props.onClose} />;
+  }
   const useV2 =
-    flags.loaded &&
-    !flags.failed &&
     flags.resetSystemVersions.legislation === "v2" &&
     flags.resetV2Countries.includes(props.countryId);
   if (useV2) {

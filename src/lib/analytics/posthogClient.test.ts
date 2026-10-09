@@ -48,6 +48,8 @@ describe("PostHog consent boundary", () => {
         removeItem: (key: string) => storage.delete(key),
       },
     });
+    const { setAnalyticsAccount } = await import("./accountContext");
+    setAnalyticsAccount({ id: "stable-user-id" });
     const { setProductEventContext } = await import("./capture");
     setProductEventContext({ iteration_id: "alpha-1", turn_number: 8, nation_id: "US" });
   });
@@ -86,27 +88,16 @@ describe("PostHog consent boundary", () => {
     );
   });
 
-  it("queues an early product event until the stable account ID is known", async () => {
+  it("drops unauthenticated events instead of attaching them to a later account", async () => {
+    const { setAnalyticsAccount } = await import("./accountContext");
     const { captureProductEvent } = await import("./capture");
     const { getPostHogClient, identifyPostHogUser } = await import("./posthogClient");
     state.consent = "accepted";
+    setAnalyticsAccount(null);
     await captureProductEvent("bill_drafted");
+    setAnalyticsAccount({ id: "stable-user-id" });
+    identifyPostHogUser((await getPostHogClient())!, "stable-user-id");
     expect(state.capture).not.toHaveBeenCalled();
-    identifyPostHogUser((await getPostHogClient())!, "stable-user-id", {
-      signup_date: "2026-09-29",
-      nation: "US",
-      party: "1",
-    });
-    expect(state.identify).toHaveBeenCalledWith("stable-user-id", {
-      is_player: true,
-      signup_date: "2026-09-29",
-      nation: "US",
-      party: "1",
-    });
-    expect(state.capture).toHaveBeenCalledWith(
-      "bill_drafted",
-      expect.objectContaining({ iteration_id: "alpha-1", turn_number: 8, nation_id: "US" })
-    );
   });
 
   it("enables sampled, masked session recording with sensitive screens blocked", async () => {
@@ -187,7 +178,7 @@ describe("PostHog consent boundary", () => {
     const { getPostHogClient, identifyPostHogUser } = await import("./posthogClient");
     state.consent = "accepted";
     identifyPostHogUser((await getPostHogClient())!, "stable-user-id");
-    rememberAccountCreated();
+    rememberAccountCreated("stable-user-id");
     await Promise.all([capturePendingAccountCreated(), capturePendingAccountCreated()]);
     await capturePendingAccountCreated();
     expect(state.capture).toHaveBeenCalledTimes(1);
@@ -206,7 +197,7 @@ describe("PostHog consent boundary", () => {
     } = await import("./capture");
     const { stopPostHogCapture } = await import("./posthogClient");
     state.consent = "accepted";
-    rememberAccountCreated();
+    rememberAccountCreated("stable-user-id");
     rememberNewCharacter("char1", 10);
     state.consent = "rejected";
     await stopPostHogCapture();

@@ -7,6 +7,7 @@ import {
   type CommodityType,
 } from "@/lib/constants/commodities";
 import { getOutputMultiplier } from "@/lib/utils/productionPolicy";
+import { ENERGY_PRODUCTIVITY_RAMP_BY_PRESET } from "@/lib/corporations/rules/energyProductivityRamp";
 import {
   CAPITAL_DEPRECIATION_PER_TURN,
   CAPITAL_SEED_HEADROOM,
@@ -846,6 +847,57 @@ describe("plants mode — demand-aware production throttle", () => {
     expect(mothballed.contractAchievableUnits).toBeCloseTo(
       running.contractAchievableUnits as number,
       2
+    );
+  });
+});
+
+describe("plants mode: 1991 energy productivity ramp", () => {
+  const stock = IMPLIED_UNITS * CAPITAL_SEED_HEADROOM;
+  const ramp = ENERGY_PRODUCTIVITY_RAMP_BY_PRESET["1991-default"]!;
+
+  function producedAt(sectorType: string, turn: number, preset: string | undefined) {
+    const env = makeEnv("plants", turn);
+    (env.lookups as { preset?: string }).preset = preset;
+    processSector(
+      env,
+      makeCorp(),
+      makeSector({
+        sectorType,
+        capitalStock: stock,
+        plantsStartTurn: 1,
+      } as Partial<CorporateSector>),
+      1,
+      undefined,
+      1
+    );
+    return sectorUpdateOf(env).producedUnits as number;
+  }
+
+  it("changes nothing at the start turn", () => {
+    const atStart = producedAt("energy", ramp.startTurn, "1991-default");
+    const off = producedAt("energy", ramp.startTurn, "2019-default");
+    expect(atStart).toBeCloseTo(off, 6);
+  });
+
+  it("lifts energy output per unit of capacity smoothly up to the cap", () => {
+    const base = producedAt("energy", ramp.startTurn, "1991-default");
+    const mid = producedAt("energy", ramp.startTurn + ramp.rampTurns / 2, "1991-default");
+    const end = producedAt("energy", ramp.startTurn + ramp.rampTurns, "1991-default");
+    const later = producedAt("energy", ramp.startTurn + ramp.rampTurns + 100, "1991-default");
+    expect(mid / base).toBeCloseTo(1 + ramp.gain / 2, 3);
+    expect(end / base).toBeCloseTo(1 + ramp.gain, 3);
+    expect(later).toBeCloseTo(end, 6);
+  });
+
+  it("leaves other sectors and other presets untouched", () => {
+    const turn = ramp.startTurn + ramp.rampTurns;
+    expect(producedAt("manufacturing", turn, "1991-default")).toBeCloseTo(
+      producedAt("manufacturing", ramp.startTurn, "1991-default"),
+      6
+    );
+    expect(producedAt("energy", turn, "2019-default")).toBeCloseTo(
+      producedAt("energy", ramp.startTurn, "2019-default"),
+      6
     );
   });
 });

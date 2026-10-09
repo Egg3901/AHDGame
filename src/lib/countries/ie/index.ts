@@ -14,7 +14,7 @@ import { IE_ERAS } from "./eras";
  * MongoDB driver into the browser. Client surfaces take `./identity` or
  * `./geographyFacts`, never this file and never `./geography`.
  */
-export const IE: CountryFolder = {
+export const IE: CountryFolder<"IE"> = {
   id: "IE",
   identity: IE_IDENTITY,
   institutions: IE_INSTITUTIONS,

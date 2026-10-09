@@ -1,15 +1,18 @@
 import { primaryMetrics } from "../catalog";
 import type { OpeningMetricObservation } from "./openingObservation";
 import { openingMetricHistory, validateMetricHistory, type ResetMetricHistory } from "./history";
+import type { ResetCountry } from "@/lib/resetLegislation/fundingOwner";
 
 export interface ResetMetricSnapshot {
   _id: string;
   worldId: string;
-  countryId: "US" | "UK" | "JP";
+  countryId: ResetCountry;
   scope: "national" | "regional";
   regionId?: string;
   sourceTurn: number;
   asOfTurn: number;
+  /** Prior observed turn for exact replay after a missed refresh; never fabricated history. */
+  lastRefreshFromTurn?: number;
   observations: Record<string, OpeningMetricObservation>;
   history?: ResetMetricHistory;
 }

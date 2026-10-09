@@ -15,6 +15,8 @@ import { getDb } from "@/lib/mongodb";
 import { runIndexFundCron } from "./fundCron";
 import { getAllFundDefinitions } from "./fundDefinitions";
 import { listActiveFunds, listFundsByIds, getFundById } from "./fundQueries";
+import { staggerPhase } from "@/lib/turn/staggerPhase";
+import { TURNS_PER_DAY } from "@/lib/constants/corporations";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 vi.mock("@/lib/db/transactionSupport", () => ({
@@ -96,6 +98,17 @@ function world(fundCount: number, corpCount = 120) {
   return { memory, db, funds: funds.length };
 }
 
+/**
+ * A turn after 48 on which no fund in the world has its staggered rebalance
+ * slot, so the pass does only the every-turn work.
+ */
+function quietTurn(w: ReturnType<typeof world>): number {
+  const ids = w.memory.collection("indexFunds").docs.map((fund) => String(fund._id));
+  for (let turn = 49; turn < 49 + TURNS_PER_DAY; turn++)
+    if (!ids.some((id) => staggerPhase(id, TURNS_PER_DAY) === turn % TURNS_PER_DAY)) return turn;
+  throw new Error("every turn of the day holds a fund's rebalance");
+}
+
 describe("index fund cron round trips", () => {
   it("keeps a rebalance turn inside its round-trip budget", async () => {
     const w = world(12);
@@ -120,7 +133,7 @@ describe("index fund cron round trips", () => {
     const w = world(12);
     await runIndexFundCron(w.db, { currentTurn: 48 });
     const trips = countRoundTrips(w.memory);
-    const result = await runIndexFundCron(w.db, { currentTurn: 49 });
+    const result = await runIndexFundCron(w.db, { currentTurn: quietTurn(w) });
     expect(result.errors).toEqual([]);
     expect(result.floatPurchases).toBe(0);
     expect(trips.total(), trips.summary()).toBeLessThan(15 * w.funds + 60);
@@ -132,11 +145,11 @@ describe("index fund cron round trips", () => {
     const small = world(4);
     await runIndexFundCron(small.db, { currentTurn: 48 });
     const smallTrips = countRoundTrips(small.memory);
-    await runIndexFundCron(small.db, { currentTurn: 49 });
+    await runIndexFundCron(small.db, { currentTurn: quietTurn(small) });
     const big = world(12);
     await runIndexFundCron(big.db, { currentTurn: 48 });
     const bigTrips = countRoundTrips(big.memory);
-    await runIndexFundCron(big.db, { currentTurn: 49 });
+    await runIndexFundCron(big.db, { currentTurn: quietTurn(big) });
     const perFund = (bigTrips.total() - smallTrips.total()) / (big.funds - small.funds);
     expect(perFund, `${smallTrips.summary()} | ${bigTrips.summary()}`).toBeLessThan(12);
   }, 280_000);

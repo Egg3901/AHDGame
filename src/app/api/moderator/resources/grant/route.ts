@@ -3,7 +3,7 @@ import { getDb } from "@/lib/mongodb";
 import { requireModerator } from "@/lib/api/requireModerator";
 import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/validate";
-import { adminResourcesGrantSchema } from "@/lib/api/schemas/admin";
+import { moderatorResourcesGrantSchema } from "@/lib/api/schemas/admin";
 import { createModAuditLog } from "@/lib/modAuditLog";
 import type { Character, ExchangeRate } from "@/lib/db/types";
 import { ObjectId } from "mongodb";
@@ -22,7 +22,7 @@ export async function POST(request: Request) {
     if (!auth.ok) return auth.response;
     const { user: moderator } = auth;
 
-    const parsed = await parseJsonBody(request, adminResourcesGrantSchema);
+    const parsed = await parseJsonBody(request, moderatorResourcesGrantSchema);
     if (!parsed.success) {
       return errorResponse(parsed.status, parsed.error);
     }

@@ -28,7 +28,7 @@ At founding you choose from **17 sector types**:
 | chemical_industries | Chemical Industries |
 | construction | Construction |
 
-Your chosen type is the corporation's **primary type**. Sectors matching your primary type receive a +10 percentage-point operating margin bonus. You can later add a **secondary type** for a +5 percentage-point bonus on sectors of that type.
+Your chosen type is the corporation's **primary type**. Sectors matching your primary type receive a +5 percentage-point operating margin bonus. You can later add a **secondary type** for a +2.5 percentage-point bonus on sectors of that type.
 
 The CEO receives 10,000,000 shares at ₳0.10 initial price. Your corporation's HQ is set to your current home state.
 
@@ -207,10 +207,10 @@ Many factors adjust your sector profit margins. These are additive:
 
 | Modifier | Max Effect | Notes |
 | --- | --- | --- |
-| Sector type match | +10pp primary / +5pp secondary / -15pp unrelated | Bonus if sector matches primary type; penalty if neither type matches |
-| Secondary type match | +5pp | If sector matches secondary type |
-| Home state | +10% | Sectors in your HQ state |
-| Same country | +5% | Sectors in your home country (not HQ state) |
+| Sector type match | +5pp primary / +2.5pp secondary / -15pp unrelated | Bonus if sector matches primary type; penalty if neither type matches |
+| Secondary type match | +2.5pp | If sector matches secondary type |
+| Home state | +5% | Sectors in your HQ state |
+| Same country | +2.5% | Sectors in your home country (not HQ state) |
 | Unemployment | ±5% | Pivot at 3%; low unemployment hurts margins, high unemployment helps |
 | Power grid | -4% | No penalty above 95% uptime; linear scale to -4% at 85% or below |
 | Corruption | -3% | Linear scale to index 100 |
@@ -279,6 +279,8 @@ If nobody is attacking you and you have no intention of splitting or attacking, 
 ### Logistical sprawl
 
 Corporations with more than **15 sectors** incur a -0.5% margin penalty per 2 sectors over the threshold. With a secondary type set, that doubles to -1.0% per 2 sectors. Logistics & Operations (your distribution reach and operational process quality) spending raises the threshold (up to 30 sectors at max Logistics & Operations Strength of 200) and halves the penalty slope.
+
+Logistics sectors (depots) never pay the sprawl penalty on their own margin. They still count toward the sector total, so adding depots raises the penalty on every other sector you own.
 
 ### Research, tech trees & wages
 

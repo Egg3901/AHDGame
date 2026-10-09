@@ -1,0 +1,21 @@
+{
+  "parties": {
+    "registrationPresence": {
+      "description": "Fund voter registration to grow your party's registered base. Spending is divided equally only across regions with a local player, active NPP or regional officeholder.",
+      "allocated": "Allocated spending",
+      "limit": "Up to +{cap} percentage points per eligible region per drive each turn. Actual gains depend on eligible regions and available registration. Nothing is spent if no region can receive a boost."
+    },
+    "leave": {
+      "button": "Leave party",
+      "pending": "Leaving…",
+      "confirmTitle": "Leave this party?",
+      "confirmMessage": "You will become an Independent.",
+      "confirm": "Leave party",
+      "cancel": "Cancel"
+    },
+    "whips": {
+      "nominationsTab": "Nominations",
+      "noActiveNominations": "No active nominations to whip."
+    }
+  }
+}

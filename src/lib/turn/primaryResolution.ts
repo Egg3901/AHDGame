@@ -12,6 +12,7 @@ import {
 
 import { usesLegacyPresidentialCampaign } from "@/lib/countries/ru/rules/presidentialCampaign";
 import { preloadIncumbentSeatShares } from "@/lib/electionEngine/incumbentSeatShare";
+import { preloadLegislativeIncumbencies } from "@/lib/electionEngine/singleSeatIncumbency";
 import { applyStandingAds } from "@/lib/campaignTargeting/standingAds";
 import { buildGranularElectorateSubstrate } from "@/lib/demographics/granularElectorate";
 import {
@@ -63,13 +64,11 @@ import {
 } from "@/lib/presidentialElectionEngine";
 import { createNotifications, type NotificationInput } from "@/lib/notifications";
 import {
-  calcPrimaryScore,
-  calcPresidentPrimaryScore,
   primarySharePctSoftmax,
   PRIMARY_SHARE_SOFTMAX_TEMPERATURE,
-  effectivePartyInfluenceForPresidentialPrimary,
   buildPartyChairMaps,
   resolvePartyChairPrimaryRole,
+  scorePrimaryCandidate,
 } from "@/lib/primaryScore";
 import { parseSeatId } from "@/lib/seats/seatId";
 import { getAllStateApprovalsForElection } from "@/lib/utils/getStateApprovalForElection";
@@ -80,7 +79,6 @@ import {
   type CountryId,
 } from "@/lib/constants/countries";
 import { getExecutiveOfficialFilter } from "@/lib/elections/executiveOfficeFilters";
-import { NPP_PRIMARY_SCORE_MULTIPLIER } from "@/lib/electionEngine/constants";
 import { resolveTurnout } from "@/lib/electionEngine/resolvedTurnout";
 import { createVoteTurnMemo } from "@/lib/electionEngine/tallyManagement";
 import { writeVoteTallies } from "./election/writeVoteTallies";
@@ -125,6 +123,18 @@ import { finaliseManifestosAtElectionCall } from "@/lib/uk/manifesto/manifestoLi
 import { getStandingPlatformsForCountry } from "@/lib/uk/conference/conferenceCommands";
 import { hydrateVoteTurnMemo } from "@/lib/turn/voteAccumulationPreload";
 import { capturePrimaryOutcome } from "@/lib/analytics/electionAnalytics";
+import {
+  loadCandidateEnrichmentPreload,
+  type CandidateEnrichmentPreload,
+} from "@/lib/electionEngine/candidateEnrichment";
+import { loadEnrichmentCountryConfigsByElection } from "./electionEnrichmentPreload";
+import { forEachWithConcurrency } from "@/lib/utils/forEachWithConcurrency";
+import {
+  loadDemographicsV2Preload,
+  loadElectionDemographicsGameState,
+} from "@/lib/electionEngine/demographicsV2Preload";
+
+const VOTE_ACCUMULATION_CONCURRENCY = 8;
 
 /**
  * Optional restriction of a turn sweep to specific elections. Absent (the
@@ -275,19 +285,20 @@ export async function resolvePrimariesIfNeeded(
     resolvingElections.push({ election, candidates, partyCounts, maxAdvancing });
   }
 
-  // Characters for infamy lookup, batched across all resolving elections.
-  // Presidential races also need this map for partyOrg/national-influence
-  // lookups below; non-presidential paths only need char.infamy.
   const allResolvingCandidates = resolvingElections.flatMap((r) => r.candidates);
-  const allCharacterIds = allResolvingCandidates.filter((c) => !c.isNPP).map((c) => c.characterId);
-  const chars =
-    allCharacterIds.length > 0
-      ? await db
-          .collection<Character>("characters")
-          .find({ _id: { $in: allCharacterIds } })
-          .toArray()
-      : [];
-  const charMap: Map<string, Character> = new Map(chars.map((c) => [c._id.toString(), c]));
+  const [enrichmentPreload, enrichmentCountryConfigByElection] = await Promise.all([
+    loadCandidateEnrichmentPreload(
+      db,
+      allResolvingCandidates,
+      resolvingElections.map(({ election }) => election._id as ObjectId),
+      hasPresident ? statePartyOrgs : undefined
+    ),
+    loadEnrichmentCountryConfigsByElection(
+      db,
+      resolvingElections.map(({ election }) => election)
+    ),
+  ]);
+  const charMap = enrichmentPreload.charactersById;
   applyStandingAds(allResolvingCandidates, charMap);
 
   // Active preset for delegate-majority thresholds (convention path). Fetched
@@ -331,6 +342,12 @@ export async function resolvePrimariesIfNeeded(
 
     const enriched = await fetchEnrichedCandidates(candidates, {
       countryId: (election.countryId ?? "US") as CountryId,
+      parties: parties.filter(
+        (party) => (party.countryId ?? "US") === (election.countryId ?? "US")
+      ),
+      preload: enrichmentPreload,
+      countryConfig: enrichmentCountryConfigByElection.get(electionId.toString()),
+      db,
     });
 
     // UK manifestos finalise at the primary→general transition (epic #856):
@@ -522,57 +539,25 @@ export async function resolvePrimariesIfNeeded(
             const ec = enriched.find((e) => e.candidateId === c._id.toString());
             if (!ec)
               return { candidateId: c._id.toString(), characterName: c.characterName, score: 0 };
-            let score: number;
-            if (usesLegacyPresidentialCampaign(election)) {
-              // Party influence (candidate's own party clout), NPPs have none. See #934.
-              // No chair multiplier — the chair primary boost was removed (#3019);
-              // effectivePartyInfluenceForPresidentialPrimary is an inert passthrough.
-              const rawPartyInfluence = c.isNPP
-                ? 0
-                : (charMap.get(c.characterId.toString())?.partyInfluence ?? 0);
-              const role = c.isNPP
+            let score = scorePrimaryCandidate({
+              isPresidential: usesLegacyPresidentialCampaign(election),
+              isNPP: Boolean(c.isNPP),
+              hasPlayerInParty,
+              candidateEcon: ec.charEP,
+              candidateSocial: ec.charSP,
+              partyEcon: partyEP,
+              partySocial: partySP,
+              favorability: ec.favorability,
+              politicalInfluence: ec.politicalInfluence,
+              nationalInfluence: charMap.get(c.characterId.toString())?.nationalInfluence,
+              partyInfluence: charMap.get(c.characterId.toString())?.partyInfluence,
+              partyChairRole: c.isNPP
                 ? null
-                : resolvePartyChairPrimaryRole(c.characterId.toString(), partyChairMaps);
-              const partyInfluence = effectivePartyInfluenceForPresidentialPrimary(
-                rawPartyInfluence,
-                role
-              );
-              const nationalOrPol = c.isNPP
-                ? ec.politicalInfluence
-                : (charMap.get(c.characterId.toString())?.nationalInfluence ??
-                  ec.politicalInfluence);
-              score = calcPresidentPrimaryScore(
-                ec.charEP,
-                ec.charSP,
-                partyEP,
-                partySP,
-                ec.favorability,
-                nationalOrPol,
-                partyInfluence,
-                ec.infamy
-              );
-            } else {
-              score = calcPrimaryScore(
-                ec.charEP,
-                ec.charSP,
-                partyEP,
-                partySP,
-                ec.favorability,
-                ec.politicalInfluence,
-                ec.infamy,
-                raceStateEconLean,
-                raceStateSocialLean
-              );
-            }
-            /*
-             * NPPs are penalised in primary scoring when a player character runs in
-             * the same party. This models the structural disadvantage NPPs face from
-             * lower voter name recognition and fewer campaign resources compared to
-             * active player-driven characters. Without this handicap, high-favorability
-             * NPPs would frequently outcompete players in their own party primaries,
-             * undermining player agency. See NPP_PRIMARY_SCORE_MULTIPLIER in constants.ts.
-             */
-            if (c.isNPP && hasPlayerInParty) score *= NPP_PRIMARY_SCORE_MULTIPLIER;
+                : resolvePartyChairPrimaryRole(c.characterId.toString(), partyChairMaps),
+              infamy: ec.infamy,
+              stateEconLean: raceStateEconLean,
+              stateSocialLean: raceStateSocialLean,
+            });
             const campaignCells = campaignCellsByRegion.get(
               `${election.countryId}:${election.state}${usesCampaignRules(election) ? "" : ":0"}`
             );
@@ -683,6 +668,9 @@ export async function resolvePrimariesIfNeeded(
       const charMapNotify = charMap;
       const notificationInputs: NotificationInput[] = [];
       const achievementPromises: Promise<unknown>[] = [];
+      const achievementModule = usesLegacyPresidentialCampaign(election)
+        ? import("@/lib/achievements")
+        : null;
       for (const c of candidates) {
         if (c.isNPP) continue;
         const char = charMapNotify.get(c.characterId.toString());
@@ -704,13 +692,12 @@ export async function resolvePrimariesIfNeeded(
             party: c.party,
           },
         });
-        if (!isLoser && usesLegacyPresidentialCampaign(election)) {
+        if (!isLoser && achievementModule) {
           achievementPromises.push(
-            import("@/lib/achievements")
-              .then(async ({ awardAchievement, resolveUserIdFromCharacter }) => {
-                const cUserId = await resolveUserIdFromCharacter(c.characterId);
-                if (cUserId) await awardAchievement(cUserId, "presidential_nominee", c.characterId);
-              })
+            achievementModule
+              .then(({ awardAchievement }) =>
+                awardAchievement(char.userId, "presidential_nominee", c.characterId)
+              )
               .catch((e) => console.error("Achievement check failed:", e))
           );
         }
@@ -858,6 +845,13 @@ async function autoAssignTentativeRunningMates(
     )
     .toArray();
   const nomineeCharMap = new Map(nomineeChars.map((c) => [c._id.toString(), c]));
+  const runningMateWrites: AnyBulkWriteOperation<ElectionCandidate>[] = [];
+  const notificationAssignments: Array<{
+    nomineeId: ObjectId;
+    runningMateId: ObjectId;
+    notification: NotificationInput;
+  }> = [];
+  const assignedAt = new Date();
 
   for (const nominee of needsVp) {
     const candidates = candidatesByParty.get(nominee.party) ?? [];
@@ -873,18 +867,23 @@ async function autoAssignTentativeRunningMates(
     );
 
     if (!pick) continue;
-
-    await db
-      .collection<ElectionCandidate>("electionCandidates")
-      .updateOne(
-        { _id: nominee._id },
-        { $set: { runningMateId: pick._id, updatedAt: new Date() } }
-      );
+    runningMateWrites.push({
+      updateOne: {
+        // Do not overwrite a player selection made after `needsVp` was read.
+        filter: {
+          _id: nominee._id,
+          $or: [{ runningMateId: { $exists: false } }, { runningMateId: { $type: 10 } }],
+        },
+        update: { $set: { runningMateId: pick._id, updatedAt: assignedAt } },
+      },
+    });
 
     const nomineeChar = nomineeCharMap.get(nominee.characterId.toString());
     if (nomineeChar?.userId) {
-      await createNotifications([
-        {
+      notificationAssignments.push({
+        nomineeId: nominee._id,
+        runningMateId: pick._id,
+        notification: {
           userId: nomineeChar.userId,
           type: "general_win",
           title: "Running mate tentatively assigned",
@@ -894,7 +893,38 @@ async function autoAssignTentativeRunningMates(
             tentativeVpId: pick._id.toString(),
           },
         },
-      ]);
+      });
+    }
+  }
+  if (runningMateWrites.length > 0) {
+    const result = await db
+      .collection<ElectionCandidate>("electionCandidates")
+      .bulkWrite(runningMateWrites, { ordered: false });
+    let confirmedNotifications = notificationAssignments;
+    if (result.matchedCount !== runningMateWrites.length && notificationAssignments.length > 0) {
+      const confirmed = await db
+        .collection<ElectionCandidate>("electionCandidates")
+        .find(
+          {
+            _id: { $in: notificationAssignments.map(({ nomineeId }) => nomineeId) },
+            updatedAt: assignedAt,
+          },
+          { projection: { _id: 1, runningMateId: 1 } }
+        )
+        .toArray();
+      const confirmedRunningMateByNominee = new Map(
+        confirmed.map((candidate) => [
+          candidate._id.toString(),
+          candidate.runningMateId?.toString(),
+        ])
+      );
+      confirmedNotifications = notificationAssignments.filter(
+        ({ nomineeId, runningMateId }) =>
+          confirmedRunningMateByNominee.get(nomineeId.toString()) === runningMateId.toString()
+      );
+    }
+    if (confirmedNotifications.length > 0) {
+      await createNotifications(confirmedNotifications.map(({ notification }) => notification));
     }
   }
 }
@@ -1043,41 +1073,15 @@ export async function recordPrimarySnapshots(
     candidatesByElection.set(eid, list);
   }
 
-  const allCharacterIds = [
-    ...new Set(allCandidates.filter((c) => !c.isNPP).map((c) => c.characterId)),
-  ];
-  const allNppIds = [
-    ...new Set(allCandidates.filter((c) => c.isNPP && c.nppId).map((c) => c.nppId!)),
-  ];
-
-  const [characters, npps] = await Promise.all([
-    allCharacterIds.length > 0
-      ? db
-          .collection<Character>("characters")
-          .find({ _id: { $in: allCharacterIds } })
-          .toArray()
-      : Promise.resolve([] as Character[]),
-    allNppIds.length > 0
-      ? db
-          .collection<NPP>("npps")
-          .find(
-            { _id: { $in: allNppIds } },
-            {
-              projection: {
-                "policies.economic": 1,
-                "policies.social": 1,
-                favorability: 1,
-                politicalInfluence: 1,
-                homeState: 1,
-              },
-            }
-          )
-          .toArray()
-      : Promise.resolve([] as NPP[]),
-  ]);
-  const charMap = new Map(characters.map((c) => [c._id.toString(), c]));
+  const enrichmentPreload = await loadCandidateEnrichmentPreload(
+    db,
+    allCandidates,
+    electionIds,
+    statePartyOrgs
+  );
+  const charMap = enrichmentPreload.charactersById;
   applyStandingAds(allCandidates, charMap);
-  const nppMap = new Map(npps.map((n) => [n._id.toString(), n]));
+  const nppMap = enrichmentPreload.nppsById;
 
   // Presidential-only: compute per-state projections FIRST (also writes the
   // per-state polling history to the tally). The returned projections drive a
@@ -1092,6 +1096,7 @@ export async function recordPrimarySnapshots(
     nppMap,
     partyMap,
     statePartyOrgs,
+    enrichmentPreload,
     now
   );
   const presPreset = hasPresident ? snapshotGameState?.preset : undefined;
@@ -1315,6 +1320,9 @@ export async function recordPrimarySnapshots(
       }
     }
 
+    const partiesWithPlayerCandidate = new Set(
+      candidates.filter((candidate) => !candidate.isNPP).map((candidate) => candidate.party)
+    );
     for (const c of candidates) {
       const party = partyMap.get(`${election.countryId ?? "US"}:${c.party}`);
       const partyEcon = party?.economicPosition ?? 0;
@@ -1370,51 +1378,25 @@ export async function recordPrimarySnapshots(
       const usePresProjection = isPresident && presPartiesWithProjection.has(c.party);
       let primaryScore = usePresProjection
         ? (presStanding?.standing ?? 0)
-        : isPresident
-          ? (() => {
-              // Pre-projection fallback (no per-state votes yet this cycle).
-              // Party influence (candidate's own party clout), NPPs have none (#934).
-              // No chair multiplier — chair primary boost removed (#3019).
-              const rawPartyInfluence = c.isNPP
-                ? 0
-                : (charMap.get(c.characterId.toString())?.partyInfluence ?? 0);
-              const role = c.isNPP
-                ? null
-                : resolvePartyChairPrimaryRole(c.characterId.toString(), partyChairMaps);
-              const partyInfluence = effectivePartyInfluenceForPresidentialPrimary(
-                rawPartyInfluence,
-                role
-              );
-              const nationalOrPol = nationalInfluence ?? politicalInfluence;
-              return calcPresidentPrimaryScore(
-                econ,
-                social,
-                partyEcon,
-                partySocial,
-                favorability,
-                nationalOrPol,
-                partyInfluence,
-                candidateInfamy
-              );
-            })()
-          : calcPrimaryScore(
-              econ,
-              social,
-              partyEcon,
-              partySocial,
-              favorability,
-              politicalInfluence,
-              candidateInfamy,
-              raceStateEconLean,
-              raceStateSocialLean
-            );
-      const partyCandidates = candidates.filter((x) => x.party === c.party);
-      const hasPlayerInParty = partyCandidates.some((x) => !x.isNPP);
-      // Same handicap as in resolvePrimariesIfNeeded — see NPP_PRIMARY_SCORE_MULTIPLIER.
-      // Skipped on the projection path: the NPP penalty is already baked into the
-      // per-state vote engine, so re-applying it would double-count.
-      if (c.isNPP && hasPlayerInParty && !usePresProjection)
-        primaryScore *= NPP_PRIMARY_SCORE_MULTIPLIER;
+        : scorePrimaryCandidate({
+            isPresidential: isPresident,
+            isNPP: Boolean(c.isNPP),
+            hasPlayerInParty: partiesWithPlayerCandidate.has(c.party),
+            candidateEcon: econ,
+            candidateSocial: social,
+            partyEcon,
+            partySocial,
+            favorability,
+            politicalInfluence,
+            nationalInfluence,
+            partyInfluence: charMap.get(c.characterId.toString())?.partyInfluence,
+            partyChairRole: c.isNPP
+              ? null
+              : resolvePartyChairPrimaryRole(c.characterId.toString(), partyChairMaps),
+            infamy: candidateInfamy,
+            stateEconLean: raceStateEconLean,
+            stateSocialLean: raceStateSocialLean,
+          });
       const adBonus = regionalAdBonuses[c._id.toString()] ?? 0;
       if (adBonus > 0)
         primaryScore = campaignPrimaryScore(
@@ -1579,6 +1561,7 @@ async function recordPresidentialStatePollingSnapshots(
   nppMap: Map<string, NPP>,
   partyMap: Map<string, PoliticalPartyType>,
   statePartyOrgs: StatePartyOrg[],
+  enrichmentPreload: CandidateEnrichmentPreload,
   now: Date
 ): Promise<PresProjectionByElection> {
   const projectionsByElection: PresProjectionByElection = new Map();
@@ -1626,6 +1609,11 @@ async function recordPresidentialStatePollingSnapshots(
     const enrichedAll = await fetchEnrichedCandidates(candidates, {
       includePartyPositions: true,
       countryId: (election.countryId ?? "US") as CountryId,
+      parties: [...partyMap.values()].filter(
+        (party) => (party.countryId ?? "US") === (election.countryId ?? "US")
+      ),
+      preload: enrichmentPreload,
+      db,
     });
 
     // Regional bases L1+C — mirror primaryStaggerPhase wiring so the
@@ -1726,14 +1714,19 @@ async function recordPresidentialStatePollingSnapshots(
 export async function accumulateGeneralElectionVotes(
   now: Date,
   turn: number,
-  scope?: ElectionSweepScope
+  scope?: ElectionSweepScope,
+  options?: { slice?: "early" }
 ): Promise<void> {
   const db = await getDb();
+  // Half-hour results tick (electionHalfTick.ts): early halves of races
+  // already on the board only; waves, presidential engines and new tallies
+  // stay on the turn.
+  const early = options?.slice === "early";
 
   // Run presidential primary stagger waves first (before general accumulation).
   // Affects only presidential elections in primary phase within 6h of ending.
   try {
-    await processPrimaryStaggerWaves(db, now, turn, scope?.electionIds);
+    if (!early) await processPrimaryStaggerWaves(db, now, turn, scope?.electionIds);
   } catch (err) {
     logger.error("Turn", "Primary stagger failed", err);
   }
@@ -1824,27 +1817,7 @@ export async function accumulateGeneralElectionVotes(
                 : { stateId: { $in: uniqueStateIds } }
             )
             .toArray(),
-          db
-            .collection<{
-              _id: string;
-              preset?: string;
-              currentYear?: number;
-              currentTurn?: number;
-              startingYear?: number;
-              eraSystemEnabled?: boolean;
-            }>("gameState")
-            .findOne(
-              { _id: "current" },
-              {
-                projection: {
-                  preset: 1,
-                  currentYear: 1,
-                  currentTurn: 1,
-                  startingYear: 1,
-                  eraSystemEnabled: 1,
-                },
-              }
-            ),
+          loadElectionDemographicsGameState(db),
           // Seeded snapshots for the granular substrate's legislation
           // lean-drift fold (only consumed when the flag is on).
           db.collection<StateDemographics>("demographicDefaults").find(regionalScope).toArray(),
@@ -1855,6 +1828,15 @@ export async function accumulateGeneralElectionVotes(
             )
           ),
         ]);
+        const { regionDemographicsByState, demographicsV2Countries, votingAgeByCountry } =
+          await loadDemographicsV2Preload({
+            db,
+            countries: uniqueCountries,
+            regionFilter: regionalScope,
+            states,
+            nationwideCountries,
+            gameState: gsPreset,
+          });
         const stateMap = new Map(states.map((s) => [s._id as string, s]));
         const demographicsMap = new Map(demographics.map((d) => [d._id as string, d]));
         const turnoutByState = new Map(turnoutDocs.map((t) => [t._id as string, t]));
@@ -1893,6 +1875,9 @@ export async function accumulateGeneralElectionVotes(
           turnoutByState,
           registrationPoolByState,
           demographicDefaultsByState: new Map(demoDefaults.map((d) => [d._id as string, d])),
+          regionDemographicsByState,
+          demographicsV2Countries,
+          votingAgeByCountry,
           governingPartyIdsByCountry: new Map(governingPartyEntries),
           turnMemo: createVoteTurnMemo(),
         };
@@ -1937,25 +1922,31 @@ export async function accumulateGeneralElectionVotes(
     list.push(c);
     candidatesByElection.set(eid, list);
   }
+  if (preload) {
+    const [legislativeIncumbency, enrichmentCountryConfigByElection] = await Promise.all([
+      preloadLegislativeIncumbencies(stateElections, candidatesByElection, db),
+      loadEnrichmentCountryConfigsByElection(db, stateElections),
+    ]);
+    preload.legislativeIncumbentByElection = legislativeIncumbency.singleSeatByElection;
+    preload.houseIncumbentTenuresByElection = legislativeIncumbency.houseTenuresByElection;
+    preload.enrichmentCountryConfigByElection = enrichmentCountryConfigByElection;
+  }
 
-  // A3 — process presidential races BEFORE down-ballot races so the
-  // coattails driver reads the freshly-accumulated presidential margin
-  // for this turn. Without this ordering, MongoDB's default iteration
-  // would let a down-ballot tally see last turn's presidential data
-  // (or none on the first turn), suppressing coattails.
-  const presidentialElections = generalElections.filter((e) => e.electionType === "president");
-  const downBallotElections = generalElections.filter((e) => e.electionType !== "president");
-  const orderedElections = [...presidentialElections, ...downBallotElections];
+  const legacyPresidentialElections = generalElections.filter(usesLegacyPresidentialCampaign);
+  const independentlyAccumulatedElections = generalElections.filter(
+    (election) => !usesLegacyPresidentialCampaign(election)
+  );
 
-  // Every race's tally update goes out in one bulk write after the loop
+  // Every state-race tally update goes out in one bulk write after the sweep
   // (#2695). Unordered: one failing race does not block the others.
   const tallyWrites: AnyBulkWriteOperation<ElectionVoteTally>[] = [];
-  for (const election of orderedElections) {
+  const accumulateElection = async (election: Election): Promise<void> => {
     try {
-      if (isBrazilIndirectPresidentialElection(election, preload?.preset)) continue;
+      if (isBrazilIndirectPresidentialElection(election, preload?.preset)) return;
       const existing = tallyByElection.get(election._id.toString());
       const activeCandidates = candidatesByElection.get(election._id.toString()) ?? [];
 
+      if (early && (!existing || usesLegacyPresidentialCampaign(election))) return;
       if (usesLegacyPresidentialCampaign(election)) {
         if (!existing && activeCandidates.length > 0) {
           await initPresidentVoteTally(election._id, activeCandidates);
@@ -1981,16 +1972,28 @@ export async function accumulateGeneralElectionVotes(
           election,
           tally: existing ?? undefined,
           candidates: activeCandidates,
+          ...(early ? { slice: "early" as const } : {}),
         });
       }
     } catch (err) {
       logger.error("Turn", `Error accumulating votes for election ${election._id}`, err);
       if (tallyByElection.get(election._id.toString())?.countingMethod === "pr_stv") throw err;
     }
-  }
+  };
+
+  // Bespoke presidential engines write directly and remain sequential. The
+  // state engine has no live presidential-tally dependency: coattails read the
+  // sitting executive and approval, so its independent races can run with a
+  // bounded worker pool before their shared unordered bulk write.
+  for (const election of legacyPresidentialElections) await accumulateElection(election);
+  await forEachWithConcurrency(
+    independentlyAccumulatedElections,
+    VOTE_ACCUMULATION_CONCURRENCY,
+    accumulateElection
+  );
   await writeVoteTallies(
     db,
     tallyWrites,
-    orderedElections.some((e) => tallyByElection.get(e._id.toString())?.countingMethod === "pr_stv")
+    generalElections.some((e) => tallyByElection.get(e._id.toString())?.countingMethod === "pr_stv")
   );
 }

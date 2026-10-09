@@ -43,6 +43,12 @@ import { getCurrentTurn } from "@/lib/currentTurn";
 import { loadSovereignCouponBooks } from "@/lib/bonds/sovereignCouponBook";
 import { sovereignStockAnnualService } from "@/lib/budget/rules/sovereignDebtService";
 import type { GameConfig } from "@/lib/db/types/gameConfig";
+import {
+  NON_LAW_CALIBRATION_VERSION,
+  calibrateNonLawSpendingShare,
+  needsNonLawCalibration,
+  seededSpendingEnvelope,
+} from "./rules/nonLawSpending";
 
 /**
  * Spec B revenue ceiling (flag-on only). A Laffer soft-cap: tax take above ~40%
@@ -599,24 +605,67 @@ export async function refreshNationalBudgetRevenue(db: Db, budgetIds?: string[])
           : undefined
       );
       // Recalculate spending to include current enacted laws and debt interest
-      const spending = await calculateFederalSpending(
+      const debtService = sovereignStockAnnualService({
+        principal: budget.debt.principal,
+        book: couponBooks.get(String(countryId)) ?? null,
+        marginalRate: budget.debt.interestRate,
+        imfBailoutActive: budget.imfSovereignBailoutActive,
+      });
+      // A recalibration measures the law book alone, without any earlier residual.
+      const recalibrate = needsNonLawCalibration(budget, countryId);
+      let spending = await calculateFederalSpending(
         db,
-        { ...budget, revenue },
-        sovereignStockAnnualService({
-          principal: budget.debt.principal,
-          book: couponBooks.get(String(countryId)) ?? null,
-          marginalRate: budget.debt.interestRate,
-          imfBailoutActive: budget.imfSovereignBailoutActive,
-        }),
+        recalibrate
+          ? { ...budget, revenue, nonLawSpendingGdpShareBaseline: undefined }
+          : { ...budget, revenue },
+        debtService,
         eraContext ?? undefined,
         refugeeServiceCosts,
         capacityRepairSpending
       );
+      // First exposure for a country whose seed law book prices only part of
+      // its government: fix the missing envelope as a share of GDP, once.
+      const calibratedShare = recalibrate
+        ? calibrateNonLawSpendingShare({
+            gdp: budget.gdp,
+            baselineTotal: seededSpendingEnvelope(budget),
+            lawTotal:
+              Object.values(spending.byCategory ?? {}).reduce(
+                (a, v) => a + (Number.isFinite(v) ? v : 0),
+                0
+              ) + (spending.stateGrants ?? 0),
+            annualRevenue: revenue.total,
+            annualDebtService: spending.debtInterest ?? 0,
+          })
+        : undefined;
+      if (calibratedShare !== undefined && calibratedShare > 0) {
+        spending = await calculateFederalSpending(
+          db,
+          { ...budget, revenue, nonLawSpendingGdpShareBaseline: calibratedShare },
+          debtService,
+          eraContext ?? undefined,
+          refugeeServiceCosts,
+          capacityRepairSpending
+        );
+      }
       const surplus = revenue.total - spending.total;
       return {
         updateOne: {
           filter: { _id: budget._id },
-          update: { $set: { revenue, spending, surplus, updatedAt: now } },
+          update: {
+            $set: {
+              revenue,
+              spending,
+              surplus,
+              updatedAt: now,
+              ...(calibratedShare !== undefined
+                ? {
+                    nonLawSpendingGdpShareBaseline: calibratedShare,
+                    nonLawSpendingCalibration: NON_LAW_CALIBRATION_VERSION,
+                  }
+                : {}),
+            },
+          },
         },
       };
     })

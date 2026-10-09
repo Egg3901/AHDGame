@@ -21,6 +21,7 @@ describe("getEraContext", () => {
       preset: "1991-default",
       startingYear: null,
       incomeBandIndexByCountry: null,
+      incomeStartVintages: null,
       mediaRegulation: {
         enabled: false,
         marketSystemMode: "off",
@@ -67,6 +68,7 @@ describe("getEraContext", () => {
       preset: null,
       startingYear: null,
       incomeBandIndexByCountry: null,
+      incomeStartVintages: null,
       mediaRegulation: {
         enabled: false,
         marketSystemMode: "off",

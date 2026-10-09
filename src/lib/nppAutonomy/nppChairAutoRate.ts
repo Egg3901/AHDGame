@@ -14,8 +14,10 @@ import { getNationalDocId } from "@/lib/constants/nationalScope";
 import {
   NPP_CHAIR_STEP_FRACTION,
   NPP_CHAIR_TARGET_GROWTH,
-  MAX_RATE_CHANGE_DELTA,
   MAX_RATE_CUT_DELTA,
+  maxHikeDeltaFor,
+  PRIME_RATE_CEILING,
+  GOVERNMENT_RATE_IDLE_TURNS,
   RATE_CHANGE_COOLDOWN_TURNS,
   RATE_HISTORY_MAX,
   snapToPrimeRateGrid,
@@ -29,17 +31,27 @@ import { isBankGovernmentControlled } from "@/lib/centralBank/governance";
  * Bounded step toward the target: 0.5x the gap, clamped to [-1.75, +0.75].
  * `alignment` scales hike vs. cut speed before the clamp (hawk hikes faster /
  * cuts slower; dove the inverse).
+ *
+ * When `inflationGap` (inflation minus target) is at least
+ * NPP_CHAIR_HIGH_INFLATION_GAP the hike clamp widens to
+ * NPP_CHAIR_HIGH_INFLATION_HIKE_DELTA so the rate can catch up with runaway
+ * inflation in a few meetings instead of years. The step is still 0.5x the gap,
+ * so it shrinks as the rate closes in, and cuts are untouched. Hikes never
+ * carry the rate past PRIME_RATE_CEILING.
  */
 export function computeNppChairRateStep(params: {
   currentRate: number;
   targetRate: number;
   alignment?: ChairAlignment | null;
+  inflationGap?: number;
 }): number {
   const policy = chairAlignmentPolicy(params.alignment);
   const desired = params.targetRate - params.currentRate;
   let step = NPP_CHAIR_STEP_FRACTION * desired;
   step *= step >= 0 ? policy.hikeStepMult : policy.cutStepMult;
-  return Math.max(-MAX_RATE_CUT_DELTA, Math.min(MAX_RATE_CHANGE_DELTA, step));
+  const hikeCap = maxHikeDeltaFor(params.inflationGap);
+  const headroom = Math.max(0, PRIME_RATE_CEILING - params.currentRate);
+  return Math.max(-MAX_RATE_CUT_DELTA, Math.min(hikeCap, headroom, step));
 }
 
 function finiteOr(value: unknown, fallback: number): number {
@@ -52,8 +64,9 @@ function finiteOr(value: unknown, fallback: number): number {
  * and stateMetrics.economic.gdpGrowth.value, keyed by getNationalBudgetId / getNationalDocId),
  * computes a Taylor-rule target, and moves primeRate toward it by a bounded step, respecting
  * the existing 6-turn cooldown and lastRateChangeTurn tracking. No-op when within cooldown,
- * when the step is ~0, when the bank's rate belongs to the government, or when the bank is
- * not governed by an NPP technocrat chair.
+ * when the step is ~0, or when the bank is not governed by an NPP technocrat chair. When the
+ * rate belongs to the government, it only acts on standing advice after the government has
+ * left the rate alone for GOVERNMENT_RATE_IDLE_TURNS (see `isStandingAdviceDue`).
  *
  * No chairInfamy character debit — the NPP has no character to penalize.
  */
@@ -65,6 +78,7 @@ export async function processNppChairAutoRate(
     | "chairMode"
     | "primeRate"
     | "lastRateChangeTurn"
+    | "lastStandingAdviceTurn"
     | "chairAlignment"
     | "governmentControlled"
     | "chairNppId"
@@ -103,11 +117,24 @@ export async function processNppChairAutoRate(
   // window slammed shut every time it opened — the rate card sat permanently on
   // "on cooldown" and the government could never actually set the rate (#1250).
   // `fomcMeetingTurn` and `seedFomcBoards` already make the same check.
-  if (isBankGovernmentControlled(bank, countryId, startingYear)) return;
+  //
+  // A government that never uses the lever would otherwise freeze the rate for
+  // the whole world: the 1991 UK sat at 4.5% for its first 28 turns through 15%
+  // inflation. So once the government has left the rate alone for a quarter,
+  // the Treasury acts on the bank's standing advice: the same bounded Taylor
+  // step, recorded in the published history. It is paced by its own field and
+  // never touches `lastRateChangeTurn`, so the government's window stays open
+  // and any rate it sets wins.
+  const governmentControlled = isBankGovernmentControlled(bank, countryId, startingYear);
   if (isCommandEconomy(countryId, currentYear, commandEconomyEnabled)) return;
 
   const lastChange = bank.lastRateChangeTurn;
-  if (typeof lastChange === "number" && currentTurn - lastChange < RATE_CHANGE_COOLDOWN_TURNS) {
+  if (governmentControlled) {
+    if (!isStandingAdviceDue(bank, currentTurn)) return;
+  } else if (
+    typeof lastChange === "number" &&
+    currentTurn - lastChange < RATE_CHANGE_COOLDOWN_TURNS
+  ) {
     return;
   }
 
@@ -150,6 +177,7 @@ export async function processNppChairAutoRate(
     currentRate: bank.primeRate,
     targetRate,
     alignment: bank.chairAlignment,
+    inflationGap: inflationRate - targetInflation,
   });
   if (Math.abs(step) <= 1e-9) return;
 
@@ -178,24 +206,52 @@ export async function processNppChairAutoRate(
           .findOne({ _id: bank.chairNppId }, { projection: { name: 1 } })
       )?.name ?? null)
     : null;
-  const record: RateChangeRecord = {
-    previousRate: bank.primeRate,
-    newRate,
-    changedBy: bank.chairNppId ?? SYSTEM_RATE_ACTOR,
-    changedByName: chairName ? `${chairName} (autonomous chair)` : "Autonomous chair",
-    changedAt: now,
-    reason: `Taylor rule: inflation ${inflationRate.toFixed(1)}%, growth ${gdpGrowth.toFixed(1)}%, neutral ${neutralRate.toFixed(2)}%`,
-  };
+  const taylor = `Taylor rule: inflation ${inflationRate.toFixed(1)}%, growth ${gdpGrowth.toFixed(1)}%, neutral ${neutralRate.toFixed(2)}%`;
+  const record: RateChangeRecord = governmentControlled
+    ? {
+        previousRate: bank.primeRate,
+        newRate,
+        changedBy: SYSTEM_RATE_ACTOR,
+        changedByName: "Treasury, on the bank's standing advice",
+        changedAt: now,
+        reason: `No government rate decision for ${GOVERNMENT_RATE_IDLE_TURNS}+ turns. ${taylor}`,
+      }
+    : {
+        previousRate: bank.primeRate,
+        newRate,
+        changedBy: bank.chairNppId ?? SYSTEM_RATE_ACTOR,
+        changedByName: chairName ? `${chairName} (autonomous chair)` : "Autonomous chair",
+        changedAt: now,
+        reason: taylor,
+      };
 
   await db.collection<CentralBank>("centralBanks").updateOne(
     { _id: bank._id },
     {
-      $set: {
-        primeRate: newRate,
-        lastRateChangeTurn: currentTurn,
-        updatedAt: now,
-      },
+      $set: governmentControlled
+        ? { primeRate: newRate, lastStandingAdviceTurn: currentTurn, updatedAt: now }
+        : { primeRate: newRate, lastRateChangeTurn: currentTurn, updatedAt: now },
       $push: { rateHistory: { $each: [record], $slice: -RATE_HISTORY_MAX } },
     }
   );
+}
+
+/**
+ * Whether the Treasury should act on the bank's standing advice this turn: the
+ * government has not set the rate for `GOVERNMENT_RATE_IDLE_TURNS` (counted
+ * from world start when it never has), and the last advice move is at least a
+ * normal cooldown old.
+ */
+export function isStandingAdviceDue(
+  bank: Pick<CentralBank, "lastRateChangeTurn" | "lastStandingAdviceTurn">,
+  currentTurn: number
+): boolean {
+  const lastGovernmentMove =
+    typeof bank.lastRateChangeTurn === "number" ? bank.lastRateChangeTurn : 0;
+  if (currentTurn - lastGovernmentMove < GOVERNMENT_RATE_IDLE_TURNS) return false;
+  const lastAdvice = bank.lastStandingAdviceTurn;
+  if (typeof lastAdvice === "number" && lastAdvice > lastGovernmentMove) {
+    return currentTurn - lastAdvice >= RATE_CHANGE_COOLDOWN_TURNS;
+  }
+  return true;
 }

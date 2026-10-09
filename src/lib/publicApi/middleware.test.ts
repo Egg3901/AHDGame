@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/api/requireBotToken", () => ({
-  requirePublicBotToken: vi.fn().mockReturnValue(false),
+  requireBotToken: vi.fn().mockReturnValue(false),
 }));
 
 vi.mock("@/lib/api/rateLimit", () => ({
@@ -35,9 +35,9 @@ describe("publicApiGuard", () => {
   beforeEach(() => vi.clearAllMocks());
 
   it("returns 401 when no auth is provided", async () => {
-    const { requirePublicBotToken } = await import("@/lib/api/requireBotToken");
+    const { requireBotToken } = await import("@/lib/api/requireBotToken");
     const { validateUserApiKey } = await import("@/lib/api/userApiAuth");
-    vi.mocked(requirePublicBotToken).mockReturnValue(false);
+    vi.mocked(requireBotToken).mockReturnValue(false);
     vi.mocked(validateUserApiKey).mockResolvedValue({ valid: false } as never);
 
     const { publicApiGuard } = await import("./middleware");
@@ -124,12 +124,12 @@ describe("publicApiGuard", () => {
   });
 
   it("keeps the bot token on the flat base allowance regardless of tier", async () => {
-    const { requirePublicBotToken } = await import("@/lib/api/requireBotToken");
+    const { requireBotToken } = await import("@/lib/api/requireBotToken");
     const { validateUserApiKey } = await import("@/lib/api/userApiAuth");
     const { durableRateLimit } = await import("@/lib/api/rateLimit.mongo");
     const { resolvePublicApiTier } = await import("./tierLimits");
     vi.mocked(validateUserApiKey).mockResolvedValue({ valid: false } as never);
-    vi.mocked(requirePublicBotToken).mockReturnValue(true);
+    vi.mocked(requireBotToken).mockReturnValue(true);
     vi.mocked(durableRateLimit).mockResolvedValue({
       ok: true,
       limit: 60,
@@ -145,11 +145,11 @@ describe("publicApiGuard", () => {
   });
 
   it("falls back to bot token when no user API key", async () => {
-    const { requirePublicBotToken } = await import("@/lib/api/requireBotToken");
+    const { requireBotToken } = await import("@/lib/api/requireBotToken");
     const { validateUserApiKey } = await import("@/lib/api/userApiAuth");
     const { durableRateLimit } = await import("@/lib/api/rateLimit.mongo");
     vi.mocked(validateUserApiKey).mockResolvedValue({ valid: false } as never);
-    vi.mocked(requirePublicBotToken).mockReturnValue(true);
+    vi.mocked(requireBotToken).mockReturnValue(true);
     vi.mocked(durableRateLimit).mockResolvedValue({
       ok: true,
       limit: 60,
@@ -165,12 +165,12 @@ describe("publicApiGuard", () => {
   });
 
   it("returns rate-limit response when limit exceeded", async () => {
-    const { requirePublicBotToken } = await import("@/lib/api/requireBotToken");
+    const { requireBotToken } = await import("@/lib/api/requireBotToken");
     const { validateUserApiKey } = await import("@/lib/api/userApiAuth");
     const { rateLimitResponse } = await import("@/lib/api/rateLimit");
     const { durableRateLimit } = await import("@/lib/api/rateLimit.mongo");
     vi.mocked(validateUserApiKey).mockResolvedValue({ valid: false } as never);
-    vi.mocked(requirePublicBotToken).mockReturnValue(true);
+    vi.mocked(requireBotToken).mockReturnValue(true);
     vi.mocked(durableRateLimit).mockResolvedValue({
       ok: false,
       limit: 60,

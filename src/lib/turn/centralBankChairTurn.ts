@@ -130,6 +130,7 @@ export async function processCentralBankChairTurn(
         | "chairMode"
         | "primeRate"
         | "lastRateChangeTurn"
+        | "lastStandingAdviceTurn"
         | "fomcBoard"
         | "governmentControlled"
         | "chairNppId"
@@ -145,6 +146,8 @@ export async function processCentralBankChairTurn(
       chairMode: 1,
       primeRate: 1,
       lastRateChangeTurn: 1,
+      // Paces the standing-advice fallback on government-controlled banks.
+      lastStandingAdviceTurn: 1,
       fomcBoard: 1,
       // Needed by the auto-rate gate below: an unprojected field reads as
       // undefined, which `isBankGovernmentControlled` treats as "no explicit

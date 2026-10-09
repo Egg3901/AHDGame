@@ -130,6 +130,12 @@ import { buildPartyDisplayById, buildPresidentialRegByStateInput } from "./presi
 import { ballotSharesWithinParty } from "@/lib/turn/primaryBallots";
 import { resolveElectionDisplayParty } from "./resolveElectionParty";
 import { applyPresidentialPrimaryDisplay } from "./enrichPresidentialPrimaryDisplay";
+import { projectContingentElection } from "./contingentProjection";
+import {
+  PRESIDENTIAL_EV_NEEDED,
+  collegeSizeFromEvByState,
+  electoralMajorityFor,
+} from "./presidentialResolutionDisplay";
 
 export async function _enrichElection(
   election: Election,
@@ -483,7 +489,8 @@ export async function _enrichElection(
           tally,
           activeCandidateIdSet,
           election.countryId ?? "US",
-          election.allocationMethod
+          election.allocationMethod,
+          election.state
         ));
 
   // US House with redistricting on: project seats district-by-district using the
@@ -846,6 +853,7 @@ export async function _enrichElection(
             cumulativeVotes: t.cumulativeVotes,
             sharesPct: t.sharesPct,
             ...(seatsEstimateSnapshot ? { seatsEstimate: seatsEstimateSnapshot } : {}),
+            ...(t.participation ? { participation: t.participation } : {}),
           };
         }),
         ...electoralVotesResult,
@@ -868,6 +876,20 @@ export async function _enrichElection(
           ? { executiveSeatingPending: true }
           : {}),
       };
+
+      // No projected EV majority: run the contingent ballot against the
+      // Congress that would cast it, so the risk banner names who wins it.
+      if (isPresident && !isEnded && generalVotes.electoralVotesByCandidate) {
+        const college = collegeSizeFromEvByState(evByState);
+        const contingentProjection = await projectContingentElection(
+          db,
+          election,
+          generalVotes.electoralVotesByCandidate,
+          college > 0 ? electoralMajorityFor(college) : PRESIDENTIAL_EV_NEEDED,
+          gameState
+        );
+        if (contingentProjection) generalVotes.contingentProjection = contingentProjection;
+      }
     }
   }
 

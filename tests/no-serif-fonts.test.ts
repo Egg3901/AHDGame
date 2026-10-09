@@ -3,12 +3,10 @@ import path from "path";
 import { describe, expect, it } from "vitest";
 
 /*
- * The site is set in one sans family, with mono only for figures. The serif
- * faces (Lora, Fraunces, Playfair Display) are gone, and the font-serif and
- * font-display utilities no longer exist. Tailwind still ships its own default
- * serif stack, so a stray font-serif class would quietly render in Georgia, and
- * nothing else in the suite would notice. This guard keeps both the classes and
- * the face names out of src.
+ * The modern interface is set in one sans family, with mono only for figures.
+ * Classic mode deliberately restores the pre-October editorial serif faces.
+ * Keep those references confined to the root font loader and the stylesheet
+ * whose selectors are explicitly scoped to data-interface="classic".
  *
  * The class names are assembled from parts so that Tailwind's source scanner
  * does not find them in this file and generate the utilities for it.
@@ -18,6 +16,7 @@ const ROOT = path.resolve(__dirname, "..");
 const SRC = path.join(ROOT, "src");
 const SCANNED = /\.(?:[cm]?[jt]sx?|css|scss|mdx?)$/;
 const TEST_FILE = /\.(?:test|spec)\.[cm]?[jt]sx?$/;
+const CLASSIC_ALLOWLIST = new Set(["src/app/interface-modes.css", "src/app/layout.tsx"]);
 
 const FONT = "font";
 const BANNED: ReadonlyArray<{ label: string; pattern: RegExp }> = [
@@ -42,7 +41,7 @@ function collect(dir: string, acc: string[] = []): string[] {
   return acc;
 }
 
-describe("no serif fonts in src", () => {
+describe("serif fonts stay confined to classic interface mode", () => {
   const files = collect(SRC).map((full) => ({
     full,
     rel: path.relative(ROOT, full).split(path.sep).join("/"),
@@ -56,12 +55,21 @@ describe("no serif fonts in src", () => {
     "has no $label",
     ({ pattern }) => {
       const offenders = files
-        .filter(({ full }) => pattern.test(readFileSync(full, "utf8")))
+        .filter(
+          ({ full, rel }) => !CLASSIC_ALLOWLIST.has(rel) && pattern.test(readFileSync(full, "utf8"))
+        )
         .map(({ rel }) => rel);
       expect(offenders, `Found in:\n${offenders.join("\n")}`).toEqual([]);
     },
     60_000
   );
+
+  it("scopes classic typography rules to the classic interface attribute", () => {
+    const css = readFileSync(path.join(SRC, "app", "interface-modes.css"), "utf8");
+    expect(css).toContain('[data-interface="classic"] :is(h1, .display-heading)');
+    expect(css).toContain('[data-interface="classic"] .font-serif');
+    expect(css).toContain('[data-interface="classic"] .font-display');
+  });
 
   it("matches what it is meant to match", () => {
     const [serif, display, faces] = BANNED.map((b) => b.pattern);

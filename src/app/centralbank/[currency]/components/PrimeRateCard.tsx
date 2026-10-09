@@ -5,12 +5,12 @@ import { useEffect, useState } from "react";
 import { fetchJson } from "@/lib/observability/fetchJson";
 import {
   MAX_RATE_CHANGE_DELTA,
-  MAX_RATE_CUT_DELTA,
   AGGRESSIVE_CUT_SCRUTINY,
   RATE_CHANGE_COOLDOWN_TURNS,
   PRIME_RATE_STEP,
   snapToPrimeRateGrid,
 } from "@/lib/db/types/centralBank";
+import { computeRateLimits, widenedCapSentence } from "@/lib/centralBank/rateLimits";
 import { CentralBankSection } from "./CentralBankSection";
 
 export interface RateGovernance {
@@ -33,6 +33,8 @@ export function PrimeRateCard({
   onChanged,
   governance,
   governanceEndpoint,
+  inflationRate,
+  targetInflation,
 }: {
   primeRate: number;
   isChair: boolean;
@@ -55,6 +57,9 @@ export function PrimeRateCard({
   governance?: RateGovernance | null;
   /** FOMC panel endpoint to load governance from when no prop is passed. */
   governanceEndpoint?: string;
+  /** Stored inflation and target the rate API measures the widened hike cap against. */
+  inflationRate?: number | null;
+  targetInflation?: number | null;
 }) {
   const [pendingRate, setPendingRate] = useState<number | null>(null);
   const [reason, setReason] = useState("");
@@ -128,9 +133,15 @@ export function PrimeRateCard({
   // the real current rate, since that is what the delta limits are measured
   // against.
   const gridBase = snapToPrimeRateGrid(primeRate);
-  const rateFloor = Math.max(0, primeRate - MAX_RATE_CUT_DELTA);
-  const rateCeiling = Math.min(25, primeRate + MAX_RATE_CHANGE_DELTA);
-  const aggressiveCutThreshold = primeRate - MAX_RATE_CHANGE_DELTA;
+  const limits = computeRateLimits({
+    primeRate,
+    inflation: inflationRate,
+    target: targetInflation,
+  });
+  const rateFloor = limits.floor;
+  const rateCeiling = limits.ceiling;
+  const widenedSentence = widenedCapSentence(limits);
+  const aggressiveCutThreshold = gridBase - MAX_RATE_CHANGE_DELTA;
   const isAggressiveCut = pendingRate !== null && pendingRate < aggressiveCutThreshold - 1e-9;
 
   return (
@@ -221,10 +232,29 @@ export function PrimeRateCard({
           <div className="flex flex-col gap-1">
             <label className="shrink-0 text-body font-semibold text-foreground">Adjust rate</label>
             <span className="text-body-sm leading-snug text-muted">
-              Hike max +{MAX_RATE_CHANGE_DELTA.toFixed(2)}% · Cut max -
-              {MAX_RATE_CUT_DELTA.toFixed(2)}% · one change per {RATE_CHANGE_COOLDOWN_TURNS} turns
+              Hike max +{limits.maxHike.toFixed(2)}% · Cut max -{limits.maxCut.toFixed(2)}% · one
+              change per {RATE_CHANGE_COOLDOWN_TURNS} turns
             </span>
+            {widenedSentence && (
+              <span className="text-body-sm leading-snug text-warning">{widenedSentence}</span>
+            )}
           </div>
+          {limits.hikeSteps.length > 0 && (
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-body-sm text-muted">Hike by</span>
+              {limits.hikeSteps.map((step) => (
+                <button
+                  key={step}
+                  type="button"
+                  onClick={() => setPendingRate(gridBase + step)}
+                  disabled={submitting || onCooldown || governedRefusal !== null}
+                  className="rounded-md border border-card-border px-2 py-1 text-body-sm tabular-nums text-foreground transition-colors hover:bg-card-elevated disabled:opacity-40"
+                >
+                  +{step.toFixed(2)}
+                </button>
+              ))}
+            </div>
+          )}
           {onCooldown && (
             <p className="text-body-sm text-warning">
               On cooldown: {cooldownRemaining} more turn

@@ -1,3 +1,4 @@
+import type { TicketPlatform } from "@/lib/tickets/platform";
 import type { ObjectId } from "mongodb";
 import type { SuggestionCategory } from "./suggestion";
 
@@ -46,6 +47,8 @@ export interface Feedback {
   impact?: string;
   priority?: number;
   context: FeedbackContext;
+  /** Where the reporter was playing, detected from the request user agent. */
+  platform?: TicketPlatform;
   metadata?: Record<string, unknown>;
   /** Sentry/GlitchTip event UUID — links this feedback to a captured exception. */
   sentryEventId?: string;

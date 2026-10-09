@@ -35,6 +35,7 @@ function pool(sectorType: CorporationType = "manufacturing", stateId = "NY"): Un
 function evaluate(args: {
   corporation: Corporation;
   pools?: UnownedSector[];
+  sectors?: CorporateSector[];
   profitable?: boolean;
   marginPct?: number;
   retailExpansionPaused?: boolean;
@@ -50,7 +51,7 @@ function evaluate(args: {
   }
   return evaluateNppEntry({
     corp: args.corporation,
-    sectors: [] as unknown as CorporateSector[],
+    sectors: args.sectors ?? [],
     unownedByCountry: byCountry,
     stateControlled: new Set<string>(),
     priceRatioOf: args.prices ?? (() => 1),
@@ -131,5 +132,39 @@ describe("entryEvaluation seam", () => {
     const entry = evaluate({ corporation: corp(), entryCapReached: true });
     expect(entry.ordinaryEntry).toBe(true);
     expect(entry.diagnostic.reason).toBe("entry_cap");
+  });
+});
+
+describe("existing media sector occupancy", () => {
+  it("still permits a different media model in the same state", () => {
+    const corporation = corp({ type: "media" });
+    const market = pool("media", "KAN");
+    const existing = {
+      _id: new ObjectId(),
+      corporationId: corporation._id,
+      countryId: "US",
+      stateId: "KAN",
+      sectorType: "media",
+      mediaDiscriminator: "entertainment",
+    } as CorporateSector;
+    expect(evaluate({ corporation, pools: [market], sectors: [existing] }).entryCandidate).toBe(
+      market
+    );
+  });
+
+  it("does not found a second entertainment sector in an occupied bucket", () => {
+    const corporation = corp({ type: "media", mediaDiscriminator: "entertainment" });
+    const market = { ...pool("media", "KAN"), mediaDiscriminator: "entertainment" as const };
+    const existing = {
+      _id: new ObjectId(),
+      corporationId: corporation._id,
+      countryId: "US",
+      stateId: "KAN",
+      sectorType: "media",
+      mediaDiscriminator: "entertainment",
+    } as CorporateSector;
+    const result = evaluate({ corporation, pools: [market], sectors: [existing] });
+    expect(result.entryCandidate).toBeNull();
+    expect(result.expansion).toBeNull();
   });
 });

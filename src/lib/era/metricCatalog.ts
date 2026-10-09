@@ -2,29 +2,35 @@ import type { CountryId } from "@/lib/constants/countries";
 import { metricCategories, type MetricDefinition } from "@/lib/constants/metricDefinitions";
 import { JP_INCOME_ANCHORS } from "@/lib/countries/jp/geographyFacts";
 import { JP_NUCLEAR_SAFETY_WINDOW } from "@/lib/countries/jp/data/jpMetricOverrides";
-import { AT_INCOME_ANCHORS } from "@/lib/countries/at/geographyFacts";
+import { AT_INCOME_ANCHORS, AT_INCOME_START_VINTAGES } from "@/lib/countries/at/geographyFacts";
 import { BR_INCOME_ANCHORS } from "@/lib/countries/br/geographyFacts";
-import { CN_INCOME_ANCHORS } from "@/lib/countries/cn/geographyFacts";
+import { CN_INCOME_ANCHORS, CN_INCOME_START_VINTAGES } from "@/lib/countries/cn/geographyFacts";
 import { DD_INCOME_ANCHORS } from "@/lib/countries/dd/geographyFacts";
 import { DE_INCOME_ANCHORS } from "@/lib/countries/de/geographyFacts";
-import { ES_INCOME_ANCHORS } from "@/lib/countries/es/geographyFacts";
-import { FI_INCOME_ANCHORS } from "@/lib/countries/fi/geographyFacts";
-import { FR_INCOME_ANCHORS } from "@/lib/countries/fr/geographyFacts";
-import { GR_INCOME_ANCHORS } from "@/lib/countries/gr/geographyFacts";
+import { ES_INCOME_ANCHORS, ES_INCOME_START_VINTAGES } from "@/lib/countries/es/geographyFacts";
+import { FI_INCOME_ANCHORS, FI_INCOME_START_VINTAGES } from "@/lib/countries/fi/geographyFacts";
+import { FR_INCOME_ANCHORS, FR_INCOME_START_VINTAGES } from "@/lib/countries/fr/geographyFacts";
+import { GR_INCOME_ANCHORS, GR_INCOME_START_VINTAGES } from "@/lib/countries/gr/geographyFacts";
 import { IE_INCOME_ANCHORS } from "@/lib/countries/ie/geographyFacts";
-import { IT_INCOME_ANCHORS } from "@/lib/countries/it/geographyFacts";
-import { NG_INCOME_ANCHORS } from "@/lib/countries/ng/geographyFacts";
+import { IT_INCOME_ANCHORS, IT_INCOME_START_VINTAGES } from "@/lib/countries/it/geographyFacts";
+import { NG_INCOME_ANCHORS, NG_INCOME_START_VINTAGES } from "@/lib/countries/ng/geographyFacts";
 import { RU_INCOME_ANCHORS } from "@/lib/countries/ru/geographyFacts";
-import { SE_INCOME_ANCHORS } from "@/lib/countries/se/geographyFacts";
-import { TR_INCOME_ANCHORS } from "@/lib/countries/tr/geographyFacts";
+import { SE_INCOME_ANCHORS, SE_INCOME_START_VINTAGES } from "@/lib/countries/se/geographyFacts";
+import { TR_INCOME_ANCHORS, TR_INCOME_START_VINTAGES } from "@/lib/countries/tr/geographyFacts";
 import { UK_INCOME_ANCHORS } from "@/lib/countries/uk/geographyFacts";
 import { US_INCOME_ANCHORS } from "@/lib/countries/us/geographyFacts";
 
 import { METRIC_BAND_CURVES, CORE5_NORMALS } from "./metricBandCurves";
-import type { BandAnchor, MetricBandCurve, NormalAnchor } from "./metricCatalogTypes";
+import type {
+  BandAnchor,
+  IncomeStartVintage,
+  IncomeVintageStamps,
+  MetricBandCurve,
+  NormalAnchor,
+} from "./metricCatalogTypes";
 
 export { METRIC_BAND_CURVES, CORE5_NORMALS };
-export type { BandAnchor, MetricBandCurve, NormalAnchor };
+export type { BandAnchor, IncomeStartVintage, IncomeVintageStamps, MetricBandCurve, NormalAnchor };
 
 /**
  * Metric Era Catalog — the single source of truth for how a metric behaves
@@ -578,6 +584,66 @@ export function getIncomeAnchor(countryId: string | undefined, year: number | nu
     }
   }
   return a[a.length - 1].value;
+}
+
+/**
+ * Start-year income vintages: the anchor for a world that STARTS in that exact
+ * year, when its seed is dated to a different currency vintage than the
+ * interpolation series in INCOME_ANCHORS. Never interpolated, so presets that
+ * start in other years keep their existing anchors.
+ */
+export const INCOME_START_VINTAGES: Partial<Record<CountryId, Record<number, IncomeStartVintage>>> =
+  {
+    NG: NG_INCOME_START_VINTAGES,
+    CN: CN_INCOME_START_VINTAGES,
+    TR: TR_INCOME_START_VINTAGES,
+    AT: AT_INCOME_START_VINTAGES,
+    ES: ES_INCOME_START_VINTAGES,
+    FI: FI_INCOME_START_VINTAGES,
+    FR: FR_INCOME_START_VINTAGES,
+    GR: GR_INCOME_START_VINTAGES,
+    IT: IT_INCOME_START_VINTAGES,
+    SE: SE_INCOME_START_VINTAGES,
+  };
+
+/** The authored start-year vintage for a country, or null when none exists. */
+export function getIncomeStartVintage(
+  countryId: string | undefined,
+  startingYear: number | null
+): IncomeStartVintage | null {
+  if (!countryId || startingYear == null) return null;
+  return INCOME_START_VINTAGES[countryId as CountryId]?.[startingYear] ?? null;
+}
+
+/**
+ * Provenance stamps for every country with a vintage at `startingYear`. Seed
+ * writers and any reviewed data migration write these alongside the matching
+ * values; nothing else may.
+ */
+export function incomeVintageStampsFor(startingYear: number | null): Record<string, string> {
+  const stamps: Record<string, string> = {};
+  for (const countryId of Object.keys(INCOME_START_VINTAGES)) {
+    const vintage = getIncomeStartVintage(countryId, startingYear);
+    if (vintage) stamps[countryId] = vintage.id;
+  }
+  return stamps;
+}
+
+/**
+ * Income anchor for the era income band of a world that started in
+ * `startingYear`. The start-year vintage applies only when the world's
+ * provenance stamp for the country matches it exactly: incomes seeded before
+ * the vintage existed carry no stamp and keep the interpolated anchor they
+ * were calibrated against. Missing or mismatched stamps fail closed to legacy.
+ */
+export function getStartingIncomeAnchor(
+  countryId: string | undefined,
+  startingYear: number | null,
+  vintageStamps?: IncomeVintageStamps | null
+): number | null {
+  const vintage = getIncomeStartVintage(countryId, startingYear);
+  if (vintage && countryId && vintageStamps?.[countryId] === vintage.id) return vintage.value;
+  return getIncomeAnchor(countryId, startingYear);
 }
 
 /**

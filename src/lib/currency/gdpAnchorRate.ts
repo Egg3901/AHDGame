@@ -36,6 +36,7 @@
  * @see src/lib/constants/sectorSeedEra.ts — the seed-time sibling of this module
  */
 
+import { getAuditRequestContext } from "@/lib/observability/context";
 import type { Db } from "mongodb";
 import { getCountryConfig, type CountryId } from "@/lib/constants/countries";
 import { resolvePresetIdFromGameState } from "@/lib/world/countryReadinessContract";
@@ -71,21 +72,49 @@ export function gdpToAnchor(localMillions: number, countryId: CountryId, preset?
 }
 
 /**
+ * Presets already read inside a running turn phase, keyed by its
+ * `turn:<n>:<phase>` trace id, per database handle. The turn lock is held for
+ * the whole phase, so a world reset cannot change the preset under it; a new
+ * phase gets a new key. Kept to the last few phases so the map never grows.
+ */
+const phasePresets = new WeakMap<Db, Map<string, Promise<string>>>();
+const PHASE_PRESET_ENTRIES = 8;
+
+async function readWorldPreset(db: Db): Promise<string> {
+  const gameState = await db
+    .collection<GameState>("gameState")
+    .findOne({ _id: "current" }, { projection: { preset: 1 } });
+  return resolvePresetIdFromGameState(gameState);
+}
+
+/**
  * The active world's reset preset, read from the `gameState` singleton.
  *
  * One projected read of one document. Deliberately NOT cached at module scope:
- * every caller already issues several queries in the same request/turn, and a
- * stale process-level preset would survive a world reset into the next era —
- * exactly the class of bug this module exists to remove.
+ * a stale process-level preset would survive a world reset into the next era,
+ * exactly the class of bug this module exists to remove. Inside a turn phase
+ * the read is shared for that phase only (banking alone asked for it about
+ * 180 times a turn), because a reset cannot happen while the phase holds the
+ * turn lock. Requests and anything outside a phase still read every time.
  *
  * Falls back to `2019-default` when the document or the field is missing, which
  * is the same fallback every seeder uses.
  */
 export async function loadWorldPreset(db: Db): Promise<string> {
-  const gameState = await db
-    .collection<GameState>("gameState")
-    .findOne({ _id: "current" }, { projection: { preset: 1 } });
-  return resolvePresetIdFromGameState(gameState);
+  const traceId = getAuditRequestContext()?.traceId;
+  if (!traceId?.startsWith("turn:")) return readWorldPreset(db);
+  let byPhase = phasePresets.get(db);
+  if (!byPhase) phasePresets.set(db, (byPhase = new Map()));
+  const cached = byPhase.get(traceId);
+  if (cached) return cached;
+  const read = readWorldPreset(db);
+  byPhase.set(traceId, read);
+  // A failed read is not remembered: the next caller in the phase retries.
+  read.catch(() => {
+    if (byPhase.get(traceId) === read) byPhase.delete(traceId);
+  });
+  while (byPhase.size > PHASE_PRESET_ENTRIES) byPhase.delete(byPhase.keys().next().value!);
+  return read;
 }
 
 /**

@@ -1,4 +1,5 @@
-import type { Db } from "mongodb";
+import { createHash } from "node:crypto";
+import type { Db, ObjectId } from "mongodb";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import type { CountryId } from "@/lib/constants/countries";
 import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
@@ -8,8 +9,12 @@ import type { CorpSnapshot } from "./types";
 import type { Corporation } from "@/lib/db/types/corporation";
 import { loadTreasuryCashContext } from "@/lib/nationalization/treasuryLedger";
 import { settleTransition, resumeSettlement } from "@/lib/banking/settlementJournal";
+import { withBankingTelemetryBatch } from "@/lib/banking/telemetry";
 import { oid, type BankingTransition } from "@/lib/banking/rules/boundary";
 import { settlePriorCorporateCashArrears } from "./cashArrears";
+import { KeyedQueue, interleaveByKey, runInLanes } from "@/lib/turn/settlementLanes";
+
+export { interleaveByKey };
 
 interface OperatingTaxDestinationQuote {
   country: string;
@@ -54,6 +59,16 @@ function readOperatingCashQuote(
 }
 
 /**
+ * Independent corporations settle in a few concurrent lanes. Each receipt is
+ * a chain of dependent journal round trips, so one lane per turn made the
+ * whole phase as slow as the sum of every corporation's chain.
+ */
+const OPERATING_CASH_LANES = 8;
+
+/** Corporations per batched net receipt; bounds one journal document. */
+const NET_BATCH_SIZE = 64;
+
+/**
  * Settle modeled gross operating receipts before federal withholding. These
  * are separate durable receipts because the settlement journal applies
  * guarded debits before credits: one transition cannot spend income that has
@@ -64,7 +79,20 @@ export async function settleCorporateOperatingCash(
   db: Db,
   snapshots: readonly CorpSnapshot[],
   turn: number,
-  now: Date
+  now: Date,
+  lanes: number = OPERATING_CASH_LANES
+): Promise<void> {
+  return withBankingTelemetryBatch(db, turn, () =>
+    settleCorporateOperatingCashBatched(db, snapshots, turn, now, lanes)
+  );
+}
+
+async function settleCorporateOperatingCashBatched(
+  db: Db,
+  snapshots: readonly CorpSnapshot[],
+  turn: number,
+  now: Date,
+  lanes: number
 ): Promise<void> {
   if (snapshots.length === 0) return;
   const context = await loadTreasuryCashContext(db, turn);
@@ -81,7 +109,7 @@ export async function settleCorporateOperatingCash(
   }>("bankMoneyMoves");
   const keys = snapshots.flatMap((snapshot) => {
     const base = `corp-operating-cash:${turn}:${snapshot.corpId.toString()}`;
-    return [base, `${base}:gross`, `${base}:tax`, `${base}:arrears`];
+    return [base, `${base}:net`, `${base}:gross`, `${base}:tax`, `${base}:arrears`];
   });
   const existingRows = await journals
     .find({ _id: { $in: keys } }, { projection: { _id: 1, event: 1 } })
@@ -92,15 +120,22 @@ export async function settleCorporateOperatingCash(
   // Finish already claimed gross receipts before taking the corporation cash
   // snapshot used for new work. This keeps the read batched while allowing a
   // retry to spend the proceeds it just replayed.
-  for (const snapshot of snapshots) {
-    const baseKey = `corp-operating-cash:${turn}:${snapshot.corpId.toString()}`;
-    const grossKey = `${baseKey}:gross`;
-    if (existingKeys.has(baseKey) || !existingKeys.has(grossKey)) continue;
+  // Gross receipts touch only their own corporation, so they resume in lanes.
+  const grossResumeKeys = [
+    ...new Set(
+      snapshots.flatMap((snapshot) => {
+        const baseKey = `corp-operating-cash:${turn}:${snapshot.corpId.toString()}`;
+        const grossKey = `${baseKey}:gross`;
+        return existingKeys.has(baseKey) || !existingKeys.has(grossKey) ? [] : [grossKey];
+      })
+    ),
+  ];
+  await runInLanes(grossResumeKeys, lanes, async (grossKey) => {
     const resumed = await resumeSettlement(db, grossKey);
     if (resumed.status !== "applied" && resumed.status !== "replayed") {
       throw new Error(resumed.error ?? `Corporate gross receipt ${grossKey} is incomplete`);
     }
-  }
+  });
 
   const corporations = await db
     .collection<Corporation>("corporations")
@@ -121,20 +156,126 @@ export async function settleCorporateOperatingCash(
     corporations.map((corp) => [corp._id.toString(), corp.liquidCapital])
   );
 
+  // Every Treasury country this call can credit. Legacy receipts and prior
+  // tax arrears hold all of them: their destinations are not known up front,
+  // and both paths are rare recovery work.
+  const treasuryLock = new KeyedQueue();
+  const treasuryKey = (country: string) => `federalBudget:${country}`;
+  // Unknown destinations must also serialize with each other when the
+  // current snapshots and quotes name no Treasury countries.
+  const allTreasuryKeys = new Set<string>(["legacy-treasury-recovery"]);
   for (const snapshot of snapshots) {
+    for (const [country] of snapshot.federalTaxByCountryAnchor ?? []) {
+      allTreasuryKeys.add(treasuryKey(country));
+    }
+  }
+  for (const row of existingRows) {
+    for (const destination of readOperatingCashQuote(row.event?.meta)?.taxDestinations ?? []) {
+      allTreasuryKeys.add(treasuryKey(destination.country));
+    }
+  }
+  for (const corp of corporations) {
+    for (const country of Object.keys(corp.federalTaxArrearsAnchorByCountry ?? {})) {
+      allTreasuryKeys.add(treasuryKey(country));
+    }
+  }
+
+  // Resolve each Treasury document once for the pass. A settlement whose legs
+  // and projections name a selector (countryId) makes the journal look the
+  // document up again, twice, before it can claim the receipt; naming the same
+  // document by id up front writes the identical journal binding without those
+  // reads. A country with no Treasury keeps its selector, so the journal still
+  // refuses it exactly as before.
+  const treasuryIdByCountry = new Map<string, ObjectId>();
+  const treasuryCountries = [...allTreasuryKeys]
+    .filter((key) => key.startsWith("federalBudget:"))
+    .map((key) => key.slice("federalBudget:".length));
+  if (treasuryCountries.length) {
+    const rows = await db
+      .collection<{ _id: ObjectId; countryId: string }>("federalBudget")
+      .find({ countryId: { $in: treasuryCountries } }, { projection: { _id: 1, countryId: 1 } })
+      .toArray();
+    for (const row of rows)
+      if (!treasuryIdByCountry.has(row.countryId)) treasuryIdByCountry.set(row.countryId, row._id);
+  }
+  const treasuryFilter = (country: string) => {
+    const id = treasuryIdByCountry.get(country);
+    return id ? { countryId: country, _id: id } : { countryId: country };
+  };
+
+  // A fresh quote from this turn's snapshot; a resumed receipt uses the quote
+  // frozen in its journal instead.
+  const freshQuote = (snapshot: CorpSnapshot): OperatingCashQuote => {
+    const netLocal = snapshot.operatingCashIncomeLocal;
+    const sourceCurrency = snapshot.operatingCashCurrency;
+    const sourceRate = snapshot.operatingCashLocalPerAnchor;
+    if (
+      !Number.isFinite(netLocal) ||
+      !sourceCurrency ||
+      !Number.isFinite(sourceRate) ||
+      !(sourceRate! > 0)
+    ) {
+      throw new Error(`Missing frozen operating cash quote for corporation ${snapshot.corpId}`);
+    }
+    const taxByCountryAnchor = [
+      ...(snapshot.federalTaxByCountryAnchor ?? new Map<string, number>()).entries(),
+    ];
+    const taxAnchor = taxByCountryAnchor.reduce((sum, [, amount]) => sum + amount, 0);
+    const taxDestinations = taxByCountryAnchor
+      .filter(([, amount]) => amount > 0)
+      .map(([country, amountAnchor]) => {
+        const treasuryCurrency =
+          context.treasuryCurrencies.get(country) ??
+          COUNTRY_CURRENCY_MAP[country as CountryId] ??
+          snapshotTreasuryCurrency({ countryId: country as CountryId });
+        const treasuryRate = treasuryAnchorValuation({
+          countryId: country,
+          currencyCode: treasuryCurrency,
+          preset: context.preset,
+          observedRate: context.rates.get(treasuryCurrency),
+        }).anchorRate;
+        return {
+          country,
+          amountAnchor,
+          currencyCode: treasuryCurrency,
+          localPerAnchor: treasuryRate,
+        };
+      });
+    return {
+      netLocal: netLocal!,
+      grossLocal: netLocal! + taxAnchor * sourceRate!,
+      sourceCurrency: sourceCurrency as CurrencyCode,
+      sourceLocalPerAnchor: sourceRate!,
+      taxByCountryAnchor,
+      taxDestinations,
+    } satisfies OperatingCashQuote;
+  };
+
+  const settleSnapshot = async (snapshot: CorpSnapshot): Promise<void> => {
     const baseKey = `corp-operating-cash:${turn}:${snapshot.corpId.toString()}`;
 
     // Resume receipts created by the previous implementation before starting
     // the split gross/tax protocol. Its original journal already contains both
     // legs, so applying a second withholding would double-charge the corp.
     if (existingKeys.has(baseKey)) {
-      const resumed = await resumeSettlement(db, baseKey);
+      const resumed = await treasuryLock.run(allTreasuryKeys, () => resumeSettlement(db, baseKey));
       if (resumed.status !== "applied" && resumed.status !== "replayed") {
         throw new Error(
           resumed.error ?? `Corporate operating cash receipt ${baseKey} is incomplete`
         );
       }
-      continue;
+      return;
+    }
+
+    // A combined receipt is complete on its own: it never pairs with a later
+    // withholding, so a resume finishes it and stops.
+    const netKey = `${baseKey}:net`;
+    if (existingKeys.has(netKey)) {
+      const resumed = await treasuryLock.run(allTreasuryKeys, () => resumeSettlement(db, netKey));
+      if (resumed.status !== "applied" && resumed.status !== "replayed") {
+        throw new Error(resumed.error ?? `Corporate net operating receipt ${netKey} is incomplete`);
+      }
+      return;
     }
 
     const grossKey = `${baseKey}:gross`;
@@ -145,59 +286,13 @@ export async function settleCorporateOperatingCash(
       throw new Error(`Gross receipt ${grossKey} has no complete frozen operating quote`);
     }
     if (!existingKeys.has(grossKey) && existingKeys.has(taxKey) && !savedQuote) {
-      const resumed = await resumeSettlement(db, taxKey);
+      const resumed = await treasuryLock.run(allTreasuryKeys, () => resumeSettlement(db, taxKey));
       if (resumed.status !== "applied" && resumed.status !== "replayed") {
         throw new Error(resumed.error ?? `Corporate tax receipt ${taxKey} is incomplete`);
       }
-      continue;
+      return;
     }
-    const quote =
-      savedQuote ??
-      (() => {
-        const netLocal = snapshot.operatingCashIncomeLocal;
-        const sourceCurrency = snapshot.operatingCashCurrency;
-        const sourceRate = snapshot.operatingCashLocalPerAnchor;
-        if (
-          !Number.isFinite(netLocal) ||
-          !sourceCurrency ||
-          !Number.isFinite(sourceRate) ||
-          !(sourceRate! > 0)
-        ) {
-          throw new Error(`Missing frozen operating cash quote for corporation ${snapshot.corpId}`);
-        }
-        const taxByCountryAnchor = [
-          ...(snapshot.federalTaxByCountryAnchor ?? new Map<string, number>()).entries(),
-        ];
-        const taxAnchor = taxByCountryAnchor.reduce((sum, [, amount]) => sum + amount, 0);
-        const taxDestinations = taxByCountryAnchor
-          .filter(([, amount]) => amount > 0)
-          .map(([country, amountAnchor]) => {
-            const treasuryCurrency =
-              context.treasuryCurrencies.get(country) ??
-              COUNTRY_CURRENCY_MAP[country as CountryId] ??
-              snapshotTreasuryCurrency({ countryId: country as CountryId });
-            const treasuryRate = treasuryAnchorValuation({
-              countryId: country,
-              currencyCode: treasuryCurrency,
-              preset: context.preset,
-              observedRate: context.rates.get(treasuryCurrency),
-            }).anchorRate;
-            return {
-              country,
-              amountAnchor,
-              currencyCode: treasuryCurrency,
-              localPerAnchor: treasuryRate,
-            };
-          });
-        return {
-          netLocal: netLocal!,
-          grossLocal: netLocal! + taxAnchor * sourceRate!,
-          sourceCurrency: sourceCurrency as CurrencyCode,
-          sourceLocalPerAnchor: sourceRate!,
-          taxByCountryAnchor,
-          taxDestinations,
-        } satisfies OperatingCashQuote;
-      })();
+    const quote = savedQuote ?? freshQuote(snapshot);
     const {
       sourceCurrency,
       sourceLocalPerAnchor: sourceRate,
@@ -209,6 +304,105 @@ export async function settleCorporateOperatingCash(
     const taxAnchor = taxByCountryAnchor.reduce((sum, [, amount]) => sum + amount, 0);
     const taxSourceLocal = taxAnchor * sourceRate;
     let availableCash = cashByCorpId.get(snapshot.corpId.toString()) ?? 0;
+    const originalCorp = corporationById.get(snapshot.corpId.toString());
+    const hasOperatingArrears = Object.values(
+      originalCorp?.operatingCashArrearsByCurrency ?? {}
+    ).some((amount) => amount > 0);
+    const hasTaxArrears = Object.values(originalCorp?.federalTaxArrearsAnchorByCountry ?? {}).some(
+      (amount) => amount > 0
+    );
+
+    // One receipt instead of two when the outcome cannot differ. The split
+    // protocol credits gross, then withholds tax guarded by cash >= tax. With
+    // no prior payables to settle in between, non-negative net income and
+    // non-negative cash, that guard always passes, so minting gross and
+    // crediting the corporation its net and each Treasury its tax in one move
+    // lands the same balances with about half the journal round trips. Every
+    // other case, and any replay of the split protocol, keeps the two moves.
+    const settlesNet =
+      !savedQuote &&
+      !existingKeys.has(grossKey) &&
+      !existingKeys.has(taxKey) &&
+      !hasOperatingArrears &&
+      !hasTaxArrears &&
+      grossLocal > 0 &&
+      taxSourceLocal > 0 &&
+      quote.netLocal >= 0 &&
+      availableCash >= 0 &&
+      taxByCountryAnchor.every(([, amount]) => amount >= 0) &&
+      taxDestinations.length > 0 &&
+      taxDestinations.every((destination) => treasuryIdByCountry.has(destination.country));
+    if (settlesNet) {
+      const valuation = { currencyCode: sourceCurrency, localPerAnchor: sourceRate };
+      const corporationLocal = grossLocal - taxSourceLocal;
+      const legs: BankingTransition["legs"] = [
+        {
+          kind: "mint",
+          amount: grossLocal,
+          valuation,
+          note: "Realized modeled gross operating receipts",
+        },
+      ];
+      if (corporationLocal > 0) {
+        legs.push({
+          kind: "credit",
+          amount: corporationLocal,
+          valuation,
+          collection: "corporations",
+          filter: { _id: oid(snapshot.corpId.toString()) },
+          path: "liquidCapital",
+          note: "Credit realized operating receipts net of tax withholding",
+        });
+      }
+      for (const destination of taxDestinations) {
+        const treasuryLocal = destination.amountAnchor * destination.localPerAnchor;
+        legs.push({
+          kind: "credit",
+          amount: treasuryLocal,
+          valuation: {
+            currencyCode: destination.currencyCode,
+            localPerAnchor: destination.localPerAnchor,
+          },
+          collection: "federalBudget",
+          filter: treasuryFilter(destination.country),
+          path: "treasuryCashLocal",
+          inc: { treasuryBalance: treasuryLocal },
+          note: "Deliver withheld corporate tax into spendable Treasury cash and fiscal position",
+        });
+      }
+      const transition: BankingTransition = {
+        key: netKey,
+        kind: "corporate_operating_net_receipt",
+        turn,
+        currency: sourceCurrency as CurrencyCode,
+        legs,
+        projections: [],
+        event: {
+          kind: "monetary.executed",
+          command: "turn.corporation.operatingNetCash",
+          subjectType: "corporation",
+          subjectId: snapshot.corpId.toString(),
+          amount: corporationLocal,
+          meta: {
+            grossOperatingCashLocal: grossLocal,
+            federalTaxAnchor: taxAnchor,
+            sourceCurrency,
+            sourceLocalPerAnchor: sourceRate,
+            operatingCashQuote: JSON.stringify(quote),
+          },
+        },
+      };
+      const destinationKeys = taxDestinations.map((destination) =>
+        treasuryKey(destination.country)
+      );
+      const settled = await treasuryLock.run(destinationKeys, () =>
+        settleTransition(db, transition)
+      );
+      if (settled.status !== "applied" && settled.status !== "replayed") {
+        throw new Error(settled.error ?? `Corporate net operating receipt ${netKey} is incomplete`);
+      }
+      return;
+    }
     if (existingKeys.has(grossKey)) {
       // Existing quote is restored from the durable gross/loss journal above;
       // cash was refreshed in one batched corporation read after resume.
@@ -258,23 +452,18 @@ export async function settleCorporateOperatingCash(
       availableCash += grossLocal;
     }
 
-    const originalCorp = corporationById.get(snapshot.corpId.toString());
-    const hasOperatingArrears = Object.values(
-      originalCorp?.operatingCashArrearsByCurrency ?? {}
-    ).some((amount) => amount > 0);
-    const hasTaxArrears = Object.values(originalCorp?.federalTaxArrearsAnchorByCountry ?? {}).some(
-      (amount) => amount > 0
-    );
     if (hasOperatingArrears || hasTaxArrears) {
-      availableCash = await settlePriorCorporateCashArrears({
-        db,
-        context,
-        corporationId: snapshot.corpId.toString(),
-        currencyCode: sourceCurrency as CurrencyCode,
-        localPerAnchor: sourceRate,
-        turn,
-        now,
-      });
+      availableCash = await treasuryLock.run(allTreasuryKeys, () =>
+        settlePriorCorporateCashArrears({
+          db,
+          context,
+          corporationId: snapshot.corpId.toString(),
+          currencyCode: sourceCurrency as CurrencyCode,
+          localPerAnchor: sourceRate,
+          turn,
+          now,
+        })
+      );
     }
 
     if (grossLocal < 0 && !existingKeys.has(grossKey)) {
@@ -348,7 +537,8 @@ export async function settleCorporateOperatingCash(
       }
     }
 
-    if (!(taxSourceLocal > 0)) continue;
+    if (!(taxSourceLocal > 0)) return;
+    const destinationKeys = taxDestinations.map((destination) => treasuryKey(destination.country));
     const arrearsKey = `${baseKey}:arrears`;
     const recordTaxArrears = async () => {
       if (existingKeys.has(arrearsKey)) {
@@ -409,15 +599,15 @@ export async function settleCorporateOperatingCash(
       existingKeys.add(arrearsKey);
     };
     if (existingKeys.has(taxKey)) {
-      const resumed = await resumeSettlement(db, taxKey);
+      const resumed = await treasuryLock.run(destinationKeys, () => resumeSettlement(db, taxKey));
       if (resumed.status === "rejected") {
         await recordTaxArrears();
-        continue;
+        return;
       }
       if (resumed.status !== "applied" && resumed.status !== "replayed") {
         throw new Error(resumed.error ?? `Corporate tax receipt ${taxKey} is incomplete`);
       }
-      continue;
+      return;
     }
 
     const sourceValuation = { currencyCode: sourceCurrency, localPerAnchor: sourceRate };
@@ -432,7 +622,6 @@ export async function settleCorporateOperatingCash(
         note: "Withhold corporate tax from available realized operating cash",
       },
     ];
-    const taxProjections: BankingTransition["projections"] = [];
     for (const destination of taxDestinations) {
       const {
         country,
@@ -447,15 +636,13 @@ export async function settleCorporateOperatingCash(
         amount: treasuryLocal,
         valuation: treasuryValuation,
         collection: "federalBudget",
-        filter: { countryId: country },
+        filter: treasuryFilter(country),
         path: "treasuryCashLocal",
-        note: "Deliver the payer-funded tax into spendable Treasury cash",
-      });
-      taxProjections.push({
-        collection: "federalBudget",
-        filter: { countryId: country },
-        update: { $inc: { treasuryBalance: treasuryLocal }, $set: { updatedAt: now } },
-        note: "Record the Treasury tax receipt in signed fiscal-position analytics",
+        // The signed fiscal-position total moves in the same write as the cash,
+        // under the leg's own receipt, instead of a second guarded projection
+        // (seven more round trips per tax payment) to the same document.
+        inc: { treasuryBalance: treasuryLocal },
+        note: "Deliver the payer-funded tax into spendable Treasury cash and fiscal position",
       });
     }
     const taxTransition: BankingTransition = {
@@ -464,7 +651,7 @@ export async function settleCorporateOperatingCash(
       turn,
       currency: sourceCurrency as CurrencyCode,
       legs: taxLegs,
-      projections: taxProjections,
+      projections: [],
       event: {
         kind: "monetary.executed",
         command: "turn.corporation.taxWithholding",
@@ -479,16 +666,207 @@ export async function settleCorporateOperatingCash(
         },
       },
     };
-    const taxed = await settleTransition(db, taxTransition);
+    const taxed = await treasuryLock.run(destinationKeys, () =>
+      settleTransition(db, taxTransition)
+    );
     if (taxed.status === "rejected") {
       // Withholding that the corporation cannot fund is a payable, not a
       // Treasury receipt. Persist it once and let the ordinary insolvency path
       // see the shortfall; never mint the missing government cash.
       await recordTaxArrears();
-      continue;
+      return;
     }
     if (taxed.status !== "applied" && taxed.status !== "replayed") {
       throw new Error(taxed.error ?? `Corporate tax receipt ${taxKey} is incomplete`);
     }
+  };
+
+  // Solvent profitable corporations with no payables settle many at a time.
+  // Their receipt is credit-only (mint gross; credit the corporation its net
+  // and each Treasury its tax), so no leg can be refused, and corporations
+  // owing the same Treasuries can share one receipt. The batch key hashes its
+  // members; any batch already claimed this turn resumes first and fences its
+  // members out of new work, so a retried pass never settles a corporation
+  // twice. Everything else keeps its own receipts below.
+  const batchPrefix = `corp-operating-net-batch:${turn}:`;
+  const claimedBatches = await journals
+    .find({ _id: { $regex: `^${batchPrefix}` } }, { projection: { _id: 1, legs: 1 } })
+    .toArray();
+  const batchedCorpIds = new Set<string>();
+  for (const row of claimedBatches as unknown as {
+    _id: string;
+    legs?: { collection?: string; filter?: { _id?: unknown } }[];
+  }[]) {
+    for (const leg of row.legs ?? [])
+      if (leg.collection === "corporations" && leg.filter?._id !== undefined)
+        batchedCorpIds.add(String(leg.filter._id));
   }
+  await runInLanes(
+    claimedBatches.map((row) => row._id),
+    lanes,
+    async (key) => {
+      const resumed = await treasuryLock.run(allTreasuryKeys, () => resumeSettlement(db, key));
+      if (resumed.status !== "applied" && resumed.status !== "replayed") {
+        throw new Error(resumed.error ?? `Corporate net operating batch ${key} is incomplete`);
+      }
+    }
+  );
+
+  const snapshotCount = new Map<string, number>();
+  for (const snapshot of snapshots) {
+    const id = snapshot.corpId.toString();
+    snapshotCount.set(id, (snapshotCount.get(id) ?? 0) + 1);
+  }
+  const batchable = new Map<string, { snapshot: CorpSnapshot; quote: OperatingCashQuote }[]>();
+  for (const snapshot of snapshots) {
+    const id = snapshot.corpId.toString();
+    if (snapshotCount.get(id) !== 1 || batchedCorpIds.has(id)) continue;
+    const baseKey = `corp-operating-cash:${turn}:${id}`;
+    if (
+      [baseKey, `${baseKey}:net`, `${baseKey}:gross`, `${baseKey}:tax`, `${baseKey}:arrears`].some(
+        (key) => existingKeys.has(key)
+      )
+    )
+      continue;
+    const corp = corporationById.get(id);
+    if (
+      Object.values(corp?.operatingCashArrearsByCurrency ?? {}).some((amount) => amount > 0) ||
+      Object.values(corp?.federalTaxArrearsAnchorByCountry ?? {}).some((amount) => amount > 0)
+    )
+      continue;
+    let quote: OperatingCashQuote;
+    try {
+      quote = freshQuote(snapshot);
+    } catch {
+      // The corporation's own receipts below report the missing quote.
+      continue;
+    }
+    const taxAnchor = quote.taxByCountryAnchor.reduce((sum, [, amount]) => sum + amount, 0);
+    const taxSourceLocal = taxAnchor * quote.sourceLocalPerAnchor;
+    if (
+      !(quote.grossLocal > 0) ||
+      !(taxSourceLocal > 0) ||
+      !(quote.netLocal >= 0) ||
+      !((cashByCorpId.get(id) ?? 0) >= 0) ||
+      !quote.taxByCountryAnchor.every(([, amount]) => amount >= 0) ||
+      quote.taxDestinations.length === 0 ||
+      !quote.taxDestinations.every((destination) => treasuryIdByCountry.has(destination.country))
+    )
+      continue;
+    // One mint leg per batch: members share a source currency and rate, and
+    // the same Treasury set.
+    const group = [
+      quote.sourceCurrency,
+      quote.sourceLocalPerAnchor,
+      quote.taxDestinations
+        .map((d) => `${d.country}:${d.currencyCode}:${d.localPerAnchor}`)
+        .sort()
+        .join(","),
+    ].join("|");
+    batchable.set(group, [...(batchable.get(group) ?? []), { snapshot, quote }]);
+  }
+
+  const batches = [...batchable.values()].flatMap((members) =>
+    Array.from({ length: Math.ceil(members.length / NET_BATCH_SIZE) }, (_, i) =>
+      members.slice(i * NET_BATCH_SIZE, (i + 1) * NET_BATCH_SIZE)
+    )
+  );
+  for (const members of batches)
+    for (const { snapshot } of members) batchedCorpIds.add(snapshot.corpId.toString());
+  await runInLanes(batches, lanes, async (members) => {
+    const { sourceCurrency, sourceLocalPerAnchor: sourceRate } = members[0].quote;
+    const valuation = { currencyCode: sourceCurrency, localPerAnchor: sourceRate };
+    const ids = members.map(({ snapshot }) => snapshot.corpId.toString());
+    const key = `${batchPrefix}${createHash("sha256").update(ids.join(",")).digest("hex").slice(0, 32)}`;
+    let grossLocal = 0;
+    const legs: BankingTransition["legs"] = [];
+    const treasuryLocal = new Map<string, number>();
+    for (const { snapshot, quote } of members) {
+      const taxAnchor = quote.taxByCountryAnchor.reduce((sum, [, amount]) => sum + amount, 0);
+      const corporationLocal = quote.grossLocal - taxAnchor * sourceRate;
+      grossLocal += quote.grossLocal;
+      if (corporationLocal > 0)
+        legs.push({
+          kind: "credit",
+          amount: corporationLocal,
+          valuation,
+          collection: "corporations",
+          filter: { _id: oid(snapshot.corpId.toString()) },
+          path: "liquidCapital",
+          note: "Credit realized operating receipts net of tax withholding",
+        });
+      for (const destination of quote.taxDestinations)
+        treasuryLocal.set(
+          destination.country,
+          (treasuryLocal.get(destination.country) ?? 0) +
+            destination.amountAnchor * destination.localPerAnchor
+        );
+    }
+    legs.unshift({
+      kind: "mint",
+      amount: grossLocal,
+      valuation,
+      note: "Realized modeled gross operating receipts",
+    });
+    for (const destination of members[0].quote.taxDestinations) {
+      const amount = treasuryLocal.get(destination.country) ?? 0;
+      legs.push({
+        kind: "credit",
+        amount,
+        valuation: {
+          currencyCode: destination.currencyCode,
+          localPerAnchor: destination.localPerAnchor,
+        },
+        collection: "federalBudget",
+        filter: treasuryFilter(destination.country),
+        path: "treasuryCashLocal",
+        inc: { treasuryBalance: amount },
+        note: "Deliver withheld corporate tax into spendable Treasury cash and fiscal position",
+      });
+    }
+    const transition: BankingTransition = {
+      key,
+      kind: "corporate_operating_net_batch",
+      turn,
+      currency: sourceCurrency,
+      legs,
+      projections: [],
+      event: {
+        kind: "monetary.executed",
+        command: "turn.corporation.operatingNetCashBatch",
+        subjectType: "corporation",
+        subjectId: ids[0],
+        amount: grossLocal,
+        meta: { corporations: ids.length, sourceCurrency, sourceLocalPerAnchor: sourceRate },
+      },
+    };
+    const settled = await treasuryLock.run(
+      members[0].quote.taxDestinations.map((destination) => treasuryKey(destination.country)),
+      () => settleTransition(db, transition)
+    );
+    if (settled.status !== "applied" && settled.status !== "replayed") {
+      throw new Error(settled.error ?? `Corporate net operating batch ${key} is incomplete`);
+    }
+  });
+
+  // A corporation's receipts stay strictly ordered (gross, prior arrears,
+  // loss, tax), and a corporation listed twice settles its entries in input
+  // order inside one task, so its idempotency keys never race themselves.
+  const snapshotsByCorp = new Map<string, CorpSnapshot[]>();
+  for (const snapshot of snapshots) {
+    const id = snapshot.corpId.toString();
+    if (batchedCorpIds.has(id)) continue;
+    const group = snapshotsByCorp.get(id);
+    if (group) group.push(snapshot);
+    else snapshotsByCorp.set(id, [snapshot]);
+  }
+  const groups = interleaveByKey([...snapshotsByCorp.values()], (group) =>
+    group
+      .flatMap((snapshot) => Array.from(snapshot.federalTaxByCountryAnchor?.keys() ?? []))
+      .sort()
+      .join(",")
+  );
+  await runInLanes(groups, lanes, async (group) => {
+    for (const snapshot of group) await settleSnapshot(snapshot);
+  });
 }

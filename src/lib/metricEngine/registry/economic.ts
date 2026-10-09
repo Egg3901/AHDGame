@@ -110,7 +110,11 @@ export const sectorGrowthNode: RegistryNode = {
   // The lagged tradeGrowth edge feeds the net-exports impulse (T5); lagged so the
   // trade↔output loop is cross-turn-damped (and registry-node prev is populated
   // by the phase, so no extra projection is needed).
-  inputs: [{ provider: "sectorRevenueTax" }, { lagged: "economic.tradeGrowth" }],
+  inputs: [
+    { provider: "sectorRevenueTax" },
+    { provider: "fiscalTradeInputs" },
+    { lagged: "economic.tradeGrowth" },
+  ],
   bounds: [SECTOR_SIGNAL_MIN, SECTOR_SIGNAL_MAX],
   inertia: INERTIA,
   maxPolicyDelta: MAX_POLICY_DELTA,
@@ -133,8 +137,17 @@ export const sectorGrowthNode: RegistryNode = {
         : sumRealizedRevenue(p.owned, true);
     // Trailing trend first (noise-proof), one-turn delta as the cold-start
     // fallback while the snapshot log matures, legacy weighted average last.
+    // The money trend is nominal: strip the lagged inflation so the real output
+    // gap does not integrate the price level (and the Phillips term it feeds).
+    const trade = ctx.providers["fiscalTradeInputs"] as FiscalTradeInputs | undefined;
+    const inflation = trade?.inflationRate;
     const trailingSignal = p.plantsEnabled
-      ? computeTrailingRevenueGrowthRate(p.revenueEmaNow, p.revenueTrendBaseline, TURNS_PER_YEAR)
+      ? computeTrailingRevenueGrowthRate(
+          p.revenueEmaNow,
+          p.revenueTrendBaseline,
+          TURNS_PER_YEAR,
+          inflation
+        )
       : null;
     const outputSignal = p.plantsEnabled
       ? computeTrailingRevenueGrowthRate(p.outputEmaNow, p.outputTrendBaseline, TURNS_PER_YEAR)
@@ -146,7 +159,8 @@ export const sectorGrowthNode: RegistryNode = {
             realizedNow,
             p.realizedRevenuePrev,
             p.turnsSincePrev,
-            TURNS_PER_YEAR
+            TURNS_PER_YEAR,
+            inflation
           )
         : null);
     const sector = blendOutputGrowthSignal(
@@ -338,11 +352,17 @@ export const medianIncomeNode: RegistryNode = {
   kind: "derived",
   // Bounds must span every ERA. Floor 1000 was a modern-USD assumption —
   // NG NORTH_EAST authors 100 (and JP 600–900, CN 320–480) on the 1953 seed
-  // scale. Match metricDefinitions [0, 10_000_000].
+  // scale. Ceiling 10M clipped 1991 TR old-lira medians (10M-40M, #3371).
+  // Match metricDefinitions [0, 1_000_000_000].
   inputs: ["economic.productivityGrowth", "economic.unemploymentRate"],
-  bounds: [0, 10_000_000],
+  bounds: [0, 1_000_000_000],
   inertia: 0,
+  // The value stays whole currency units; the growth baseline carries 6dp so a
+  // small step on a low-unit income (1%/yr on 1,884 CNY is 0.39 a turn)
+  // accumulates instead of rounding away (#3394). 1e9 x 1e6 stays inside
+  // double precision.
   decimals: 0,
+  baselineDecimals: 6,
   compute: (ctx) => {
     const id = "economic.medianIncome";
     const base = Number.isFinite(ctx.prevSimBaseline[id])

@@ -237,16 +237,11 @@ export function CandidateFile({
               distance={electorateDistance}
               detail={
                 electorate
-                  ? // The headline word uses getDisplayLean (dominant axis), not the raw
-                    // economic value: some era models (e.g. UK 1953) keep economicLean
-                    // negative and socialLean positive in EVERY region by construction —
-                    // only the social axis's magnitude flips which one dominates region to
-                    // region. Rendering raw economic alone made every electorate read
-                    // identically "Center-Left" here regardless of true lean; see
-                    // HomeStatePicker.tsx / HomeStatePicker.test.tsx for the same fix.
-                    `That electorate sits ${getLeanLabel(
+                  ? `Electoral lean: ${getLeanLabel(
                       getDisplayLean(electorate.economic, electorate.social)
-                    )} / ${getSocialLeanLabel(electorate.social)}.`
+                    )}. Economic: ${getLeanLabel(electorate.economic)}. Social: ${getSocialLeanLabel(
+                      electorate.social
+                    )}.`
                   : undefined
               }
             />

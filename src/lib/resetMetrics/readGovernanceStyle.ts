@@ -7,6 +7,7 @@ import { resetLawFamilies, type LegislativePosition } from "@/lib/resetLegislati
 import type { ResetLawOpeningBoard } from "@/lib/resetLegislation/rules/openingBoard";
 import { openingChoice1991 } from "@/lib/resetLegislation/rules/reviewCatalog";
 import type { LawChoice } from "@/lib/resetLegislation/rules/eligibility";
+import type { ResetCountry } from "@/lib/resetLegislation/fundingOwner";
 import {
   scoreResetGovernanceStyle,
   type ResetMetricConditionScores,
@@ -25,7 +26,7 @@ function isLegislativePosition(choice: LawChoice): choice is LegislativePosition
 export async function readResetGovernanceStyle(input: {
   db: Db;
   worldId: string;
-  countryId: "US" | "UK" | "JP";
+  countryId: ResetCountry;
   scope: "national" | "regional";
   regionId?: string;
   conditionScores: ResetMetricConditionScores;

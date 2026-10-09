@@ -7,6 +7,7 @@ import {
   corpIncomeBasis,
   cashAfterContracts,
 } from "./financialsModel";
+import { applyFogToFinancials } from "@/lib/corporations/financialFogOfWar";
 import type { Financials } from "../CorporationPageTypes";
 
 const baseFinancials: Financials = {
@@ -41,6 +42,15 @@ const baseFinancials: Financials = {
   currentGrowthRate: 0,
   subsidyBenefit: 0,
 };
+
+it("applies the same financial fog to freight income and costs", () => {
+  const fogged = applyFogToFinancials(
+    { ...baseFinancials, freightIncome: 120, freightCosts: 600 },
+    0.9
+  );
+  expect(fogged.freightIncome).toBe(108);
+  expect(fogged.freightCosts).toBe(540);
+});
 
 describe("cashAfterContracts", () => {
   it("adds last-turn supply-agreement CFD cash onto retained P&L", () => {
@@ -168,6 +178,15 @@ describe("buildAllocation", () => {
   // `netIncome` was passed through from `f.income` rather than derived from
   // the rows above it. A reader running down the column could not reproduce
   // the total, which is the whole point of an income statement.
+  it("names freight separately instead of hiding it in Other", () => {
+    const f = { ...baseFinancials, freightCosts: 600, income: baseFinancials.income - 600 };
+    const a = buildAllocation(f, "daily");
+    expect(a.segments.find((s) => s.key === "freight")?.value).toBe(600);
+    expect(a.segments.find((s) => s.label === "Freight charges")?.pct).toBe(25);
+    expect(new Set(a.segments.map((s) => s.key)).size).toBe(a.segments.length);
+    expect(a.netIncome).toBe(f.income);
+  });
+
   it("includes wages as a row", () => {
     const a = buildAllocation({ ...baseFinancials, laborCosts: 600 }, "turn");
     const labor = a.segments.find((s) => s.key === "labor");

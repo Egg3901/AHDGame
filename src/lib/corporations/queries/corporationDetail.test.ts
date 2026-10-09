@@ -49,6 +49,8 @@ vi.mock("@/lib/currency/corporationCapital", async () => {
   };
 });
 
+import { loadCorporationDetailView } from "./corporationDetail";
+
 let db: MockDb;
 
 describe("loadCorporationDetailView", () => {
@@ -89,7 +91,6 @@ describe("loadCorporationDetailView", () => {
     } as never);
     db.collectionMocks["corporationHistory"]!.findOne.mockResolvedValue({ income: 0 });
 
-    const { loadCorporationDetailView } = await import("./corporationDetail");
     const result = await loadCorporationDetailView({
       db: db as unknown as Db,
       corporation,
@@ -117,6 +118,98 @@ describe("loadCorporationDetailView", () => {
     expect(result.sectors).toEqual([]);
     expect(result.financials.totalRevenue).toBe(0);
     expect(result.balanceSheet.assets.cashOnHand).toBe(corporation.liquidCapital);
+    expect(result.financials).not.toHaveProperty("arrears");
+
+    db.collection("bankMoneyMoves");
+    db.collectionMocks.bankMoneyMoves.find.mockReturnValue({
+      toArray: async () => [{ status: "applied", currency: "USD", event: { amount: 75 } }],
+    } as never);
+    const ownerView = await loadCorporationDetailView({
+      db: db as unknown as Db,
+      corporation: {
+        ...corporation,
+        operatingCashArrearsByCurrency: { USD: 100 },
+        federalTaxArrearsAnchorByCountry: { US: 25 },
+      },
+      currentTurn: 10,
+      viewerUserId: ceo.userId!.toString(),
+    });
+    expect(ownerView.financials.arrears).toEqual({
+      turn: 10,
+      paidLastTurn: 75,
+      remaining: 125,
+    });
+  });
+
+  it("includes recorded freight and complete physical costs in the corporate statement", async () => {
+    const ceo = makeCharacter({ _id: new ObjectId(), userId: new ObjectId() });
+    const corporation = makeCorporation({
+      ceoId: ceo._id,
+      userId: ceo.userId,
+      countryId: "US",
+      headquartersState: "CA",
+      liquidCurrencyCode: "USD",
+      marketingBudget: 0,
+      logisticsBudget: 0,
+      rdBudget: 0,
+      ceoSalary: 0,
+      dividendRate: 0,
+      shareholders: [],
+      publicFloat: 0,
+    });
+    const sector = {
+      _id: new ObjectId(),
+      corporationId: corporation._id,
+      countryId: "US",
+      stateId: "CA",
+      sectorType: "energy",
+      strategyId: "standard",
+      profitMargin: 35,
+      effectiveProfitMargin: 40,
+      revenue: 2400,
+      realizedRevenue: 2400,
+      laborCost: 240,
+      currentGrowthCost: 0,
+      currentGrowthRate: 0,
+      productionPolicyLevel: 0,
+      workers: 10,
+      freightBillingCharge: 2160,
+      freightBillingCredit: 120,
+      plantsPnl: {
+        revenue: 2400,
+        inputs: 720,
+        labour: 240,
+        otherOpex: 480,
+        financialLegs: 0,
+        policyCredit: 0,
+        upkeep: 120,
+        compliance: 60,
+        inventoryCarry: 24,
+        operatingCost: 1440,
+        totalCost: 1644,
+        profit: 756,
+      },
+    };
+    db.collectionMocks.characters.findOne.mockResolvedValue(ceo);
+    db.collectionMocks.corporateSectors.find.mockReturnValue({
+      toArray: () => Promise.resolve([sector]),
+    } as never);
+    db.collectionMocks.bonds.find.mockReturnValue({ toArray: () => Promise.resolve([]) } as never);
+    db.collectionMocks.corporationHistory.findOne.mockResolvedValue({ income: -53.5 });
+    const view = await loadCorporationDetailView({
+      db: db as unknown as Db,
+      corporation,
+      currentTurn: 10,
+      viewerUserId: ceo.userId!.toString(),
+    });
+    expect(view.financials.totalRevenue).toBe(2520);
+    expect(view.sectors[0]?.financialRevenue).toBe(2520);
+    expect(view.sectors[0]?.profit).toBe(-1284);
+    expect(view.financials.freightCosts).toBe(2160);
+    expect(view.financials.freightIncome).toBe(120);
+    expect(view.financials.regulatoryBurden).toBe(60);
+    expect(view.financials.operatingIncome).toBe(-1284);
+    expect(view.financials.realizedIncome).toBe(-1284);
   });
 
   it("labels a modelled vehicle corporation while preserving its manufacturing identity", async () => {
@@ -147,7 +240,6 @@ describe("loadCorporationDetailView", () => {
     } as never);
     db.collectionMocks["corporationHistory"]!.findOne.mockResolvedValue({ income: 0 });
 
-    const { loadCorporationDetailView } = await import("./corporationDetail");
     const result = await loadCorporationDetailView({
       db: db as unknown as Db,
       corporation,
@@ -201,7 +293,6 @@ describe("loadCorporationDetailView", () => {
     } as never);
     db.collectionMocks["corporationHistory"]!.findOne.mockResolvedValue({ income: 0 });
 
-    const { loadCorporationDetailView } = await import("./corporationDetail");
     const result = await loadCorporationDetailView({
       db: db as unknown as Db,
       corporation,
@@ -291,7 +382,6 @@ describe("loadCorporationDetailView", () => {
     } as never);
     db.collectionMocks["corporationHistory"]!.findOne.mockResolvedValue({ income: 0 });
 
-    const { loadCorporationDetailView } = await import("./corporationDetail");
     const view = await loadCorporationDetailView({
       db: db as unknown as Db,
       corporation,
@@ -376,7 +466,6 @@ describe("loadCorporationDetailView", () => {
       revenue: 20_833.33,
     });
 
-    const { loadCorporationDetailView } = await import("./corporationDetail");
     const view = await loadCorporationDetailView({
       db: db as unknown as Db,
       corporation,
@@ -466,7 +555,6 @@ describe("loadCorporationDetailView", () => {
       revenue: 25_000,
     });
 
-    const { loadCorporationDetailView } = await import("./corporationDetail");
     const view = await loadCorporationDetailView({
       db: db as unknown as Db,
       corporation,
@@ -546,7 +634,6 @@ describe("loadCorporationDetailView", () => {
       income: 0,
     });
 
-    const { loadCorporationDetailView } = await import("./corporationDetail");
     const view = await loadCorporationDetailView({
       db: db as unknown as Db,
       corporation,
@@ -633,7 +720,6 @@ describe("loadCorporationDetailView — plants-tier physicals", () => {
     } as never);
     pdb.collectionMocks["corporationHistory"]!.findOne.mockResolvedValue({ income: 0 });
 
-    const { loadCorporationDetailView } = await import("./corporationDetail");
     return loadCorporationDetailView({
       db: pdb as unknown as Db,
       corporation,

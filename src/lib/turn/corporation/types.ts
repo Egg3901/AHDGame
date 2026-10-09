@@ -37,6 +37,8 @@ export interface CorporationLookups {
   mediaProductDevelopmentByCorpId?: Map<string, MediaProductProject>;
   mediaProductQualityBySectorId?: Map<string, number>;
   mediaProductLoyaltyBonusBySectorId?: Map<string, number>;
+  /** Revenue multiplier per sector from released product ventures whose lift is running. */
+  productVentureBoostBySectorId?: Map<string, number>;
   corpById: Map<string, Corporation>;
   /** Two-axis electorate lean, projected only while mediaEditorialEnabled is true. */
   editorialAudienceLeanByState?: Map<string, { economic: number; social: number }>;
@@ -218,6 +220,12 @@ export interface CorporationLookups {
    * in which case the corporation turn computes and writes nothing.
    */
   freightChargesByDestState?: Map<string, Map<CommodityType, number>>;
+  /** Full buyer demand from the same sourcing snapshot as freight charges. */
+  freightDemandByDestState?: Map<string, Map<CommodityType, number>>;
+  /** Destination unit prices (₳) used to bound each sector's freight bill by goods value. */
+  freightUnitPriceByDestState?: Map<string, Map<CommodityType, number>>;
+  /** Full freight supply from the same sourcing snapshot as haul revenue. */
+  freightSupplyByOriginState?: Map<string, number>;
   /**
    * The transfer's other half: per origin state, LAST turn's haul revenue its
    * freight network earned. Same gate and source as

@@ -6,7 +6,7 @@ import type { GameState } from "@/lib/db/types/gameState";
 import type { FederalBudget } from "@/lib/db/types/budget";
 import { runRequiredTransaction } from "@/lib/db/runRequiredTransaction";
 import { RESET_V2_READY } from "@/lib/resetVersions/availability";
-import { resetSystemVersionsForCountry } from "@/lib/resetVersions/rules";
+import { RESET_V2_COUNTRIES, resetSystemVersionsForCountry } from "@/lib/resetVersions/rules";
 import type { ResetCountry } from "./fundingOwner";
 import { resetLawFamilyById } from "./catalog";
 import type { ResetLawOpeningBoard } from "./rules/openingBoard";
@@ -31,7 +31,7 @@ export async function applyResetLawBillEnactment(
     return applyRegionalResetLawBillEnactment(db, bill, frozen, turn);
   }
   const country = bill.countryId;
-  if (!country || !["US", "UK", "JP"].includes(country)) {
+  if (!country || !(RESET_V2_COUNTRIES as readonly string[]).includes(country)) {
     throw new Error("A v2 law bill needs a supported country");
   }
   const resetCountry = country as ResetCountry;
@@ -249,7 +249,7 @@ async function applyRegionalResetLawBillEnactment(
 ): Promise<{ applied: boolean; programs: number }> {
   const country = bill.countryId;
   const regionId = bill.stateId?.toUpperCase();
-  if (!country || !["US", "UK", "JP"].includes(country) || !regionId) {
+  if (!country || !(RESET_V2_COUNTRIES as readonly string[]).includes(country) || !regionId) {
     throw new Error("A regional v2 law bill needs a supported jurisdiction");
   }
   if (

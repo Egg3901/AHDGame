@@ -3,6 +3,7 @@ import type { Db } from "mongodb";
 import type { ResetDepartmentAccountSnapshot } from "@/lib/resetFinance/rules/liveDepartmentAccount";
 import type { ResetLawProgramDocument } from "@/lib/resetLegislation/program";
 import { validateResetDepartmentAllocations } from "./rules/allocation";
+import type { ResetCountry } from "@/lib/resetLegislation/fundingOwner";
 
 export type ResetAllocationWriteResult =
   { ok: true } | { ok: false; status: 400 | 403 | 404 | 409; error: string };
@@ -10,7 +11,7 @@ export type ResetAllocationWriteResult =
 export async function setResetDepartmentAllocations(input: {
   db: Db;
   worldId: string;
-  countryId: "US" | "UK" | "JP";
+  countryId: ResetCountry;
   departmentId: string;
   positionId: string;
   turn: number;

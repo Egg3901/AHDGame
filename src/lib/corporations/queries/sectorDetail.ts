@@ -1,9 +1,15 @@
+import {
+  expansionOperatingReserve,
+  sellableExpansionUnits,
+} from "@/lib/corporations/investment/expansion/rules";
+import { deliveredFraction } from "@/lib/corporations/buildDelivery";
 import { loadInvestmentBondReference } from "@/lib/corporations/investment/bondReference";
 import { NextResponse } from "next/server";
 import { findMergedRegionMetrics } from "@/lib/macroMetrics/merge";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { getAuthUser } from "@/lib/auth";
+import { getControllingCorporateParent } from "@/lib/corporations/corporateOwnership";
 import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { resolveCorporation } from "@/lib/api/corporations/resolveQuery";
 import { buildPoliticalBaseModifiers } from "@/lib/politicalLegislation/marginAdapter";
@@ -28,6 +34,8 @@ import type {
   UnownedSector,
   Subsidy,
   Union,
+  BankLoan,
+  Bond,
 } from "@/lib/db/types";
 import {
   getTariffBlendWeights,
@@ -35,14 +43,28 @@ import {
   tariffRulesNeedSectorPresenceKeys,
 } from "@/lib/tariffs/tariffEffects";
 import { buildFtaCoverageLookup, loadActiveFtaPairs } from "@/lib/tariffs/ftaOverrides";
-import { CORPORATION_TYPE_LABELS, calculateWorkers } from "@/lib/constants/corporations";
+import {
+  CORPORATION_TYPE_LABELS,
+  calculateWorkers,
+  TURNS_PER_DAY,
+} from "@/lib/constants/corporations";
 import type {
   CorporationType,
   StateMetricValues,
   MacroEconomicValues,
 } from "@/lib/constants/corporations";
 import { isStateOwned } from "@/lib/nationalization/nationalCorporation";
-import { eraScaledBasePrices, type CommodityType } from "@/lib/constants/commodities";
+import {
+  computeOwnershipMarginTerms,
+  roundOwnershipTerms,
+} from "@/lib/nationalization/ownershipMarginTerms";
+import { loadEconomicModelsByCountry } from "@/lib/economicModels/queries";
+import {
+  eraScaledBasePrices,
+  commodityMixWeight,
+  COMMODITY_BASE_PRICES,
+  type CommodityType,
+} from "@/lib/constants/commodities";
 import { sectorDemandGapUnits } from "@/lib/market/sectorDemandGap";
 import { commodityDemandGap, isStateScopedCommodity } from "@/lib/market/commodityMarketScope";
 import { latentTopUpForCountry, latentTopUpForState } from "@/lib/market/latentShortageSignal";
@@ -60,6 +82,7 @@ import { capacityRescaleRatio } from "@/lib/constants/capacityEconomy";
 import { STARTING_YEAR, TURNS_PER_YEAR } from "@/lib/constants/turnTime";
 import {
   getCorpFxRate,
+  fxRateForSectorHostFromMap,
   getSectorHostFxRate,
   loadFxRatesByCurrency,
   resolveSectorHostCurrencyCode,
@@ -190,12 +213,30 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
       !viewerIsAdmin &&
       user?.isModerator === true &&
       new URL(request.url).searchParams.get("modView") === "1";
-    const shouldRedact = shouldRedactCorporation(
-      corporation,
-      user?.userId ?? undefined,
-      viewerIsAdmin,
-      modViewEnabled
-    );
+    // The CEO of the controlling parent is an insider of its subsidiary, same
+    // rule GET /api/corporations/[id] applies (ticket 1423).
+    let isParentCeo = false;
+    const controllingParent = user && !isCeo ? getControllingCorporateParent(corporation) : null;
+    if (user && controllingParent) {
+      const parentCorp = await db
+        .collection<Corporation>("corporations")
+        .findOne(
+          { _id: controllingParent.corporationId },
+          { projection: { userId: 1, ceoVacant: 1 } }
+        );
+      isParentCeo =
+        !!parentCorp &&
+        parentCorp.ceoVacant !== true &&
+        parentCorp.userId?.toString() === user.userId;
+    }
+    const shouldRedact =
+      !isParentCeo &&
+      shouldRedactCorporation(
+        corporation,
+        user?.userId ?? undefined,
+        viewerIsAdmin,
+        modViewEnabled
+      );
     // Financial fog of war (public corps only, non-insiders), mirrors the
     // protection GET /api/corporations/[id] already applies, so a competitor
     // can't see a public corp's live sector financials through this page when
@@ -203,11 +244,8 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
     // Unlike the corp page, there is no per-sector historical snapshot to
     // build a jittered quarterly estimate from, so this takes the stricter
     // path of hiding the figures outright rather than approximating them.
-    // Does not check for CEO-of-controlling-parent (the corp page's other
-    // insider case), a parent-corp CEO sees this sector fogged too, which is
-    // overly cautious but not a leak.
     const isPublicCorp = !corporation.isPrivate && !corporation.countryOwnerId;
-    const isInsider = isCeo || viewerIsAdmin;
+    const isInsider = isCeo || isParentCeo || viewerIsAdmin;
     const publicFinancialFog = isPublicCorp && !shouldRedact && !isInsider;
 
     // Look up the viewer's corporation (for attack/split UI)
@@ -313,6 +351,13 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
                 realizedRevenue: 1,
                 profitMargin: 1,
                 currentGrowthCost: 1,
+                "plantsPnl.totalCost": 1,
+                "plantsPnl.turn": 1,
+                "plantsPnl.policyCredit": 1,
+                operatingCapacityUnits: 1,
+                capitalStock: 1,
+                buildQueue: 1,
+                freightBillingCharge: 1,
               },
             }
           )
@@ -354,6 +399,8 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
               unionsBanned: 1,
               "taxRates.domesticCorporateTax": 1,
               "taxRates.foreignCorporateTax": 1,
+              investorConfidence: 1,
+              stateOwnershipConcentration: 1,
             },
           }
         ),
@@ -516,6 +563,30 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
       sector.industryModel,
       sector.mediaDiscriminator
     ) as CorporationType;
+    // Ownership margin terms (SOE efficiency, expropriation risk, economic-model
+    // fit): the turn applies them inside the stack, so the breakdown names them.
+    const ownerCountryId = corporation.countryOwnerId;
+    const [economicModelByCountry, ownerBudget] = await Promise.all([
+      loadEconomicModelsByCountry(db, [sectorCountryId]),
+      ownerCountryId && ownerCountryId !== sectorCountryId
+        ? db
+            .collection<FederalBudget>("federalBudget")
+            .findOne(
+              { countryId: ownerCountryId },
+              { projection: { stateOwnershipConcentration: 1 } }
+            )
+        : Promise.resolve(federalBudget),
+    ]);
+    const ownershipTerms = computeOwnershipMarginTerms({
+      corporation,
+      sector,
+      sectorType,
+      corruptionIndex: stateMetrics?.governance?.corruptionIndex?.value ?? null,
+      governmentTransparency: stateMetrics?.governance?.governmentTransparency?.value ?? null,
+      ownerSoci: ownerBudget?.stateOwnershipConcentration ?? 0,
+      investorConfidence: federalBudget?.investorConfidence,
+      economicModel: economicModelByCountry.get(sectorCountryId),
+    });
     const metrics: StateMetricValues = {
       fullMetrics: stateMetrics ?? null,
       unemploymentRate: stateMetrics?.economic?.unemploymentRate?.value ?? null,
@@ -843,7 +914,7 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
       // embargoed and untraded supply the sector can neither buy from nor lose
       // a sale to, so a sector in a real shortage was told it was oversupplied
       // (ticket #1077). Falls back to the aggregate when no book is persisted.
-      const reachableBooks = await loadReachableBooks(db);
+      const reachableBooks = await loadReachableBooks(db, currentTurn);
       const priceDocByCommodity = new Map(commodityPrices.map((cp) => [cp.commodity, cp]));
       const demandGapUnits = sectorDemandGapUnits(effectiveSupply, (gapCommodity) => {
         // Demand audit step 1: restore the 1.5x-cap-hidden demand to the
@@ -862,6 +933,110 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
           latentDemandTopUp,
         });
       });
+
+      // The sizing shortcut uses actual buyers for every output, not the
+      // weighted expansion appetite or latent price-cap demand above.
+      const queuedMarketUnits = siblingsSectors.reduce(
+        (sum, candidate) =>
+          sum +
+          (candidate.buildQueue ?? []).reduce(
+            (queued, order) =>
+              queued + order.unitsOrdered * (1 - deliveredFraction(order, currentTurn)),
+            0
+          ),
+        0
+      );
+      const currentDemand = Object.entries(effectiveSupply)
+        .filter(([, rate]) => (rate ?? 0) > 0)
+        .every(([commodity]) => {
+          const key = commodity as CommodityType;
+          return isStateScopedCommodity(key)
+            ? priceDocByCommodity.get(key)?.turn === currentTurn
+            : !!bookFor(reachableBooks, sectorCountryId, key);
+        });
+      const measuredDemandGapUnits = currentDemand
+        ? Math.max(
+            0,
+            sellableExpansionUnits(
+              Object.entries(effectiveSupply)
+                .filter(([, rate]) => (rate ?? 0) > 0)
+                .map(([commodity]) => {
+                  const key = commodity as CommodityType;
+                  return {
+                    weight: commodityMixWeight(effectiveSupply, COMMODITY_BASE_PRICES, key),
+                    gap: (
+                      isStateScopedCommodity(key)
+                        ? stateBalances.has(key)
+                        : !!bookFor(reachableBooks, sectorCountryId, key)
+                    )
+                      ? commodityDemandGap({
+                          commodity: key,
+                          stateBalance: stateBalances.get(key),
+                          reachableBook: bookFor(reachableBooks, sectorCountryId, key),
+                          globalBalance: globalBalances.get(key),
+                          latentDemandTopUp: 0,
+                        })
+                      : 0,
+                  };
+                })
+            ) - queuedMarketUnits
+          )
+        : null;
+      // Existing debt needs a repayment budget, which this operating scenario
+      // does not model. Do not offer automatic sizing for an indebted company.
+      const [activeLoan, activeBond] = await Promise.all([
+        db.collection<BankLoan>("bankLoans").findOne(
+          {
+            borrowerType: "corporation",
+            borrowerId: corporation._id,
+            status: { $in: ["pending", "current", "arrears", "defaulted"] },
+            $or: [{ outstanding: { $gt: 0 } }, { principal: { $gt: 0 } }],
+          },
+          { projection: { _id: 1 } }
+        ),
+        db
+          .collection<Bond>("bonds")
+          .findOne({ corporationId: corporation._id, matured: false }, { projection: { _id: 1 } }),
+      ]);
+      const unsettled =
+        !!activeLoan ||
+        !!activeBond ||
+        corporation.imfBailoutActive === true ||
+        (corporation.shareEscrowBalance ?? 0) < 0 ||
+        Object.values(corporation.operatingCashArrearsByCurrency ?? {}).some(
+          (value) => value > 0
+        ) ||
+        Object.values(corporation.federalTaxArrearsAnchorByCountry ?? {}).some(
+          (value) => value > 0
+        );
+      const operatingReserveAnchor =
+        unsettled || !enginePnl
+          ? null
+          : expansionOperatingReserve({
+              overheadPerTurnAnchor:
+                corpLiquidCapitalToAnchor(
+                  corpLevelCosts + (corporation.rdBudget ?? 0),
+                  corporation,
+                  corporationFxRate
+                ) / TURNS_PER_DAY,
+              sectors: allCorpSectors.map((s) => ({
+                current: s.plantsPnl?.turn === currentTurn,
+                capacityUnits: s.operatingCapacityUnits ?? s.capitalStock ?? 0,
+                queuedUnits: (s.buildQueue ?? []).reduce(
+                  (sum, order) =>
+                    sum + order.unitsOrdered * (1 - deliveredFraction(order, currentTurn)),
+                  0
+                ),
+                costPerTurnAnchor:
+                  readCorpEconomicAnchor(
+                    (s.plantsPnl?.totalCost ?? NaN) +
+                      Math.max(0, s.plantsPnl?.policyCredit ?? 0) +
+                      Math.max(0, s.freightBillingCharge ?? 0),
+                    resolveSectorHostCurrencyCode(s, corporation),
+                    fxRateForSectorHostFromMap(s, corporation, siblingFxByCurrency)
+                  ) / TURNS_PER_DAY,
+              })),
+            });
 
       // Ticket 1370 follow-up: when the plant is held back because the
       // valuable part of its output is oversupplied, name the strategy whose
@@ -965,6 +1140,7 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
           sectorDetailUnitScale
         ),
         demandGapUnits,
+        measuredDemandGapUnits,
         // Every producer's capacity in this cell (the focal sector included),
         // so "Unclaimed share" reads the same pool `headroomUnits` measures.
         retoolHint,
@@ -976,6 +1152,7 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
         }, 0),
         workers: sector.workers ?? calculateWorkers(sectorRevenueAnchor, metrics.workforceSkill),
         investment: {
+          operatingReserveAnchor,
           overheadDailyAnchor:
             corpLiquidCapitalToAnchor(
               corpLevelCosts + (corporation.rdBudget ?? 0),
@@ -996,6 +1173,8 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
           growthCostAnchor: sectorAmountAnchor(sector.currentGrowthCost),
           profitAnchor: sectorAmountAnchor(profit),
           inputsAnchor,
+          freightCostAnchor: sectorAmountAnchor(sector.freightBillingCharge ?? 0),
+          freightIncomeAnchor: sectorAmountAnchor(sector.freightBillingCredit ?? 0),
           // Ticket 1122: the turn's own lines, normalized to ₳. Present on any
           // sector that has run a plants turn since the field shipped; the
           // builder falls back to reconstruction when it is null.
@@ -1026,7 +1205,7 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
           ? buildPolicyStackRows({
               policyCreditAnchor: sectorAmountAnchor(enginePnl.policyCredit),
               revenueAnchor: sectorAmountAnchor(enginePnl.revenue),
-              mods: { ...mods, techMarginBonus: techMarginBonusPp },
+              mods: { ...mods, ...ownershipTerms, techMarginBonus: techMarginBonusPp },
               appliedPolicyPp: enginePnl.policyPp,
             })
           : [],
@@ -1197,6 +1376,7 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
       margins: {
         base: sector.profitMargin,
         ...mods,
+        ...roundOwnershipTerms(ownershipTerms),
         // computeSectorMarginSection already folds crises into both the
         // displayed margin and the maintenance/profit calculation.
         effective: mods.effective,

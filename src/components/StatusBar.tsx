@@ -32,6 +32,7 @@ import { BreakdownRow } from "./statusbar/BreakdownRow";
 import { CorpCashStatusChip } from "./statusbar/CorpCashStatusChip";
 import { StatusChip } from "./statusbar/StatusChip";
 import { OnlineStatusDot } from "./statusbar/OnlineStatusDot";
+import { TurnStatusLink } from "./statusbar/TurnStatusLink";
 import {
   STATUS_BAR_CONTAINER_CLASS,
   statusBarRowClassName,
@@ -47,7 +48,14 @@ interface OnlineStatus {
   online: number;
 }
 
-export function StatusBar({ showOnlineStatus = true }: { showOnlineStatus?: boolean }) {
+export function StatusBar({
+  showOnlineStatus = true,
+  turnStatusLink = false,
+}: {
+  showOnlineStatus?: boolean;
+  /** Link the turn timer to the public turn status page. Off in singleplayer. */
+  turnStatusLink?: boolean;
+}) {
   const pathname = usePathname();
   const isExcludedPath = EXCLUDED_PATHS.includes(pathname) || isLightweightLayoutPath(pathname);
   const { stats, patchStats } = useCharacterStats();
@@ -390,25 +398,30 @@ export function StatusBar({ showOnlineStatus = true }: { showOnlineStatus?: bool
               </span>
               <div className="flex min-w-0 shrink-0 items-center gap-1.5 sm:gap-2">
                 {isProcessing ? (
-                  <span className="inline-flex items-center gap-1 rounded-md bg-secondary/10 px-1.5 py-0.5 text-[11px] font-bold text-secondary sm:gap-1.5 sm:px-2 sm:py-1 sm:text-xs">
-                    <svg
-                      className="h-2.5 w-2.5 animate-spin sm:h-3 sm:w-3"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                      strokeWidth={2}
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-                      />
-                    </svg>
-                    <span className="hidden sm:inline">Turn processing</span>
-                    <span className="sm:hidden">Processing</span>
-                  </span>
+                  <TurnStatusLink enabled={turnStatusLink}>
+                    <span className="inline-flex items-center gap-1 rounded-md bg-secondary/10 px-1.5 py-0.5 text-[11px] font-bold text-secondary sm:gap-1.5 sm:px-2 sm:py-1 sm:text-xs">
+                      <svg
+                        className="h-2.5 w-2.5 animate-spin sm:h-3 sm:w-3"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                        strokeWidth={2}
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                        />
+                      </svg>
+                      <span className="hidden sm:inline">Turn processing</span>
+                      <span className="sm:hidden">Processing</span>
+                    </span>
+                  </TurnStatusLink>
                 ) : (
-                  <>
+                  <TurnStatusLink
+                    enabled={turnStatusLink}
+                    className="inline-flex min-w-0 shrink-0 items-center gap-1.5 sm:gap-2"
+                  >
                     <svg
                       className={`h-3.5 w-3.5 shrink-0 ${gameState.isActive ? "text-primary" : "text-yellow-500"}`}
                       fill="none"
@@ -431,7 +444,7 @@ export function StatusBar({ showOnlineStatus = true }: { showOnlineStatus?: bool
                     ) : (
                       <span className="shrink-0 text-yellow-500">Paused</span>
                     )}
-                  </>
+                  </TurnStatusLink>
                 )}
               </div>
             </div>

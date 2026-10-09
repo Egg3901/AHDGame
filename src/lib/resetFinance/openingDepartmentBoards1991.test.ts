@@ -5,7 +5,7 @@ import { departmentOpeningBoardPayload } from "./rules/departmentBoard";
 describe("1991 v2 department opening boards", () => {
   it("balances each country exactly against its operating claims", () => {
     const boards = buildOpeningDepartmentBoards1991("new-world", 1);
-    expect(boards.map((board) => board.countryId)).toEqual(["US", "UK", "JP"]);
+    expect(boards.map((board) => board.countryId)).toEqual(["US", "UK", "JP", "IE"]);
     expect(departmentOpeningBoardPayload(boards)).toContain("new-world");
     for (const board of boards) {
       expect(board.accounts.length).toBeGreaterThan(0);

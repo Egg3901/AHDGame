@@ -1,5 +1,6 @@
 // @vitest-environment node
 import Module, { createRequire } from "node:module";
+import { dirname } from "node:path";
 import { PassThrough } from "node:stream";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { getDb } from "@/lib/mongodb";
@@ -35,11 +36,9 @@ type FlightServer = {
 // react-server builds of React it is compiled against.
 function loadFlightServer(): FlightServer {
   const require = createRequire(import.meta.url);
-  const compiled = require
-    .resolve("next/dist/compiled/react/package.json")
-    .replace(/react\/package\.json$/, "");
-  const react = `${compiled}react/cjs/react.react-server.production.js`;
-  const reactDom = `${compiled}react-dom/cjs/react-dom.react-server.production.js`;
+  const compiled = dirname(dirname(require.resolve("next/dist/compiled/react/package.json")));
+  const react = `${compiled}/react/cjs/react.react-server.production.js`;
+  const reactDom = `${compiled}/react-dom/cjs/react-dom.react-server.production.js`;
   const swaps: Record<string, string> = {
     react,
     "react-dom": reactDom,
@@ -54,7 +53,7 @@ function loadFlightServer(): FlightServer {
     swaps[request] ?? original.call(Module, request, ...rest);
   try {
     return require(
-      `${compiled}react-server-dom-webpack/cjs/react-server-dom-webpack-server.node.production.js`
+      `${compiled}/react-server-dom-webpack/cjs/react-server-dom-webpack-server.node.production.js`
     ) as FlightServer;
   } finally {
     loader._resolveFilename = original;

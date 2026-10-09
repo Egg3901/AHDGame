@@ -38,6 +38,7 @@ describe("demographicTurnoutTurn", () => {
             gunowners: 0,
           },
         },
+        campaignContactModifiers: { race: { white: 6 } },
         countryId: "US",
         lastDecayApplied: new Date(),
         lastUpdated: new Date(),
@@ -49,6 +50,7 @@ describe("demographicTurnoutTurn", () => {
       expect(result[0].modifiers.race.black).toBeCloseTo(4.9);
       expect(result[0].modifiers.race.asian).toBeCloseTo(-2.94);
       expect(result[0].modifiers.age.young).toBeCloseTo(7.84);
+      expect(result[0].campaignContactModifiers?.race.white).toBeCloseTo(6 * 2 ** (-1 / 6));
     });
 
     it("rounds to zero when below threshold", async () => {
@@ -907,6 +909,52 @@ describe("demographicTurnoutTurn", () => {
       expect(us.modifiers.uk_voterGroups.moderate_centrists).toBe(0);
       expect(dc.modifiers.uk_voterGroups.new_britons).toBe(0);
       expect(dc.modifiers.uk_voterGroups.moderate_centrists).toBe(0);
+    });
+
+    it("applies a census target when a legacy international turnout document lacks its category", async () => {
+      const budget = {
+        _id: new ObjectId(),
+        partyId: "1",
+        countryId: "UK" as const,
+        scope: "national" as const,
+        gotvBudgetPercent: 10,
+        gotvTargetCategory: "education",
+        gotvTargetGroup: "degree_plus",
+        suppressionBudgetPercent: 0,
+        orgBuildingPercent: 0,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      } as unknown as PartyBudget;
+      const turnout: StateDemographicTurnout = {
+        _id: "E1",
+        countryId: "UK",
+        modifiers: { uk_voterGroups: { urban_progressives: 0 } },
+        lastDecayApplied: new Date(),
+        lastUpdated: new Date(),
+      };
+      const party = {
+        _id: new ObjectId(),
+        sequentialId: 1,
+        countryId: "UK",
+        name: "Labour Party",
+        economicPosition: -2,
+        socialPosition: -1,
+        treasury: 100_000,
+      } as unknown as PoliticalParty;
+
+      const result = await processPartyGOTV(
+        [budget],
+        [turnout],
+        { economic: -2, social: -1 },
+        12_000,
+        undefined,
+        undefined,
+        [party]
+      );
+
+      expect(result.turnout[0].modifiers.education.degree_plus).toBeGreaterThan(0);
+      expect(result.turnout[0].campaignModifiers?.education?.degree_plus).toBeGreaterThan(0);
+      expect(result.turnout[0].modifiers.uk_voterGroups.urban_progressives).toBe(0);
     });
 
     it("counts legacy country-less turnout docs as US regions for national GOTV", async () => {

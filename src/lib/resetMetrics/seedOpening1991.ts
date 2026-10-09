@@ -4,6 +4,7 @@ import type { Db } from "mongodb";
 import type { State } from "@/lib/db/types/state";
 import type { ResetSystemSeedReceipt } from "@/lib/resetVersions/rules";
 import { RESET_V2_SEED_REVISION } from "@/lib/resetVersions/rules";
+import { RESET_V2_OPENING_COUNTRIES } from "@/lib/resetVersions/rules";
 import {
   auditOpeningMetricSources,
   auditOpeningNationalMetricSources1991,
@@ -13,14 +14,15 @@ import {
   resetMetricSnapshotPayload,
   type ResetMetricSnapshot,
 } from "./rules/snapshot";
+import type { OpeningCountry } from "./rules/provisionalOpening";
 
 export function buildOpeningMetricSnapshots1991(
   worldId: string,
   sourceTurn: number
-): ResetMetricSnapshot[] {
+): Array<ResetMetricSnapshot & { countryId: OpeningCountry }> {
   const national = auditOpeningNationalMetricSources1991();
   const regional = auditOpeningMetricSources();
-  const rows = (["US", "UK", "JP"] as const).map((countryId) =>
+  const rows = RESET_V2_OPENING_COUNTRIES.map((countryId) =>
     buildResetMetricSnapshot({
       worldId,
       countryId,
@@ -39,24 +41,29 @@ export function buildOpeningMetricSnapshots1991(
       })
     );
   }
-  if (rows.length !== 74 || new Set(rows.map((row) => row._id)).size !== rows.length) {
-    throw new Error(
-      "The 1991 v2 metric opening must contain three national and 71 regional boards"
-    );
+  const regionalCount = regional.length;
+  if (
+    rows.length !== RESET_V2_OPENING_COUNTRIES.length + regionalCount ||
+    new Set(rows.map((row) => row._id)).size !== rows.length
+  ) {
+    throw new Error("The 1991 v2 metric opening contains duplicate or missing boards");
   }
-  return rows;
+  return rows as Array<ResetMetricSnapshot & { countryId: OpeningCountry }>;
 }
 
 /** Bulk-write then read back every board before issuing a world-bound receipt. */
 export async function seedOpeningMetrics1991(
   db: Db,
   worldId: string,
-  sourceTurn: number
+  sourceTurn: number,
+  countries: readonly OpeningCountry[] = RESET_V2_OPENING_COUNTRIES
 ): Promise<ResetSystemSeedReceipt> {
-  const expected = buildOpeningMetricSnapshots1991(worldId, sourceTurn);
+  const expected = buildOpeningMetricSnapshots1991(worldId, sourceTurn).filter((row) =>
+    countries.includes(row.countryId)
+  );
   const seededRegions = await db
     .collection<State>("states")
-    .find({ countryId: { $in: ["US", "UK", "JP"] } }, { projection: { _id: 1, countryId: 1 } })
+    .find({ countryId: { $in: [...countries] } }, { projection: { _id: 1, countryId: 1 } })
     .toArray();
   const expectedRegionKeys = expected
     .filter((row) => row.scope === "regional")
@@ -75,7 +82,7 @@ export async function seedOpeningMetrics1991(
   );
   const persisted = await collection
     .find(
-      {},
+      { countryId: { $in: [...countries] } },
       {
         projection: {
           _id: 1,
@@ -104,5 +111,6 @@ export async function seedOpeningMetrics1991(
     sourceTurn,
     completedAt: new Date().toISOString(),
     verificationHash: createHash("sha256").update(expectedPayload).digest("hex"),
+    countries: [...countries],
   };
 }

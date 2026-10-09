@@ -23,6 +23,7 @@ import { PresidentialCandidateTable } from "./PresidentialCandidateTable";
 import { CandidateComparisonCards } from "./CandidateComparisonCards";
 import { NonPresidentialResultsPanel } from "./NonPresidentialResultsPanel";
 import { ContingentElectionPanel } from "./ContingentElectionPanel";
+import { ContingentHouseVotePanel } from "./ContingentHouseVotePanel";
 import {
   assessContingentEvRisk,
   isContingentResolutionMode,
@@ -569,8 +570,14 @@ export function GeneralElectionPanel({
             />
           )}
 
-        {contingentRisk?.atRisk && (
-          <ContingentRiskBanner risk={contingentRisk} candidateNames={tally.candidateNames} />
+        {/* The Blend hero carries this banner beside its college bar, and that
+            screen mounts this panel with the college summary turned off. */}
+        {showCollegeSummary && contingentRisk?.atRisk && (
+          <ContingentRiskBanner
+            risk={contingentRisk}
+            candidateNames={tally.candidateNames}
+            projection={tally.contingentProjection}
+          />
         )}
 
         {/* Winner Announcement Banner (only when resolved) */}
@@ -611,6 +618,10 @@ export function GeneralElectionPanel({
               electoralVotes={electoralVotes}
             />
           )}
+
+        {isEnded && electionId && tally.contingentResult && (
+          <ContingentHouseVotePanel electionId={electionId} colorMap={colorMap} />
+        )}
 
         {/* Detailed stats table */}
         {showCollegeSummary && (

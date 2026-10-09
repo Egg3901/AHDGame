@@ -118,6 +118,8 @@ describe("PrimaryBlendView", () => {
   it("says a voted state was won and an upcoming one is only projected", async () => {
     stubFetch(() => detailFor("1", "First Filer"));
     render(<PrimaryBlendView election={election()} wire={[]} />);
+    // The state board is the stage's Squares view; the map is the default.
+    fireEvent.click(screen.getByRole("tab", { name: "Squares" }));
 
     await waitFor(() =>
       expect(
@@ -159,6 +161,7 @@ describe("PrimaryBlendView", () => {
     );
 
     render(<PrimaryBlendView election={election()} wire={[]} />);
+    fireEvent.click(screen.getByRole("tab", { name: "Squares" }));
     fireEvent.click(screen.getAllByRole("button", { name: /Republican/ })[0]);
 
     await waitFor(() =>
@@ -183,17 +186,17 @@ describe("PrimaryBlendView", () => {
 describe("the wave calendar", () => {
   // The desktop rail is `hidden lg:block`. A rail-only calendar left mobile
   // with no schedule and no state chips, so the board was the only way to
-  // reach a state there. Both trees render, so each row appears twice.
-  it("reaches both layouts, not just the desktop rail", async () => {
+  // reach a state there. The stage renders it once, at every width.
+  it("reaches every width, not just the desktop rail", async () => {
     stubFetch(() => detailFor("1", "First Filer"));
     render(<PrimaryBlendView election={election()} wire={[]} />);
 
     await waitFor(() => expect(screen.getAllByText("Mid-March Wave").length).toBeGreaterThan(0));
-    expect(screen.getAllByText("Mid-March Wave")).toHaveLength(2);
-    expect(screen.getAllByText("Iowa Caucus")).toHaveLength(2);
+    expect(screen.getAllByText("Mid-March Wave")).toHaveLength(1);
+    expect(screen.getAllByText("Iowa Caucus")).toHaveLength(1);
   });
 
-  it("offers every wave's states as chips on both layouts", async () => {
+  it("offers every wave's states as chips", async () => {
     stubFetch(() => detailFor("1", "First Filer"));
     render(<PrimaryBlendView election={election()} wire={[]} />);
 
@@ -201,19 +204,20 @@ describe("the wave calendar", () => {
     await waitFor(() =>
       expect(screen.getAllByRole("button", { name: "Ohio" }).length).toBeGreaterThan(0)
     );
-    expect(screen.getAllByRole("button", { name: "Ohio" })).toHaveLength(2);
+    expect(screen.getAllByRole("button", { name: "Ohio" })).toHaveLength(1);
   });
 
   it("moves the carve-up when a chip is chosen", async () => {
     stubFetch(() => detailFor("1", "First Filer"));
     render(<PrimaryBlendView election={election()} wire={[]} />);
+    fireEvent.click(screen.getByRole("tab", { name: "Squares" }));
 
     await waitFor(() =>
       expect(screen.getAllByRole("button", { name: "Iowa" }).length).toBeGreaterThan(0)
     );
-    // The mobile copy comes first in the DOM; clicking it drives the shared
-    // selection, so the desktop tile for Iowa becomes the pressed one too.
-    screen.getAllByRole("button", { name: "Iowa" })[0].click();
+    // The calendar chip drives the shared selection, so the board's Iowa tile
+    // becomes the pressed one.
+    act(() => screen.getAllByRole("button", { name: "Iowa" })[0].click());
 
     await waitFor(() => {
       const tiles = screen.getAllByRole("button", { name: "Iowa: First Filer won" });

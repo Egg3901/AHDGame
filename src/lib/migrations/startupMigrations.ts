@@ -17,6 +17,8 @@ import { migration as mediaProductProjectsV1Index } from "./entries/2026-10-04-m
 import { migration as manufacturingProductProjectsV2Index } from "./entries/2026-10-04-manufacturing-product-projects-v2-index";
 import { migration as underwritingRecoveryIndexes } from "./entries/2026-10-04-underwriting-recovery-indexes";
 import { migration as advertisingAgreementIndexes } from "./entries/2026-10-05-advertising-agreement-indexes";
+import { migration as productVentureIndexes } from "./entries/2026-10-08-product-venture-indexes";
+import { migration as campaignFieldOfficeIndexes } from "./entries/2026-10-09-campaign-field-office-indexes";
 import { runMigrations, type RunSummary } from "./runner";
 import type { Migration } from "./types";
 
@@ -62,6 +64,8 @@ export const REQUIRED_STARTUP_MIGRATIONS: readonly Migration[] = [
   // Original funding leases must remain discoverable even when underwriting is disabled.
   underwritingRecoveryIndexes,
   advertisingAgreementIndexes,
+  productVentureIndexes,
+  campaignFieldOfficeIndexes,
 ];
 
 /** Index metadata can disappear on reset even when migration markers survive. */
@@ -75,6 +79,8 @@ export const REQUIRED_STARTUP_INDEX_MIGRATIONS: readonly Migration[] = [
   mediaProductProjectsV1Index,
   manufacturingProductProjectsV2Index,
   underwritingRecoveryIndexes,
+  productVentureIndexes,
+  campaignFieldOfficeIndexes,
 ];
 
 export async function runRequiredStartupMigrations(db: Db): Promise<RunSummary> {

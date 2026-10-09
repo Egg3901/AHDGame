@@ -134,6 +134,73 @@ describe("buildCorporationLookups — bond holdings", () => {
     expect(issuerTypes).toEqual(["corporation", "sovereign"]);
   });
 
+  it.each([100, 99])(
+    "uses only matching projected legacy freight books (price turn %i)",
+    async (priceTurn) => {
+      db.collection("gameState");
+      db.collectionMocks.gameState.findOne.mockResolvedValue({ currentTurn: 100 });
+      db.collection("sourcingNetworkLoad");
+      db.collectionMocks.sourcingNetworkLoad.find.mockReturnValue(
+        makeCursor([
+          {
+            turn: 100,
+            freightCharges: { CA: { food: 2_000 } },
+            freightHaulRevenue: { CA: 500 },
+          },
+        ])
+      );
+      const prices = [
+        {
+          commodity: "food",
+          turn: priceTurn,
+          basePrice: 100,
+          globalPrice: 100,
+          globalSupply: 0,
+          globalDemand: 1_000,
+          stateSupply: { CA: 0 },
+          stateDemand: { CA: 1_000 },
+          nationalSupply: {},
+          nationalDemand: {},
+        },
+        {
+          commodity: "freight",
+          turn: priceTurn,
+          basePrice: 100,
+          globalPrice: 100,
+          globalSupply: 50,
+          globalDemand: 0,
+          stateSupply: { CA: 50 },
+          stateDemand: { CA: 0 },
+          nationalSupply: {},
+          nationalDemand: {},
+        },
+      ];
+      // Honor the database projection so the test exercises the documents the
+      // real loader receives, rather than handing it fields Mongo would omit.
+      db.collectionMocks.commodityPrices.find.mockImplementation(
+        (_query, options: { projection: Record<string, number> }) =>
+          makeCursor(
+            prices.map((price) =>
+              Object.fromEntries(
+                Object.entries(price).filter(([key]) => options.projection[key] === 1)
+              )
+            )
+          )
+      );
+
+      const lookups = await buildCorporationLookups(db as unknown as Db, {
+        canonicalFreightBillingEnabled: true,
+      });
+
+      expect(lookups.freightDemandByDestState?.get("CA")?.get("food")).toBe(
+        priceTurn === 100 ? 1_000 : undefined
+      );
+      expect(lookups.freightSupplyByOriginState?.get("CA")).toBe(
+        priceTurn === 100 ? 50 : undefined
+      );
+    }
+  );
+
   it("excludes product output maps from sector reads while the product gate is off", async () => {
     await buildCorporationLookups(db as unknown as Db);
 

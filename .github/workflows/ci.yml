@@ -237,10 +237,21 @@ jobs:
       - name: Next build
         # env.ts validates lazily, so the build compiles without secrets; the
         # Sentry sourcemap upload is skipped when SENTRY_AUTH_TOKEN is absent.
-        run: npm run verify:build
+        # A background sampler logs runner memory every 10 s, so a build that
+        # starves the runner shows how close it came in the job log.
+        run: |
+          ( while true; do echo "[mem] $(date -u +%H:%M:%S) $(free -m | awk '/Mem:/ {print "used=" $3 "MB avail=" $7 "MB"}')"; sleep 10; done ) &
+          sampler=$!
+          trap 'kill "$sampler" 2>/dev/null' EXIT
+          npm run verify:build
         env:
           NODE_OPTIONS: --max-old-space-size=6144
           CI: "true"
+          # One static-generation worker. Three exhausted the 16 GB runner and
+          # got its agent killed in about one build in five; two still did on
+          # 2026-10-08 (killed at 568 of 758 pages). Static generation takes
+          # about 8 s when healthy, so one worker costs little.
+          NEXT_BUILD_CPUS: "1"
 
   federation-transactions:
     needs: changes

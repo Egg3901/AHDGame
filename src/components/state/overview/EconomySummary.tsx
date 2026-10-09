@@ -17,8 +17,8 @@ import { CORPORATION_TYPE_LABELS, type CorporationType } from "@/lib/constants/c
  * falling back to `sectorSpecializations.{primary, secondary}` when
  * the cache is empty.
  *
- * Each sector tagged with `specializationBonus` shows "+10pp margin"
- * (primary) or "+5pp margin" (secondary): the regional margin bonus the
+ * Each sector tagged with `specializationBonus` shows "+5pp margin"
+ * (primary) or "+2.5pp margin" (secondary): the regional margin bonus the
  * state grants corps of that type.
  *
  * `gdpDeltaPct` is still a placeholder (Phase 2+).
@@ -80,11 +80,11 @@ export function EconomySummary({
                         className="text-body-sm font-medium text-success"
                         title={
                           s.specializationBonus === "primary"
-                            ? "State primary specialization: +10pp regional margin bonus"
-                            : "State secondary specialization: +5pp regional margin bonus"
+                            ? "State primary specialization: +5pp regional margin bonus"
+                            : "State secondary specialization: +2.5pp regional margin bonus"
                         }
                       >
-                        {s.specializationBonus === "primary" ? "+10pp margin" : "+5pp margin"}
+                        {s.specializationBonus === "primary" ? "+5pp margin" : "+2.5pp margin"}
                       </span>
                     )}
                   </li>

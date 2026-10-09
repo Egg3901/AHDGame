@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { assertMergeEligibility, MergeEligibilityError } from "@/lib/parties/mergeEligibility";
 import { ObjectId, type Db } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
@@ -370,7 +371,10 @@ export async function POST(request: Request, { params }: RouteParams) {
       }
       const targetParty = await db
         .collection<PoliticalParty>("politicalParties")
-        .findOne({ _id: targetPartyObjId }, { projection: { countryId: 1, isDefunct: 1 } });
+        .findOne(
+          { _id: targetPartyObjId },
+          { projection: { countryId: 1, sequentialId: 1, isDefunct: 1 } }
+        );
       if (!targetParty) {
         return errorResponse(404, "Target party not found");
       }
@@ -379,6 +383,12 @@ export async function POST(request: Request, { params }: RouteParams) {
       }
       if (targetParty.countryId !== party.countryId) {
         return errorResponse(400, "Cannot merge parties across countries");
+      }
+      try {
+        await assertMergeEligibility(db, party, targetParty);
+      } catch (error) {
+        if (error instanceof MergeEligibilityError) return errorResponse(400, error.message);
+        throw error;
       }
     }
 

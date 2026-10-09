@@ -1,7 +1,9 @@
 import type { ObjectId } from "mongodb";
 import type { GameHealthSummary } from "./gameHealthSnapshot";
-import type { TurnPhaseTelemetryMap } from "./turnPhaseTelemetry";
+import type { TurnOutcome, TurnPhaseTelemetryMap } from "./turnPhaseTelemetry";
 import type { GameIteration } from "./gameState";
+import type { TurnBuild } from "@/lib/turn/turnBuild";
+import type { TurnMemoryPeak } from "@/lib/turn/turnMemory";
 
 /**
  * Verbose turn processing log stored every hour.
@@ -16,10 +18,19 @@ export interface TurnLog {
   gameTime: Date;
   realTime: Date;
   durationMs: number;
+  /** The turn committed. A committed turn can still be degraded; see `outcome`. */
   success: boolean;
+  /** `degraded` when a phase failed or was skipped after an upstream failure. Absent before v2.10. */
+  outcome?: TurnOutcome;
+  failedPhases?: string[];
+  abortedPhases?: string[];
+  /** Peak process memory while the turn ran. */
+  memory?: TurnMemoryPeak;
   warnings: string[];
   health?: GameHealthSummary | null;
   phaseStatuses?: TurnPhaseTelemetryMap;
+  /** Deployed source the turn ran on; absent outside a hosted deployment. */
+  build?: TurnBuild;
   /**
    * Anti-abuse scans run after the turn commits (#2694): financialSuspectScan,
    * auditAnomalyScan, suspiciousDetection. Absent on off-cadence turns.

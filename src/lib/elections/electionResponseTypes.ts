@@ -16,6 +16,7 @@ import type { Apportionment } from "./apportionment";
 import type { CountryId } from "@/lib/constants/countries";
 import type {
   ContingentElectionDisplay,
+  ContingentProjectionDisplay,
   PresidentialResolutionMode,
 } from "@/lib/elections/presidentialResolutionDisplay";
 import type {
@@ -25,6 +26,7 @@ import type {
 } from "@/lib/elections/candidateEnrichment";
 import type { FactorLedgerSnapshot } from "@/lib/electionEngine/factorLedger";
 import type { DemocraticHealthElectionSnapshot } from "@/lib/electionEngine/democraticHealth";
+import type { ParticipationSummary } from "@/lib/demographics/v2/rules";
 
 export interface PollingData {
   leaderId: string | null;
@@ -63,6 +65,7 @@ export interface GeneralVotesData {
     cumulativeVotes: Record<string, number>;
     sharesPct: Record<string, number>;
     seatsEstimate?: Record<string, number>;
+    participation?: ParticipationSummary;
   }>;
   // Electoral-vote fields (president only) — shape comes from electoralVoteService
   electoralVotesByCandidate?: Record<string, number>;
@@ -87,6 +90,8 @@ export interface GeneralVotesData {
   resolutionMode?: PresidentialResolutionMode;
   /** President only: House/Senate contingent breakdown when no EV majority */
   contingentResult?: ContingentElectionDisplay;
+  /** President only, live race: projected contingent ballot when no EV majority is projected */
+  contingentProjection?: ContingentProjectionDisplay;
   /** President only: contingent ballot failed and will retry next turn */
   contingentResolutionPending?: boolean;
   /** President only: tally finalized but executive seating incomplete */
@@ -138,6 +143,8 @@ export interface ElectionResponse {
    */
   electionYear: number | null;
   status: string;
+  /** The requesting character withdrew from this election and may not re-enter. */
+  viewerWithdrew?: boolean;
   totalSeats: number | null;
 
   // Timing

@@ -168,6 +168,8 @@ const GAME_STATE_OPERATOR_FLAG_AUDIT_FIELDS = [
   "legislationSystemVersionAt",
   "cabinetSystemVersionBy",
   "cabinetSystemVersionAt",
+  "demographicsSystemVersionBy",
+  "demographicsSystemVersionAt",
   "onboardingChecklistEnabledBy",
   "onboardingChecklistEnabledAt",
   "seasonRecapEnabledBy",
@@ -226,6 +228,8 @@ export const GAME_STATE_RESET_PRESERVED_FIELD_REASONS: Readonly<Record<string, s
     processingPhase:
       "Turn-runner recovery evidence owned by processTurn and its shutdown recovery.",
     processingPhaseStatuses:
+      "Turn-runner recovery evidence owned by processTurn and its shutdown recovery.",
+    processingPhaseResults:
       "Turn-runner recovery evidence owned by processTurn and its shutdown recovery.",
     ...Object.fromEntries(
       GAME_STATE_OPERATOR_FLAG_AUDIT_FIELDS.map((field) => [
@@ -300,6 +304,9 @@ export const STALE_PROGRESS_GAME_STATE_UNSET: Readonly<Record<string, "">> = Obj
   // at the DEAD world's price level until the first recompute lands.
   eraGdpPerCapitaBaseline: "",
   incomeBandIndexByCountry: "",
+  // Income vintage provenance describes the outgoing world's seeded incomes. The
+  // new world's metric seed writers stamp their own.
+  incomeStartVintages: "",
   // Presidential term-limit ledger (src/lib/turn/election/presidentialTenureLedger.ts).
   // Counts terms served per country; the previous world's counts would term-limit
   // brand-new presidents in the new one.
@@ -391,6 +398,7 @@ export async function resetGameWorld(
               metricsSystemVersion: 1,
               legislationSystemVersion: 1,
               cabinetSystemVersion: 1,
+              demographicsSystemVersion: 1,
               resetSystemSelections: 1,
             },
           }
@@ -675,6 +683,7 @@ export async function resetGameWorld(
     metricsSystemVersion: selectedVersions.metrics,
     legislationSystemVersion: selectedVersions.legislation,
     cabinetSystemVersion: selectedVersions.cabinet,
+    demographicsSystemVersion: selectedVersions.demographics,
     resetSystemSelections: selectedVersions,
   };
   // Law-created seats belong to the outgoing world. A fresh v1 world begins

@@ -22,6 +22,7 @@ import type { CommodityPrice } from "@/lib/db/types";
 import type { TradeFlowSnapshot } from "@/lib/db/types/tradeFlowSnapshot";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import { COUNTRY_CURRENCY_MAP, eraRateForCurrency } from "@/lib/constants/currencies";
+import { readFreightBillingSnapshot } from "@/lib/logistics/freightBillingSnapshot";
 import type { CommodityType } from "@/lib/constants/commodities";
 import type { CountryId } from "@/lib/constants/countries";
 import { isCorporateIssuerBond } from "@/lib/bonds/corporateCredit";
@@ -109,6 +110,7 @@ import {
   scarcityReliefCappedUtilization,
 } from "@/lib/extraction/capacityHaircut";
 import type { SourcingNetworkDoc } from "@/lib/logistics/sourcingLedger";
+import { SETTLEMENT_HISTORY_EXCLUDED } from "@/lib/banking/settlementHistory";
 
 export async function buildCorporationLookups(
   db: Db,
@@ -221,6 +223,9 @@ export async function buildCorporationLookups(
         {},
         {
           projection: {
+            // Money-move settlement history: most of each document's bytes,
+            // read only by the settlement protocol under its own projection.
+            ...SETTLEMENT_HISTORY_EXCLUDED,
             ...(options?.mediaEditorialEnabled === true ? {} : { editorialStance: 0 }),
             ...(options?.productLinesV2Enabled === true
               ? {}
@@ -283,10 +288,12 @@ export async function buildCorporationLookups(
           projection: {
             _id: 1,
             commodity: 1,
+            turn: 1,
             globalSupply: 1,
             globalDemand: 1,
             globalPrice: 1,
             basePrice: 1,
+            statePrices: 1,
             stateSupply: 1,
             stateDemand: 1,
             stateInputAvailability: 1,
@@ -1291,6 +1298,9 @@ export async function buildCorporationLookups(
   const landedPremiumByState = new Map<string, Map<CommodityType, number>>();
   const freightChargesByDestState = new Map<string, Map<CommodityType, number>>();
   const freightHaulRevenueByOriginState = new Map<string, number>();
+  const freightDemandByDestState = new Map<string, Map<CommodityType, number>>();
+  const freightUnitPriceByDestState = new Map<string, Map<CommodityType, number>>();
+  const freightSupplyByOriginState = new Map<string, number>();
   if (options?.moneyWiringEnabled || options?.canonicalFreightBillingEnabled) {
     const networkDoc = await db
       .collection<SourcingNetworkDoc>("sourcingNetworkLoad")
@@ -1310,17 +1320,30 @@ export async function buildCorporationLookups(
       }
     }
     if (options?.canonicalFreightBillingEnabled) {
+      const priceBookByCommodity = new Map(commodityPrices.map((cp) => [cp.commodity, cp]));
       for (const [stateId, byCommodity] of Object.entries(doc?.freightCharges ?? {})) {
         const m = new Map<CommodityType, number>();
         for (const [commodity, charge] of Object.entries(byCommodity)) {
           if (typeof charge === "number" && charge > 0) m.set(commodity as CommodityType, charge);
         }
         if (m.size > 0) freightChargesByDestState.set(stateId, m);
+        const prices = new Map<CommodityType, number>();
+        for (const commodity of m.keys()) {
+          const book = priceBookByCommodity.get(commodity);
+          const price = book?.statePrices?.[stateId] ?? book?.globalPrice;
+          if (typeof price === "number" && price > 0) prices.set(commodity, price);
+        }
+        if (prices.size > 0) freightUnitPriceByDestState.set(stateId, prices);
       }
       for (const [stateId, revenue] of Object.entries(doc?.freightHaulRevenue ?? {})) {
         if (typeof revenue === "number" && revenue > 0)
           freightHaulRevenueByOriginState.set(stateId, revenue);
       }
+      const billingSnapshot = readFreightBillingSnapshot(doc, commodityPrices);
+      for (const [stateId, demand] of billingSnapshot.demandByDestState)
+        freightDemandByDestState.set(stateId, demand);
+      for (const [stateId, supply] of billingSnapshot.supplyByOriginState)
+        freightSupplyByOriginState.set(stateId, supply);
     }
   }
 
@@ -1390,6 +1413,9 @@ export async function buildCorporationLookups(
     reachableInputPriceRatiosByCountry,
     landedPremiumByState,
     freightChargesByDestState,
+    freightDemandByDestState,
+    freightUnitPriceByDestState,
+    freightSupplyByOriginState,
     freightHaulRevenueByOriginState,
     nationalCommodityBalancesByCountry,
     countryClearingBooks,

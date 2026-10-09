@@ -44,6 +44,7 @@ export const ELECTION_TYPE_LABEL_MAP: Record<string, string> = {
   supremeSovietDeputy: "Supreme Soviet",
   supremeSoviet: "Supreme Soviet",
   nationalitiesDeputy: "Soviet of Nationalities",
+  unionCongressDeputy: "Congress of People's Deputies",
   republicSupremeSoviet: "Republic Supreme Soviet",
   // DD (East Germany) offices
   volkskammerDeputy: "Volkskammer",
@@ -99,6 +100,7 @@ export const ELECTION_TYPE_SHORT_LABEL: Record<string, string> = {
   supremeSovietDeputy: "Supreme Soviet",
   supremeSoviet: "Supreme Soviet",
   nationalitiesDeputy: "Nationalities",
+  unionCongressDeputy: "Union Congress",
   // DD (East Germany) offices
   volkskammerDeputy: "Volkskammer",
   landAssembly: "Landtag",
@@ -233,6 +235,9 @@ export const MULTI_SEAT_TYPES: ReadonlySet<string> = new Set([
   "supremeSovietDeputy",
   "nationalitiesDeputy",
   "republicSupremeSoviet",
+  // RU 1991 Soviet Congress of People's Deputies: the same per-region delegate
+  // shape. Without it each region's delegation would seat a single deputy.
+  "unionCongressDeputy",
   // Union-republic Supreme Soviets (UKR/BLR/BAL, electionType "supremeSoviet",
   // office key "sovietDeputy"): the same one-list-per-region PR shape as the
   // RU chambers above. Without both keys every republic delegation collapsed

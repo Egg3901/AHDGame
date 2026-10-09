@@ -11,10 +11,16 @@ import type { ReachableBookEntry, ReachableBooksDoc } from "@/lib/trade/reachabl
  * treat null as "fall back to the previous global-aggregate behaviour" rather
  * than as "no room", or a world mid-upgrade would show every market closed.
  */
-export async function loadReachableBooks(db: Db): Promise<ReachableBooksDoc | null> {
+export async function loadReachableBooks(
+  db: Db,
+  observedTurn?: number
+): Promise<ReachableBooksDoc | null> {
   const doc = await db
     .collection<TradeFlowSnapshot>("tradeFlowSnapshots")
-    .findOne({ books: { $exists: true } }, { sort: { turn: -1 }, projection: { books: 1 } });
+    .findOne(
+      { books: { $exists: true }, ...(observedTurn == null ? {} : { turn: observedTurn }) },
+      { sort: { turn: -1 }, projection: { books: 1 } }
+    );
   return doc?.books ?? null;
 }
 

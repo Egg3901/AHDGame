@@ -5,7 +5,7 @@ import { reconcileOpeningOwnership } from "./rules/openingOwnership";
 export function openingFiscalOwnership1991() {
   const books = openingFiscalBooks1991();
   return Object.fromEntries(
-    (["US", "UK", "JP"] as const).map((country: ResetOpeningCountry) => {
+    (["US", "UK", "JP", "IE"] as const).map((country: ResetOpeningCountry) => {
       const claims = openingLawReferences
         .filter((reference) => reference.country === country && reference.scope === "national")
         .flatMap((reference) =>
@@ -34,7 +34,7 @@ export function openingFiscalOwnership1991() {
 /** Source-named transfers that must not become spendable Cabinet cash. */
 export function openingNamedGrantClaims1991(): Record<ResetOpeningCountry, Record<string, number>> {
   return Object.fromEntries(
-    (["US", "UK", "JP"] as const).map((country) => {
+    (["US", "UK", "JP", "IE"] as const).map((country) => {
       const byFamily: Record<string, number> = {};
       for (const reference of openingLawReferences) {
         if (reference.country !== country || reference.scope !== "national") continue;

@@ -19,6 +19,7 @@ import { runShareFillRecoveryPass } from "@/lib/corporations/commands/shareTradi
 import { captureServerProductEvent } from "@/lib/analytics/captureServer";
 import { isCronWorkerProcess, shouldStartHostedBackgroundServices } from "@/lib/startupMode";
 import { PatreonReconcileLockBusyError, runPatreonReconcile } from "@/lib/patreon/reconcile";
+import { runElectionHalfTick } from "@/lib/turn/elections/electionHalfTick";
 
 /*
  * Sentry cron-monitor slug for the primary turn cron. Service-suffixed so
@@ -296,6 +297,17 @@ export async function initializeCronJobs() {
         const shouldFire = await shouldFireBackupTurn(new Date(), currentState);
         if (!shouldFire) {
           console.log("[Cron] Backup turn skipped — primary already processed this hour");
+          // The hour's turn ran, so the half hour carries the election
+          // results tick instead (votes only; deadlines stay on the hour).
+          try {
+            const turn = await runElectionHalfTick();
+            if (turn != null) console.log(`[Cron] Election results tick banked turn ${turn}`);
+          } catch (error) {
+            console.error("[Cron] Election results tick failed:", error);
+            Sentry.captureException(error, {
+              tags: { component: "cron", job: "electionHalfTick" },
+            });
+          }
           return;
         }
 
@@ -675,7 +687,9 @@ export async function initializeCronJobs() {
   if (
     process.env.NODE_ENV === "production" &&
     isCronWorkerProcess(process.env) &&
-    shouldStartHostedBackgroundServices(process.env)
+    shouldStartHostedBackgroundServices(process.env) &&
+    // Sandboxes do not inherit the creator token or reconcile live supporters.
+    (process.env.SENTRY_ENVIRONMENT !== "sandbox" || !!process.env.PATREON_CREATOR_TOKEN?.trim())
   ) {
     patreonReconcileCron = cron.schedule(
       PATREON_RECONCILIATION_SCHEDULE,

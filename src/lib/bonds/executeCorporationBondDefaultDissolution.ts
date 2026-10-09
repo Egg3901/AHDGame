@@ -1,6 +1,14 @@
 import type { Db } from "mongodb";
+import { recordCorporationExit } from "@/lib/corporations/exits/recordCorporationExit";
 import { ObjectId } from "mongodb";
-import type { Bond, Character, Corporation, CorporateSector, CentralBank } from "@/lib/db/types";
+import type {
+  Bond,
+  Character,
+  Corporation,
+  CorporateSector,
+  CentralBank,
+  CorporationExitReason,
+} from "@/lib/db/types";
 import type { ImperialCharacter } from "@/lib/db/types/imperialCharacter";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
 import { buildPersonalBalanceInc, getHomeCurrency } from "@/lib/currency/characterFunds";
@@ -64,7 +72,7 @@ export interface CorporationDissolutionResult {
 export async function executeCorporationBondDefaultDissolution(
   db: Db,
   corporation: Corporation,
-  options: { requireDefaultedBonds: boolean }
+  options: { requireDefaultedBonds: boolean; exitReason?: CorporationExitReason }
 ): Promise<CorporationDissolutionResult> {
   if (corporation.countryOwnerId) {
     throw badRequest("National corporations cannot be dissolved here");
@@ -729,6 +737,11 @@ export async function executeCorporationBondDefaultDissolution(
   });
 
   await db.collection<Corporation>("corporations").deleteOne({ _id: refreshedCorporation._id });
+  await recordCorporationExit(db, refreshedCorporation, {
+    reason:
+      options.exitReason ?? (options.requireDefaultedBonds ? "bond_default" : "forced_liquidation"),
+    now,
+  });
 
   const totalPayoutToPeople = [...charAll].reduce(
     (s, id) => s + (charBondPay.get(id) ?? 0) + (charSharePay.get(id) ?? 0),

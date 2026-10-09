@@ -150,7 +150,7 @@ export function buildShortageRows(
     // dsRatio can't express it (division by zero), so flag it explicitly.
     const noSupply = supply <= 0 && demand > 0;
     // The premium a supplier ACTUALLY earns, not the raw price gap. The engine
-    // scales realized revenue by clamp((price/base)^0.5, 0.7, 1.5) — the same
+    // scales realized revenue by clamp((price/base)^0.5, 0.7, PRICE_REALIZATION_MAX) — the same
     // shared priceRealizationFactor — so a rare-earth price at +95% of base only
     // realizes about +40%. Showing raw price/base overstated the payoff ~2.4x
     // and made the "sells at a premium" copy a promise the engine never keeps.

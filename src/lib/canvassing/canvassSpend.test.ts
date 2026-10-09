@@ -220,6 +220,7 @@ function spendInput(overrides: Record<string, unknown> = {}) {
       modifierPath: "modifiers.youth.students",
       modifierValue: 1.5,
       campaignModifiers: { youth: { students: 1.5 } },
+      campaignContactModifiers: { youth: { students: 0.5 } },
     },
     fingerprint: "char:IA:modifiers.youth.students:2",
     idempotencyKey: `key-${Math.random().toString(36).slice(2)}`,
@@ -262,6 +263,12 @@ describe("applyCanvassSpend (standalone fallback)", () => {
 
     expect(result).toEqual({ duplicate: false });
     expect(spend(db)).toEqual({ actions: 8, funds: 4800, pool: 10, modifier: 1.5 });
+    expect(
+      getPath(
+        db.collection("stateDemographicTurnout").docs.get("IA")!,
+        "campaignContactModifiers.youth.students"
+      )
+    ).toBe(0.5);
     expect(receipt(db, "happy").status).toBe("completed");
   });
 

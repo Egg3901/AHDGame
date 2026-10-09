@@ -132,8 +132,8 @@ export const updateCorporationSettingsSchema = z.object({
       z.null(),
     ])
     .optional(),
-  secondaryType: z.enum(CORPORATION_TYPES).nullable().optional(),
-  primaryType: z.enum(CORPORATION_TYPES).optional(),
+  secondaryType: foundableTypeSchema.nullable().optional(),
+  primaryType: foundableTypeSchema.optional(),
 });
 
 export const renameCorporationSchema = z.object({

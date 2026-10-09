@@ -74,3 +74,90 @@ the backbone action/entity/spending fields and controlled domain-specific fields
 The productArea map broadens area_viewed to named gameplay areas while preserving
 previous area names. The server contracts are documented in
 [WORLD_EVENTS.md](./WORLD_EVENTS.md).
+
+### Observed account cohorts
+
+Browser product events carry the same account metadata in PostHog and Amplitude,
+using the authenticated `client-nav` response already loaded by the application:
+
+| Event property         | Meaning                                                      |
+| ---------------------- | ------------------------------------------------------------ |
+| `account_created_date` | Account creation date, `YYYY-MM-DD` UTC, or `unknown`        |
+| `account_age_days`     | UTC calendar days between creation and capture, or `unknown` |
+| `account_age_band`     | `day_0`, `days_1_6`, `days_7_plus`, or `unknown`             |
+| `account_role`         | `admin`, `moderator`, `player`, or `unknown`                 |
+
+These are event-time properties. Missing, malformed, and future creation dates
+remain unknown. `player` requires both admin and moderator flags to be explicitly
+false. This does not identify test accounts. No account query runs per event.
+Server events do not acquire browser consent or these properties by inference.
+
+Use `game_visit` for observed account presence and `player_action_succeeded` for
+acknowledged actions. Split by creation date or event-time age to separate recent
+accounts from older accounts creating new characters. `day_0` means the same UTC
+calendar date, not the first 24 hours. OAuth accounts are eligible for this
+metadata without fabricating `account_created` events. Registration events still
+cover only the consented password-registration path. Its pending marker is bound
+to the returned account ID; legacy unowned markers are discarded.
+
+Both destinations use the opaque authenticated account ID. Amplitude now resets
+its device ID before assigning an account, on account switching, and on logout;
+consent withdrawal opts out and resets both SDKs. Historical anonymous Amplitude
+identities are not backfilled or linked to these accounts. Compare account uniques
+only after rollout, and check actual destination delivery before interpreting
+counts. PostHog resets before a different account is identified, including initial
+SDK hydration, so a persisted previous account cannot absorb the next account.
+
+Events with known account context wait for SDK initialization. Work started under
+an account is discarded if the identity changes before delivery. Events without
+a known account are not queued for assignment to an arbitrary later login.
+Milestone helpers do not consume pending signup markers or claim durable character
+activation before account context exists. A claim already in flight at logout can
+still complete server-side while its browser event is dropped. Analytics delivery
+is best effort; the activation claim is not a delivery acknowledgement.
+
+For analysis, use complete UTC days after rollout and report unknown metadata
+separately. Exclude `account_role` admin/moderator where a player-only population
+is needed; require `account_role = player` for a strict known non-staff population
+and show excluded unknowns. Test traffic remains unexcluded unless independently
+identified by an existing documented project filter. Never sum generic successful
+actions with their overlapping domain-specific events. Rejection codes remain
+HTTP response classes, not detailed rule or reliability diagnoses.
+
+### Operation diagnostics
+
+Generic `player_action_succeeded` and `player_action_rejected` events also carry
+`action_operation`. It is a fixed label for the following POST routes; every
+other observed route/method is `unknown`. No URL or dynamic path segment is
+copied into this property. Existing `action_type`, event eligibility, success
+classification and `failure_code` semantics stay unchanged.
+
+| POST route                                                           | `action_operation`                  |
+| -------------------------------------------------------------------- | ----------------------------------- |
+| `/api/actions/execute`                                               | `character_action_execute`          |
+| `/api/country/[code]/parties`                                        | `party_create`                      |
+| `/api/country/[code]/parties/[id]/influence`                         | `party_influence_national`          |
+| `/api/country/[code]/region/[id]/party/[partyId]/influence`          | `party_influence_regional`          |
+| `/api/country/[code]/region/[id]/party/[partyId]/recruitment`        | `party_recruitment_regional`        |
+| `/api/country/[code]/region/[id]/party/[partyId]/org-building`       | `party_org_building_regional`       |
+| `/api/country/[code]/region/[id]/party/[partyId]/leadership`         | `party_leadership_regional`         |
+| `/api/country/[code]/region/[id]/party/[partyId]/primary-allocation` | `party_primary_allocation_regional` |
+| `/api/country/[code]/region/[id]/party/[partyId]/build-org`          | `party_build_org_regional`          |
+
+Only `character_action_execute` also carries `requested_action`, read from the
+request's `actionType`: `fundraise`, `campaign`, `advertise`, `buildDonorBase`,
+`poll`, `pollLarge`, `convertCash`, `rest`, or `debatePrep`. Missing, malformed
+and unreviewed values become `unknown`. It describes the requested action,
+including requests rejected before validation; it does not prove execution.
+Other operations omit this property. Request amounts, targets, error messages
+and response codes are not added to these diagnostics.
+
+Match operation, requested action where applicable, account population, iteration
+and time window between success and rejection counts. The rejection rate is all
+rejections divided by successes plus all rejections in that scope. A single
+failure class uses that same denominator, not successes plus only that class.
+Show literal `unknown`
+operation/action coverage and pre-rollout missing properties separately. These
+labels do not backfill or reclassify historical `action_type = post` events, and
+do not add detailed game-rule rejection reasons. Domain-specific success events
+retain their existing shape and overlap the generic stream; do not sum them.

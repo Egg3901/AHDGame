@@ -40,6 +40,99 @@ Code layout in one minute: `src/app/api/**` are thin route handlers (auth guard,
 
 Persisted state must have a reset policy. `npm run architecture:contracts` checks collection lifecycle entries, GameState reset writes or named preservation reasons, region state and political or macro metric field coverage, and bootstrap index coverage. Optional seed writes do not prove that a field resets when a different preset omits it. New world collections need a seed index plan or a reviewed primary-key policy. The same command flags new direct Mongo operations inside turn loops; collect ids and batch reads and writes. Frozen legacy boundaries record existing debt and must not be regenerated to approve new violations. Explain any necessary lifecycle or concurrency exception in the PR.
 
+## Select simulation evidence by change risk
+
+These checks select relevant simulation evidence. The required verify, build,
+security and dependency gates above still apply. Balance changes still require
+a report from `scripts/sim/`.
+
+| Change                                        | Minimum relevant qualification                                                                     | Escalation                                                                      |
+| --------------------------------------------- | -------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| Copy or isolated UI behavior                  | Focused behavior check and existing merge gates                                                    | World simulation when gameplay semantics change                                 |
+| Rules or formula                              | Deterministic rules and accounting tests; simulation report for balance changes                    | Longer trajectory when feedback or accumulation matters                         |
+| Phase I/O or performance                      | Same-state before/after replay, preserved outputs and invariants, command/byte/memory measurements | Integrated smoke when order, writes, retries or cross-phase dependencies change |
+| Scheduler, seed, migration or multiple phases | Bounded integrated replay on the relevant isolated state                                           | Longer campaign when unresolved effects span turns                              |
+| New economic feedback or long-horizon balance | Experiment with question, baseline, state, metrics and horizon                                     | Long simulation remains necessary; insufficient budget means unqualified        |
+
+For a change-aware world plan, copy `scripts/sim/worldsim-plan.example.json`,
+replace the placeholder source commits/worktree names, and state the question,
+minimum horizon, relevant periodic cadences and engine-time budget. From the
+repository run:
+
+```bash
+npx tsx scripts/sim/planWorldsim.ts --request request.json --out plan.json
+```
+
+This command only reads git and writes a plan. Paths select presentation-only
+versus runtime evidence; declared semantic intent overrides presentation paths.
+Unknown runtime paths require an explicit horizon. `performance` defaults to a
+one-turn integrated smoke fallback; prefer the existing same-state phase replay
+where one exists. Neither a smoke nor a successful engine exit proves equivalence.
+Each declared period requires at least two cycle occurrences. A reviewer must
+identify longer feedback horizons: the planner cannot infer them from filenames.
+Aged-state requests are blocked until a compatible prepared-sandbox experiment
+is supplied separately, never replaced by a fresh world.
+
+The reservation is `(bootstrap + turns * secondsPerTurn) * safetyFactor` for each
+arm, rounded up. The default 700 seconds/turn is a planning assumption, not a
+benchmark. Insufficient budget leaves the required horizon unchanged and exits
+with code 2. Engine caps exclude queue waiting, collectors, control-plane work,
+and up to one second of termination grace. They do not price credits or enforce
+a whole-host memory ceiling; existing worker capacity admission still applies.
+
+After a budget-aware worker is deployed, `--enqueue` submits stable-id sandbox
+jobs through `OPS_MONGODB_URI` to the existing `simJobs` queue. Every source pin
+must be a clean registered task worktree and is rechecked by the worker. Jobs
+start only in the overnight window, never clone production, and retain their
+sandbox output for inspection. The versioned `full-budgeted-v1` mode is rejected
+by older workers rather than run without a cap. A standalone watchdog enforces
+the engine deadline even if the queue worker exits; expiration means unqualified.
+Repeated submission does not reset failed jobs or duplicate existing jobs. An
+explicit higher `attempt` reserves a new budget and separate sandbox for a retry.
+The worker must match the plan's Node version, platform and architecture. Stale
+budgeted leases fail instead of automatically spending another reservation.
+
+For reuse, supply `acceptedEvidence` entries with `fingerprint`, `verdict: passed`,
+`completedTurns`, `reportPath`, and the report's `reportSha256`. The reviewed JSON
+report must itself contain the matching fingerprint, verdict and completed turn
+count. The planner verifies its bytes and matches the entire source commit,
+runtime, preset, seed, horizon, question and declared cycles. This is deliberately
+conservative: even unrelated source changes invalidate reuse. A job's completed
+status alone is never accepted evidence. Review outcome/invariant and failure
+coverage before signing a report; keep actual reports outside the repository.
+
+The corporation payout primitive pilot runs with
+`npx tsx scripts/perf/money-move-qualification.ts --receipt receipt.json`.
+Run the identical harness in the baseline and candidate source worktrees; add
+`--baseline baseline.json` to the candidate command. It uses an owned temporary
+Mongo process and synthetic holders, never a configured database. Seven cases
+cover 3/12/120 holders, zero/3 ms simulated latency per awaited DB operation,
+duplicate replay and a lost credit acknowledgement. This qualifies the money
+move primitive, not a whole corporation phase or world.
+
+Each run has a ten-minute cap and stops its owned storage process on timeout.
+The receipt pins source, fixture, harness, dependencies and runtime; compares
+explicit balances, settled keys and journal legs; and records existing profiler
+counts, returned BSON bytes/documents, Node lifetime peak RSS and heap used.
+Node RSS excludes Mongo and host memory. For ordinary payouts, the matched
+baseline caps commands, returned documents and bytes. A lost bulk-write
+acknowledgement interrupts multiple credits, while a lost scalar-write
+acknowledgement interrupts one: recovery cost is diagnostic because interrupted
+states differ; final outputs must still match. Node peak RSS permits 25% process startup noise;
+wall clock is diagnostic. The existing whole corporation phase command budget
+also remains a ceiling, not proof that a whole phase fits. Never increase a
+budget just to make qualification pass.
+
+No compatible first-turn, periodic-boundary or aged-world snapshot is bundled.
+A checkpoint report alone is not a restorable snapshot. Select additional
+isolated integration evidence when those states or simultaneous writers matter.
+Actual world simulations follow the existing sandbox queue and claim window.
+For a long run, record question, source pins, valid initial state, horizon,
+stop conditions, estimated resource cost and wall-time bound. A failed run
+produces a diagnostic receipt; rerun only with changed input or a stated
+investigation. Reuse evidence only while its relevant inputs remain unchanged.
+Record required gate results and normal post-deployment observation separately.
+
 ## Name the mechanic at the top of the file
 
 Files under `src/lib` that implement a game mechanic open with a short JSDoc block, before the imports, that names the mechanic in the words a player uses and states the two or three facts a player asks about (what it is, what it depends on, what it affects), citing the exported symbol that implements it. Keep it to two to five lines of plain English in the present tense, with every fact taken from the code in that file. The search index embeds file text, so this header is what makes the file findable for a player question.

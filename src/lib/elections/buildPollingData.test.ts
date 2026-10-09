@@ -269,17 +269,17 @@ describe("computeSeatEstimates — parity with allocateSeats (ticket #1032)", ()
       computeSeatEstimates("nationalAssembly", 80, tally, new Set(["candidate"]), "BG")
     ).toBeNull();
   });
-  it("projects 1991 Japan SNTV by candidate rather than party vote share", () => {
-    const votes = { a: 500, b: 400, c: 300, d: 100 };
+  it("fills a 1991 Japan region proportionally even from a legacy SNTV snapshot", () => {
+    const votes = { a: 500 };
     const tally = {
       totalVotes: votes,
-      candidateParties: { a: "LDP", b: "LDP", c: "JSP", d: "LDP" },
+      candidateParties: { a: "LDP" },
     } as never;
     expect(
-      computeSeatEstimates("shugiin", 3, tally, new Set(Object.keys(votes)), "JP", "sntv")
-    ).toEqual({ a: 1, b: 1, c: 1, d: 0 });
+      computeSeatEstimates("shugiin", 34, tally, new Set(Object.keys(votes)), "JP", "sntv")
+    ).toEqual({ a: 34 });
   });
-  it("projects bounded NPP slates with the same seats as final resolution", () => {
+  it("keeps legacy JP projections in parity with proportional final resolution", () => {
     const votes = { ldp: 600, jsp: 400, player: 250 };
     const tally = {
       totalVotes: votes,
@@ -332,6 +332,49 @@ describe("computeSeatEstimates — parity with allocateSeats (ticket #1032)", ()
       major: 5,
       minor: 0,
     });
+  });
+
+  it("projects a multi-seat Nigerian Senate race with the final allocator", () => {
+    const votes = { major: 600, minor: 400 };
+    const tally = {
+      totalVotes: votes,
+      candidateParties: { major: "major", minor: "minor" },
+    } as never;
+    const projection = computeSeatEstimates(
+      "senate",
+      3,
+      tally,
+      new Set(Object.keys(votes)),
+      "NG",
+      undefined,
+      "NG-NORTH"
+    );
+    const resolution = allocateSeats(
+      "senate",
+      "NG-NORTH",
+      3,
+      [
+        { id: "major", votes: 600, party: "major" },
+        { id: "minor", votes: 400, party: "minor" },
+      ],
+      1000,
+      { "NG-NORTH": 3 },
+      undefined,
+      undefined,
+      "NG"
+    ).seatsEstimate;
+    expect(projection).toEqual(resolution);
+    expect(projection).toEqual({ major: 2, minor: 1 });
+  });
+
+  it("projects the final two-seat House winner-take-all exception", () => {
+    const tally = {
+      totalVotes: { major: 830, minor: 170 },
+      candidateParties: { major: "major", minor: "minor" },
+    } as never;
+    expect(
+      computeSeatEstimates("house", 2, tally, new Set(["major", "minor"]), "US", undefined, "US-XX")
+    ).toEqual({ major: 2, minor: 0 });
   });
 
   /** Runs both engines over the same votes and returns per-party seat totals. */

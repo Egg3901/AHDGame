@@ -30,6 +30,9 @@ interface CorpRelocation {
 }
 
 interface RelocationStatus {
+  hasParty: boolean;
+  partyCountryId: string | null;
+  partyFrontierRegions: string[] | null;
   canRelocate: boolean;
   remainingTurns: number;
   cooldownRemainingDays: number | null;
@@ -79,12 +82,14 @@ export function RelocateButton({
   const [error, setError] = useState<string | null>(null);
   const [payment, setPayment] = useState<PaymentMethod>("cash");
   const [corpChoice, setCorpChoice] = useState<CorpRelocationChoice | null>(null);
+  const [partyDepartureRequired, setPartyDepartureRequired] = useState(false);
 
   function resetConfirmState() {
     setConfirming(false);
     setError(null);
     setPayment("cash");
     setCorpChoice(null);
+    setPartyDepartureRequired(false);
   }
 
   useEffect(() => {
@@ -102,6 +107,9 @@ export function RelocateButton({
       .then((r) => r.json())
       .then((data) => {
         setStatus({
+          hasParty: data.hasParty ?? false,
+          partyCountryId: data.partyCountryId ?? null,
+          partyFrontierRegions: data.partyFrontierRegions ?? null,
           canRelocate: data.canRelocate ?? false,
           remainingTurns: data.remainingTurns ?? 0,
           cooldownRemainingDays: data.cooldownRemainingDays ?? null,
@@ -119,12 +127,19 @@ export function RelocateButton({
         });
       })
       .catch(() => setStatus(null));
-  }, [userHomeState]);
-
-  const isCurrentHome = userHomeState === targetStateId;
-  const showButton = userHomeState != null && !isCurrentHome && status != null;
+  }, [userHomeState, userCountryId]);
 
   const isCountryChange = !!userCountryId && !!targetCountryId && userCountryId !== targetCountryId;
+  const isCurrentHome = userHomeState === targetStateId && !isCountryChange;
+  const showButton = userHomeState != null && !isCurrentHome && status != null;
+
+  const leavesParty =
+    partyDepartureRequired ||
+    !!(
+      status?.hasParty &&
+      ((targetCountryId && status.partyCountryId !== targetCountryId) ||
+        (status.partyFrontierRegions && !status.partyFrontierRegions.includes(targetStateId)))
+    );
 
   const corp = status?.corpRelocation ?? null;
   const corpCrossCountry = !!corp && !!targetCountryId && corp.currentCountryId !== targetCountryId;
@@ -205,10 +220,12 @@ export function RelocateButton({
             // Pass target country so the server can scope the state lookup
             // against cross-country state-ID collisions (CN HB / DE HB).
             ...(targetCountryId ? { targetCountryId } : {}),
+            confirmPartyDeparture: leavesParty,
           }),
         });
         const data = await res.json();
         if (!res.ok) {
+          if (data.partyDepartureRequired) setPartyDepartureRequired(true);
           setError(apiErrorText(data, "Relocation failed"));
           return;
         }
@@ -220,10 +237,12 @@ export function RelocateButton({
             targetStateId,
             ...(targetCountryId ? { targetCountryId } : {}),
             paymentMethod: mode === "imperial-combined" ? "imperial-free" : payment,
+            confirmPartyDeparture: leavesParty,
           }),
         });
         const data = await res.json();
         if (!res.ok) {
+          if (data.partyDepartureRequired) setPartyDepartureRequired(true);
           setError(apiErrorText(data, "Relocation failed"));
           return;
         }
@@ -354,6 +373,13 @@ export function RelocateButton({
             <div className="mt-3 space-y-2 text-sm text-muted">
               <p className="font-semibold text-foreground">The following will happen:</p>
               <ul className="list-disc space-y-1 pl-5">
+                {leavesParty && (
+                  <li className="text-warning">
+                    This destination is outside your party&apos;s reach. You will become
+                    Independent, lose party influence, and leave party leadership and caucus roles.
+                    Any existing party-join cooldown continues; this does not start a new cooldown.
+                  </li>
+                )}
                 <li>Political influence resets to 0.</li>
                 <li>Donor base resets to 0.</li>
                 <li>Group favorability is cleared.</li>

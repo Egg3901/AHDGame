@@ -12,13 +12,20 @@ export interface BlendShellProps {
   children: ReactNode;
   /** Right rail width. The design uses 296px on the campaign screen, 300px on the election screens. */
   rightWidth?: number;
+  /**
+   * Run the frame edge to edge: the rails hug the viewport edges, the centre
+   * column takes all the width between them, and each rail sticks under the
+   * site navbar while the centre scrolls. Off by default, which keeps the
+   * contained `max-w-7xl` frame the other Blend screens use.
+   */
+  fullBleed?: boolean;
 }
 
 /**
  * The Blend three-column frame.
  *
- * Desktop is `206px | minmax(0,1fr) | 296-300px` over a 900px minimum. Below
- * `lg` the rails drop out and the centre column runs full width, which is what
+ * Desktop is `206px | minmax(0,1fr) | 296-300px` over a 900px minimum (none when
+ * full bleed). Below `lg` the rails drop out and the centre column runs full width, which is what
  * the design's mobile artboards show; the screens supply their own sticky
  * mobile header and fold the rails' content into the stacked body.
  *
@@ -29,25 +36,47 @@ export interface BlendShellProps {
  * the app is a centred `max-w-7xl` column. The dark ground still bleeds to the
  * edges, so the treatment reads the same.
  */
-export function BlendShell({ left, right, children, rightWidth = 296 }: BlendShellProps) {
+export function BlendShell({
+  left,
+  right,
+  children,
+  rightWidth = 296,
+  fullBleed = false,
+}: BlendShellProps) {
+  const frame = (
+    /* Rails are lg-and-up only; the grid template is applied by the class. */
+    <div
+      className={[
+        "blend-shell",
+        fullBleed ? "blend-shell--bleed" : "",
+        left ? "" : "blend-shell--no-left",
+      ]
+        .filter(Boolean)
+        .join(" ")}
+      style={
+        {
+          "--blend-right-width": `${rightWidth}px`,
+          ...(fullBleed ? {} : { border: `1px solid ${BLEND.hairline}` }),
+        } as React.CSSProperties
+      }
+    >
+      {left ? (
+        <div className="blend-shell__rail blend-shell__rail--left">
+          {fullBleed ? <div className="blend-shell__sticky">{left}</div> : left}
+        </div>
+      ) : null}
+      <main style={{ minWidth: 0 }}>{children}</main>
+      {right ? (
+        <div className="blend-shell__rail blend-shell__rail--right">
+          {fullBleed ? <div className="blend-shell__sticky">{right}</div> : right}
+        </div>
+      ) : null}
+    </div>
+  );
+
   return (
     <div style={{ background: BLEND.page, color: BLEND.ink, fontFamily: FONT.sans }}>
-      <div className={BLEND_CONTAINER}>
-        {/* Rails are lg-and-up only; the grid template is applied by the class. */}
-        <div
-          className="blend-shell"
-          style={
-            {
-              "--blend-right-width": `${rightWidth}px`,
-              border: `1px solid ${BLEND.hairline}`,
-            } as React.CSSProperties
-          }
-        >
-          {left ? <div className="blend-shell__rail">{left}</div> : null}
-          <main style={{ minWidth: 0 }}>{children}</main>
-          {right ? <div className="blend-shell__rail">{right}</div> : null}
-        </div>
-      </div>
+      {fullBleed ? frame : <div className={BLEND_CONTAINER}>{frame}</div>}
       <style>{`
         .blend-shell { display: block; min-height: 900px; }
         .blend-shell__rail { display: none; }
@@ -56,7 +85,36 @@ export function BlendShell({ left, right, children, rightWidth = 296 }: BlendShe
             display: grid;
             grid-template-columns: 206px minmax(0, 1fr) var(--blend-right-width);
           }
+          .blend-shell--no-left { grid-template-columns: minmax(0, 1fr) var(--blend-right-width); }
           .blend-shell__rail { display: block; }
+          /*
+           * Full bleed: the rail cell stretches the full height of the row and
+           * carries the ground and the divider, so the column reads as a rail
+           * past the end of its own content. The content inside sticks under
+           * the site navbar (h-14) and scrolls on its own if it outgrows the
+           * viewport. The rails draw their own divider for the contained
+           * frame, so it is dropped here rather than doubled.
+           */
+          .blend-shell--bleed { min-height: 0; }
+          .blend-shell--bleed > .blend-shell__rail {
+            background: ${BLEND.rail};
+          }
+          .blend-shell--bleed > .blend-shell__rail--left {
+            border-right: 1px solid ${BLEND.hairline};
+          }
+          .blend-shell--bleed > .blend-shell__rail--right {
+            border-left: 1px solid ${BLEND.hairline};
+          }
+          .blend-shell--bleed .blend-shell__sticky {
+            position: sticky;
+            top: 3.5rem;
+            max-height: calc(100vh - 3.5rem);
+            overflow-y: auto;
+            overscroll-behavior: contain;
+          }
+          .blend-shell--bleed .blend-shell__sticky > aside {
+            border: 0 !important;
+          }
         }
       `}</style>
     </div>

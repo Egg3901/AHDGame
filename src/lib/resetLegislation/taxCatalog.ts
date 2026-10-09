@@ -29,53 +29,49 @@ export interface ResetTaxDefinition {
 }
 
 const federal: ReadonlyArray<[string, string, ResetTaxType, string, string, string]> = [
-  [
-    "T01",
-    "Income tax",
-    "incomeTax",
-    "us_federal_income_tax_rate",
-    "uk_income_tax_rate",
-    "jp_income_tax_rate",
-  ],
+  ["T01", "Income tax", "incomeTax", "us.tax.incomeTax", "uk.tax.incomeTax", "jp_income_tax_rate"],
   [
     "T02",
     "Domestic corporate tax",
     "domesticCorporateTax",
-    "us_federal_domestic_corporate_tax_rate",
-    "uk_domestic_corporation_tax",
+    "us.tax.domesticCorporateTax",
+    "uk.tax.domesticCorporateTax",
     "jp_domestic_corporation_tax",
   ],
   [
     "T03",
     "Foreign corporate tax",
     "foreignCorporateTax",
-    "us_federal_foreign_corporate_tax_rate",
-    "uk_foreign_corporation_tax",
+    "us.tax.foreignCorporateTax",
+    "uk.tax.foreignCorporateTax",
     "jp_foreign_corporation_tax",
   ],
   [
     "T04",
     "Payroll tax",
     "payrollTax",
-    "us_federal_payroll_tax_rate",
-    "uk_national_insurance",
+    "us.tax.payrollTax",
+    "uk.tax.payrollTax",
     "jp_social_insurance",
   ],
   [
     "T05",
     "Sales or consumption tax",
     "salesTax",
-    "us_federal_sales_tax_rate",
-    "uk_vat",
+    "us.tax.salesTax",
+    "uk.tax.salesTax",
     "jp_consumption_tax",
   ],
-  ["T06", "Tariffs", "tariffs", "us_federal_tariff_rate", "uk_excise_customs", "jp_customs_tariff"],
+  ["T06", "Tariffs", "tariffs", "us.tax.tariffs", "uk.tax.tariffs", "jp_customs_tariff"],
 ];
 
 const treasurySeat: Record<ResetCountry, string> = {
   US: "secretary_of_treasury",
   UK: "chancellor",
   JP: "finance_minister",
+  IE: "minister_for_finance",
+  SCO: "financeSecretary",
+  WAL: "financeSecretary",
 };
 
 const nationalTaxes: ResetTaxDefinition[] = federal.flatMap(([id, title, taxType, us, uk, jp]) => [
@@ -106,7 +102,34 @@ const nationalTaxes: ResetTaxDefinition[] = federal.flatMap(([id, title, taxType
     existingLegislationTypeId: jp,
     overseeingSeatId: treasurySeat.JP,
   },
+  {
+    id,
+    title,
+    taxType,
+    country: "IE",
+    scope: "national",
+    existingLegislationTypeId: (
+      {
+        T01: "ie_income_tax_rate",
+        T02: "ie_corporate_tax_rate",
+        T03: "ie_foreign_corporate_tax_rate",
+        T04: "ie_prsi",
+        T05: "ie_vat_rate",
+        T06: "ie_customs_tariff_rate",
+      } as const
+    )[id as "T01" | "T02" | "T03" | "T04" | "T05" | "T06"],
+    overseeingSeatId: treasurySeat.IE,
+  },
 ]);
+nationalTaxes.push({
+  id: "T07",
+  title: "Local property tax",
+  taxType: "propertyTax",
+  country: "IE",
+  scope: "national",
+  existingLegislationTypeId: "ie_local_property_tax",
+  overseeingSeatId: treasurySeat.IE,
+});
 
 const regionalTaxes: ResetTaxDefinition[] = [
   {
@@ -115,7 +138,7 @@ const regionalTaxes: ResetTaxDefinition[] = [
     taxType: "incomeTax",
     country: "US",
     scope: "regional",
-    existingLegislationTypeId: "us_state_income_tax_rate",
+    existingLegislationTypeId: "us.tax.stateIncomeTax",
     overseeingSeatId: null,
   },
   {
@@ -124,7 +147,7 @@ const regionalTaxes: ResetTaxDefinition[] = [
     taxType: "domesticCorporateTax",
     country: "US",
     scope: "regional",
-    existingLegislationTypeId: "us_state_domestic_corporate_tax_rate",
+    existingLegislationTypeId: "us.tax.stateDomesticCorporateTax",
     overseeingSeatId: null,
   },
   {
@@ -133,7 +156,7 @@ const regionalTaxes: ResetTaxDefinition[] = [
     taxType: "foreignCorporateTax",
     country: "US",
     scope: "regional",
-    existingLegislationTypeId: "us_state_foreign_corporate_tax_rate",
+    existingLegislationTypeId: "us.tax.stateForeignCorporateTax",
     overseeingSeatId: null,
   },
   {
@@ -142,7 +165,7 @@ const regionalTaxes: ResetTaxDefinition[] = [
     taxType: "salesTax",
     country: "US",
     scope: "regional",
-    existingLegislationTypeId: "us_state_sales_tax_rate",
+    existingLegislationTypeId: "us.tax.stateSalesTax",
     overseeingSeatId: null,
   },
   {
@@ -151,7 +174,7 @@ const regionalTaxes: ResetTaxDefinition[] = [
     taxType: "propertyTax",
     country: "US",
     scope: "regional",
-    existingLegislationTypeId: "us_state_property_tax_rate",
+    existingLegislationTypeId: "us.tax.statePropertyTax",
     overseeingSeatId: null,
   },
   {

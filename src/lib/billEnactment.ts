@@ -70,6 +70,7 @@ import { generateDiscordEventCard } from "@/lib/discord/eventCard";
 import { billChamberVoteSplits } from "@/lib/charts/voteSplitChart";
 import { calculateShiftImpacts } from "@/lib/archetypeAffinities";
 import { regionalDefaultLevel } from "@/lib/politicalLegislation/regionalDefaults";
+import { taxSliderRateLabel } from "@/lib/politicalLegislation/taxSlider";
 import {
   calculateFederalRevenue,
   calculateStateRevenue,
@@ -150,6 +151,8 @@ interface ProvisionData {
   social?: number;
   /** Tax-slider laws (ruling #16): the slider-chosen rate. */
   proposedRate?: number;
+  policyOptionNameSnapshot?: string;
+  currentPolicyOptionNameSnapshot?: string;
 }
 
 /**
@@ -395,11 +398,17 @@ export async function applyCentralBankIndependenceProvision(
 export async function onBillEnacted(
   db: Db,
   bill: EnactableBill,
-  currentTurn: number
+  currentTurn: number,
+  knownLegislationTypes?: ReadonlyMap<string, LegislationType>
 ): Promise<void> {
   // Country-scoped national bills use pseudo-state ids (federal, uk_national, ca_national, …).
   const stateId = bill.stateId ?? "federal";
   const isNationalBill = inferCountryIdFromStateId(stateId) != null;
+  let resolvedCountryPromise: Promise<CountryId> | undefined;
+  const getResolvedCountry = (): Promise<CountryId> => {
+    resolvedCountryPromise ??= resolveBillCountryId(db, bill as Bill);
+    return resolvedCountryPromise;
+  };
 
   // National budget gate (audit S6). onBillEnacted is the single choke-point
   // every national enactment path flows through (manual presidential sign,
@@ -451,7 +460,7 @@ export async function onBillEnacted(
   // on landmark laws rather than every local policy change.
   if (isNationalBill) {
     (async () => {
-      const countryId = await resolveBillCountryId(db, bill);
+      const countryId = await getResolvedCountry();
       await recordCountryEvent(db, {
         countryId,
         turn: currentTurn,
@@ -508,7 +517,7 @@ export async function onBillEnacted(
   // and politics phases read next turn, and neither depends on provision state.
   const electoralLawProvisions = (bill.provisions ?? []).filter((p) => p.type === "electoral_law");
   if (electoralLawProvisions.length > 0) {
-    const enactingCountryId = await resolveBillCountryId(db, bill as Bill);
+    const enactingCountryId = await getResolvedCountry();
     for (const p of electoralLawProvisions) {
       await applyElectoralLawProvision(db, p as ElectoralLawProvision, enactingCountryId, {
         turn: currentTurn,
@@ -519,7 +528,7 @@ export async function onBillEnacted(
 
   // Euro adoption: record this country's vote; enable eurozone when all members adopt.
   if (bill.provisions?.some((p) => p.type === "euro_adoption")) {
-    const enactingCountryId = await resolveBillCountryId(db, bill as Bill);
+    const enactingCountryId = await getResolvedCountry();
     await applyEuroAdoptionProvision(
       db,
       enactingCountryId as CountryId,
@@ -533,7 +542,7 @@ export async function onBillEnacted(
     (p) => p.type === "central_bank_independence"
   );
   if (centralBankProvisions.length > 0) {
-    const enactingCountryId = await resolveBillCountryId(db, bill as Bill);
+    const enactingCountryId = await getResolvedCountry();
     for (const p of centralBankProvisions) {
       await applyCentralBankIndependenceProvision(
         db,
@@ -549,7 +558,7 @@ export async function onBillEnacted(
     (p) => p.type === "economic_system_reform"
   );
   if (economicReformProvisions.length > 0) {
-    const enactingCountryId = await resolveBillCountryId(db, bill as Bill);
+    const enactingCountryId = await getResolvedCountry();
     for (const p of economicReformProvisions) {
       await applyEconomicSystemReformProvision(
         db,
@@ -581,6 +590,8 @@ export async function onBillEnacted(
         // federalBudget.taxRates never moved and the duties/VAT the bill
         // levied were never collected (ticket #1102).
         proposedRate: p.proposedRate,
+        policyOptionNameSnapshot: p.policyOptionNameSnapshot,
+        currentPolicyOptionNameSnapshot: p.currentPolicyOptionNameSnapshot,
       });
     }
   } else if (bill.legislationTypeId && bill.effectDirection != null) {
@@ -600,12 +611,16 @@ export async function onBillEnacted(
 
   // Batch fetch legislation types for the policy provisions (empty list is a no-op).
   const uniqueLegTypeIds = [...new Set(provisions.map((p) => p.legislationTypeId))];
-  const legTypes = uniqueLegTypeIds.length
-    ? await db
-        .collection<LegislationType>("legislationTypes")
-        .find({ _id: { $in: uniqueLegTypeIds } })
-        .toArray()
-    : [];
+  const knownTypesAreComplete =
+    knownLegislationTypes != null && uniqueLegTypeIds.every((id) => knownLegislationTypes.has(id));
+  const legTypes = knownTypesAreComplete
+    ? uniqueLegTypeIds.map((id) => knownLegislationTypes.get(id) as LegislationType)
+    : uniqueLegTypeIds.length
+      ? await db
+          .collection<LegislationType>("legislationTypes")
+          .find({ _id: { $in: uniqueLegTypeIds } })
+          .toArray()
+      : [];
   const legTypeMap = new Map<string, LegislationType>(
     legTypes.map((lt) => [lt._id, lt] as [string, LegislationType])
   );
@@ -627,7 +642,7 @@ export async function onBillEnacted(
     }
   }
 
-  const resolvedCountry = await resolveBillCountryId(db, bill as Bill);
+  const resolvedCountry = await getResolvedCountry();
   // UK-only archetype routing hook (unchanged behavior for non-UK)
   const billCountryId = resolvedCountry ?? undefined;
 
@@ -826,8 +841,29 @@ async function processProvisionEnactment(
   // Find the matching policy option and its index
   let policyOption: LegislationPolicyOption | undefined;
   let newPolicyIndex = 3; // Default to center (index 3 in 0-6 range)
+  const exactRateValidated =
+    provision.proposedRate !== undefined &&
+    (Boolean(lt?.taxSlider) ||
+      (Boolean(lt?.taxRateChange) &&
+        provision.policyOptionNameSnapshot === taxSliderRateLabel(provision.proposedRate) &&
+        typeof provision.currentPolicyOptionNameSnapshot === "string"));
 
-  if (lt?.policyOptions?.length) {
+  if (exactRateValidated && provision.proposedRate !== undefined && lt?.policyOptions?.length) {
+    const ratedOptions = lt.policyOptions
+      .map((option, index) => ({ option, index }))
+      .filter(
+        (entry): entry is { option: LegislationPolicyOption & { rate: number }; index: number } =>
+          typeof entry.option.rate === "number" && Number.isFinite(entry.option.rate)
+      );
+    if (ratedOptions.length > 0) {
+      newPolicyIndex = ratedOptions.reduce((nearest, candidate) =>
+        Math.abs(candidate.option.rate - provision.proposedRate!) <
+        Math.abs(nearest.option.rate - provision.proposedRate!)
+          ? candidate
+          : nearest
+      ).index;
+    }
+  } else if (lt?.policyOptions?.length) {
     // Prefer policyOptionId lookup (reliable), fall back to effectDirection matching
     let matchIndex = -1;
     if (provision.policyOptionId) {
@@ -937,14 +973,18 @@ async function processProvisionEnactment(
   }
 
   // Apply tax rate changes if this is tax legislation
-  if (lt?.taxRateChange && policyOption?.rate !== undefined) {
+  if (!exactRateValidated && lt?.taxRateChange && policyOption?.rate !== undefined) {
     await applyTaxRateChange(db, lt, policyOption.rate, stateId);
   }
 
-  // Tax-slider laws (ruling #16): no options ladder — the provision carries the
-  // slider-chosen rate; federalBudget.taxRates stays the source of truth (the
-  // statePolicies record above stores the rate-encoded option id for readback).
-  if (lt?.taxSlider && provision.proposedRate !== undefined) {
+  // Exact-rate laws carry the chosen rate on the provision. New-generation
+  // types expose `taxSlider`; reviewed JP/IE v2 taxes retain their established
+  // `taxRateChange` types and use the same rate-encoded provision shape.
+  if (
+    exactRateValidated &&
+    (lt?.taxSlider || lt?.taxRateChange) &&
+    provision.proposedRate !== undefined
+  ) {
     await applyTaxRateChange(db, lt, provision.proposedRate, stateId);
   }
 

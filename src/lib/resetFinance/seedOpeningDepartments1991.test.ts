@@ -11,7 +11,7 @@ import { seedOpeningDepartmentBoards1991 } from "./seedOpeningDepartments1991";
 import { openingCabinetActionStates } from "@/lib/resetCabinet/rules/actionState";
 
 describe("v2 department opening persistence", () => {
-  it("writes and verifies all three country boards before returning a receipt", async () => {
+  it("writes and verifies all four country boards before returning a receipt", async () => {
     const db = createMockDb();
     db.collection("gameState").findOne.mockResolvedValue({
       resetWorldId: "new-world",
@@ -29,6 +29,7 @@ describe("v2 department opening persistence", () => {
         US: fiscal.US.grants,
         UK: fiscal.UK.grants,
         JP: fiscal.JP.grants,
+        IE: fiscal.IE.grants,
       },
       openingNamedGrantClaims1991()
     );
@@ -54,13 +55,13 @@ describe("v2 department opening persistence", () => {
     } as never);
     const receipt = await seedOpeningDepartmentBoards1991(db as unknown as Db, "new-world", 1);
     expect(collection.bulkWrite).toHaveBeenCalledTimes(1);
-    expect(collection.bulkWrite.mock.calls[0][0]).toHaveLength(3);
+    expect(collection.bulkWrite.mock.calls[0][0]).toHaveLength(4);
     expect(accounts.bulkWrite).toHaveBeenCalledTimes(1);
     expect(accounts.bulkWrite.mock.calls[0][0]).toHaveLength(partition.accounts.length);
-    expect(continuity.bulkWrite.mock.calls[0][0]).toHaveLength(3);
-    expect(treasuries.bulkWrite.mock.calls[0][0]).toHaveLength(3);
+    expect(continuity.bulkWrite.mock.calls[0][0]).toHaveLength(4);
+    expect(treasuries.bulkWrite.mock.calls[0][0]).toHaveLength(4);
     expect(receipt.worldId).toBe("new-world");
-    expect(actionStates.bulkWrite.mock.calls[0][0]).toHaveLength(3);
+    expect(actionStates.bulkWrite.mock.calls[0][0]).toHaveLength(4);
     // Value-only opening balance changes remain compatible with running v2
     // worlds and must not invalidate their Cabinet seed receipt.
     expect(receipt.revision).toBe(8);
@@ -115,7 +116,12 @@ describe("v2 department opening persistence", () => {
     const partition = buildOpeningDepartmentFundingPartition(
       expected,
       DEPARTMENT_DEFINITIONS,
-      { US: fiscal.US.grants, UK: fiscal.UK.grants, JP: fiscal.JP.grants },
+      {
+        US: fiscal.US.grants,
+        UK: fiscal.UK.grants,
+        JP: fiscal.JP.grants,
+        IE: fiscal.IE.grants,
+      },
       openingNamedGrantClaims1991()
     );
     db.collection("resetDepartmentAccounts").find.mockReturnValue({
@@ -144,7 +150,12 @@ describe("v2 department opening persistence", () => {
     const partition = buildOpeningDepartmentFundingPartition(
       expected,
       DEPARTMENT_DEFINITIONS,
-      { US: fiscal.US.grants, UK: fiscal.UK.grants, JP: fiscal.JP.grants },
+      {
+        US: fiscal.US.grants,
+        UK: fiscal.UK.grants,
+        JP: fiscal.JP.grants,
+        IE: fiscal.IE.grants,
+      },
       openingNamedGrantClaims1991()
     );
     db.collection("resetDepartmentAccounts").find.mockReturnValue({

@@ -177,12 +177,24 @@ export function resolveSourceLink(
   }
 
   // ── Supply agreement negotiation ─────────────────────────────────────────
-  if (type === "corp_supply_agreement_offer") {
+  if (type === "corp_supply_agreement_offer" || type === "corp_supply_agreement_update") {
     const corporationId = asString(m.corporationId);
     if (corporationId) {
       return {
-        label: "Review supply offer",
+        label:
+          type === "corp_supply_agreement_offer" ? "Review supply offer" : "View supply agreement",
         href: `/corporation/${corporationId}?tab=commodities#supply-agreements`,
+      };
+    }
+  }
+
+  // ── Product ventures ─────────────────────────────────────────────────────
+  if (type === "corp_product_event" || type === "corp_product_result") {
+    const corporationId = asString(m.corporationId);
+    if (corporationId) {
+      return {
+        label: type === "corp_product_event" ? "Answer decision" : "View product",
+        href: `/corporation/${corporationId}?tab=sectors#product-studio`,
       };
     }
   }

@@ -167,14 +167,11 @@ describe("S6 — every roster consumer agrees with tierFor", () => {
  * `npp` is checked below instead, so the tier keeps coverage that can fail.
  */
 describe("S2 — live countries meet their tier's capability contract", () => {
-  const SCOPE = { player: "player", econ: "autonomous" } as const;
-
   function s2Failures(preset: ShippingPreset): string[] {
     const out: string[] = [];
     for (const country of COUNTRY_ORDER) {
       const tier = tierFor(preset, country);
       if (tier !== "player" && tier !== "econ") continue;
-      const scope = SCOPE[tier];
 
       let report;
       try {
@@ -186,10 +183,8 @@ describe("S2 — live countries meet their tier's capability contract", () => {
         continue;
       }
 
-      if (report[scope] === "ready") continue;
-      const blocking = report.capabilities
-        .filter((c) => c.status === "hard-block" && c.requiredFor.includes(scope))
-        .map((c) => c.capabilityId);
+      if (report.requirementStatus === "ready") continue;
+      const blocking = report.requirementBlockers.map((blocker) => blocker.capabilityId);
       out.push(`${country} (${tier}): ${blocking.join(", ")}`);
     }
     return out;
@@ -224,7 +219,7 @@ describe("S2 — live countries meet their tier's capability contract", () => {
   );
 
   /**
-   * 1999, 2007 and 2023 were authored past the United States by upstream's
+   * 1999, 2007, 2023 and 2027 were authored past the United States by upstream's
    * "make every seed complete" (#1669). What remains is `partiesAuthored`, plus
    * the 1953-gated full-autonomous promotion for Brazil and Nigeria.
    *
@@ -268,9 +263,10 @@ describe("S2 — live countries meet their tier's capability contract", () => {
       "BR (econ): fullAutonomousTier, partiesAuthored",
       "NG (econ): fullAutonomousTier, partiesAuthored",
     ],
+    "2027-default": ["BR (econ): fullAutonomousTier", "NG (econ): fullAutonomousTier"],
   };
 
-  it.each(["1999-default", "2007-default", "2023-default"] as const)(
+  it.each(["1999-default", "2007-default", "2023-default", "2027-default"] as const)(
     "%s is a skeleton era, and its gaps are exactly the recorded ones",
     (preset) => {
       expect(s2Failures(preset)).toEqual(SKELETON_ERA_GAPS[preset] ?? []);

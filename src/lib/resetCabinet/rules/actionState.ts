@@ -1,5 +1,6 @@
 import type { ResetCountry } from "@/lib/resetLegislation/fundingOwner";
 import type { ActionUseHistory, ActiveCabinetAction, CabinetActorActionState } from "./actions";
+import { RESET_V2_OPENING_COUNTRIES } from "@/lib/resetVersions/rules";
 
 /** World-bound persistence envelope for the portable ministerial-action rules. */
 export interface ResetCabinetActionState {
@@ -20,7 +21,7 @@ export function openingCabinetActionStates(
   if (!worldId || !Number.isSafeInteger(sourceTurn) || sourceTurn < 1) {
     throw new Error("Cabinet action opening requires a world and source turn");
   }
-  return (["US", "UK", "JP"] as const).map((countryId) => ({
+  return RESET_V2_OPENING_COUNTRIES.map((countryId) => ({
     _id: countryId,
     worldId,
     countryId,

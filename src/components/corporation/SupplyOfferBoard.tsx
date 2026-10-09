@@ -40,6 +40,8 @@ export function SupplyOfferBoard({
   const [premium, setPremium] = useState(0);
   const [duration, setDuration] = useState("");
   const [revision, setRevision] = useState(0);
+  const [takeVolumes, setTakeVolumes] = useState<Record<string, string>>({});
+  const [notice, setNotice] = useState("");
   useEffect(() => {
     const controller = new AbortController();
     setLoading(true);
@@ -91,6 +93,29 @@ export function SupplyOfferBoard({
     },
     [corpId, t]
   );
+  async function take(row: SupplyListingView) {
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      const response = await fetch(`/api/corporations/${corpId}/supply-listings/take`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          listingId: row.id,
+          volume: Number(takeVolumes[row.id] ?? row.volumeCap),
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(apiErrorText(data, t("failed")));
+      setNotice(t("taken"));
+      setRevision((n) => n + 1);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : t("failed"));
+    } finally {
+      setBusy(false);
+    }
+  }
   async function publish(e: FormEvent) {
     e.preventDefault();
     const slot = Array.from({ length: 10 }, (_, i) => i).find(
@@ -143,6 +168,7 @@ export function SupplyOfferBoard({
           </button>
         </p>
       )}
+      {notice && <p role="status">{notice}</p>}
       {form && (
         <form onSubmit={(e) => void publish(e)} className="grid gap-3 sm:grid-cols-2">
           <label className="text-xs">
@@ -295,8 +321,19 @@ export function SupplyOfferBoard({
                   </h4>
                   <p className="text-sm">
                     {row.corporationName}
+                    {row.ai ? ` (${t("npp")})` : ""}
                     {row.stateId ? ` (${row.stateId})` : ""}
                   </p>
+                  {row.corporationCountryId && (
+                    <p className="text-xs text-muted">
+                      {row.creditRating
+                        ? t("seller", {
+                            country: row.corporationCountryId,
+                            rating: row.creditRating,
+                          })
+                        : t("sellerCountry", { country: row.corporationCountryId })}
+                    </p>
+                  )}
                   <p className="text-xs">
                     {t("terms", {
                       volume: row.volumeCap.toLocaleString(),
@@ -309,13 +346,38 @@ export function SupplyOfferBoard({
                     {t("expires", { turn: row.expiresAtTurn })}
                   </p>
                   {!row.own && (
-                    <button
-                      type="button"
-                      onClick={() => onRespond(row)}
-                      className="inline-flex h-7 items-center rounded-md border border-card-border px-2.5 text-xs font-medium text-foreground hover:bg-card-elevated"
-                    >
-                      {t("respond")}
-                    </button>
+                    <div className="flex flex-wrap items-end gap-2">
+                      <label className="text-xs">
+                        {t("takeVolume")}
+                        <input
+                          className={`${control} w-28`}
+                          type="number"
+                          min="0.000001"
+                          max={row.volumeCap}
+                          step="any"
+                          value={takeVolumes[row.id] ?? String(row.volumeCap)}
+                          onChange={(e) =>
+                            setTakeVolumes((prev) => ({ ...prev, [row.id]: e.target.value }))
+                          }
+                          disabled={busy}
+                        />
+                      </label>
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => void take(row)}
+                        className="inline-flex h-7 items-center rounded-md border border-primary bg-primary px-2.5 text-xs font-medium text-white hover:bg-primary/90 disabled:opacity-50"
+                      >
+                        {busy ? t("taking") : t("take")}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => onRespond(row)}
+                        className="inline-flex h-7 items-center rounded-md border border-card-border px-2.5 text-xs font-medium text-foreground hover:bg-card-elevated"
+                      >
+                        {t("negotiate")}
+                      </button>
+                    </div>
                   )}
                 </article>
               ))}

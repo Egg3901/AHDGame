@@ -132,6 +132,10 @@ export interface CampaignData {
     /** Baked LARP year on the linked election doc (null on legacy rows). */
     electionYear: number | null;
     isEnded: boolean;
+    /** Field-office granularity in this race's country; null when unavailable. */
+    fieldOfficeScope?: "county" | "region" | null;
+    /** Offices this campaign holds right now. */
+    fieldOfficeCount?: number;
   } | null;
 
   /**
@@ -331,6 +335,19 @@ export interface BriefingCoalitionBucket {
   demoSP: number;
 }
 
+export interface BriefingParticipationTarget {
+  bucket: string;
+  action: "canvass" | "targeted_ads" | "hold";
+  reason: string;
+}
+
+export interface BriefingParticipationPlan {
+  expectedTurnout: number;
+  contactLift: number;
+  saturationDrag: number;
+  targets: BriefingParticipationTarget[];
+}
+
 export interface CampaignBriefing {
   /**
    * Path to victory. Delegate math in the primary phase, tipping-point EV math
@@ -349,6 +366,8 @@ export interface CampaignBriefing {
    * non-presidential races or before the ledger is first teed.
    */
   coalitionWeakness: BriefingCoalitionBucket[];
+  /** Method 4 guidance based on the exact participation receipt from the latest turn. */
+  participationPlan?: BriefingParticipationPlan;
 }
 
 export interface OpsBranchCostView {

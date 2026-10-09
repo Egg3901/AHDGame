@@ -19,6 +19,7 @@ import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { parseJsonBody } from "@/lib/api/validate";
 import { performRelocation } from "@/lib/character/performRelocation";
+import { relocationLeavesParty, PARTY_DEPARTURE_WARNING } from "@/lib/character/relocationParty";
 import { getCountryAccess } from "@/lib/countryAccess";
 import { getGameState } from "@/lib/gameState";
 import { getGameTime } from "@/lib/time/gameTime";
@@ -71,6 +72,7 @@ const bodySchema = z.object({
   // when state-IDs could collide (e.g. CN HB / DE HB).
   targetCountryId: z.string().min(2).max(3).optional(),
   paymentMethod: z.enum(["cash", "bond", "imperial-free"]),
+  confirmPartyDeparture: z.boolean().optional(),
 });
 
 // POST /api/character/relocate-with-corp
@@ -116,7 +118,10 @@ export async function POST(request: Request) {
         return errorResponse(400, unplayableTerritoryHomeError(targetState.name));
       }
     }
-    if (auth.character.homeState === normalizedTarget) {
+    if (
+      auth.character.homeState === normalizedTarget &&
+      (auth.character.countryId ?? "US") === targetState.countryId
+    ) {
       return errorResponse(400, "Already in this state/region");
     }
     // Turn-first relocation cooldown (72 turns); legacy Date fallback in helper.
@@ -141,6 +146,14 @@ export async function POST(request: Request) {
       if (!enabledForPlayers) {
         return errorResponse(403, "Relocation to this country is not currently available.");
       }
+    }
+
+    // Consent must precede any corporation charge, bond, lease or relocation write.
+    const leaveParty = await relocationLeavesParty(db, auth.character, targetState);
+    if (leaveParty && !parsed.data.confirmPartyDeparture) {
+      return errorResponse(409, PARTY_DEPARTURE_WARNING, {
+        extra: { partyDepartureRequired: true },
+      });
     }
 
     const corp = await findActiveResidentCeoCorporation(
@@ -511,6 +524,7 @@ export async function POST(request: Request) {
 
     const outcome = await performRelocation(db, auth.character, targetState, {
       skipCeoResignForCorpId: corp._id,
+      leaveParty,
     });
 
     logWireEvent(

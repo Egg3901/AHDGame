@@ -1,6 +1,8 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import { useCurrency } from "@/contexts/CurrencyContext";
+import { useTranslations } from "next-intl";
+import { ChevronDown } from "lucide-react";
+import { formatCurrencyFaceAmount } from "@/lib/currency/formatCurrencyFaceAmount";
 import { quoteLoanOrigination } from "@/lib/banking/rules/loanFees";
 import type {
   ConstructionFinanceChoice,
@@ -26,9 +28,10 @@ export default function ConstructionFinanceControls({
   cashAnchor: number;
   onChange: (choice: ConstructionFinanceChoice | null) => void;
 }) {
-  const { formatAmount } = useCurrency();
+  const t = useTranslations("corporations.sectorInvestment");
   const [lenders, setLenders] = useState<Lender[]>([]);
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
   const [enabled, setEnabled] = useState(false);
   const [bankId, setBankId] = useState("");
   const [principalDraft, setPrincipalDraft] = useState("");
@@ -52,7 +55,7 @@ export default function ConstructionFinanceControls({
     termTurns >= 4 &&
     termTurns <= 120 &&
     affordable;
-  const native = (amount: number) => formatAmount(amount, view.currency);
+  const native = (amount: number) => formatCurrencyFaceAmount(amount, view.currency);
 
   useEffect(() => {
     if (view.pendingRequest) return;
@@ -78,6 +81,9 @@ export default function ConstructionFinanceControls({
       .catch((failure: unknown) => {
         if (!controller.signal.aborted)
           setError(failure instanceof Error ? failure.message : "Lender quotes unavailable");
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false);
       });
     return () => controller.abort();
   }, [view.corporationId, view.currency, view.pendingRequest]);
@@ -119,7 +125,7 @@ export default function ConstructionFinanceControls({
   const pendingRequest = view.pendingRequest;
   if (pendingRequest)
     return (
-      <div className="rounded-lg border border-border p-3 space-y-3">
+      <div className="rounded-lg border border-card-border p-4 space-y-3">
         <p className="text-body-sm">
           {pendingRequest.status === "awaiting_approval"
             ? "Construction is awaiting lender approval. No cash has moved and no capacity is queued."
@@ -138,100 +144,171 @@ export default function ConstructionFinanceControls({
       </div>
     );
 
+  const inputClass =
+    "mt-1.5 block h-11 w-full min-w-0 rounded-lg border border-card-border bg-background px-3 text-body-sm text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/20";
   return (
-    <div className="rounded-lg border border-border p-3 space-y-3">
-      <label className="flex items-center gap-2 text-body-sm">
+    <fieldset
+      disabled={busy}
+      className="min-w-0 rounded-lg border border-card-border p-4 space-y-3"
+    >
+      <div className="flex flex-wrap items-baseline justify-between gap-1">
+        <h3 className="text-body-sm font-semibold text-foreground">{t("paymentTitle")}</h3>
+        <p className="text-body-xs text-muted">
+          {t("cashBalance", { amount: native(cashAnchor * view.localPerAnchor) })}
+        </p>
+      </div>
+      <label
+        className={`flex cursor-pointer items-start gap-3 rounded-lg border p-3 text-body-sm ${enabled ? "border-primary/40 bg-primary/5" : "border-card-border bg-background/40"}`}
+      >
         <input
           type="checkbox"
+          className="mt-0.5 h-4 w-4 shrink-0 accent-primary"
           checked={enabled}
           onChange={(e) => {
             setEnabled(e.target.checked);
             setConsent(false);
           }}
         />
-        Finance this build with a bank term loan
+        <span>
+          <span className="block font-medium text-foreground">{t("financeToggle")}</span>
+          <span className="mt-1 block text-body-xs text-muted">{t("financeHelp")}</span>
+        </span>
       </label>
-      {enabled && (
+      {!enabled ? (
+        <div className="flex flex-wrap justify-between gap-2 text-body-sm">
+          <span className="text-muted">{t("cashPayment")}</span>
+          <span className="font-semibold tabular-nums text-foreground">{native(costLocal)}</span>
+        </div>
+      ) : (
         <>
           {error && (
             <p className="text-error text-body-sm" role="alert">
               {error}
             </p>
           )}
-          {!error && lenders.length === 0 && (
-            <p className="text-body-sm">No eligible same-currency lender is available.</p>
+          {!error && loading && (
+            <p className="text-body-sm text-muted" role="status">
+              {t("lendersLoading")}
+            </p>
           )}
-          <label className="block text-body-sm">
-            Lender
-            <select
-              className="block w-full"
-              value={bankId}
-              onChange={(e) => {
-                setBankId(e.target.value);
-                setConsent(false);
-              }}
-            >
-              {lenders.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.name}: {item.ratePercent.toFixed(2)}% per year
-                  {item.approvalRequired ? " (approval required)" : ""}
-                </option>
-              ))}
-            </select>
+          {!error && !loading && lenders.length === 0 && (
+            <p className="text-body-sm text-warning">{t("noLenders")}</p>
+          )}
+          <label className="block text-body-sm font-medium text-foreground">
+            {t("lenderLabel")}
+            <span className="relative block">
+              <select
+                className={`${inputClass} appearance-none pr-9`}
+                value={bankId}
+                disabled={loading || lenders.length === 0}
+                onChange={(e) => {
+                  setBankId(e.target.value);
+                  setConsent(false);
+                }}
+              >
+                {lenders.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {t("lenderOption", { name: item.name, rate: item.ratePercent.toFixed(2) })}
+                    {item.approvalRequired ? ` (${t("approvalRequired")})` : ""}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown
+                className="pointer-events-none absolute right-3 top-3.5 h-4 w-4 text-muted"
+                aria-hidden
+              />
+            </span>
           </label>
-          <label className="block text-body-sm">
-            Principal ({view.currency})
-            <input
-              className="block w-full"
-              type="number"
-              min={1}
-              max={limit}
-              value={principalDraft === "" ? Math.floor(limit) : principalDraft}
-              onChange={(e) => {
-                setPrincipalDraft(e.target.value);
-                setConsent(false);
-              }}
-            />
-          </label>
-          <label className="block text-body-sm">
-            Term (turns)
-            <input
-              className="block w-full"
-              type="number"
-              min={4}
-              max={120}
-              value={termTurns}
-              onChange={(e) => {
-                setTermTurns(Number(e.target.value));
-                setConsent(false);
-              }}
-            />
-          </label>
-          <p className="text-body-sm">
-            Principal limit {native(limit)}. Origination fee {native(loan.originationFee)} is
-            withheld from proceeds. Your cash contribution is {native(contribution)}.
-          </p>
-          <label className="flex items-start gap-2 text-body-sm">
+          <div className="grid grid-cols-2 gap-3">
+            <label className="block min-w-0 text-body-sm font-medium text-foreground">
+              {t("principalLabel", { currency: view.currency })}
+              <input
+                className={inputClass}
+                type="number"
+                min={1}
+                max={limit}
+                value={principalDraft === "" ? Math.floor(limit) : principalDraft}
+                onChange={(e) => {
+                  setPrincipalDraft(e.target.value);
+                  setConsent(false);
+                }}
+              />
+              <span className="mt-1.5 block text-body-xs font-normal text-muted">
+                {t("principalLimit", { amount: native(limit) })}
+              </span>
+            </label>
+            <label className="block min-w-0 text-body-sm font-medium text-foreground">
+              {t("termLabel")}
+              <input
+                className={inputClass}
+                type="number"
+                min={4}
+                max={120}
+                value={termTurns}
+                onChange={(e) => {
+                  setTermTurns(Number(e.target.value));
+                  setConsent(false);
+                }}
+              />
+              <span className="mt-1.5 block text-body-xs font-normal text-muted">
+                {t("termHelp")}
+              </span>
+            </label>
+          </div>
+          <dl className="space-y-2 rounded-lg bg-background/60 p-3 text-body-sm">
+            <div className="flex justify-between gap-3">
+              <dt className="text-muted">{t("loanPrincipal")}</dt>
+              <dd className="text-right tabular-nums text-foreground">{native(loan.principal)}</dd>
+            </div>
+            <div className="flex justify-between gap-3">
+              <dt className="text-muted">{t("loanFee")}</dt>
+              <dd className="text-right tabular-nums text-foreground">
+                {native(loan.originationFee)}
+              </dd>
+            </div>
+            <div className="flex justify-between gap-3">
+              <dt className="text-muted">{t("loanProceeds")}</dt>
+              <dd className="text-right tabular-nums text-foreground">{native(loan.proceeds)}</dd>
+            </div>
+            <div className="flex justify-between gap-3 border-t border-card-border pt-2 font-semibold">
+              <dt>{t("cashContribution")}</dt>
+              <dd
+                className={`text-right tabular-nums ${affordable ? "text-foreground" : "text-error"}`}
+              >
+                {native(contribution)}
+              </dd>
+            </div>
+          </dl>
+          <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-card-border p-3 text-body-sm">
             <input
               type="checkbox"
+              className="mt-0.5 h-4 w-4 shrink-0 accent-primary"
               checked={consent}
               onChange={(e) => setConsent(e.target.checked)}
             />
-            I pledge this sector to the lender until principal is repaid. Cancellation refunds and
-            sale proceeds repay secured principal first; default can lead to foreclosure.
+            <span>
+              <span className="block font-medium text-foreground">{t("loanPledge")}</span>
+              <span className="mt-1 block text-body-xs text-muted">{t("loanPledgeHelp")}</span>
+            </span>
           </label>
           {!affordable && (
-            <p className="text-error text-body-sm">
-              Available cash does not cover your contribution.
+            <p className="text-error text-body-sm" role="alert">
+              {t("contributionShortfall")}
             </p>
           )}
           {lender?.approvalRequired && (
-            <p className="text-body-sm">
-              The build starts after the lender approves and delivers funding.
-            </p>
+            <p className="text-body-sm text-warning">{t("loanStartsAfterApproval")}</p>
           )}
         </>
       )}
-    </div>
+      <div className="flex flex-wrap justify-between gap-2 border-t border-card-border pt-3 text-body-sm">
+        <span className="text-muted">{t("cashRemaining")}</span>
+        <span
+          className={`font-semibold tabular-nums ${(enabled ? affordable : costLocal <= cashAnchor * view.localPerAnchor) ? "text-foreground" : "text-error"}`}
+        >
+          {native(cashAnchor * view.localPerAnchor - (enabled ? contribution : costLocal))}
+        </span>
+      </div>
+    </fieldset>
   );
 }

@@ -135,6 +135,20 @@ describe("cron jobs", () => {
   });
 
   describe("initializeCronJobs", () => {
+    it("does not reconcile production supporters from an unconfigured sandbox worker", async () => {
+      vi.stubEnv("CRON_OWNER", "worker");
+      vi.stubEnv("NODE_ENV", "production");
+      vi.stubEnv("SENTRY_ENVIRONMENT", "sandbox");
+      vi.stubEnv("PATREON_CREATOR_TOKEN", undefined);
+      const { initializeCronJobs, PATREON_RECONCILIATION_SCHEDULE } = await import("./cron");
+      mockGetGameState.mockResolvedValue({ currentTurn: 1, isActive: true });
+      mockSchedule.mockReturnValue({ start: vi.fn(), stop: vi.fn(), getStatus: vi.fn() } as any);
+      await initializeCronJobs();
+      expect(
+        mockSchedule.mock.calls.some(([schedule]) => schedule === PATREON_RECONCILIATION_SCHEDULE)
+      ).toBe(false);
+    });
+
     it("runs Patreon reconciliation in apply mode from the hosted worker schedule", async () => {
       vi.stubEnv("CRON_OWNER", "worker");
       vi.stubEnv("SINGLEPLAYER", undefined);

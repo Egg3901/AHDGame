@@ -13,10 +13,30 @@ describe("reset system controls", () => {
       nppForeignPolicyMode: "off",
       nppForeignPolicyStage: "votes",
       nppEntryViabilityMode: "off",
-      resetSystemVersions: { metrics: "v1", legislation: "v1", cabinet: "v1" },
-      resetSystemSelections: { metrics: "v2", legislation: "v1", cabinet: "v1" },
-      resetV2Ready: { metrics: true, legislation: false, cabinet: false },
-      resetV2Seeded: { metrics: false, legislation: false, cabinet: false },
+      resetSystemVersions: {
+        metrics: "v1",
+        legislation: "v1",
+        cabinet: "v1",
+        demographics: "v1",
+      },
+      resetSystemSelections: {
+        metrics: "v2",
+        legislation: "v1",
+        cabinet: "v1",
+        demographics: "v1",
+      },
+      resetV2Ready: {
+        metrics: true,
+        legislation: false,
+        cabinet: false,
+        demographics: true,
+      },
+      resetV2Seeded: {
+        metrics: false,
+        legislation: false,
+        cabinet: false,
+        demographics: false,
+      },
     };
     global.fetch = vi.fn((url: string) =>
       Promise.resolve(
@@ -35,7 +55,8 @@ describe("reset system controls", () => {
         )
       ).toBeTruthy()
     );
-    expect(within(section).getAllByText("v1 live")).toHaveLength(3);
+    expect(within(section).getAllByText("v1 live")).toHaveLength(4);
+    expect(within(section).getByText("Demographics")).toBeTruthy();
     const metrics = within(section).getByText("Metrics").closest("div.rounded-lg");
     expect(metrics).toBeTruthy();
     expect(metrics!.querySelector("button.bg-primary")?.textContent).toBe("v2");

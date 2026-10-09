@@ -1,60 +1,45 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
-import { sendSystemMail } from "./systemMail";
-import { ObjectId } from "mongodb";
+import { describe, expect, it, vi } from "vitest";
+import { ObjectId, type Db } from "mongodb";
+import { sendSystemMails } from "./systemMail";
 
-vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
-
-let db: MockDb;
-
-beforeEach(() => {
-  db = createMockDb();
-});
-
-describe("sendSystemMail", () => {
-  it("inserts a mail document with no fromCharacterId", async () => {
-    const toCharacterId = new ObjectId();
-    const toUserId = new ObjectId();
-
-    await sendSystemMail(db as unknown as import("mongodb").Db, {
-      toCharacterId,
-      toCharacterName: "Alice",
-      toCharacterSequentialId: 42,
-      toUserId,
-      subject: "Test Subject",
-      body: "Test body",
+describe("batched system mail", () => {
+  it("writes eleven distinct recipients in one command with system mail fields", async () => {
+    const insertMany = vi.fn().mockResolvedValue({ insertedCount: 11 });
+    const collection = vi.fn().mockReturnValue({ insertMany });
+    const db = { collection } as unknown as Db;
+    const recipients = Array.from({ length: 11 }, (_, i) => ({
+      toCharacterId: new ObjectId(),
+      toCharacterName: `Recipient ${i}`,
+      toCharacterSequentialId: i + 1,
+      toUserId: new ObjectId(),
+      subject: "Whip",
+      body: "Vote aye",
+      senderName: "Party Whip",
+    }));
+    await sendSystemMails(db, recipients);
+    expect(collection).toHaveBeenCalledWith("playerMail");
+    expect(insertMany).toHaveBeenCalledOnce();
+    const docs = insertMany.mock.calls[0]?.[0];
+    expect(docs).toHaveLength(11);
+    recipients.forEach((recipient, i) => {
+      expect(docs[i]).toEqual(
+        expect.objectContaining({
+          toUserId: recipient.toUserId,
+          toCharacterId: recipient.toCharacterId,
+          fromCharacterName: "Party Whip",
+          subject: "Whip",
+          body: "Vote aye",
+          read: false,
+          deletedByRecipient: false,
+          deletedBySender: false,
+          createdAt: expect.any(Date),
+        })
+      );
     });
-
-    const insertCalls = db.collectionMocks.playerMail?.insertOne?.mock.calls;
-    expect(insertCalls).toHaveLength(1);
-
-    const inserted = insertCalls![0][0];
-    expect(inserted.fromCharacterId).toBeUndefined();
-    expect(inserted.fromCharacterName).toBe("Forex Market");
-    expect(inserted.toCharacterId).toEqual(toCharacterId);
-    expect(inserted.toUserId).toEqual(toUserId);
-    expect(inserted.subject).toBe("Test Subject");
-    expect(inserted.body).toBe("Test body");
-    expect(inserted.read).toBe(false);
-    expect(inserted.deletedByRecipient).toBe(false);
-    expect(inserted.deletedBySender).toBe(false);
   });
-
-  it("uses a custom senderName when provided", async () => {
-    const toCharacterId = new ObjectId();
-    const toUserId = new ObjectId();
-
-    await sendSystemMail(db as unknown as import("mongodb").Db, {
-      toCharacterId,
-      toCharacterName: "Bob",
-      toCharacterSequentialId: 7,
-      toUserId,
-      subject: "System Alert",
-      body: "Something happened.",
-      senderName: "Game System",
-    });
-
-    const inserted = db.collectionMocks.playerMail?.insertOne?.mock.calls[0][0];
-    expect(inserted.fromCharacterName).toBe("Game System");
+  it("does not issue an empty mail insert", async () => {
+    const collection = vi.fn();
+    await sendSystemMails({ collection } as unknown as Db, []);
+    expect(collection).not.toHaveBeenCalled();
   });
 });

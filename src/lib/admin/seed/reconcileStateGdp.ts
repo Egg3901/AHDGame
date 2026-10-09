@@ -164,17 +164,23 @@ export async function reconcileStateGdpWithNationalSeeds(
 
   const scalars = computeStateGdpScalars(regionRows, nationalGdpByCountry);
   const toApply = scalars.filter((s) => s.applied);
-  for (const entry of toApply) {
-    await db.collection<State>("states").updateMany(
-      {
-        countryId: entry.countryId,
-        _id: { $nin: [...NATIONAL_SCOPE_IDS] },
-        // $gt is type-bracketed in MongoDB: matches only numeric gdp > 0, so
-        // rows with missing/zero gdp are left untouched (never $mul'd to 0/NaN).
-        gdp: { $gt: 0 },
-      },
-      { $mul: { gdp: entry.scalar } }
+  if (toApply.length > 0) {
+    await db.collection<State>("states").bulkWrite(
+      toApply.map((entry) => ({
+        updateMany: {
+          filter: {
+            countryId: entry.countryId,
+            _id: { $nin: [...NATIONAL_SCOPE_IDS] },
+            // $gt is type-bracketed in MongoDB: matches only numeric gdp > 0, so
+            // rows with missing/zero gdp are left untouched (never $mul'd to 0/NaN).
+            gdp: { $gt: 0 },
+          },
+          update: { $mul: { gdp: entry.scalar } },
+        },
+      }))
     );
+  }
+  for (const entry of toApply) {
     log(
       `[GdpReconcile] ${entry.countryId}: Σ regions ${Math.round(entry.regionalSum / 1e6).toLocaleString("en-US")}M ` +
         `vs authored ${Math.round(entry.nationalGdp / 1e6).toLocaleString("en-US")}M ` +

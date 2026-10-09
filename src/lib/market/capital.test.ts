@@ -75,17 +75,30 @@ describe("advanceCapitalBookAnchor", () => {
   it("ratchets up when NPV rises above the anchor", () => {
     expect(advanceCapitalBookAnchor({ prevAnchor: 1000, sectorNPV: 1500 })).toBe(1500);
   });
-  it("holds (barely decayed) when NPV falls below the anchor", () => {
-    // prev 1000 decays by 0.0005 → 999.5, still above the depressed NPV 400.
-    expect(advanceCapitalBookAnchor({ prevAnchor: 1000, sectorNPV: 400 })).toBeCloseTo(999.5, 6);
+  it("eases toward current NPV when it falls below the anchor", () => {
+    // Gap 600 closes 4% in one turn: 400 + 600 * 0.96 = 976.
+    expect(advanceCapitalBookAnchor({ prevAnchor: 1000, sectorNPV: 400 })).toBeCloseTo(976, 6);
   });
-  it("bleeds down over sustained mild impairment via the decay factor", () => {
-    // NPV 900 stays within the 5x cap, so the slow decay governs the ratchet-down.
+  it("fades a stale peak to near current NPV within a year (48 turns)", () => {
     let a = 1000;
-    for (let i = 0; i < 100; i++) a = advanceCapitalBookAnchor({ prevAnchor: a, sectorNPV: 900 });
-    expect(a).toBeCloseTo(1000 * Math.pow(1 - 0.0005, 100), 4);
-    expect(a).toBeLessThan(1000);
-    expect(a).toBeGreaterThan(900);
+    for (let i = 0; i < 48; i++) a = advanceCapitalBookAnchor({ prevAnchor: a, sectorNPV: 400 });
+    expect(a).toBeCloseTo(400 + 600 * Math.pow(0.96, 48), 4);
+    expect(a).toBeLessThan(400 + 600 * 0.15);
+    expect(a).toBeGreaterThan(400);
+  });
+  it("moves the anchor at most the convergence share of the gap per turn", () => {
+    const next = advanceCapitalBookAnchor({ prevAnchor: 1000, sectorNPV: 800 });
+    expect(next).toBeGreaterThanOrEqual(1000 - 0.04 * 200 - 1e-9);
+  });
+  it("never falls below current NPV", () => {
+    let a = 1000;
+    for (let i = 0; i < 500; i++) a = advanceCapitalBookAnchor({ prevAnchor: a, sectorNPV: 900 });
+    expect(a).toBeGreaterThanOrEqual(900);
+  });
+  it("re-ratchets instantly after a recovery", () => {
+    let a = 1000;
+    for (let i = 0; i < 20; i++) a = advanceCapitalBookAnchor({ prevAnchor: a, sectorNPV: 400 });
+    expect(advanceCapitalBookAnchor({ prevAnchor: a, sectorNPV: 2000 })).toBe(2000);
   });
   it("caps the anchor at a multiple of current NPV (kills the ghost high-water mark)", () => {
     // prev 1000 vs NPV 100 is a 10x impairment: the slow decay would hold it near
@@ -100,9 +113,15 @@ describe("advanceCapitalBookAnchor", () => {
     expect(a).toBe(0);
   });
   it("honors a custom depreciation rate within the cap", () => {
-    // NPV 500 keeps the 5x cap (2500) non-binding, so the custom 0.1 decay shows.
+    // NPV 500 keeps the 5x cap (2500) non-binding; convergence off so the custom
+    // 0.1 decay shows.
     expect(
-      advanceCapitalBookAnchor({ prevAnchor: 1000, sectorNPV: 500, depreciationPerTurn: 0.1 })
+      advanceCapitalBookAnchor({
+        prevAnchor: 1000,
+        sectorNPV: 500,
+        depreciationPerTurn: 0.1,
+        convergencePerTurn: 0,
+      })
     ).toBeCloseTo(900, 6);
   });
 });

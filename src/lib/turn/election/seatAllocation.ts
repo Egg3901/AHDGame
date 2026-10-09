@@ -2,7 +2,7 @@ import { HOUSE_SEATS, UK_COMMONS_SEATS, UK_REGIONAL_COUNCIL_SEATS } from "@/lib/
 import { allocateBlocListSeats } from "./blocListAllocation";
 import { MULTI_SEAT_TYPES } from "@/lib/utils/electionLabels";
 import { getMultiSeatMinShare } from "./rules/seatEligibility";
-import type { ElectionMethod } from "@/lib/constants/countries";
+import { COUNTRY_CONFIGS, type ElectionMethod } from "@/lib/constants/countries";
 
 export { getMultiSeatMinShare } from "./rules/seatEligibility";
 
@@ -190,6 +190,11 @@ export interface SeatAllocationResult {
   losers: string[];
 }
 
+/** Shared multi-seat gate for resolution and every live projection surface. */
+export function isMultiSeatElection(electionType: string, totalSeats: number): boolean {
+  return MULTI_SEAT_TYPES.has(electionType) || (electionType === "senate" && totalSeats > 1);
+}
+
 /**
  * Allocate seats proportionally (Largest Remainder method) for multi-seat races,
  * or assign a single seat to the top vote-getter for single-seat races.
@@ -224,8 +229,7 @@ export function allocateSeats(
   // so a "senate" race carrying more than one seat is allocated proportionally
   // like any other multi-seat chamber (#912/NG — without this NG senate zones
   // only ever seated 1 winner). US senate is unaffected (totalSeats stays 1).
-  const isMultiSeat =
-    MULTI_SEAT_TYPES.has(electionType) || (electionType === "senate" && totalSeats > 1);
+  const isMultiSeat = isMultiSeatElection(electionType, totalSeats);
 
   // Use authoritative seat count for House/Commons to prevent over-allocation.
   // `houseSeats` defaults to the 2020-census `HOUSE_SEATS`; pass
@@ -242,8 +246,15 @@ export function allocateSeats(
           : totalSeats;
 
   const seatsEstimate: Record<string, number> = {};
+  // Deployed 1991 JP races may still carry the former SNTV snapshot until the
+  // perpetual-election healer runs. Interpret those documents through the
+  // current proportional rule so projections and final resolution agree
+  // throughout the rollout.
+  const isJapanShugiin =
+    countryId === COUNTRY_CONFIGS.JP.id &&
+    (electionType === "shugiin" || electionType === "snap_shugiin");
 
-  if (isMultiSeat && allocationMethod === "sntv") {
+  if (isMultiSeat && allocationMethod === "sntv" && !isJapanShugiin) {
     // Player candidates win at most one seat; NPP entries represent finite
     // slates of virtual individuals. There is no proportional seat quota.
     Object.assign(seatsEstimate, sntvSeats(ranked, authoritativeSeats));

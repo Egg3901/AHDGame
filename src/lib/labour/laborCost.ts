@@ -178,18 +178,25 @@ export function clampWageLevel(value: number): number {
  * over few workers (high pay each); retail = moderate share over many workers
  * (low pay each); extraction = low share over a moderate crew.
  *
+ * Service sectors (technology, financial, healthcare, real estate) are the
+ * heaviest payroll, roughly 30 to 40% of realized revenue after the 1991 era
+ * multiplier. Under the explicit plant cost model labour is billed on top of
+ * inputs and overhead, so these shares set the base margin of those sectors
+ * directly. The ceiling is the 1991 starter-plant cushion in
+ * `openingPlantScenario`: a founder's plant must still clear its floor.
+ *
  * These are the only sector-level tuned numbers in Phase 2. Because the carve-out
  * is profit-invariant at wageLevel=1 for ANY value here, they change nothing at
  * baseline: they only set how big the wage lever's bite is per sector, so they
  * are safe to refine alongside ongoing balance work.
  */
 export const SECTOR_LABOR_INTENSITY: Record<CorporationType, number> = {
-  technology: 0.3,
-  healthcare: 0.3,
+  technology: 0.4,
+  healthcare: 0.4,
   media: 0.28,
   entertainment: 0.28,
   construction: 0.28,
-  financial: 0.25,
+  financial: 0.4,
   defense: 0.24,
   retail: 0.22,
   telecommunications: 0.2,
@@ -200,7 +207,7 @@ export const SECTOR_LABOR_INTENSITY: Record<CorporationType, number> = {
   chemical_industries: 0.15,
   energy: 0.12,
   extraction: 0.12,
-  real_estate: 0.1,
+  real_estate: 0.32,
 };
 
 /** Fallback labor share when a sector type isn't in the table. */
