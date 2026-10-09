@@ -96,6 +96,10 @@ const REASON_BY_TX_TYPE: Partial<Record<FinancialTxLogEntry["type"], string>> = 
   onboarding_reward: "onboarding_reward",
   // The weekly contest prize is the same kind of system mint: no in-world payer.
   contest_prize: "contest_prize",
+  // The Discord casino house is a system bank: stakes sink into it and
+  // winnings mint out of it under one shared reason, so its net is the house take.
+  casino_wager: "casino",
+  casino_payout: "casino",
   // World event treasury and wallet payouts and charges have no in-world payer
   // or recipient.
   world_event_payout: "world_event",

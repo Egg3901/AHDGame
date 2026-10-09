@@ -118,6 +118,8 @@ export const ALL_TX_TYPES: readonly FinancialTxType[] = [
   "admin_transfer",
   "onboarding_reward",
   "contest_prize",
+  "casino_wager",
+  "casino_payout",
 
   // ── Party budget ───────────────────────────────────────────────────────
   "party_transfer",
@@ -266,6 +268,8 @@ export const TX_TYPE_LABELS: Record<FinancialTxType, string> = {
   admin_transfer: "Admin Transfer",
   onboarding_reward: "Onboarding Reward",
   contest_prize: "Contest Prize",
+  casino_wager: "Casino Stake",
+  casino_payout: "Casino Payout",
 
   party_transfer: "Party Transfer",
   party_gotv_spend: "Party GOTV Spend",

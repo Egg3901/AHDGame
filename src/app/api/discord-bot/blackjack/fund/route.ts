@@ -1,13 +1,13 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
-import { handleRouteError, errorResponse } from "@/lib/api/errors";
+import { errorResponse, handleRouteError } from "@/lib/api/errors";
 import { requireBotToken } from "@/lib/api/requireBotToken";
 import { checkRateLimit, rateLimitResponse, BOT_FINANCIAL_LIMITS } from "@/lib/api/rateLimit";
-import type { DiscordBotFund } from "@/lib/db/types/discordBotFund";
+import { loadHouse } from "@/lib/casino/house";
 
-// GET /api/discord-bot/blackjack/fund — Returns the current blackjack prize pool balance.
-// Auth: requireAdminOrApiKey (via X-Bot-Token header)
-// Errors: 401
+// GET /api/discord-bot/blackjack/fund — The casino house bank that blackjack and every other
+// house game pays from. `balance` is the anchor-unit bank; legacy totals are kept for history.
+// Auth: X-Bot-Token. Errors: 401
 export async function GET(request: Request) {
   try {
     if (!requireBotToken(request, false)) {
@@ -21,33 +21,16 @@ export async function GET(request: Request) {
     );
     if (!rateLimit.ok) return rateLimitResponse(rateLimit.retryAfter);
 
-    const db = await getDb();
-
-    const fund = await db
-      .collection<DiscordBotFund>("discordBotFunds")
-      .findOne({ name: "blackjack_prize_pool" });
-
-    if (!fund) {
-      return NextResponse.json({
-        found: false,
-        balance: 0,
-        message: "Prize pool not initialized",
-      });
-    }
-
+    const house = await loadHouse(await getDb());
+    const blackjack = house.games?.blackjack;
     return NextResponse.json({
       found: true,
-      balance: fund.balance,
-      currencyBalances: fund.currencyBalances ?? {
-        USD: 0,
-        GBP: 0,
-        JPY: 0,
-        EUR: 0,
-      },
-      totalWagered: fund.totalWagered ?? 0,
-      totalPaidOut: fund.totalPaidOut ?? 0,
-      totalCollected: fund.totalCollected ?? 0,
-      gamesPlayed: fund.gamesPlayed ?? 0,
+      balance: Math.floor(house.anchorBalance),
+      currency: "anchor",
+      totalWagered: house.totalWagered ?? 0,
+      totalPaidOut: house.totalPaidOut ?? 0,
+      totalCollected: house.totalCollected ?? 0,
+      gamesPlayed: (house.gamesPlayed ?? 0) + (blackjack?.played ?? 0),
     });
   } catch (error) {
     return handleRouteError(error);
