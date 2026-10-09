@@ -200,6 +200,15 @@ function describeSubsidyProvision(
   return `Grant subsidies to ${scopeLabel}${strategyLabel}${provision.domesticOnly ? " (domestic only)" : ""}`;
 }
 
+function sponsorProfileFields(
+  sponsor: Pick<Character, "sequentialId" | "avatarUrl"> | undefined
+): Pick<BillDisplay, "sponsorSequentialId" | "sponsorAvatarUrl"> {
+  return {
+    ...(sponsor?.sequentialId != null ? { sponsorSequentialId: sponsor.sequentialId } : {}),
+    ...(sponsor?.avatarUrl ? { sponsorAvatarUrl: sponsor.avatarUrl } : {}),
+  };
+}
+
 export async function listNationalLegislatureBills(
   db: Db,
   { countryId, chamber, page = 1, authUser }: NationalBillListArgs
@@ -419,6 +428,21 @@ export async function listNationalLegislatureBills(
     }
   }
 
+  const sponsorIds = [
+    ...new Set(bills.flatMap((b) => (b.sponsorId ? [b.sponsorId.toString()] : []))),
+  ];
+  const sponsorChars =
+    sponsorIds.length > 0
+      ? await db
+          .collection<Character>("characters")
+          .find(
+            { _id: { $in: sponsorIds.map((id) => new ObjectId(id)) } },
+            { projection: { _id: 1, sequentialId: 1, avatarUrl: 1 } }
+          )
+          .toArray()
+      : [];
+  const sponsorMap = new Map(sponsorChars.map((c) => [c._id.toString(), c]));
+
   const billDisplays: BillDisplay[] = bills.map((bill) => {
     const { origin: originTally, other: otherTally } = nationalBillListTallies(
       bill,
@@ -589,6 +613,7 @@ export async function listNationalLegislatureBills(
       currentChamber: bill.currentChamber,
       sponsorId: bill.sponsorId?.toString() ?? null,
       sponsorName: bill.sponsorName,
+      ...sponsorProfileFields(sponsorMap.get(bill.sponsorId?.toString() ?? "")),
       sponsorParty: partySlug,
       sponsorPartyName: party?.name ?? (partySlug || "Independent"),
       sponsorPartyColor: getPartyHex(partySlug, party?.color),
