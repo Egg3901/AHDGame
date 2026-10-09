@@ -5,6 +5,7 @@ let db: Db;
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn(async () => db) }));
 vi.mock("@/lib/api/requireBotToken", () => ({ requireBotToken: vi.fn(() => true) }));
 import { GET, PATCH } from "./route";
+import { GET as pendingResolutions } from "./pending-resolutions/route";
 const uri = process.env.FEDERATION_TEST_MONGO_URI;
 const request = (body: unknown) =>
   new Request("https://example.com/api/discord-bot/tickets", {
@@ -60,6 +61,41 @@ describe.skipIf(!uri)("Persistent ticket intake on isolated Mongo", () => {
   });
   const ticket = () => db.collection("tickets").findOne({ ticketNumber: 42 });
 
+  it("offers a deleted-channel receipt for DM delivery after the first permanent failure", async () => {
+    await db.collection("tickets").updateOne(
+      { ticketNumber: 42 },
+      {
+        $set: {
+          status: "resolved",
+          resolution: { message: "Issue fixed.", createdAt: new Date(), deliveredAt: null },
+          publicUpdates: [
+            {
+              kind: "resolution",
+              delivery: {
+                status: "failed",
+                attempts: 1,
+                error: 'discord 404: {"message":"Unknown Channel","code":10003}',
+              },
+            },
+          ],
+        },
+      }
+    );
+    const request = () =>
+      new Request("https://example.com/api/discord-bot/tickets/pending-resolutions");
+    const response = await (await pendingResolutions(request())).json();
+    expect(response.tickets.map((item: { ticketNumber: number }) => item.ticketNumber)).toEqual([
+      42,
+    ]);
+    await db
+      .collection("tickets")
+      .updateOne(
+        { ticketNumber: 42 },
+        { $set: { "publicUpdates.0.delivery.error": "discord 503: temporarily unavailable" } }
+      );
+    expect((await (await pendingResolutions(request())).json()).tickets).toEqual([]);
+  });
+
   it("preserves one receipt version and close event across sequential retries", async () => {
     const body = {
       action: "close",
@@ -101,22 +137,20 @@ describe.skipIf(!uri)("Persistent ticket intake on isolated Mongo", () => {
 
   it("keeps the exact receipt version and channel acknowledgement after delivery", async () => {
     const createdAt = new Date("2026-10-09T10:00:00.123Z");
-    await db
-      .collection("tickets")
-      .updateOne(
-        { ticketNumber: 42 },
-        {
-          $set: {
-            status: "closed",
-            resolution: {
-              message: "Issue fixed.",
-              createdAt,
-              deliveredAt: null,
-              channelDelivery: { status: "posted", postedAt: createdAt },
-            },
+    await db.collection("tickets").updateOne(
+      { ticketNumber: 42 },
+      {
+        $set: {
+          status: "closed",
+          resolution: {
+            message: "Issue fixed.",
+            createdAt,
+            deliveredAt: null,
+            channelDelivery: { status: "posted", postedAt: createdAt },
           },
-        }
-      );
+        },
+      }
+    );
     const response = await (
       await PATCH(
         request({
