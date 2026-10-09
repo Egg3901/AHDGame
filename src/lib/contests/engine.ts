@@ -6,13 +6,22 @@
 import type { Db } from "mongodb";
 import { ObjectId } from "mongodb";
 import * as Sentry from "@sentry/nextjs";
-import type { Character, Corporation, GovernmentApproval, User } from "@/lib/db/types";
+import type {
+  Bill,
+  Character,
+  Corporation,
+  GovernmentApproval,
+  PoliticalParty,
+  User,
+} from "@/lib/db/types";
+import type { StateBill } from "@/lib/db/types/stateBill";
 import type { CorporationHistory } from "@/lib/db/types/corporationHistory";
 import type {
   ContestBaseline,
   ContestKind,
   ContestRound,
   ContestStanding,
+  ContestWinner,
 } from "@/lib/db/types/contestRound";
 import type { CountryId } from "@/lib/constants/countries";
 import { getCountryDisplayName } from "@/lib/constants/countries";
@@ -27,11 +36,12 @@ import {
   corpGrowthScore,
   corpMinOpeningAnchor,
   gainScore,
-  pickWinner,
+  pickPlacings,
   rankStandings,
   roundBelongsToEarlierWorld,
   roundIsDue,
   splitCorpTiers,
+  wealthMinOpeningAnchor,
   altPairKey,
   countWeeklyReferrals,
   REFERRAL_ALT_LINK_THRESHOLD,
@@ -40,6 +50,8 @@ import {
 } from "./rules";
 import { awardReferralContest } from "./referralAward";
 import { payContestPrize } from "./prize";
+import { loadCharacterNetWorths, loadExternalInflows } from "./netWorth";
+import { announceContestResults, type SettledRoundResult } from "./announce";
 import { getContestRoundsCollection } from "./collection";
 
 type PlayerCharacter = Pick<
@@ -202,6 +214,67 @@ async function loadPlayerHeads(
   return out;
 }
 
+interface PartyRow {
+  partyId: string;
+  name: string;
+  chairId: string | null;
+  memberCount: number;
+}
+
+/** Parties by id, or every party when no ids are given. */
+async function loadParties(db: Db, partyIds?: string[]): Promise<Map<string, PartyRow>> {
+  const docs = await db
+    .collection<PoliticalParty>("politicalParties")
+    .find(partyIds ? { _id: { $in: partyIds.map((id) => new ObjectId(id)) } } : {}, {
+      projection: { _id: 1, name: 1, chairId: 1, memberCount: 1 },
+    })
+    .toArray();
+  return new Map(
+    docs.map((p) => [
+      p._id.toString(),
+      {
+        partyId: p._id.toString(),
+        name: p.name,
+        chairId: p.chairId?.toString() ?? null,
+        memberCount: p.memberCount ?? 0,
+      },
+    ])
+  );
+}
+
+/** Bills each player sponsored that were enacted in (since, until], national and state. */
+async function loadEnactedBillCounts(
+  db: Db,
+  world: ContestWorld,
+  since: Date,
+  until: Date
+): Promise<Map<string, number>> {
+  const window = { $gt: since, $lte: until };
+  const [national, state] = await Promise.all([
+    db
+      .collection<Bill>("bills")
+      .find(
+        { status: "signed", enactedAt: window, sponsorId: { $ne: null } },
+        { projection: { sponsorId: 1 } }
+      )
+      .toArray(),
+    db
+      .collection<StateBill>("stateBills")
+      .find({ enactedAt: window, sponsorId: { $ne: null } }, { projection: { sponsorId: 1 } })
+      .toArray(),
+  ]);
+  const counts = new Map<string, number>();
+  for (const bill of [...national, ...state]) {
+    const id = bill.sponsorId?.toString();
+    if (!id || !world.players.has(id)) continue;
+    counts.set(id, (counts.get(id) ?? 0) + 1);
+  }
+  return counts;
+}
+
+const playerObjectIds = (world: ContestWorld, ids?: string[]) =>
+  (ids ?? [...world.players.keys()]).map((id) => new ObjectId(id));
+
 // ── Opening a round ─────────────────────────────────────────────────────────
 
 async function openingBaselines(
@@ -258,7 +331,27 @@ async function openingBaselines(
     out.set("approval_gain", { baselines });
   }
 
-  // Referral rounds count new players from the opening; there is no baseline.
+  if (kinds.includes("wealth_growth")) {
+    const worths = await loadCharacterNetWorths(db, playerObjectIds(world));
+    const floor = wealthMinOpeningAnchor(world.preset);
+    out.set("wealth_growth", {
+      baselines: [...worths]
+        .filter(([, value]) => value >= floor)
+        .map(([id, value]) => ({ subjectId: id, characterId: id, value, injected: 0 })),
+    });
+  }
+
+  if (kinds.includes("party_growth")) {
+    const parties = await loadParties(db);
+    out.set("party_growth", {
+      baselines: [...parties.values()]
+        .filter((p) => p.chairId && world.players.has(p.chairId))
+        .map((p) => ({ subjectId: p.partyId, characterId: p.chairId!, value: p.memberCount })),
+    });
+  }
+
+  // Legislator and referral rounds count from the opening; there is no baseline.
+  if (kinds.includes("legislator_bills")) out.set("legislator_bills", { baselines: [] });
   if (kinds.includes("referrals_weekly")) out.set("referrals_weekly", { baselines: [] });
 
   return out;
@@ -379,6 +472,79 @@ async function computeStandings(
     return { standings: rankStandings(standings), baselines };
   }
 
+  if (kind === "wealth_growth") {
+    const ids = baselines.map((b) => b.subjectId);
+    const since = round.refreshedAt ?? round.startedAt;
+    const [worths, fresh] = await Promise.all([
+      loadCharacterNetWorths(db, playerObjectIds(world, ids)),
+      loadExternalInflows(db, playerObjectIds(world, ids), since, world.now),
+    ]);
+    // Inflows accumulate across refreshes, as corp injections do.
+    const updated = baselines.map((b) => ({
+      ...b,
+      injected: (b.injected ?? 0) + (fresh.get(b.subjectId) ?? 0),
+    }));
+    for (const b of updated) {
+      const c = world.players.get(b.characterId);
+      const current = worths.get(b.subjectId);
+      if (!c || current === undefined) continue;
+      const score = corpGrowthScore(b.value, current, b.injected ?? 0);
+      if (score === null) continue;
+      standings.push({
+        subjectId: b.subjectId,
+        subjectName: c.name,
+        characterId: b.characterId,
+        characterName: c.name,
+        baseline: b.value,
+        current,
+        score,
+      });
+    }
+    return { standings: rankStandings(standings), baselines: updated };
+  }
+
+  if (kind === "party_growth") {
+    const parties = await loadParties(
+      db,
+      baselines.map((b) => b.subjectId)
+    );
+    for (const b of baselines) {
+      const party = parties.get(b.subjectId);
+      if (!party || !approvalEntryEligible(b.characterId, party.chairId)) continue;
+      const chair = world.players.get(b.characterId);
+      if (!chair) continue;
+      const score = gainScore(b.value, party.memberCount);
+      if (score === null) continue;
+      standings.push({
+        subjectId: b.subjectId,
+        subjectName: party.name,
+        characterId: b.characterId,
+        characterName: chair.name,
+        baseline: b.value,
+        current: party.memberCount,
+        score,
+      });
+    }
+    return { standings: rankStandings(standings), baselines };
+  }
+
+  if (kind === "legislator_bills") {
+    const counts = await loadEnactedBillCounts(db, world, round.startedAt, world.now);
+    for (const [characterId, count] of counts) {
+      const c = world.players.get(characterId)!;
+      standings.push({
+        subjectId: characterId,
+        subjectName: c.name,
+        characterId,
+        characterName: c.name,
+        baseline: 0,
+        current: count,
+        score: count,
+      });
+    }
+    return { standings: rankStandings(standings), baselines };
+  }
+
   if (kind === "referrals_weekly") {
     return {
       standings: await referralStandings(db, world.playersByUser, round.startedAt),
@@ -484,18 +650,21 @@ export async function referralStandings(
 
 // ── Settlement ──────────────────────────────────────────────────────────────
 
-async function settleRound(db: Db, world: ContestWorld, round: ContestRound): Promise<boolean> {
+async function settleRound(
+  db: Db,
+  world: ContestWorld,
+  round: ContestRound
+): Promise<SettledRoundResult | null> {
   const { standings, baselines } = await computeStandings(db, world, round);
-  const leader = pickWinner(standings);
-  const winner = leader
-    ? {
-        characterId: leader.characterId,
-        characterName: leader.characterName,
-        subjectId: leader.subjectId,
-        subjectName: leader.subjectName,
-        score: leader.score,
-      }
-    : null;
+  const kind = round.kind as ContestKind;
+  const winners: ContestWinner[] = pickPlacings(kind, standings).map((s, i) => ({
+    rank: i + 1,
+    characterId: s.characterId,
+    characterName: s.characterName,
+    subjectId: s.subjectId,
+    subjectName: s.subjectName,
+    score: s.score,
+  }));
 
   // The status flip is the claim: only the process that moves the round out
   // of "active" pays, so a prize can never be paid twice.
@@ -510,39 +679,43 @@ async function settleRound(db: Db, world: ContestWorld, round: ContestRound): Pr
         baselines,
         standingsTurn: world.turn,
         refreshedAt: world.now,
-        winners: winner ? [winner] : [],
+        winners,
       },
     }
   );
-  if (claim.modifiedCount !== 1 || !winner) return claim.modifiedCount === 1;
+  if (claim.modifiedCount !== 1) return null;
 
-  const character = world.players.get(winner.characterId);
-  if (!character) return true;
-  try {
-    const paid = await payContestPrize(db, {
-      character,
-      round: { _id: round._id, kind: round.kind as ContestKind, roundNumber: round.roundNumber },
-      subjectName: winner.subjectName,
-      turn: world.turn,
-      preset: world.preset,
-      now: world.now,
-    });
-    await contestRounds(db).updateOne(
-      { _id: round._id },
-      {
-        $set: {
-          "winners.0.prizeAnchor": paid.anchorAmount,
-          "winners.0.prizeLocal": paid.localAmount,
-          "winners.0.currencyCode": paid.currencyCode,
-          ...(paid.credited ? { "winners.0.paidAt": world.now } : {}),
-        },
-      }
-    );
-  } catch (err) {
-    Sentry.captureException(err, { tags: { area: "contests", round: round._id } });
-    console.error(`[contests] prize payment failed for ${round._id}`, err);
+  for (const [i, winner] of winners.entries()) {
+    const character = world.players.get(winner.characterId);
+    if (!character) continue;
+    try {
+      const paid = await payContestPrize(db, {
+        character,
+        round: { _id: round._id, kind, roundNumber: round.roundNumber },
+        subjectName: winner.subjectName,
+        place: i + 1,
+        turn: world.turn,
+        preset: world.preset,
+        now: world.now,
+      });
+      await contestRounds(db).updateOne(
+        { _id: round._id },
+        {
+          $set: {
+            [`winners.${i}.prizeAnchor`]: paid.anchorAmount,
+            [`winners.${i}.prizeLocal`]: paid.localAmount,
+            [`winners.${i}.currencyCode`]: paid.currencyCode,
+            ...(paid.credited ? { [`winners.${i}.paidAt`]: world.now } : {}),
+          },
+        }
+      );
+      winners[i] = { ...winner, prizeAnchor: paid.anchorAmount };
+    } catch (err) {
+      Sentry.captureException(err, { tags: { area: "contests", round: round._id } });
+      console.error(`[contests] prize payment failed for ${round._id} place ${i + 1}`, err);
+    }
   }
-  return true;
+  return { kind, roundNumber: round.roundNumber, standings, winners };
 }
 
 // ── Iteration referral contest ──────────────────────────────────────────────
@@ -710,6 +883,7 @@ export async function runContests(
     .toArray();
 
   const stillActive = new Set<string>();
+  const settled: SettledRoundResult[] = [];
   for (const round of active) {
     const otherIteration =
       !!round.iterationKey && !!world.iterationKey && round.iterationKey !== world.iterationKey;
@@ -722,7 +896,11 @@ export async function runContests(
       continue;
     }
     if (roundIsDue(round.endsAt.getTime(), now.getTime())) {
-      if (await settleRound(db, world, round)) summary.settled++;
+      const result = await settleRound(db, world, round);
+      if (result) {
+        summary.settled++;
+        settled.push(result);
+      }
       continue;
     }
     const { standings, baselines } = await computeStandings(db, world, round);
@@ -733,6 +911,11 @@ export async function runContests(
     stillActive.add(round.kind);
     summary.refreshed++;
   }
+
+  await announceContestResults(
+    settled,
+    new Map([...players.values()].map((c) => [c._id.toString(), c.userId]))
+  );
 
   const missing = CONTEST_KINDS.filter((k) => !stillActive.has(k));
   summary.opened = await openRounds(db, world, missing);
