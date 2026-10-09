@@ -1730,4 +1730,66 @@ describe("accumulateGeneralElectionVotes", () => {
     const { initElectionVoteTally } = await import("@/lib/electionEngine");
     expect(initElectionVoteTally).toHaveBeenCalledWith(electionId, [candidate], "CA");
   });
+
+  describe("half-hour results tick", () => {
+    async function runEarly(tally: Record<string, unknown> | null) {
+      const electionId = new ObjectId();
+      const election = {
+        _id: electionId,
+        electionType: "senate",
+        status: "active",
+        countryId: "US",
+        state: "CA",
+        primaryEndTurn: 10,
+        endTurn: 40,
+        endTime: new Date(NOW.getTime() + 100000),
+      };
+      const candidate = { _id: new ObjectId(), electionId, characterName: "A", status: "active" };
+      for (const name of [
+        "demographicCategories",
+        "states",
+        "stateDemographics",
+        "statePartyOrg",
+      ]) {
+        db.collectionMocks[name] = db.collection(name);
+        db.collectionMocks[name].find.mockReturnValue(makeCursor([]));
+      }
+      db.collectionMocks["elections"] = db.collection("elections");
+      db.collectionMocks["elections"].find.mockReturnValue(makeCursor([election]));
+      db.collectionMocks["electionVoteTallies"] = db.collection("electionVoteTallies");
+      db.collectionMocks["electionVoteTallies"].find.mockReturnValue(
+        makeCursor(tally ? [{ _id: new ObjectId(), electionId, ...tally }] : [])
+      );
+      db.collectionMocks["electionCandidates"] = db.collection("electionCandidates");
+      db.collectionMocks["electionCandidates"].find.mockReturnValue(makeCursor([candidate]));
+      await accumulateGeneralElectionVotes(NOW, 10, undefined, { slice: "early" });
+      const { accumulateVoteTurn, initElectionVoteTally } = await import("@/lib/electionEngine");
+      return { electionId, accumulateVoteTurn, initElectionVoteTally };
+    }
+
+    it.each([
+      ["no tally yet", null],
+      [
+        "a tally holding only primary ballots",
+        { totalVotes: {}, turnSnapshots: [], primaryVotes: { a: 10 } },
+      ],
+    ])("leaves a race with %s to the turn", async (_label, tally) => {
+      const { accumulateVoteTurn, initElectionVoteTally } = await runEarly(tally);
+      expect(accumulateVoteTurn).not.toHaveBeenCalled();
+      expect(initElectionVoteTally).not.toHaveBeenCalled();
+    });
+
+    it("banks the early half once the race has counted a general turn", async () => {
+      const { electionId, accumulateVoteTurn } = await runEarly({
+        totalVotes: { a: 5 },
+        turnSnapshots: [{ turn: 9 }],
+      });
+      expect(accumulateVoteTurn).toHaveBeenCalledWith(
+        electionId,
+        10,
+        NOW,
+        expect.objectContaining({ slice: "early" })
+      );
+    });
+  });
 });

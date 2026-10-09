@@ -104,6 +104,7 @@ import {
 } from "@/lib/electionEngine/demographicsV2Preload";
 
 import { scopeFilter, type ElectionSweepScope } from "./electionSweepScope";
+import { hasBankedGeneralTurn } from "@/lib/electionEngine/rules/turnSlice";
 
 export type { ElectionSweepScope } from "./electionSweepScope";
 export { recordPrimarySnapshots } from "./primarySnapshots";
@@ -1132,7 +1133,11 @@ export async function accumulateGeneralElectionVotes(
       const existing = tallyByElection.get(election._id.toString());
       const activeCandidates = candidatesByElection.get(election._id.toString()) ?? [];
 
-      if (early && (!existing || usesLegacyPresidentialCampaign(election))) return;
+      // The early half only extends a race already counting general turns:
+      // a tally holding just primary ballots still has its primary to
+      // resolve on the turn, which stamps or resets the tally.
+      if (early && (!hasBankedGeneralTurn(existing) || usesLegacyPresidentialCampaign(election)))
+        return;
       if (usesLegacyPresidentialCampaign(election)) {
         if (!existing && activeCandidates.length > 0) {
           await initPresidentVoteTally(election._id, activeCandidates);

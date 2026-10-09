@@ -51,6 +51,7 @@ import {
 } from "./singleSeatIncumbency";
 import { getFundsByPartyForElection } from "./fundsByParty";
 import { TALLY_WITH_SNAPSHOT_TURNS_ONLY } from "./tallyProjections";
+import { planTurnSlice, sameTurnSliceParts } from "./rules/turnSlice";
 import { accumulateHuBallots } from "@/lib/countries/hu/rules/accumulateBallots2014";
 import { allocateHuListTurnVotes } from "@/lib/countries/hu/rules/listBallots2014";
 import {
@@ -199,14 +200,12 @@ export async function accumulateVoteTurn(
   // A turn may be split in two: the half-hour results tick banks an "early"
   // half ahead of the turn, and the turn then banks the "rest". Each half is
   // counted once; a whole or "rest" snapshot means the turn is fully counted.
-  const sameTurn = tally.turnSnapshots?.filter((s) => s.turn === turnNumber) ?? [];
-  if (
-    options?.slice === "early" ? sameTurn.length > 0 : sameTurn.some((s) => s.slicePart !== "early")
-  )
-    return;
-  const slicePart: VoteTurnSnapshot["slicePart"] =
-    options?.slice === "early" ? "early" : sameTurn.length > 0 ? "rest" : undefined;
-  const sliceFraction = slicePart ? 0.5 : 1;
+  const slicePlan = planTurnSlice(
+    sameTurnSliceParts(tally.turnSnapshots, turnNumber),
+    options?.slice
+  );
+  if (!slicePlan) return;
+  const { slicePart, fraction: sliceFraction } = slicePlan;
 
   const election =
     options?.election ?? (await db.collection<Election>("elections").findOne({ _id: electionId }));
