@@ -10,7 +10,7 @@ import { payContestPrize } from "./prize";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
 import { emitTx } from "@/lib/financialTxLog/emit";
 import { createNotification } from "@/lib/notifications";
-import { contestPrizeAnchor } from "./rules";
+import { placePrizeAnchor } from "./rules";
 
 const character = {
   _id: new ObjectId(),
@@ -23,6 +23,7 @@ const input = {
   character,
   round: { _id: "influence_gain:3", kind: "influence_gain" as const, roundNumber: 3 },
   subjectName: "Hiro",
+  place: 1,
   turn: 120,
   preset: undefined,
   now: new Date("2026-10-09T00:00:00Z"),
@@ -43,7 +44,7 @@ describe("payContestPrize", () => {
 
     const result = await payContestPrize(db as unknown as Db, input);
 
-    const anchor = contestPrizeAnchor("influence_gain", undefined);
+    const anchor = placePrizeAnchor("influence_gain", 1, undefined);
     expect(result).toEqual({
       credited: true,
       anchorAmount: anchor,
@@ -62,11 +63,25 @@ describe("payContestPrize", () => {
         amount: anchor * 150,
         currencyCode: "JPY",
         anchorAmount: anchor,
-        meta: { roundId: "influence_gain:3", kind: "influence_gain" },
+        meta: { roundId: "influence_gain:3", kind: "influence_gain", place: 1 },
       })
     );
     expect(createNotification).toHaveBeenCalledWith(
       expect.objectContaining({ userId: character.userId })
+    );
+  });
+
+  it("pays a place its share and says where it finished", async () => {
+    vi.mocked(isForexEnabled).mockResolvedValue(false);
+
+    const result = await payContestPrize(db as unknown as Db, { ...input, place: 2 });
+
+    expect(result.anchorAmount).toBe(placePrizeAnchor("influence_gain", 2, undefined));
+    expect(createNotification).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: "You placed in a weekly contest",
+        message: expect.stringContaining("finished second"),
+      })
     );
   });
 
