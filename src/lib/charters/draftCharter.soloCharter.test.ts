@@ -107,7 +107,7 @@ describe("draftCharter solo charter testing flag", () => {
 
   it("flag set on the production service: still requires 3 founders", async () => {
     vi.stubEnv("AHD_SANDBOX_SOLO_CHARTER", "1");
-    vi.stubEnv("RAILWAY_SERVICE_NAME", "Main Site");
+    vi.stubEnv("RAILWAY_SERVICE_NAME", "AHD Production");
     const id = new ObjectId();
     const { db } = makeDb([id]);
     const result = await draftCharter({ ...base, foundersCharacterIds: [id], proposedBy: id }, db);

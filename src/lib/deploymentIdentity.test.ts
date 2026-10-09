@@ -118,11 +118,21 @@ describe("isSoloCharterTestingEnabled", () => {
     expect(isSoloCharterTestingEnabled(env({ AHD_SANDBOX_SOLO_CHARTER: "1" }))).toBe(true);
   });
 
-  it("is forced off on the production service", () => {
+  it("is on for the staging service under its current name", () => {
     expect(
       isSoloCharterTestingEnabled(
-        env({ AHD_SANDBOX_SOLO_CHARTER: "1", RAILWAY_SERVICE_NAME: "Main Site" })
+        env({ AHD_SANDBOX_SOLO_CHARTER: "1", RAILWAY_SERVICE_NAME: "AHD Staging" })
       )
-    ).toBe(false);
+    ).toBe(true);
+  });
+
+  it("is forced off on the production service under any name", () => {
+    for (const name of ["Main Site", "AHD Production", "Renamed Live Game"]) {
+      expect(
+        isSoloCharterTestingEnabled(
+          env({ AHD_SANDBOX_SOLO_CHARTER: "1", RAILWAY_SERVICE_NAME: name })
+        )
+      ).toBe(false);
+    }
   });
 });
