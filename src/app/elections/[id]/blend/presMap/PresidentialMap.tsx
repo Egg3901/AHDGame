@@ -38,6 +38,7 @@ import { usePanZoom } from "./usePanZoom";
 import { MIN_ZOOM, MAX_ZOOM, visibleBox } from "./mapView";
 import { COUNTY_ZOOM, CountyPaths, countyOpacity, useCountyRows } from "./CountyLayer";
 import type { CountyRow } from "./countyModel";
+import type { CountySource } from "./countyStore";
 
 /** Container width at which the state overview sits over the map instead of rising as a sheet. */
 const PANEL_MIN_WIDTH = 640;
@@ -84,6 +85,8 @@ export interface PresidentialMapProps {
   counties?: boolean;
   /** Told whenever the open state changes. */
   onSelectState?: (stateId: string | null) => void;
+  /** Where county results come from; defaults to the race's general tally. */
+  countySource?: CountySource;
 }
 
 type Hover = { id: string; county?: string; x: number; y: number } | null;
@@ -138,6 +141,7 @@ export function PresidentialMap({
   variant = "inline",
   counties = variant === "stage",
   onSelectState,
+  countySource,
 }: PresidentialMapProps) {
   const stage = variant === "stage";
   const frameRef = useRef<HTMLDivElement>(null);
@@ -242,7 +246,7 @@ export function PresidentialMap({
       .map((g) => g.id)
       .sort();
   }, [stage, counties, geo, k, pz.view, frameW, frameH, states, selected]);
-  const countyRows = useCountyRows(electionId, turn, countyStates, candidate);
+  const countyRows = useCountyRows(electionId, turn, countyStates, candidate, countySource);
   // Rows for states that are in view now; ones loaded earlier stay cached.
   const shownCountyRows = useMemo(() => {
     const out: Record<string, CountyRow[]> = {};
