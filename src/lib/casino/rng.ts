@@ -3,7 +3,8 @@ import { randomInt } from "node:crypto";
 /** Uniform draw in [0, 1). Games take it as a parameter so tests can pin outcomes. */
 export type Rng = () => number;
 
-const RNG_SPAN = 2 ** 48;
+/** `randomInt` requires max - min below 2^48. */
+const RNG_SPAN = 2 ** 48 - 1;
 
 /** Cryptographic RNG. The bot never decides an outcome, so the draw must not be predictable. */
 export const cryptoRng: Rng = () => randomInt(0, RNG_SPAN) / RNG_SPAN;
