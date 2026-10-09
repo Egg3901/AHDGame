@@ -278,7 +278,8 @@ jobs:
       - run: npm ci --no-audit --no-fund
       - name: Start isolated Mongo replica set
         run: |
-          docker run --detach --name federation-mongo --publish 27991:27017 mongo:8.0 --replSet federationQualification --bind_ip_all
+          # Google's Docker Hub mirror: same mongo:8.0 digest, no anonymous pull limit.
+          docker run --detach --name federation-mongo --publish 27991:27017 mirror.gcr.io/library/mongo:8.0 --replSet federationQualification --bind_ip_all
           # Wait until the entrypoint finishes chown before mongosh can create
           # files in /data/db. Probing earlier can make that chown fail.
           mongo_started=0

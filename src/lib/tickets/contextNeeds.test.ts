@@ -60,6 +60,42 @@ describe("inferCreationContextNeeds", () => {
       inferCreationContextNeeds({ ...base, description: "See https://game.example/character/5." })
     ).toContain("page");
   });
+
+  it("does not read the bot's platform line as a page word (ticket 1448)", () => {
+    for (const label of [
+      "Desktop: web browser",
+      "Mobile: web browser",
+      "Mobile: Android app",
+      "Mobile: iOS app",
+    ]) {
+      expect(
+        inferCreationContextNeeds({
+          title: "Profit Margin Calculations don't make sense to me",
+          description: `Platform: ${label}\n\nProfit Margin Calculations don't make sense to me`,
+          hasGameIdentity: true,
+        })
+      ).toEqual([]);
+    }
+    // The player's own words still count.
+    expect(
+      inferCreationContextNeeds({
+        title: "Broken",
+        description: "Platform: Desktop: web browser\n\nThe market screen does not load.",
+        hasGameIdentity: true,
+      })
+    ).toContain("page");
+  });
+
+  it("does not ask for a page the recent visits already suggest", () => {
+    expect(
+      inferCreationContextNeeds({
+        title: "Market page",
+        description: "The market screen does not load.",
+        hasGameIdentity: true,
+        suggestedPagePath: "/market",
+      })
+    ).not.toContain("page");
+  });
 });
 
 describe("creationContextKey", () => {

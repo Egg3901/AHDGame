@@ -132,8 +132,17 @@ export function buildFreightBillingBySector(args: {
  * A sector's two freight billing legs plus the `$set` payload that persists
  * them, resolved from the market context maps the corp-phase entry populated.
  *
- * ₳/turn on `charge`/`credit` (they ride the sector's cost and revenue rails);
- * the persisted lines are on the same daily basis and host currency as
+ * The maps hold DAILY money. The sourcing pass settles the world commodity
+ * ledger, and the ledger counts units per day (the same basis as `revenue`,
+ * `producedUnits` and the plants input bill before it is divided by
+ * TURNS_PER_DAY), so the state shipping bill it books is a day's bill. The
+ * returned `charge`/`credit` are that day's money spread over the day's turns,
+ * ₳/turn, because they ride the hourly cost and revenue rails. Charging the
+ * whole daily bill every turn billed freight 24 times over (ticket 1448: a
+ * California vehicle plant paid 26.9% of its revenue in freight, 45% of its
+ * entire input bill).
+ *
+ * The persisted lines are the daily amounts, same basis and host currency as
  * `revenue` / `laborCost`, so a later financials bridge can show "freight"
  * instead of a blended haircut. Only billing worlds populate the maps, so a
  * world with the flag off writes nothing new, except to clear a value it
@@ -153,23 +162,25 @@ export function resolveSectorFreightBillingLegs(args: {
   const { market, sector, embargoLegacyMothball, currentTurn, sectorCurrencyCode, sectorFxRate } =
     args;
   const sectorId = sector._id.toString();
-  const charge = embargoLegacyMothball
+  const dailyCharge = embargoLegacyMothball
     ? 0
     : (market.freightBillingChargeBySectorId?.get(sectorId) ?? 0);
-  const credit = embargoLegacyMothball
+  const dailyCredit = embargoLegacyMothball
     ? 0
     : (market.freightBillingCreditBySectorId?.get(sectorId) ?? 0);
+  const charge = dailyCharge / TURNS_PER_DAY;
+  const credit = dailyCredit / TURNS_PER_DAY;
   const active =
     market.freightBillingChargeBySectorId != null || market.freightBillingCreditBySectorId != null;
   const sectorUpdate: Record<string, unknown> = {};
   if (active) {
     sectorUpdate.freightBillingCharge = writeCorpEconomicLocal(
-      charge * TURNS_PER_DAY,
+      dailyCharge,
       sectorCurrencyCode,
       sectorFxRate
     );
     sectorUpdate.freightBillingCredit = writeCorpEconomicLocal(
-      credit * TURNS_PER_DAY,
+      dailyCredit,
       sectorCurrencyCode,
       sectorFxRate
     );

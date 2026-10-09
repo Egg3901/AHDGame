@@ -44,7 +44,7 @@ const SETTING_OPTIONS: SettingOption[] = [
   },
   {
     key: "orgBuilding",
-    label: "Org building budget",
+    label: "Organization building budget",
     max: MAX_ORG_BUILDING_PERCENT,
     help: "% of state party revenue spent building organization",
   },

@@ -55,6 +55,7 @@ import type {
 } from "@/lib/db/types";
 import type { ImperialCharacter } from "@/lib/db/types/imperialCharacter";
 import { buildTurnBriefing } from "@/lib/client/turnBriefing";
+import { loadWidgetExtras } from "@/lib/client/widgetExtras";
 
 // GET /api/client-status — Returns status bar enrichment data (funds, corp, election stats, income).
 // Auth: requireBasicAuth
@@ -64,9 +65,10 @@ export async function GET(request: Request) {
     const auth = await requireBasicAuth();
     if (!auth.ok) return auth.response;
 
-    const requestedLayout = normalizeStatusBarLayout(
-      new URL(request.url).searchParams.get("layout")
-    );
+    const params = new URL(request.url).searchParams;
+    const requestedLayout = normalizeStatusBarLayout(params.get("layout"));
+    // The phone widgets also show the turn clock and inbox counts.
+    const includeWidgetExtras = params.get("widgets") === "1";
     const includeCorp =
       requestedLayout === "standard" || requestedLayout === "corp" || requestedLayout === "full";
     const includeCorpMarket = requestedLayout === "corp" || requestedLayout === "full";
@@ -88,11 +90,16 @@ export async function GET(request: Request) {
             activeCharacterId: 1,
             activeCharacterType: 1,
             activeImperialCharacterId: 1,
+            ...(includeWidgetExtras ? { notificationPreferences: 1 } : {}),
           },
         }
       ),
       isForexEnabled(),
     ]);
+    // A failed count leaves the widget fields out rather than failing the poll.
+    const widgetExtras = includeWidgetExtras
+      ? loadWidgetExtras(db, new ObjectId(userId), user?.notificationPreferences).catch(() => null)
+      : Promise.resolve(null);
     const forexRates = forexEnabled ? await loadFxRatesRecord(db) : undefined;
 
     // Check for imperial mode first
@@ -354,6 +361,7 @@ export async function GET(request: Request) {
           turnBriefing: buildTurnBriefing(corpNav, null),
           marketWatch,
           isImperial: true,
+          ...(await widgetExtras),
         },
         { headers: { "Cache-Control": "private, no-store, no-transform" } }
       );
@@ -409,6 +417,7 @@ export async function GET(request: Request) {
           electionStats: null,
           turnBriefing: buildTurnBriefing(null, null),
           marketWatch: [],
+          ...(await widgetExtras),
         },
         { cacheControl: "private, no-cache" }
       );
@@ -919,6 +928,7 @@ export async function GET(request: Request) {
       electionStats,
       turnBriefing: buildTurnBriefing(corpNav, electionStats),
       marketWatch,
+      ...(await widgetExtras),
     };
     // Large per-user status payload. Switch from no-store to a private ETag:
     // stays private (never shared-cached, no cross-user key), but a bodyless

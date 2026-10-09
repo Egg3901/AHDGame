@@ -50,6 +50,16 @@ export function platformFromDescriptionPrefix(description: string): TicketPlatfo
 }
 
 /**
+ * The description without the bot's "Platform: <label>" line, for anything
+ * that reads the player's own words. The labels contain "web browser" and
+ * "Mobile", which read as page words and asked for a page on reports that
+ * named none (ticket 1448).
+ */
+export function stripPlatformPrefix(description: string): string {
+  return description.replace(/^Platform:\s*[^\n]+\n+/i, "");
+}
+
+/**
  * Platform from a user agent. AHDClient appends `AHDClient-Mobile/<v>` (iOS
  * and Android) or `AHDClient-Desktop/<v>`; the old Capacitor Android app sends
  * `AHD-Android`. Single player is the desktop client talking to its own local

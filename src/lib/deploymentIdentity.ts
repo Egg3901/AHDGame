@@ -2,7 +2,7 @@
  * Which deployment this process is — the one thing a database restore cannot
  * carry with it.
  *
- * Railway sets `RAILWAY_SERVICE_NAME` per service ("Main Site", "Sandbox
+ * Railway sets `RAILWAY_SERVICE_NAME` per service ("AHD Production", "AHD
  * Staging"). `RAILWAY_ENVIRONMENT_NAME` is "production" on every service in this
  * project, so it is only a fallback, and anything off Railway (a local `next
  * dev`, a script) is "local".
@@ -52,17 +52,26 @@ export function ownsConfiguredWebhooks(owner: string | undefined): boolean {
   return false;
 }
 
-/** Service slug of the live game. The solo charter waiver never applies here. */
-const PRODUCTION_SERVICE_SLUG = "main-site";
+/**
+ * Deployments where the solo charter waiver may apply. An allowlist, not a
+ * production denylist: the live service has been renamed before ("Main Site"
+ * to "AHD Production"), and a rename must leave the waiver off, not on.
+ */
+const SOLO_CHARTER_SERVICE_SLUGS: ReadonlySet<string> = new Set([
+  "ahd-staging",
+  "sandbox-staging",
+  "local",
+]);
 
 /**
  * True when this deployment lets one tester found a party alone (1 to 3
  * founders instead of exactly 3). Opt-in through the dedicated
- * `AHD_SANDBOX_SOLO_CHARTER` variable, set to exactly "1" or "true". Forced
- * off on the production service even if the variable leaks onto it.
+ * `AHD_SANDBOX_SOLO_CHARTER` variable, set to exactly "1" or "true", and only
+ * on a known non-production service, so the variable leaking onto the live
+ * game (under any name) changes nothing.
  */
 export function isSoloCharterTestingEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
   const flag = env.AHD_SANDBOX_SOLO_CHARTER;
   if (flag !== "1" && flag !== "true") return false;
-  return deploymentServiceSlug(env) !== PRODUCTION_SERVICE_SLUG;
+  return SOLO_CHARTER_SERVICE_SLUGS.has(deploymentServiceSlug(env));
 }

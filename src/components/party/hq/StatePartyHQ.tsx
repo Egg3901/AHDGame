@@ -334,16 +334,16 @@ export function StatePartyHQ({
       if (done === 0) {
         // Nothing succeeded — surface the real reason (e.g. insufficient PS) and
         // keep the selection so the player can retry after fixing it.
-        showToast(firstError || "Build Org failed in all selected states", "error");
+        showToast(firstError || "Build Organization failed in all selected states", "error");
         return;
       }
 
       const cashPart = spentCash > 0 ? ` and ${fmtLocalMoney(spentCash, countryId)}` : "";
       showToast(
         failed > 0
-          ? `Built org in ${done} states from national PS${cashPart} · ${failed} failed`
-          : `Built org in ${done} states from national PS` +
-              (spent > 0 ? ` (−${spent.toFixed(0)} Nat'l PS${cashPart})` : ""),
+          ? `Built organization in ${done} states with national party PS${cashPart} · ${failed} failed`
+          : `Built organization in ${done} states with national party PS` +
+              (spent > 0 ? ` (−${spent.toFixed(0)} PS${cashPart})` : ""),
         failed > 0 ? "info" : "success"
       );
       setBulkMode(null);
@@ -381,8 +381,8 @@ export function StatePartyHQ({
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Tile label="Avg organization" value={`${totals.avgOrg.toFixed(1)}%`} />
         <Tile label="Total treasury" value={fmtMoney(totals.treasury)} />
-        <Tile label="State PS (sum)" value={totals.ps.toFixed(0)} />
-        <Tile label="National PS" value={nationalPs.toFixed(1)} />
+        <Tile label="State parties' PS (total)" value={totals.ps.toFixed(0)} />
+        <Tile label="National party PS" value={nationalPs.toFixed(1)} />
       </div>
 
       {/* Priority banner */}
@@ -421,7 +421,7 @@ export function StatePartyHQ({
                   onClick={() => setColorBy(c)}
                   className={`rounded px-2 py-1 ${colorBy === c ? "bg-primary text-white" : "text-muted"}`}
                 >
-                  {c === "org" ? "Org%" : "Reg%"}
+                  {c === "org" ? "Organization" : "Registration"}
                 </button>
               ))}
             </div>
@@ -448,8 +448,8 @@ export function StatePartyHQ({
           {canSpendPs && bulkMode && estimate && (
             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-card-border pb-2 text-xs">
               <span className="font-medium">
-                Build org · nat&apos;l PS · {estimate.states} states · Est.{" "}
-                <b className="tabular-nums">{estimate.totalPS} Nat&apos;l PS</b>
+                Build organization in {estimate.states} states with national party PS · Est.{" "}
+                <b className="tabular-nums">{estimate.totalPS} PS</b>
                 <span className="text-muted"> (have {nationalPs.toFixed(1)})</span>
                 {estimate.totalCash > 0 ? (
                   <>
@@ -468,12 +468,12 @@ export function StatePartyHQ({
                   <>
                     avg{" "}
                     <b className="tabular-nums">
-                      +{(estimate.totalDelta / estimate.states).toFixed(2)} Org
+                      +{(estimate.totalDelta / estimate.states).toFixed(2)}% Organization
                     </b>{" "}
                     each
                   </>
                 ) : (
-                  <b className="tabular-nums">+{estimate.totalDelta.toFixed(2)} Org</b>
+                  <b className="tabular-nums">+{estimate.totalDelta.toFixed(2)}% Organization</b>
                 )}
                 {estimate.skipped.length > 0 ? ` · ${estimate.skipped.length} skipped` : ""}
                 {estimate.pending.length > 0 ? " · estimating…" : ""}
@@ -497,7 +497,7 @@ export function StatePartyHQ({
                 >
                   {busy
                     ? "Working…"
-                    : `Confirm (${estimate.totalPS} Nat'l PS${estimate.totalCash > 0 ? ` · ${fmtLocalMoney(estimate.totalCash, countryId)}` : ""})`}
+                    : `Confirm (${estimate.totalPS} national PS${estimate.totalCash > 0 ? ` · ${fmtLocalMoney(estimate.totalCash, countryId)}` : ""})`}
                 </button>
                 <button
                   className="text-muted hover:text-foreground"

@@ -3,6 +3,7 @@ import { ObjectId } from "mongodb";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { providerConfigured, sendNativePush } from "./providers";
 import type { PushDevice } from "./types";
+import type { PushPreview } from "./policy";
 const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
 const device: PushDevice = {
   _id: "hash",
@@ -17,6 +18,16 @@ const device: PushDevice = {
   expiresAt: new Date(),
   nextAttemptAt: new Date(),
   leaseUntil: new Date(),
+};
+const preview: PushPreview = {
+  title: "Vote open",
+  subtitle: "Legislation · 1 more in your inbox",
+  body: "The Senate is voting on H.R. 12.",
+  path: "/notifications",
+  href: "/congress/bills/12",
+  thread: "legislation",
+  count: 2,
+  id: "0123456789abcdef01234567",
 };
 const fetchMock = vi.fn<typeof fetch>();
 beforeEach(() => {
@@ -33,14 +44,23 @@ afterEach(() => {
   vi.unstubAllEnvs();
 });
 describe("FCM provider delivery", () => {
-  it("authenticates and sends only the fixed preview with a short delivery lifetime", async () => {
+  it("authenticates and sends the alert as string data with a short delivery lifetime", async () => {
     fetchMock.mockResolvedValueOnce(Response.json({ name: "accepted" }));
-    expect(await sendNativePush(device)).toBe("sent");
+    expect(await sendNativePush(device, preview)).toBe("sent");
     const [url, request] = fetchMock.mock.calls[1];
     expect(url).toBe("https://fcm.googleapis.com/v1/projects/example-project/messages:send");
     const payload = JSON.parse(String(request?.body));
     expect(payload.message.android.ttl).toBe("300s");
-    expect(payload.message.data.path).toBe("/notifications");
+    expect(payload.message.data).toEqual({
+      title: "Vote open",
+      subtitle: "Legislation · 1 more in your inbox",
+      body: "The Senate is voting on H.R. 12.",
+      path: "/notifications",
+      href: "/congress/bills/12",
+      thread: "legislation",
+      count: "2",
+      id: "0123456789abcdef01234567",
+    });
     expect(payload.message).not.toHaveProperty("notification");
     expect(payload.message).not.toHaveProperty("userId");
     expect(request?.redirect).toBe("error");
@@ -49,16 +69,16 @@ describe("FCM provider delivery", () => {
     fetchMock.mockResolvedValueOnce(
       Response.json({ error: { details: [{ errorCode: "UNREGISTERED" }] } }, { status: 404 })
     );
-    expect(await sendNativePush(device)).toBe("invalid");
+    expect(await sendNativePush(device, preview)).toBe("invalid");
   });
   it("keeps devices on provider outages and authentication errors", async () => {
     fetchMock.mockResolvedValueOnce(Response.json({ error: "outage" }, { status: 503 }));
-    expect(await sendNativePush(device)).toBe("retry");
+    expect(await sendNativePush(device, preview)).toBe("retry");
   });
   it("does no network work until explicitly enabled and configured", async () => {
     vi.stubEnv("NATIVE_PUSH_ENABLED", "false");
     expect(providerConfigured("fcm")).toBe(false);
-    expect(await sendNativePush(device)).toBe("retry");
+    expect(await sendNativePush(device, preview)).toBe("retry");
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });

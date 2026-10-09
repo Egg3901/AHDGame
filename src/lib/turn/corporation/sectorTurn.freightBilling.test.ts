@@ -137,8 +137,10 @@ function run(
 }
 
 describe("sector turn — canonical freight billing, flag ON", () => {
-  const CHARGE = 120; // ₳/turn
-  const CREDIT = 45; // ₳/turn
+  // The apportioned maps carry DAILY money: the sourcing pass settles the
+  // daily commodity ledger, so its state bills are a day's shipping.
+  const CHARGE = 2_880; // ₳/day
+  const CREDIT = 1_080; // ₳/day
   const sectorKey = SECTOR_ID.toString();
 
   it("persists both legs as named daily lines and stamps the turn", () => {
@@ -146,19 +148,29 @@ describe("sector turn — canonical freight billing, flag ON", () => {
       charge: new Map([[sectorKey, CHARGE]]),
       credit: new Map([[sectorKey, CREDIT]]),
     });
-    expect(update.freightBillingCharge as number).toBeCloseTo(CHARGE * TURNS_PER_DAY, 8);
-    expect(update.freightBillingCredit as number).toBeCloseTo(CREDIT * TURNS_PER_DAY, 8);
+    expect(update.freightBillingCharge as number).toBeCloseTo(CHARGE, 8);
+    expect(update.freightBillingCredit as number).toBeCloseTo(CREDIT, 8);
     expect(update.freightBillingTurn).toBe(1000);
   });
 
-  it("charge rides sector costs, credit rides sector revenue", () => {
+  it("charge rides sector costs, credit rides sector revenue, one turn's share each", () => {
     const baseline = run(makeSector());
     const billed = run(makeSector(), {
       charge: new Map([[sectorKey, CHARGE]]),
       credit: new Map([[sectorKey, CREDIT]]),
     });
-    expect(billed.result.costs - baseline.result.costs).toBeCloseTo(CHARGE, 8);
-    expect(billed.result.hourlyRevenue - baseline.result.hourlyRevenue).toBeCloseTo(CREDIT, 8);
+    expect(billed.result.costs - baseline.result.costs).toBeCloseTo(CHARGE / TURNS_PER_DAY, 8);
+    expect(billed.result.hourlyRevenue - baseline.result.hourlyRevenue).toBeCloseTo(
+      CREDIT / TURNS_PER_DAY,
+      8
+    );
+  });
+
+  it("a full day of turns pays the daily bill once, not once per turn (ticket 1448)", () => {
+    const baseline = run(makeSector());
+    const billed = run(makeSector(), { charge: new Map([[sectorKey, CHARGE]]) });
+    const perTurn = billed.result.costs - baseline.result.costs;
+    expect(perTurn * TURNS_PER_DAY).toBeCloseTo(CHARGE, 6);
   });
 
   it("a sector with no apportioned money persists explicit zero legs", () => {

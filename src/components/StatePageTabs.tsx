@@ -173,7 +173,7 @@ export function StatePageTabs({
                     ...sharedConfig,
                     headingLabel: `State Party Organizations in ${state.name}`,
                     description:
-                      "infrastructure, volunteers, and ground-game capacity. Build Org adds a fixed unit to your accumulated regional bucket. Organization can decay if your party becomes inactive here.",
+                      "Organization is each party's ground game in this state: infrastructure, volunteers, and campaign capacity. Party officers grow it with Build Organization, which spends Political Strength (PS). A party that stops building here slowly loses share.",
                     partyFlavor: makeUSPartyFlavor(state),
                     sortComparator: compareUSParties,
                     emptyStateHint: "Party organization data will appear here once configured.",

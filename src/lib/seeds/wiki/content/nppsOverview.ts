@@ -40,7 +40,7 @@ Party-controlled NPP capacity depends on active player membership. Each of the f
 
 ## Influence system
 
-Players can directly influence individual NPPs from the NPP profile page (\`/npp/[id]\`). Those profile actions are **deterministic** (\`CAPITAL_ACTIONS\` in \`src/lib/capital/actions.ts\`), not a chance roll:
+Players can directly influence individual NPPs from each NPP's profile page. Those profile actions are **deterministic**, not a chance roll:
 
 | Action | Actions | Funds | Min Relationship | Effect |
 | --- | --- | --- | --- | --- |

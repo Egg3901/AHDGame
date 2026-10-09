@@ -78,8 +78,9 @@ Per-turn jitter of **±0.4%** prevents perfectly predictable movements.
 ### 4. Directional regime pressure
 
 A 12-turn directional regime applies independently of macro fundamentals,
-trading volume, and noise. The direction and strength come from
-\`CYCLE_PRESSURE_BY_REGIME\`.
+trading volume, and noise. Each window rolls one of five regimes at random:
+a moderate or slight push stronger (0.15% or 0.07% a turn), neutral, or the
+same push weaker.
 
 ### Guardrails
 

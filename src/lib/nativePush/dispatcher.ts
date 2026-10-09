@@ -4,7 +4,7 @@ import { type Db } from "mongodb";
 import type { Notification } from "@/lib/db/types/notifications";
 import type { User } from "@/lib/db/types/user";
 import { pushDevices } from "./devices";
-import { shouldPush } from "./policy";
+import { buildPushPreview, shouldPush } from "./policy";
 import { providerConfigured, sendNativePush } from "./providers";
 import type { PushDevice } from "./types";
 
@@ -32,19 +32,32 @@ async function deliverDevice(db: Db, device: PushDevice): Promise<void> {
           { createdAt: device.cursorAt, _id: { $gt: device.cursorId } },
         ],
       },
-      { projection: { type: 1, read: 1, archivedAt: 1, snoozedUntil: 1, createdAt: 1 } }
+      {
+        projection: {
+          type: 1,
+          title: 1,
+          message: 1,
+          metadata: 1,
+          read: 1,
+          archivedAt: 1,
+          snoozedUntil: 1,
+          createdAt: 1,
+        },
+      }
     )
     .sort({ createdAt: 1, _id: 1 })
     .limit(500)
     .toArray();
-  const candidate = notifications.some(
-    (notification) =>
-      notification.createdAt.getTime() > now.getTime() - 24 * 60 * 60_000 &&
-      shouldPush(notification, user.notificationPreferences ?? {}, now)
+  const preview = buildPushPreview(
+    notifications.filter(
+      (notification) =>
+        notification.createdAt.getTime() > now.getTime() - 24 * 60 * 60_000 &&
+        shouldPush(notification, user.notificationPreferences ?? {}, now)
+    )
   );
   // Revocation or an account switch invalidates a leased delivery.
   if (!(await devices.findOne(owned, { projection: { _id: 1 } }))) return;
-  const result = candidate ? await sendNativePush(device) : "sent";
+  const result = preview ? await sendNativePush(device, preview) : "sent";
   if (result === "invalid") {
     await devices.deleteOne(owned);
     return;
