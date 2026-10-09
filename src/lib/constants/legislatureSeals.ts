@@ -11,7 +11,7 @@ import type { ExecutiveSeal } from "./executiveSeals";
 const commons = (path: string, file: string) =>
   `https://upload.wikimedia.org/wikipedia/commons/thumb/${path}/${file}/330px-${file}.png`;
 
-const UK_PORTCULLIS: ExecutiveSeal = {
+const CROWNED_PORTCULLIS: ExecutiveSeal = {
   src: commons("a/af", "Crowned_Portcullis.svg"),
   alt: "Crowned portcullis of the Parliament of the United Kingdom",
 };
@@ -43,7 +43,7 @@ export const LEGISLATURE_SEALS: Partial<Record<CountryId, Record<string, Executi
       alt: "Seal of the United States Senate",
     },
   },
-  UK: { commons: UK_PORTCULLIS, lords: UK_PORTCULLIS },
+  UK: { commons: CROWNED_PORTCULLIS, lords: CROWNED_PORTCULLIS },
   DE: {
     bundestag: {
       src: commons("e/e3", "Bundesadler_Bundesorgane.svg"),
