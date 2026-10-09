@@ -45,6 +45,7 @@ const BASE: OrgInfluenceView = {
       sanctionedBy: [],
       isMember: false,
       costToGate: 1_000,
+      rivalPressure: null,
     },
     {
       entityId: "YU",
@@ -67,6 +68,7 @@ const BASE: OrgInfluenceView = {
       sanctionedBy: [],
       isMember: false,
       costToGate: 1_000,
+      rivalPressure: null,
     },
   ],
   recent: [],
