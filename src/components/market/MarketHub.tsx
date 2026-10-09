@@ -13,6 +13,7 @@ import {
   FundsPanel,
   SectorsPanel,
   StocksPanel,
+  WealthPanel,
   sectorsUrl,
   type SectorsForSaleResponse,
 } from "./MarketPanels";
@@ -223,6 +224,7 @@ export function MarketHub() {
           {tab === "stocks" && <StocksPanel exchange={exchangeApi} />}
           {tab === "bonds" && <BondsPanel />}
           {tab === "funds" && <FundsPanel />}
+          {tab === "wealth" && <WealthPanel exchange={exchangeApi} />}
           {tab === "sectors" && <SectorsPanel />}
           {tab === "commodities" && (
             <CommoditiesPanel

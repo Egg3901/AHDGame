@@ -3,6 +3,7 @@ export const MARKET_TABS = [
   { key: "stocks", label: "Stocks" },
   { key: "bonds", label: "Bonds" },
   { key: "funds", label: "Funds" },
+  { key: "wealth", label: "Wealth list" },
   { key: "sectors", label: "Sectors for sale" },
   { key: "commodities", label: "Commodities" },
   { key: "supply", label: "Supply deals" },
@@ -19,7 +20,13 @@ export function parseMarketTab(value: string | null | undefined): MarketTab {
 /** Tabs of the old stock market page that now live in the hub. */
 export function legacyStockTabToMarketTab(value: string | null | undefined): MarketTab | null {
   if (!value || value === "listings") return "stocks";
-  if (value === "stocks" || value === "bonds" || value === "funds" || value === "commodities") {
+  if (
+    value === "stocks" ||
+    value === "bonds" ||
+    value === "funds" ||
+    value === "wealth" ||
+    value === "commodities"
+  ) {
     return value;
   }
   return null;
