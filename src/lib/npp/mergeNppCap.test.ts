@@ -85,8 +85,8 @@ describe("selectMergeNppCull", () => {
     expect(cull).toHaveLength(2);
   });
 
-  it("uses POST-merge org to size the cap (org >= 75 → 5 slots)", () => {
-    const npps = Array.from({ length: 6 }, (_, i) =>
+  it("uses POST-merge org to size the cap (org >= 50 → 6 slots)", () => {
+    const npps = Array.from({ length: 7 }, (_, i) =>
       makeNpp({ homeState: "DUB", politicalInfluence: 100 - i })
     );
 
@@ -96,13 +96,13 @@ describe("selectMergeNppCull", () => {
       targetOrgByState: new Map([["DUB", 80]]),
     });
 
-    expect(keep).toHaveLength(5);
+    expect(keep).toHaveLength(6);
     expect(cull).toHaveLength(1);
-    expect(cull[0]!._id.toString()).toBe(npps[5]!._id.toString());
+    expect(cull[0]!._id.toString()).toBe(npps[6]!._id.toString());
   });
 
   it("caps each home state independently", () => {
-    // DUB org 0 → 2 slots (3 incoming → 1 cull); COR org 50 → 4 slots (1 incoming → keep).
+    // DUB org 0 → 2 slots (3 incoming → 1 cull); COR org 50 → 6 slots (1 incoming → keep).
     const dub = Array.from({ length: 3 }, (_, i) =>
       makeNpp({ homeState: "DUB", politicalInfluence: 30 - i })
     );

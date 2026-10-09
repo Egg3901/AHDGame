@@ -23,18 +23,18 @@ describe("calculateRecruitmentSlots", () => {
     expect(calculateRecruitmentSlots(49)).toBe(4);
   });
 
-  it("returns the 5-slot total cap at and above 50% org", () => {
-    expect(calculateRecruitmentSlots(50)).toBe(5);
-    expect(calculateRecruitmentSlots(100)).toBe(5);
+  it("returns the 6-slot total cap at and above 50% org", () => {
+    expect(calculateRecruitmentSlots(50)).toBe(6);
+    expect(calculateRecruitmentSlots(100)).toBe(6);
   });
 
   it("leaves an over-cap state with no available slots until org climbs back", () => {
-    // A state recruited to 5 NPPs at 50% org keeps all of them when org falls,
+    // A state recruited to 6 NPPs at 50% org keeps all of them when org falls,
     // but the live cap shrinks, so currentNPPs >= cap blocks new recruitment.
-    const recruitedNPPs = 5;
+    const recruitedNPPs = 6;
     expect(recruitedNPPs >= calculateRecruitmentSlots(20)).toBe(true); // cap 2, over cap
     expect(recruitedNPPs >= calculateRecruitmentSlots(40)).toBe(true); // cap 4, still over
-    expect(recruitedNPPs >= calculateRecruitmentSlots(50)).toBe(true); // cap 5, exactly full
+    expect(recruitedNPPs >= calculateRecruitmentSlots(50)).toBe(true); // cap 6, exactly full
   });
 });
 
@@ -117,7 +117,7 @@ describe("calculateRelocationCapacity", () => {
     // 2 NPPs over 50 regions: fair share rounds to 1, so the 2-slot recruitment
     // floor is what binds.
     expect(calculateRelocationCapacity(0, 2, 50)).toBe(2);
-    expect(calculateRelocationCapacity(75, 2, 50)).toBe(5);
+    expect(calculateRelocationCapacity(75, 2, 50)).toBe(6);
   });
 
   it("scales with the roster so a seeded party can still move politicians", () => {
