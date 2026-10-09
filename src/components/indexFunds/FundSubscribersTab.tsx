@@ -1,4 +1,5 @@
 "use client";
+import { FundPagination, FUND_PAGE_SIZE } from "./FundPagination";
 
 import { useEffect, useState } from "react";
 import { Skeleton } from "@/components/ui";
@@ -19,6 +20,7 @@ type HolderRow = {
 type HoldersResponse = {
   holders: HolderRow[];
   byKind: {
+    corporations?: HolderRow[];
     players: HolderRow[];
     npps: HolderRow[];
     imperial: HolderRow[];
@@ -93,6 +95,22 @@ export default function FundSubscribersTab({
         </div>
       )}
 
+      {(byKind.corporations?.length ?? 0) > 0 && (
+        <HolderTable
+          title="Corporation subscribers"
+          rows={byKind.corporations!}
+          ccy={ccy}
+          formatAmount={formatAmount}
+        />
+      )}
+      {byKind.npps.length > 0 && (
+        <HolderTable
+          title="Institutional subscribers"
+          rows={byKind.npps}
+          ccy={ccy}
+          formatAmount={formatAmount}
+        />
+      )}
       {byKind.players.length > 0 && (
         <HolderTable
           title="Player subscribers"
@@ -120,7 +138,9 @@ export default function FundSubscribersTab({
         />
       )}
 
-      {byKind.players.length === 0 &&
+      {(byKind.corporations?.length ?? 0) === 0 &&
+        byKind.npps.length === 0 &&
+        byKind.players.length === 0 &&
         byKind.imperial.length === 0 &&
         byKind.reserve.length === 0 && (
           <div className="rounded-xl border border-card-border bg-card p-6 text-center text-muted">
@@ -142,6 +162,8 @@ function HolderTable({
   ccy: CurrencyCode;
   formatAmount: (n: number, c?: CurrencyCode) => string;
 }) {
+  const [page, setPage] = useState(1);
+  const currentPage = Math.min(page, Math.max(1, Math.ceil(rows.length / FUND_PAGE_SIZE)));
   return (
     <div className="rounded-xl border border-card-border bg-card overflow-hidden shadow-sm">
       <div className="bg-card-elevated px-4 py-3 border-b border-card-border">
@@ -157,26 +179,29 @@ function HolderTable({
             </tr>
           </thead>
           <tbody className="divide-y divide-card-border">
-            {rows.map((row) => (
-              <tr key={`${row.holderKind}-${row.holderId}`}>
-                <td className="px-4 py-2.5">
-                  <span className="font-medium">{row.displayName}</span>
-                  {row.party && <span className="ml-2 text-xs text-muted">({row.party})</span>}
-                  {row.countryId && (
-                    <span className="ml-1 text-[10px] text-muted uppercase">{row.countryId}</span>
-                  )}
-                </td>
-                <td className="px-4 py-2.5 text-right tabular-nums">
-                  {row.units.toLocaleString("en-US")}
-                </td>
-                <td className="px-4 py-2.5 text-right tabular-nums">
-                  {formatAmount(row.marketValueAnchor ?? 0, ccy)}
-                </td>
-              </tr>
-            ))}
+            {rows
+              .slice((currentPage - 1) * FUND_PAGE_SIZE, currentPage * FUND_PAGE_SIZE)
+              .map((row) => (
+                <tr key={`${row.holderKind}-${row.holderId}`}>
+                  <td className="px-4 py-2.5">
+                    <span className="font-medium">{row.displayName}</span>
+                    {row.party && <span className="ml-2 text-xs text-muted">({row.party})</span>}
+                    {row.countryId && (
+                      <span className="ml-1 text-[10px] text-muted uppercase">{row.countryId}</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-2.5 text-right tabular-nums">
+                    {row.units.toLocaleString("en-US")}
+                  </td>
+                  <td className="px-4 py-2.5 text-right tabular-nums">
+                    {formatAmount(row.marketValueAnchor ?? 0, ccy)}
+                  </td>
+                </tr>
+              ))}
           </tbody>
         </table>
       </div>
+      <FundPagination page={currentPage} total={rows.length} onChange={setPage} />
     </div>
   );
 }

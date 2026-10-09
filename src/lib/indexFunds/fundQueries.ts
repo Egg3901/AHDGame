@@ -275,11 +275,18 @@ export async function getPosition(
   db: Db,
   fundId: ObjectId,
   holderKind: IndexFundPosition["holderKind"],
-  filter: { characterId?: ObjectId; imperialCharacterId?: ObjectId; nppId?: ObjectId },
+  filter: {
+    corporationId?: ObjectId;
+    characterId?: ObjectId;
+    imperialCharacterId?: ObjectId;
+    nppId?: ObjectId;
+  },
   options?: FundQueryOptions
 ): Promise<IndexFundPosition | null> {
   const query: Record<string, unknown> = { fundId, holderKind };
-  if (holderKind === "character" && filter.characterId) {
+  if (holderKind === "corporation" && filter.corporationId) {
+    query.corporationId = filter.corporationId;
+  } else if (holderKind === "character" && filter.characterId) {
     query.characterId = filter.characterId;
   } else if (holderKind === "imperial_character" && filter.imperialCharacterId) {
     query.imperialCharacterId = filter.imperialCharacterId;
@@ -337,6 +344,7 @@ export async function creditFundPosition(
   fundId: ObjectId,
   holderKind: IndexFundPosition["holderKind"],
   holderFilter: {
+    corporationId?: ObjectId;
     characterId?: ObjectId;
     imperialCharacterId?: ObjectId;
     nppId?: ObjectId;
@@ -348,6 +356,7 @@ export async function creditFundPosition(
 ): Promise<IndexFundPosition> {
   const now = new Date();
   const identityFields: Record<string, unknown> = { holderKind };
+  if (holderFilter.corporationId) identityFields.corporationId = holderFilter.corporationId;
   if (holderFilter.characterId) identityFields.characterId = holderFilter.characterId;
   if (holderFilter.imperialCharacterId)
     identityFields.imperialCharacterId = holderFilter.imperialCharacterId;
@@ -588,11 +597,17 @@ export async function debitFundPosition(
   db: Db,
   fundId: ObjectId,
   holderKind: IndexFundPosition["holderKind"],
-  holderFilter: { characterId?: ObjectId; imperialCharacterId?: ObjectId; nppId?: ObjectId },
+  holderFilter: {
+    corporationId?: ObjectId;
+    characterId?: ObjectId;
+    imperialCharacterId?: ObjectId;
+    nppId?: ObjectId;
+  },
   units: number,
   options?: FundQueryOptions
 ): Promise<DebitFundPositionResult> {
   const identityFields: Record<string, unknown> = { fundId, holderKind };
+  if (holderFilter.corporationId) identityFields.corporationId = holderFilter.corporationId;
   if (holderFilter.characterId) identityFields.characterId = holderFilter.characterId;
   if (holderFilter.imperialCharacterId)
     identityFields.imperialCharacterId = holderFilter.imperialCharacterId;

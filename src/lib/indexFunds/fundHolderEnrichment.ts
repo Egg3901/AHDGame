@@ -21,6 +21,16 @@ export async function enrichFundPositions(
   const nonZero = positions.filter((p) => p.units > 0);
   if (nonZero.length === 0) return [];
 
+  const corporationIds = nonZero
+    .filter((p) => p.holderKind === "corporation" && p.corporationId)
+    .map((p) => p.corporationId!);
+  const corporations = corporationIds.length
+    ? await db
+        .collection<{ _id: ObjectId; name: string }>("corporations")
+        .find({ _id: { $in: corporationIds } }, { projection: { name: 1 } })
+        .toArray()
+    : [];
+  const corporationNames = new Map(corporations.map((c) => [c._id.toString(), c.name]));
   const characterIds = nonZero
     .filter((p) => p.holderKind === "character" && p.characterId)
     .map((p) => p.characterId!);
@@ -69,6 +79,15 @@ export async function enrichFundPositions(
         marketValueAnchor,
       };
     }
+    if (p.holderKind === "corporation" && p.corporationId)
+      return {
+        holderKind: p.holderKind,
+        holderId: p.corporationId.toString(),
+        displayName: corporationNames.get(p.corporationId.toString()) ?? "Unknown corporation",
+        units: p.units,
+        avgNavAnchor: p.avgNavAnchor ?? null,
+        marketValueAnchor,
+      };
     if (p.holderKind === "character" && p.characterId) {
       const id = p.characterId.toString();
       return {

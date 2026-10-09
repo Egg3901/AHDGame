@@ -1,3 +1,4 @@
+import { tradeCorporationFund } from "@/lib/indexFunds/corporationTrade";
 import { resumeFundCommandAudit } from "@/lib/indexFunds/playerCommandAudit";
 import {
   claimFundCommand,
@@ -43,6 +44,10 @@ import { rejectDuringTurn } from "@/lib/api/rejectDuringTurn";
 import { claimFundRedemptionLock } from "@/lib/indexFunds/redemptionLock";
 
 const redeemSchema = z.object({
+  corporationId: z
+    .string()
+    .regex(/^[a-fA-F0-9]{24}$/)
+    .optional(),
   operationId: z.string().uuid(),
   units: z.number().int().min(1),
 });
@@ -76,6 +81,15 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
       return errorResponse(parsed.status, parsed.error);
     }
     const { units, operationId } = parsed.data;
+    if (parsed.data.corporationId)
+      return tradeCorporationFund(
+        db,
+        auth.userId,
+        characterId,
+        fund,
+        { ...parsed.data, corporationId: parsed.data.corporationId },
+        "redeem"
+      );
     claimedOperationId = operationId;
     const command = await claimFundCommand(db, characterId, operationId, {
       fundId: fund._id.toHexString(),

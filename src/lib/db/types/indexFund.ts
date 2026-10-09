@@ -104,6 +104,7 @@ export interface IndexFund {
 
 export type IndexFundHolderKind =
   | "character"
+  | "corporation"
   | "imperial_character"
   | "npp"
   | "fund_reserve"
@@ -115,6 +116,7 @@ export interface IndexFundPosition {
   _id: ObjectId;
   fundId: ObjectId;
   holderKind: IndexFundHolderKind;
+  corporationId?: ObjectId;
   characterId?: ObjectId;
   imperialCharacterId?: ObjectId;
   nppId?: ObjectId;
