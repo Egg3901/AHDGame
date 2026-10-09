@@ -7,7 +7,8 @@ import { parseJsonBody } from "@/lib/api/validate";
 import { createAdminLog } from "@/lib/adminLog";
 import type { GameConfig } from "@/lib/db/types";
 import type { ObjectId } from "mongodb";
-import { awardReferralContest, ReferralAwardError } from "@/lib/contests/referralAward";
+import { ReferralAwardError } from "@/lib/contests/referralAward";
+import { awardIterationReferralsNow } from "@/lib/contests/engine";
 
 const TOP_N = 100;
 
@@ -121,7 +122,7 @@ export async function PATCH(request: Request) {
     if (parsed.data.action === "award-and-restart") {
       let result;
       try {
-        result = await awardReferralContest(db, { awardedBy: auth.admin.username, now });
+        result = await awardIterationReferralsNow(db, auth.admin.username, now);
       } catch (err) {
         if (err instanceof ReferralAwardError) return errorResponse(400, err.message);
         throw err;
