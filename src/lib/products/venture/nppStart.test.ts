@@ -1,9 +1,12 @@
 import { ObjectId } from "mongodb";
 import { describe, expect, it } from "vitest";
 import type { Corporation, CorporateSector } from "@/lib/db/types";
+import { TURNS_PER_DAY } from "@/lib/constants/corporations";
 import { VENTURE_DEVELOPMENT_TURNS, referenceFundingPerTurn, ventureTargetAnchor } from "./engine";
 import {
-  NPP_VENTURE_CASH_RUNWAY_TURNS,
+  NPP_VENTURE_CASH_BUFFER_TURNS,
+  NPP_VENTURE_PROFIT_COVER,
+  NPP_VENTURE_STANDARD_PROFIT_COVER,
   NPP_VENTURE_START_HAZARD,
   isNppDistressed,
   nppLineWeight,
@@ -35,6 +38,7 @@ function mediaSector(corporationId: ObjectId, extra: Partial<CorporateSector> = 
     countryId: "us",
     realizedRevenue: REVENUE_PER_DAY,
     revenue: REVENUE_PER_DAY,
+    plantsPnl: { profit: REVENUE_PER_DAY * 0.2 },
     ...extra,
   } as unknown as CorporateSector;
 }
@@ -90,30 +94,58 @@ describe("selectNppVentureStarts eligibility", () => {
     expect(selectNppVentureStarts(args([player, state], sectors))).toEqual([]);
   });
 
-  function runwayFor(corps: Corporation[], sectors: Map<string, CorporateSector[]>): number {
+  /** Standard funding per turn for the fixture media sector. */
+  function fundingFor(corps: Corporation[], sectors: Map<string, CorporateSector[]>): number {
     const [probe] = selectNppVentureStarts(args(corps, sectors));
-    return (
-      referenceFundingPerTurn(ventureTargetAnchor(probe.baselineRevenueAnchor)) *
-      NPP_VENTURE_CASH_RUNWAY_TURNS
-    );
+    return referenceFundingPerTurn(ventureTargetAnchor(probe.baselineRevenueAnchor));
   }
 
-  it("needs a funding runway above the reserve, not the whole commitment in cash", () => {
+  /** Daily plant profit that yields `cover` turns of funding per turn. */
+  function dailyProfitFor(funding: number, cover: number): number {
+    return funding * cover * TURNS_PER_DAY;
+  }
+
+  it("funds from income: lifted profit must cover two turns of funding", () => {
     const { corps, sectors } = world(1);
-    const runway = runwayFor(corps, sectors);
-    corps[0].liquidCapital = RESERVE + runway - 1;
+    const funding = fundingFor(corps, sectors);
+    const sector = sectors.get(corps[0]._id.toString())![0];
+    sector.plantsPnl = {
+      profit: dailyProfitFor(funding, NPP_VENTURE_PROFIT_COVER) * 0.99,
+    } as CorporateSector["plantsPnl"];
     expect(selectNppVentureStarts(args(corps, sectors))).toEqual([]);
-    corps[0].liquidCapital = RESERVE + runway;
+    sector.plantsPnl = {
+      profit: dailyProfitFor(funding, NPP_VENTURE_PROFIT_COVER) * 1.01,
+    } as CorporateSector["plantsPnl"];
     expect(selectNppVentureStarts(args(corps, sectors))).toHaveLength(1);
   });
 
-  it("goes lean when headroom above the reserve is under two runways", () => {
+  it("starts with only a small cash buffer over the reserve, as live NPPs hold", () => {
     const { corps, sectors } = world(1);
-    const runway = runwayFor(corps, sectors);
-    corps[0].liquidCapital = RESERVE + runway * 1.5;
-    const [start] = selectNppVentureStarts(args(corps, sectors));
-    expect(start.tier).toBe("lean");
-    corps[0].liquidCapital = RESERVE + runway * 2;
+    const funding = fundingFor(corps, sectors);
+    corps[0].liquidCapital = RESERVE + funding * NPP_VENTURE_CASH_BUFFER_TURNS - 1;
+    expect(selectNppVentureStarts(args(corps, sectors))).toEqual([]);
+    // +1 absorbs float rounding in (reserve + buffer) - reserve.
+    corps[0].liquidCapital = RESERVE + funding * NPP_VENTURE_CASH_BUFFER_TURNS + 1;
+    expect(selectNppVentureStarts(args(corps, sectors))).toHaveLength(1);
+  });
+
+  it("skips loss-making sectors", () => {
+    const { corps, sectors } = world(1);
+    sectors.get(corps[0]._id.toString())![0].plantsPnl = {
+      profit: -REVENUE_PER_DAY * 0.1,
+    } as CorporateSector["plantsPnl"];
+    expect(selectNppVentureStarts(args(corps, sectors))).toEqual([]);
+  });
+
+  it("goes lean when profit covers fewer than four turns of funding", () => {
+    const { corps, sectors } = world(1);
+    const funding = fundingFor(corps, sectors);
+    const sector = sectors.get(corps[0]._id.toString())![0];
+    sector.plantsPnl = { profit: dailyProfitFor(funding, 3) } as CorporateSector["plantsPnl"];
+    expect(selectNppVentureStarts(args(corps, sectors))[0].tier).toBe("lean");
+    sector.plantsPnl = {
+      profit: dailyProfitFor(funding, NPP_VENTURE_STANDARD_PROFIT_COVER),
+    } as CorporateSector["plantsPnl"];
     expect(selectNppVentureStarts(args(corps, sectors))[0].tier).toBe("standard");
   });
 
@@ -218,6 +250,7 @@ describe("line weighting", () => {
       capitalStock: 1_000_000,
       plantCount: 5,
       realizedRevenue: REVENUE_PER_DAY,
+      plantsPnl: { profit: REVENUE_PER_DAY * 0.2 },
       revenue: REVENUE_PER_DAY,
     } as unknown as CorporateSector;
     const vehicleSector = {
