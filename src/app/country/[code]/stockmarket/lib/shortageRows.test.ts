@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { buildShortageRows } from "./shortageRows";
+import { PRICE_REALIZATION_MAX } from "@/lib/market/priceRealization";
 import type { CommodityData } from "../types";
 
 function make(partial: Partial<CommodityData>): CommodityData {
@@ -119,16 +120,17 @@ describe("buildShortageRows", () => {
     ]);
     // balanced D/S but a real premium -> kept; flat unpriced -> dropped
     expect(rows.map((r) => r.commodity)).toEqual(["premium"]);
-    // Realized premium, not raw: clamp(1.37^0.5, 0.7, 1.5) - 1 = +17.05%, not +37%.
+    // Realized premium, not raw: clamp(1.37^0.5, 0.7, MAX) - 1 = +17.05%, not +37%.
     expect(rows[0]!.premiumPct).toBeCloseTo(17.05, 1);
   });
 
   it("shows the REALIZED premium a supplier earns, not the raw price gap (#3034)", () => {
-    // Engine scales revenue by clamp((price/base)^0.5, 0.7, 1.5).
+    // Engine scales revenue by clamp((price/base)^0.5, 0.7, PRICE_REALIZATION_MAX).
     const realized = (globalPrice: number) =>
       buildShortageRows([make({ commodity: "c", globalPrice, basePrice: 100 })])[0]!.premiumPct;
     expect(realized(196)).toBeCloseTo(40, 1); // raw +96% -> realized +40%
-    expect(realized(400)).toBeCloseTo(50, 5); // raw +300% -> clamped at +50%
+    // raw +800% -> clamped at the realization ceiling
+    expect(realized(900)).toBeCloseTo((PRICE_REALIZATION_MAX - 1) * 100, 5);
     expect(realized(100)).toBeCloseTo(0, 5); // at base -> no premium
     expect(realized(25)).toBeCloseTo(-30, 5); // deep glut -> clamped at -30%
   });

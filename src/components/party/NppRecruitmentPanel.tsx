@@ -285,7 +285,8 @@ export function NppRecruitmentPanel({
           <span>{status.activeMemberCount ?? 0}</span>
         </div>
         <p className="pt-1 text-xs text-muted">
-          5 NPPs per active member, up to 25. Members need 2 game actions in the last 14 days.
+          5 NPPs per active member for the first 5, then 4, 3 and 2 per member as the party grows.
+          No ceiling. Members need 2 game actions in the last 14 days.
         </p>
         {status.blockedReason && !hasCooldown && (
           <p className="pt-1 text-xs text-warning">{status.blockedReason}</p>

@@ -411,7 +411,7 @@ export default function CommoditiesPanel({
             <p className="text-muted text-xs">
               Your realized revenue is scaled by the market price of what you sell, using last
               turn&apos;s prices weighted by your output mix. Selling into a shortage pays a premium
-              (up to +50%); selling into a glut discounts your revenue (down to −30%). Expand where
+              (up to +100%); selling into a glut discounts your revenue (down to −30%). Expand where
               prices are above normal, but the bonus shrinks as the shortage closes.
               {commodities.priceRealization.applied != null && (
                 <>
