@@ -101,11 +101,9 @@ export async function GET(_request: Request, { params }: { params: Promise<{ cod
       !holder || holder === "centralBank" || holder === getBankId(countryId);
     const [bankingPolicy, holderBank] = await Promise.all([
       loadBankingPolicy(db),
-      holderIsCentralBank
+      holderIsCentralBank || !ObjectId.isValid(holder)
         ? Promise.resolve(null)
-        : db.collection<Corporation>("corporations").findOne({
-            _id: ObjectId.isValid(holder) ? new ObjectId(holder) : holder,
-          }),
+        : db.collection<Corporation>("corporations").findOne({ _id: new ObjectId(holder) }),
     ]);
     const validPrivateHolder =
       holderBank?.bankCharter?.status === "active" &&
