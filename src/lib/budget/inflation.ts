@@ -28,6 +28,7 @@
 
 import { ObjectId, type Db } from "mongodb";
 import type { FederalBudget } from "@/lib/db/types/budget";
+import { fractionalAlpha } from "@/lib/turn/subhour/stepFraction";
 import type { CentralBank } from "@/lib/db/types/centralBank";
 import type { GameConfig } from "@/lib/db/types/gameConfig";
 import type { GameState } from "@/lib/db/types/gameState";
@@ -259,6 +260,13 @@ const INERTIA = 0.35;
  *  "inertia trap" where prev≈raw locks the rate at whatever it is. */
 const MEAN_REVERSION_COEFF = 0.08;
 
+/**
+ * Share of the gap to its turn target that inflation closes in one turn.
+ * Inertia then mean reversion leave (1 - MEAN_REVERSION_COEFF) * INERTIA of the
+ * previous rate in place, so the turn is prev + STEP_ALPHA * (target - prev).
+ */
+const STEP_ALPHA = 1 - (1 - MEAN_REVERSION_COEFF) * INERTIA;
+
 /** Maximum ordinary |Δ inflation| allowed per turn from this calculation.
  *  Prevents a single-turn spike when a previously-stuck wageGrowth value
  *  suddenly normalizes (or vice versa). At 48 turns per game year, 1.5pp per
@@ -343,6 +351,11 @@ export interface InflationInputs {
    * untouched, so policy is never inert. Defaults to full credibility.
    */
   centralBankScrutiny?: number;
+  /**
+   * Share of one turn's step to take, in (0, 1]. The :30 half tick passes 0.5.
+   * Omitted or 1 is the ordinary turn and computes exactly as before.
+   */
+  stepFraction?: number;
 }
 
 /** Fraction of the spot rate that takes effect immediately (before lag). */
@@ -561,7 +574,23 @@ export function calculateInflationWithBreakdown(inputs: InflationInputs): {
   const maxPositiveDelta = recoveringFromDeepDeflation
     ? Math.max(MAX_PER_TURN_DELTA, targetInflationInput - previousInflationInput)
     : MAX_PER_TURN_DELTA;
-  const clampedDelta = Math.max(-MAX_PER_TURN_DELTA, Math.min(maxPositiveDelta, delta));
+  const stepFraction = inputs.stepFraction;
+  const partial =
+    typeof stepFraction === "number" &&
+    Number.isFinite(stepFraction) &&
+    stepFraction > 0 &&
+    stepFraction < 1;
+  // A full step moves inflation a fixed share STEP_ALPHA of the way from the
+  // previous rate to its turn target. A partial step moves the share that, taken
+  // again for the rest of the turn against the same target, lands on the full
+  // step exactly (see fractionalAlpha); the per-turn limits scale with it.
+  const stepDelta = partial
+    ? (fractionalAlpha(STEP_ALPHA, stepFraction) / STEP_ALPHA) * delta
+    : delta;
+  const stepScale = partial ? stepFraction : 1;
+  const clampedDelta = partial
+    ? Math.max(-MAX_PER_TURN_DELTA * stepScale, Math.min(maxPositiveDelta * stepScale, stepDelta))
+    : Math.max(-MAX_PER_TURN_DELTA, Math.min(maxPositiveDelta, delta));
   const clampedSmoothed = previousInflationInput + clampedDelta;
 
   const rate =
@@ -683,7 +712,9 @@ export async function calculateCountryInflation(
    */
   moneyGrowthCoeff?: number,
   /** Current-turn measured exposure rate. Omitted retains the legacy fallback for non-turn callers. */
-  tariffRateOverride?: number
+  tariffRateOverride?: number,
+  /** Share of a turn's step (the :30 half tick passes 0.5). Omitted = a full turn. */
+  stepFraction?: number
 ): Promise<number> {
   // `typeof NaN === "number"`, so `?? fallback` does not catch NaN that slipped
   // into a persisted field. Any NaN reaching the inflation math recurses every
@@ -831,6 +862,7 @@ export async function calculateCountryInflation(
     centralBankScrutiny,
     housingCostPressure,
     previousInflation,
+    ...(stepFraction !== undefined ? { stepFraction } : {}),
   });
 
   // Last line of defense: if any post-calc sanity check still produces NaN,
