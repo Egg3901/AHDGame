@@ -6,6 +6,7 @@ import { BLEND, BLEND_CONTAINER, FONT, BLEND_LABEL } from "@/components/blend/to
 import { BlendSection } from "@/components/blend/BlendShell";
 import type { ElectionDetail } from "../components/ElectionDetailTypes";
 import { PresidentialStage, presidentialTitle } from "./PresidentialStage";
+import { StageField, candidateLinks } from "./StageField";
 import { PresidentialMap } from "./presMap/PresidentialMap";
 import { buildPresMapModel, presMapModelFromTiles } from "./presMap/presMapModel";
 import type { ElectionResultsResponse } from "@/lib/elections/liveResults/types";
@@ -366,8 +367,35 @@ export function ResultsBlendView({
                 <EvBar vm={vm} height={28} />
               </div>
               <div style={{ marginTop: 22 }}>
-                <div style={BLEND_LABEL}>{route === "concluded" ? "Final tickets" : "Tickets"}</div>
-                <TicketRows vm={vm} />
+                {election ? (
+                  <StageField
+                    title={route === "concluded" ? "Final tickets" : "Tickets"}
+                    countryId={data.election.countryId}
+                    rows={vm.tickets.map((t) => {
+                      const c =
+                        election.allCandidates.find((x) => x.id === t.id) ??
+                        election.allCandidates.find((x) => x.characterName === t.name);
+                      return {
+                        id: t.id,
+                        name: t.name,
+                        ...candidateLinks(c, data.election.countryId),
+                        partyName: t.party,
+                        color: t.color,
+                        figure: `${t.ev} EV`,
+                        sub: `${t.pct}% · ${t.votes}`,
+                        isWinner: t.isWinner,
+                        isYou: c?.isYou,
+                      };
+                    })}
+                  />
+                ) : (
+                  <>
+                    <div style={BLEND_LABEL}>
+                      {route === "concluded" ? "Final tickets" : "Tickets"}
+                    </div>
+                    <TicketRows vm={vm} />
+                  </>
+                )}
               </div>
               {vm.closest.length > 0 ? (
                 <div

@@ -365,10 +365,9 @@ describe("the hero is the ticket list in a two-way race", () => {
     // standing, and the figure in the tickets table and its phone card, which
     // is where each ticket's campaign sits next to its standing. The hero's
     // own carries its unit under a "Current projection" label, so it reads as
-    // "276 EV", as does the stage's field list. If the count rises, something
-    // started echoing the hero again.
+    // "276 EV". If the count rises, something started echoing the hero again.
     expect(screen.getAllByText("276")).toHaveLength(3);
-    expect(screen.getAllByText("276 EV")).toHaveLength(2);
+    expect(screen.getAllByText("276 EV")).toHaveLength(1);
   });
 });
 
@@ -481,7 +480,7 @@ describe("the hero separates what is counted from what is forecast", () => {
 describe("names link out and states open", () => {
   it("links each hero ticket to its candidate profile", () => {
     renderView();
-    // The hero, the stage's field list, and the tickets table below.
+    // The hero, then the tickets table and its phone card below the stage.
     expect(screen.getAllByRole("link", { name: "First Ticket" })).toHaveLength(3);
     const hrefs = screen
       .getAllByRole("link", { name: "First Ticket" })

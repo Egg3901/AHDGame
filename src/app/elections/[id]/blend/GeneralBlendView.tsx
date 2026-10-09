@@ -5,6 +5,8 @@ import { apiErrorText } from "@/lib/errors/catalog";
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { Avatar } from "@/components/Avatar";
+import { PartyLogo } from "@/components/PartyLogo";
+import type { CountryId } from "@/lib/constants/countries";
 import { BLEND, FONT, BLEND_LABEL, BLEND_CONTAINER } from "@/components/blend/tokens";
 import { BlendSection } from "@/components/blend/BlendShell";
 import { BlendTicker } from "@/components/blend/BlendTicker";
@@ -21,6 +23,7 @@ import { DemocraticHealthBlock } from "./DemocraticHealthBlock";
 import { PresidentialMap } from "./presMap/PresidentialMap";
 import { StateSquares } from "./presMap/StateSquares";
 import { PresidentialStage, presidentialTitle } from "./PresidentialStage";
+import { presidentialResultsLive } from "./liveState";
 import { buildPresMapModel } from "./presMap/presMapModel";
 import {
   buildGeneralBlendViewModel,
@@ -68,6 +71,7 @@ export function GeneralBlendView({
     [election, wire, rail, ground]
   );
 
+  const live = presidentialResultsLive(election);
   const mapModel = useMemo(() => buildPresMapModel(election, ground), [election, ground]);
 
   // No projected EV majority: say so beside the college bar, with the House
@@ -396,27 +400,31 @@ export function GeneralBlendView({
             color: BLEND.mutedDim,
           },
           <span style={{ display: "inline-flex", alignItems: "center", gap: 6, minWidth: 0 }}>
-            <i
-              style={{
-                width: 8,
-                height: 8,
-                borderRadius: 99,
-                background: c.color,
-                display: "block",
-                flexShrink: 0,
-              }}
+            <PartyLogo
+              partyId={c.partyId}
+              partyColor={c.color}
+              size="h-4 w-4"
+              countryId={election.countryId as CountryId}
             />
             <Link
               href={c.partyHref}
               style={{
                 color: "inherit",
                 textDecoration: "underline",
-                textDecorationColor: "rgba(255,255,255,.25)",
+                textDecorationColor: "rgba(128,128,128,.4)",
                 textUnderlineOffset: 3,
               }}
             >
               {c.party}
             </Link>
+            {c.campaignHref ? (
+              <Link
+                href={c.campaignHref}
+                style={{ color: BLEND.accentInk, textDecoration: "none", flexShrink: 0 }}
+              >
+                Campaign
+              </Link>
+            ) : null}
           </span>
         )
       )}
@@ -526,11 +534,17 @@ export function GeneralBlendView({
           kicker={
             <>
               <span>{vm.kicker}</span>
-              <span style={{ marginLeft: 12, color: BLEND.positive }}>{vm.liveText}</span>
+              {live ? (
+                <span style={{ marginLeft: 12, color: BLEND.positive }}>{vm.liveText}</span>
+              ) : vm.closesIn != null ? (
+                <span style={{ marginLeft: 12 }}>
+                  {vm.closesIn} TURN{vm.closesIn === 1 ? "" : "S"} LEFT
+                </span>
+              ) : null}
             </>
           }
           deck={vm.headline}
-          ticker={<BlendTicker tag="CALLS" items={vm.wire} />}
+          ticker={live ? <BlendTicker tag="CALLS" items={vm.wire} /> : null}
           nav={stageNav}
           left={
             <>
@@ -558,71 +572,6 @@ export function GeneralBlendView({
                     <div style={{ marginTop: 14 }}>{contingentBanner}</div>
                   ) : null}
                 </>
-              ) : null}
-              {vm.tickets.length > 0 ? (
-                <div style={{ marginTop: heroPairTickets.length > 0 ? 22 : 4 }}>
-                  <div style={{ ...BLEND_LABEL, marginBottom: 6 }}>The field</div>
-                  {vm.tickets.map((c) => (
-                    <div
-                      key={c.id}
-                      style={{
-                        display: "grid",
-                        gridTemplateColumns: "10px minmax(0,1fr) auto auto",
-                        alignItems: "center",
-                        gap: 10,
-                        padding: "8px 0",
-                        borderBottom: `1px solid ${BLEND.hairline}`,
-                      }}
-                    >
-                      <i style={{ width: 10, height: 10, display: "block", background: c.color }} />
-                      <div style={{ minWidth: 0 }}>
-                        <Link
-                          href={c.href}
-                          style={{
-                            display: "block",
-                            fontSize: 14,
-                            fontWeight: 600,
-                            color: BLEND.ink,
-                          }}
-                        >
-                          {c.name}
-                          {c.isYou ? (
-                            <span style={{ marginLeft: 6, fontSize: 11, color: BLEND.accentInk }}>
-                              YOU
-                            </span>
-                          ) : null}
-                        </Link>
-                        <div
-                          style={{
-                            fontSize: 11.5,
-                            color: BLEND.mutedDim,
-                            overflow: "hidden",
-                            textOverflow: "ellipsis",
-                            whiteSpace: "nowrap",
-                          }}
-                        >
-                          {c.party}
-                          {c.mate ? ` / ${c.mate}` : ""}
-                        </div>
-                      </div>
-                      <span style={{ fontFamily: FONT.mono, fontSize: 12.5, color: BLEND.muted }}>
-                        {c.pct}%
-                      </span>
-                      <span
-                        style={{
-                          fontFamily: FONT.mono,
-                          fontSize: 13,
-                          fontWeight: 600,
-                          color: c.color,
-                          minWidth: 44,
-                          textAlign: "right",
-                        }}
-                      >
-                        {c.ev} EV
-                      </span>
-                    </div>
-                  ))}
-                </div>
               ) : null}
               {vm.standfirst ? (
                 <p

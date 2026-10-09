@@ -495,7 +495,7 @@ export function PresidentialMap({
           onReset={pz.reset}
         />
 
-        {freeGestures && geo ? (
+        {freeGestures && geo && (atRest || (countyLoading && countyAlpha > 0)) ? (
           <StageHint k={k} countiesOn={counties} loading={countyLoading && countyAlpha > 0} />
         ) : null}
 
@@ -559,18 +559,31 @@ export function PresidentialMap({
             background: BLEND.page,
           }}
         >
-          {viewsOn ? (
-            <DataViewPicker
-              view={activeView}
-              onView={setDataView}
-              candidates={pickable}
-              shareCand={shareCand}
-              onShareCand={setShareCandId}
-            />
-          ) : null}
-          {callouts.length > 0 ? (
-            <CalloutChips callouts={callouts} selected={selected} onSelect={select} stage />
-          ) : null}
+          <div
+            style={{
+              display: "flex",
+              flexWrap: "wrap",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: "8px 16px",
+              marginBottom: 8,
+            }}
+          >
+            {viewsOn ? (
+              <DataViewPicker
+                view={activeView}
+                onView={setDataView}
+                candidates={pickable}
+                shareCand={shareCand}
+                onShareCand={setShareCandId}
+              />
+            ) : (
+              <span />
+            )}
+            {callouts.length > 0 ? (
+              <CalloutChips callouts={callouts} selected={selected} onSelect={select} stage />
+            ) : null}
+          </div>
           {activeView === "margin" ? (
             (legend ?? <MapKey model={model} />)
           ) : (
@@ -607,9 +620,11 @@ function CalloutChips({
   stage?: boolean;
 }) {
   return (
-    <div style={{ marginTop: stage ? 0 : 14, marginBottom: stage ? 8 : 0 }}>
-      <div style={{ ...BLEND_LABEL, marginBottom: 6 }}>Small states and DC</div>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+    <div style={stage ? { display: "flex", alignItems: "center", gap: 8 } : { marginTop: 14 }}>
+      <div style={{ ...BLEND_LABEL, marginBottom: stage ? 0 : 6 }}>
+        {stage ? "Small states" : "Small states and DC"}
+      </div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: stage ? 3 : 4 }}>
         {callouts.map((s) => (
           <button
             key={s.id}
@@ -630,19 +645,21 @@ function CalloutChips({
               display: "inline-flex",
               alignItems: "baseline",
               gap: 6,
-              padding: "6px 9px",
+              padding: stage ? "3px 6px" : "6px 9px",
               cursor: "pointer",
               font: "inherit",
               fontFamily: FONT.mono,
-              fontSize: 11,
+              fontSize: stage ? 10 : 11,
               color: s.ink,
               background: s.fill,
               border: `1px solid ${s.id === selected ? BLEND.ink : "transparent"}`,
             }}
           >
             <b style={{ fontWeight: 700 }}>{s.id}</b>
-            {stateFigure(s) ? <span style={{ opacity: 0.8 }}>{stateFigure(s)}</span> : null}
-            {s.broadcast || s.evLabel !== undefined ? null : (
+            {!stage && stateFigure(s) ? (
+              <span style={{ opacity: 0.8 }}>{stateFigure(s)}</span>
+            ) : null}
+            {stage || s.broadcast || s.evLabel !== undefined ? null : (
               <span style={{ opacity: 0.65, fontSize: 10 }}>+{s.margin.toFixed(1)}</span>
             )}
           </button>
@@ -684,19 +701,17 @@ function StageHint({
   countiesOn: boolean;
   loading: boolean;
 }) {
-  const text = !countiesOn
-    ? "SCROLL TO ZOOM / DRAG TO PAN"
-    : k < COUNTY_ZOOM
-      ? "SCROLL OR DOUBLE-CLICK A STATE TO ZOOM IN FOR COUNTY RESULTS"
-      : loading
-        ? "LOADING COUNTY RESULTS..."
-        : "COUNTY RESULTS";
+  const text = loading
+    ? "LOADING COUNTY RESULTS..."
+    : countiesOn && k < COUNTY_ZOOM
+      ? "CLICK A STATE OR SCROLL TO ZOOM IN FOR COUNTIES"
+      : "SCROLL TO ZOOM, DRAG TO PAN";
   return (
     <div
       style={{
         position: "absolute",
         top: 10,
-        left: 12,
+        left: 56,
         padding: "3px 7px",
         background: `color-mix(in srgb, ${BLEND.page} 80%, transparent)`,
         fontFamily: FONT.mono,
@@ -707,7 +722,6 @@ function StageHint({
       }}
     >
       {text}
-      <span style={{ marginLeft: 10, opacity: 0.7 }}>{k.toFixed(1)}x</span>
     </div>
   );
 }
@@ -1095,9 +1109,7 @@ function DataViewPicker({
   onShareCand: (id: string) => void;
 }) {
   return (
-    <div
-      style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6, marginBottom: 10 }}
-    >
+    <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6 }}>
       <span style={{ ...BLEND_LABEL, marginRight: 4 }}>Colour by</span>
       <div
         role="radiogroup"

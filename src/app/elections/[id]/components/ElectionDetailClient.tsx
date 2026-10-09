@@ -28,6 +28,7 @@ import BackButton from "@/components/BackButton";
 import { PrimaryBlendView } from "../blend/PrimaryBlendView";
 import { GeneralBlendView } from "../blend/GeneralBlendView";
 import { presidentialTitle } from "../blend/PresidentialStage";
+import { presidentialResultsLive } from "../blend/liveState";
 import { ResultsBlendView } from "../blend/ResultsBlendView";
 import type { ElectionResultsResponse } from "@/lib/elections/liveResults/types";
 import { BLEND } from "@/components/blend/tokens";
@@ -474,7 +475,7 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
   // the old page header below the stage, which the desktop no longer renders.
   const stageRailTop = (
     <div>
-      <ElectionNavigation election={election} />
+      <ElectionNavigation election={election} showLiveLink={presidentialResultsLive(election)} />
       {canEnter &&
         (election.bulgarianFoundingRound?.round === 1 ||
           Boolean(election.bulgarianFoundingRound?.newNominationDistrictIds?.length)) && (

@@ -352,6 +352,9 @@ export function PresidentialStage({
             height: calc(100dvh - 3.5rem);
             min-height: 640px;
             grid-template-columns: var(--ps-left) minmax(0, 1fr) var(--ps-right);
+            /* One row capped at the stage's height, so a tall rail scrolls
+               inside itself instead of stretching the row past the viewport. */
+            grid-template-rows: minmax(0, 1fr);
           }
           .pres-stage--no-right { grid-template-columns: var(--ps-left) minmax(0, 1fr); }
           .pres-stage__centre,

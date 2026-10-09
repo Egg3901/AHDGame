@@ -17,3 +17,7 @@ areas: [frontend]
 - The presidential page and the campaign screens now follow your chosen theme, including the light theme. Map shading fades toward your theme's background.
 - On a phone the page uses the same layout, stacked: the headline and map first, then the race, then the national context. Tap the lock to pan and zoom the map.
 - When you are signed out during primary season, the map shades each state by when it votes instead of showing a blank map.
+- The candidate lists beside the map show each candidate's portrait and party logo, and link to their profile, their party and their campaign.
+- The right-hand panel scrolls again when its content is taller than the screen.
+- The page only says "live" (the results ticker, the live tally label and the Live results link) while results are actually coming in: once a primary wave has voted, or in the final turns of the general election.
+- The map's controls under it take less room: one row for the view switch and the small states, one line for the key.

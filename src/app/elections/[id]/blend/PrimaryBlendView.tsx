@@ -12,6 +12,10 @@ import type { PrimaryPartyDetail } from "@/lib/elections/dto/primaryPartyDetail"
 import type { ElectionDetail } from "../components/ElectionDetailTypes";
 import { PrimaryTileBoard } from "./PrimaryTileBoard";
 import { PresidentialStage, presidentialTitle } from "./PresidentialStage";
+import { presidentialResultsLive } from "./liveState";
+import { StageField, candidateLinks } from "./StageField";
+import { PartyLogo } from "@/components/PartyLogo";
+import type { CountryId } from "@/lib/constants/countries";
 import { PresidentialMap } from "./presMap/PresidentialMap";
 import type { PresMapModel, PresMapState } from "./presMap/presMapModel";
 import { STATE_NAMES } from "./presMap/usStates";
@@ -33,7 +37,15 @@ export interface PrimaryBlendViewProps {
   stageNav?: React.ReactNode;
 }
 
-function PartyButton({ p, onSelect }: { p: PrimaryPartyVM; onSelect: () => void }) {
+function PartyButton({
+  p,
+  onSelect,
+  countryId,
+}: {
+  p: PrimaryPartyVM;
+  onSelect: () => void;
+  countryId: string;
+}) {
   return (
     <button
       type="button"
@@ -53,15 +65,12 @@ function PartyButton({ p, onSelect }: { p: PrimaryPartyVM; onSelect: () => void 
         background: p.selected ? "rgba(220,38,38,.12)" : "transparent",
       }}
     >
-      <i
-        style={{
-          width: 10,
-          height: 10,
-          borderRadius: 99,
-          background: p.color,
-          display: "block",
-          flexShrink: 0,
-        }}
+      <PartyLogo
+        partyId={p.id}
+        partyColor={p.color}
+        size="h-6 w-6"
+        countryId={countryId as CountryId}
+        className="shrink-0"
       />
       <span style={{ flex: 1, minWidth: 0, textAlign: "left" }}>
         <span style={{ display: "block", fontFamily: FONT.sans, fontSize: 14, fontWeight: 600 }}>
@@ -532,7 +541,14 @@ export function PrimaryBlendView({
           }
           deck={vm.headline}
           ticker={
-            <BlendTicker tag="RETURNS" tagColor={BLEND.caution} tagInk="#14141c" items={vm.wire} />
+            presidentialResultsLive(election) ? (
+              <BlendTicker
+                tag="RETURNS"
+                tagColor={BLEND.caution}
+                tagInk="#14141c"
+                items={vm.wire}
+              />
+            ) : null
           }
           nav={stageNav}
           left={
@@ -540,7 +556,12 @@ export function PrimaryBlendView({
               <div style={{ ...BLEND_LABEL, paddingBottom: 9 }}>Parties</div>
               <div style={{ margin: "0 -8px" }}>
                 {vm.parties.map((p) => (
-                  <PartyButton key={p.id} p={p} onSelect={() => setPartyId(p.id)} />
+                  <PartyButton
+                    key={p.id}
+                    p={p}
+                    onSelect={() => setPartyId(p.id)}
+                    countryId={election.countryId}
+                  />
                 ))}
               </div>
               {vm.delegateRace ? (
@@ -565,6 +586,25 @@ export function PrimaryBlendView({
                   <DelegateRace vm={vm} height={28} />
                 </div>
               ) : null}
+              <div style={{ marginTop: 18 }}>
+                <StageField
+                  title="The field"
+                  countryId={election.countryId}
+                  rows={vm.field.map((f) => {
+                    const c = election.allCandidates.find((x) => x.id === f.id);
+                    return {
+                      id: f.id,
+                      name: f.name,
+                      ...candidateLinks(c, election.countryId),
+                      partyName: c?.partyName ?? "",
+                      color: f.color,
+                      figure: `${f.pct}%`,
+                      sub: f.delegates ? `${f.delegates} del.` : f.statusText,
+                      isYou: f.isYou,
+                    };
+                  })}
+                />
+              </div>
               {vm.standfirst ? (
                 <p
                   style={{
