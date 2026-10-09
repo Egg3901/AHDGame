@@ -1,4 +1,5 @@
 ---
+date: 2026-10-09
 title: Private support context and platform confirmation
 badges: [patch]
 areas: [fullstack]
