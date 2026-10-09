@@ -57,7 +57,7 @@ describe("ticket intake context", () => {
     expect(buildIntakeQuestions("moderation", [], false)).toHaveLength(1);
     expect(
       buildIntakeQuestions("market button", [visit("/news"), visit("/market")], true)[0]
-    ).toContain("https://ahousedividedgame.com/market?");
+    ).toContain("https://ahousedividedgame.com/market>");
     expect(buildIntakeQuestions("market", [visit("/market")], true)[1]).toContain(
       "client version unknown"
     );

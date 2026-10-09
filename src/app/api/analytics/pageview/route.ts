@@ -26,6 +26,11 @@ import {
 
 const bodySchema = z.object({
   path: z.string().min(1).max(520),
+  gameVersion: z
+    .string()
+    .regex(/^\d+\.\d+\.\d+(?:[.+-][\w.-]+)?$/)
+    .max(64)
+    .optional(),
   /** Client-reported navigation timing in ms. Optional. */
   loadTimeMs: z.number().finite().nonnegative().max(120_000).optional(),
 });
@@ -108,7 +113,7 @@ export async function POST(request: Request) {
                 {
                   path: supportPath,
                   recordedAt: new Date(),
-                  gameVersion: GAME_VERSION,
+                  gameVersion: parsed.data.gameVersion ?? GAME_VERSION,
                   ...classifySupportRuntime(ua),
                 },
               ],

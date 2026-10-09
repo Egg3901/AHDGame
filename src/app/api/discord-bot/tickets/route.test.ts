@@ -458,7 +458,7 @@ describe("POST /api/discord-bot/tickets filing context", () => {
       })
     );
     const result = await response.json();
-    expect(result.contextQuestions.join("\n")).toContain("https://ahousedividedgame.com/market?");
+    expect(result.contextQuestions.join("\n")).toContain("https://ahousedividedgame.com/market>");
     expect(result).not.toHaveProperty("supportRecentVisits");
     const stored = db.collectionMocks.tickets.insertOne.mock.calls[0][0];
     expect(stored.supportRecentVisits).toHaveLength(2);

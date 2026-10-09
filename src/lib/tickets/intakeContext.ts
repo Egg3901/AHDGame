@@ -98,7 +98,7 @@ export function buildIntakeQuestions(
     const candidate = ranked[0]?.visit;
     questions.push(
       candidate
-        ? `It seems like you are reporting an issue that may affect a specific page. Is this the page you are having trouble with: https://ahousedividedgame.com${candidate.path}? If not, please send the correct game page or menu path.`
+        ? `It seems like you are reporting an issue that may affect a specific page. Is this the page you are having trouble with: <https://ahousedividedgame.com${candidate.path}>? If not, please send the correct game page or menu path.`
         : "Which game page or menu path are you having trouble with?"
     );
   }
