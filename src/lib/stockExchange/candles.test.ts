@@ -7,6 +7,8 @@ import {
   type CandlePoint,
   bucketCandles,
   chartBucketTurns,
+  mergeQuarterCandles,
+  type QuarterTick,
 } from "./candles";
 
 const pts = (caps: number[]): CandleInput[] =>
@@ -105,5 +107,60 @@ describe("range bucketing", () => {
     expect(chartBucketTurns(720, 720)).toBe(4);
     expect(chartBucketTurns(168, 168)).toBe(1);
     expect(chartBucketTurns(0, 8760)).toBe(48);
+  });
+});
+
+describe("mergeQuarterCandles", () => {
+  const hourly = buildCandles(pts([100, 110, 120]), new Map());
+  const tick = (turn: number, q: number, last: number, extra: Partial<QuarterTick> = {}) => ({
+    turn,
+    time: 1_700_000_000 + (turn - 100) * 3600 + q * 900,
+    open: last,
+    high: last,
+    low: last,
+    last,
+    prints: 1,
+    ...extra,
+  });
+
+  it("splits ticked turns into quarter candles and keeps unticked turns hourly", () => {
+    const merged = mergeQuarterCandles(
+      hourly,
+      [tick(101, 0, 104), tick(101, 1, 106, { high: 109 }), tick(101, 2, 103), tick(101, 3, 111)],
+      new Map([[1_700_000_000 + 3600 + 900, 7]])
+    );
+    expect(merged.map((c) => [c.turn, c.open, c.close])).toEqual([
+      [100, 100, 100],
+      [101, 100, 104],
+      [101, 104, 106],
+      [101, 106, 103],
+      [101, 103, 111],
+      [102, 111, 120],
+    ]);
+    expect(merged[2].high).toBe(109);
+    expect(merged[2].volume).toBe(7);
+    expect(merged[1].volume).toBe(0);
+    // Strictly increasing times for the chart library.
+    expect(merged.every((c, i) => i === 0 || c.time > merged[i - 1].time)).toBe(true);
+  });
+
+  it("ignores empty or invalid ticks", () => {
+    const merged = mergeQuarterCandles(
+      hourly,
+      [tick(101, 0, Number.NaN), tick(101, 1, 105, { prints: 0 })],
+      new Map()
+    );
+    expect(merged).toEqual(hourly);
+  });
+
+  it("carries the turn candle's notes on its first quarter only", () => {
+    const noted: CandlePoint[] = hourly.map((c) =>
+      c.turn === 101 ? { ...c, notes: ["split"], invalidVolumeTrades: 2 } : c
+    );
+    const merged = mergeQuarterCandles(noted, [tick(101, 0, 104), tick(101, 1, 105)], new Map());
+    expect(merged[1].notes).toEqual(["split"]);
+    expect(merged[1].invalidVolumeTrades).toBe(2);
+    expect(merged[2].notes).toEqual([]);
+    expect(merged[2].invalidVolumeTrades).toBe(0);
   });
 });

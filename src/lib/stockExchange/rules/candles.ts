@@ -94,6 +94,83 @@ export function buildCandles(
   });
 }
 
+/** One recorded 15-minute market cap slot (marketCapTicks), chart-ready. */
+export interface QuarterTick {
+  turn: number;
+  /** Slot start, unix seconds. */
+  time: number;
+  open: number;
+  high: number;
+  low: number;
+  last: number;
+  prints: number;
+}
+
+/**
+ * Replace each turn's candle with its recorded 15-minute candles, where the
+ * turn has any. Turns without ticks (history before the market tick existed,
+ * or a missed hour) keep their turn candle. Opens chain from the previous
+ * close so the series stays continuous across both kinds. The turn candle's
+ * notes and invalid-volume count ride on its first quarter.
+ */
+export function mergeQuarterCandles(
+  hourly: CandlePoint[],
+  ticks: QuarterTick[],
+  volumeBySlot: Map<number, number>
+): CandlePoint[] {
+  const valid = (n: number) => Number.isFinite(n) && n >= 0;
+  const byTurn = new Map<number, QuarterTick[]>();
+  for (const tick of ticks) {
+    if (tick.prints <= 0 || ![tick.open, tick.high, tick.low, tick.last].every(valid)) continue;
+    const list = byTurn.get(tick.turn) ?? [];
+    list.push(tick);
+    byTurn.set(tick.turn, list);
+  }
+  const out: CandlePoint[] = [];
+  let prevClose: number | null = null;
+  for (const candle of hourly) {
+    const quarters = byTurn.get(candle.turn)?.sort((a, b) => a.time - b.time);
+    if (!quarters?.length) {
+      // After a quarter series, open where it closed so the chart has no gap.
+      const chained = out.at(-1)?.endTurn === candle.turn - 1 && prevClose != null;
+      out.push(
+        chained
+          ? {
+              ...candle,
+              open: prevClose as number,
+              high: Math.max(candle.high, prevClose as number),
+              low: Math.min(candle.low, prevClose as number),
+            }
+          : candle
+      );
+      prevClose = candle.close;
+      continue;
+    }
+    quarters.forEach((q, i) => {
+      const open = prevClose ?? q.open;
+      const close = q.last;
+      const volume = volumeBySlot.get(q.time) ?? 0;
+      out.push({
+        turn: candle.turn,
+        endTurn: candle.turn,
+        time: q.time,
+        open,
+        high: Math.max(open, close, q.high),
+        low: Math.min(open, close, q.low),
+        close,
+        volume: valid(volume) ? volume : 0,
+        invalidVolumeTrades: i === 0 ? (candle.invalidVolumeTrades ?? 0) : 0,
+        notes: i === 0 ? (candle.notes ?? []) : [],
+        intraday: true,
+        intradayTurns: i === 0 ? 1 : 0,
+        totalTurns: i === 0 ? 1 : 0,
+      });
+      prevClose = close;
+    });
+  }
+  return out;
+}
+
 /** Retain detail using game-calendar buckets, targeting at most 250 candles. */
 export function chartBucketTurns(_turns: number, count: number): number {
   return (

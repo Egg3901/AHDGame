@@ -198,6 +198,11 @@ export interface GameState {
   isActive: boolean;
   lastTurnProcessed: Date;
   nextScheduledTurn: Date | null;
+  /**
+   * Last completed 15-minute market tick (stock reprice + market cap point).
+   * Drives the "markets updated" status bar note and live chart refreshes.
+   */
+  lastMarketTickAt?: Date;
   pausedAt: Date | null;
   /** Human-readable reason set when the cron pauses (manual or auto). null when active. */
   pauseReason?: string | null;

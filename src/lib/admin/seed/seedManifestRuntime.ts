@@ -378,6 +378,7 @@ export const RUNTIME: CollectionEntry[] = [
   { name: "investorRankingSnapshots", category: "runtime" },
   { name: "marketCapHistory", category: "runtime" },
   { name: "marketIndexIntraday", category: "runtime" },
+  { name: "marketCapTicks", category: "runtime" },
   { name: "shareListings", category: "runtime" },
   { name: "shareOffers", category: "runtime" },
   { name: "shareOrders", category: "runtime" },

@@ -211,6 +211,7 @@ export type { TradeEmbargo } from "./tradeEmbargo";
 export type { TradeEmbargoCooldown } from "./tradeEmbargoCooldown";
 export type { MarketCapHistory } from "./marketCapHistory";
 export type { MarketIndexIntraday } from "./marketIndexIntraday";
+export type { MarketCapTick } from "./marketCapTick";
 export type { CorporationHistory } from "./corporationHistory";
 export type {
   CorporationExit,

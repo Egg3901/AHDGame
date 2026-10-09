@@ -18,6 +18,7 @@ import { migration as manufacturingProductProjectsV2Index } from "./entries/2026
 import { migration as underwritingRecoveryIndexes } from "./entries/2026-10-04-underwriting-recovery-indexes";
 import { migration as advertisingAgreementIndexes } from "./entries/2026-10-05-advertising-agreement-indexes";
 import { migration as productVentureIndexes } from "./entries/2026-10-08-product-venture-indexes";
+import { migration as marketCapTickIndexes } from "./entries/2026-10-09-market-cap-tick-indexes";
 import { runMigrations, type RunSummary } from "./runner";
 import type { Migration } from "./types";
 
@@ -64,6 +65,7 @@ export const REQUIRED_STARTUP_MIGRATIONS: readonly Migration[] = [
   underwritingRecoveryIndexes,
   advertisingAgreementIndexes,
   productVentureIndexes,
+  marketCapTickIndexes,
 ];
 
 /** Index metadata can disappear on reset even when migration markers survive. */
@@ -78,6 +80,7 @@ export const REQUIRED_STARTUP_INDEX_MIGRATIONS: readonly Migration[] = [
   manufacturingProductProjectsV2Index,
   underwritingRecoveryIndexes,
   productVentureIndexes,
+  marketCapTickIndexes,
 ];
 
 export async function runRequiredStartupMigrations(db: Db): Promise<RunSummary> {
