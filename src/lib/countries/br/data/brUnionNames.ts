@@ -1,4 +1,4 @@
-import type { CorporationType } from "@/lib/constants/corporations";
+import type { OperatingSectorType } from "@/lib/constants/corporations";
 
 /**
  * BR's trade-union names, by era.
@@ -12,9 +12,9 @@ import type { CorporationType } from "@/lib/constants/corporations";
  * map -- is a separate thing and stays there.
  */
 
-export const BR_UNION_NAMES_MODERN: Partial<Record<CorporationType, string>> = {
+export const BR_UNION_NAMES_MODERN: Partial<Record<OperatingSectorType, string>> = {
   manufacturing: "CUT Metalworkers' Federation",
-  automobiles: "CUT Metalworkers' Federation",
+  manufacturing_vehicles: "CUT Metalworkers' Federation",
   extraction: "CUT Mining Federation",
   energy: "CUT Energy Federation",
   agriculture: "CONTAG",
@@ -27,14 +27,14 @@ export const BR_UNION_NAMES_MODERN: Partial<Record<CorporationType, string>> = {
   technology: "CUT Metalworkers' Federation",
   financial: "CUT Bank Workers' Federation",
   telecommunications: "CUT Communications Federation",
-  entertainment: "CUT Culture Federation",
+  media_entertainment: "CUT Culture Federation",
   defense: "CUT Metalworkers' Federation",
   real_estate: "CUT Construction Federation",
 };
 
-export const BR_UNION_NAMES_1979: Partial<Record<CorporationType, string>> = {
+export const BR_UNION_NAMES_1979: Partial<Record<OperatingSectorType, string>> = {
   manufacturing: "National Confederation of Industrial Workers",
-  automobiles: "National Confederation of Industrial Workers",
+  manufacturing_vehicles: "National Confederation of Industrial Workers",
   chemical_industries: "National Confederation of Industrial Workers",
   extraction: "National Confederation of Industrial Workers",
   energy: "National Confederation of Industrial Workers",
@@ -45,9 +45,9 @@ export const BR_UNION_NAMES_1979: Partial<Record<CorporationType, string>> = {
   agriculture: "CONTAG",
 };
 
-export const BR_UNION_NAMES_1953: Partial<Record<CorporationType, string>> = {
+export const BR_UNION_NAMES_1953: Partial<Record<OperatingSectorType, string>> = {
   manufacturing: "National Confederation of Industrial Workers",
-  automobiles: "National Confederation of Industrial Workers",
+  manufacturing_vehicles: "National Confederation of Industrial Workers",
   chemical_industries: "National Confederation of Industrial Workers",
   extraction: "National Confederation of Industrial Workers",
   energy: "National Confederation of Industrial Workers",

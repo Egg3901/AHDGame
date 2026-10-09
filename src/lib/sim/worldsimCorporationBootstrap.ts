@@ -1,6 +1,11 @@
+import { getOperatingSectorType } from "@/lib/constants/sectorStrategies";
 import type { Db } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
-import { CORPORATION_TYPES } from "@/lib/constants/corporations";
+import {
+  OPERATING_SECTOR_TYPES,
+  operatingSectorIdentity,
+  type OperatingSectorType,
+} from "@/lib/constants/corporations";
 import { batchSpawnNppCorporations, NPP_CAPITAL_STATES } from "@/lib/admin/spawnNppCorporation";
 import { loadPrivateEnterpriseBlockedCountries } from "@/lib/economy/queries/privateEnterpriseGate";
 
@@ -78,13 +83,16 @@ export async function bootstrapWorldsimCorporations(
     const existing = await db
       .collection<{ type: string }>("corporations")
       .find({ ceoType: "npp", countryId })
-      .project<{ type: string }>({ type: 1 })
+      .project<{ type: string; industryModel?: string | null; mediaDiscriminator?: string | null }>(
+        { type: 1, industryModel: 1, mediaDiscriminator: 1 }
+      )
       .toArray();
     const existingByType = new Map<string, number>();
     for (const corp of existing) {
-      existingByType.set(corp.type, (existingByType.get(corp.type) ?? 0) + 1);
+      const lane = getOperatingSectorType(corp.type, corp.industryModel, corp.mediaDiscriminator);
+      existingByType.set(lane, (existingByType.get(lane) ?? 0) + 1);
     }
-    const missing = CORPORATION_TYPES.map((type) => ({
+    const missing = OPERATING_SECTOR_TYPES.map((type) => ({
       type,
       count: Math.max(0, options.perSectorCount - (existingByType.get(type) ?? 0)),
     })).filter(({ count }) => count > 0);
@@ -94,7 +102,7 @@ export async function bootstrapWorldsimCorporations(
     }
     try {
       let spawnedCount = 0;
-      const typesByCount = new Map<number, (typeof CORPORATION_TYPES)[number][]>();
+      const typesByCount = new Map<number, OperatingSectorType[]>();
       for (const { type, count } of missing) {
         const types = typesByCount.get(count) ?? [];
         types.push(type);
@@ -102,7 +110,14 @@ export async function bootstrapWorldsimCorporations(
       }
       for (const [count, sectorTypes] of typesByCount) {
         const spawned = await batchSpawnNppCorporations(db, countryId, {
-          sectorTypes,
+          sectorMarkets: sectorTypes.map((lane) => {
+            const identity = operatingSectorIdentity(lane);
+            return {
+              type: identity.sectorType,
+              industryModel: identity.industryModel,
+              mediaDiscriminator: identity.mediaDiscriminator,
+            };
+          }),
           perSectorCount: count,
           limitToUnownedPool: true,
         });

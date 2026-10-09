@@ -43,7 +43,7 @@ import {
 import { BOND_UNIT_FACE_VALUE } from "@/lib/db/types/bond";
 import { recordIntradayLevels } from "@/lib/stockExchange/intraday";
 import {
-  CORPORATION_TYPE_LABELS,
+  OPERATING_SECTOR_TYPE_LABELS,
   CEO_INITIAL_SHARES,
   computeAllMarginModifiers,
   getHomeLocationMarginBonus,
@@ -958,7 +958,7 @@ export async function generateStockExchangeSnapshots(currentTurn: number, db?: D
           typeLabel:
             corp.type === "manufacturing" && corp.industryModel === "vehicles"
               ? "Vehicle manufacturing"
-              : CORPORATION_TYPE_LABELS[corp.type],
+              : OPERATING_SECTOR_TYPE_LABELS[corp.type],
           headquartersState: corp.headquartersState,
           headquartersStateName: stateNameMap.get(corp.headquartersState) ?? corp.headquartersState,
           logoUrl: isNatcorp
@@ -1139,7 +1139,7 @@ export async function generateStockExchangeSnapshots(currentTurn: number, db?: D
               0
             ),
           })),
-          ...Object.keys(CORPORATION_TYPE_LABELS).map((type) => ({
+          ...Object.keys(OPERATING_SECTOR_TYPE_LABELS).map((type) => ({
             exchange: `sector:${type}`,
             marketCap: allListings
               .filter((l) => l.type === type)

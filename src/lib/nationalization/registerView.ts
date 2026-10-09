@@ -8,7 +8,10 @@ import type {
 } from "@/lib/db/types";
 import type { CountryLeaderState } from "@/lib/db/types/countryLeaderState";
 import { writeGovBudgetLocal } from "@/lib/currency/govBudgetFields";
-import { CORPORATION_TYPE_LABELS, type CorporationType } from "@/lib/constants/corporations";
+import {
+  OPERATING_SECTOR_TYPE_LABELS,
+  type OperatingSectorType,
+} from "@/lib/constants/corporations";
 import type { NationalizationTrigger } from "./consequences/types";
 import { TIER_LABEL, PATH_LABEL, TRIGGER_LABEL, isPrivatizationKind } from "./labels";
 import {
@@ -111,8 +114,9 @@ export function summarizeRegister(
       id: String(e._id),
       firm: priv ? (e.newCorpName ?? "Spin-out") : (e.formerCorpName ?? "Asset"),
       sectorLabel:
-        e.sectorTypes?.map((s) => CORPORATION_TYPE_LABELS[s as CorporationType] ?? s).join(", ") ||
-        "—",
+        e.sectorTypes
+          ?.map((s) => OPERATING_SECTOR_TYPE_LABELS[s as OperatingSectorType] ?? s)
+          .join(", ") || "—",
       turn: e.turn,
       kind: e.kind,
       isPrivatization: priv,

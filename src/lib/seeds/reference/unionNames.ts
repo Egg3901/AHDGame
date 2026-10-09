@@ -1,5 +1,5 @@
 import { uniform } from "@/lib/seeds/reference/uniformUnionName";
-import type { CorporationType } from "@/lib/constants/corporations";
+import type { OperatingSectorType } from "@/lib/constants/corporations";
 import type { CountryId } from "@/lib/constants/countries";
 import type { EraId } from "@/lib/seeds/presetSelector";
 import {
@@ -107,7 +107,7 @@ import {
 import { YU_UNION_NAMES_MODERN } from "@/lib/countries/yu/data/yuUnionNames";
 
 /** Per-country, per-sector historical union names for a given era. */
-export type UnionNameMap = Partial<Record<CountryId, Partial<Record<CorporationType, string>>>>;
+export type UnionNameMap = Partial<Record<CountryId, Partial<Record<OperatingSectorType, string>>>>;
 
 /**
  * Shared modern-era names (2019/2023 family). Era-specific bundles override

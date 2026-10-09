@@ -15,7 +15,7 @@
  * COPY RULE (project standing): plain language, short, no dashes, no jargon.
  */
 
-import type { CorporationType } from "@/lib/constants/corporations";
+import type { OperatingSectorType } from "@/lib/constants/corporations";
 
 export interface FacilityVocabulary {
   /** "store". Lowercase; capitalize at the call site when it leads a sentence. */
@@ -47,7 +47,7 @@ export const GENERIC_FACILITY: FacilityVocabulary = {
   runNoun: "the operation",
 };
 
-const VOCABULARY: Record<CorporationType, FacilityVocabulary> = {
+const VOCABULARY: Record<OperatingSectorType, FacilityVocabulary> = {
   financial: { singular: "branch", plural: "branches", buildVerb: "open", runNoun: "the desk" },
   media: { singular: "newsroom", plural: "newsrooms", buildVerb: "open", runNoun: "the desk" },
   manufacturing: { singular: "plant", plural: "plants", buildVerb: "build", runNoun: "the line" },
@@ -59,7 +59,7 @@ const VOCABULARY: Record<CorporationType, FacilityVocabulary> = {
   },
   healthcare: { singular: "clinic", plural: "clinics", buildVerb: "open", runNoun: "the ward" },
   retail: { singular: "store", plural: "stores", buildVerb: "open", runNoun: "the floor" },
-  automobiles: {
+  manufacturing_vehicles: {
     singular: "assembly plant",
     plural: "assembly plants",
     buildVerb: "build",
@@ -87,7 +87,12 @@ const VOCABULARY: Record<CorporationType, FacilityVocabulary> = {
     buildVerb: "build",
     runNoun: "the network",
   },
-  entertainment: { singular: "venue", plural: "venues", buildVerb: "open", runNoun: "the room" },
+  media_entertainment: {
+    singular: "venue",
+    plural: "venues",
+    buildVerb: "open",
+    runNoun: "the room",
+  },
   logistics: { singular: "depot", plural: "depots", buildVerb: "open", runNoun: "the fleet" },
   extraction: { singular: "mine", plural: "mines", buildVerb: "sink", runNoun: "the workings" },
 };
@@ -98,19 +103,23 @@ const VOCABULARY: Record<CorporationType, FacilityVocabulary> = {
  * type from a pre-rename world should render "facility", not a broken page.
  */
 export function facilityVocabulary(
-  sectorType: CorporationType | string | null | undefined
+  sectorType: OperatingSectorType | string | null | undefined
 ): FacilityVocabulary {
   if (!sectorType) return GENERIC_FACILITY;
-  return VOCABULARY[sectorType as CorporationType] ?? GENERIC_FACILITY;
+  return VOCABULARY[sectorType as OperatingSectorType] ?? GENERIC_FACILITY;
 }
 
 /** "store" / "facility". */
-export function facilitySingular(sectorType: CorporationType | string | null | undefined): string {
+export function facilitySingular(
+  sectorType: OperatingSectorType | string | null | undefined
+): string {
   return facilityVocabulary(sectorType).singular;
 }
 
 /** "stores" / "facilities". */
-export function facilityPlural(sectorType: CorporationType | string | null | undefined): string {
+export function facilityPlural(
+  sectorType: OperatingSectorType | string | null | undefined
+): string {
   return facilityVocabulary(sectorType).plural;
 }
 
@@ -120,7 +129,9 @@ export function capitalizeFacility(word: string): string {
 }
 
 /** "open a store", "build an arsenal", "sink a mine". Handles a/an. */
-export function buildOnePhrase(sectorType: CorporationType | string | null | undefined): string {
+export function buildOnePhrase(
+  sectorType: OperatingSectorType | string | null | undefined
+): string {
   const v = facilityVocabulary(sectorType);
   const article = /^[aeiou]/i.test(v.singular) ? "an" : "a";
   // "works" is already plural in form, so it takes no article.
@@ -129,6 +140,8 @@ export function buildOnePhrase(sectorType: CorporationType | string | null | und
 }
 
 /** "Your stores", "Your network hubs". */
-export function yourFacilities(sectorType: CorporationType | string | null | undefined): string {
+export function yourFacilities(
+  sectorType: OperatingSectorType | string | null | undefined
+): string {
   return `Your ${facilityPlural(sectorType)}`;
 }

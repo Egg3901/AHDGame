@@ -11,8 +11,8 @@ import { cnRegions } from "@/lib/seeds/cn/cnRegions";
 import { ieRegions } from "@/lib/seeds/ie/ieRegions";
 import { brRegions } from "@/lib/seeds/br/brRegions";
 import { CDN_GEO } from "@/lib/images/cdnUrls";
-import { CORPORATION_TYPES, CORPORATION_TYPE_LABELS } from "@/lib/constants/corporations";
-import type { CorporationType } from "@/lib/constants/corporations";
+import { OPERATING_SECTOR_TYPES, OPERATING_SECTOR_TYPE_LABELS } from "@/lib/constants/corporations";
+import type { OperatingSectorType } from "@/lib/constants/corporations";
 import type { CountryId } from "@/lib/constants/countries";
 import { getStateSectorWeights } from "@/lib/seeds/reference/sectorSeedWeights";
 import type { RegionMapData } from "@/components/RegionMapPaths";
@@ -120,7 +120,7 @@ const COUNTRIES: { id: CountryId; label: string }[] = [
 
 export function SectorSeedMap() {
   const [country, setCountry] = useState<CountryId>("US");
-  const [sector, setSector] = useState<CorporationType>("technology");
+  const [sector, setSector] = useState<OperatingSectorType>("technology");
 
   const regionIds = useMemo(() => REGION_IDS[country] ?? [], [country]);
 
@@ -176,12 +176,12 @@ export function SectorSeedMap() {
       <div className="mb-3">
         <select
           value={sector}
-          onChange={(e) => setSector(e.target.value as CorporationType)}
+          onChange={(e) => setSector(e.target.value as OperatingSectorType)}
           className="rounded border border-card-border bg-card px-2 py-1 text-sm text-foreground"
         >
-          {CORPORATION_TYPES.map((t) => (
+          {OPERATING_SECTOR_TYPES.map((t) => (
             <option key={t} value={t}>
-              {CORPORATION_TYPE_LABELS[t]}
+              {OPERATING_SECTOR_TYPE_LABELS[t]}
             </option>
           ))}
         </select>

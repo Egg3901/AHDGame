@@ -221,37 +221,6 @@ describe("D9 — retool leaves capital-mode utilization alone", () => {
   });
 });
 
-describe("automobile manufacturing model compatibility through corporation turn", () => {
-  it("keeps vehicle output and the operating revenue basis equal to legacy automobile rows", () => {
-    const legacy = run(
-      "plants",
-      makeSector({
-        sectorType: "automobiles",
-        strategyId: "standard",
-        capitalStock: 5_000,
-        operatingCapacityUnits: 5_000,
-      } as Partial<CorporateSector>),
-      makeCorp({ type: "automobiles" })
-    );
-    const modelled = run(
-      "plants",
-      makeSector({
-        sectorType: "manufacturing",
-        industryModel: "vehicles",
-        strategyId: "standard",
-        capitalStock: 5_000,
-        operatingCapacityUnits: 5_000,
-      } as Partial<CorporateSector>),
-      makeCorp({ type: "manufacturing", industryModel: "vehicles" })
-    );
-
-    expect(modelled.update.producedUnits).toBe(legacy.update.producedUnits);
-    expect(modelled.update.soldUnits).toBe(legacy.update.soldUnits);
-    expect(modelled.update.revenue).toBe(legacy.update.revenue);
-    expect(modelled.update.realizedRevenue).toBe(legacy.update.realizedRevenue);
-  });
-});
-
 // ─── Tech outputRateMult reaches the plants units chain ─────────────────────
 
 describe("tech outputRate — plants units chain", () => {

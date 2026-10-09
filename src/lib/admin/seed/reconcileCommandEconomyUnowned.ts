@@ -22,6 +22,7 @@
  * migration for live worlds.
  */
 
+import { operatingSectorFilter } from "@/lib/constants/corporations";
 import type { Db } from "mongodb";
 import { ObjectId } from "mongodb";
 import type {
@@ -33,7 +34,7 @@ import type {
   UnownedSector,
 } from "@/lib/db/types";
 import type { CountryId } from "@/lib/constants/countries";
-import type { CorporationType } from "@/lib/constants/corporations";
+import type { OperatingSectorType } from "@/lib/constants/corporations";
 import { commandEconomySoeSectors, isCommandEconomy } from "@/lib/constants/commandEconomy";
 import { getStartingYearForPreset } from "@/lib/constants/turnTime";
 import { generateCountryOwnedSeedData } from "@/lib/seeds/reference/budgets";
@@ -143,9 +144,9 @@ export async function reconcileCommandEconomyUnowned(
   // production instead of reconciling it (ticket #1271).
   const coveredStatesByCountryType = new Map<
     string,
-    { countryId: CountryId; sectorType: CorporationType; stateIds: Set<string> }
+    { countryId: CountryId; sectorType: OperatingSectorType; stateIds: Set<string> }
   >();
-  const markCovered = (countryId: CountryId, sectorType: CorporationType, stateId: string) => {
+  const markCovered = (countryId: CountryId, sectorType: OperatingSectorType, stateId: string) => {
     const key = `${countryId}:${sectorType}`;
     let covered = coveredStatesByCountryType.get(key);
     if (!covered) {
@@ -157,7 +158,7 @@ export async function reconcileCommandEconomyUnowned(
 
   for (const entry of seedEntries) {
     const sectorType = (entry.corporation.assignedSectorTypes?.[0] ??
-      entry.corporation.type) as CorporationType;
+      entry.corporation.type) as OperatingSectorType;
     const countryId = entry.corporation.countryOwnerId as CountryId;
 
     const existing = await db.collection<Corporation>("corporations").findOne({
@@ -233,7 +234,7 @@ export async function reconcileCommandEconomyUnowned(
     if (!dryRun && entry.sectors.length > 0) {
       await db.collection<CorporateSector>("corporateSectors").deleteMany({
         countryId,
-        sectorType,
+        ...operatingSectorFilter(sectorType),
         stateId: { $in: [...new Set(entry.sectors.map((s) => s.stateId))] },
         corporationId: { $ne: corpId },
       });
@@ -243,7 +244,13 @@ export async function reconcileCommandEconomyUnowned(
       if (!dryRun) {
         const { _id: _sectorId, corporationId: _ignored, ...sectorData } = sector;
         await db.collection<CorporateSector>("corporateSectors").updateOne(
-          { corporationId: corpId, stateId: sector.stateId, sectorType: sector.sectorType },
+          {
+            corporationId: corpId,
+            stateId: sector.stateId,
+            sectorType: sector.sectorType,
+            industryModel: sector.industryModel ?? null,
+            mediaDiscriminator: sector.mediaDiscriminator ?? null,
+          },
           {
             $set: {
               ...sectorData,
@@ -272,7 +279,7 @@ export async function reconcileCommandEconomyUnowned(
   const unownedFilter = {
     $or: covered.map(({ countryId, sectorType, stateIds }) => ({
       countryId,
-      sectorType,
+      ...operatingSectorFilter(sectorType),
       stateId: { $in: stateIds },
     })),
   };

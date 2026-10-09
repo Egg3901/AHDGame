@@ -140,14 +140,28 @@ describe("reconcileCommandEconomyUnowned", () => {
     expect(result.unownedDeleted).toBe(12);
     expect(db.collectionMocks.unownedSectors.deleteMany).toHaveBeenCalledWith({
       $or: [
-        { countryId: "DD", sectorType: "manufacturing", stateId: { $in: ["SN"] } },
-        { countryId: "DD", sectorType: "retail", stateId: { $in: ["SN"] } },
+        {
+          countryId: "DD",
+          sectorType: "manufacturing",
+          industryModel: null,
+          mediaDiscriminator: null,
+          stateId: { $in: ["SN"] },
+        },
+        {
+          countryId: "DD",
+          sectorType: "retail",
+          industryModel: null,
+          mediaDiscriminator: null,
+          stateId: { $in: ["SN"] },
+        },
       ],
     });
     // Fallout cleanup reaches only the covered state, not the whole country.
     expect(db.collectionMocks.corporateSectors.deleteMany).toHaveBeenCalledWith({
       countryId: "DD",
       sectorType: "manufacturing",
+      industryModel: null,
+      mediaDiscriminator: null,
       stateId: { $in: ["SN"] },
       corporationId: { $ne: existingCorpId },
     });
@@ -204,8 +218,20 @@ describe("reconcileCommandEconomyUnowned", () => {
       $or: Array<{ countryId: string; sectorType: string; stateId: { $in: string[] } }>;
     };
     expect(filter.$or).toEqual([
-      { countryId: "CN", sectorType: "manufacturing", stateId: { $in: ["BJ"] } },
-      { countryId: "CN", sectorType: "energy", stateId: { $in: ["BJ"] } },
+      {
+        countryId: "CN",
+        sectorType: "manufacturing",
+        industryModel: null,
+        mediaDiscriminator: null,
+        stateId: { $in: ["BJ"] },
+      },
+      {
+        countryId: "CN",
+        sectorType: "energy",
+        industryModel: null,
+        mediaDiscriminator: null,
+        stateId: { $in: ["BJ"] },
+      },
     ]);
   });
 
@@ -310,7 +336,15 @@ describe("reconcileCommandEconomyUnowned", () => {
     const result = await reconcileCommandEconomyUnowned(db as unknown as Db, { dryRun: true });
     expect(result.unownedDeleted).toBe(12);
     expect(db.collectionMocks.unownedSectors.countDocuments).toHaveBeenCalledWith({
-      $or: [{ countryId: "DD", sectorType: "manufacturing", stateId: { $in: ["SN"] } }],
+      $or: [
+        {
+          countryId: "DD",
+          sectorType: "manufacturing",
+          industryModel: null,
+          mediaDiscriminator: null,
+          stateId: { $in: ["SN"] },
+        },
+      ],
     });
     expect(db.collectionMocks.unownedSectors.deleteMany).not.toHaveBeenCalled();
     expect(db.collectionMocks.corporations.updateOne).not.toHaveBeenCalled();

@@ -136,7 +136,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
           id: sector._id.toString(),
           strategyId: sector.strategyId,
           operatingSectorType:
-            sector.mediaDiscriminator === "entertainment" ? "entertainment" : "media",
+            sector.mediaDiscriminator === "entertainment" ? "media_entertainment" : "media",
           capitalStock: sector.capitalStock ?? 0,
         })),
       },

@@ -31,7 +31,7 @@ describe("facilityVocabulary", () => {
 
   it("keeps the industrial word where it is right", () => {
     expect(facilityPlural("manufacturing")).toBe("plants");
-    expect(facilityPlural("automobiles")).toBe("assembly plants");
+    expect(facilityPlural("manufacturing_vehicles")).toBe("assembly plants");
   });
 
   it("falls back to the generic instead of throwing on an unknown type", () => {

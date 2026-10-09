@@ -1,4 +1,4 @@
-import type { CorporationType } from "@/lib/constants/corporations";
+import type { OperatingSectorType } from "@/lib/constants/corporations";
 import { uniform } from "@/lib/seeds/reference/uniformUnionName";
 
 /**
@@ -13,9 +13,9 @@ import { uniform } from "@/lib/seeds/reference/uniformUnionName";
  * map -- is a separate thing and stays there.
  */
 
-export const ES_UNION_NAMES_MODERN: Partial<Record<CorporationType, string>> = {
+export const ES_UNION_NAMES_MODERN: Partial<Record<OperatingSectorType, string>> = {
   manufacturing: "CCOO Industry Federation",
-  automobiles: "CCOO Industry Federation",
+  manufacturing_vehicles: "CCOO Industry Federation",
   chemical_industries: "CCOO Industry Federation",
   construction: "CCOO Construction Federation",
   energy: "CCOO Energy Federation",
@@ -27,12 +27,12 @@ export const ES_UNION_NAMES_MODERN: Partial<Record<CorporationType, string>> = {
   technology: "CCOO Industry Federation",
   financial: "CCOO Finance Federation",
   telecommunications: "CCOO Communications Federation",
-  entertainment: "CCOO Culture Federation",
+  media_entertainment: "CCOO Culture Federation",
   defense: "CCOO Industry Federation",
   agriculture: "CCOO Agriculture Federation",
   real_estate: "CCOO Construction Federation",
 };
 
-export const ES_UNION_NAMES_1953: Partial<Record<CorporationType, string>> = uniform(
+export const ES_UNION_NAMES_1953: Partial<Record<OperatingSectorType, string>> = uniform(
   "Organización Sindical Española"
 );

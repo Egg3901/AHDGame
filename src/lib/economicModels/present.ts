@@ -5,7 +5,7 @@ import {
   type EconomicModelState,
   type EconomicModelId,
 } from "@/lib/constants/economicModels";
-import { CORPORATION_TYPE_LABELS } from "@/lib/constants/corporations";
+import { OPERATING_SECTOR_TYPE_LABELS } from "@/lib/constants/corporations";
 import { metricCategories } from "@/lib/constants/metricDefinitions";
 import {
   effectStrength,
@@ -69,7 +69,7 @@ export function presentEconomicModel(state: EconomicModelState): EconomicModelVi
   const archetype = MODEL_ARCHETYPES[state.current];
   const signatureSectors = archetype.primarySector
     ? [archetype.primarySector, ...archetype.secondarySectors].map(
-        (s) => CORPORATION_TYPE_LABELS[s]
+        (s) => OPERATING_SECTOR_TYPE_LABELS[s]
       )
     : [];
 

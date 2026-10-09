@@ -35,7 +35,6 @@ export const CORPORATION_TYPES = [
   "chemical_industries",
   "healthcare",
   "retail",
-  "automobiles",
   "technology",
   "energy",
   "agriculture",
@@ -43,83 +42,125 @@ export const CORPORATION_TYPES = [
   "construction",
   "defense",
   "telecommunications",
-  "entertainment",
   "logistics",
   "extraction",
 ] as const;
 
 export type CorporationType = (typeof CORPORATION_TYPES)[number];
 
-/**
- * Types folded into another sector by the 1.12 taxonomy: automobiles is the
- * manufacturing "vehicles" model, entertainment is the media "entertainment"
- * discriminator. They stay in CORPORATION_TYPES for legacy rows and readers
- * but can no longer be chosen for a new corporation or a new sector.
- */
-export const RETIRED_CORPORATION_TYPES = ["automobiles", "entertainment"] as const;
-
-export type RetiredCorporationType = (typeof RETIRED_CORPORATION_TYPES)[number];
-
-export function isRetiredCorporationType(type: string): type is RetiredCorporationType {
-  return (RETIRED_CORPORATION_TYPES as readonly string[]).includes(type);
-}
-
-export const FOUNDABLE_CORPORATION_TYPES = CORPORATION_TYPES.filter(
-  (t): t is Exclude<CorporationType, RetiredCorporationType> => !isRetiredCorporationType(t)
-) as readonly Exclude<CorporationType, RetiredCorporationType>[];
-
-/**
- * Sector focus options for a picker: foundable types only, plus the saved
- * value when it is a retired legacy type, so an old automobiles or
- * entertainment corporation still renders its own focus without the retired
- * type being offered to anyone else.
- */
-export function sectorFocusOptions(saved?: string | null): CorporationType[] {
-  const options: CorporationType[] = [...FOUNDABLE_CORPORATION_TYPES];
-  if (
-    saved &&
-    !options.includes(saved as CorporationType) &&
-    (CORPORATION_TYPES as readonly string[]).includes(saved)
-  ) {
-    options.push(saved as CorporationType);
-  }
-  return options;
-}
-
-/** Canonical sector a retired type was folded into by the 1.12 taxonomy. */
-const FOLDED_INTO: Record<RetiredCorporationType, CorporationType> = {
-  automobiles: "manufacturing",
-  entertainment: "media",
-};
-
-/**
- * Whether a sector-scoped policy target (subsidy, tariff) covers a sector,
- * given the sector's OPERATING type (vehicle plants operate as "automobiles",
- * entertainment media lanes as "entertainment"; see getOperatingSectorType).
- *
- * - A legacy "automobiles"/"entertainment" target still reaches the converted
- *   vehicle and entertainment lanes, so laws enacted before the merger keep
- *   working.
- * - A "manufacturing"/"media" target covers the whole canonical sector,
- *   folded lanes included, since that is the only choice pickers now offer.
- * - Ordinary manufacturing/media is never reached by a retired target.
- */
-export function sectorPolicyTargetMatches(
-  target: string | null | undefined,
-  operatingSectorType: string
-): boolean {
-  if (!target) return false;
-  if (target === operatingSectorType) return true;
-  return (
-    isRetiredCorporationType(operatingSectorType) && FOLDED_INTO[operatingSectorType] === target
-  );
-}
-
 /** Specialized production models that belong to the manufacturing taxonomy. */
 export type ManufacturingIndustryModel = "vehicles";
 
-/** Preserves the former entertainment operating lane inside canonical media. */
+/** The entertainment operating lane inside canonical media. */
 export type MediaDiscriminator = "entertainment";
+
+/**
+ * Operating lanes that carry their own economics inside a corporation type.
+ * Recipes, prices, tech, plant sizes and seed weights for vehicle makers and
+ * entertainment houses are keyed by these lanes. Stored rows never hold a lane
+ * key: they hold the corporation type plus `industryModel` or
+ * `mediaDiscriminator` (see operatingSectorIdentity).
+ */
+export const SPECIALIZED_OPERATING_LANES = [
+  "manufacturing_vehicles",
+  "media_entertainment",
+] as const;
+
+export type SpecializedOperatingLane = (typeof SPECIALIZED_OPERATING_LANES)[number];
+
+/**
+ * Every economic profile a sector can run under: a corporation type or a
+ * specialized lane. The order is load-bearing: seeded state-enterprise ids,
+ * specialization rotations and seeded random picks derive from a lane's
+ * position, so the lanes sit where their economics always sat. Append only.
+ */
+export const OPERATING_SECTOR_TYPES = [
+  "financial",
+  "media",
+  "manufacturing",
+  "chemical_industries",
+  "healthcare",
+  "retail",
+  "manufacturing_vehicles",
+  "technology",
+  "energy",
+  "agriculture",
+  "real_estate",
+  "construction",
+  "defense",
+  "telecommunications",
+  "media_entertainment",
+  "logistics",
+  "extraction",
+] as const satisfies readonly (CorporationType | SpecializedOperatingLane)[];
+
+export type OperatingSectorType = (typeof OPERATING_SECTOR_TYPES)[number];
+
+/** The persisted identity of an operating lane. */
+export interface OperatingSectorIdentity {
+  sectorType: CorporationType;
+  industryModel: ManufacturingIndustryModel | null;
+  mediaDiscriminator: MediaDiscriminator | null;
+}
+
+export function isCorporationType(value: unknown): value is CorporationType {
+  return typeof value === "string" && (CORPORATION_TYPES as readonly string[]).includes(value);
+}
+
+export function isOperatingSectorType(value: unknown): value is OperatingSectorType {
+  return typeof value === "string" && (OPERATING_SECTOR_TYPES as readonly string[]).includes(value);
+}
+
+/** Resolve the operating lane a persisted sector (or corporation) runs under. */
+export function operatingSectorTypeFor(
+  sectorType: CorporationType,
+  industryModel?: string | null,
+  mediaDiscriminator?: string | null
+): OperatingSectorType {
+  if (sectorType === "manufacturing" && industryModel === "vehicles") {
+    return "manufacturing_vehicles";
+  }
+  if (sectorType === "media" && mediaDiscriminator === "entertainment") {
+    return "media_entertainment";
+  }
+  return sectorType;
+}
+
+/** The fields a row stores for an operating lane. */
+export function operatingSectorIdentity(lane: OperatingSectorType): OperatingSectorIdentity {
+  if (lane === "manufacturing_vehicles") {
+    return { sectorType: "manufacturing", industryModel: "vehicles", mediaDiscriminator: null };
+  }
+  if (lane === "media_entertainment") {
+    return { sectorType: "media", industryModel: null, mediaDiscriminator: "entertainment" };
+  }
+  return { sectorType: lane, industryModel: null, mediaDiscriminator: null };
+}
+
+/**
+ * Mongo filter fields selecting exactly one operating lane's rows. A plain
+ * type matches rows with no model or discriminator (null matches absent).
+ * Unknown values pass through as a bare sector type.
+ */
+export function operatingSectorFilter(lane: OperatingSectorType): OperatingSectorIdentity;
+export function operatingSectorFilter(lane: string): {
+  sectorType: string;
+  industryModel?: ManufacturingIndustryModel | null;
+  mediaDiscriminator?: MediaDiscriminator | null;
+};
+export function operatingSectorFilter(lane: string): {
+  sectorType: string;
+  industryModel?: ManufacturingIndustryModel | null;
+  mediaDiscriminator?: MediaDiscriminator | null;
+} {
+  if (!isOperatingSectorType(lane)) return { sectorType: lane };
+  return operatingSectorIdentity(lane);
+}
+
+/** The corporation type an operating lane belongs to. */
+export function corporationTypeOfLane(lane: OperatingSectorType): CorporationType {
+  return operatingSectorIdentity(lane).sectorType;
+}
 
 export const CORPORATION_TYPE_LABELS: Record<CorporationType, string> = {
   financial: "Financial",
@@ -128,7 +169,6 @@ export const CORPORATION_TYPE_LABELS: Record<CorporationType, string> = {
   chemical_industries: "Chemical Industries",
   healthcare: "Healthcare",
   retail: "Retail",
-  automobiles: "Automobiles",
   technology: "Technology",
   energy: "Energy",
   agriculture: "Agriculture",
@@ -136,9 +176,15 @@ export const CORPORATION_TYPE_LABELS: Record<CorporationType, string> = {
   construction: "Construction",
   defense: "Defense",
   telecommunications: "Telecommunications",
-  entertainment: "Entertainment",
   logistics: "Logistics",
   extraction: "Extraction & Mining",
+};
+
+/** Labels for operating lanes; the specialized lanes name their line of business. */
+export const OPERATING_SECTOR_TYPE_LABELS: Record<OperatingSectorType, string> = {
+  ...CORPORATION_TYPE_LABELS,
+  manufacturing_vehicles: "Automobiles",
+  media_entertainment: "Entertainment",
 };
 
 /** Cost deducted from character funds to found a corporation */
@@ -887,8 +933,8 @@ export const ATTACK_OWNED_COST_FRACTION = 0.1;
  */
 export const ATTACK_OWNED_CONTESTED_FRACTION = 0.1;
 
-/** Number of sector types (for market size division) */
-export const SECTOR_TYPE_COUNT = CORPORATION_TYPES.length;
+/** Number of operating lanes (for market size division) */
+export const SECTOR_TYPE_COUNT = OPERATING_SECTOR_TYPES.length;
 
 /**
  * Cost to expand growth by 1% = sector revenue × this multiplier.
@@ -1051,7 +1097,7 @@ export const SECTOR_RISK_PREMIUM: Record<string, number> = {
   chemical_industries: 0.05,
   healthcare: 0.05,
   retail: 0.04,
-  automobiles: 0.05,
+  manufacturing_vehicles: 0.05,
   technology: 0.06,
   energy: 0.06,
   agriculture: 0.03,
@@ -1059,7 +1105,7 @@ export const SECTOR_RISK_PREMIUM: Record<string, number> = {
   construction: 0.04,
   defense: 0.04,
   telecommunications: 0.04,
-  entertainment: 0.06,
+  media_entertainment: 0.06,
   logistics: 0.04,
   extraction: 0.06,
   default: 0.05,
@@ -1117,7 +1163,7 @@ export const MAX_DIVIDEND_RATE = 25;
 // Each sector-specific metric only affects the listed sector types.
 
 /** Sectors affected by workforce skill (education → skilled labor availability) */
-export const WORKFORCE_SKILL_SECTORS = new Set<CorporationType>([
+export const WORKFORCE_SKILL_SECTORS = new Set<OperatingSectorType>([
   "technology",
   "chemical_industries",
   "healthcare",
@@ -1126,14 +1172,14 @@ export const WORKFORCE_SKILL_SECTORS = new Set<CorporationType>([
 ]);
 
 /** Sectors affected by crime rate (foot traffic, theft, vandalism risk) */
-export const CRIME_RATE_SECTORS = new Set<CorporationType>([
+export const CRIME_RATE_SECTORS = new Set<OperatingSectorType>([
   "retail",
   "real_estate",
-  "entertainment",
+  "media_entertainment",
 ]);
 
 /** Sectors affected by broadband access (connectivity-dependent operations) */
-export const BROADBAND_SECTORS = new Set<CorporationType>([
+export const BROADBAND_SECTORS = new Set<OperatingSectorType>([
   "technology",
   "telecommunications",
   "media",
@@ -1141,27 +1187,27 @@ export const BROADBAND_SECTORS = new Set<CorporationType>([
 ]);
 
 /** Sectors affected by road condition (logistics and supply chain) */
-export const ROAD_CONDITION_SECTORS = new Set<CorporationType>([
+export const ROAD_CONDITION_SECTORS = new Set<OperatingSectorType>([
   "manufacturing",
   "retail",
   "agriculture",
-  "automobiles",
+  "manufacturing_vehicles",
   "construction",
   "logistics",
   "extraction",
 ]);
 
 /** Sectors affected by carbon emissions (regulatory / compliance costs) */
-export const CARBON_EMISSIONS_SECTORS = new Set<CorporationType>([
+export const CARBON_EMISSIONS_SECTORS = new Set<OperatingSectorType>([
   "energy",
   "chemical_industries",
   "manufacturing",
-  "automobiles",
+  "manufacturing_vehicles",
   "extraction",
 ]);
 
 /** Sectors affected by cost of living (labor cost proxy) */
-export const COST_OF_LIVING_SECTORS = new Set<CorporationType>([
+export const COST_OF_LIVING_SECTORS = new Set<OperatingSectorType>([
   "chemical_industries",
   "manufacturing",
   "retail",
@@ -1343,7 +1389,7 @@ export const ROAD_CONDITION_MAX_MODIFIER = 3;
 
 /**
  * Compute profit margin modifier from state road condition (0–100 index).
- * Only applies to: manufacturing, retail, agriculture, automobiles, construction.
+ * Only applies to: manufacturing, retail, agriculture, the vehicles lane, construction.
  *
  * - At 60: 0% modifier
  * - Below 60: linear penalty to -3% at 0 (poor roads raise logistics costs)
@@ -1372,7 +1418,7 @@ export const CARBON_EMISSIONS_MAX_PENALTY = 3;
 
 /**
  * Compute profit margin modifier from state carbon emissions (MT per capita).
- * Only applies to: energy, manufacturing, automobiles.
+ * Only applies to: energy, manufacturing, the vehicles lane.
  *
  * Higher emissions = higher regulatory & compliance costs.
  * - At or below 3 MT: 0% modifier
@@ -1447,9 +1493,10 @@ export function getHomeLocationMarginBonus(
   return 0;
 }
 
+/** A state's specialized operating lanes (a lane can be a whole corporation type). */
 export interface StateSectorSpecialization {
-  primary: CorporationType;
-  secondary: CorporationType;
+  primary: OperatingSectorType;
+  secondary: OperatingSectorType;
 }
 
 /**
@@ -1459,7 +1506,7 @@ export interface StateSectorSpecialization {
  */
 export function getStateSectorSpecializationMarginBonus(
   specialization: StateSectorSpecialization | null | undefined,
-  sectorType: CorporationType
+  sectorType: OperatingSectorType
 ): number {
   if (!specialization) return 0;
   if (specialization.primary === sectorType) return STATE_PRIMARY_SECTOR_MARGIN_BONUS;
@@ -1888,16 +1935,16 @@ export interface MacroEconomicValues {
  * @returns All modifier values and the effective margin (rounded to 1 decimal)
  */
 export function computeAllMarginModifiers(
-  sectorType: CorporationType,
+  sectorType: OperatingSectorType,
   baseProfitMargin: number,
   metrics: StateMetricValues,
   commodityMod: number = 0,
   homeLocationBonus: number = 0,
-  corporationType?: CorporationType,
+  corporationType?: OperatingSectorType,
   totalSectors?: number,
   macroEcon?: MacroEconomicValues,
   logisticsStrength?: number,
-  secondaryType?: CorporationType | null,
+  secondaryType?: OperatingSectorType | null,
   typeSwitchPenaltyActive?: boolean,
   foreignTariffMod: number = 0,
   domesticTariffMod: number = 0,
@@ -2113,3 +2160,16 @@ export const PRIVATIZATION_FAILED_COOLDOWN_TURNS = 96;
  * previous = 0.5, two decades back = 0.25, etc.
  */
 export const TECH_ASSET_VALUE_PER_RD_ANCHOR = 45_000;
+
+/** Canonical policies cover their operating lanes. */
+export function sectorPolicyTargetMatches(
+  target: string | null | undefined,
+  operatingSectorType: string
+): boolean {
+  if (!target) return false;
+  return (
+    target === operatingSectorType ||
+    (target === "manufacturing" && operatingSectorType === "manufacturing_vehicles") ||
+    (target === "media" && operatingSectorType === "media_entertainment")
+  );
+}

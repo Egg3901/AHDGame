@@ -3,8 +3,8 @@
 import { useState, useEffect } from "react";
 import { getCountryConfig } from "@/lib/constants/countries";
 import type { CountryId } from "@/lib/constants/countries";
-import { CORPORATION_TYPE_LABELS } from "@/lib/constants/corporations";
-import type { CorporationType } from "@/lib/constants/corporations";
+import { OPERATING_SECTOR_TYPE_LABELS } from "@/lib/constants/corporations";
+import type { OperatingSectorType } from "@/lib/constants/corporations";
 import type { SectorDetail } from "./CorporationPageTypes";
 
 interface SubsidyEntry {
@@ -126,7 +126,7 @@ export function SubsidyBenefits({ corpHqState, corpHqCountryId, sectors }: Subsi
                 s.scope === "state" && s.stateId ? s.stateId : null,
                 SCOPE_LABELS[s.scopeType] ?? s.scopeType,
                 s.targetSectorType
-                  ? (CORPORATION_TYPE_LABELS[s.targetSectorType as CorporationType] ??
+                  ? (OPERATING_SECTOR_TYPE_LABELS[s.targetSectorType as OperatingSectorType] ??
                     s.targetSectorType)
                   : null,
               ]

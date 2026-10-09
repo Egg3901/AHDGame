@@ -1,4 +1,4 @@
-import type { CorporationType } from "@/lib/constants/corporations";
+import type { OperatingSectorType } from "@/lib/constants/corporations";
 
 /**
  * IE's trade-union names, by era.
@@ -12,9 +12,9 @@ import type { CorporationType } from "@/lib/constants/corporations";
  * map -- is a separate thing and stays there.
  */
 
-export const IE_UNION_NAMES_MODERN: Partial<Record<CorporationType, string>> = {
+export const IE_UNION_NAMES_MODERN: Partial<Record<OperatingSectorType, string>> = {
   manufacturing: "SIPTU",
-  automobiles: "SIPTU",
+  manufacturing_vehicles: "SIPTU",
   healthcare: "INMO",
   retail: "Mandate",
   construction: "Connect Trade Union",
@@ -26,16 +26,16 @@ export const IE_UNION_NAMES_MODERN: Partial<Record<CorporationType, string>> = {
   telecommunications: "CWU Ireland",
 };
 
-export const IE_UNION_NAMES_1999: Partial<Record<CorporationType, string>> = {
+export const IE_UNION_NAMES_1999: Partial<Record<OperatingSectorType, string>> = {
   ...IE_UNION_NAMES_MODERN,
   healthcare: "Irish Nurses Organisation",
   financial: "Irish Bank Officials' Association",
   construction: "Technical Engineering and Electrical Union",
 };
 
-export const IE_UNION_NAMES_1991: Partial<Record<CorporationType, string>> = {
+export const IE_UNION_NAMES_1991: Partial<Record<OperatingSectorType, string>> = {
   manufacturing: "SIPTU",
-  automobiles: "SIPTU",
+  manufacturing_vehicles: "SIPTU",
   energy: "SIPTU",
   logistics: "SIPTU",
   technology: "SIPTU",
@@ -46,9 +46,9 @@ export const IE_UNION_NAMES_1991: Partial<Record<CorporationType, string>> = {
   telecommunications: "Communications Workers' Union",
 };
 
-export const IE_UNION_NAMES_1979: Partial<Record<CorporationType, string>> = {
+export const IE_UNION_NAMES_1979: Partial<Record<OperatingSectorType, string>> = {
   manufacturing: "Irish Transport and General Workers' Union",
-  automobiles: "Irish Transport and General Workers' Union",
+  manufacturing_vehicles: "Irish Transport and General Workers' Union",
   energy: "Irish Transport and General Workers' Union",
   logistics: "Irish Transport and General Workers' Union",
   technology: "Irish Transport and General Workers' Union",
@@ -59,7 +59,7 @@ export const IE_UNION_NAMES_1979: Partial<Record<CorporationType, string>> = {
   telecommunications: "Post Office Workers' Union",
 };
 
-export const IE_UNION_NAMES_1953: Partial<Record<CorporationType, string>> = {
+export const IE_UNION_NAMES_1953: Partial<Record<OperatingSectorType, string>> = {
   ...IE_UNION_NAMES_1979,
   retail: "Irish Union of Distributive Workers and Clerks",
 };

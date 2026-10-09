@@ -1,5 +1,5 @@
 import { fundingResponse } from "../spendingChannel";
-import type { CorporationType } from "@/lib/constants/corporations";
+import type { OperatingSectorType } from "@/lib/constants/corporations";
 import type { EngineNodeContext, RegistryNode } from "../types";
 import type { SectorRevenueTaxPayload } from "./economic";
 
@@ -18,12 +18,12 @@ import type { SectorRevenueTaxPayload } from "./economic";
  */
 
 /** Relative CO2 intensity per unit revenue, by sector class. */
-export const CARBON_INTENSITY: Record<CorporationType, number> = {
+export const CARBON_INTENSITY: Record<OperatingSectorType, number> = {
   energy: 3,
   extraction: 3,
   chemical_industries: 2.5,
   manufacturing: 2,
-  automobiles: 2,
+  manufacturing_vehicles: 2,
   logistics: 2,
   construction: 1.5,
   agriculture: 1.5,
@@ -32,7 +32,7 @@ export const CARBON_INTENSITY: Record<CorporationType, number> = {
   healthcare: 0.7,
   telecommunications: 0.5,
   real_estate: 0.5,
-  entertainment: 0.5,
+  media_entertainment: 0.5,
   technology: 0.4,
   financial: 0.3,
   media: 0.3,
@@ -70,7 +70,7 @@ export const REFERENCE_MIX_INTENSITY = 1.4;
  */
 export const ENV_SPEND_HALF_SAT = 200;
 
-type SectorRow = { revenue: number; sectorType?: CorporationType };
+type SectorRow = { revenue: number; sectorType?: OperatingSectorType };
 
 /**
  * Revenue-weighted mean carbon intensity of a state's sector mix. Untyped rows

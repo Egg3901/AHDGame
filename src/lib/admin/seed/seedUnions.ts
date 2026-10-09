@@ -2,7 +2,11 @@ import type { AnyBulkWriteOperation, Db } from "mongodb";
 import type { State } from "@/lib/db/types/state";
 import type { CorporateSector } from "@/lib/db/types/corporation";
 import type { Union } from "@/lib/db/types";
-import { CORPORATION_TYPES, type CorporationType } from "@/lib/constants/corporations";
+import {
+  OPERATING_SECTOR_TYPES,
+  operatingSectorIdentity,
+  type CorporationType,
+} from "@/lib/constants/corporations";
 import type { CountryId } from "@/lib/constants/countries";
 import { getUnionName } from "@/lib/unions/unionNames";
 import { BASE_APPROVAL } from "@/lib/unions/unionDues";
@@ -20,7 +24,7 @@ import { getOperatingSectorType } from "@/lib/constants/sectorStrategies";
 export const SEED_DUES_PER_WORKER_ANNUAL = 0;
 
 /**
- * Idempotent seed of one vacant-head union per (countryId, sectorType) for
+ * Idempotent seed of one vacant-head union per (countryId, operating lane) for
  * every country present in `states`, plus the sector representation each of
  * those unions starts out holding. Names are era-appropriate where authored
  * in `src/lib/seeds/reference/unionNames.ts`, with a generic fallback.
@@ -66,57 +70,17 @@ export async function seedUnions(
     mediaDiscriminator: CorporateSector["mediaDiscriminator"];
   }[] = [];
 
+  // One world union per (country, operating lane): the vehicles and
+  // entertainment lanes keep their own unions under their canonical identity.
   for (const rawCountryId of countryIds) {
     const countryId = rawCountryId as CountryId;
-    for (const sectorType of CORPORATION_TYPES) {
-      pairs.push({ countryId, sectorType, industryModel: null, mediaDiscriminator: null });
-    }
-  }
-
-  // Model-specific markets are seeded from the same sector snapshot that the
-  // union assignment below uses. The legacy type slot remains present, while a
-  // manufacturing vehicle market gets its own union identity and index key.
-  const modelSectors = await db
-    .collection<CorporateSector>("corporateSectors")
-    .find(
-      {
-        $or: [{ industryModel: { $type: "string" } }, { mediaDiscriminator: { $type: "string" } }],
-      },
-      {
-        projection: {
-          countryId: 1,
-          sectorType: 1,
-          industryModel: 1,
-          mediaDiscriminator: 1,
-        },
-      }
-    )
-    .toArray();
-  for (const sector of modelSectors) {
-    if (!sector.countryId || (!sector.industryModel && !sector.mediaDiscriminator)) continue;
-    const exists = pairs.some(
-      (pair) =>
-        pair.countryId === sector.countryId &&
-        pair.sectorType === sector.sectorType &&
-        pair.industryModel === (sector.industryModel ?? null) &&
-        pair.mediaDiscriminator === (sector.mediaDiscriminator ?? null)
-    );
-    if (!exists) {
-      pairs.push({
-        countryId: sector.countryId,
-        sectorType: sector.sectorType,
-        industryModel: sector.industryModel ?? null,
-        mediaDiscriminator: sector.mediaDiscriminator ?? null,
-      });
+    for (const lane of OPERATING_SECTOR_TYPES) {
+      pairs.push({ countryId, ...operatingSectorIdentity(lane) });
     }
   }
 
   for (const { countryId, sectorType, industryModel, mediaDiscriminator } of pairs) {
-    const unionType = getOperatingSectorType(
-      sectorType,
-      industryModel,
-      mediaDiscriminator
-    ) as CorporationType;
+    const unionType = getOperatingSectorType(sectorType, industryModel, mediaDiscriminator);
     const name = getUnionName(countryId, unionType, preset);
     unionOps.push({
       updateOne: {
@@ -222,7 +186,7 @@ export async function seedUnions(
     }
   }
 
-  const total = countryIds.length * CORPORATION_TYPES.length;
+  const total = countryIds.length * OPERATING_SECTOR_TYPES.length;
   log(
     `Seeded unions: ${upserted} inserted, ${total} total slots for ${countryIds.length} countries ` +
       `(preset ${preset}), ${sectorsAssigned} sectors newly represented`

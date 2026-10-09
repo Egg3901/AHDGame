@@ -29,7 +29,7 @@ describe("computeUnownedHeadroomUnits", () => {
 
   it("uses the entertainment mix for the canonical media discriminator", () => {
     expect(computeUnownedHeadroomUnits("media", 50_000, 1, null, "entertainment")).toBeCloseTo(
-      computeUnownedHeadroomUnits("entertainment", 50_000, 1)
+      computeUnownedHeadroomUnits("media_entertainment", 50_000, 1)
     );
   });
 });

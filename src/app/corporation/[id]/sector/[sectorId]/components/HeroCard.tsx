@@ -5,7 +5,7 @@ import Link from "next/link";
 import { STATE_FLAGS } from "@/lib/constants";
 import { bypassNextImageOptimization } from "@/lib/images/bypassImageOptimization";
 import { CorporationLogo } from "@/components/corporation/CorporationLogo";
-import { CORPORATION_TYPE_LABELS } from "@/lib/constants/corporations";
+import { OPERATING_SECTOR_TYPE_LABELS } from "@/lib/constants/corporations";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import { getTypeColor } from "../lib/helpers";
 import type {
@@ -100,7 +100,7 @@ export default function HeroCard({
               <span
                 className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium ${getTypeColor(sector.sectorType)}`}
               >
-                {CORPORATION_TYPE_LABELS[sector.sectorType]}
+                {OPERATING_SECTOR_TYPE_LABELS[sector.sectorType]}
               </span>
             )}
             {sector.forSale && (

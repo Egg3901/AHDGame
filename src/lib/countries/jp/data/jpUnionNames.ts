@@ -1,4 +1,4 @@
-import type { CorporationType } from "@/lib/constants/corporations";
+import type { OperatingSectorType } from "@/lib/constants/corporations";
 import { uniform } from "@/lib/seeds/reference/uniformUnionName";
 
 /**
@@ -20,9 +20,9 @@ import { uniform } from "@/lib/seeds/reference/uniformUnionName";
  * `genericUnionName` at lookup, which is preferred over inventing a union.
  */
 
-export const JP_UNION_NAMES_MODERN: Partial<Record<CorporationType, string>> = {
+export const JP_UNION_NAMES_MODERN: Partial<Record<OperatingSectorType, string>> = {
   manufacturing: "Japanese Trade Union Confederation",
-  automobiles: "Confederation of Japan Automobile Workers' Unions",
+  manufacturing_vehicles: "Confederation of Japan Automobile Workers' Unions",
   chemical_industries: "UA Zensen",
   construction: "National Federation of Construction Workers' Unions",
   energy: "Japanese Federation of Electric Wire and Electric Power Workers' Unions",
@@ -34,39 +34,39 @@ export const JP_UNION_NAMES_MODERN: Partial<Record<CorporationType, string>> = {
   technology: "UA Zensen",
   financial: "National Federation of Finance Industry Workers' Unions",
   telecommunications: "UA Zensen",
-  entertainment: "UA Zensen",
+  media_entertainment: "UA Zensen",
   defense: "Japan Federation of Aviation Industry Workers' Unions",
   agriculture: "UA Zensen",
   real_estate: "UA Zensen",
 };
 
-export const JP_UNION_NAMES_2007: Partial<Record<CorporationType, string>> = {
+export const JP_UNION_NAMES_2007: Partial<Record<OperatingSectorType, string>> = {
   ...JP_UNION_NAMES_MODERN,
   chemical_industries: "UI Zensen",
   retail: "UI Zensen",
   media: "UI Zensen",
   technology: "UI Zensen",
   telecommunications: "UI Zensen",
-  entertainment: "UI Zensen",
+  media_entertainment: "UI Zensen",
   agriculture: "UI Zensen",
   real_estate: "UI Zensen",
 };
 
-export const JP_UNION_NAMES_1999: Partial<Record<CorporationType, string>> = {
+export const JP_UNION_NAMES_1999: Partial<Record<OperatingSectorType, string>> = {
   ...JP_UNION_NAMES_2007,
   chemical_industries: "Zensen Dōmei",
   retail: "Zensen Dōmei",
   media: "Zensen Dōmei",
   technology: "Zensen Dōmei",
   telecommunications: "Zensen Dōmei",
-  entertainment: "Zensen Dōmei",
+  media_entertainment: "Zensen Dōmei",
   agriculture: "Zensen Dōmei",
   real_estate: "Zensen Dōmei",
 };
 
-export const JP_UNION_NAMES_1991: Partial<Record<CorporationType, string>> = {
+export const JP_UNION_NAMES_1991: Partial<Record<OperatingSectorType, string>> = {
   manufacturing: "Japanese Trade Union Confederation",
-  automobiles: "Confederation of Japan Automobile Workers' Unions",
+  manufacturing_vehicles: "Confederation of Japan Automobile Workers' Unions",
   chemical_industries: "Japanese Federation of Synthetic Chemistry Workers' Unions",
   construction: "National Federation of Construction Workers' Unions",
   // Attribution to a single-era energy federation is uncertain; this is the
@@ -82,9 +82,9 @@ export const JP_UNION_NAMES_1991: Partial<Record<CorporationType, string>> = {
   telecommunications: "Japan Telecommunications Workers' Union",
 };
 
-export const JP_UNION_NAMES_1979: Partial<Record<CorporationType, string>> = {
+export const JP_UNION_NAMES_1979: Partial<Record<OperatingSectorType, string>> = {
   manufacturing: "General Council of Trade Unions of Japan",
-  automobiles: "Confederation of Japan Automobile Workers' Unions",
+  manufacturing_vehicles: "Confederation of Japan Automobile Workers' Unions",
   chemical_industries: "Japanese Federation of Synthetic Chemistry Workers' Unions",
   construction: "National Federation of Construction Workers' Unions",
   energy: "Japanese Federation of Electric Wire and Electric Power Workers' Unions",
@@ -98,9 +98,9 @@ export const JP_UNION_NAMES_1979: Partial<Record<CorporationType, string>> = {
   telecommunications: "Japan Telecommunications Workers' Union",
 };
 
-export const JP_UNION_NAMES_1953: Partial<Record<CorporationType, string>> = {
+export const JP_UNION_NAMES_1953: Partial<Record<OperatingSectorType, string>> = {
   ...uniform("General Council of Trade Unions of Japan"),
-  automobiles: "All Japan Automobile Industry Workers' Union",
+  manufacturing_vehicles: "All Japan Automobile Industry Workers' Union",
   telecommunications: "Japan Telecommunications Workers' Union",
   logistics: "All Japan Seamen's Union",
   extraction: "Japan Coal Miners' Union",

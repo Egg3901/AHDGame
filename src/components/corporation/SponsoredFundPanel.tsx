@@ -5,9 +5,9 @@ import { apiErrorText } from "@/lib/errors/catalog";
 import { useState, useEffect, type FormEvent } from "react";
 import Link from "next/link";
 import {
-  FOUNDABLE_CORPORATION_TYPES,
-  CORPORATION_TYPE_LABELS,
-  type CorporationType,
+  OPERATING_SECTOR_TYPES,
+  OPERATING_SECTOR_TYPE_LABELS,
+  type OperatingSectorType,
 } from "@/lib/constants/corporations";
 import { ALL_COUNTRY_IDS } from "@/lib/constants/countries";
 import {
@@ -270,9 +270,9 @@ export default function SponsoredFundPanel({ corpId }: { corpId: string }) {
                   required
                 >
                   <option value="">Pick an industry…</option>
-                  {FOUNDABLE_CORPORATION_TYPES.map((t) => (
+                  {OPERATING_SECTOR_TYPES.map((t) => (
                     <option key={t} value={t}>
-                      {CORPORATION_TYPE_LABELS[t as CorporationType]}
+                      {OPERATING_SECTOR_TYPE_LABELS[t as OperatingSectorType]}
                     </option>
                   ))}
                 </select>

@@ -222,8 +222,8 @@
       "media": 2,
       "healthcare": 2,
       "extraction": 1,
-      "entertainment": 1,
-      "automobiles": 1,
+      "media_entertainment": 1,
+      "manufacturing_vehicles": 1,
       "chemical_industries": 1,
       "technology": 0
     }
@@ -1822,7 +1822,7 @@
     "value": {
       "1953": {
         "manufacturing": "Irish Transport and General Workers' Union",
-        "automobiles": "Irish Transport and General Workers' Union",
+        "manufacturing_vehicles": "Irish Transport and General Workers' Union",
         "energy": "Irish Transport and General Workers' Union",
         "logistics": "Irish Transport and General Workers' Union",
         "technology": "Irish Transport and General Workers' Union",
@@ -1834,7 +1834,7 @@
       },
       "1979": {
         "manufacturing": "Irish Transport and General Workers' Union",
-        "automobiles": "Irish Transport and General Workers' Union",
+        "manufacturing_vehicles": "Irish Transport and General Workers' Union",
         "energy": "Irish Transport and General Workers' Union",
         "logistics": "Irish Transport and General Workers' Union",
         "technology": "Irish Transport and General Workers' Union",
@@ -1846,7 +1846,7 @@
       },
       "1991": {
         "manufacturing": "SIPTU",
-        "automobiles": "SIPTU",
+        "manufacturing_vehicles": "SIPTU",
         "energy": "SIPTU",
         "logistics": "SIPTU",
         "technology": "SIPTU",
@@ -1858,7 +1858,7 @@
       },
       "1999": {
         "manufacturing": "SIPTU",
-        "automobiles": "SIPTU",
+        "manufacturing_vehicles": "SIPTU",
         "healthcare": "Irish Nurses Organisation",
         "retail": "Mandate",
         "construction": "Technical Engineering and Electrical Union",
@@ -1871,7 +1871,7 @@
       },
       "2007": {
         "manufacturing": "SIPTU",
-        "automobiles": "SIPTU",
+        "manufacturing_vehicles": "SIPTU",
         "healthcare": "INMO",
         "retail": "Mandate",
         "construction": "Connect Trade Union",
@@ -1884,7 +1884,7 @@
       },
       "2019": {
         "manufacturing": "SIPTU",
-        "automobiles": "SIPTU",
+        "manufacturing_vehicles": "SIPTU",
         "healthcare": "INMO",
         "retail": "Mandate",
         "construction": "Connect Trade Union",
@@ -1897,7 +1897,7 @@
       },
       "2023": {
         "manufacturing": "SIPTU",
-        "automobiles": "SIPTU",
+        "manufacturing_vehicles": "SIPTU",
         "healthcare": "INMO",
         "retail": "Mandate",
         "construction": "Connect Trade Union",
@@ -1910,7 +1910,7 @@
       },
       "2027": {
         "manufacturing": "SIPTU",
-        "automobiles": "SIPTU",
+        "manufacturing_vehicles": "SIPTU",
         "healthcare": "INMO",
         "retail": "Mandate",
         "construction": "Connect Trade Union",
@@ -3333,10 +3333,10 @@
       "media": 3,
       "telecommunications": 3,
       "manufacturing": 3,
-      "entertainment": 2,
+      "media_entertainment": 2,
       "energy": 1,
       "defense": 1,
-      "automobiles": 1,
+      "manufacturing_vehicles": 1,
       "extraction": 1
     }
   },
@@ -3353,13 +3353,13 @@
       "healthcare": 5,
       "financial": 4,
       "defense": 2,
-      "automobiles": 2,
+      "manufacturing_vehicles": 2,
       "extraction": 2,
       "logistics": 4,
       "telecommunications": 2,
       "technology": 1,
       "media": 3,
-      "entertainment": 4
+      "media_entertainment": 4
     }
   },
   "COUNTRY_SECTOR_WEIGHTS_1991": {
@@ -3375,12 +3375,12 @@
       "healthcare": 6,
       "energy": 4,
       "logistics": 4,
-      "automobiles": 2,
+      "manufacturing_vehicles": 2,
       "media": 2,
       "technology": 4,
       "telecommunications": 2,
       "extraction": 4,
-      "entertainment": 2,
+      "media_entertainment": 2,
       "defense": 1
     }
   },

@@ -1,5 +1,5 @@
-import { CORPORATION_TYPE_LABELS } from "@/lib/constants/corporations";
-import type { CorporationType } from "@/lib/constants/corporations";
+import { OPERATING_SECTOR_TYPE_LABELS } from "@/lib/constants/corporations";
+import type { OperatingSectorType } from "@/lib/constants/corporations";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { UNION_NAMES_BY_ERA } from "@/lib/seeds/reference/unionNames";
 import { eraForPreset, type EraId } from "@/lib/seeds/presetSelector";
@@ -16,9 +16,9 @@ const ERA_FALLBACK_CHAIN: Record<EraId, EraId[]> = {
 };
 
 /** Generic fallback when no era-specific historical name exists for a pair. */
-export function genericUnionName(countryId: CountryId, sectorType: CorporationType): string {
+export function genericUnionName(countryId: CountryId, sectorType: OperatingSectorType): string {
   const country = COUNTRY_CONFIGS[countryId]?.name ?? countryId;
-  const sector = CORPORATION_TYPE_LABELS[sectorType] ?? sectorType;
+  const sector = OPERATING_SECTOR_TYPE_LABELS[sectorType] ?? sectorType;
   return `${country} ${sector} Workers' Union`;
 }
 
@@ -29,7 +29,7 @@ export function genericUnionName(countryId: CountryId, sectorType: CorporationTy
  */
 export function getUnionName(
   countryId: CountryId,
-  sectorType: CorporationType,
+  sectorType: OperatingSectorType,
   preset: string
 ): string {
   const era = eraForPreset(preset);

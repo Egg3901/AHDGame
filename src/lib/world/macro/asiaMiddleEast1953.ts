@@ -14,7 +14,7 @@
  * (#3723) as unconfigured proposed Tier-1 → sphere-macro; authored here so
  * seedMacroCountries never falls back to a modern preset.
  */
-import type { CorporationType } from "@/lib/constants/corporations";
+import type { OperatingSectorType } from "@/lib/constants/corporations";
 import type { WorldEntityId } from "@/lib/world/worldEntityManifest";
 import { buildMacroCountryFromSpec, type MacroCountrySeedSpec } from "./seedBuilder";
 import type { MacroCountryState } from "./types";
@@ -41,7 +41,7 @@ export const SOUTH_KOREA_ENTITY_ID = "KR";
 export const NORTH_VIETNAM_ENTITY_ID = "NVN";
 export const SOUTH_VIETNAM_ENTITY_ID = "SVN";
 
-const JO_WEIGHTS: Partial<Record<CorporationType, number>> = {
+const JO_WEIGHTS: Partial<Record<OperatingSectorType, number>> = {
   // Hashemite kingdom: British-trained Arab Legion, refugee absorption, phosphates.
   agriculture: 28,
   defense: 14,
@@ -56,13 +56,13 @@ const JO_WEIGHTS: Partial<Record<CorporationType, number>> = {
   real_estate: 2,
   telecommunications: 1,
   media: 1,
-  entertainment: 1,
+  media_entertainment: 1,
   chemical_industries: 1,
-  automobiles: 0,
+  manufacturing_vehicles: 0,
   technology: 0,
 };
 
-const AF_WEIGHTS: Partial<Record<CorporationType, number>> = {
+const AF_WEIGHTS: Partial<Record<OperatingSectorType, number>> = {
   // Zahir Shah monarchy: pastoral/agrarian, negligible industry, opium/karakul trade.
   agriculture: 45,
   logistics: 8,
@@ -77,13 +77,13 @@ const AF_WEIGHTS: Partial<Record<CorporationType, number>> = {
   real_estate: 2,
   telecommunications: 1,
   media: 1,
-  entertainment: 1,
+  media_entertainment: 1,
   chemical_industries: 1,
-  automobiles: 0,
+  manufacturing_vehicles: 0,
   technology: 0,
 };
 
-const YE_WEIGHTS: Partial<Record<CorporationType, number>> = {
+const YE_WEIGHTS: Partial<Record<OperatingSectorType, number>> = {
   // Mutawakkilite Imamate: near-autarkic highland agriculture, almost no industry.
   agriculture: 55,
   retail: 10,
@@ -97,14 +97,14 @@ const YE_WEIGHTS: Partial<Record<CorporationType, number>> = {
   financial: 1,
   real_estate: 1,
   media: 1,
-  entertainment: 1,
+  media_entertainment: 1,
   telecommunications: 1,
   chemical_industries: 0,
-  automobiles: 0,
+  manufacturing_vehicles: 0,
   technology: 0,
 };
 
-const MM_WEIGHTS: Partial<Record<CorporationType, number>> = {
+const MM_WEIGHTS: Partial<Record<OperatingSectorType, number>> = {
   // Union of Burma under U Nu: rice bowl, teak, Yenangyaung oil, tin/tungsten.
   agriculture: 38,
   extraction: 12, // teak counted via timber endowment; oil + tin here
@@ -120,12 +120,12 @@ const MM_WEIGHTS: Partial<Record<CorporationType, number>> = {
   real_estate: 1,
   telecommunications: 1,
   media: 1,
-  entertainment: 1,
-  automobiles: 0,
+  media_entertainment: 1,
+  manufacturing_vehicles: 0,
   technology: 0,
 };
 
-const LA_WEIGHTS: Partial<Record<CorporationType, number>> = {
+const LA_WEIGHTS: Partial<Record<OperatingSectorType, number>> = {
   // Kingdom of Laos: subsistence + timber/tin; First Indochina War periphery.
   agriculture: 48,
   extraction: 10, // timber + tin
@@ -139,14 +139,14 @@ const LA_WEIGHTS: Partial<Record<CorporationType, number>> = {
   financial: 1,
   real_estate: 1,
   media: 1,
-  entertainment: 1,
+  media_entertainment: 1,
   telecommunications: 1,
   chemical_industries: 0,
-  automobiles: 0,
+  manufacturing_vehicles: 0,
   technology: 0,
 };
 
-const KH_WEIGHTS: Partial<Record<CorporationType, number>> = {
+const KH_WEIGHTS: Partial<Record<OperatingSectorType, number>> = {
   // Kingdom of Cambodia (independence Nov 1953): rice, rubber, Tonle Sap fisheries.
   agriculture: 42,
   retail: 10,
@@ -160,14 +160,14 @@ const KH_WEIGHTS: Partial<Record<CorporationType, number>> = {
   financial: 2,
   real_estate: 2,
   media: 1,
-  entertainment: 1,
+  media_entertainment: 1,
   telecommunications: 1,
   chemical_industries: 1,
-  automobiles: 1,
+  manufacturing_vehicles: 1,
   technology: 0,
 };
 
-const TH_WEIGHTS: Partial<Record<CorporationType, number>> = {
+const TH_WEIGHTS: Partial<Record<OperatingSectorType, number>> = {
   // Thailand under Phibun: rice/teak/tin exports; US military aid rising toward SEATO.
   agriculture: 32,
   manufacturing: 14,
@@ -183,12 +183,12 @@ const TH_WEIGHTS: Partial<Record<CorporationType, number>> = {
   real_estate: 1,
   telecommunications: 1,
   media: 1,
-  entertainment: 1,
-  automobiles: 0,
+  media_entertainment: 1,
+  manufacturing_vehicles: 0,
   technology: 0,
 };
 
-const IN_WEIGHTS: Partial<Record<CorporationType, number>> = {
+const IN_WEIGHTS: Partial<Record<OperatingSectorType, number>> = {
   // Nehru republic: First Plan (1951–56); textiles, steel plants starting, monsoon agri.
   agriculture: 42,
   manufacturing: 16,
@@ -204,12 +204,12 @@ const IN_WEIGHTS: Partial<Record<CorporationType, number>> = {
   real_estate: 1,
   telecommunications: 1,
   media: 1,
-  entertainment: 1,
-  automobiles: 1,
+  media_entertainment: 1,
+  manufacturing_vehicles: 1,
   technology: 0,
 };
 
-const PK_WEIGHTS: Partial<Record<CorporationType, number>> = {
+const PK_WEIGHTS: Partial<Record<OperatingSectorType, number>> = {
   // Early Pakistan: jute/cotton exports; refugee absorption; thin industry.
   agriculture: 45,
   manufacturing: 12,
@@ -224,13 +224,13 @@ const PK_WEIGHTS: Partial<Record<CorporationType, number>> = {
   real_estate: 1,
   telecommunications: 1,
   media: 1,
-  entertainment: 1,
+  media_entertainment: 1,
   chemical_industries: 1,
-  automobiles: 0,
+  manufacturing_vehicles: 0,
   technology: 0,
 };
 
-const IR_WEIGHTS: Partial<Record<CorporationType, number>> = {
+const IR_WEIGHTS: Partial<Record<OperatingSectorType, number>> = {
   // Post-Mossadegh (Aug 1953 coup): oil nationalisation crisis; Shah restored.
   extraction: 22, // Abadan / southern oil
   agriculture: 28,
@@ -245,13 +245,13 @@ const IR_WEIGHTS: Partial<Record<CorporationType, number>> = {
   real_estate: 2,
   telecommunications: 1,
   media: 1,
-  entertainment: 1,
+  media_entertainment: 1,
   chemical_industries: 1,
-  automobiles: 0,
+  manufacturing_vehicles: 0,
   technology: 0,
 };
 
-const IQ_WEIGHTS: Partial<Record<CorporationType, number>> = {
+const IQ_WEIGHTS: Partial<Record<OperatingSectorType, number>> = {
   // Hashemite Iraq: IPC oil; barley/dates; Baghdad Pact forming.
   extraction: 20, // Kirkuk oil
   agriculture: 32,
@@ -266,13 +266,13 @@ const IQ_WEIGHTS: Partial<Record<CorporationType, number>> = {
   real_estate: 2,
   telecommunications: 1,
   media: 1,
-  entertainment: 1,
+  media_entertainment: 1,
   chemical_industries: 1,
-  automobiles: 0,
+  manufacturing_vehicles: 0,
   technology: 0,
 };
 
-const EG_WEIGHTS: Partial<Record<CorporationType, number>> = {
+const EG_WEIGHTS: Partial<Record<OperatingSectorType, number>> = {
   // Free Officers (1952): Nile agriculture; Suez Canal; nascent industry.
   agriculture: 35,
   manufacturing: 14,
@@ -287,13 +287,13 @@ const EG_WEIGHTS: Partial<Record<CorporationType, number>> = {
   real_estate: 2,
   telecommunications: 1,
   media: 1,
-  entertainment: 1,
+  media_entertainment: 1,
   chemical_industries: 1,
-  automobiles: 0,
+  manufacturing_vehicles: 0,
   technology: 0,
 };
 
-const SA_WEIGHTS: Partial<Record<CorporationType, number>> = {
+const SA_WEIGHTS: Partial<Record<OperatingSectorType, number>> = {
   // Aramco oil kingdom: still early production ramp; thin non-oil economy.
   extraction: 40, // Ghawar / Aramco
   agriculture: 18, // oasis / date
@@ -308,13 +308,13 @@ const SA_WEIGHTS: Partial<Record<CorporationType, number>> = {
   real_estate: 1,
   telecommunications: 1,
   media: 1,
-  entertainment: 0,
+  media_entertainment: 0,
   chemical_industries: 0,
-  automobiles: 0,
+  manufacturing_vehicles: 0,
   technology: 0,
 };
 
-const SY_WEIGHTS: Partial<Record<CorporationType, number>> = {
+const SY_WEIGHTS: Partial<Record<OperatingSectorType, number>> = {
   // Syrian Republic: cotton/wheat; coups; pipeline transit.
   agriculture: 38,
   manufacturing: 12,
@@ -329,13 +329,13 @@ const SY_WEIGHTS: Partial<Record<CorporationType, number>> = {
   real_estate: 2,
   telecommunications: 1,
   media: 1,
-  entertainment: 1,
+  media_entertainment: 1,
   chemical_industries: 1,
-  automobiles: 0,
+  manufacturing_vehicles: 0,
   technology: 0,
 };
 
-const ID_WEIGHTS: Partial<Record<CorporationType, number>> = {
+const ID_WEIGHTS: Partial<Record<OperatingSectorType, number>> = {
   // Sukarno republic: rubber/tin/oil; Java rice; Konfrontasi not yet.
   agriculture: 36,
   extraction: 14, // oil + tin
@@ -350,13 +350,13 @@ const ID_WEIGHTS: Partial<Record<CorporationType, number>> = {
   real_estate: 1,
   telecommunications: 1,
   media: 1,
-  entertainment: 1,
+  media_entertainment: 1,
   chemical_industries: 1,
-  automobiles: 0,
+  manufacturing_vehicles: 0,
   technology: 0,
 };
 
-const KP_WEIGHTS: Partial<Record<CorporationType, number>> = {
+const KP_WEIGHTS: Partial<Record<OperatingSectorType, number>> = {
   // DPRK postwar reconstruction under Kim Il-sung; heavy industry priority.
   manufacturing: 28,
   defense: 16,
@@ -372,12 +372,12 @@ const KP_WEIGHTS: Partial<Record<CorporationType, number>> = {
   real_estate: 1,
   telecommunications: 1,
   media: 1,
-  entertainment: 0,
-  automobiles: 0,
+  media_entertainment: 0,
+  manufacturing_vehicles: 0,
   technology: 0,
 };
 
-const KR_WEIGHTS: Partial<Record<CorporationType, number>> = {
+const KR_WEIGHTS: Partial<Record<OperatingSectorType, number>> = {
   // ROK after armistice (Jul 1953): devastated, aid-dependent, agrarian.
   agriculture: 40,
   construction: 12, // UN / US reconstruction
@@ -392,13 +392,13 @@ const KR_WEIGHTS: Partial<Record<CorporationType, number>> = {
   real_estate: 1,
   telecommunications: 1,
   media: 1,
-  entertainment: 1,
+  media_entertainment: 1,
   chemical_industries: 1,
-  automobiles: 0,
+  manufacturing_vehicles: 0,
   technology: 0,
 };
 
-const NVN_WEIGHTS: Partial<Record<CorporationType, number>> = {
+const NVN_WEIGHTS: Partial<Record<OperatingSectorType, number>> = {
   // Viet Minh north: land reform; war economy against France (pre-Geneva).
   agriculture: 40,
   defense: 18,
@@ -414,12 +414,12 @@ const NVN_WEIGHTS: Partial<Record<CorporationType, number>> = {
   real_estate: 1,
   telecommunications: 1,
   media: 1,
-  entertainment: 0,
-  automobiles: 0,
+  media_entertainment: 0,
+  manufacturing_vehicles: 0,
   technology: 0,
 };
 
-const SVN_WEIGHTS: Partial<Record<CorporationType, number>> = {
+const SVN_WEIGHTS: Partial<Record<OperatingSectorType, number>> = {
   // State of Vietnam / Bao Dai: Mekong rice; French / US aid; weak industry.
   agriculture: 42,
   retail: 10,
@@ -434,9 +434,9 @@ const SVN_WEIGHTS: Partial<Record<CorporationType, number>> = {
   real_estate: 2,
   telecommunications: 1,
   media: 1,
-  entertainment: 1,
+  media_entertainment: 1,
   chemical_industries: 1,
-  automobiles: 0,
+  manufacturing_vehicles: 0,
   technology: 0,
 };
 

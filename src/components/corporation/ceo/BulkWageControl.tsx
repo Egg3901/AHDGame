@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import { useTranslations } from "next-intl";
-import type { CorporationType } from "@/lib/constants/corporations";
+import type { OperatingSectorType } from "@/lib/constants/corporations";
 import { WAGE_LEVEL_MIN, WAGE_LEVEL_MAX } from "@/lib/labour/laborCost";
 import type { BulkOperationsFn, BulkOperationsResult } from "./CeoOperationsTable";
 import { SmallButton } from "../dense/DenseKit";
@@ -13,7 +13,7 @@ export function BulkWageControl({
   fmtMoney,
 }: {
   country: string;
-  sectorType: CorporationType | null;
+  sectorType: OperatingSectorType | null;
   onBulkOperations: BulkOperationsFn;
   fmtMoney: (n: number) => string;
 }) {

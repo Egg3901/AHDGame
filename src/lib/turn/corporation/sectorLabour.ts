@@ -1,3 +1,4 @@
+import { getOperatingSectorType } from "@/lib/constants/sectorStrategies";
 import type { CorporateSector } from "@/lib/db/types";
 import {
   accumulateAutomationIndex,
@@ -288,7 +289,11 @@ export function resolveSectorLabourEconomics({
   const split = computeSectorLaborCost({
     hourlyRevenue,
     grossMaintenance,
-    laborShare0: getSectorLaborShare(sector.sectorType, currentYear),
+    // The labour share is a lane property: vehicle plants run the vehicles share.
+    laborShare0: getSectorLaborShare(
+      getOperatingSectorType(sector.sectorType, sector.industryModel, sector.mediaDiscriminator),
+      currentYear
+    ),
     wageMultiplier,
   });
   const result: SectorLabourEconomicsResult = {

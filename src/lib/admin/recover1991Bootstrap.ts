@@ -148,8 +148,6 @@ export async function recover1991Bootstrap(
       mode: "historical",
       startingParties: "none",
       resetReference: true,
-      fresh1991VehicleModelSeed: true,
-      fresh1991MediaTaxonomySeed: true,
       preIteration: true,
       log,
       run,

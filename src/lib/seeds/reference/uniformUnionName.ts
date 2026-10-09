@@ -1,5 +1,5 @@
-import { CORPORATION_TYPES } from "@/lib/constants/corporations";
-import type { CorporationType } from "@/lib/constants/corporations";
+import { OPERATING_SECTOR_TYPES } from "@/lib/constants/corporations";
+import type { OperatingSectorType } from "@/lib/constants/corporations";
 
 /**
  * One national labour body covering every sector.
@@ -17,8 +17,8 @@ import type { CorporationType } from "@/lib/constants/corporations";
  * not the harmless type-only kind. Duplicating four lines instead would leave
  * two copies to drift. A third module both can import is neither.
  */
-export function uniform(name: string): Partial<Record<CorporationType, string>> {
-  const map: Partial<Record<CorporationType, string>> = {};
-  for (const type of CORPORATION_TYPES) map[type] = name;
+export function uniform(name: string): Partial<Record<OperatingSectorType, string>> {
+  const map: Partial<Record<OperatingSectorType, string>> = {};
+  for (const type of OPERATING_SECTOR_TYPES) map[type] = name;
   return map;
 }

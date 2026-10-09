@@ -30,7 +30,7 @@ import {
   ATTACK_OWNED_CONTESTED_FRACTION,
   DEFAULT_PROFIT_MARGIN,
   DEFAULT_SECTOR_STARTING_WORKERS,
-  CORPORATION_TYPE_LABELS,
+  OPERATING_SECTOR_TYPE_LABELS,
   getDominanceAttackEaseMultiplier,
   getUnderdogAttackAmplifier,
 } from "@/lib/constants/corporations";
@@ -531,7 +531,8 @@ export async function executeNppSectorAttack(
     .updateOne({ _id: defender._id }, { $set: { lastAutoAttackedTurn: currentTurn } });
 
   const sectorLabel =
-    CORPORATION_TYPE_LABELS[targetSector.sectorType as CorporationType] ?? targetSector.sectorType;
+    OPERATING_SECTOR_TYPE_LABELS[targetSector.sectorType as CorporationType] ??
+    targetSector.sectorType;
 
   // Wire headline (same surface as a player attack) so the action is visible.
   const stateName = await db

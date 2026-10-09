@@ -2,7 +2,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { ChevronDown, ExternalLink } from "lucide-react";
 import { EmptyState } from "@/components/ui";
-import { CORPORATION_TYPE_LABELS } from "@/lib/constants/corporations";
+import { OPERATING_SECTOR_TYPE_LABELS } from "@/lib/constants/corporations";
 import { formatCompactNumber } from "@/lib/utils/formatters";
 import type {
   NationalCorporationViewModel,
@@ -97,7 +97,7 @@ function HoldingCard({
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="text-body-sm font-semibold text-foreground">
-                    {CORPORATION_TYPE_LABELS[s.sectorType]}
+                    {OPERATING_SECTOR_TYPE_LABELS[s.sectorType]}
                   </span>
                   <Pill className="border-card-border bg-card-muted text-muted">{s.stateName}</Pill>
                   {triggerTone && <Pill className={triggerTone}>{s.acquisitionTrigger}</Pill>}

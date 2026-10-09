@@ -24,12 +24,12 @@ import { loadWorldEraUnitScale } from "@/lib/currency/gdpAnchorRate";
 import { getExtractionOutputScaleEnabled } from "@/lib/market/featureFlag";
 import type { GameConfig } from "@/lib/db/types";
 import type { ExtractableResource } from "@/lib/constants/commodities";
-import type { CorporationType } from "@/lib/constants/corporations";
+import type { OperatingSectorType } from "@/lib/constants/corporations";
 
 export async function computeSectorExtractionCapacityContext(
   db: Db,
   sector: CorporateSector,
-  sectorType: CorporationType
+  sectorType: OperatingSectorType
 ) {
   // ── Extraction-only: resource capacity and per-resource multipliers ──
   // Must be computed before supply flows so stateResources is available

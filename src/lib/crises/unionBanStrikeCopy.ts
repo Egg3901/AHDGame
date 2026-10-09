@@ -1,4 +1,4 @@
-import type { CorporationType } from "@/lib/constants/corporations";
+import type { OperatingSectorType } from "@/lib/constants/corporations";
 
 /**
  * Shared constants and copy for the union-ban wildcat general strike.
@@ -44,9 +44,9 @@ export const UNION_BAN_STRIKE_NODES = {
  * identifiers, not copy: the country-facing names are in
  * {@link STRUCK_TRADE_COPY}.
  */
-export const UNION_BAN_STRUCK_SECTORS: CorporationType[] = [
+export const UNION_BAN_STRUCK_SECTORS: OperatingSectorType[] = [
   "manufacturing",
-  "automobiles",
+  "manufacturing_vehicles",
   "logistics",
 ];
 

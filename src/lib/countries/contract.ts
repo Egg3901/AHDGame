@@ -19,7 +19,7 @@ import type { ExecutiveSurfaceConfig } from "@/lib/constants/executiveSurface";
 import type { IdentityText } from "@/lib/constants/institutionIdentity";
 import type { CostScaleAnchor } from "@/lib/budget/costs";
 import type { CabinetGroup } from "@/lib/constants/cabinetPositionGroups";
-import type { CorporationType } from "@/lib/constants/corporations";
+import type { OperatingSectorType } from "@/lib/constants/corporations";
 import type { CurrencyCode, MonetaryBaseline } from "@/lib/constants/currencies";
 import type { LegalStructureId } from "@/lib/constants/legalStructures";
 import type { GdpDenomination } from "@/lib/seeds/reference/gdpDenomination";
@@ -352,17 +352,17 @@ export interface CountryEconomy {
     readonly byEra: Record<string, EraMonetaryBaseline>;
   };
   /**
-   * ⚠️ Keyed to CorporationType, not string. A loose Record<string, number>
+   * ⚠️ Keyed to OperatingSectorType, not string. A loose Record<string, number>
    * accepts a sector name that does not exist, on a BALANCE surface where a
    * typo would silently drop a sector's weight.
    */
   readonly sectorWeights: {
     /** Required: COUNTRY_SECTOR_WEIGHTS is a total Record, not a Partial. */
-    readonly base: Partial<Record<CorporationType, number>>;
+    readonly base: Partial<Record<OperatingSectorType, number>>;
     /** Only 1979 and 1991 carry era-specific weights. */
-    readonly byEra: Record<string, Partial<Record<CorporationType, number>>>;
+    readonly byEra: Record<string, Partial<Record<OperatingSectorType, number>>>;
   };
-  readonly strategicSectors?: CorporationType[];
+  readonly strategicSectors?: OperatingSectorType[];
   /** GDP and population anchors for legislation cost scaling. BALANCE SURFACE. */
   readonly repEcon?: { readonly gdp: number; readonly population: number };
   /** Cost-scale interpolation anchors. BALANCE SURFACE. */

@@ -19,8 +19,8 @@
  * All weights are normalised at read time, so only relative magnitudes matter.
  */
 
-import { CORPORATION_TYPES } from "@/lib/constants/corporations";
-import type { CorporationType } from "@/lib/constants/corporations";
+import { OPERATING_SECTOR_TYPES } from "@/lib/constants/corporations";
+import type { OperatingSectorType } from "@/lib/constants/corporations";
 import type { CountryId } from "@/lib/constants/countries";
 import { JP_ECONOMY } from "@/lib/countries/jp/economy";
 import { US_ECONOMY } from "@/lib/countries/us/economy";
@@ -45,7 +45,7 @@ import { CS_ECONOMY } from "@/lib/countries/cs/economy";
 import { UKR_ECONOMY } from "@/lib/countries/ukr/economy";
 import { BAL_ECONOMY } from "@/lib/countries/bal/economy";
 
-type SectorWeightMap = Partial<Record<CorporationType, number>>;
+type SectorWeightMap = Partial<Record<OperatingSectorType, number>>;
 
 export const COUNTRY_SECTOR_WEIGHTS_1979: Record<string, SectorWeightMap> = {
   US: US_ECONOMY.sectorWeights.byEra["1979"],
@@ -104,10 +104,10 @@ export const COUNTRY_SECTOR_WEIGHTS_1979: Record<string, SectorWeightMap> = {
     retail: 2,
     real_estate: 0,
     financial: 0,
-    automobiles: 0,
+    manufacturing_vehicles: 0,
     technology: 0,
     media: 0,
-    entertainment: 1,
+    media_entertainment: 1,
   },
   // DD: GDR Kombinat system — chemical (Leuna), machinery, textiles, brown coal
   // (lignite). Honecker hard-line communist. No financial market, no real estate.
@@ -174,10 +174,10 @@ export const COUNTRY_SECTOR_WEIGHTS_1979: Record<string, SectorWeightMap> = {
     logistics: 5, // the western transit corridor
     healthcare: 4,
     retail: 2,
-    automobiles: 1,
+    manufacturing_vehicles: 1,
     telecommunications: 1,
     media: 1,
-    entertainment: 0,
+    media_entertainment: 0,
     financial: 0,
     real_estate: 0,
     technology: 0,
@@ -205,20 +205,22 @@ const BUNDLE_KEY_ALIASES_1979: Record<string, string> = { RU: "SU", BLR: "BY" };
  * Returns the 1979 country-level sector weight map.
  * Used by `getStateSectorWeights` when the active preset is `1979-default`.
  */
-export function getCountrySectorWeights1979(countryId: CountryId): Record<CorporationType, number> {
+export function getCountrySectorWeights1979(
+  countryId: CountryId
+): Record<OperatingSectorType, number> {
   const key = BUNDLE_KEY_ALIASES_1979[countryId as string] ?? (countryId as string);
   const raw = COUNTRY_SECTOR_WEIGHTS_1979[key] ?? {};
-  const entries = CORPORATION_TYPES.map((t) => [t, raw[t] ?? 0] as const);
+  const entries = OPERATING_SECTOR_TYPES.map((t) => [t, raw[t] ?? 0] as const);
   const total = entries.reduce((s, [, v]) => s + v, 0);
   if (total === 0) {
-    const even = 1 / CORPORATION_TYPES.length;
-    return Object.fromEntries(CORPORATION_TYPES.map((t) => [t, even])) as Record<
-      CorporationType,
+    const even = 1 / OPERATING_SECTOR_TYPES.length;
+    return Object.fromEntries(OPERATING_SECTOR_TYPES.map((t) => [t, even])) as Record<
+      OperatingSectorType,
       number
     >;
   }
   return Object.fromEntries(entries.map(([t, v]) => [t, v / total])) as Record<
-    CorporationType,
+    OperatingSectorType,
     number
   >;
 }

@@ -85,8 +85,8 @@ describe("media operating model strategies", () => {
     ["media", "newspaper", 0.5],
     ["media", "cable_tv", 0.5],
     ["media", "streaming_platform", 0.5],
-    ["entertainment", "film_studio", 0.6],
-    ["entertainment", "streaming_platform", 0.6],
+    ["media_entertainment", "film_studio", 0.6],
+    ["media_entertainment", "streaming_platform", 0.6],
   ])("resolves active virtual strategy %s:%s through legacy readers", (sectorType, id, budget) => {
     const strategy = getStrategy(sectorType, id);
     expect(strategy.mediaOperatingModelId).toBe(id);
@@ -144,10 +144,10 @@ describe("persisted media and entertainment sectors", () => {
       getEffectiveStrategyRates("media", "legacy_broadcast", null, null, 1065)
     ).not.toThrow();
     expect(() =>
-      getEffectiveStrategyRates("entertainment", "live_service", null, null, 1065)
+      getEffectiveStrategyRates("media_entertainment", "live_service", null, null, 1065)
     ).not.toThrow();
     expect(SECTOR_STRATEGIES.media).toBeDefined();
-    expect(SECTOR_STRATEGIES.entertainment).toBeDefined();
+    expect(SECTOR_STRATEGIES.media_entertainment).toBeDefined();
   });
 });
 

@@ -246,9 +246,9 @@
       "media": 2,
       "defense": 2,
       "telecommunications": 1,
-      "automobiles": 0,
+      "manufacturing_vehicles": 0,
       "chemical_industries": 0,
-      "entertainment": 1,
+      "media_entertainment": 1,
       "technology": 0
     }
   },
@@ -696,7 +696,7 @@
         "chemical_industries": "All-Nigeria Trade Union Federation",
         "healthcare": "All-Nigeria Trade Union Federation",
         "retail": "All-Nigeria Trade Union Federation",
-        "automobiles": "All-Nigeria Trade Union Federation",
+        "manufacturing_vehicles": "All-Nigeria Trade Union Federation",
         "technology": "All-Nigeria Trade Union Federation",
         "energy": "All-Nigeria Trade Union Federation",
         "agriculture": "All-Nigeria Trade Union Federation",
@@ -704,7 +704,7 @@
         "construction": "All-Nigeria Trade Union Federation",
         "defense": "All-Nigeria Trade Union Federation",
         "telecommunications": "All-Nigeria Trade Union Federation",
-        "entertainment": "All-Nigeria Trade Union Federation",
+        "media_entertainment": "All-Nigeria Trade Union Federation",
         "logistics": "All-Nigeria Trade Union Federation",
         "extraction": "All-Nigeria Trade Union Federation"
       },
@@ -722,10 +722,10 @@
         "technology": "Nigeria Labour Congress",
         "financial": "Association of Senior Staff of Banks, Insurance and Financial Institutions",
         "telecommunications": "Nigeria Labour Congress",
-        "entertainment": "Nigeria Labour Congress",
+        "media_entertainment": "Nigeria Labour Congress",
         "defense": "Nigeria Labour Congress",
         "real_estate": "Nigeria Labour Congress",
-        "automobiles": "Nigeria Labour Congress"
+        "manufacturing_vehicles": "Nigeria Labour Congress"
       },
       "1991": {
         "manufacturing": "Nigeria Labour Congress",
@@ -741,10 +741,10 @@
         "technology": "Nigeria Labour Congress",
         "financial": "Association of Senior Staff of Banks, Insurance and Financial Institutions",
         "telecommunications": "Private Telecommunications and Communications Senior Staff Association",
-        "entertainment": "Nigeria Labour Congress",
+        "media_entertainment": "Nigeria Labour Congress",
         "defense": "Nigeria Labour Congress",
         "real_estate": "Nigeria Labour Congress",
-        "automobiles": "Nigeria Labour Congress"
+        "manufacturing_vehicles": "Nigeria Labour Congress"
       },
       "1999": {
         "manufacturing": "Nigeria Labour Congress",
@@ -760,10 +760,10 @@
         "technology": "Nigeria Labour Congress",
         "financial": "Association of Senior Staff of Banks, Insurance and Financial Institutions",
         "telecommunications": "Private Telecommunications and Communications Senior Staff Association",
-        "entertainment": "Nigeria Labour Congress",
+        "media_entertainment": "Nigeria Labour Congress",
         "defense": "Nigeria Labour Congress",
         "real_estate": "Nigeria Labour Congress",
-        "automobiles": "Nigeria Labour Congress"
+        "manufacturing_vehicles": "Nigeria Labour Congress"
       },
       "2007": {
         "manufacturing": "Nigeria Labour Congress",
@@ -779,10 +779,10 @@
         "technology": "Nigeria Labour Congress",
         "financial": "Association of Senior Staff of Banks, Insurance and Financial Institutions",
         "telecommunications": "Private Telecommunications and Communications Senior Staff Association",
-        "entertainment": "Nigeria Labour Congress",
+        "media_entertainment": "Nigeria Labour Congress",
         "defense": "Nigeria Labour Congress",
         "real_estate": "Nigeria Labour Congress",
-        "automobiles": "Nigeria Labour Congress"
+        "manufacturing_vehicles": "Nigeria Labour Congress"
       },
       "2019": {
         "manufacturing": "Nigeria Labour Congress",
@@ -798,10 +798,10 @@
         "technology": "Nigeria Labour Congress",
         "financial": "Association of Senior Staff of Banks, Insurance and Financial Institutions",
         "telecommunications": "Private Telecommunications and Communications Senior Staff Association",
-        "entertainment": "Nigeria Labour Congress",
+        "media_entertainment": "Nigeria Labour Congress",
         "defense": "Nigeria Labour Congress",
         "real_estate": "Nigeria Labour Congress",
-        "automobiles": "Nigeria Labour Congress"
+        "manufacturing_vehicles": "Nigeria Labour Congress"
       },
       "2023": {
         "manufacturing": "Nigeria Labour Congress",
@@ -817,10 +817,10 @@
         "technology": "Nigeria Labour Congress",
         "financial": "Association of Senior Staff of Banks, Insurance and Financial Institutions",
         "telecommunications": "Private Telecommunications and Communications Senior Staff Association",
-        "entertainment": "Nigeria Labour Congress",
+        "media_entertainment": "Nigeria Labour Congress",
         "defense": "Nigeria Labour Congress",
         "real_estate": "Nigeria Labour Congress",
-        "automobiles": "Nigeria Labour Congress"
+        "manufacturing_vehicles": "Nigeria Labour Congress"
       },
       "2027": {
         "manufacturing": "Nigeria Labour Congress",
@@ -836,10 +836,10 @@
         "technology": "Nigeria Labour Congress",
         "financial": "Association of Senior Staff of Banks, Insurance and Financial Institutions",
         "telecommunications": "Private Telecommunications and Communications Senior Staff Association",
-        "entertainment": "Nigeria Labour Congress",
+        "media_entertainment": "Nigeria Labour Congress",
         "defense": "Nigeria Labour Congress",
         "real_estate": "Nigeria Labour Congress",
-        "automobiles": "Nigeria Labour Congress"
+        "manufacturing_vehicles": "Nigeria Labour Congress"
       }
     }
   },
@@ -2059,9 +2059,9 @@
       "chemical_industries": 2,
       "technology": 2,
       "media": 1,
-      "entertainment": 1,
+      "media_entertainment": 1,
       "defense": 1,
-      "automobiles": 1
+      "manufacturing_vehicles": 1
     }
   },
   "COUNTRY_SECTOR_WEIGHTS_1979": {
@@ -2080,10 +2080,10 @@
       "logistics": 4,
       "telecommunications": 1,
       "technology": 0,
-      "automobiles": 1,
+      "manufacturing_vehicles": 1,
       "chemical_industries": 1,
       "media": 1,
-      "entertainment": 2
+      "media_entertainment": 2
     }
   },
   "COUNTRY_SECTOR_WEIGHTS_1991": {
@@ -2101,10 +2101,10 @@
       "healthcare": 2,
       "logistics": 2,
       "chemical_industries": 2,
-      "automobiles": 1,
+      "manufacturing_vehicles": 1,
       "technology": 1,
       "media": 1,
-      "entertainment": 1,
+      "media_entertainment": 1,
       "defense": 1
     }
   },

@@ -255,7 +255,7 @@ describe("capacity pricing call-site registry", () => {
       const open = m.index! + m[0].length - 1;
       const args = argsAt(src, open);
       // Skip the declarations (`export function capacityPricePerUnit(` etc.).
-      if (/^\s*sectorType\s*:\s*CorporationType/.test(args)) continue;
+      if (/^\s*sectorType\s*:\s*(?:CorporationType|OperatingSectorType)/.test(args)) continue;
       if (/^\s*inputs\s*:\s*BuildCostInputs/.test(args)) continue;
       calls.push({
         fn: m[0].startsWith("compute") ? "computeBuildCost" : "capacityPricePerUnit",

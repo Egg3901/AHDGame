@@ -2,7 +2,7 @@
 
 import { useWorldFlags } from "@/hooks/useWorldFlags";
 import { useEffect, useState } from "react";
-import type { CorporationType } from "@/lib/constants/corporations";
+import type { OperatingSectorType } from "@/lib/constants/corporations";
 import {
   getOperatingSectorType,
   getSectorStrategies,
@@ -25,7 +25,7 @@ import { useCurrency } from "@/contexts/CurrencyContext";
 import { fetchJson } from "@/lib/observability/fetchJson";
 
 interface StrategyChangeConfirmProps {
-  sectorType: CorporationType;
+  sectorType: OperatingSectorType;
   /** Manufacturing production model (vehicles) of the persisted sector. */
   industryModel?: string | null;
   /** Media lane discriminator (entertainment) of the persisted sector. */

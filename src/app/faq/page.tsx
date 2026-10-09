@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { publicPageMetadata } from "@/lib/siteMetadata";
 import { AdSenseUnit } from "@/components/AdSenseUnit";
-import { FOUNDABLE_CORPORATION_TYPES } from "@/lib/constants/corporations";
+import { OPERATING_SECTOR_TYPES } from "@/lib/constants/corporations";
 import {
   formatNationChoices,
   formatNationList,
@@ -59,7 +59,7 @@ function buildFaqs(world: MarketedWorld): FAQItem[] {
     },
     {
       question: "Can I run a business in the game?",
-      answer: `Yes. You can found a corporation in any of ${FOUNDABLE_CORPORATION_TYPES.length} sectors, produce and trade commodities, issue shares and bonds, and compete for market share. Corporations operate independently of political careers, so you can be both a legislator and a CEO.`,
+      answer: `Yes. You can found a corporation in any of ${OPERATING_SECTOR_TYPES.length} sectors, produce and trade commodities, issue shares and bonds, and compete for market share. Corporations operate independently of political careers, so you can be both a legislator and a CEO.`,
     },
     {
       question: "What is the hourly turn system?",

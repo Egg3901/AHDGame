@@ -2,8 +2,7 @@ import type { Db } from "mongodb";
 import { ObjectId } from "mongodb";
 import type { UnownedSector } from "@/lib/db/types";
 import type { State } from "@/lib/db/types/state";
-import { CORPORATION_TYPES } from "@/lib/constants/corporations";
-import type { CorporationType, ManufacturingIndustryModel } from "@/lib/constants/corporations";
+import { OPERATING_SECTOR_TYPES, operatingSectorIdentity } from "@/lib/constants/corporations";
 import { computeUnownedSeedRevenue } from "@/lib/admin/seed/seedUnownedSectors";
 import type { CountryId } from "@/lib/constants/countries";
 import { TURNS_PER_YEAR } from "@/lib/constants/turnTime";
@@ -136,45 +135,13 @@ export async function processAutoSectorSeed(
   // revenue mid-turn.
   const preset = await getGameStatePresetOrDefault(db);
 
-  const vehicleModelExists = existingDocs.some(
-    (doc) => (doc as { industryModel?: string }).industryModel === "vehicles"
-  );
-  const profiles: Array<{
-    sectorType: CorporationType;
-    industryModel: ManufacturingIndustryModel | null;
-    mediaDiscriminator: "entertainment" | null;
-    operatingType: CorporationType;
-  }> = CORPORATION_TYPES.flatMap((sectorType) => {
-    if (sectorType === "entertainment") return [];
-    const base: {
-      sectorType: CorporationType;
-      industryModel: ManufacturingIndustryModel | null;
-      mediaDiscriminator: "entertainment" | null;
-      operatingType: CorporationType;
-    }[] = [
-      { sectorType, industryModel: null, mediaDiscriminator: null, operatingType: sectorType },
-    ];
-    return sectorType === "manufacturing" && vehicleModelExists
-      ? [
-          ...base,
-          {
-            sectorType,
-            industryModel: "vehicles",
-            mediaDiscriminator: null,
-            operatingType: "automobiles",
-          },
-        ]
-      : base;
-  });
-  profiles.push({
-    sectorType: "media",
-    industryModel: null,
-    mediaDiscriminator: "entertainment",
-    operatingType: "entertainment",
-  });
+  const profiles = OPERATING_SECTOR_TYPES.map((operatingType) => ({
+    ...operatingSectorIdentity(operatingType),
+    operatingType,
+  }));
 
   for (const { sectorType, industryModel, mediaDiscriminator, operatingType } of profiles) {
-    const boost = boostMap.get(operatingType as CorporationType) ?? 0;
+    const boost = boostMap.get(operatingType) ?? 0;
     if (boost <= 0) continue;
 
     const multiplier = 1 + boost;
@@ -214,7 +181,7 @@ export async function processAutoSectorSeed(
           typeof u.headroomUnits === "number" && Number.isFinite(u.headroomUnits)
             ? u.headroomUnits
             : computeUnownedHeadroomUnits(
-                u.sectorType as CorporationType,
+                u.sectorType,
                 u.revenue ?? 0,
                 eraUnitScale,
                 u.industryModel,
@@ -230,12 +197,13 @@ export async function processAutoSectorSeed(
       // `unownedPoolBoostSet`.
       const boostPipeline = {
         $set: unownedPoolBoostSet(
-          sectorType as CorporationType,
+          sectorType,
           multiplier,
           now,
           plantsEnabled,
           eraUnitScale,
-          industryModel
+          industryModel,
+          mediaDiscriminator
         ),
       };
       const { modifiedCount } = await db
@@ -247,11 +215,16 @@ export async function processAutoSectorSeed(
     // Using $multiply (not $inc) keeps growth proportional and self-limiting.
     // The old approach used $inc which compounded unboundedly (UK energy runaway).
     if (natCorpObjectIds.length > 0) {
-      const quantum = plantSizeUnits(sectorType, industryModel);
+      const quantum = plantSizeUnits(sectorType, industryModel, mediaDiscriminator);
       const boostedStock = { $multiply: [{ $ifNull: ["$capitalStock", 0] }, multiplier] };
-      const { modifiedCount: natModified } = await db
-        .collection("corporateSectors")
-        .updateMany({ sectorType, industryModel, corporationId: { $in: natCorpObjectIds } }, [
+      const { modifiedCount: natModified } = await db.collection("corporateSectors").updateMany(
+        {
+          sectorType,
+          industryModel,
+          mediaDiscriminator,
+          corporationId: { $in: natCorpObjectIds },
+        },
+        [
           {
             $set: {
               revenue: { $round: [{ $multiply: ["$revenue", multiplier] }, 0] },
@@ -296,7 +269,8 @@ export async function processAutoSectorSeed(
               updatedAt: now,
             },
           },
-        ]);
+        ]
+      );
       sectorsUpdated += natModified;
     }
 
@@ -326,7 +300,7 @@ export async function processAutoSectorSeed(
         // Derived from revenue — these inserts omitted it entirely, so every
         // mid-game auto-seeded market was born without the field.
         headroomUnits: computeUnownedHeadroomUnits(
-          sectorType as CorporationType,
+          sectorType,
           seedRevenue,
           eraUnitScale,
           industryModel,

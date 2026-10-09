@@ -10,7 +10,7 @@ import { getDb } from "@/lib/mongodb";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
 import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
-import { CORPORATION_TYPES, type CorporationType } from "@/lib/constants/corporations";
+import { isOperatingSectorType } from "@/lib/constants/corporations";
 import { getCurrentTurn } from "@/lib/turn/currentTurn";
 import { computeSectorNationalizationPreview } from "@/lib/nationalization/billTargetPreview";
 import type { SectorScope } from "@/lib/nationalization/nationalizeSectorWide";
@@ -30,8 +30,8 @@ export async function GET(request: Request, { params }: RouteParams) {
       return errorResponse(400, "Invalid country code");
     }
     const sp = new URL(request.url).searchParams;
-    const sectorType = sp.get("sectorType") as CorporationType | null;
-    if (!sectorType || !CORPORATION_TYPES.includes(sectorType)) {
+    const sectorType = sp.get("sectorType");
+    if (!isOperatingSectorType(sectorType)) {
       return errorResponse(400, "Invalid sector type");
     }
     const carveFraction = Math.min(1, Math.max(0, Number(sp.get("carveFraction") ?? 1)));

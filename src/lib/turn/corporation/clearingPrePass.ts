@@ -782,12 +782,7 @@ export function runClearingPrePass(input: ClearingPrePassInput): ClearingPrePass
           const stateId = clearingStateBySector.get(input.sectorId);
           const corporationId = sectorCorpId.get(input.sectorId);
           const sectorType = sectorTypeBySectorId.get(input.sectorId);
-          if (
-            !stateId ||
-            !corporationId ||
-            (sectorType !== "media" && sectorType !== "entertainment")
-          )
-            continue;
+          if (!stateId || !corporationId || sectorType !== "media") continue;
           if (
             lookups.stateCountryMap?.get(stateId) !== "US" ||
             lookups.corpById.get(corporationId)?.countryOwnerId
@@ -801,7 +796,7 @@ export function runClearingPrePass(input: ClearingPrePassInput): ClearingPrePass
       for (const sector of clearingInputs) {
         const sectorId = sector.sectorId;
         const sectorType = sectorTypeBySectorId.get(sectorId);
-        if (sectorType !== "media" && sectorType !== "entertainment") continue;
+        if (sectorType !== "media") continue;
         const stateId = clearingStateBySector.get(sectorId);
         const corporationId = sectorCorpId.get(sectorId);
         if (!stateId || !corporationId) continue;

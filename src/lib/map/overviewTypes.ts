@@ -9,12 +9,12 @@ import type { MapApprovalState } from "@/lib/map/approvalService";
 import type { MapLeanState } from "@/lib/map/leanService";
 import type { MapPresidentialState } from "@/lib/map/presidentialService";
 import type { MapRegionRosterEntry } from "@/lib/map/rosterService";
-import type { CorporationType } from "@/lib/constants/corporations";
+import type { OperatingSectorType } from "@/lib/constants/corporations";
 
 export interface MapSectorSpecializationState {
-  primary: CorporationType;
+  primary: OperatingSectorType;
   primaryLabel: string;
-  secondary: CorporationType;
+  secondary: OperatingSectorType;
   secondaryLabel: string;
   tooltip: string[];
 }

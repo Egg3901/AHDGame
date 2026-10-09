@@ -86,7 +86,7 @@ describe("applyInternationalWithdrawalMeasure — FTA rescission sentiment hook"
       UK: ["energy", "media"],
       US: ["technology"],
       JP: [],
-      DE: ["automobiles"],
+      DE: ["manufacturing_vehicles"],
     });
 
     const { applyInternationalWithdrawalMeasure } = await import("./withdrawalBills");
@@ -225,7 +225,11 @@ describe("applyInternationalWithdrawalMeasure — FTA rescission sentiment hook"
       status: "active",
       parties: ["UK", "JP", "DE"],
     });
-    setupSignedSectorTariffs({ UK: ["energy"], JP: ["technology"], DE: ["automobiles"] });
+    setupSignedSectorTariffs({
+      UK: ["energy"],
+      JP: ["technology"],
+      DE: ["manufacturing_vehicles"],
+    });
 
     const { applyInternationalWithdrawalMeasure } = await import("./withdrawalBills");
     await applyInternationalWithdrawalMeasure(

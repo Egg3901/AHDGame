@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { COUNTRY_ORDER } from "@/lib/constants/countries";
-import { FOUNDABLE_CORPORATION_TYPES } from "@/lib/constants/corporations";
+import { OPERATING_SECTOR_TYPES } from "@/lib/constants/corporations";
 import { GAME_VERSION } from "./marketedWorld";
 
 /**
@@ -86,10 +86,10 @@ describe("public copy stays derived", () => {
 
   it("the FAQ's sector count matches the foundable sector registry", () => {
     const faq = read("src/app/faq/page.tsx");
-    expect(faq).toContain("${FOUNDABLE_CORPORATION_TYPES.length} sectors");
+    expect(faq).toContain("${OPERATING_SECTOR_TYPES.length} sectors");
     expect(faq).not.toMatch(/\b\d+ sectors\b/);
     // Guards the interpolation above against a registry that shrank to nothing.
-    expect(FOUNDABLE_CORPORATION_TYPES.length).toBeGreaterThan(1);
+    expect(OPERATING_SECTOR_TYPES.length).toBeGreaterThan(1);
   });
 
   it("package.json is the only place the release version is written", () => {

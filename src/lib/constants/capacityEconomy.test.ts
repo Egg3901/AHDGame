@@ -14,10 +14,11 @@ import {
   revenuePerCapacityUnit,
 } from "./capacityEconomy";
 import {
-  CORPORATION_TYPES,
+  OPERATING_SECTOR_TYPES,
   GROWTH_COST_MULTIPLIER,
   calculateWorkers,
   type CorporationType,
+  type OperatingSectorType,
 } from "./corporations";
 import { COMMODITY_BASE_PRICES, type CommodityType } from "./commodities";
 import { impliedOutputUnits } from "@/lib/market/capital";
@@ -38,7 +39,7 @@ const ANCHOR_SECTORS: CorporationType[] = ["manufacturing", "retail", "extractio
 const REF_REVENUE = 1_000_000;
 
 /** Units the live engine implies for REF_REVENUE on a sector's default mix. */
-function liveImpliedUnits(sectorType: CorporationType): number {
+function liveImpliedUnits(sectorType: OperatingSectorType): number {
   return impliedOutputUnits(REF_REVENUE, defaultSupplyRates(sectorType), COMMODITY_BASE_PRICES, 1);
 }
 
@@ -49,7 +50,7 @@ describe("capacityEconomy — source-table wiring", () => {
   });
 
   it("prices every sector against a real, ungated default output mix", () => {
-    for (const type of CORPORATION_TYPES) {
+    for (const type of OPERATING_SECTOR_TYPES) {
       const supply = defaultSupplyRates(type);
       const commodities = Object.keys(supply) as CommodityType[];
       expect(commodities.length, `${type} has no default supply mix`).toBeGreaterThan(0);
@@ -65,13 +66,13 @@ describe("capacityEconomy — source-table wiring", () => {
   });
 
   it("capacityUnitYield is exactly impliedOutputUnits' per-revenue slope", () => {
-    for (const type of CORPORATION_TYPES) {
+    for (const type of OPERATING_SECTOR_TYPES) {
       expect(capacityUnitYield(type, 1)).toBeCloseTo(liveImpliedUnits(type) / REF_REVENUE, 12);
     }
   });
 
   it("revenuePerCapacityUnit is the reciprocal unit yield, not the arithmetic mix", () => {
-    for (const type of CORPORATION_TYPES) {
+    for (const type of OPERATING_SECTOR_TYPES) {
       expect(revenuePerCapacityUnit(type, 1)).toBeCloseTo(REF_REVENUE / liveImpliedUnits(type), 6);
     }
   });
@@ -108,7 +109,7 @@ describe("identity A (labour): workers per unit/day of capacity", () => {
   });
 
   it("equals RPU ÷ REVENUE_PER_WORKER at the anchor year for every sector", () => {
-    for (const type of CORPORATION_TYPES) {
+    for (const type of OPERATING_SECTOR_TYPES) {
       expect(laborIntensity(type, CAPACITY_ANCHOR_YEAR, 1)).toBeCloseTo(
         revenuePerCapacityUnit(type, 1) / CAPACITY_REVENUE_PER_WORKER,
         9
@@ -120,14 +121,14 @@ describe("identity A (labour): workers per unit/day of capacity", () => {
 describe("identity B (price): ₳ per unit/day of capacity", () => {
   it("prices canonical entertainment capacity from the legacy entertainment recipe", () => {
     expect(defaultSupplyRates("media", null, "entertainment")).toEqual(
-      defaultSupplyRates("entertainment")
+      defaultSupplyRates("media_entertainment")
     );
     expect(revenuePerCapacityUnit("media", 1, null, "entertainment")).toBeCloseTo(
-      revenuePerCapacityUnit("entertainment", 1)
+      revenuePerCapacityUnit("media_entertainment", 1)
     );
     expect(
       capacityPricePerUnit("media", CAPACITY_ANCHOR_YEAR, 1, null, null, "entertainment")
-    ).toBeCloseTo(capacityPricePerUnit("entertainment", CAPACITY_ANCHOR_YEAR, 1, null));
+    ).toBeCloseTo(capacityPricePerUnit("media_entertainment", CAPACITY_ANCHOR_YEAR, 1, null));
   });
 
   it.each(ANCHOR_SECTORS)(
@@ -156,7 +157,7 @@ describe("identity B (price): ₳ per unit/day of capacity", () => {
   );
 
   it("equals GROWTH_COST_MULTIPLIER × RPU at the anchor year for every sector", () => {
-    for (const type of CORPORATION_TYPES) {
+    for (const type of OPERATING_SECTOR_TYPES) {
       expect(capacityPricePerUnit(type, CAPACITY_ANCHOR_YEAR, 1, null)).toBeCloseTo(
         GROWTH_COST_MULTIPLIER * revenuePerCapacityUnit(type, 1),
         6
@@ -165,7 +166,7 @@ describe("identity B (price): ₳ per unit/day of capacity", () => {
   });
 
   it("A and B stay mutually consistent: price ÷ labour = GROWTH_COST_MULTIPLIER × CAPACITY_REVENUE_PER_WORKER at the anchor", () => {
-    for (const type of CORPORATION_TYPES) {
+    for (const type of OPERATING_SECTOR_TYPES) {
       const ratio =
         capacityPricePerUnit(type, CAPACITY_ANCHOR_YEAR, 1, null) /
         laborIntensity(type, CAPACITY_ANCHOR_YEAR, 1);
@@ -270,8 +271,8 @@ describe("era lookup", () => {
 
 describe("totality: every sector type, every year 1900-2100", () => {
   it("returns finite, positive values", () => {
-    expect(CAPACITY_SECTOR_TYPES).toEqual(CORPORATION_TYPES);
-    for (const type of CORPORATION_TYPES) {
+    expect(CAPACITY_SECTOR_TYPES).toEqual(OPERATING_SECTOR_TYPES);
+    for (const type of OPERATING_SECTOR_TYPES) {
       for (let year = 1900; year <= 2100; year++) {
         const price = capacityPricePerUnit(type, year, 1, null);
         const labour = laborIntensity(type, year, 1);
@@ -286,7 +287,7 @@ describe("totality: every sector type, every year 1900-2100", () => {
 
 describe("CAPACITY_BUILD_TURNS (provisional)", () => {
   it("covers every sector type with a positive whole number of turns", () => {
-    for (const type of CORPORATION_TYPES) {
+    for (const type of OPERATING_SECTOR_TYPES) {
       const turns = CAPACITY_BUILD_TURNS(type);
       expect(Number.isInteger(turns), `${type}`).toBe(true);
       expect(turns).toBeGreaterThan(0);

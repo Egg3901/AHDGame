@@ -43,8 +43,8 @@
  * distribution for any country not in the map.
  */
 
-import { CORPORATION_TYPES } from "@/lib/constants/corporations";
-import type { CorporationType } from "@/lib/constants/corporations";
+import { OPERATING_SECTOR_TYPES } from "@/lib/constants/corporations";
+import type { OperatingSectorType } from "@/lib/constants/corporations";
 import type { CountryId } from "@/lib/constants/countries";
 import { JP_SECTOR_WEIGHTS_1953 } from "@/lib/countries/jp/data/jpSectorWeights1953";
 import { US_ECONOMY } from "@/lib/countries/us/economy";
@@ -72,7 +72,7 @@ import { CS_ECONOMY } from "@/lib/countries/cs/economy";
 import { UKR_ECONOMY } from "@/lib/countries/ukr/economy";
 import { BAL_ECONOMY } from "@/lib/countries/bal/economy";
 
-export type SectorWeightMap = Partial<Record<CorporationType, number>>;
+export type SectorWeightMap = Partial<Record<OperatingSectorType, number>>;
 
 export const COUNTRY_SECTOR_WEIGHTS_1953: Record<string, SectorWeightMap> = {
   US: US_ECONOMY.sectorWeights.byEra["1953"],
@@ -106,9 +106,9 @@ export const COUNTRY_SECTOR_WEIGHTS_1953: Record<string, SectorWeightMap> = {
     real_estate: 1, // state-allocated housing; kommunalka; no market
     healthcare: 1, // Semashko system; free universal; underfunded
     retail: 1, // state shops; queuing; black market
-    automobiles: 0, // Moskvitch; GAZ Pobeda; elite Zil; negligible consumer auto
+    manufacturing_vehicles: 0, // Moskvitch; GAZ Pobeda; elite Zil; negligible consumer auto
     technology: 0, // BESM-1 (1953); no commercial market
-    entertainment: 0, // Bolshoi; socialist realism cinema; approved culture only
+    media_entertainment: 0, // Bolshoi; socialist realism cinema; approved culture only
   },
 
   DD: DD_ECONOMY.sectorWeights.byEra["1953"],
@@ -151,8 +151,8 @@ export const COUNTRY_SECTOR_WEIGHTS_1953: Record<string, SectorWeightMap> = {
     financial: 1, // Gosbank branch; no autonomy
     real_estate: 1,
     telecommunications: 1,
-    automobiles: 2, // MAZ/BELAZ early trucks; no private cars
-    entertainment: 1, // Kupala National Theatre; folk music
+    manufacturing_vehicles: 2, // MAZ/BELAZ early trucks; no private cars
+    media_entertainment: 1, // Kupala National Theatre; folk music
     technology: 0,
   },
 
@@ -179,7 +179,7 @@ function bundleKey1953(countryId: CountryId | string): string {
  * character: peak manufacturing, coal/oil/ore extraction, cotton/grain/dairy
  * agriculture, Big-Three autos in the Midwest, shipbuilding and textiles in
  * Britain, heavy industry across the Urals and Donbass. No `technology` sector
- * (commercially ~0 in 1953) and only nascent `entertainment` (film, tourism).
+ * (commercially ~0 in 1953) and only nascent media entertainment (film, tourism).
  */
 export const STATE_SECTOR_WEIGHT_OVERRIDES_1953: Record<string, SectorWeightMap> = {
   // United States (1950-census 48 states + DC; AK/HI still territories)
@@ -187,17 +187,17 @@ export const STATE_SECTOR_WEIGHT_OVERRIDES_1953: Record<string, SectorWeightMap>
   "US:AK": { extraction: 12, logistics: 6, agriculture: 4 }, // gold, fishing, canneries
   "US:AZ": { extraction: 20, agriculture: 12, defense: 8 }, // copper; cotton; airbases
   "US:AR": { agriculture: 22, extraction: 8 }, // cotton, rice; bauxite/oil
-  "US:CA": { agriculture: 16, entertainment: 14, defense: 12, extraction: 8, energy: 6 }, // Central Valley; Hollywood; aerospace; LA oil
+  "US:CA": { agriculture: 16, media_entertainment: 14, defense: 12, extraction: 8, energy: 6 }, // Central Valley; Hollywood; aerospace; LA oil
   "US:CO": { extraction: 14, agriculture: 12, defense: 8 }, // mining; ranching
   "US:CT": { defense: 16, manufacturing: 16, financial: 12 }, // submarines/aircraft; Hartford insurance
   "US:DE": { chemical_industries: 22, manufacturing: 12, financial: 8 }, // DuPont
   "US:DC": { financial: 12, media: 10, real_estate: 10 }, // federal district services
-  "US:FL": { agriculture: 18, entertainment: 12, real_estate: 10, construction: 8 }, // citrus; tourism
+  "US:FL": { agriculture: 18, media_entertainment: 12, real_estate: 10, construction: 8 }, // citrus; tourism
   "US:GA": { agriculture: 16, manufacturing: 14, logistics: 8 }, // cotton; textiles
-  "US:HI": { agriculture: 20, defense: 14, entertainment: 8 }, // sugar/pineapple; Pearl Harbor
+  "US:HI": { agriculture: 20, defense: 14, media_entertainment: 8 }, // sugar/pineapple; Pearl Harbor
   "US:ID": { agriculture: 20, extraction: 10, logistics: 8 }, // potatoes; silver; timber
   "US:IL": { manufacturing: 16, logistics: 12, agriculture: 12, financial: 10 }, // Chicago rail hub
-  "US:IN": { manufacturing: 22, automobiles: 10, agriculture: 10 }, // Gary steel
+  "US:IN": { manufacturing: 22, manufacturing_vehicles: 10, agriculture: 10 }, // Gary steel
   "US:IA": { agriculture: 26, manufacturing: 8 }, // corn, hogs
   "US:KS": { agriculture: 22, defense: 8, extraction: 6 }, // wheat; Wichita aircraft
   "US:KY": { agriculture: 16, extraction: 14 }, // tobacco; coal
@@ -205,20 +205,20 @@ export const STATE_SECTOR_WEIGHT_OVERRIDES_1953: Record<string, SectorWeightMap>
   "US:ME": { manufacturing: 14, agriculture: 10, logistics: 8 }, // paper; fishing/timber
   "US:MD": { manufacturing: 16, defense: 12, financial: 8 }, // Bethlehem Steel; Navy
   "US:MA": { manufacturing: 16, financial: 12, healthcare: 10 }, // machinery; insurance; hospitals
-  "US:MI": { automobiles: 26, manufacturing: 12 }, // Detroit Big Three
+  "US:MI": { manufacturing_vehicles: 26, manufacturing: 12 }, // Detroit Big Three
   "US:MN": { extraction: 16, agriculture: 14, manufacturing: 8 }, // Mesabi iron
   "US:MS": { agriculture: 24, manufacturing: 8 }, // cotton
-  "US:MO": { manufacturing: 14, agriculture: 12, automobiles: 8, logistics: 8 }, // St Louis/KC
+  "US:MO": { manufacturing: 14, agriculture: 12, manufacturing_vehicles: 8, logistics: 8 }, // St Louis/KC
   "US:MT": { extraction: 18, agriculture: 14 }, // copper mining; ranching
   "US:NE": { agriculture: 26 }, // corn, cattle
-  "US:NV": { extraction: 20, entertainment: 12 }, // mining; nascent gaming
+  "US:NV": { extraction: 20, media_entertainment: 12 }, // mining; nascent gaming
   "US:NH": { manufacturing: 16, agriculture: 6 }, // textiles/machinery
   "US:NJ": { chemical_industries: 18, manufacturing: 14, financial: 8 }, // pharma
   "US:NM": { extraction: 14, defense: 12, agriculture: 8 }, // oil/potash/uranium; Los Alamos/Sandia
   "US:NY": { financial: 20, media: 12, manufacturing: 12, real_estate: 10 }, // Wall Street; publishing
   "US:NC": { manufacturing: 18, agriculture: 14 }, // textiles; tobacco
   "US:ND": { agriculture: 28 }, // wheat
-  "US:OH": { manufacturing: 20, automobiles: 10, chemical_industries: 8 }, // steel; Akron rubber
+  "US:OH": { manufacturing: 20, manufacturing_vehicles: 10, chemical_industries: 8 }, // steel; Akron rubber
   "US:OK": { extraction: 20, agriculture: 12 }, // oil
   "US:OR": { logistics: 12, agriculture: 12, manufacturing: 8 }, // timber/lumber
   "US:PA": { manufacturing: 22, extraction: 12, financial: 8 }, // US Steel; anthracite coal
@@ -240,7 +240,7 @@ export const STATE_SECTOR_WEIGHT_OVERRIDES_1953: Record<string, SectorWeightMap>
   "UK:SWE": { agriculture: 16, manufacturing: 8, logistics: 6 }, // farming; Plymouth naval
   "UK:EAE": { agriculture: 20, manufacturing: 6 }, // East Anglia arable
   "UK:EMI": { manufacturing: 20, extraction: 8 }, // hosiery; coal
-  "UK:WMI": { manufacturing: 22, automobiles: 10 }, // Birmingham metal trades/cars
+  "UK:WMI": { manufacturing: 22, manufacturing_vehicles: 10 }, // Birmingham metal trades/cars
   "UK:YHU": { manufacturing: 20, extraction: 8 }, // Sheffield steel, Leeds wool; coal
   "UK:NWE": { manufacturing: 22, logistics: 8 }, // Lancashire cotton; Liverpool port
   "UK:NEE": { manufacturing: 18, extraction: 12 }, // Tyneside shipbuilding; coal
@@ -290,33 +290,33 @@ export const STATE_SECTOR_WEIGHT_OVERRIDES_1953: Record<string, SectorWeightMap>
   "DD:MV": { agriculture: 22, logistics: 8 }, // Mecklenburg farming; Rostock port
   "DD:BB": { energy: 12, manufacturing: 12, agriculture: 8 }, // Lausitz lignite power; Eisenhuettenstadt steel
   "DD:ST": { chemical_industries: 20, manufacturing: 10 }, // Leuna/Buna/Bitterfeld chemicals; Magdeburg machine-building
-  "DD:SN": { manufacturing: 20, automobiles: 8, extraction: 8 }, // Chemnitz machine-building; Zwickau autos; lignite
+  "DD:SN": { manufacturing: 20, manufacturing_vehicles: 8, extraction: 8 }, // Chemnitz machine-building; Zwickau autos; lignite
   "DD:TH": { manufacturing: 16, agriculture: 8 }, // Jena optics; Suhl workshops; Thuringian farming
   // West Germany (Bundesländer)
   "DE:NW": { manufacturing: 24, extraction: 12, chemical_industries: 8 }, // Ruhr coal, steel, heavy industry
   "DE:SL": { extraction: 16, manufacturing: 16 }, // Saarland coal & steel
-  "DE:BW": { manufacturing: 20, automobiles: 12 }, // Stuttgart: Daimler, precision engineering
-  "DE:BY": { manufacturing: 14, agriculture: 12, automobiles: 6 }, // Bavaria: farming + emerging industry
+  "DE:BW": { manufacturing: 20, manufacturing_vehicles: 12 }, // Stuttgart: Daimler, precision engineering
+  "DE:BY": { manufacturing: 14, agriculture: 12, manufacturing_vehicles: 6 }, // Bavaria: farming + emerging industry
   "DE:HE": { financial: 16, chemical_industries: 12 }, // Frankfurt finance; Hoechst chemicals
   "DE:RP": { chemical_industries: 18, agriculture: 8 }, // BASF Ludwigshafen; Moselle wine
-  "DE:NI": { manufacturing: 12, automobiles: 10, agriculture: 10, extraction: 8 }, // VW Wolfsburg; Salzgitter; gas
+  "DE:NI": { manufacturing: 12, manufacturing_vehicles: 10, agriculture: 10, extraction: 8 }, // VW Wolfsburg; Salzgitter; gas
   "DE:SH": { agriculture: 16, logistics: 8 }, // farming; Kiel shipbuilding
   "DE:HH": { logistics: 18, manufacturing: 10, media: 8 }, // Hamburg port, shipyards, press
   "DE:BRE": { logistics: 16, manufacturing: 10 }, // Bremen port & shipbuilding
   "DE:BE": { manufacturing: 12, media: 10, retail: 8 }, // West Berlin
   // France
-  "FR:FR_IDF": { financial: 16, manufacturing: 14, media: 10, automobiles: 6 }, // Paris: Renault/Citroën, banking, press
+  "FR:FR_IDF": { financial: 16, manufacturing: 14, media: 10, manufacturing_vehicles: 6 }, // Paris: Renault/Citroën, banking, press
   "FR:FR_NOR": { extraction: 16, manufacturing: 16 }, // Nord: coal, textiles, steel
   "FR:FR_EST": { manufacturing: 18, extraction: 14 }, // Lorraine iron & steel; Alsace industry
   "FR:FR_OUE": { agriculture: 20, logistics: 8 }, // Brittany/Normandy farming; Atlantic ports
   "FR:FR_SOU": { agriculture: 14, energy: 8, extraction: 8 }, // Aquitaine: Lacq gas, farming, Landes timber
   "FR:FR_ARA": { manufacturing: 16, energy: 8 }, // Lyon industry; Alpine hydro
-  "FR:FR_MED": { agriculture: 12, logistics: 10, entertainment: 8 }, // Marseille port; Riviera; farming
+  "FR:FR_MED": { agriculture: 12, logistics: 10, media_entertainment: 8 }, // Marseille port; Riviera; farming
   "FR:FR_CEN": { agriculture: 22 }, // Beauce/Centre grain belt
   // Italy
-  "IT:IT_NW": { manufacturing: 20, automobiles: 12 }, // Turin FIAT; Milan/Genoa industrial triangle
+  "IT:IT_NW": { manufacturing: 20, manufacturing_vehicles: 12 }, // Turin FIAT; Milan/Genoa industrial triangle
   "IT:IT_NE": { manufacturing: 12, agriculture: 14, energy: 8 }, // Po Valley farming; gas; Veneto textiles
-  "IT:IT_TUS": { manufacturing: 12, extraction: 8, entertainment: 8 }, // Tuscan industry; iron/pyrite; tourism
+  "IT:IT_TUS": { manufacturing: 12, extraction: 8, media_entertainment: 8 }, // Tuscan industry; iron/pyrite; tourism
   "IT:IT_LAZ": { financial: 12, media: 12, construction: 8 }, // Rome: government, Cinecittà, building
   "IT:IT_CAM": { manufacturing: 12, agriculture: 12, logistics: 8 }, // Naples industry; farming; port
   "IT:IT_SUD": { agriculture: 24 }, // the agrarian Mezzogiorno
@@ -333,7 +333,7 @@ export const STATE_SECTOR_WEIGHT_OVERRIDES_1953: Record<string, SectorWeightMap>
   "ES:ES_CEN": { agriculture: 22 }, // Castilian grain
   // Sweden
   "SE:SE_STH": { financial: 14, manufacturing: 10, media: 8 }, // Stockholm services
-  "SE:SE_GOT": { manufacturing: 18, automobiles: 10, logistics: 8 }, // Göteborg: Volvo/SKF, port
+  "SE:SE_GOT": { manufacturing: 18, manufacturing_vehicles: 10, logistics: 8 }, // Göteborg: Volvo/SKF, port
   "SE:SE_SKA": { agriculture: 18, manufacturing: 8 }, // Skåne farming; Malmö industry
   "SE:SE_EAS": { manufacturing: 16, agriculture: 8 }, // Linköping (SAAB); farming
   "SE:SE_SML": { manufacturing: 16, extraction: 6 }, // small-industry & glass belt
@@ -351,7 +351,7 @@ export const STATE_SECTOR_WEIGHT_OVERRIDES_1953: Record<string, SectorWeightMap>
   "AT:AT_NOE": { agriculture: 18, energy: 8, manufacturing: 6 }, // eastern grain belt; Zistersdorf oil (USIA)
   "AT:AT_OOE": { manufacturing: 16, energy: 8, agriculture: 10 }, // VOEST Linz; Salzkammergut; Alpine hydro
   "AT:AT_STK": { manufacturing: 14, extraction: 10, agriculture: 10 }, // Erzberg iron; Mur-Mürz steel valley
-  "AT:AT_TYR": { entertainment: 10, energy: 8, agriculture: 10 }, // Alpine tourism; hydro; mountain farming
+  "AT:AT_TYR": { media_entertainment: 10, energy: 8, agriculture: 10 }, // Alpine tourism; hydro; mountain farming
   "FI:FI_UUS": { manufacturing: 12, financial: 8, logistics: 8 }, // Helsinki: engineering, banks, the port
   "FI:FI_SW": { agriculture: 14, manufacturing: 10, logistics: 8 }, // Turku shipyards (reparations ships); farm coast
   "FI:FI_HAM": { manufacturing: 16, extraction: 8, agriculture: 12 }, // Tampere textiles/metal; lake-district sawmills
@@ -369,7 +369,7 @@ export const STATE_SECTOR_WEIGHT_OVERRIDES_1953: Record<string, SectorWeightMap>
   // Japan
   "JP:KAN": { manufacturing: 24, financial: 12, media: 8 }, // Tokyo/Kanto: industrial + financial core
   "JP:KNS": { manufacturing: 22, retail: 6 }, // Osaka/Kinki: Hanshin industrial belt
-  "JP:CHU": { manufacturing: 20, automobiles: 14 }, // Nagoya/Chubu: Toyota, machinery
+  "JP:CHU": { manufacturing: 20, manufacturing_vehicles: 14 }, // Nagoya/Chubu: Toyota, machinery
   "JP:KYU": { manufacturing: 16, extraction: 12 }, // Kitakyushu steel; Miike/Chikuho coal
   "JP:TOH": { agriculture: 18, extraction: 6 }, // Tohoku rice; mining
   "JP:HOK": { agriculture: 16, extraction: 10, logistics: 6 }, // Hokkaido farming, coal, fishing
@@ -416,19 +416,21 @@ export function getCountrySectorRaw1953(countryId: CountryId): SectorWeightMap {
  * Returns the 1953 country-level sector weight map.
  * Used by `getStateSectorWeights` when the active preset is `1953-default`.
  */
-export function getCountrySectorWeights1953(countryId: CountryId): Record<CorporationType, number> {
+export function getCountrySectorWeights1953(
+  countryId: CountryId
+): Record<OperatingSectorType, number> {
   const raw = COUNTRY_SECTOR_WEIGHTS_1953[bundleKey1953(countryId)] ?? {};
-  const entries = CORPORATION_TYPES.map((t) => [t, raw[t] ?? 0] as const);
+  const entries = OPERATING_SECTOR_TYPES.map((t) => [t, raw[t] ?? 0] as const);
   const total = entries.reduce((s, [, v]) => s + v, 0);
   if (total === 0) {
-    const even = 1 / CORPORATION_TYPES.length;
-    return Object.fromEntries(CORPORATION_TYPES.map((t) => [t, even])) as Record<
-      CorporationType,
+    const even = 1 / OPERATING_SECTOR_TYPES.length;
+    return Object.fromEntries(OPERATING_SECTOR_TYPES.map((t) => [t, even])) as Record<
+      OperatingSectorType,
       number
     >;
   }
   return Object.fromEntries(entries.map(([t, v]) => [t, v / total])) as Record<
-    CorporationType,
+    OperatingSectorType,
     number
   >;
 }

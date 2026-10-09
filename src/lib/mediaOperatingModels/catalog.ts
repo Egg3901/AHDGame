@@ -16,7 +16,8 @@ export type MediaOperatingModelId =
   | "publishing_house"
   | "streaming_platform";
 
-export type MediaOperatingModelSector = "media" | "entertainment";
+/** Operating lanes inside media that can run a business model. */
+export type MediaOperatingModelSector = "media" | "media_entertainment";
 
 export interface MediaOperatingModelDefinition {
   id: MediaOperatingModelId;
@@ -78,24 +79,24 @@ export const MEDIA_OPERATING_MODELS: readonly MediaOperatingModelDefinition[] = 
   {
     id: "film_studio",
     name: "Film Studio",
-    sectorTypes: ["entertainment"],
+    sectorTypes: ["media_entertainment"],
     availableFromYear: 1910,
     outputProducts: ["entertainment_services"],
     recipes: {
-      entertainment: { inputStrategyId: "standard", outputStrategyId: "standard" },
+      media_entertainment: { inputStrategyId: "standard", outputStrategyId: "standard" },
     },
-    technologies: { entertainment: { decade: "1940", nodeName: "Hollywood Studio System" } },
+    technologies: { media_entertainment: { decade: "1940", nodeName: "Hollywood Studio System" } },
   },
   {
     id: "music_label",
     name: "Music Label",
-    sectorTypes: ["entertainment"],
+    sectorTypes: ["media_entertainment"],
     availableFromYear: 1950,
     outputProducts: ["entertainment_services"],
     recipes: {
-      entertainment: { inputStrategyId: "standard", outputStrategyId: "standard" },
+      media_entertainment: { inputStrategyId: "standard", outputStrategyId: "standard" },
     },
-    technologies: { entertainment: { decade: "1950", nodeName: "Record Labels" } },
+    technologies: { media_entertainment: { decade: "1950", nodeName: "Record Labels" } },
   },
   {
     id: "publishing_house",
@@ -111,16 +112,16 @@ export const MEDIA_OPERATING_MODELS: readonly MediaOperatingModelDefinition[] = 
   {
     id: "streaming_platform",
     name: "Streaming Platform",
-    sectorTypes: ["media", "entertainment"],
+    sectorTypes: ["media", "media_entertainment"],
     availableFromYear: 2005,
     outputProducts: ["advertising", "entertainment_services"],
     recipes: {
       media: { inputStrategyId: "streaming_media", outputStrategyId: "streaming_media" },
-      entertainment: { inputStrategyId: "streaming", outputStrategyId: "streaming" },
+      media_entertainment: { inputStrategyId: "streaming", outputStrategyId: "streaming" },
     },
     technologies: {
       media: { decade: "2009", nodeName: "Streaming Platforms" },
-      entertainment: { decade: "2009", nodeName: "Streaming Distribution" },
+      media_entertainment: { decade: "2009", nodeName: "Streaming Distribution" },
     },
   },
 ];

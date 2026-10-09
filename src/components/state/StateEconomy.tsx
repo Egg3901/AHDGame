@@ -28,9 +28,9 @@ import {
   MIN_GROWTH_RATE,
   GROWTH_ADJUST_COST_PER_PERCENT,
   GROWTH_RATE_TURNS_PER_YEAR,
-  CORPORATION_TYPES,
-  CORPORATION_TYPE_LABELS,
-  type CorporationType,
+  OPERATING_SECTOR_TYPES,
+  OPERATING_SECTOR_TYPE_LABELS,
+  type OperatingSectorType,
 } from "@/lib/constants/corporations";
 import { economyUrl, regionApiSubUrl, stockmarketUrl } from "@/lib/urls";
 import { CorporationLogo } from "@/components/corporation/CorporationLogo";
@@ -102,7 +102,7 @@ interface SectorOwner {
 }
 
 interface EconomySector {
-  type: CorporationType;
+  type: OperatingSectorType;
   label: string;
   totalMarket: number;
   ownedRevenue: number;
@@ -132,19 +132,19 @@ interface EconomyData {
     nationalGdpGrowth: number | null;
   };
   /** National effective-market totals per sector (₳), for the context line. */
-  nationalSectorTotals?: Partial<Record<CorporationType, number>>;
+  nationalSectorTotals?: Partial<Record<OperatingSectorType, number>>;
   sectorSpecializations?: {
-    primary: CorporationType;
+    primary: OperatingSectorType;
     primaryLabel: string;
     primaryBonus: number;
-    secondary: CorporationType;
+    secondary: OperatingSectorType;
     secondaryLabel: string;
     secondaryBonus: number;
   } | null;
   totalMarketPerSector: number;
   sectors: EconomySector[];
   userCorporationId: string | null;
-  userCorporationSectorType?: CorporationType | null;
+  userCorporationSectorType?: OperatingSectorType | null;
   userMarketingStrength: number;
   userLiquidCapitalAnchor?: number;
   /** MS charged by the owned-sector attack route. */
@@ -169,12 +169,14 @@ export function StateEconomy({ stateId, countryId }: { stateId: string; countryI
   const searchParams = useSearchParams();
   const urlSector = searchParams.get("sector");
   const validUrlSector =
-    urlSector && (CORPORATION_TYPES as readonly string[]).includes(urlSector)
-      ? (urlSector as CorporationType)
+    urlSector && (OPERATING_SECTOR_TYPES as readonly string[]).includes(urlSector)
+      ? (urlSector as OperatingSectorType)
       : null;
   const [data, setData] = useState<EconomyData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [selectedType, setSelectedType] = useState<CorporationType>(validUrlSector ?? "financial");
+  const [selectedType, setSelectedType] = useState<OperatingSectorType>(
+    validUrlSector ?? "financial"
+  );
   const hasAppliedInitialSector = useRef(false);
   const [splitting, setSplitting] = useState(false);
   const [splitMsg, setSplitMsg] = useState("");
@@ -359,7 +361,7 @@ export function StateEconomy({ stateId, countryId }: { stateId: string; countryI
     null
   );
 
-  const selectSector = (type: CorporationType) => {
+  const selectSector = (type: OperatingSectorType) => {
     setSelectedType(type);
     setSplitStrength("full");
     setSplitMsg("");
@@ -442,7 +444,7 @@ export function StateEconomy({ stateId, countryId }: { stateId: string; countryI
           <select
             aria-label="Select sector"
             value={selectedType}
-            onChange={(e) => selectSector(e.target.value as CorporationType)}
+            onChange={(e) => selectSector(e.target.value as OperatingSectorType)}
             className="w-full cursor-pointer rounded-lg border border-card-border bg-background px-3 py-2 text-sm font-medium focus:border-primary/60 focus:outline-none"
           >
             {[...data.sectors]
@@ -468,7 +470,7 @@ export function StateEconomy({ stateId, countryId }: { stateId: string; countryI
         {specializationBonus > 0 && (
           <span
             className="inline-flex items-center gap-1 rounded-full border border-gold/35 bg-gold/10 px-2.5 py-0.5 text-[11px] font-semibold text-gold"
-            title={`${CORPORATION_TYPE_LABELS[selectedType]} sectors in ${data.stateName} receive a +${specializationBonus}pp regional profit margin bonus`}
+            title={`${OPERATING_SECTOR_TYPE_LABELS[selectedType]} sectors in ${data.stateName} receive a +${specializationBonus}pp regional profit margin bonus`}
           >
             ★ {data.sectorSpecializations?.primary === selectedType ? "Primary" : "Secondary"}{" "}
             specialization · +{specializationBonus}pp margin

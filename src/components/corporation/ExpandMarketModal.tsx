@@ -5,10 +5,10 @@ import { apiErrorText } from "@/lib/errors/catalog";
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { CORPORATION_TYPE_LABELS, FOUNDABLE_CORPORATION_TYPES } from "@/lib/constants/corporations";
+import { OPERATING_SECTOR_TYPES, OPERATING_SECTOR_TYPE_LABELS } from "@/lib/constants/corporations";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import { regionUrl } from "@/lib/urls";
-import type { CorporationType } from "@/lib/constants/corporations";
+import type { OperatingSectorType } from "@/lib/constants/corporations";
 import { COUNTRY_CURRENCY_MAP, type CurrencyCode } from "@/lib/constants/currencies";
 import { type CountryId } from "@/lib/constants/countries";
 import { CorporationLogo } from "@/components/corporation/CorporationLogo";
@@ -61,8 +61,8 @@ interface FoundingQuote {
 
 interface ExpandMarketModalProps {
   corpId: string;
-  primaryType: CorporationType;
-  secondaryType?: CorporationType | null;
+  primaryType: OperatingSectorType;
+  secondaryType?: OperatingSectorType | null;
   liquidCapital: number;
   onClose: () => void;
   /**
@@ -72,7 +72,7 @@ interface ExpandMarketModalProps {
    */
   plantsMode?: boolean;
   /** Deep-link: skip type pick and open suggestions for this sector type. */
-  initialSectorType?: CorporationType;
+  initialSectorType?: OperatingSectorType;
   /** Deep-link: focus this state once suggestions load. */
   initialStateId?: string;
 }
@@ -107,7 +107,7 @@ export default function ExpandMarketModal({
   const [step, setStep] = useState<Step>(
     plantsMode || initialSectorType ? "suggestions" : "selectType"
   );
-  const [selectedType, setSelectedType] = useState<CorporationType>(startType);
+  const [selectedType, setSelectedType] = useState<OperatingSectorType>(startType);
   const [suggestionMode, setSuggestionMode] = useState<SuggestionMode>("unowned");
   const [ownershipFilter, setOwnershipFilter] = useState<OwnershipFilter>(
     plantsMode && !initialStateId ? "unowned" : "all"
@@ -152,7 +152,7 @@ export default function ExpandMarketModal({
   }, [suggestions]);
 
   async function handleFetchSuggestions(
-    type: CorporationType,
+    type: OperatingSectorType,
     mode: SuggestionMode,
     countries: Set<string>,
     ownership: OwnershipFilter,
@@ -234,7 +234,7 @@ export default function ExpandMarketModal({
     void handleFetchSuggestions(selectedType, suggestionMode, next, ownershipFilter);
   };
 
-  const selectPlantSectorType = (type: CorporationType) => {
+  const selectPlantSectorType = (type: OperatingSectorType) => {
     if (type === selectedType) return;
     setSelectedType(type);
     setSuggestionMode("unowned");
@@ -304,13 +304,12 @@ export default function ExpandMarketModal({
     }
   }
 
-  // Any foundable sector type is buildable; retired automobiles/entertainment
-  // only appear as a legacy primary or secondary. Primary and secondary are
-  // listed first and badged; the rest carry the off-type margin penalty but are not gated out.
-  const orderedTypes: CorporationType[] = [
+  // Any sector type is buildable. Primary and secondary are listed first and
+  // badged; the rest carry the off-type margin penalty but are not gated out.
+  const orderedTypes: OperatingSectorType[] = [
     primaryType,
     ...(secondaryType ? [secondaryType] : []),
-    ...FOUNDABLE_CORPORATION_TYPES.filter((t) => t !== primaryType && t !== secondaryType),
+    ...OPERATING_SECTOR_TYPES.filter((t) => t !== primaryType && t !== secondaryType),
   ];
 
   return (
@@ -376,7 +375,7 @@ export default function ExpandMarketModal({
                           : "border-card-border bg-card-elevated/40 text-foreground hover:border-primary/40 hover:bg-primary/5"
                       }`}
                     >
-                      <span className="font-medium">{CORPORATION_TYPE_LABELS[t]}</span>
+                      <span className="font-medium">{OPERATING_SECTOR_TYPE_LABELS[t]}</span>
                       <span className="flex items-center gap-1.5 shrink-0 ml-2">
                         {isPrimary && (
                           <span className="rounded px-1.5 py-0.5 text-[10px] font-semibold bg-primary/20 text-primary">
@@ -434,11 +433,11 @@ export default function ExpandMarketModal({
                       ? confirming && activeSuggestion
                         ? `Review ${activeSuggestion.stateName}`
                         : "Choose a market"
-                      : `${CORPORATION_TYPE_LABELS[selectedType]} markets`}
+                      : `${OPERATING_SECTOR_TYPE_LABELS[selectedType]} markets`}
                   </p>
                   <p className="mt-0.5 text-xs text-muted">
                     {plantsMode
-                      ? `${CORPORATION_TYPE_LABELS[selectedType]} sector · ${formatTreasuryAmount(fetchedLiquidCapital)} available`
+                      ? `${OPERATING_SECTOR_TYPE_LABELS[selectedType]} sector · ${formatTreasuryAmount(fetchedLiquidCapital)} available`
                       : suggestionMode === "playerCorp"
                         ? "Sorted by competitor revenue"
                         : "Sorted by revenue capture"}
@@ -531,7 +530,7 @@ export default function ExpandMarketModal({
                       value={selectedType}
                       disabled={loadingSuggestions}
                       onChange={(event) =>
-                        selectPlantSectorType(event.target.value as CorporationType)
+                        selectPlantSectorType(event.target.value as OperatingSectorType)
                       }
                       className="w-full rounded-md border border-card-border bg-card px-2 py-1.5 text-xs text-foreground disabled:opacity-50"
                     >
@@ -544,7 +543,7 @@ export default function ExpandMarketModal({
                               : " (-15% margin)";
                         return (
                           <option key={t} value={t}>
-                            {CORPORATION_TYPE_LABELS[t]}
+                            {OPERATING_SECTOR_TYPE_LABELS[t]}
                             {suffix}
                           </option>
                         );
@@ -806,7 +805,7 @@ export default function ExpandMarketModal({
                             {activeSuggestion.stateName}
                           </p>
                           <p className="text-xs text-muted mt-0.5">
-                            {CORPORATION_TYPE_LABELS[selectedType]}
+                            {OPERATING_SECTOR_TYPE_LABELS[selectedType]}
                           </p>
                         </div>
                         {activeSuggestion.ownedSectorId ? (

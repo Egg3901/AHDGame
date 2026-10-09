@@ -1,6 +1,6 @@
 import type { CountryEconomy } from "../contract";
 import type { CurrencyCode } from "@/lib/constants/currencies";
-import type { CorporationType } from "@/lib/constants/corporations";
+import type { OperatingSectorType } from "@/lib/constants/corporations";
 import type { LegalStructureId } from "@/lib/constants/legalStructures";
 
 /**
@@ -46,12 +46,12 @@ const sectorWeightsBase = {
   construction: 6,
   logistics: 5,
   chemical_industries: 5,
-  automobiles: 4,
+  manufacturing_vehicles: 4,
   defense: 4,
   media: 4,
   telecommunications: 4,
   energy: 3,
-  entertainment: 3,
+  media_entertainment: 3,
   agriculture: 2,
   extraction: 2,
 };
@@ -69,10 +69,10 @@ const costScaleAnchors = {
 };
 /**
  * ⚠ THE CAST IS LOAD-BEARING, for the same reason as the cabinet groups:
- * JSON.parse widens each sector name to `string`, and `CorporationType[]` is a
+ * JSON.parse widens each sector name to `string`, and `OperatingSectorType[]` is a
  * union array. Caught by typecheck alone.
  */
-const strategicSectors = ["defense", "technology"] as CorporationType[];
+const strategicSectors = ["defense", "technology"] as OperatingSectorType[];
 const treasuryPsRate = {
   national: 75000,
   state: 37500,
@@ -116,7 +116,7 @@ export const US_ECONOMY: CountryEconomy = {
       "1953": {
         manufacturing: 26,
         defense: 14,
-        automobiles: 10,
+        manufacturing_vehicles: 10,
         agriculture: 8,
         energy: 7,
         construction: 6,
@@ -128,7 +128,7 @@ export const US_ECONOMY: CountryEconomy = {
         healthcare: 2,
         media: 2,
         telecommunications: 2,
-        entertainment: 2,
+        media_entertainment: 2,
         extraction: 2,
         technology: 0,
       },
@@ -136,7 +136,7 @@ export const US_ECONOMY: CountryEconomy = {
         manufacturing: 18,
         real_estate: 10,
         retail: 8,
-        automobiles: 8,
+        manufacturing_vehicles: 8,
         energy: 7,
         agriculture: 6,
         construction: 6,
@@ -149,7 +149,7 @@ export const US_ECONOMY: CountryEconomy = {
         telecommunications: 3,
         technology: 2,
         media: 2,
-        entertainment: 2,
+        media_entertainment: 2,
       },
       "1991": {
         manufacturing: 14,
@@ -158,7 +158,7 @@ export const US_ECONOMY: CountryEconomy = {
         retail: 9,
         healthcare: 7,
         construction: 7,
-        automobiles: 6,
+        manufacturing_vehicles: 6,
         defense: 7,
         chemical_industries: 6,
         energy: 5,
@@ -168,7 +168,7 @@ export const US_ECONOMY: CountryEconomy = {
         technology: 3,
         agriculture: 3,
         extraction: 2,
-        entertainment: 1,
+        media_entertainment: 1,
       },
     },
   },

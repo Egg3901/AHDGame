@@ -10,7 +10,11 @@
 
 import type { Corporation, CorporateSector } from "@/lib/db/types";
 import type { UnownedSector } from "@/lib/db/types/unownedSector";
-import type { CorporationType, ManufacturingIndustryModel } from "@/lib/constants/corporations";
+import type {
+  CorporationType,
+  OperatingSectorType,
+  ManufacturingIndustryModel,
+} from "@/lib/constants/corporations";
 import type { CountryId } from "@/lib/constants/countries";
 import { adjacentStates } from "@/lib/constants/stateAdjacency";
 import { unownedHeadroomUnitsOf } from "@/lib/corporations/marketShare";
@@ -57,10 +61,10 @@ export const ESSENTIAL_SHORTAGE_SCORE = 1.6;
  * commodity it answers, scanned in order.
  */
 export const FRAGILE_MARKET_COMMODITIES_BY_SECTOR: Readonly<
-  Partial<Record<CorporationType, readonly CommodityType[]>>
+  Partial<Record<OperatingSectorType, readonly CommodityType[]>>
 > = {
   media: ["advertising"],
-  entertainment: ["advertising", "entertainment_services"],
+  media_entertainment: ["advertising", "entertainment_services"],
   healthcare: ["healthcare_services"],
   chemical_industries: ["fertilizers"],
   logistics: ["freight"],
@@ -72,7 +76,7 @@ export const FRAGILE_MARKET_SHORTAGE_SCORE = ESSENTIAL_SHORTAGE_SCORE;
 
 /** The sector's most-short fragile commodity at or above the bar, else null. */
 export function fragileMarketCommodityForSector(
-  sectorType: CorporationType,
+  sectorType: OperatingSectorType,
   countryId: string,
   priceRatioOf: CommodityPriceRatioFn
 ): CommodityType | null {
@@ -90,7 +94,7 @@ export function fragileMarketCommodityForSector(
 
 /** Focus a new plant on the diagnosed commodity when the sector has a dedicated recipe. */
 export function fragileMarketFoundingStrategy(
-  sectorType: CorporationType,
+  sectorType: OperatingSectorType,
   countryId: string,
   priceRatioOf: CommodityPriceRatioFn
 ): string | undefined {
@@ -391,11 +395,7 @@ export function findBestUnownedSector(
   // starved instead of treating every state in the country as one market.
   const shortageOf = (c: UnownedSector) =>
     sectorShortageScore(
-      getOperatingSectorType(
-        c.sectorType,
-        c.industryModel,
-        c.mediaDiscriminator
-      ) as CorporationType,
+      getOperatingSectorType(c.sectorType, c.industryModel, c.mediaDiscriminator),
       countryId,
       (commodity, cid) => {
         const stateRatio = signals?.statePriceRatioOf?.(commodity, c.stateId);
@@ -416,11 +416,7 @@ export function findBestUnownedSector(
   const fragileScore = (c: UnownedSector): number => {
     if (signals?.fragileMarketCountryEligible?.(c.countryId) === false) return 0;
     const commodity = fragileMarketCommodityForSector(
-      getOperatingSectorType(
-        c.sectorType,
-        c.industryModel,
-        c.mediaDiscriminator
-      ) as CorporationType,
+      getOperatingSectorType(c.sectorType, c.industryModel, c.mediaDiscriminator),
       c.countryId,
       candidatePriceRatioOf(c)
     );
@@ -438,11 +434,7 @@ export function findBestUnownedSector(
   // though consulting is at base.
   const peakShortageOf = (c: UnownedSector): number =>
     sectorPeakShortageScore(
-      getOperatingSectorType(
-        c.sectorType,
-        c.industryModel,
-        c.mediaDiscriminator
-      ) as CorporationType,
+      getOperatingSectorType(c.sectorType, c.industryModel, c.mediaDiscriminator),
       countryId,
       priceRatioOf
     );
@@ -501,7 +493,7 @@ export function findBestUnownedSector(
  * GH #3370). Glut capacity is reduced via targetGrowthRate instead (section 2a).
  */
 export function computeMacroProductionPolicy(
-  sectorType: CorporationType,
+  sectorType: OperatingSectorType,
   countryId: string,
   priceRatioOf: CommodityPriceRatioFn
 ): number | null {
@@ -537,7 +529,7 @@ export function computeMacroProductionPolicy(
  * cleared volume under BOTH ledger and clearing modes.
  */
 export function sectorShortageScore(
-  sectorType: CorporationType,
+  sectorType: OperatingSectorType,
   countryId: string,
   priceRatioOf: CommodityPriceRatioFn
 ): number {
@@ -560,7 +552,7 @@ export function sectorShortageScore(
  * be hidden by a balanced co-product in the weighted sector average.
  */
 export function sectorPeakShortageScore(
-  sectorType: CorporationType,
+  sectorType: OperatingSectorType,
   countryId: string,
   priceRatioOf: CommodityPriceRatioFn
 ): number {

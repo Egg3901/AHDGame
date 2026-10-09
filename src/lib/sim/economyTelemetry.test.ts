@@ -12,7 +12,7 @@ import {
   TRAILING_TURNS,
 } from "./economyTelemetry";
 import { US_STATES } from "@/lib/constants";
-import { CORPORATION_TYPES } from "@/lib/constants/corporations";
+import { OPERATING_SECTOR_TYPES } from "@/lib/constants/corporations";
 
 type Doc = Record<string, unknown>;
 
@@ -288,7 +288,7 @@ describe("#991 coverage telemetry", () => {
     });
     const t = await collectEconomyTelemetry(db);
     expect(t.coverage.available).toBe(true);
-    const universe = US_STATES.length * CORPORATION_TYPES.length;
+    const universe = US_STATES.length * OPERATING_SECTOR_TYPES.length;
     expect(t.coverage.presentCombos).toBe(1);
     expect(t.coverage.emptyCombos).toBe(universe - 1);
     expect(t.coverage.emptyShare).toBeCloseTo((universe - 1) / universe, 10);

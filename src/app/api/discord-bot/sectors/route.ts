@@ -7,13 +7,15 @@ import { requireBotToken } from "@/lib/api/requireBotToken";
 import { checkRateLimit, rateLimitResponse, BOT_FINANCIAL_LIMITS } from "@/lib/api/rateLimit";
 import type { Corporation, CorporateSector, State, UnownedSector } from "@/lib/db/types";
 import {
-  CORPORATION_TYPES,
-  CORPORATION_TYPE_LABELS,
+  OPERATING_SECTOR_TYPE_LABELS,
   SECTOR_MARKET_GDP_FRACTION,
   SECTOR_TYPE_COUNT,
   calculateWorkers,
+  isOperatingSectorType,
+  operatingSectorFilter,
+  OPERATING_SECTOR_TYPES,
 } from "@/lib/constants/corporations";
-import type { CorporationType } from "@/lib/constants/corporations";
+
 import { type CountryId } from "@/lib/constants/countries";
 import { getGdpAnchorRate, loadWorldPreset } from "@/lib/currency/gdpAnchorRate";
 import {
@@ -46,16 +48,18 @@ export async function GET(request: Request) {
     if (!rateLimit.ok) return rateLimitResponse(rateLimit.retryAfter);
 
     const url = new URL(request.url);
-    const sectorType = url.searchParams.get("type") as CorporationType | null;
+    const requestedType = url.searchParams.get("type");
     const unowned = url.searchParams.get("unowned") === "true";
     const page = Math.max(1, parseInt(url.searchParams.get("page") ?? "1", 10));
 
-    if (!sectorType || !CORPORATION_TYPES.includes(sectorType)) {
+    if (!isOperatingSectorType(requestedType)) {
       return errorResponse(
         400,
-        `Must provide a valid type. Options: ${CORPORATION_TYPES.join(", ")}`
+        `Must provide a valid type. Options: ${OPERATING_SECTOR_TYPES.join(", ")}`
       );
     }
+    const sectorType = requestedType;
+    const laneFilter = operatingSectorFilter(sectorType);
 
     const db = await getDb();
 
@@ -73,7 +77,7 @@ export async function GET(request: Request) {
           found: false,
           mode: "unowned",
           sectorType,
-          sectorLabel: CORPORATION_TYPE_LABELS[sectorType],
+          sectorLabel: OPERATING_SECTOR_TYPE_LABELS[sectorType],
           page: 1,
           totalPages: 1,
           totalItems: 0,
@@ -100,8 +104,8 @@ export async function GET(request: Request) {
       // state+sector combos that have never been seeded. Matches the pattern in
       // /api/discord-bot/marketshare and /api/corporations/.../sectors.
       const [ownedSectors, persistedUnowned, fxByCurrency, worldPreset] = await Promise.all([
-        db.collection<CorporateSector>("corporateSectors").find({ sectorType }).toArray(),
-        db.collection<UnownedSector>("unownedSectors").find({ sectorType }).toArray(),
+        db.collection<CorporateSector>("corporateSectors").find(laneFilter).toArray(),
+        db.collection<UnownedSector>("unownedSectors").find(laneFilter).toArray(),
         loadFxRatesByCurrency(db),
         loadWorldPreset(db),
       ]);
@@ -187,7 +191,7 @@ export async function GET(request: Request) {
         found: pageItems.length > 0,
         mode: "unowned",
         sectorType,
-        sectorLabel: CORPORATION_TYPE_LABELS[sectorType],
+        sectorLabel: OPERATING_SECTOR_TYPE_LABELS[sectorType],
         page: clampedPage,
         totalPages,
         totalItems,
@@ -201,7 +205,7 @@ export async function GET(request: Request) {
     // FX per corp, sort by anchor revenue, paginate in memory.
     const allSectors = await db
       .collection<CorporateSector>("corporateSectors")
-      .find({ sectorType })
+      .find(laneFilter)
       .toArray();
 
     const totalItems = allSectors.length;
@@ -213,7 +217,7 @@ export async function GET(request: Request) {
         found: false,
         mode: "owned",
         sectorType,
-        sectorLabel: CORPORATION_TYPE_LABELS[sectorType],
+        sectorLabel: OPERATING_SECTOR_TYPE_LABELS[sectorType],
         page: 1,
         totalPages: 1,
         totalItems: 0,
@@ -321,7 +325,7 @@ export async function GET(request: Request) {
       found: true,
       mode: "owned",
       sectorType,
-      sectorLabel: CORPORATION_TYPE_LABELS[sectorType],
+      sectorLabel: OPERATING_SECTOR_TYPE_LABELS[sectorType],
       page: clampedPage,
       totalPages,
       totalItems,

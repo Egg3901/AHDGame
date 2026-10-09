@@ -44,9 +44,9 @@ function fixtureClient(uri: string): MongoClient {
   return new MongoClient(uri, { monitorCommands: true });
 }
 
-describe.skipIf(!mongoUri)("legacy persisted sector native consumers", () => {
+describe.skipIf(!mongoUri)("vehicles and entertainment lane native consumers", () => {
   it.each([false, true])(
-    "loads both legacy types through all consumers with rework flags=%s",
+    "loads both specialized lanes through all consumers with rework flags=%s",
     async (enabled) => {
       const client = fixtureClient(mongoUri!);
       const db = client.db(`ahd_sim_fixture_legacy_${randomUUID().replaceAll("-", "")}`);
@@ -100,10 +100,14 @@ describe.skipIf(!mongoUri)("legacy persisted sector native consumers", () => {
         } as never);
         await db.collection("exchangeRates").insertOne({ currencyCode: "USD", rate: 1 });
 
-        const corporations = ["automobiles", "entertainment"].map((type, index) => {
+        const lanes = [
+          { type: "manufacturing" as const, industryModel: "vehicles" as const },
+          { type: "media" as const, mediaDiscriminator: "entertainment" as const },
+        ];
+        const corporations = lanes.map((lane, index) => {
           const corporation = makeCorporation({
-            name: `Legacy fixture ${type}`,
-            type: type as "automobiles" | "entertainment",
+            name: `Lane fixture ${index + 1}`,
+            ...lane,
             sequentialId: index + 1,
             countryId: "US",
             liquidCurrencyCode: "USD",
@@ -120,6 +124,8 @@ describe.skipIf(!mongoUri)("legacy persisted sector native consumers", () => {
           _id: new ObjectId(),
           corporationId: corporation._id,
           sectorType: corporation.type,
+          industryModel: corporation.industryModel ?? null,
+          mediaDiscriminator: corporation.mediaDiscriminator ?? null,
           stateId: "CA",
           countryId: "US",
           strategyId: "standard",
@@ -140,6 +146,8 @@ describe.skipIf(!mongoUri)("legacy persisted sector native consumers", () => {
           sectors.map((sector) => ({
             _id: new ObjectId(),
             sectorType: sector.sectorType,
+            industryModel: sector.industryModel ?? null,
+            mediaDiscriminator: sector.mediaDiscriminator ?? null,
             stateId: "CA",
             countryId: "US",
             revenue: 100_000,

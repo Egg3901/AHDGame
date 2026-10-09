@@ -1,9 +1,9 @@
 "use client";
 
 import {
-  FOUNDABLE_CORPORATION_TYPES,
-  CORPORATION_TYPE_LABELS,
-  type CorporationType,
+  OPERATING_SECTOR_TYPES,
+  OPERATING_SECTOR_TYPE_LABELS,
+  type OperatingSectorType,
 } from "@/lib/constants/corporations";
 import { type CountryId } from "@/lib/constants/countries";
 import { MAX_PROVISIONS } from "@shared/constants/legislation";
@@ -106,15 +106,16 @@ export function TariffProvisionEditor({ value, onChange, countryId, enabledCount
                 value={row.targetSectorType ?? ""}
                 onChange={(e) =>
                   updateRow(i, {
-                    targetSectorType: (e.target.value || undefined) as CorporationType | undefined,
+                    targetSectorType: (e.target.value || undefined) as
+                      OperatingSectorType | undefined,
                   })
                 }
                 className="w-full rounded-lg border border-card-border bg-card px-3 py-2 text-sm"
               >
                 <option value="">Select…</option>
-                {FOUNDABLE_CORPORATION_TYPES.map((s) => (
+                {OPERATING_SECTOR_TYPES.map((s) => (
                   <option key={s} value={s}>
-                    {CORPORATION_TYPE_LABELS[s]}
+                    {OPERATING_SECTOR_TYPE_LABELS[s]}
                   </option>
                 ))}
               </select>

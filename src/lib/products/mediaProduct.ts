@@ -17,7 +17,7 @@ export interface MediaProductProject {
   /** Present during development only. The unique partial index bounds each slate. */
   activeDevelopmentCorporationId?: string;
   sectorId: string;
-  operatingSectorType?: "media" | "entertainment";
+  operatingSectorType?: "media" | "media_entertainment";
   kindId: string;
   title: string;
   allocationShare: number;

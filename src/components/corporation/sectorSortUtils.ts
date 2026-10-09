@@ -1,4 +1,4 @@
-import { CORPORATION_TYPE_LABELS, type CorporationType } from "@/lib/constants/corporations";
+import { OPERATING_SECTOR_TYPE_LABELS, type CorporationType } from "@/lib/constants/corporations";
 import type { SectorDetail } from "./CorporationPageTypes";
 
 /**
@@ -101,8 +101,8 @@ export function compareSectors(
     case "location":
       return a.stateName.localeCompare(b.stateName, undefined, { sensitivity: "base" }) * sign;
     case "type": {
-      const la = CORPORATION_TYPE_LABELS[a.sectorType as CorporationType];
-      const lb = CORPORATION_TYPE_LABELS[b.sectorType as CorporationType];
+      const la = OPERATING_SECTOR_TYPE_LABELS[a.sectorType as CorporationType];
+      const lb = OPERATING_SECTOR_TYPE_LABELS[b.sectorType as CorporationType];
       return la.localeCompare(lb, undefined, { sensitivity: "base" }) * sign;
     }
     case "growthRate":

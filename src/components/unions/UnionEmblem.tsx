@@ -4,7 +4,7 @@ import { useState } from "react";
 import Image from "next/image";
 import { SectorGlyph } from "@/components/national/sectorIcons";
 import { getTypeColor } from "@/components/corporation/CorporationHelpers";
-import type { CorporationType } from "@/lib/constants/corporations";
+import type { OperatingSectorType } from "@/lib/constants/corporations";
 import { bypassNextImageOptimization } from "@/lib/images/bypassImageOptimization";
 import { unionLogoUrl } from "@/lib/unions/unionLogos";
 
@@ -68,14 +68,14 @@ export function UnionEmblem({
 
   const tone = suspended
     ? "bg-muted/10 text-muted border-muted/30"
-    : getTypeColor(sectorType as CorporationType);
+    : getTypeColor(sectorType as OperatingSectorType);
 
   return (
     <span
       aria-hidden
       className={`inline-flex shrink-0 items-center justify-center rounded-full border ${s.box} ${tone} ${className}`}
     >
-      <SectorGlyph type={sectorType as CorporationType} className={s.icon} />
+      <SectorGlyph type={sectorType as OperatingSectorType} className={s.icon} />
     </span>
   );
 }

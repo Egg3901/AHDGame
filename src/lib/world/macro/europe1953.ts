@@ -22,7 +22,7 @@
  * (1979/1991/1999/2007-default) and historical-presence in 2019-default —
  * this file only ever contributes to the 1953-default manifest.
  */
-import type { CorporationType } from "@/lib/constants/corporations";
+import type { OperatingSectorType } from "@/lib/constants/corporations";
 import type { WorldEntityId } from "@/lib/world/worldEntityManifest";
 import { AUSTRIA_ENTITY_ID, AUSTRIA_1953_SPEC, getAustria1953MacroCountry } from "./austria1953";
 import { buildMacroCountryFromSpec, type MacroCountrySeedSpec } from "./seedBuilder";
@@ -58,7 +58,7 @@ export const UKRAINE_ENTITY_ID = "UKR";
 export const BYELORUSSIA_ENTITY_ID = "BLR";
 export const BALTIC_ENTITY_ID = "BAL";
 
-const FI_WEIGHTS: Partial<Record<CorporationType, number>> = {
+const FI_WEIGHTS: Partial<Record<OperatingSectorType, number>> = {
   // Paper/pulp + metalworking after war reparations to the USSR (ended 1952).
   manufacturing: 22,
   agriculture: 18,
@@ -74,12 +74,12 @@ const FI_WEIGHTS: Partial<Record<CorporationType, number>> = {
   defense: 3, // constrained by FCMA with USSR
   telecommunications: 2,
   media: 1,
-  entertainment: 1,
-  automobiles: 1,
+  media_entertainment: 1,
+  manufacturing_vehicles: 1,
   technology: 0,
 };
 
-const GR_WEIGHTS: Partial<Record<CorporationType, number>> = {
+const GR_WEIGHTS: Partial<Record<OperatingSectorType, number>> = {
   // Post-civil-war reconstruction; Marshall Plan; NATO from 1952.
   agriculture: 28,
   manufacturing: 14,
@@ -95,12 +95,12 @@ const GR_WEIGHTS: Partial<Record<CorporationType, number>> = {
   chemical_industries: 2,
   telecommunications: 1,
   media: 1,
-  entertainment: 1,
-  automobiles: 1,
+  media_entertainment: 1,
+  manufacturing_vehicles: 1,
   technology: 0,
 };
 
-const IE_WEIGHTS: Partial<Record<CorporationType, number>> = {
+const IE_WEIGHTS: Partial<Record<OperatingSectorType, number>> = {
   // Matches sectorSeedWeights1953 IE authoring (cattle exports, ESB peat, protected industry).
   agriculture: 22,
   manufacturing: 18,
@@ -115,13 +115,13 @@ const IE_WEIGHTS: Partial<Record<CorporationType, number>> = {
   media: 2,
   healthcare: 2,
   extraction: 1,
-  entertainment: 1,
-  automobiles: 1,
+  media_entertainment: 1,
+  manufacturing_vehicles: 1,
   chemical_industries: 1,
   technology: 0,
 };
 
-const PL_WEIGHTS: Partial<Record<CorporationType, number>> = {
+const PL_WEIGHTS: Partial<Record<OperatingSectorType, number>> = {
   agriculture: 22,
   manufacturing: 20,
   extraction: 15, // Silesian coal
@@ -136,12 +136,12 @@ const PL_WEIGHTS: Partial<Record<CorporationType, number>> = {
   financial: 1,
   real_estate: 1,
   telecommunications: 1,
-  automobiles: 1,
-  entertainment: 1,
+  manufacturing_vehicles: 1,
+  media_entertainment: 1,
   technology: 0,
 };
 
-const CS_WEIGHTS: Partial<Record<CorporationType, number>> = {
+const CS_WEIGHTS: Partial<Record<OperatingSectorType, number>> = {
   manufacturing: 30, // most industrialized Eastern Bloc
   defense: 14,
   agriculture: 12,
@@ -151,17 +151,17 @@ const CS_WEIGHTS: Partial<Record<CorporationType, number>> = {
   energy: 6,
   logistics: 5,
   healthcare: 4,
-  automobiles: 3,
+  manufacturing_vehicles: 3,
   retail: 1,
   media: 1,
   financial: 1,
   real_estate: 1,
   telecommunications: 1,
   technology: 1,
-  entertainment: 1,
+  media_entertainment: 1,
 };
 
-const HU_WEIGHTS: Partial<Record<CorporationType, number>> = {
+const HU_WEIGHTS: Partial<Record<OperatingSectorType, number>> = {
   manufacturing: 22,
   agriculture: 20,
   defense: 12,
@@ -172,16 +172,16 @@ const HU_WEIGHTS: Partial<Record<CorporationType, number>> = {
   logistics: 4,
   healthcare: 4,
   retail: 2,
-  entertainment: 2,
+  media_entertainment: 2,
   media: 1,
   financial: 1,
   real_estate: 1,
   telecommunications: 1,
-  automobiles: 1,
+  manufacturing_vehicles: 1,
   technology: 0,
 };
 
-const RO_WEIGHTS: Partial<Record<CorporationType, number>> = {
+const RO_WEIGHTS: Partial<Record<OperatingSectorType, number>> = {
   agriculture: 30,
   manufacturing: 18,
   extraction: 12, // Ploiești oil
@@ -196,15 +196,15 @@ const RO_WEIGHTS: Partial<Record<CorporationType, number>> = {
   financial: 1,
   real_estate: 1,
   telecommunications: 1,
-  automobiles: 1,
-  entertainment: 1,
+  manufacturing_vehicles: 1,
+  media_entertainment: 1,
   technology: 0,
 };
 
 // Union-republic weights. Deliberately NOT copies of the satellites': a union
 // republic has no consumer or financial sector to speak of, so the weight that
 // would sit in retail/financial elsewhere goes to heavy industry and extraction.
-const UKR_WEIGHTS: Partial<Record<CorporationType, number>> = {
+const UKR_WEIGHTS: Partial<Record<OperatingSectorType, number>> = {
   agriculture: 26, // black earth: grain, sugar beet, sunflower
   manufacturing: 18, // Dnieper metallurgy; Kharkiv machine building
   extraction: 14, // Donbas coal; Kryvyi Rih ore; Nikopol manganese
@@ -219,12 +219,12 @@ const UKR_WEIGHTS: Partial<Record<CorporationType, number>> = {
   financial: 1,
   real_estate: 1,
   telecommunications: 1,
-  automobiles: 1,
-  entertainment: 1,
+  manufacturing_vehicles: 1,
+  media_entertainment: 1,
   technology: 0,
 };
 
-const BLR_WEIGHTS: Partial<Record<CorporationType, number>> = {
+const BLR_WEIGHTS: Partial<Record<OperatingSectorType, number>> = {
   agriculture: 25, // potato, flax, dairy; still a farm republic in 1953
   manufacturing: 20, // MAZ trucks; all-Union machine-building investment
   construction: 10, // roughly 80% of Minsk had to be rebuilt
@@ -235,16 +235,16 @@ const BLR_WEIGHTS: Partial<Record<CorporationType, number>> = {
   chemical_industries: 4,
   healthcare: 4,
   retail: 2,
-  automobiles: 2,
+  manufacturing_vehicles: 2,
   media: 1,
   financial: 1,
   real_estate: 1,
   telecommunications: 1,
-  entertainment: 1,
+  media_entertainment: 1,
   technology: 0,
 };
 
-const BAL_WEIGHTS: Partial<Record<CorporationType, number>> = {
+const BAL_WEIGHTS: Partial<Record<OperatingSectorType, number>> = {
   manufacturing: 22, // VEF Riga; Estonian machinery; textiles
   agriculture: 15, // dairy and fishing; less rural than the union average
   defense: 10, // Baltic Fleet bases and coastal defence
@@ -255,16 +255,16 @@ const BAL_WEIGHTS: Partial<Record<CorporationType, number>> = {
   chemical_industries: 5,
   healthcare: 5, // the best health outcomes in the union
   retail: 3, // the best-supplied shops in the union
-  entertainment: 3,
+  media_entertainment: 3,
   media: 2, // Baltic-language press, permitted here and nowhere else
   real_estate: 2, // surviving pre-war housing stock
   telecommunications: 2,
   technology: 2,
   financial: 1,
-  automobiles: 1,
+  manufacturing_vehicles: 1,
 };
 
-const BG_WEIGHTS: Partial<Record<CorporationType, number>> = {
+const BG_WEIGHTS: Partial<Record<OperatingSectorType, number>> = {
   agriculture: 40, // tobacco, wine, roses
   manufacturing: 15,
   defense: 10,
@@ -279,12 +279,12 @@ const BG_WEIGHTS: Partial<Record<CorporationType, number>> = {
   financial: 1,
   real_estate: 1,
   telecommunications: 1,
-  automobiles: 1,
-  entertainment: 1,
+  manufacturing_vehicles: 1,
+  media_entertainment: 1,
   technology: 0,
 };
 
-const YU_WEIGHTS: Partial<Record<CorporationType, number>> = {
+const YU_WEIGHTS: Partial<Record<OperatingSectorType, number>> = {
   // Tito path: abandoned Soviet collectivization 1953; US aid; self-management.
   agriculture: 25,
   manufacturing: 20,
@@ -297,21 +297,21 @@ const YU_WEIGHTS: Partial<Record<CorporationType, number>> = {
   logistics: 4,
   healthcare: 3,
   financial: 2,
-  entertainment: 2,
+  media_entertainment: 2,
   media: 1,
   real_estate: 1,
   telecommunications: 1,
-  automobiles: 1,
+  manufacturing_vehicles: 1,
   technology: 0,
 };
 
 /** Matches sectorSeedWeights1953 FR (Fourth Republic / Trente Glorieuses start). */
-const FR_WEIGHTS: Partial<Record<CorporationType, number>> = {
+const FR_WEIGHTS: Partial<Record<OperatingSectorType, number>> = {
   manufacturing: 25,
   agriculture: 15,
   construction: 10,
   energy: 8,
-  automobiles: 6,
+  manufacturing_vehicles: 6,
   chemical_industries: 5,
   financial: 5,
   retail: 5,
@@ -322,17 +322,17 @@ const FR_WEIGHTS: Partial<Record<CorporationType, number>> = {
   media: 2,
   healthcare: 2,
   extraction: 2, // Lorraine coal/iron
-  entertainment: 1,
+  media_entertainment: 1,
   technology: 0,
 };
 
 /** Matches sectorSeedWeights1953 IT (IRI / Miracolo Economico dawn). */
-const IT_WEIGHTS: Partial<Record<CorporationType, number>> = {
+const IT_WEIGHTS: Partial<Record<OperatingSectorType, number>> = {
   manufacturing: 24,
   agriculture: 20,
   construction: 12,
   energy: 7, // ENI founded 1953
-  automobiles: 6,
+  manufacturing_vehicles: 6,
   real_estate: 5,
   retail: 5,
   financial: 5,
@@ -343,12 +343,12 @@ const IT_WEIGHTS: Partial<Record<CorporationType, number>> = {
   telecommunications: 2,
   media: 2,
   extraction: 1,
-  entertainment: 1,
+  media_entertainment: 1,
   technology: 0,
 };
 
 /** Matches sectorSeedWeights1953 ES (Franco autarky → Pact of Madrid 1953). */
-const ES_WEIGHTS: Partial<Record<CorporationType, number>> = {
+const ES_WEIGHTS: Partial<Record<OperatingSectorType, number>> = {
   agriculture: 25,
   manufacturing: 18,
   construction: 10,
@@ -362,20 +362,20 @@ const ES_WEIGHTS: Partial<Record<CorporationType, number>> = {
   telecommunications: 2,
   media: 2,
   healthcare: 2,
-  automobiles: 1, // SEAT founded 1950
+  manufacturing_vehicles: 1, // SEAT founded 1950
   chemical_industries: 1,
-  entertainment: 1,
+  media_entertainment: 1,
   technology: 0,
 };
 
 /** Matches sectorSeedWeights1953 SE (Erlander / export industry / folkhemmet). */
-const SE_WEIGHTS: Partial<Record<CorporationType, number>> = {
+const SE_WEIGHTS: Partial<Record<OperatingSectorType, number>> = {
   manufacturing: 26,
   energy: 10, // Vattenfall hydro
   agriculture: 8,
   construction: 8,
   financial: 7,
-  automobiles: 6, // Volvo / SAAB
+  manufacturing_vehicles: 6, // Volvo / SAAB
   logistics: 5,
   chemical_industries: 5,
   retail: 5,
@@ -385,12 +385,12 @@ const SE_WEIGHTS: Partial<Record<CorporationType, number>> = {
   media: 2,
   telecommunications: 2,
   extraction: 2, // Kiruna iron
-  entertainment: 1,
+  media_entertainment: 1,
   technology: 0,
 };
 
 /** Matches sectorSeedWeights1953 TR (Menderes / NATO / agrarian majority). */
-const TR_WEIGHTS: Partial<Record<CorporationType, number>> = {
+const TR_WEIGHTS: Partial<Record<OperatingSectorType, number>> = {
   agriculture: 40,
   manufacturing: 14,
   construction: 10,
@@ -404,8 +404,8 @@ const TR_WEIGHTS: Partial<Record<CorporationType, number>> = {
   healthcare: 1,
   telecommunications: 1,
   media: 1,
-  entertainment: 1,
-  automobiles: 0,
+  media_entertainment: 1,
+  manufacturing_vehicles: 0,
   chemical_industries: 0,
   technology: 0,
 };

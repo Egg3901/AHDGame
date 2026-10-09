@@ -92,7 +92,10 @@ import {
   SECTOR_SUPPLY,
 } from "@/lib/constants/commodities";
 import type { ExtractableResource } from "@/lib/constants/commodities";
-import { getEffectiveStrategyRates } from "@/lib/constants/sectorStrategies";
+import {
+  getEffectiveStrategyRates,
+  getOperatingSectorType,
+} from "@/lib/constants/sectorStrategies";
 import { retoolProductionMeasurements } from "@/lib/corporations/retooling/rules";
 import {
   computeExtractionCapacityMultipliers,
@@ -627,8 +630,14 @@ export async function buildCorporationLookups(
     const corpCountry = corp.countryId;
     // Only cross-border presence shifts the blend; domestic sectors don't need keys
     if (sectorCountry === corpCountry) continue;
-    sectorPresenceKeys.add(`${sectorCountry}:${corpCountry}:${sector.sectorType}`);
-    sectorPresenceKeys.add(`${sectorCountry}:corp:${corp._id.toString()}:${sector.sectorType}`);
+    // Keyed by operating lane, the type getTariffBlendWeights is asked about.
+    const lane = getOperatingSectorType(
+      sector.sectorType,
+      sector.industryModel,
+      sector.mediaDiscriminator
+    );
+    sectorPresenceKeys.add(`${sectorCountry}:${corpCountry}:${lane}`);
+    sectorPresenceKeys.add(`${sectorCountry}:corp:${corp._id.toString()}:${lane}`);
   }
 
   // Member-aware: the ECB doc carries countryId "DE"; keying by bank.countryId
@@ -720,6 +729,8 @@ export async function buildCorporationLookups(
             _id: c._id,
             countryId: c.countryId,
             type: c.type,
+            industryModel: c.industryModel,
+            mediaDiscriminator: c.mediaDiscriminator,
           })),
           currentTurn: await getCurrentTurn(db),
           globalGdp: federalBudgets.reduce((acc, b) => acc + gdpToAnchor(b), 0),

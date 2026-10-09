@@ -9,7 +9,7 @@ import type { PlantsData, Financials, CorporationRef } from "../types";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import DetailsDisclosure from "../components/DetailsDisclosure";
 import { fmtUnits, fmtPct, PLANTS_CLOCK_NOTE } from "../lib/plants";
-import type { CorporationType } from "@/lib/constants/corporations";
+import type { OperatingSectorType } from "@/lib/constants/corporations";
 import { facilityPlural } from "@/lib/constants/facilityVocabulary";
 import { COMMODITY_LABELS, type CommodityType } from "@/lib/constants/commodities";
 import { DELIVERY_LIMITED_MIN_SHARE } from "@/components/corporation/plantsPresentation";
@@ -22,7 +22,7 @@ import {
 interface MarketMoneyPanelProps {
   plants: PlantsData;
   /** Drives the facility noun in the cost lines. */
-  sectorType: CorporationType;
+  sectorType: OperatingSectorType;
   financials: Financials | null;
   corporation: CorporationRef;
 }

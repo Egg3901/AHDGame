@@ -5,10 +5,11 @@ import Image from "next/image";
 import Link from "next/link";
 import { STATE_FLAGS } from "@/lib/constants";
 import {
-  CORPORATION_TYPE_LABELS,
+  OPERATING_SECTOR_TYPE_LABELS,
   MAX_GROWTH_RATE,
   MIN_GROWTH_RATE,
   type CorporationType,
+  type OperatingSectorType,
 } from "@/lib/constants/corporations";
 import { scaleMoney } from "@/lib/constants/moneyTimescale";
 import { bypassNextImageOptimization } from "@/lib/images/bypassImageOptimization";
@@ -54,7 +55,7 @@ export interface BulkOperationsResult {
 
 export type BulkOperationsFn = (
   countryId: string,
-  sectorType: CorporationType | null,
+  sectorType: OperatingSectorType | null,
   body: {
     targetGrowthRate?: number;
     productionPolicy?: number; // pragma: allowlist secret
@@ -453,7 +454,7 @@ function OperationsRow({
 interface Scope {
   key: string;
   country: string;
-  sectorType: CorporationType | null;
+  sectorType: OperatingSectorType | null;
   label: string;
   count: number;
 }
@@ -740,7 +741,7 @@ export default function CeoOperationsTable({
         label: `All sectors${suffix}`,
         count: list.length,
       });
-      const types = new Map<CorporationType, number>();
+      const types = new Map<OperatingSectorType, number>();
       for (const s of list) {
         const t = s.sectorType as CorporationType;
         types.set(t, (types.get(t) ?? 0) + 1);
@@ -750,7 +751,7 @@ export default function CeoOperationsTable({
           key: `${c}::${t}`,
           country: c,
           sectorType: t,
-          label: `${CORPORATION_TYPE_LABELS[t]}${suffix}`,
+          label: `${OPERATING_SECTOR_TYPE_LABELS[t]}${suffix}`,
           count: n,
         });
       }

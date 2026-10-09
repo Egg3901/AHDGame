@@ -206,7 +206,12 @@ describe("POST /api/country/[code]/legislature/bills — trade bills", () => {
     const res = await postTradeBill({
       ...validBody,
       provisions: [
-        { type: "tariff", scopeType: "sector", targetSectorType: "automobiles", rate: 20 },
+        {
+          type: "tariff",
+          scopeType: "sector",
+          targetSectorType: "manufacturing_vehicles",
+          rate: 20,
+        },
       ],
     });
     expect(res.status).toBe(201);

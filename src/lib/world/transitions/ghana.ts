@@ -1,4 +1,4 @@
-import type { CorporationType } from "@/lib/constants/corporations";
+import type { OperatingSectorType } from "@/lib/constants/corporations";
 import type { MacroCountryState, MacroSectorState } from "@/lib/world/macro/types";
 import { computeMacroContribution } from "@/lib/world/macro/kernel";
 import { macroTickBucket } from "@/lib/world/macro/schedule";
@@ -12,7 +12,7 @@ import { GHANA_ENTITY_ID } from "./rules";
  * - Cocoa / gold / timber export economy; modest industry.
  * - Commonwealth primary sphere with secondary US ties.
  */
-const GHANA_1957_SECTOR_WEIGHTS: Partial<Record<CorporationType, number>> = {
+const GHANA_1957_SECTOR_WEIGHTS: Partial<Record<OperatingSectorType, number>> = {
   agriculture: 32,
   extraction: 14,
   manufacturing: 10,
@@ -25,9 +25,9 @@ const GHANA_1957_SECTOR_WEIGHTS: Partial<Record<CorporationType, number>> = {
   healthcare: 3,
   telecommunications: 2,
   media: 2,
-  entertainment: 2,
+  media_entertainment: 2,
   defense: 2,
-  automobiles: 1,
+  manufacturing_vehicles: 1,
   chemical_industries: 0,
   technology: 0,
 };
@@ -36,13 +36,13 @@ const GHANA_1957_SECTOR_WEIGHTS: Partial<Record<CorporationType, number>> = {
 const GHANA_1957_GDP = 2_800;
 const TURNS_PER_YEAR = 48;
 
-function buildSectors(): Partial<Record<CorporationType, MacroSectorState>> {
+function buildSectors(): Partial<Record<OperatingSectorType, MacroSectorState>> {
   const perTurnGdp = GHANA_1957_GDP / TURNS_PER_YEAR;
   const weightSum = Object.values(GHANA_1957_SECTOR_WEIGHTS).reduce((a, b) => a + (b ?? 0), 0);
-  const sectors: Partial<Record<CorporationType, MacroSectorState>> = {};
+  const sectors: Partial<Record<OperatingSectorType, MacroSectorState>> = {};
 
   for (const [sectorType, weight] of Object.entries(GHANA_1957_SECTOR_WEIGHTS) as [
-    CorporationType,
+    OperatingSectorType,
     number,
   ][]) {
     if (weight <= 0) continue;

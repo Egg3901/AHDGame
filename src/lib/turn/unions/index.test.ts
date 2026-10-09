@@ -16,7 +16,7 @@ import {
 import { INACTIVE_CEO_TURN_THRESHOLD } from "@/lib/turn/corporation/inactiveCeoSectorShed";
 import { seedUnions } from "@/lib/admin/seed/seedUnions";
 import { MS_PER_TURN } from "@/lib/constants/turnTime";
-import { CORPORATION_TYPES } from "@/lib/constants/corporations";
+import { OPERATING_SECTOR_TYPES } from "@/lib/constants/corporations";
 import {
   freeCashFlowPerTurn,
   politicalContributionPerTurn,
@@ -95,15 +95,15 @@ function mockDb({
   organizers?: { unionId: ObjectId; characterId: ObjectId; strength: number }[];
   /** Character _ids (as strings) considered ACTIVE (lastActivity = now). Any owner not listed here has no user doc at all (skipped, not vacated) unless overridden via `inactiveCharacterIds`. */
   activeCharacterIds?: string[];
-  /** countDocuments result for the safety-net check. Defaults to a COMPLETE roster (`seededCountryIds.length * CORPORATION_TYPES.length`) so the incomplete-roster backfill does not fire unless a test asks for it. */
+  /** countDocuments result for the safety-net check. Defaults to a COMPLETE roster (`seededCountryIds.length * OPERATING_SECTOR_TYPES.length`) so the incomplete-roster backfill does not fire unless a test asks for it. */
   totalUnionCount?: number;
-  /** Non-NATIONAL country ids `states.distinct` returns; drives the expected full-roster size (`× CORPORATION_TYPES.length`). */
+  /** Non-NATIONAL country ids `states.distinct` returns; drives the expected full-roster size (`× OPERATING_SECTOR_TYPES.length`). */
   seededCountryIds?: string[];
   /** Country ids whose FederalBudget documents have an active union ban. */
   bannedCountryIds?: string[];
 }) {
   const now = new Date();
-  const expectedFullRoster = seededCountryIds.length * CORPORATION_TYPES.length;
+  const expectedFullRoster = seededCountryIds.length * OPERATING_SECTOR_TYPES.length;
   const characterUserId = new Map(unions.map((u) => [u.ownerId!.toString(), new ObjectId()]));
   const unionsBulkWrite = vi.fn().mockResolvedValue({});
   const unionsUpdateMany = vi.fn().mockResolvedValue({});
@@ -630,7 +630,7 @@ describe("processUnionsTurn, safety-net seeding + union-ban suspension", () => {
     const { db } = mockDb({
       unions: [],
       totalUnionCount: 1,
-      seededCountryIds: ["US", "UK", "RU"], // expected = 3 × CORPORATION_TYPES.length ≫ 1
+      seededCountryIds: ["US", "UK", "RU"], // expected = 3 × OPERATING_SECTOR_TYPES.length ≫ 1
     });
 
     await processUnionsTurn(db);
@@ -648,7 +648,7 @@ describe("processUnionsTurn, safety-net seeding + union-ban suspension", () => {
       unions: [union],
       activeCharacterIds: [union.ownerId!.toString()],
       seededCountryIds: ["US"],
-      totalUnionCount: CORPORATION_TYPES.length, // 1 country × all sectors = full roster
+      totalUnionCount: OPERATING_SECTOR_TYPES.length, // 1 country × all sectors = full roster
     });
 
     await processUnionsTurn(db);

@@ -8,7 +8,7 @@
  * from DB I/O so the command-economy turn phase can compose them.
  */
 
-import type { CorporationType } from "@/lib/constants/corporations";
+import type { OperatingSectorType } from "@/lib/constants/corporations";
 import type { SoeState } from "@/lib/db/types/corporation";
 import { TURNS_PER_YEAR } from "@/lib/constants/turnTime";
 import { capacityPricePerUnit, CAPACITY_ANCHOR_YEAR } from "@/lib/constants/capacityEconomy";
@@ -102,7 +102,7 @@ export function aggregateCapacityUtilisation(
  * `planTarget` is the sum of the SOE's seeded sector revenue (nominal expected
  * output); capacity carries the standard 10% headroom.
  */
-export function makeSeedSoeState(sector: CorporationType, planTarget: number): SoeState {
+export function makeSeedSoeState(sector: OperatingSectorType, planTarget: number): SoeState {
   const target = Number.isFinite(planTarget) && planTarget > 0 ? planTarget : 0;
   return {
     sector,
@@ -141,7 +141,7 @@ export function makeSeedSoeState(sector: CorporationType, planTarget: number): S
  * record under the plan yet, and inventing one would be inventing a grade.
  */
 export function makeAdoptedSoeState(
-  sector: CorporationType,
+  sector: OperatingSectorType,
   sectors: ReadonlyArray<{
     revenue?: number | null;
     realizedRevenue?: number | null;
@@ -222,8 +222,8 @@ export function directedCreditBudget(aggregatePlanTarget: number, aggressiveness
 export function allocateDirectedCredit(
   soes: ReadonlyArray<Pick<SoeState, "sector" | "output" | "planTarget">>,
   totalCredit: number
-): Map<CorporationType, number> {
-  const out = new Map<CorporationType, number>();
+): Map<OperatingSectorType, number> {
+  const out = new Map<OperatingSectorType, number>();
   const credit = Number.isFinite(totalCredit) && totalCredit > 0 ? totalCredit : 0;
   if (soes.length === 0 || credit === 0) {
     for (const s of soes) out.set(s.sector, 0);
@@ -261,9 +261,9 @@ export function resolveCreditAllocation(
   >,
   totalCredit: number,
   sectorCredit?: Record<string, number> | null
-): Map<CorporationType, number> {
+): Map<OperatingSectorType, number> {
   const credit = Number.isFinite(totalCredit) && totalCredit > 0 ? totalCredit : 0;
-  const out = new Map<CorporationType, number>();
+  const out = new Map<OperatingSectorType, number>();
   if (soes.length === 0 || credit === 0) {
     for (const s of soes) out.set(s.sector, 0);
     return out;
@@ -401,7 +401,7 @@ export function directedCreditCapacityUnits(creditAnchor: number, unitPriceAncho
  */
 export function soeCapacityReplacementCostAnchor(
   sectors: ReadonlyArray<{
-    sectorType: CorporationType;
+    sectorType: OperatingSectorType;
     strategyId?: string | null;
     capitalStock?: number | null;
   }>,
