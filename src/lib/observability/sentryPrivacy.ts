@@ -24,7 +24,6 @@ export const SENTRY_DATA_COLLECTION = {
   graphQL: { document: false, variables: false },
   genAI: { inputs: false, outputs: false },
   databaseQueryData: false,
-  queues: false,
   stackFrameVariables: false,
 } as const satisfies DataCollection;
 

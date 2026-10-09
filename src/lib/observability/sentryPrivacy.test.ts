@@ -32,7 +32,6 @@ describe("Sentry v11 privacy baseline", () => {
       graphQL: { document: false, variables: false },
       genAI: { inputs: false, outputs: false },
       databaseQueryData: false,
-      queues: false,
       stackFrameVariables: false,
     });
   });
