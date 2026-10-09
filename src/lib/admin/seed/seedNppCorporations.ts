@@ -9,7 +9,11 @@ import type { StateResourceCapacity } from "@/lib/db/types/stateResourceCapacity
 import { chooseSeedExtractionSite } from "@/lib/extraction/rules/seedPlacement";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import type { Corporation } from "@/lib/db/types";
-import { OPERATING_SECTOR_TYPES, operatingSectorIdentity } from "@/lib/constants/corporations";
+import {
+  OPERATING_SECTOR_TYPES,
+  operatingSectorIdentity,
+  type OperatingSectorType,
+} from "@/lib/constants/corporations";
 import { getOperatingSectorType } from "@/lib/constants/sectorStrategies";
 import { getEraUnitScale } from "@/lib/constants/sectorSeedEra";
 import { computeUnownedSeedRevenue } from "@/lib/admin/seed/seedUnownedSectors";
