@@ -10,14 +10,17 @@ import type { CommodityType } from "@/lib/constants/commodities";
  *
  * Guards against oscillation (the cobweb failure mode):
  *   - the exponent dampens the response (√ of the price ratio, not the ratio),
- *   - the clamp bounds the worst per-turn revenue shock to [−30%, +50%],
+ *   - the clamp bounds realization to [−30%, +100%] of base. The ceiling was
+ *     1.5 until chronic shortages (energy at ~2.9x base for 40+ turns) pinned
+ *     every producer at it, so deeper scarcity stopped reaching anyone's
+ *     income and nothing paid for new capacity. Inputs use the same clamp.
  *   - prices are lagged one turn upstream (lookups.priceRatioByCommodity is
  *     built from the prior turn's commodityPrices docs), breaking the
  *     price → revenue → supply → price circularity.
  */
 export const PRICE_REALIZATION_EXPONENT = 0.5;
 export const PRICE_REALIZATION_MIN = 0.7;
-export const PRICE_REALIZATION_MAX = 1.5;
+export const PRICE_REALIZATION_MAX = 2.0;
 
 /**
  * Output-weighted realization factor for one sector.

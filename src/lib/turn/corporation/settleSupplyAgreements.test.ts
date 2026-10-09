@@ -3,7 +3,7 @@ import { ObjectId } from "mongodb";
 import type { Db } from "mongodb";
 import { COMMODITY_BASE_PRICES, type CommodityType } from "@/lib/constants/commodities";
 import { TURNS_PER_DAY } from "@/lib/constants/turnTime";
-import { priceRealizationFactor } from "@/lib/market/priceRealization";
+import { PRICE_REALIZATION_MAX, priceRealizationFactor } from "@/lib/market/priceRealization";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import {
   computeDemandCappedContractReservations,
@@ -1462,8 +1462,8 @@ describe("computeSupplyAgreementSettlements: premium sizing", () => {
   it("prices off the damped realization factor, not the raw price ratio", () => {
     const damped = settle(4, 200).deltaByCorp.get(S) ?? 0;
     const raw = settle(1, 200).deltaByCorp.get(S) ?? 0;
-    // ratio 4 realizes at most PRICE_REALIZATION_MAX (1.5x), never 4x.
-    expect(damped / raw).toBeLessThanOrEqual(1.5 + 1e-6);
+    // ratio 4 realizes at most PRICE_REALIZATION_MAX, never 4x.
+    expect(damped / raw).toBeLessThanOrEqual(PRICE_REALIZATION_MAX + 1e-6);
     expect(damped).toBeGreaterThan(raw);
   });
 

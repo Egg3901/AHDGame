@@ -675,6 +675,12 @@ export interface SectorDetail {
   domesticTariffMalus: number;
   /** Margin bonus from unlocked tech-tree nodes (pp). Null when zero or tech trees disabled. */
   techMarginBonus?: number | null;
+  /** State enterprise efficiency (pp, <= 0). 0 for private corps. */
+  soeEfficiencyModifier?: number;
+  /** Expropriation-risk drag from low investor confidence (pp). 0 for state enterprises. */
+  expropriationRiskModifier?: number;
+  /** Fit with the host country's economic model (pp, signed). */
+  economicModelAlignmentModifier?: number;
   stateMetricsModifier?: number;
   legacyStateMetricsModifier?: number;
   /** Named regional conditions (Economic Boom, Recession, …) stacked margin swing. */

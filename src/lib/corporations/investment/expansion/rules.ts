@@ -4,15 +4,22 @@
  * profitable operating scenario; missing figures leave the choice manual.
  */
 import { forecastSectorInvestment, type InvestmentForecastInput } from "../rules";
-import { PRICE_REALIZATION_MAX, PRICE_REALIZATION_MIN } from "@/lib/market/priceRealization";
 
 /**
  * Clearing's realization bounds cover the sale-price drop as scarcity eases.
  * Stress physical input prices in the opposite direction, leaving wages and
  * other observed costs unchanged. Missing input detail stresses all costs.
  */
+/**
+ * Sale-price stress for expansion advice. Pinned to the original 0.7 / 1.5
+ * realization band: tying it to the live clamp meant raising the shortage
+ * ceiling made the advisor harsher on exactly the scarce sectors it is meant to
+ * steer capacity into.
+ */
+export const EXPANSION_SALE_STRESS_FACTOR = 0.7 / 1.5;
+
 export function stressExpansionForecast(input: InvestmentForecastInput): InvestmentForecastInput {
-  const saleFactor = PRICE_REALIZATION_MIN / PRICE_REALIZATION_MAX;
+  const saleFactor = EXPANSION_SALE_STRESS_FACTOR;
   const inputs = Math.max(0, input.inputsCostDailyAnchor ?? input.operatingCostDailyAnchor);
   return {
     ...input,
