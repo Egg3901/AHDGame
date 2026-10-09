@@ -250,7 +250,7 @@ describe("corporation fund accounting", () => {
         await processIndexFundDividendsBatch(
           db,
           [{ fundId, corporationId, shares: 1, amountAnchor: 1000 }],
-          5
+          { turn: 5 }
         );
       expect(memory.collection("corporations").docs[0].liquidCapital).toBe(100500);
       expect(memory.collection("indexFunds").docs[0].cashAnchor).toBe(10995);

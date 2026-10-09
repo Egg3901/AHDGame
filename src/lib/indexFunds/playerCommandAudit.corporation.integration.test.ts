@@ -77,4 +77,23 @@ describe("corporate fund order audit outbox", () => {
     expect(memory.collection("financialTxLog").docs).toHaveLength(1);
     expect(memory.collection("ledgerEntries").docs).toHaveLength(1);
   });
+  it("leaves an unsupported persisted audit destination undelivered", async () => {
+    const memory = createInMemoryDb();
+    const db = memory as unknown as Db;
+    memory.seed("indexFundCommands", [
+      {
+        _id: "unsupported",
+        state: "completed",
+        audit: { entries: [] },
+        auditPlan: {
+          rows: [{ collection: "unsupportedAudit", document: { _id: new ObjectId() } }],
+        },
+      },
+    ]);
+    await expect(resumeFundCommandAudit(db, "unsupported")).rejects.toThrow(
+      "Fund command audit destination is unsupported"
+    );
+    expect(memory.collection("unsupportedAudit").docs).toHaveLength(0);
+    expect(memory.collection("indexFundCommands").docs[0].auditCompletedAt).toBeUndefined();
+  });
 });

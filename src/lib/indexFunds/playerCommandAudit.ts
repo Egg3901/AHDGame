@@ -30,7 +30,10 @@ export interface FundCommandAudit {
 }
 
 interface AuditPlan {
-  rows: Array<{ collection: string; document: Document & { _id: ObjectId } }>;
+  rows: Array<{
+    collection: "financialTxLog" | "ledgerEntries" | "actionAuditLog";
+    document: Document & { _id: ObjectId };
+  }>;
 }
 interface Receipt extends Document {
   _id: string;
@@ -157,6 +160,8 @@ export async function resumeFundCommandAudit(db: Db, key: string): Promise<void>
   }
   if (!receipt?.auditPlan) throw new Error("Fund command audit plan is unavailable");
   for (const row of receipt.auditPlan.rows) {
+    if (!["financialTxLog", "ledgerEntries", "actionAuditLog"].includes(row.collection))
+      throw new Error("Fund command audit destination is unsupported");
     await db.collection(row.collection).updateOne(
       { _id: row.document._id },
       {
