@@ -231,9 +231,12 @@ export async function POST(request: Request) {
     if (dedupeOr.length) {
       const existing = await coll.findOne(
         { $or: dedupeOr },
-        { projection: { _id: 1, ticketNumber: 1 } }
+        { projection: { _id: 1, ticketNumber: 1, discordChannelId: 1 } }
       );
       if (existing) {
+        if (body.discordChannelId && existing.discordChannelId !== body.discordChannelId) {
+          return errorResponse(409, "Ticket number already belongs to another Discord channel");
+        }
         return NextResponse.json({
           id: existing._id.toString(),
           ticketNumber: existing.ticketNumber,
