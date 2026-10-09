@@ -49,11 +49,13 @@ function useStatusBarHeight(): number {
   useEffect(() => {
     let ro: ResizeObserver | null = null;
     let tries = 0;
+    let retry: number | undefined;
+    let detach: (() => void) | undefined;
     const attach = () => {
       const bar = document.querySelector<HTMLElement>("[data-statusbar]");
       if (!bar) {
         // The bar mounts after the page on first load; look again briefly.
-        if (tries++ < 20) window.setTimeout(attach, 250);
+        if (tries++ < 20) retry = window.setTimeout(attach, 250);
         return;
       }
       const read = () =>
@@ -62,9 +64,16 @@ function useStatusBarHeight(): number {
       ro = new ResizeObserver(read);
       ro.observe(bar);
       bar.addEventListener("transitionend", read);
+      detach = () => bar.removeEventListener("transitionend", read);
     };
     attach();
-    return () => ro?.disconnect();
+    // A pending retry must not outlive the stage: it would run against a
+    // torn-down document (and did, failing test runs after unmount).
+    return () => {
+      window.clearTimeout(retry);
+      ro?.disconnect();
+      detach?.();
+    };
   }, []);
   return Math.round(height);
 }

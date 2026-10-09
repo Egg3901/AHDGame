@@ -4,9 +4,17 @@ import type { ContestRound } from "@/lib/db/types/contestRound";
 
 vi.mock("@sentry/nextjs", () => ({ captureException: vi.fn() }));
 vi.mock("@/lib/patreon/service", () => ({ applyPatreonStatus: vi.fn() }));
-vi.mock("@/lib/notifications", () => ({ createNotification: vi.fn() }));
+vi.mock("@/lib/notifications", () => ({
+  createNotification: vi.fn(),
+  createNotifications: vi.fn(),
+}));
+vi.mock("@/lib/news", () => ({ createSystemNewsPost: vi.fn() }));
 vi.mock("@/lib/api/headOfGovernment", () => ({
   getHeadOfGovernmentCharacterIds: vi.fn(),
+}));
+vi.mock("./netWorth", () => ({
+  loadCharacterNetWorths: vi.fn().mockResolvedValue(new Map()),
+  loadExternalInflows: vi.fn().mockResolvedValue(new Map()),
 }));
 vi.mock("./prize", () => ({
   payContestPrize: vi.fn().mockResolvedValue({
@@ -21,7 +29,8 @@ import { ensureContestsOpen, runContests } from "./engine";
 import { payContestPrize } from "./prize";
 import { getHeadOfGovernmentCharacterIds } from "@/lib/api/headOfGovernment";
 import { applyPatreonStatus } from "@/lib/patreon/service";
-import { CONTEST_ROUND_MS } from "./rules";
+import { loadCharacterNetWorths, loadExternalInflows } from "./netWorth";
+import { CONTEST_KINDS, CONTEST_ROUND_MS } from "./rules";
 
 // ── A small in-memory Mongo: enough query and update operators for the engine ──
 
@@ -257,7 +266,7 @@ describe("runContests: opening rounds", () => {
 
     const summary = await runContests(db, 10, now);
 
-    expect(summary.opened).toBe(5);
+    expect(summary.opened).toBe(CONTEST_KINDS.length);
     const byKind = new Map(rounds(data).map((r) => [r.kind, r]));
     expect(byKind.get("corp_growth_small")?._id).toBe("corp_growth_small:1");
     expect(byKind.get("corp_growth_small")?.endsAt.getTime()).toBe(
@@ -305,7 +314,9 @@ describe("runContests: opening rounds", () => {
     } as unknown as Db;
 
     await expect(runContests(staleRead, 10, now)).resolves.toMatchObject({ opened: 0 });
-    expect(rounds(data).filter((r) => r.kind !== "referrals_iteration")).toHaveLength(5);
+    expect(rounds(data).filter((r) => r.kind !== "referrals_iteration")).toHaveLength(
+      CONTEST_KINDS.length
+    );
   });
 });
 
@@ -332,7 +343,7 @@ describe("opening without waiting for a turn", () => {
 
     await ensureContestsOpen(db, now);
     const opened = rounds(data).filter((r) => r.kind !== "referrals_iteration");
-    expect(opened).toHaveLength(5);
+    expect(opened).toHaveLength(CONTEST_KINDS.length);
     expect(opened.every((r) => r.startTurn === 12)).toBe(true);
 
     // A second view inside the minute does nothing, even with a round missing.
@@ -418,7 +429,7 @@ describe("runContests: standings and settlement", () => {
       expect.objectContaining({ round: expect.objectContaining({ _id: "influence_gain:1" }) })
     );
     expect(rounds(data).find((r) => r._id === "influence_gain:2")?.status).toBe("active");
-    expect(summary.opened).toBe(5);
+    expect(summary.opened).toBe(CONTEST_KINDS.length);
 
     // Corporate rounds with no growth settle without a winner or a payment.
     const flat = rounds(data).find((r) => r._id === "corp_growth_large:1")!;
@@ -449,7 +460,7 @@ describe("runContests: standings and settlement", () => {
 
     const summary = await runContests(db, 3, now);
 
-    expect(summary.voided).toBe(5);
+    expect(summary.voided).toBe(CONTEST_KINDS.length);
     expect(payContestPrize).not.toHaveBeenCalled();
   });
 });
@@ -574,5 +585,114 @@ describe("runContests: referrals", () => {
     )!;
     expect(next).toMatchObject({ iterationKey: "Beta:3", startedAt: newWorld });
     expect(next.standings.map((s) => [s.characterName, s.score])).toEqual([["Bob", 1]]);
+  });
+});
+
+describe("runContests: legislator, wealth and party contests", () => {
+  const party1 = new ObjectId();
+  const party2 = new ObjectId();
+  const party3 = new ObjectId();
+
+  function seed() {
+    const base = world(10, { small: 400_000, mid: 2e6, big: 3e7 }, { alice: 0, bob: 0, carol: 0 });
+    return {
+      ...base,
+      politicalParties: [
+        { _id: party1, name: "Reform", chairId: alice, memberCount: 40 },
+        { _id: party2, name: "Labour", chairId: bob, memberCount: 100 },
+        // No player chair: not entered.
+        { _id: party3, name: "Old Guard", chairId: null, memberCount: 80 },
+      ],
+      bills: [] as Doc[],
+      stateBills: [] as Doc[],
+    };
+  }
+
+  it("counts enacted bills by sponsor, national and state, from the round's opening", async () => {
+    const { db, data } = fakeDb(seed());
+    await runContests(db, 10, now);
+    const later = new Date(now.getTime() + 60_000);
+    data.bills.push(
+      { _id: new ObjectId(), status: "signed", sponsorId: alice, enactedAt: later },
+      { _id: new ObjectId(), status: "signed", sponsorId: alice, enactedAt: later },
+      // Enacted before the round opened, or not law: not counted.
+      { _id: new ObjectId(), status: "signed", sponsorId: bob, enactedAt: new Date(0) },
+      { _id: new ObjectId(), status: "vetoed", sponsorId: bob, enactedAt: undefined },
+      // Banned sponsor: not entered.
+      { _id: new ObjectId(), status: "signed", sponsorId: banned, enactedAt: later }
+    );
+    data.stateBills.push({
+      _id: new ObjectId(),
+      status: "enacted",
+      sponsorId: bob,
+      enactedAt: later,
+    });
+
+    await runContests(db, 11, new Date(now.getTime() + 3_600_000));
+
+    const round = rounds(data).find((r) => r.kind === "legislator_bills")!;
+    expect(round.standings.map((s) => [s.characterName, s.score])).toEqual([
+      ["Alice", 2],
+      ["Bob", 1],
+    ]);
+  });
+
+  it("ranks party member gains while the opening chair still leads", async () => {
+    const { db, data } = fakeDb(seed());
+    await runContests(db, 10, now);
+    const opened = rounds(data).find((r) => r.kind === "party_growth")!;
+    expect(opened.baselines.map((b) => b.subjectId).sort()).toEqual(
+      [party1, party2].map(String).sort()
+    );
+
+    for (const p of data.politicalParties) {
+      if (String(p._id) === party1.toString()) p.memberCount = 52;
+      if (String(p._id) === party2.toString()) {
+        p.memberCount = 130;
+        p.chairId = carol;
+      }
+    }
+    await runContests(db, 11, new Date(now.getTime() + 3_600_000));
+
+    const round = rounds(data).find((r) => r.kind === "party_growth")!;
+    // Labour changed chair, so it drops out.
+    expect(round.standings.map((s) => [s.subjectName, s.characterName, s.score])).toEqual([
+      ["Reform", "Alice", 12],
+    ]);
+  });
+
+  it("ranks net worth growth net of wires and loans, above the opening floor", async () => {
+    vi.mocked(loadCharacterNetWorths).mockResolvedValueOnce(
+      new Map([
+        [alice.toString(), 1_000_000],
+        [bob.toString(), 2_000_000],
+        // Below the floor: sits out.
+        [carol.toString(), 1_000],
+      ])
+    );
+    const { db, data } = fakeDb(seed());
+    await runContests(db, 10, now);
+    const opened = rounds(data).find((r) => r.kind === "wealth_growth")!;
+    expect(opened.baselines.map((b) => b.subjectId).sort()).toEqual(
+      [alice, bob].map(String).sort()
+    );
+
+    vi.mocked(loadCharacterNetWorths).mockResolvedValue(
+      new Map([
+        [alice.toString(), 1_200_000],
+        [bob.toString(), 3_000_000],
+      ])
+    );
+    // Bob received a 900,000 wire: only 100,000 of his growth is his own.
+    vi.mocked(loadExternalInflows).mockResolvedValue(new Map([[bob.toString(), 900_000]]));
+    await runContests(db, 11, new Date(now.getTime() + 3_600_000));
+
+    const round = rounds(data).find((r) => r.kind === "wealth_growth")!;
+    expect(round.standings.map((s) => [s.characterName, Math.round(s.score)])).toEqual([
+      ["Alice", 20],
+      ["Bob", 5],
+    ]);
+    vi.mocked(loadCharacterNetWorths).mockResolvedValue(new Map());
+    vi.mocked(loadExternalInflows).mockResolvedValue(new Map());
   });
 });

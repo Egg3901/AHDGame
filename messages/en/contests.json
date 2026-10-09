@@ -1,7 +1,7 @@
 {
   "contests": {
     "title": "Contests",
-    "intro": "Weekly races between players. When a week ends, the leader of each contest wins the cash prize shown and a new round starts. New corporations and characters join at the start of the next round.",
+    "intro": "Weekly races between players. When a week ends, the top three in each contest split its cash prize 50 / 30 / 20 (government approval is winner takes all) and a new round starts. New corporations and characters join at the start of the next round.",
     "referralIntro": "Invite players with your link. A referral counts when the player you invite creates a character.",
     "endsAt": "Round {round} ends",
     "entrants": "{count, plural, =0 {No entries yet} one {# entry} other {# entries}}",
@@ -37,13 +37,27 @@
       "referrals_iteration": {
         "title": "This iteration",
         "rules": "Most new players brought in this iteration. Counting restarts when a new iteration begins."
+      },
+      "legislator_bills": {
+        "title": "Legislator of the week",
+        "rules": "Most bills you sponsored that became law during the round, national or state."
+      },
+      "wealth_growth": {
+        "title": "Personal wealth growth",
+        "rules": "Percent growth in your net worth: cash, savings, shares, bonds and funds. Wires you receive and loan principal do not count."
+      },
+      "party_growth": {
+        "title": "Party growth",
+        "rules": "Most members gained by a party chaired by a player. The same chair must lead the party for the whole round."
       }
     },
     "scores": {
       "percent": "{value}%",
       "influence": "{value} NI",
       "approval": "{value} pts",
-      "referrals": "{count, plural, one {# referral} other {# referrals}}"
+      "referrals": "{count, plural, one {# referral} other {# referrals}}",
+      "bills": "{count, plural, one {# bill enacted} other {# bills enacted}}",
+      "members": "{value} members"
     },
     "referrals": {
       "since": "Counting since",
@@ -76,6 +90,10 @@
     "countdown": "Round {round} ends in",
     "timeLeft": "{days}d {hours}h {minutes}m",
     "settling": "Settling after the next turn",
-    "tiedLead": "tied with the leader"
+    "tiedLead": "tied with the leader",
+    "split": {
+      "podium": "Top 3 split 50 / 30 / 20",
+      "winnerTakesAll": "Winner takes all"
+    }
   }
 }
