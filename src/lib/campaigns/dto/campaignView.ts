@@ -6,6 +6,7 @@ import type { CampaignStatePresence } from "@/lib/elections/dto/campaignStatePre
 import type { OppositionTarget } from "@/lib/campaigns/oppositionTargets";
 import {
   getEffectiveBranchCost,
+  getCampaignFamilyScalar,
   OPS_MAX_BRANCH_LEVEL,
   OPS_TREES,
   type OpsBranchKey,
@@ -385,6 +386,8 @@ export interface OpsBranchView {
   effectType: string;
   level: number;
   maxLevel: number;
+  /** Standing effect of the owned tier, in campaign currency where monetary. */
+  currentEffect?: string;
   /** Localized next-tier cost, or null when the branch is maxed. */
   next: OpsBranchCostView | null;
 }
@@ -411,10 +414,25 @@ export function buildOpsTreeView(
   requiresTarget: boolean,
   electionType: string | undefined,
   isGeneralPhase: boolean,
-  toLocal: (anchor: number) => number
+  toLocal: (anchor: number) => number,
+  currencySymbol = "$"
 ): OpsTreeView {
   const def = OPS_TREES[category];
   const unlocked = !!tree?.starter;
+  const localMoney = (amount: number) =>
+    `${currencySymbol}${Math.round(toLocal(amount * getCampaignFamilyScalar(electionType))).toLocaleString("en-US")}`;
+  const starterEffect =
+    category === "fundraising"
+      ? `+${localMoney(def.starter.magnitude)}/turn base income`
+      : def.starter.effect;
+  const branchEffect = (branch: (typeof def.branches)[number], level: number) => {
+    const tier = branch.tiers.find((t) => t.level === level);
+    if (!tier) return "No effect";
+    if (branch.effectType === "incomeFlat") return `+${localMoney(tier.magnitude)}/turn`;
+    if (branch.effectType === "incomeLumpOnPurchase")
+      return `+${localMoney(tier.lumpSum ?? 0)} on purchase`;
+    return tier.effect;
+  };
   const localizeCost = (
     c: {
       funds: number;
@@ -422,14 +440,15 @@ export function buildOpsTreeView(
       effect: string;
       maintenance?: number;
       lumpSum?: number;
-    } | null
+    } | null,
+    effect?: string
   ): OpsBranchCostView | null =>
     c == null
       ? null
       : {
           funds: Math.round(toLocal(c.funds)),
           actions: c.actions,
-          effect: c.effect,
+          effect: effect ?? c.effect,
           ...(c.maintenance != null ? { maintenance: Math.round(toLocal(c.maintenance)) } : {}),
           // lumpSum is currency for income branches, a raw % for oppo — the
           // effect string already conveys the % so only localize the currency
@@ -441,11 +460,14 @@ export function buildOpsTreeView(
 
   return {
     unlocked,
-    starterEffect: def.starter.effect,
+    starterEffect,
     requiresTarget,
     starterCost: unlocked
       ? null
-      : localizeCost(getEffectiveBranchCost(category, null, 0, electionType, isGeneralPhase)),
+      : localizeCost(
+          getEffectiveBranchCost(category, null, 0, electionType, isGeneralPhase),
+          starterEffect
+        ),
     branches: def.branches.map((b) => {
       const level = tree ? tree[b.key] : 0;
       const next =
@@ -459,7 +481,8 @@ export function buildOpsTreeView(
         effectType: b.effectType,
         level,
         maxLevel: OPS_MAX_BRANCH_LEVEL,
-        next: localizeCost(next),
+        currentEffect: branchEffect(b, unlocked ? level : 0),
+        next: localizeCost(next, branchEffect(b, level + 1)),
       };
     }),
   };
@@ -475,7 +498,8 @@ export function buildOpsTrees(
   >,
   electionType: string | undefined,
   isGeneralPhase: boolean,
-  toLocal: (anchor: number) => number
+  toLocal: (anchor: number) => number,
+  currencySymbol = "$"
 ): Record<UpgradeCategory, OpsTreeView> {
   return {
     fundraising: buildOpsTreeView(
@@ -484,7 +508,8 @@ export function buildOpsTrees(
       false,
       electionType,
       isGeneralPhase,
-      toLocal
+      toLocal,
+      currencySymbol
     ),
     oppositionResearch: buildOpsTreeView(
       "oppositionResearch",
@@ -492,7 +517,8 @@ export function buildOpsTrees(
       true,
       electionType,
       isGeneralPhase,
-      toLocal
+      toLocal,
+      currencySymbol
     ),
     groundGame: buildOpsTreeView(
       "groundGame",
@@ -500,7 +526,8 @@ export function buildOpsTrees(
       false,
       electionType,
       isGeneralPhase,
-      toLocal
+      toLocal,
+      currencySymbol
     ),
     mediaSpending: buildOpsTreeView(
       "mediaSpending",
@@ -508,7 +535,8 @@ export function buildOpsTrees(
       false,
       electionType,
       isGeneralPhase,
-      toLocal
+      toLocal,
+      currencySymbol
     ),
   };
 }
