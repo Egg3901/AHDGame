@@ -3,6 +3,7 @@
  * accrues non-presidential primary ballots over the ballot window, and writes
  * the presidential per-state polling projection.
  */
+import { primaryWinMomentumFromTally } from "@/lib/elections/primaryRegional/rules";
 import { usesLegacyPresidentialCampaign } from "@/lib/countries/ru/rules/presidentialCampaign";
 import { applyStandingAds } from "@/lib/campaignTargeting/standingAds";
 import { buildGranularElectorateSubstrate } from "@/lib/demographics/granularElectorate";
@@ -765,6 +766,20 @@ async function recordPresidentialStatePollingSnapshots(
   const stateMap = new Map(statesDocs.map((s) => [s._id as string, s]));
   const demographicsMap = new Map(demographicsDocs.map((d) => [d._id as string, d]));
 
+  // Win momentum per race, from the waves already run. One projected read for
+  // every presidential race this turn, so the polling projection carries the
+  // same momentum the next wave will.
+  const momentumTallies = await db
+    .collection<ElectionVoteTally>("electionVoteTallies")
+    .find(
+      { electionId: { $in: presElections.map((e) => e._id) } },
+      { projection: { electionId: 1, primaryWaveHistory: 1, primaryStateVotes: 1 } }
+    )
+    .toArray();
+  const winMomentumByElection = new Map(
+    momentumTallies.map((t) => [t.electionId.toString(), primaryWinMomentumFromTally(t)])
+  );
+
   const orgMap = new Map<string, number>();
   for (const po of statePartyOrgs) {
     orgMap.set(`${po.stateId}_${po.partyId}`, (po.organization ?? 0) + (po.primarySurge ?? 0));
@@ -828,6 +843,9 @@ async function recordPresidentialStatePollingSnapshots(
         };
       });
       const { byState } = projectPrimaryByState({
+        // Same seed as the live wave, so the projection sees the same state swing.
+        regionalSeed: String(election._id),
+        winMomentum: winMomentumByElection.get(String(election._id)),
         campaignContext:
           usesCampaignAds(election, enriched) && campaignContext
             ? { ...campaignContext, campaignRulesVersion: election.campaignRulesVersion ?? 0 }

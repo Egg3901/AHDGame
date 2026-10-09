@@ -23,6 +23,8 @@ export interface CountyApiResponse {
   candidateNames?: Record<string, string>;
   candidateParties?: Record<string, string>;
   partyColors?: Record<string, string>;
+  /** Per-candidate colours, for a primary where every candidate shares a party colour. */
+  candidateColors?: Record<string, string>;
 }
 
 export interface CountyRow {
@@ -65,7 +67,7 @@ function resolveCandidate(
   if (known && known.name !== "Unknown") return known;
   const name = data.candidateNames?.[id];
   const party = data.candidateParties?.[id];
-  const color = party ? data.partyColors?.[party] : undefined;
+  const color = data.candidateColors?.[id] ?? (party ? data.partyColors?.[party] : undefined);
   if (name || color)
     return { name: name ?? known?.name ?? "Unknown", color: color ?? known?.color ?? NEUTRAL_FILL };
   return known ?? null;

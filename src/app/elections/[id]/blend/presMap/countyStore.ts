@@ -12,8 +12,30 @@ import type { CountyApiResponse } from "./countyModel";
 const results = new Map<string, CountyApiResponse>();
 const inflight = new Map<string, Promise<CountyApiResponse | null>>();
 
-export function countyKey(electionId: string, stateId: string, turn: number | null): string {
-  return `${electionId}|${stateId}|${turn ?? ""}`;
+/**
+ * Where a map's county results come from. The default is the race's general
+ * tally; a primary map points at one party's primary instead.
+ */
+export interface CountySource {
+  /** Distinguishes cache entries: "general", or "primary:<party>". */
+  id: string;
+  url: (stateId: string) => string;
+}
+
+export function generalCountySource(electionId: string): CountySource {
+  return {
+    id: "general",
+    url: (stateId) => `/api/elections/${electionId}/state/${stateId}/subdivision-results`,
+  };
+}
+
+export function countyKey(
+  electionId: string,
+  stateId: string,
+  turn: number | null,
+  sourceId: string = "general"
+): string {
+  return `${electionId}|${sourceId}|${stateId}|${turn ?? ""}`;
 }
 
 export function cachedCounties(key: string): CountyApiResponse | undefined {
@@ -23,9 +45,10 @@ export function cachedCounties(key: string): CountyApiResponse | undefined {
 export function loadCounties(
   electionId: string,
   stateId: string,
-  turn: number | null
+  turn: number | null,
+  source: CountySource = generalCountySource(electionId)
 ): Promise<CountyApiResponse | null> {
-  const key = countyKey(electionId, stateId, turn);
+  const key = countyKey(electionId, stateId, turn, source.id);
   const hit = results.get(key);
   if (hit) return Promise.resolve(hit);
   const pending = inflight.get(key);
@@ -33,7 +56,7 @@ export function loadCounties(
 
   const request = (async () => {
     try {
-      const res = await fetch(`/api/elections/${electionId}/state/${stateId}/subdivision-results`);
+      const res = await fetch(source.url(stateId));
       if (!res.ok) return null;
       const data = (await res.json()) as CountyApiResponse;
       if (!Array.isArray(data.subdivisions) || data.subdivisions.length === 0) return null;

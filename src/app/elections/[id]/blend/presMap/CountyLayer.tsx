@@ -4,7 +4,7 @@ import { memo, useEffect, useMemo, useState } from "react";
 import { BLEND } from "@/components/blend/tokens";
 import { useBlendGround } from "@/components/blend/useBlendGround";
 import { buildCountyRows, type CountyRow } from "./countyModel";
-import { cachedCounties, countyKey, loadCounties } from "./countyStore";
+import { cachedCounties, countyKey, loadCounties, type CountySource } from "./countyStore";
 import { COUNTY_OFFSET_Y } from "./usStatesGeo";
 
 /** Zoom at which counties start to fade in over their states. */
@@ -28,7 +28,8 @@ export function useCountyRows(
   electionId: string,
   turn: number | null,
   stateIds: string[],
-  candidate: (id: string) => { name: string; color: string }
+  candidate: (id: string) => { name: string; color: string },
+  source?: CountySource
 ): Record<string, CountyRow[]> {
   // Bumped whenever a request lands, so the memo below re-reads the cache.
   const [loaded, setLoaded] = useState(0);
@@ -39,15 +40,18 @@ export function useCountyRows(
     if (!idsKey) return;
     let live = true;
     for (const id of idsKey.split(",")) {
-      if (cachedCounties(countyKey(electionId, id, turn))) continue;
-      loadCounties(electionId, id, turn).then((data) => {
+      if (cachedCounties(countyKey(electionId, id, turn, source?.id))) continue;
+      loadCounties(electionId, id, turn, source).then((data) => {
         if (live && data) setLoaded((n) => n + 1);
       });
     }
     return () => {
       live = false;
     };
-  }, [electionId, turn, idsKey]);
+    // The source is identified by its id; a new object with the same id is the
+    // same source.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [electionId, turn, idsKey, source?.id]);
 
   // Every state requested so far, in first-seen order. Grown during render
   // rather than in an effect, so a newly visible state is included in the
@@ -60,11 +64,11 @@ export function useCountyRows(
     void loaded;
     const out: Record<string, CountyRow[]> = {};
     for (const id of seen) {
-      const data = cachedCounties(countyKey(electionId, id, turn));
+      const data = cachedCounties(countyKey(electionId, id, turn, source?.id));
       if (data) out[id] = buildCountyRows(data, candidate, ground);
     }
     return out;
-  }, [seen, loaded, electionId, turn, candidate, ground]);
+  }, [seen, loaded, electionId, turn, candidate, ground, source?.id]);
 }
 
 /**

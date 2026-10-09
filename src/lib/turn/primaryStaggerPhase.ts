@@ -14,6 +14,8 @@
  * Called from `primaryResolution.ts` before the existing primary-end check.
  */
 
+import { primaryWinMomentumFromTally } from "@/lib/elections/primaryRegional/rules";
+import { loadPrimaryFieldOffices } from "@/lib/elections/primaryRegional/fieldOffices";
 import { turnoutForElection, usesCampaignAds } from "@/lib/campaignTargeting/rules";
 
 import { loadDemographicCategories } from "@/lib/demographics/categoryCatalog";
@@ -496,6 +498,10 @@ export async function runPrimaryStaggerWaveIfDue(
   // Projected per-candidate votes per state per party — the EXPECTED-share
   // source for momentum. Same GE-style demographic allocation the stagger uses,
   // so expected-vs-actual diverges only on a real demographic-variance upset.
+  // Field offices: a candidate's offices in a state lift their vote there, in
+  // the projection below and in the wave itself. One query per race.
+  const fieldOffices = await loadPrimaryFieldOffices(db, election, candidates, currentTurn);
+
   const projectionVotesByParty = new Map<string, Record<string, Record<string, number>>>();
   for (const partyId of uniquePartyIds) {
     const party = partyMap.get(partyId);
@@ -505,6 +511,10 @@ export async function runPrimaryStaggerWaveIfDue(
       partyCandidates.some((c) => c.candidateId === m.candidateId)
     );
     const { stateWinners, byState } = projectPrimaryByState({
+      // Same seed as the live wave, so the projection sees the same state swing.
+      regionalSeed: String(election._id),
+      winMomentum: primaryWinMomentumFromTally(tally),
+      fieldOffices,
       // Suppression is applied to the EXPECTED share as well as to the result.
       // Without this the target would be punished twice: fewer votes on the
       // night, and a momentum penalty for "missing" an expectation that never
@@ -564,6 +574,11 @@ export async function runPrimaryStaggerWaveIfDue(
   // Vote-share momentum carried INTO this wave (accumulated from prior waves).
   // Read-only here; the new accumulated value is computed after the wave votes.
   // partyId -> candidateId -> points.
+  // Win momentum: states won in earlier waves boost a candidate's vote in this
+  // one (moderate, decayed, capped; see primaryRegional/rules.ts). Read from
+  // the tally before this wave's results are merged in.
+  const winMomentum = primaryWinMomentumFromTally(tally);
+
   const priorMomentum: Record<string, Record<string, number>> = momentumEnabled
     ? structuredCloneOr(tally.primaryMomentum ?? {})
     : {};
@@ -727,6 +742,8 @@ export async function runPrimaryStaggerWaveIfDue(
           includeInfluenceInAppeal: false,
           useNationalInfluenceForReach: true,
           presidentialPrimaryNationalReach: true,
+          // Fixed per-state swing for this race; the projection passes the same.
+          primaryRegionalSeed: String(election._id),
           applyPartyFit: true, // L1 — primary-only party-fit penalty
           // Regional bases L1+C — per-candidate state-org level for this
           // state, plus per-candidate home state. Both gated on the
@@ -819,6 +836,18 @@ export async function runPrimaryStaggerWaveIfDue(
         if (mood !== 1) {
           votesPerCandidate[ec.candidateId] = Math.round(
             (votesPerCandidate[ec.candidateId] ?? 0) * mood
+          );
+        }
+      }
+
+      // Win momentum from states already won, and field offices in this
+      // state. The projection applies the same two.
+      for (const ec of partyCandidates) {
+        const mult =
+          (winMomentum[ec.candidateId] ?? 1) * (fieldOffices?.(ec.candidateId, stateId) ?? 1);
+        if (mult !== 1) {
+          votesPerCandidate[ec.candidateId] = Math.round(
+            (votesPerCandidate[ec.candidateId] ?? 0) * mult
           );
         }
       }
