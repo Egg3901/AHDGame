@@ -62,7 +62,8 @@
       "prize": "Won {prize}",
       "supporter": "Supporter for the next iteration",
       "alreadySupporter": "Already a supporter",
-      "formerPlayer": "Former player"
+      "formerPlayer": "Former player",
+      "iterationTitle": "Iteration referrals"
     },
     "prize": "Prize: {prize} to the winner",
     "referralsHeading": "Referrals",

@@ -214,7 +214,9 @@ function PastWinners({ past, t, locale }: { past: PastRoundData[]; t: T; locale:
             <li key={round.id} className="py-2.5">
               <div className="flex flex-wrap items-baseline justify-between gap-2">
                 <span className="font-medium text-foreground">
-                  {t(`kinds.${round.kind}.title`)}{" "}
+                  {round.kind === "referrals_iteration"
+                    ? t("past.iterationTitle")
+                    : t(`kinds.${round.kind}.title`)}{" "}
                   <span className="font-normal text-muted">
                     {t("past.round", { round: round.roundNumber })}
                   </span>

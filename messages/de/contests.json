@@ -62,7 +62,8 @@
       "prize": "{prize} gewonnen",
       "supporter": "Supporter für die nächste Iteration",
       "alreadySupporter": "Bereits Supporter",
-      "formerPlayer": "Ehemaliger Spieler"
+      "formerPlayer": "Ehemaliger Spieler",
+      "iterationTitle": "Empfehlungen der Iteration"
     },
     "prize": "Preis: {prize} für den Sieg",
     "referralsHeading": "Empfehlungen",
