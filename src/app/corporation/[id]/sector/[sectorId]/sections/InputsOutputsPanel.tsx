@@ -75,13 +75,44 @@ export default function InputsOutputsPanel({
   // What the engine actually applied, floored at THROUGHPUT_MIN, the raw
   // availability ratio on the rows above is uncapped and is not the throttle.
   const throttleApplied = commodities.throughput?.applied ?? commodities.throughput?.projected;
+  const inputBillSharePct =
+    plants.pnl && plants.pnl.revenueAnchor > 0
+      ? (plants.pnl.inputsAnchor / plants.pnl.revenueAnchor) * 100
+      : null;
+  // The flow rows arrive at nameplate: what a plant running flat out would buy
+  // and make. The bill and the sales ran at the plant's real output, and the
+  // output price was the market's, not what the sales realized, so a player
+  // multiplying units by price on this panel landed on different totals from
+  // the money panel (ticket 1448). Show last turn as it happened: inputs scaled
+  // so units x billed price sums to the booked input bill, outputs at the units
+  // actually made and, for a one-product plant, the average price realized.
+  const nameplateInputBill = commodities.demands.reduce(
+    (sum, d) => sum + (d.units > 0 ? d.units * (d.billedUnitPrice ?? d.marketPrice) : 0),
+    0
+  );
+  const inputUnitScale =
+    plants.pnl && plants.pnl.inputsAnchor > 0 && nameplateInputBill > 0
+      ? plants.pnl.inputsAnchor / nameplateInputBill
+      : 1;
+  const nameplateOutputUnits = commodities.supplies.reduce(
+    (sum, f) => sum + Math.max(0, f.units),
+    0
+  );
+  const outputUnitScale =
+    !isExtraction && plants.producedUnits != null && nameplateOutputUnits > 0
+      ? plants.producedUnits / nameplateOutputUnits
+      : 1;
+  const realizedOutputPrice =
+    commodities.supplies.length === 1 ? (plants.pnl?.avgSalePriceAnchor ?? null) : null;
 
   return (
     <div className="rounded-xl border border-card-border bg-card p-6 shadow-card">
       <h2 className="text-heading-sm font-bold text-foreground">What goes in, what comes out</h2>
       <p className="mb-4 mt-1 text-body-sm text-muted">
-        Your plants buy the things on the left and make the things on the right. Prices are per
-        unit, in {currencyCode}.{" "}
+        Your plants buy the things on the left and make the things on the right. Amounts are what
+        they bought and made last turn, per day. Prices are per unit, in {currencyCode}: what you
+        were charged for inputs
+        {realizedOutputPrice != null ? " and what your sales averaged" : ""}.{" "}
         {hasPerOutput && "Each thing you make sells at its own rate, the rows are not one number."}
       </p>
 
@@ -110,7 +141,7 @@ export default function InputsOutputsPanel({
               {commodities.demands.map((f) => (
                 <FlowRow
                   key={f.commodity}
-                  flow={f}
+                  flow={{ ...f, units: f.units * inputUnitScale }}
                   priceText={price(f.billedUnitPrice ?? f.marketPrice)}
                   right={
                     f.inputAvailability != null && f.inputAvailability < 0.999 ? (
@@ -181,8 +212,8 @@ export default function InputsOutputsPanel({
               {commodities.supplies.map((f) => (
                 <FlowRow
                   key={f.commodity}
-                  flow={f}
-                  priceText={price(f.marketPrice)}
+                  flow={{ ...f, units: f.units * outputUnitScale }}
+                  priceText={price(realizedOutputPrice ?? f.marketPrice)}
                   right={(() => {
                     const share = soldShareFor(f);
                     if (share == null) return null;
@@ -261,17 +292,16 @@ export default function InputsOutputsPanel({
 
       <DetailsDisclosure className="mt-4">
         <dl className="space-y-1.5 text-body-sm">
-          <div className="flex items-center justify-between gap-3">
-            <dt className="text-muted">Net effect of prices on your margin</dt>
-            <dd
-              className={`tabular-nums ${
-                commodities.commodityMarginModifier >= 0 ? "text-success" : "text-error"
-              }`}
-            >
-              {commodities.commodityMarginModifier >= 0 ? "+" : ""}
-              {commodities.commodityMarginModifier}%
-            </dd>
-          </div>
+          {/* Under plants prices reach profit as the input bill and the sale
+              price, not as a margin modifier, so the legacy "net effect of
+              prices" figure moved no money and contradicted the cost chain
+              (ticket 1448). Show what the prices actually cost instead. */}
+          {inputBillSharePct != null && (
+            <div className="flex items-center justify-between gap-3">
+              <dt className="text-muted">Your input bill, as a share of sales revenue</dt>
+              <dd className="tabular-nums text-foreground">{inputBillSharePct.toFixed(1)}%</dd>
+            </div>
+          )}
           {commodities.throughput && (
             <div className="flex items-center justify-between gap-3">
               <dt className="text-muted">Input availability applied last turn</dt>
