@@ -147,6 +147,12 @@ const nextConfig: NextConfig = {
       }
     : {}),
   cleanDistDir: !railwayEnv,
+  webpack(config, { dev }) {
+    // Clean hosted builds do not reuse .next/cache. Avoid serializing the
+    // large route graph into a filesystem cache during compilation.
+    if (process.env.CI === "true" && !dev) config.cache = false;
+    return config;
+  },
   // The standalone Turbopack build gives an explicitly external MongoDB
   // package a generated require alias. That alias is not emitted into the
   // desktop bundle on Windows, so local worlds fail before the server starts.
