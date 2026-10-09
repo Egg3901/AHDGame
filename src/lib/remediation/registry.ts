@@ -30,6 +30,7 @@ import { defect as mergedStateExtraction } from "./defects/AHD-1271-merged-state
 import { defect as poolCountryAttribution } from "./defects/AHD-1271-pool-country-attribution";
 import { defect as natCorpSplitSectorType } from "./defects/AHD-1271-natcorp-split-sector-type";
 import { defect as mergedPartyOrg } from "./defects/AHD-1372-merged-party-org";
+import { defect as freightOverbillingRestitution } from "./defects/AHD-1448-freight-overbilling-restitution";
 import type { Defect } from "./types";
 
 export const DEFECTS: Defect[] = [
@@ -74,6 +75,9 @@ export const DEFECTS: Defect[] = [
   // Modern mergers delete them; this releases the legacy Reg shares and
   // removes the stale regional organizations.
   mergedPartyOrg,
+  // Ticket #1448: canonical freight billing charged a full day's bill every
+  // hourly turn. Credits overcharged buyers once; haulers keep their surplus.
+  freightOverbillingRestitution,
 ];
 
 export function getDefect(id: string): Defect | undefined {
