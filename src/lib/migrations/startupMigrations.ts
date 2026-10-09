@@ -20,6 +20,7 @@ import { migration as advertisingAgreementIndexes } from "./entries/2026-10-05-a
 import { migration as productVentureIndexes } from "./entries/2026-10-08-product-venture-indexes";
 import { migration as campaignFieldOfficeIndexes } from "./entries/2026-10-09-campaign-field-office-indexes";
 import { migration as marketCapTickIndexes } from "./entries/2026-10-09-market-cap-tick-indexes";
+import { migration as subhourWikiCadence } from "./entries/2026-10-09-subhour-wiki-cadence";
 import { runMigrations, type RunSummary } from "./runner";
 import type { Migration } from "./types";
 
@@ -68,6 +69,7 @@ export const REQUIRED_STARTUP_MIGRATIONS: readonly Migration[] = [
   productVentureIndexes,
   campaignFieldOfficeIndexes,
   marketCapTickIndexes,
+  subhourWikiCadence,
 ];
 
 /** Index metadata can disappear on reset even when migration markers survive. */

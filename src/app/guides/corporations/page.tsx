@@ -829,7 +829,8 @@ Scaled growth  = 0.65 × ln(1 + dailyBudget / 100,000)
           <section className="space-y-4">
             <SectionHeader id="shareprice">12. How share price works</SectionHeader>
             <p className="text-sm text-muted leading-relaxed">
-              Share price is recalculated every turn as a weighted blend of three components:
+              In multiplayer, share price is recalculated every 15 minutes as a weighted blend of
+              three components. Earnings update on the hourly turn:
             </p>
             <p className="text-sm text-muted leading-relaxed">
               In short: price blends what the corporation owns (book value) with what it earns,
