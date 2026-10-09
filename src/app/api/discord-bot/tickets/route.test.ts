@@ -446,10 +446,28 @@ describe("POST /api/discord-bot/tickets filing context", () => {
     );
     const result = await response.json();
     expect(result.contextQuestions.join("\n")).toContain("https://ahousedividedgame.com/market>");
+    // The suggested page answers the page need; the player confirms it in one tap.
+    expect(result.contextNeeded).toEqual([]);
     expect(result).not.toHaveProperty("supportRecentVisits");
     const stored = db.collectionMocks.tickets.insertOne.mock.calls[0][0];
     expect(stored.supportRecentVisits).toHaveLength(2);
     expect(JSON.stringify(stored.supportRecentVisits)).not.toContain("token");
+  });
+
+  it("does not ask for a page because of the bot's platform line (ticket 1448)", async () => {
+    db.collectionMocks.users.findOne.mockResolvedValue({ _id: "user-1", username: "tester" });
+    const { POST } = await import("./route");
+    const response = await POST(
+      post({
+        category: "bug",
+        title: "Profit Margin Calculations don't make sense to me",
+        description:
+          "Platform: Desktop: web browser\n\nProfit Margin Calculations don't make sense to me",
+        discordUserId: "ctx-platform-prefix",
+      })
+    );
+    const result = (await response.json()) as { contextNeeded: string[] };
+    expect(result.contextNeeded).toEqual([]);
   });
 
   it("still requires the bot token", async () => {
