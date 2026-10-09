@@ -169,6 +169,56 @@ describe("resolveBillProvisions", () => {
     });
   });
 
+  it("keeps every reviewed-law metric and budget effect on the bill detail DTO", async () => {
+    const { resolveBillProvisions } = await import("./billEnrichment");
+    const bill = {
+      countryId: "US",
+      stateId: "us_national",
+      provisions: [
+        {
+          type: "reset_law",
+          familyId: "L16",
+          scope: "national",
+          choice: "far_left",
+          reviewedOption: {
+            country: "US",
+            annualAllocation: 125_000_000,
+            accruedTransitionLiability: 4_000_000,
+          },
+          titleSnapshot: "Universal Care Guarantee",
+          descriptionSnapshot: "Extend public coverage broadly.",
+          currentLawSnapshot: "Medicare and Medicaid",
+          currentLawDescriptionSnapshot: "Existing coverage components.",
+          currentChoiceSnapshot: "center_right",
+          currentAnnualAllocationSnapshot: 95_000_000,
+          annualAllocationDeltaSnapshot: 30_000_000,
+          primaryMetricEffectsSnapshot: [
+            { metricId: "16", favorableNormalizedPoints: 0.91 },
+            { metricId: "17", favorableNormalizedPoints: 0.91 },
+            { metricId: "19", favorableNormalizedPoints: 0.91 },
+          ],
+        },
+      ],
+    } as unknown as Bill;
+
+    const result = await resolveBillProvisions(db as unknown as Db, bill);
+
+    expect(result.provisionsResolved[0]).toMatchObject({
+      metricEffects: [
+        { metric: "Effective health coverage", favorableNormalizedDelta: 0.42 },
+        { metric: "Care affordability", favorableNormalizedDelta: 0.42 },
+        { metric: "Preventable mortality", favorableNormalizedDelta: 0.42 },
+      ],
+      fiscal: {
+        currencyCode: "USD",
+        current: { cost: 95_000_000, revenue: 0, net: -95_000_000 },
+        proposed: { cost: 125_000_000, revenue: 0, net: -125_000_000 },
+        netDelta: -30_000_000,
+        transitionCost: 4_000_000,
+      },
+    });
+  });
+
   it("reports projected effects as a per-metric delta vs the current law, honoring weight sign + isHigherBetter", async () => {
     const { resolveBillProvisions } = await import("./billEnrichment");
 

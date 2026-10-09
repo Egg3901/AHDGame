@@ -39,13 +39,71 @@ export function BillProvisionCard({
         direction={view.effectDirection ?? 0}
       />
       {view.fiscal && <ProvisionFiscalRow fiscal={view.fiscal} />}
+      {!view.fiscal && (
+        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 rounded-md bg-background/60 px-2.5 py-1.5 text-xs">
+          <span className="text-body-sm font-medium text-muted">Budget effect</span>
+          <span className="text-muted">No direct budget effect</span>
+        </div>
+      )}
+      {view.metricEffects && view.metricEffects.length > 0 && (
+        <div className="flex flex-col gap-1.5">
+          <span
+            className="text-body-sm font-medium text-muted"
+            title="Modeled effect compared with the current law at full implementation."
+          >
+            Metric effect
+          </span>
+          <div className="flex flex-wrap gap-1.5">
+            {view.metricEffects.map((effect) => {
+              const favorable = effect.favorableNormalizedDelta > 0;
+              const unfavorable = effect.favorableNormalizedDelta < 0;
+              return (
+                <span
+                  key={effect.metric}
+                  className="inline-flex items-center gap-1 rounded-md border border-card-border px-2 py-0.5 text-[11px] text-foreground/80"
+                  title={`${effect.metric}: ${favorable ? "favorable" : unfavorable ? "unfavorable" : "no"} modeled change from current law at full implementation`}
+                >
+                  <span
+                    className={
+                      favorable ? "text-success" : unfavorable ? "text-error" : "text-muted"
+                    }
+                    aria-hidden="true"
+                  >
+                    {favorable ? "+" : unfavorable ? "−" : "="}
+                  </span>
+                  {effect.metric}
+                  <span
+                    className={
+                      favorable ? "text-success" : unfavorable ? "text-error" : "text-muted"
+                    }
+                  >
+                    {favorable ? "Favorable" : unfavorable ? "Unfavorable" : "No change"}
+                  </span>
+                </span>
+              );
+            })}
+          </div>
+        </div>
+      )}
+      {view.metricEffects && view.metricEffects.length === 0 && (
+        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 rounded-md bg-background/60 px-2.5 py-1.5 text-xs">
+          <span className="text-body-sm font-medium text-muted">Metric effect</span>
+          <span className="text-muted">Metric effect information unavailable</span>
+        </div>
+      )}
+      {(!view.effects || view.effects.length === 0) && !view.metricEffects && (
+        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 rounded-md bg-background/60 px-2.5 py-1.5 text-xs">
+          <span className="text-body-sm font-medium text-muted">Metric effect</span>
+          <span className="text-muted">No direct metric effect</span>
+        </div>
+      )}
       {view.effects && view.effects.length > 0 && (
         <div className="flex flex-col gap-1.5">
           <span
             className="text-body-sm font-medium text-muted"
             title="Change relative to the current law. An arrow shows how each metric moves if this provision passes; green = beneficial, red = harmful."
           >
-            Projected effects vs current law
+            Metric effect vs current law
           </span>
           <div className="flex flex-wrap gap-1.5">
             {view.effects.map((effect, j) => {
@@ -109,7 +167,7 @@ function ProvisionFiscalRow({ fiscal }: { fiscal: NonNullable<BillProvisionView[
     const delta = fiscal.revenueDelta ?? 0;
     return (
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 rounded-md bg-background/60 px-2.5 py-1.5 text-xs">
-        <span className="text-body-sm font-medium text-muted">Fiscal impact</span>
+        <span className="text-body-sm font-medium text-muted">Budget effect</span>
         <span className="tabular-nums">
           Rate {fiscal.currentRate}% → {fiscal.proposedRate}%
         </span>
@@ -126,7 +184,7 @@ function ProvisionFiscalRow({ fiscal }: { fiscal: NonNullable<BillProvisionView[
   const netDelta = fiscal.netDelta ?? proposed.net;
   return (
     <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 rounded-md bg-background/60 px-2.5 py-1.5 text-xs">
-      <span className="text-body-sm font-medium text-muted">Fiscal impact</span>
+      <span className="text-body-sm font-medium text-muted">Budget effect</span>
       <span className="tabular-nums text-muted">
         Cost {fiscal.current ? `${money(fiscal.current.cost)} → ` : ""}
         {money(proposed.cost)}/yr

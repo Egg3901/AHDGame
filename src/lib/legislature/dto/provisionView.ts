@@ -27,6 +27,7 @@ export interface BillProvisionView {
     proposedRate?: number;
     revenueDelta?: number;
   };
+  metricEffects?: { metric: string; favorableNormalizedDelta: number }[];
 }
 
 /**
@@ -59,5 +60,6 @@ export function provisionToView(p: ProvisionDisplay): BillProvisionView {
     policyOptionScores: p.policyOptionScores,
     nationalizationDetail: p.nationalizationDetail,
     fiscal: p.fiscal,
+    metricEffects: p.metricEffects,
   };
 }
