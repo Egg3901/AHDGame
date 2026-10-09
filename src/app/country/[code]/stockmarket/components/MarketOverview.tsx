@@ -6,6 +6,7 @@ import { marketTurnLabel } from "@/lib/stockExchange/rules/calendar";
 import type { GameDateAnchor } from "@/lib/utils/gameDate";
 import { LocalTime, RelativeTime } from "@/components/time/LocalTime";
 import { Skeleton } from "@/components/ui";
+import { useGameEvents, type GameEvent } from "@/hooks/useGameEvents";
 import {
   ALL_EXCHANGES,
   getExchangeApiKey,
@@ -33,6 +34,20 @@ import type {
 /* ------------------------------------------------------------------ */
 /* Range model: turns on the wire, labels in the UI.                   */
 /* ------------------------------------------------------------------ */
+
+const MARKET_TICK_EVENTS: GameEvent["type"][] = ["market_tick"];
+
+/**
+ * Viewer-local clock time of a 15-minute candle (unix seconds). Chart labels
+ * are drawn on the client only, so the browser's own zone is the right one.
+ */
+function quarterClock(time: number): string {
+  return new Date(time * 1000).toLocaleTimeString([], {
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+  });
+}
 
 const RANGES = [
   { key: "1M", label: "1M", turns: 4 },
@@ -66,6 +81,8 @@ interface CandlesResponse {
   turns: number;
   bucketed: boolean;
   bucketTurns: number;
+  /** "15m": one candle per quarter-hour market tick where recorded. */
+  resolution?: "15m" | "turn";
   points: CandleDto[];
   intradayTurns: number;
   totalTurns: number;
@@ -157,6 +174,10 @@ export function MarketOverview({
   const [chartReady, setChartReady] = useState(false);
   const [meta, setMeta] = useState<CandlesResponse | null>(null);
   const calendarRef = useRef<GameDateAnchor | null>(null);
+  const quarterRef = useRef(false);
+  // Each quarter-hour market tick redraws the chart without a reload.
+  const [tickKey, setTickKey] = useState(0);
+  useGameEvents(() => setTickKey((k) => k + 1), MARKET_TICK_EVENTS);
   const fittedRange = useRef<string | null>(null);
 
   const exchangeApi =
@@ -205,7 +226,9 @@ export function MarketOverview({
       const border = cssVar("--card-border", "#2a2a3d");
       const turnLabel = (time: number): string => {
         const candle = candlesRef.current.find((row) => row.time === time);
-        return candle ? marketTurnLabel(candle.endTurn ?? candle.turn, calendarRef.current) : "";
+        if (!candle) return "";
+        const label = marketTurnLabel(candle.endTurn ?? candle.turn, calendarRef.current);
+        return quarterRef.current ? `${label} ${quarterClock(time)}` : label;
       };
 
       chart = createChart(container, {
@@ -229,7 +252,8 @@ export function MarketOverview({
           borderColor: border,
           timeVisible: true,
           secondsVisible: false,
-          tickMarkFormatter: (time: Time) => turnLabel(Number(time)),
+          tickMarkFormatter: (time: Time) =>
+            quarterRef.current ? quarterClock(Number(time)) : turnLabel(Number(time)),
         },
       });
       chartRef.current = chart;
@@ -280,7 +304,7 @@ export function MarketOverview({
           ? " · recorded closes"
           : ` · ${row.intradayTurns ?? 1}/${row.totalTurns ?? 1} turns with prints`;
         tip.innerHTML =
-          `<div class="font-mono font-bold text-foreground">${row ? marketTurnLabel(row.turn, calendarRef.current, true) : ""}${row?.endTurn && row.endTurn !== row.turn ? `<br/>through ${marketTurnLabel(row.endTurn, calendarRef.current, true)}` : ""}</div>` +
+          `<div class="font-mono font-bold text-foreground">${row ? marketTurnLabel(row.turn, calendarRef.current, true) : ""}${row && quarterRef.current ? ` ${quarterClock(row.time)}` : ""}${row?.endTurn && row.endTurn !== row.turn ? `<br/>through ${marketTurnLabel(row.endTurn, calendarRef.current, true)}` : ""}</div>` +
           `<div class="font-mono tabular-nums">O ${fmt(data.open)} H ${fmt(data.high)}<br/>` +
           `L ${fmt(data.low)} C ${fmt(data.close)}</div>` +
           `<div class="font-mono tabular-nums ${chg >= 0 ? "text-success" : "text-error"}">` +
@@ -335,6 +359,7 @@ export function MarketOverview({
         const json: CandlesResponse = await response.json();
         if (controller.signal.aborted) return;
         calendarRef.current = json.calendar ?? null;
+        quarterRef.current = json.resolution === "15m";
         setMeta(json);
         setCandles(json.points ?? []);
         setBucketTurns(json.bucketTurns ?? 1);
@@ -364,7 +389,7 @@ export function MarketOverview({
       window.clearInterval(timer);
       document.removeEventListener("visibilitychange", refresh);
     };
-  }, [exchangeApi, turns, refreshKey, currentTurn]);
+  }, [exchangeApi, turns, refreshKey, currentTurn, tickKey]);
 
   /* ---------------- push candles + volume into the chart ---------------- */
   useEffect(() => {
@@ -811,10 +836,15 @@ export function MarketOverview({
       </div>
       <div className="px-4 py-2 text-[11px] text-muted border-t border-card-border mt-3">
         Game-calendar ranges: 4 turns per month, 48 per year. Raw listed capitalization in anchor
-        units, {bucketed ? `${bucketTurns}-turn buckets` : "one candle per turn"}. Covered turns use
-        observed live prints; older turns use recorded closes. Capitalization changes include
-        listings, removals and coverage changes, so they are not investment returns. Volume includes
-        recorded executable fills. Hover for O/H/L/C, turnover and bucket dates.
+        units,{" "}
+        {bucketed
+          ? `${bucketTurns}-turn buckets`
+          : meta?.resolution === "15m"
+            ? "one candle per 15-minute market update where recorded, otherwise one per turn"
+            : "one candle per turn"}
+        . Covered turns use observed live prints; older turns use recorded closes. Capitalization
+        changes include listings, removals and coverage changes, so they are not investment returns.
+        Volume includes recorded executable fills. Hover for O/H/L/C, turnover and bucket dates.
       </div>
     </div>
   );

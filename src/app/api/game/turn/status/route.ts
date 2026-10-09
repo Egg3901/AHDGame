@@ -63,6 +63,7 @@ export async function GET(request: Request) {
       isActive: gameState.isActive,
       isProcessing: gameState.isProcessing ?? false,
       lastTurnProcessed: gameState.lastTurnProcessed,
+      lastMarketTickAt: gameState.lastMarketTickAt ?? null,
       nextScheduledTurn: !singleplayer && gameState.isActive ? nextCron.toISOString() : null,
       pausedAt: gameState.pausedAt ?? null,
       pauseReason: gameState.pauseReason ?? null,
