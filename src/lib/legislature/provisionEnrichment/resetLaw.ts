@@ -1,6 +1,9 @@
 /** Reset-law bill displays use the frozen proposal price, including retained claims. */
-import type { ResetLawProvision } from "@/lib/db/types/legislation";
 import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
+import type { ResetLawProvision } from "@/lib/db/types/legislation";
+import { primaryMetricById } from "@/lib/resetMetrics/catalog";
+import profiles from "@/lib/resetLegislation/provisionalBalanceProfiles.json";
+import { reviewedLawMetricEffectDeltas } from "@/lib/resetLegislation/rules/provisionImpact";
 import type { ProvisionDisplay } from "./types";
 
 export function resolveResetLawProvision(provision: ResetLawProvision): ProvisionDisplay {
@@ -8,6 +11,18 @@ export function resolveResetLawProvision(provision: ResetLawProvision): Provisio
   // The reviewed allocation is only the new program. The snapshot delta also
   // accounts for source claims retained or superseded by this proposal.
   const proposedCost = currentCost + provision.annualAllocationDeltaSnapshot;
+  const profile = profiles.find((candidate) => candidate.familyId === provision.familyId);
+  const metricEffects = profile
+    ? reviewedLawMetricEffectDeltas({
+        currentChoice: provision.currentChoiceSnapshot,
+        primaryResponse: profile.primaryResponse,
+        proposedEffects: provision.primaryMetricEffectsSnapshot,
+      }).map((effect) => ({
+        metric: primaryMetricById(effect.metricId)?.name ?? `Metric ${effect.metricId}`,
+        favorableNormalizedDelta: effect.favorableNormalizedPoints,
+      }))
+    : [];
+
   return {
     legislationTypeName: provision.titleSnapshot,
     current: {
@@ -24,5 +39,6 @@ export function resolveResetLawProvision(provision: ResetLawProvision): Provisio
       netDelta: -provision.annualAllocationDeltaSnapshot,
       transitionCost: provision.reviewedOption.accruedTransitionLiability,
     },
+    metricEffects,
   };
 }
