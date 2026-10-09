@@ -16,10 +16,17 @@ export interface FundCommandAudit {
   fundSlug: string;
   fundTicker: string;
   currencyCode: CurrencyCode;
+  fundCurrency?: CurrencyCode;
   holderId: ObjectId;
+  holderKind?: "character" | "corporation";
   holderName: string;
   turn: number;
-  entries: Array<{ transactionId: ObjectId; amountNative: number; balanceAfter?: number }>;
+  entries: Array<{
+    transactionId: ObjectId;
+    amountNative: number;
+    anchorAmount?: number;
+    balanceAfter?: number;
+  }>;
 }
 
 interface AuditPlan {
@@ -56,8 +63,9 @@ export async function resumeFundCommandAudit(db: Db, key: string): Promise<void>
         .findOne({
           _id: entry.transactionId,
           fundId: audit.fundId,
-          characterId: audit.holderId,
-          holderKind: "character",
+          ...(audit.holderKind === "corporation"
+            ? { corporationId: audit.holderId, holderKind: "corporation" }
+            : { characterId: audit.holderId, holderKind: "character" }),
           kind: { $in: ["subscription", "redemption"] },
         });
       if (!transaction) throw new Error("Fund command audit witness is missing");
@@ -68,11 +76,11 @@ export async function resumeFundCommandAudit(db: Db, key: string): Promise<void>
         type: sign < 0 ? "index_fund_subscribe" : "index_fund_redeem",
         turn: audit.turn,
         createdAt: transaction.createdAt,
-        subjectType: "character",
+        subjectType: audit.holderKind ?? "character",
         subjectId: audit.holderId,
         subjectName: audit.holderName,
         amount: entry.amountNative,
-        anchorAmount: sign * transaction.amountAnchor,
+        anchorAmount: sign * (entry.anchorAmount ?? transaction.amountAnchor),
         balanceAfter: entry.balanceAfter,
         currencyCode: audit.currencyCode,
         counterpartyType: "system",
@@ -82,7 +90,7 @@ export async function resumeFundCommandAudit(db: Db, key: string): Promise<void>
           fundName: audit.fundName,
           fundSlug: audit.fundSlug,
           fundTicker: audit.fundTicker,
-          fundCurrency: audit.currencyCode,
+          fundCurrency: audit.fundCurrency ?? audit.currencyCode,
           units: transaction.units,
           navAnchor: transaction.navAnchor,
           source: "player",
@@ -119,7 +127,11 @@ export async function resumeFundCommandAudit(db: Db, key: string): Promise<void>
                 source: "system",
                 action: doc.type === "index_fund_subscribe" ? "fund.buy" : "fund.sell",
                 category: "money",
-                subject: { type: "character", id: audit.holderId, name: audit.holderName },
+                subject: {
+                  type: audit.holderKind ?? "character",
+                  id: audit.holderId,
+                  name: audit.holderName,
+                },
                 amount: doc.amount,
                 currencyCode: doc.currencyCode,
                 anchorAmount: doc.anchorAmount,

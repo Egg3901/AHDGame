@@ -675,6 +675,33 @@ export default function FinancialsTab({
                   note="at market price"
                 />
               )}
+              {(balanceSheet.assets.fundHoldingsValue ?? 0) > 0 && (
+                <StatementLine
+                  indent
+                  label="Index fund holdings"
+                  amount={fmt(balanceSheet.assets.fundHoldingsValue ?? 0)}
+                  note="at current fund NAV"
+                />
+              )}
+              {(balanceSheet.assets.heldFunds ?? []).map((holding) => (
+                <StatementLine
+                  key={holding.fundId}
+                  indent
+                  label={
+                    holding.slug ? (
+                      <Link
+                        href={`/stockmarket/global/fund/${holding.slug}`}
+                        className="text-primary hover:underline"
+                      >
+                        {holding.name}
+                      </Link>
+                    ) : (
+                      holding.name
+                    )
+                  }
+                  amount={`${holding.units.toLocaleString("en-US")} units`}
+                />
+              ))}
               {(balanceSheet.assets.imfFacilityReceivablesValue ?? 0) > 0 && (
                 <StatementLine
                   indent

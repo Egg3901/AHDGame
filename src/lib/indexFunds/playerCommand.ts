@@ -7,6 +7,7 @@ export interface FundCommandRequest {
   kind: "subscribe" | "redeem";
   units: number;
   payCurrency?: string;
+  corporationId?: string;
 }
 
 interface FundCommand extends Document {

@@ -1,4 +1,5 @@
 "use client";
+import { FundPagination, FUND_PAGE_SIZE } from "./FundPagination";
 
 import { useMemo, useState } from "react";
 import type { CurrencyCode } from "@/lib/constants/currencies";
@@ -42,6 +43,7 @@ export function ConstituentsPanel({
   formatPrice: (n: number, c?: CurrencyCode) => string;
   ccy: CurrencyCode;
 }) {
+  const [page, setPage] = useState(1);
   const [view, setView] = useState<View>("actual");
 
   // Compute totals + per-row weight for the donut and bar.
@@ -99,6 +101,12 @@ export function ConstituentsPanel({
       ? 0
       : Math.max(...sorted.map((r) => Math.max(r.weightActual, r.targetWeight)));
 
+  const visibleRows = sorted.filter((r) => (view === "actual" ? r.shares > 0 : r.targetWeight > 0));
+  const currentPage = Math.min(page, Math.max(1, Math.ceil(visibleRows.length / FUND_PAGE_SIZE)));
+  const pageRows = visibleRows.slice(
+    (currentPage - 1) * FUND_PAGE_SIZE,
+    currentPage * FUND_PAGE_SIZE
+  );
   const totalHoldingsLabel = formatAmount(totalHoldingsValue, ccy);
 
   return (
@@ -115,7 +123,10 @@ export function ConstituentsPanel({
             <button
               key={v.key}
               type="button"
-              onClick={() => setView(v.key)}
+              onClick={() => {
+                setView(v.key);
+                setPage(1);
+              }}
               className={`rounded-md border px-2.5 py-1 text-[11px] font-semibold transition-all ${
                 view === v.key
                   ? "border-primary/45 bg-primary/14 text-primary"
@@ -151,7 +162,8 @@ export function ConstituentsPanel({
       {/* Tables */}
       {view === "actual" ? (
         <ActualHoldings
-          rows={sorted}
+          rows={pageRows}
+          offset={(currentPage - 1) * FUND_PAGE_SIZE}
           totalHoldingsLabel={totalHoldingsLabel}
           colorFor={colorFor}
           maxWeight={maxWeight}
@@ -161,12 +173,14 @@ export function ConstituentsPanel({
         />
       ) : (
         <TargetHoldings
-          rows={sorted}
+          rows={pageRows}
+          offset={(currentPage - 1) * FUND_PAGE_SIZE}
           colorFor={colorFor}
           maxWeight={maxWeight}
           formatAmount={formatAmount}
         />
       )}
+      <FundPagination page={currentPage} total={visibleRows.length} onChange={setPage} />
     </div>
   );
 }
@@ -287,6 +301,7 @@ const VALUE_HELP =
 
 function ActualHoldings({
   rows,
+  offset,
   totalHoldingsLabel,
   colorFor,
   maxWeight,
@@ -295,6 +310,7 @@ function ActualHoldings({
   ccy,
 }: {
   rows: ActualRow[];
+  offset: number;
   totalHoldingsLabel: string;
   colorFor: (id: string) => string;
   maxWeight: number;
@@ -331,7 +347,7 @@ function ActualHoldings({
               <ActualDesktopRow
                 key={r.id}
                 r={r}
-                i={i}
+                i={i + offset}
                 colorFor={colorFor}
                 maxWeight={maxWeight}
                 formatAmount={formatAmount}
@@ -361,7 +377,7 @@ function ActualHoldings({
               <ActualMobileCard
                 key={r.id}
                 r={r}
-                i={i}
+                i={i + offset}
                 colorFor={colorFor}
                 maxWeight={maxWeight}
                 formatAmount={formatAmount}
@@ -520,11 +536,13 @@ type TargetRow = {
 
 function TargetHoldings({
   rows,
+  offset,
   colorFor,
   maxWeight,
   formatAmount,
 }: {
   rows: TargetRow[];
+  offset: number;
   colorFor: (id: string) => string;
   maxWeight: number;
   formatAmount: (n: number, c?: CurrencyCode) => string;
@@ -551,7 +569,7 @@ function TargetHoldings({
               <TargetDesktopRow
                 key={r.id}
                 r={r}
-                i={i}
+                i={i + offset}
                 colorFor={colorFor}
                 maxWeight={maxWeight}
                 formatAmount={formatAmount}
@@ -575,7 +593,7 @@ function TargetHoldings({
               <TargetMobileCard
                 key={r.id}
                 r={r}
-                i={i}
+                i={i + offset}
                 colorFor={colorFor}
                 maxWeight={maxWeight}
                 formatAmount={formatAmount}
