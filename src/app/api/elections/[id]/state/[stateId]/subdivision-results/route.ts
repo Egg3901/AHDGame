@@ -54,9 +54,23 @@ export async function GET(
       return errorResponse(404, "Subdivision data not available for this region");
     }
 
-    const tally = await db
-      .collection<ElectionVoteTally>("electionVoteTallies")
-      .findOne({ electionId: election._id });
+    // Projected: a presidential tally carries per-turn snapshots for every
+    // state and runs to megabytes; this route needs one state's slice. The map
+    // requests a state at a time as the reader zooms, so the full read made
+    // every county load crawl.
+    const tally = await db.collection<ElectionVoteTally>("electionVoteTallies").findOne(
+      { electionId: election._id },
+      {
+        projection: {
+          state: 1,
+          totalVotes: 1,
+          [`totalVotesByUnit.${regionId}`]: 1,
+          candidateNames: 1,
+          candidateParties: 1,
+          seatsEstimate: 1,
+        },
+      }
+    );
     if (!tally) return errorResponse(404, "No tally found");
     // Presidential tallies span all regions (aggregated below); everything else
     // must be the requested region's own tally — legacy county-results behavior.

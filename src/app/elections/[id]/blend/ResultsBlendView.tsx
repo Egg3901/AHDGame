@@ -7,6 +7,7 @@ import { BlendSection } from "@/components/blend/BlendShell";
 import type { ElectionDetail } from "../components/ElectionDetailTypes";
 import { PresidentialStage, presidentialTitle } from "./PresidentialStage";
 import { StageField, candidateLinks } from "./StageField";
+import { CollegeSnake } from "./presMap/CollegeSnake";
 import { PresidentialMap } from "./presMap/PresidentialMap";
 import { buildPresMapModel, presMapModelFromTiles } from "./presMap/presMapModel";
 import type { ElectionResultsResponse } from "@/lib/elections/liveResults/types";
@@ -28,6 +29,8 @@ export interface ResultsBlendViewProps {
   stageTitle?: string;
   /** Previous / next cycle links for the top of the stage's left rail. */
   stageNav?: React.ReactNode;
+  /** A state to open on arrival (`?state=OH`). */
+  initialFocus?: string | null;
 }
 
 function EvBar({ vm, height }: { vm: ResultsBlendVM; height: number }) {
@@ -201,7 +204,11 @@ export function ResultsBlendView({
   election,
   stageTitle = presidentialTitle(data.election.electionYear),
   stageNav,
+  initialFocus,
 }: ResultsBlendViewProps) {
+  const [focus, setFocus] = useState<{ stateId: string; nonce: number } | null>(
+    initialFocus ? { stateId: initialFocus, nonce: 0 } : null
+  );
   // The stage shows every section at once.
   const rail: ResultsRail = "overview";
   const [sortBy, setSortBy] = useState<StateSortKey>("ev");
@@ -418,7 +425,17 @@ export function ResultsBlendView({
               electionId={data.election.id}
               countryId={data.election.countryId}
               turn={null}
+              focusRequest={focus}
             />
+          }
+          strip={
+            data.election.countryId === "US" ? (
+              <CollegeSnake
+                model={mapModel}
+                threshold={vm.threshold}
+                onSelect={(stateId) => setFocus({ stateId, nonce: Date.now() })}
+              />
+            ) : null
           }
           squares={<TileBoard vm={vm} columns={11} />}
         />

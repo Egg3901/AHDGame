@@ -6,6 +6,7 @@ import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { resolveElectionRouteParam } from "@/lib/elections/electionParamResolution";
 import { loadPrimaryPartyData } from "@/lib/elections/primaryPartyDetail";
+import { cachedPartyData } from "@/lib/elections/primaryRegional/partyDataCache";
 import { loadSubdivisionFile } from "@/lib/maps/subdivisionData";
 import { distributePrimaryCounties } from "@/lib/elections/primaryRegional/rules";
 import { getGameStatePresetOrDefault } from "@/lib/db/collections/gameState";
@@ -59,14 +60,16 @@ export async function GET(request: Request, { params }: RouteParams) {
       return errorResponse(404, "County results are only available for US presidential primaries");
     }
 
-    const data = await loadPrimaryPartyData(db, {
-      election,
-      partyId: party.data,
-      viewer: {
-        userId: auth.user.userId,
-        activeCharacterId: auth.user.activeCharacterId ?? null,
-      },
-    });
+    const data = await cachedPartyData(String(election._id), party.data, () =>
+      loadPrimaryPartyData(db, {
+        election,
+        partyId: party.data,
+        viewer: {
+          userId: auth.user.userId,
+          activeCharacterId: auth.user.activeCharacterId ?? null,
+        },
+      })
+    );
     if (!data) return errorResponse(404, "Party not in this race");
 
     // Primary night: no county picture until the state has numbers to show.

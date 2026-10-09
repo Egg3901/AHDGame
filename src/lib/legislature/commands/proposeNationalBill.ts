@@ -693,21 +693,6 @@ export async function proposeNationalBill(
     if (usingSovereignOverride) {
       await enactSingleplayerDecree(db, { ...bill, _id: result.insertedId } as Bill);
     }
-    if (isUsCongress) {
-      try {
-        const { checkBillSponsoredAchievements } = await import("@/lib/achievements/triggers");
-        await checkBillSponsoredAchievements(new ObjectId(authUser.userId), character._id);
-      } catch (error) {
-        console.error(
-          JSON.stringify({
-            error: "achievement_check_failed",
-            operation: "bill_sponsored_achievement",
-            timestamp: new Date().toISOString(),
-            details: error instanceof Error ? error.message : "Unknown error",
-          })
-        );
-      }
-    }
     return {
       status: 201,
       body: {
@@ -735,8 +720,23 @@ export async function proposeNationalBill(
   }
 }
 
-/** Non-throwing: the first-bill achievement must never fail a proposal that already landed. */
+/**
+ * Non-throwing: the first-bill achievement must never fail a proposal that
+ * already landed (a throw here would reach the caller's catch and refund the
+ * sponsor's actions for a bill that exists).
+ */
 async function awardBillSponsored(userId: string, characterId: ObjectId): Promise<void> {
-  const { checkBillSponsoredAchievements } = await import("@/lib/achievements/triggers");
-  await checkBillSponsoredAchievements(new ObjectId(userId), characterId);
+  try {
+    const { checkBillSponsoredAchievements } = await import("@/lib/achievements/triggers");
+    await checkBillSponsoredAchievements(new ObjectId(userId), characterId);
+  } catch (error) {
+    console.error(
+      JSON.stringify({
+        error: "achievement_check_failed",
+        operation: "bill_sponsored_achievement",
+        timestamp: new Date().toISOString(),
+        details: error instanceof Error ? error.message : "Unknown error",
+      })
+    );
+  }
 }

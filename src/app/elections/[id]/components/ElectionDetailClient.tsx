@@ -473,6 +473,11 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
   // The presidential stage's left rail opens with the cycle navigation, the
   // reader's own action on the race, and the two guides. These used to sit in
   // the old page header below the stage, which the desktop no longer renders.
+  // `?state=OH` opens that state on the stage (the old per-state page
+  // redirects here). Only a plain state code is honoured.
+  const stateParam = searchParams.get("state")?.toUpperCase() ?? null;
+  const focusStateParam = stateParam && /^[A-Z]{2}$/.test(stateParam) ? stateParam : null;
+
   const stageRailTop = (
     <div>
       <ElectionNavigation election={election} showLiveLink={presidentialResultsLive(election)} />
@@ -591,6 +596,7 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
           election={election}
           stageTitle={presidentialTitle(electionYear)}
           stageNav={stageRailTop}
+          initialFocus={focusStateParam}
         />
 
         {desktopTail}
@@ -618,6 +624,7 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
           onRefresh={fetchElection}
           stageTitle={presidentialTitle(electionYear)}
           stageNav={stageRailTop}
+          initialFocus={focusStateParam}
         />
 
         {/* Everything the hero above does not already say. The college bar, the
@@ -646,6 +653,7 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
           wire={wire}
           stageTitle={presidentialTitle(electionYear)}
           stageNav={stageRailTop}
+          initialFocus={focusStateParam}
         />
 
         {desktopTail}

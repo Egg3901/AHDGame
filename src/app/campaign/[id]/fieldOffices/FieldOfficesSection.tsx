@@ -23,6 +23,8 @@ export interface FieldOfficesSectionProps {
   /** Called after an open or close so the war chest and actions refresh. */
   onChanged: () => void;
   variant?: "desktop" | "mobile";
+  /** Region to open first (`?region=OH` on the campaign page). */
+  initialRegion?: string | null;
 }
 
 type ColorMode = "lean" | "value";
@@ -98,9 +100,10 @@ export function FieldOfficesSection({
   campaignId,
   onChanged,
   variant = "desktop",
+  initialRegion = null,
 }: FieldOfficesSectionProps) {
   const mobile = variant === "mobile";
-  const [region, setRegion] = useState<string | null>(null);
+  const [region, setRegion] = useState<string | null>(initialRegion);
   const [view, setView] = useState<FieldOfficeView | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [mode, setMode] = useState<ColorMode>("lean");

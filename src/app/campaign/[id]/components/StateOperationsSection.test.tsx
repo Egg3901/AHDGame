@@ -4,7 +4,10 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { StateOperationsSection } from "./StateOperationsSection";
 import type { StateOperationsView } from "@/lib/elections/dto/stateOperations";
 
-vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ refresh: vi.fn() }),
+  useSearchParams: () => new URLSearchParams(),
+}));
 
 function view(over: Partial<StateOperationsView> = {}): StateOperationsView {
   return {
