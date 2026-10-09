@@ -53,6 +53,18 @@ describe("ticket intake context", () => {
     expect(result[0].path).toBe("/market");
     expect(JSON.stringify(result)).not.toContain("secret");
   });
+  it("prefers the reporter's game link over an inferred visit", () => {
+    expect(
+      buildIntakeQuestions(
+        "Button failed on https://ahousedividedgame.com/corporation/42?token=private",
+        [visit("/market")],
+        true
+      )[0]
+    ).toContain("/corporation/42>");
+    expect(
+      buildIntakeQuestions("https://evil.test/secret", [visit("/market")], true)[0]
+    ).not.toContain("evil.test");
+  });
   it("asks every reporter to confirm platform and never claims unknown versions", () => {
     expect(buildIntakeQuestions("moderation", [], false)).toHaveLength(1);
     expect(
