@@ -23,6 +23,52 @@
     },
     "supplyBoard": {
       "npp": "NPP"
+    },
+    "techTree": {
+      "track": {
+        "generic": "Konzernpfad",
+        "sector": "Branchenpfad"
+      },
+      "firstUnlockCommits": "Mit der ersten Technologie legst du dich für dieses Jahrzehnt auf einen Pfad fest.",
+      "futureDecadesLocked": "Dieselbe Wahl gilt auch für künftige Jahrzehnte.",
+      "baselineResearchGrant": "Abgeschlossene Jahrzehnte werden kostenlos als Grundforschung gewährt.",
+      "activeWindowBonuses": "Diese Jahrzehnte liefern aktive Technikeffekte.",
+      "olderDecadesInactive": "Ältere Jahrzehnte bleiben freigeschaltet, gewähren aber keine Boni mehr.",
+      "firstTrackConfirmation": "Dies ist deine erste Forschung im Jahrzehnt {decade}. Sie legt dich fest auf den",
+      "firstTrackConfirmationEnd": "Der andere Pfad bleibt gesperrt, bis du dieses Jahrzehnt aufgibst. Freigeschaltete Technologien werden entfernt; F&E und Geld werden nicht erstattet.",
+      "specializationConfirmation": "Dadurch werden die anderen Optionen dieser Gruppe für das Jahrzehnt gesperrt.",
+      "unlocking": "Wird freigeschaltet…",
+      "unlockTechnology": "Technologie freischalten",
+      "baselineResearch": "Grundforschung",
+      "abandonDecade": "Jahrzehnt aufgeben",
+      "completedBaseline": "Abgeschlossenes Jahrzehnt. Beide Pfade werden kostenlos als Grundforschung gewährt.",
+      "committedTrack": "Auf {track} festgelegt. Der andere Pfad bleibt gesperrt, bis du dieses Jahrzehnt aufgibst.",
+      "chooseTrack": "Wähle einen Pfad, indem du seine erste Technologie freischaltest. Dadurch wird der andere Pfad für dieses Jahrzehnt gesperrt.",
+      "decadeOpens": "Dieses Jahrzehnt beginnt, sobald das Spieljahr {year} erreicht.",
+      "trackSelected": "{track} ausgewählt",
+      "baselineAutoDetail": "Automatisch gewährt. Es wurden keine F&E-Punkte und kein Geld ausgegeben.",
+      "baselineNoCost": "Grundlage, kostenlos",
+      "owned": "Freigeschaltet",
+      "lockedByTrack": "Durch {track} gesperrt",
+      "specializationLocked": "Eine andere Spezialisierung wurde gewählt",
+      "availableFrom": "Verfügbar ab {decade}",
+      "unlockPrerequisite": "Zuerst {technology} freischalten",
+      "available": "Verfügbar",
+      "unlock": "Freischalten",
+      "needsRd": "{amount} weitere F&E-Punkte",
+      "needsCash": "{amount} mehr Geld",
+      "needs": "Benötigt {shortfalls}",
+      "and": " und ",
+      "notAvailable": "Nicht verfügbar",
+      "corporateEffect": "Verringerte Boni für alle Branchen",
+      "sectorEffect": "Volle Boni für diese Branche",
+      "ownedCount": "{owned}/{total} freigeschaltet",
+      "leftBranch": "Linker Zweig",
+      "rightBranch": "Rechter Zweig",
+      "specializationSelected": "Spezialisierung gewählt: {name}",
+      "specializationChoice": "Spezialisierung wählen",
+      "allSpecializationsBaseline": "Die Grundforschung abgeschlossener Jahrzehnte umfasst alle Spezialisierungen.",
+      "chooseSpecialization": "Wähle eine. Die anderen werden für dieses Jahrzehnt gesperrt. Jeder Abschluss folgt seiner eigenen Wahl."
     }
   }
 }

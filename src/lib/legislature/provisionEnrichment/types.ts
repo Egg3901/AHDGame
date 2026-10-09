@@ -27,6 +27,12 @@ export interface ProvisionFiscal {
   revenueDelta?: number;
 }
 
+export interface ProvisionMetricEffect {
+  metric: string;
+  /** Proposed minus current favorable modeled pressure. */
+  favorableNormalizedDelta: number;
+}
+
 /**
  * Which budget and fiscal base a provision resolves against.
  *
@@ -73,6 +79,8 @@ export interface ProvisionDisplay {
   social?: number;
 
   fiscal?: ProvisionFiscal;
+  /** Reviewed-law proposal-time metric comparison. */
+  metricEffects?: ProvisionMetricEffect[];
   annualCostPerCapita?: number | null;
   gdpPerCapitaMultiplier?: number | null;
 

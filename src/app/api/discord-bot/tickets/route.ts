@@ -350,7 +350,7 @@ export async function POST(request: Request) {
         ...buildIntakeQuestions(
           `${body.title}\n${body.description}`,
           visits,
-          contextRequest.needed.includes("page")
+          contextRequest.needed.includes("page") || body.category === "bug"
         ),
       ],
     });
