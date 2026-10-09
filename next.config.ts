@@ -246,14 +246,16 @@ const nextConfig: NextConfig = {
           // allowlist origins). 'self' keeps same-origin framing working: the
           // Political Operations dashboard frames the same-origin
           // /campaign/[id] page in its Campaign Manager tab. *.itch.io (the game
-          // page) and *.hwcdn.net (itch.io's CDN that serves the uploaded
-          // index.html inside an iframe) are allowlisted for the official
-          // itch.io embed. Every other origin is still blocked from framing.
+          // page), *.itch.zone (itch.io's HTML game host, whose wrapper page is
+          // the direct parent of the game iframe) and *.hwcdn.net (itch.io's
+          // file CDN) are allowlisted for the official itch.io embed. Every
+          // other origin is still blocked from framing.
           // Only frame-ancestors is enforced here; the report-only policy below
           // is unchanged.
           {
             key: "Content-Security-Policy",
-            value: "frame-ancestors 'self' https://*.itch.io https://*.hwcdn.net",
+            value:
+              "frame-ancestors 'self' https://*.itch.io https://*.itch.zone https://*.hwcdn.net",
           },
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
           { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
