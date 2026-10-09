@@ -8,6 +8,7 @@ import { advanceOutputGap } from "@/lib/metricEngine/outputGap";
 import { compoundGdpLevel } from "@/lib/metricEngine/gdpLevel";
 import { runMetricEngine } from "@/lib/metricEngine/phase";
 import { growthHalfStepForRegion, runGrowthHalfStep } from "./growthHalfStep";
+import { rewindHalfTick } from "./rewindHalfTick";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 
@@ -213,22 +214,21 @@ describe("growth half step and the turn", () => {
 
     const memory = seedTick();
     await runGrowthHalfStep(memory as unknown as Db, TURN, new Date());
+    // The tick really moved what the engine reads.
+    expect((await memory.collection("states").findOne({ _id: "s1" }))?.gdp).not.toBe(1000);
+    // Turn start: every stamped value goes back to the start of the hour.
+    const rewound = await rewindHalfTick(memory as unknown as Db, TURN);
+    expect(rewound.rewound.states).toBe(2);
     const tickedStates = (await memory.collection("states").find({}).toArray()) as Doc[];
     const tickedMetrics = (await memory.collection("macroMetrics").find({}).toArray()) as Doc[];
-    // The tick really moved what the engine reads.
-    expect(tickedStates.find((s) => s._id === "s1")?.gdp).not.toBe(1000);
+    expect(tickedStates.every((s) => s.subhourStep === undefined)).toBe(true);
+    const budget = (await memory.collection("federalBudget").findOne({ _id: "federal" })) as Doc;
+    expect(budget.subhourStep).toBeUndefined();
     const ticked = await runEngine(clone(tickedStates), clone(tickedMetrics));
 
     expect(control.stateOps.length).toBe(2);
     expect(comparable(ticked.stateOps)).toEqual(comparable(control.stateOps));
     expect(comparable(ticked.metricOps)).toEqual(comparable(control.metricOps));
-    // The spent start values are cleared only on the stamped documents.
-    for (const op of ticked.stateOps) {
-      expect(op.updateOne.update.$unset?.["subhourBase.growth"]).toBe("");
-    }
-    for (const op of [...control.stateOps, ...control.metricOps]) {
-      expect(op.updateOne.update.$unset?.["subhourBase.growth"]).toBeUndefined();
-    }
   });
 
   it("ignores a stamp left by an earlier hour", async () => {

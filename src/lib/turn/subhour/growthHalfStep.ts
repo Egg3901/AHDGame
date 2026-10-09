@@ -8,7 +8,12 @@ import { advanceOutputGap } from "@/lib/metricEngine/outputGap";
 import { compoundGdpLevel } from "@/lib/metricEngine/gdpLevel";
 import { gdpWeightedGrowth, resolvePipelineGdpGrowth } from "@/lib/country/nationalGdpGrowth";
 import { getRegisteredCountryIdSet } from "@/lib/country/registeredCountries";
-import { HALF_TICK_FRACTION, subhourStepStamp } from "./stepFraction";
+import {
+  HALF_TICK_FRACTION,
+  hasSubhourStep,
+  subhourStepStamp,
+  type SubhourStepStamp,
+} from "./stepFraction";
 import {
   activeSubhourBase,
   type SubhourGrowthMetricBase,
@@ -114,7 +119,11 @@ export async function runGrowthHalfStep(
     db
       .collection<FederalBudget>("federalBudget")
       .find({})
-      .project<Pick<FederalBudget, "_id" | "countryId">>({ countryId: 1 })
+      .project<Pick<FederalBudget, "_id" | "countryId" | "economicFactors" | "subhourStep">>({
+        countryId: 1,
+        "economicFactors.gdpGrowth": 1,
+        subhourStep: 1,
+      })
       .toArray(),
     getRegisteredCountryIdSet(db),
   ]);
@@ -185,8 +194,19 @@ export async function runGrowthHalfStep(
     rows.push({ growth, gdp });
   }
 
-  // National docs are pure rollups of their regions; the turn recomputes them
-  // from scratch, so they carry the stamp but no start values.
+  // National docs are rollups of their regions. They carry start values too:
+  // turn phases that run before the national rollup read them, and the turn
+  // rewinds every stamped field before it starts (rewindHalfTick.ts).
+  // A retried tick must keep the first run's start value, never record its
+  // own half-way value as the start.
+  const growthBase = (
+    doc: { subhourStep?: SubhourStepStamp } | undefined,
+    base: unknown,
+    written: number
+  ) =>
+    finite(base) && !hasSubhourStep(doc?.subhourStep, turn)
+      ? { "subhourBase.growth": { turn, gdpGrowth: { base, written } } }
+      : {};
   const nationalGrowth = new Map<string, number>();
   for (const [nationalId, countryId] of Object.entries(NATIONAL_SCOPE)) {
     if (!metricsById.has(nationalId)) continue;
@@ -197,7 +217,17 @@ export async function runGrowthHalfStep(
     metricOps.push({
       updateOne: {
         filter: { _id: nationalId },
-        update: { $set: { "economic.gdpGrowth.value": value, subhourStep: stamp } as never },
+        update: {
+          $set: {
+            "economic.gdpGrowth.value": value,
+            subhourStep: stamp,
+            ...growthBase(
+              metricsById.get(nationalId),
+              metricsById.get(nationalId)?.economic?.gdpGrowth?.value,
+              value
+            ),
+          } as never,
+        },
       },
     });
   }
@@ -218,7 +248,13 @@ export async function runGrowthHalfStep(
     budgetOps.push({
       updateOne: {
         filter: { _id: budget._id },
-        update: { $set: { "economicFactors.gdpGrowth": gdpGrowth, subhourStep: stamp } },
+        update: {
+          $set: {
+            "economicFactors.gdpGrowth": gdpGrowth,
+            subhourStep: stamp,
+            ...growthBase(budget, budget.economicFactors?.gdpGrowth, gdpGrowth),
+          },
+        },
       },
     });
   }

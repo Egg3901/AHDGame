@@ -4,6 +4,7 @@ import type { CurrencyCode, CurrencyCyclePressureRegime } from "@/lib/constants/
 import type { MonetaryRegime } from "@/lib/monetary/brettonWoods";
 import type { TurnSnapshot } from "./centralBank";
 import type { SubhourStepStamp } from "@/lib/turn/subhour/stepFraction";
+import type { SubhourForexBase } from "@/lib/turn/subhour/stepBase";
 
 /** One row in the recent-interventions audit log (ring buffer, last 24 turns). */
 export interface InterventionRecord {
@@ -104,10 +105,12 @@ export interface ExchangeRate {
   goldCover?: number;
   /**
    * Set by the :30 half tick in the same update as `rate`: the coming turn
-   * whose rate step was partly applied ahead of time. That turn applies only
-   * the remainder (see src/lib/turn/subhour/stepFraction.ts). Absent or
-   * stamped for another turn = the turn applies the full step.
+   * whose rate step was partly applied ahead of time. The turn rewinds the
+   * row to `subhourBase.forex` before it runs, then takes the full step
+   * (src/lib/turn/subhour/rewindHalfTick.ts).
    */
   subhourStep?: SubhourStepStamp;
+  /** Start-of-hour values the :30 half step overwrote. */
+  subhourBase?: { forex?: SubhourForexBase };
   updatedAt: Date;
 }

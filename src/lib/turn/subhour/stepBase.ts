@@ -37,7 +37,17 @@ export interface SubhourGrowthStateBase {
   outputGap: SubhourBaseValue;
 }
 
-/** Regional macroMetrics: the growth half step's displayed-rate start value. */
+/** exchangeRates: the forex half step's start values. */
+export interface SubhourForexBase {
+  turn: number;
+  rate: SubhourBaseValue;
+  macroTarget?: SubhourBaseValue;
+}
+
+/**
+ * macroMetrics (regional and national) and federalBudget: the growth half
+ * step's displayed-rate start value.
+ */
 export interface SubhourGrowthMetricBase {
   turn: number;
   gdpGrowth: SubhourBaseValue;

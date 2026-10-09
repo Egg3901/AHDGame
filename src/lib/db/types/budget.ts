@@ -2,7 +2,7 @@ import type { ObjectId } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
 import type { EconomicSystemTarget, JurisdictionMode, LawImplementationMode } from "./legislation";
 import type { SubhourStepStamp } from "@/lib/turn/subhour/stepFraction";
-import type { SubhourInflationBase } from "@/lib/turn/subhour/stepBase";
+import type { SubhourGrowthMetricBase, SubhourInflationBase } from "@/lib/turn/subhour/stepBase";
 
 export type CreditRating = "AAA" | "AA" | "A" | "BBB" | "BB" | "B" | "CCC";
 export type BudgetDocumentId = "federal" | "UK" | string;
@@ -553,7 +553,7 @@ export interface FederalBudget {
   /** The :30 half tick's stamp (turn/subhour/stepFraction.ts). */
   subhourStep?: SubhourStepStamp;
   /** Start-of-hour values the :30 half tick overwrote (turn/subhour/stepBase.ts). */
-  subhourBase?: { inflation?: SubhourInflationBase };
+  subhourBase?: { inflation?: SubhourInflationBase; growth?: SubhourGrowthMetricBase };
   _id: BudgetDocumentId;
   countryId: string;
   fiscalYear: number;

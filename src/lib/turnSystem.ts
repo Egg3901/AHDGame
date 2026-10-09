@@ -1,3 +1,4 @@
+import { rewindHalfTick } from "@/lib/turn/subhour/rewindHalfTick";
 import {
   withServerTurnAnalytics,
   markServerTurnAnalyticsCommitted,
@@ -557,6 +558,20 @@ async function processTurnImpl(
         },
       }
     );
+
+    // The :30 half tick moved growth, inflation and exchange rates ahead of
+    // this turn for display and trading. Put them back to the start of the
+    // hour so every phase reads the world it would have read without the tick
+    // and the hour's step lands exactly as before (subhour/rewindHalfTick.ts).
+    // A failure is not fatal: the rewind is idempotent and a stamped value
+    // left in place only means that document moves half a step further.
+    try {
+      await withPhaseProfiling("halfTickRewind", () => rewindHalfTick(db, nextTurnNumber));
+    } catch (error) {
+      warnings.push(
+        `Half-hour tick rewind failed: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
 
     // Bracketed so its reads are attributable: turn setup runs before the
     // first phase, and was the largest single bucket in the round-trip profile

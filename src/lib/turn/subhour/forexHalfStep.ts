@@ -68,6 +68,8 @@ export type ForexHalfStepRow = Pick<
 export interface ForexHalfStepWrite {
   countryId: string;
   prevRate: number;
+  /** Stored macro target before the step; the turn rewinds to it. */
+  prevMacroTarget?: number;
   rate: number;
   macroTarget: number;
   /** Set when this row copies an anchor quote computed in the same run. */
@@ -174,6 +176,7 @@ export function planForexHalfStep(input: ForexHalfStepInputs): ForexHalfStepPlan
       writes.push({
         countryId,
         prevRate: row.rate,
+        prevMacroTarget: row.macroTarget,
         rate: pegRate,
         macroTarget: euroAnchorMacroTarget ?? pegRate,
         ...(anchorCountryId ? { followsAnchor: anchorCountryId } : {}),
@@ -224,6 +227,7 @@ export function planForexHalfStep(input: ForexHalfStepInputs): ForexHalfStepPlan
     writes.push({
       countryId,
       prevRate: row.rate,
+      prevMacroTarget: row.macroTarget,
       rate: update.rate,
       macroTarget: update.macroTarget,
     });
@@ -257,6 +261,7 @@ export function planForexHalfStep(input: ForexHalfStepInputs): ForexHalfStepPlan
       writes.push({
         countryId: member.countryId,
         prevRate: row.rate,
+        prevMacroTarget: row.macroTarget,
         rate,
         macroTarget: rate,
         ...(anchorCountryId ? { followsAnchor: anchorCountryId } : {}),
@@ -288,6 +293,15 @@ function writeOp(
           rate: write.rate,
           macroTarget: write.macroTarget,
           subhourStep: subhourStepStamp(turn, fraction),
+          // Start-of-hour values: the turn rewinds to them before it runs
+          // (rewindHalfTick.ts) and then takes the hour's full step.
+          "subhourBase.forex": {
+            turn,
+            rate: { base: write.prevRate, written: write.rate },
+            ...(typeof write.prevMacroTarget === "number" && Number.isFinite(write.prevMacroTarget)
+              ? { macroTarget: { base: write.prevMacroTarget, written: write.macroTarget } }
+              : {}),
+          },
           updatedAt: now,
         },
       },
@@ -299,6 +313,7 @@ const ROW_PROJECTION = {
   countryId: 1,
   currencyCode: 1,
   rate: 1,
+  macroTarget: 1,
   baseRate: 1,
   hardPeg: 1,
   cyclePressureRegime: 1,

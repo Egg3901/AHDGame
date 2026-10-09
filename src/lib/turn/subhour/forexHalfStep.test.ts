@@ -8,6 +8,7 @@ import type { EuroMonetaryUnion } from "@/lib/currency/euro/rules";
 import type { CentralBank } from "@/lib/db/types/centralBank";
 import { processForexTurn } from "@/lib/turn/forexTurn";
 import { planForexHalfStep, runForexHalfStep, type ForexHalfStepRow } from "./forexHalfStep";
+import { restoreMultiplicative } from "./stepBase";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 
@@ -219,18 +220,28 @@ describe("forex half step: composition with the turn", () => {
     // The half moved the rate part of the way.
     expect(half.UK).not.toBe(0.82);
 
-    vi.mocked(rateCalculation.computeFractionalRateUpdate).mockClear();
-    const stamp = { subhourStep: { turn: TURN, fraction: 0.5 } };
-    await runTurn(
-      baseRows({
-        US: { ...stamp, rate: half.US },
-        UK: { ...stamp, rate: half.UK },
-        JP: { ...stamp, rate: half.JP },
-      })
-    );
-    expect(rateCalculation.computeFractionalRateUpdate).toHaveBeenCalledTimes(3);
+    // The :30 value sits part of the way from the start toward the hour's step.
     for (const id of ["US", "UK", "JP"] as const) {
-      expect(turnSet(id).rate as number).toBeCloseTo(full[id] as number, 12);
+      const start = planRows(baseRows()).find((r) => r.countryId === id)?.rate as number;
+      const lo = Math.min(start, full[id] as number);
+      const hi = Math.max(start, full[id] as number);
+      expect(half[id]).toBeGreaterThanOrEqual(lo);
+      expect(half[id]).toBeLessThanOrEqual(hi);
+    }
+
+    // Turn start rewinds each stamped row to its stored start value
+    // (rewindHalfTick.ts), so the turn takes exactly the plain hourly step.
+    vi.mocked(rateCalculation.computeFractionalRateUpdate).mockClear();
+    const rewound = Object.fromEntries(
+      plan.writes.map((w) => [
+        w.countryId,
+        { rate: restoreMultiplicative(w.rate, { base: w.prevRate, written: w.rate }) },
+      ])
+    );
+    await runTurn(baseRows(rewound));
+    expect(rateCalculation.computeFractionalRateUpdate).not.toHaveBeenCalled();
+    for (const id of ["US", "UK", "JP"] as const) {
+      expect(turnSet(id).rate as number).toBe(full[id] as number);
     }
     // Hourly bookkeeping is untouched by the split: one history point per turn.
     expect(turnSet("UK").rateHistory).toEqual([
@@ -371,9 +382,13 @@ describe("runForexHalfStep", () => {
       "subhourStep.turn": { $ne: TURN },
     });
     expect(Object.keys(uk.update.$set).sort()).toEqual(
-      ["macroTarget", "rate", "subhourStep", "updatedAt"].sort()
+      ["macroTarget", "rate", "subhourStep", "subhourBase.forex", "updatedAt"].sort()
     );
     expect(uk.update.$set.subhourStep).toEqual({ turn: TURN, fraction: 0.5 });
+    expect(uk.update.$set["subhourBase.forex"]).toMatchObject({
+      turn: TURN,
+      rate: { base: 0.82, written: uk.update.$set.rate },
+    });
     expect(stats).toMatchObject({ written: 3, casSkipped: 0 });
 
     // No intervention spend, no limit-order work, one projected read each.

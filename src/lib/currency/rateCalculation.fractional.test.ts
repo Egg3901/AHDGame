@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   computeFractionalRateUpdate,
   computeRateUpdate,
@@ -122,6 +122,14 @@ describe("computeFractionalRateUpdate", () => {
   });
 
   it("keeps hourly noise variance: two half-hour draws add up to one hourly draw", () => {
+    // Seeded draws: a statistical bound on unseeded Math.random fails now and then.
+    let seed = 0x2545f491;
+    const random = vi.spyOn(Math, "random").mockImplementation(() => {
+      seed ^= seed << 13;
+      seed ^= seed >>> 17;
+      seed ^= seed << 5;
+      return (seed >>> 0) / 4294967296;
+    });
     const samples = 20_000;
     const jitter = (fraction: number) => {
       const quiet = computeFractionalRateUpdate(0.8, 0.75, "UK", macro, volumes, fraction, 0);
@@ -141,5 +149,6 @@ describe("computeFractionalRateUpdate", () => {
     expect(hourly).toBeCloseTo(0.004 ** 2 / 3, 7);
     expect((2 * half) / hourly).toBeGreaterThan(0.95);
     expect((2 * half) / hourly).toBeLessThan(1.05);
+    random.mockRestore();
   });
 });

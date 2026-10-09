@@ -71,11 +71,6 @@ import type {
   ConflictCapacityObligation,
 } from "@/lib/db/types/conflictCapacity";
 import { METRIC_REGISTRY_SORTED } from "./registry";
-import {
-  activeSubhourBase,
-  restoreAdditive,
-  restoreMultiplicative,
-} from "@/lib/turn/subhour/stepBase";
 import type { SectorRevenueTaxPayload } from "./registry/economic";
 import type { NodeId } from "./types";
 import type { EconomicModelState } from "@/lib/constants/economicModels";
@@ -211,8 +206,6 @@ function readMetricPath(
 
 interface PrevMetricsDoc {
   _id: string;
-  subhourStep?: StateMetrics["subhourStep"];
-  subhourBase?: StateMetrics["subhourBase"];
   livingConflictExposure?: CrisisEconomicExposure;
   /** §6.1 (P7b): the region's LAGGED economic model, for sector GDP concentration. */
   economicModel?: EconomicModelState;
@@ -298,9 +291,6 @@ export async function runMetricEngine(db: Db, turn: number): Promise<number> {
     "economic.laborForce.value": 1,
     "economic.labourTightness.value": 1,
     "economic.labourParticipationDemandBonus.value": 1,
-    // The :30 growth half step's stamp and start values (rewound below).
-    subhourStep: 1,
-    "subhourBase.growth": 1,
     // Generic nodes (P2+): prev value/simBaseline + external seed/lagged reads,
     // derived from the registry at module load.
     ...GENERIC_PROJECTION,
@@ -377,26 +367,6 @@ export async function runMetricEngine(db: Db, turn: number): Promise<number> {
     // Destroyed conflict capital and its funded repair, folded into the stock below.
     loadRepairingCapacityObligations(db, turn),
   ]);
-  // The :30 half tick moved some regions' GDP, output gap and growth rate half
-  // a turn. Restore their start-of-hour values before anything reads them, so
-  // this turn takes the full hour's step from the same place it would have
-  // without the tick (turn/subhour/stepBase.ts). Unstamped regions are untouched.
-  const rewoundStates = new Set<string>();
-  for (const state of allStates) {
-    const start = activeSubhourBase(state.subhourStep, state.subhourBase?.growth, turn);
-    if (!start) continue;
-    state.gdp = restoreMultiplicative(state.gdp, start.gdp);
-    state.outputGap = restoreAdditive(state.outputGap, start.outputGap);
-    rewoundStates.add(state._id);
-  }
-  const rewoundMetrics = new Set<string>();
-  for (const m of prevMetrics) {
-    const start = activeSubhourBase(m.subhourStep, m.subhourBase?.growth, turn);
-    if (!start || !m.economic?.gdpGrowth) continue;
-    m.economic.gdpGrowth.value = restoreAdditive(m.economic.gdpGrowth.value, start.gdpGrowth);
-    rewoundMetrics.add(m._id);
-  }
-
   const capacityByRegion = new Map<string, ConflictCapacityObligation[]>();
   for (const obligation of capacityObligations) {
     const list = capacityByRegion.get(obligation.regionId) ?? [];
@@ -512,10 +482,7 @@ export async function runMetricEngine(db: Db, turn: number): Promise<number> {
 
   const now = new Date();
   const macroOps: Array<{
-    updateOne: {
-      filter: { _id: string };
-      update: { $set: Record<string, number | Date>; $unset?: Record<string, ""> };
-    };
+    updateOne: { filter: { _id: string }; update: { $set: Record<string, number | Date> } };
   }> = [];
   // GDP-level stock writes to the `states` collection (SSOT — design §5.4). The
   // engine compounds state.gdp each turn by the region's freshly-computed
@@ -1081,14 +1048,7 @@ export async function runMetricEngine(db: Db, turn: number): Promise<number> {
           macroSet[`livingConflictExposure.${key}`] = value;
       }
       macroSet.lastUpdated = now;
-      macroOps.push({
-        updateOne: {
-          filter: { _id: state._id },
-          update: rewoundMetrics.has(state._id)
-            ? { $set: macroSet, $unset: { "subhourBase.growth": "" } }
-            : { $set: macroSet },
-        },
-      });
+      macroOps.push({ updateOne: { filter: { _id: state._id }, update: { $set: macroSet } } });
     }
 
     // Compound the region's GDP LEVEL by the INTEGRATED gdpGrowth this turn (exact
@@ -1168,14 +1128,9 @@ export async function runMetricEngine(db: Db, turn: number): Promise<number> {
                         sectorRevenueSnapshots: "" as const,
                       }
                     : {}),
-                  // The :30 half step's start values are spent once the hour's
-                  // step lands; a retried turn then steps like an untouched one.
-                  ...(rewoundStates.has(state._id) ? { "subhourBase.growth": "" as const } : {}),
                 },
               }
-            : rewoundStates.has(state._id)
-              ? { $unset: { "subhourBase.growth": "" as const } }
-              : {}),
+            : {}),
         },
       },
     });
