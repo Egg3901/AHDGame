@@ -272,8 +272,8 @@ export interface AvailableStrategy {
 
 export interface StrategyData {
   currentStrategyId: string;
-  /** Strategy catalog the sector runs (vehicles resolve to automobiles). */
-  operatingSectorType?: CorporationType;
+  /** Strategy catalog the sector runs (vehicles resolve to their operating lane). */
+  operatingSectorType?: OperatingSectorType;
   /** Whether media operating-model strategies are offered in this world. */
   mediaOperatingModelsEnabled?: boolean;
   currentStrategyName: string;
