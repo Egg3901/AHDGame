@@ -51,6 +51,14 @@ describe("runHalfHourTick", () => {
     expect(result).toMatchObject({ turn: 57, electionTurn: 57, market: { turn: 56 } });
   });
 
+  it("still refreshes macro and markets when election accumulation fails", async () => {
+    election.mockRejectedValueOnce(new Error("tally revision conflict"));
+    const result = await runHalfHourTick(now, dbWith({ currentTurn: 56, isActive: true }));
+    expect(result?.electionTurn).toBeNull();
+    expect(result?.steps.elections).toEqual({ error: "tally revision conflict" });
+    expect(calls).toEqual(["growth", "inflation", "forex", "market"]);
+  });
+
   it("keeps going when one macro step fails; the turn absorbs it", async () => {
     inflation.mockRejectedValueOnce(new Error("boom"));
     const result = await runHalfHourTick(now, dbWith({ currentTurn: 56, isActive: true }));

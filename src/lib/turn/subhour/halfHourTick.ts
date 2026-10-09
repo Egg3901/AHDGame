@@ -44,8 +44,14 @@ export async function runHalfHourTick(
   if (!state?.isActive || state.isProcessing || state.fastMode) return null;
   const turn = state.currentTurn + 1;
 
-  const electionTurn = await runElectionHalfTick(now);
   const steps: HalfHourTickResult["steps"] = {};
+  let electionTurn: number | null = null;
+  try {
+    electionTurn = await runElectionHalfTick(now);
+  } catch (error) {
+    steps.elections = { error: error instanceof Error ? error.message : String(error) };
+    Sentry.captureException(error, { tags: { component: "cron", job: "halfTick:elections" } });
+  }
   const macro: [string, (db: Db, turn: number, now: Date) => Promise<Record<string, unknown>>][] = [
     ["growth", runGrowthHalfStep],
     ["inflation", runInflationHalfStep],

@@ -4,7 +4,6 @@ import type { GameState } from "@/lib/db/types/gameState";
 import { applyPriceMultipliers } from "@/lib/corporations/applyPriceMultipliers";
 import { recomputeSharePricesAfterBondTurn } from "@/lib/turn/corporation/recomputeSharePrices";
 import { generateStockExchangeSnapshots } from "@/lib/turn/stockExchangeSnapshot";
-import { getProcessingLockState } from "@/lib/turn/processingLock";
 import { runInAuditContext } from "@/lib/observability/context";
 
 export interface MarketTickResult {
@@ -54,10 +53,9 @@ export async function runMarketTick(
     }
   );
   if (!state?.isActive) return null;
-  // A stale lock means no turn is really in flight (the process died
-  // mid-turn); keep markets moving. Observed 2026-05-24: the refresh skipped
-  // for hours on a stuck flag.
-  if (state.isProcessing && !getProcessingLockState(state, now).isStale) return null;
+  // A stale heartbeat does not prove the previous writer has stopped.
+  // Lock recovery belongs to the turn processor.
+  if (state.isProcessing) return null;
 
   const turn = state.currentTurn;
   return runInAuditContext(`market-tick:${turn}:${now.toISOString()}`, async () => {

@@ -66,14 +66,14 @@ describe("runMarketTick", () => {
     expect(recompute).not.toHaveBeenCalled();
   });
 
-  it("keeps markets moving under a stale lock (a turn died mid-process)", async () => {
+  it("skips a stale lock until the turn processor resolves it", async () => {
     const { db } = fakeDb({
       currentTurn: 56,
       isActive: true,
       isProcessing: true,
       processingHeartbeatAt: new Date(now.getTime() - 60 * 60_000),
     });
-    expect(await runMarketTick(now, db)).not.toBeNull();
-    expect(recompute).toHaveBeenCalled();
+    expect(await runMarketTick(now, db)).toBeNull();
+    expect(recompute).not.toHaveBeenCalled();
   });
 });
