@@ -234,6 +234,11 @@ export async function runReconcile(
     if (u.supporterProvider === "stripe") {
       continue;
     }
+    // Referral contest Supporter lasts one iteration with no end date; the
+    // next contest award ends it, never a Patreon lapse.
+    if (u.supporterProvider === "contest") {
+      continue;
+    }
 
     // Positively match this supporter to a Patreon record.
     const rec = u.patreonUserId ? byPatreonUserId.get(u.patreonUserId) : undefined;
