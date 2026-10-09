@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { TurnStatusLink } from "./TurnStatusLink";
 
 const QUARTER_MS = 15 * 60_000;
 
@@ -15,18 +16,34 @@ export function nextQuarterAt(nowMs: number): number {
   return (Math.floor(nowMs / QUARTER_MS) + 1) * QUARTER_MS;
 }
 
+/** Past this, the quarter-hour ticks are not landing and a countdown would mislead. */
+const STALE_AFTER_MINUTES = 20;
+
+/** Whole minutes until the next quarter-hour price refresh, at least 1. */
+export function minutesUntilNextRefresh(nowMs: number): number {
+  return Math.max(1, Math.ceil((nextQuarterAt(nowMs) - nowMs) / 60_000));
+}
+
 /**
- * Status bar note: when stock prices last updated. Prices re-price every 15
- * minutes (the turn at :00, market ticks at :15/:30/:45). Both paths publish
- * a wall-clock completion marker; lastTurnProcessed belongs to the game clock.
+ * Status bar note for the price refresh, which is separate from the turn:
+ * stock prices refresh every 15 minutes (the turn at :00, market ticks at
+ * :15/:30/:45). Counts down like the turn timer beside it. If no refresh has
+ * landed for a while it says how old prices are instead. Both paths publish a
+ * wall-clock marker; lastTurnProcessed belongs to the game clock.
  */
-export function MarketTickNote({ lastMarketTickAt }: { lastMarketTickAt?: string | null }) {
+export function MarketTickNote({
+  lastMarketTickAt,
+  statusLink = false,
+}: {
+  lastMarketTickAt?: string | null;
+  statusLink?: boolean;
+}) {
   const [nowMs, setNowMs] = useState<number | null>(null);
-  // Clock read after mount and every 30 s keeps SSR deterministic.
+  // Clock read after mount and every 15 s keeps SSR deterministic.
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     setNowMs(Date.now());
-    const id = setInterval(() => setNowMs(Date.now()), 30_000);
+    const id = setInterval(() => setNowMs(Date.now()), 15_000);
     return () => clearInterval(id);
   }, []);
   /* eslint-enable react-hooks/set-state-in-effect */
@@ -34,25 +51,47 @@ export function MarketTickNote({ lastMarketTickAt }: { lastMarketTickAt?: string
   const parsed = lastMarketTickAt ? new Date(lastMarketTickAt).getTime() : Number.NaN;
   const lastMs = Number.isFinite(parsed) ? parsed : null;
   if (nowMs === null || lastMs === null) return null;
-  const minutes = minutesSince(lastMs, nowMs) ?? 0;
-  const ago = minutes < 1 ? "just now" : `${minutes}m ago`;
-  const nextIn = Math.max(1, Math.ceil((nextQuarterAt(nowMs) - nowMs) / 60_000));
+  const ago = minutesSince(lastMs, nowMs) ?? 0;
+  const agoText = ago < 1 ? "just now" : `${ago} min ago`;
+  const nextIn = minutesUntilNextRefresh(nowMs);
+  const stale = ago > STALE_AFTER_MINUTES;
   return (
-    <span
+    <TurnStatusLink
+      enabled={statusLink}
       className="inline-flex shrink-0 items-center gap-1 text-[11px] text-muted sm:text-xs"
-      title={`Stock prices update every 15 minutes. Next update in ${nextIn} min.`}
     >
-      <svg
-        className="h-3 w-3 shrink-0"
-        fill="none"
-        viewBox="0 0 24 24"
-        stroke="currentColor"
-        aria-hidden="true"
+      <span
+        className="inline-flex items-center gap-1"
+        title={`Stock prices refresh every 15 minutes, between turns too. Last refresh ${agoText}.`}
       >
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 17l6-6 4 4 8-8" />
-      </svg>
-      <span className="hidden sm:inline">Markets {ago}</span>
-      <span className="sm:hidden tabular-nums">{minutes < 1 ? "now" : `${minutes}m`}</span>
-    </span>
+        <svg
+          className="h-3 w-3 shrink-0"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+          aria-hidden="true"
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
+            d="M3 17l6-6 4 4 8-8"
+          />
+        </svg>
+        {stale ? (
+          <>
+            <span className="hidden sm:inline">Prices {ago}m old</span>
+            <span className="sm:hidden tabular-nums">{ago}m old</span>
+          </>
+        ) : (
+          <>
+            <span className="hidden sm:inline">
+              Prices refresh in <span className="tabular-nums">{nextIn}m</span>
+            </span>
+            <span className="sm:hidden tabular-nums">{nextIn}m</span>
+          </>
+        )}
+      </span>
+    </TurnStatusLink>
   );
 }
