@@ -82,7 +82,7 @@ import type { TurnPhaseAdapter } from "@/simulation/engine/types";
 import { regionalBudgetPhaseDue, resolveRegionalBudgetCadence } from "./regionalBudgetCadence";
 import type { LegislationType } from "@/lib/db/types/legislation";
 import { RESET_V2_READY } from "@/lib/resetVersions/availability";
-import { resetSystemVersionsForCountry } from "@/lib/resetVersions/rules";
+import { RESET_V2_COUNTRIES, resetSystemVersionsForCountry } from "@/lib/resetVersions/rules";
 
 export const stateEffectsAndNationalAggregationPhase: TurnPhaseAdapter = {
   key: "stateEffectsAndNationalAggregation",
@@ -181,7 +181,9 @@ export const stateEffectsAndNationalAggregationPhase: TurnPhaseAdapter = {
         db,
         newTurn,
         regionalBudgetCadence,
-        gameState.regionalLegislationFinanceEnabled === true
+        gameState.regionalLegislationFinanceEnabled === true,
+        resetSystemVersionsForCountry(gameState, RESET_V2_READY, "UK").legislation === "v2",
+        typeof gameState.resetWorldId === "string" ? gameState.resetWorldId : undefined
       )
     );
     const jpRegionalBudgetPromise = runRegionalBudgetPhase("jpRegionalBudgetProcessing", () =>
@@ -189,7 +191,9 @@ export const stateEffectsAndNationalAggregationPhase: TurnPhaseAdapter = {
         db,
         newTurn,
         gameState.regionalLegislationFinanceEnabled === true,
-        regionalBudgetCadence
+        regionalBudgetCadence,
+        resetSystemVersionsForCountry(gameState, RESET_V2_READY, "JP").legislation === "v2",
+        typeof gameState.resetWorldId === "string" ? gameState.resetWorldId : undefined
       )
     );
     const policyEffectsPromise = (async () => {
@@ -230,7 +234,7 @@ export const stateEffectsAndNationalAggregationPhase: TurnPhaseAdapter = {
       // destructured (mirrors the append-only results below); only
       // demoEffectResult is.
       runtime.runPhase("demographicEffects", async () => {
-        const result = await processAllStateDemographics(db, await getLegislationTypes());
+        const result = await processAllStateDemographics(db, await getLegislationTypes(), newTurn);
         // Isolated so a checkpoint bug can't mark the whole demographics phase
         // failed (and discard its result) after the demographics writes above
         // have already persisted — the sequencing constraint is the only
@@ -672,7 +676,7 @@ export const stateEffectsAndNationalAggregationPhase: TurnPhaseAdapter = {
     // only from complete, owner-produced observations. While the reset release
     // gate is closed this is a zero-query skip and v1 remains authoritative.
     if (
-      (["US", "UK", "JP"] as const).some(
+      RESET_V2_COUNTRIES.some(
         (country) =>
           resetSystemVersionsForCountry(gameState, RESET_V2_READY, country).metrics === "v2"
       )
@@ -687,7 +691,8 @@ export const stateEffectsAndNationalAggregationPhase: TurnPhaseAdapter = {
           db,
           gameState,
           turn: newTurn,
-          ownerReadings: (boards) => collectResetMetricOwnerReadings(db, boards, newTurn),
+          ownerReadings: (boards) =>
+            collectResetMetricOwnerReadings(db, boards, newTurn, currentYear),
         })
       );
     } else {

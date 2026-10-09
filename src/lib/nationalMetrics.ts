@@ -5,7 +5,7 @@ import type { State } from "@/lib/db/types/state";
 import { NATIONAL_SCOPE, NATIONAL_SCOPE_IDS } from "@/lib/constants/nationalScope";
 import { isMacroMetricPath } from "@/lib/macroMetrics/paths";
 import { aggregateNationalGdp } from "@/lib/utils/nationalGdp";
-import { getIncomeAnchor } from "@/lib/era/metricCatalog";
+import { getIncomeStartVintage, getStartingIncomeAnchor } from "@/lib/era/metricCatalog";
 
 /**
  * Plausible range for the back-solved income-band index at world start. A seed
@@ -65,6 +65,7 @@ export async function computeNationalMetrics(db: Db): Promise<void> {
           startingYear: 1,
           eraSystemEnabled: 1,
           eraGdpPerCapitaBaseline: 1,
+          incomeStartVintages: 1,
         },
       }
     ),
@@ -72,6 +73,7 @@ export async function computeNationalMetrics(db: Db): Promise<void> {
   // Era income-band index: only computed while the era system is on.
   const eraOn = eraGameState?.eraSystemEnabled === true;
   const eraStartingYear = eraGameState?.startingYear ?? null;
+  const incomeVintages = eraGameState?.incomeStartVintages ?? null;
   const gdpPcBaselines: Record<string, number> = {};
   for (const [k, v] of Object.entries(eraGameState?.eraGdpPerCapitaBaseline ?? {})) {
     if (typeof v === "number" && Number.isFinite(v)) gdpPcBaselines[k] = v;
@@ -95,7 +97,22 @@ export async function computeNationalMetrics(db: Db): Promise<void> {
   // Metrics that should be weighted by GDP instead of population
   const GDP_WEIGHTED_METRICS = new Set(["gdpGrowth"]);
 
-  for (const [nationalId, countryId] of Object.entries(NATIONAL_SCOPE)) {
+  const countryRollups: Array<[string | null, string]> = Object.entries(NATIONAL_SCOPE);
+  const nationalCountries = new Set(Object.values(NATIONAL_SCOPE));
+  // Some regional countries have no stored national metrics document. Their
+  // newly stamped income vintages still need a GDP index for regional scoring.
+  // Missing or unknown stamps retain the existing world's behavior.
+  if (eraOn) {
+    for (const countryId of new Set(allStates.map((state) => state.countryId))) {
+      if (!countryId || nationalCountries.has(countryId)) continue;
+      const vintage = getIncomeStartVintage(countryId, eraStartingYear);
+      if (vintage && incomeVintages?.[countryId] === vintage.id) {
+        countryRollups.push([null, countryId]);
+      }
+    }
+  }
+
+  for (const [nationalId, countryId] of countryRollups) {
     const countryStates = allStates.filter((s) => s.countryId === countryId);
     if (countryStates.length === 0) continue;
 
@@ -163,7 +180,7 @@ export async function computeNationalMetrics(db: Db): Promise<void> {
     for (const [key, value] of Object.entries(setOps)) {
       (isMacroMetricPath(key) ? macroSetOps : politicalSetOps)[key] = value;
     }
-    if (Object.keys(macroSetOps).length > 0) {
+    if (nationalId !== null && Object.keys(macroSetOps).length > 0) {
       await db
         .collection<NationalMetricsDoc>("macroMetrics")
         .updateOne(
@@ -193,7 +210,7 @@ export async function computeNationalMetrics(db: Db): Promise<void> {
       if (gdpPc > 0) {
         let baseline = gdpPcBaselines[countryId];
         if (!Number.isFinite(baseline) || baseline <= 0) {
-          const anchor = getIncomeAnchor(countryId, eraStartingYear);
+          const anchor = getStartingIncomeAnchor(countryId, eraStartingYear, incomeVintages);
           if (
             anchor != null &&
             anchor > 0 &&

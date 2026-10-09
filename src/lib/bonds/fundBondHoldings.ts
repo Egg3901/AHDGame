@@ -1,3 +1,8 @@
+/**
+ * Funds hold corporate and sovereign bonds in each series' holder book.
+ * listFundBondHoldings reads active positions; valuation helpers convert their
+ * market value into the same anchor units as fund cash and NAV.
+ */
 import type { Db, ObjectId } from "mongodb";
 import type { Bond, IndexFund } from "@/lib/db/types";
 import { BOND_UNIT_FACE_VALUE } from "@/lib/db/types/bond";
@@ -7,6 +12,10 @@ import { corpCapitalToAnchor } from "@/lib/currency/corporationCapital";
 
 export type FundBondHoldingRow = {
   bondId: ObjectId;
+  corporationId: ObjectId;
+  issuerType: "corporation" | "sovereign";
+  issuerName?: string;
+  maturityTurn: number;
   countryId?: Bond["countryId"];
   units: number;
   couponRate: number;
@@ -44,6 +53,10 @@ export async function listFundBondHoldings(
     const valueLocal = holder.units * BOND_UNIT_FACE_VALUE * bond.marketPrice;
     rows.push({
       bondId: bond._id,
+      corporationId: bond.corporationId,
+      issuerType: bond.issuerType ?? "corporation",
+      issuerName: bond.issuerName,
+      maturityTurn: bond.maturityTurn,
       countryId: bond.countryId,
       units: holder.units,
       couponRate: bond.couponRate,

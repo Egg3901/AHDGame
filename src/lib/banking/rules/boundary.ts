@@ -174,6 +174,8 @@ export interface TransitionLeg {
   filter?: Record<string, unknown>;
   path?: string;
   set?: Record<string, unknown>;
+  /** Non-money counters incremented in the leg's own write (see MoneyMoveLeg.inc). */
+  inc?: Record<string, number>;
   note: string;
 }
 

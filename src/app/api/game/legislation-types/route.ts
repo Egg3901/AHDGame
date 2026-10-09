@@ -108,6 +108,7 @@ export async function GET(request: Request) {
     const country = searchParams.get("country")?.toLowerCase().trim(); // "us" or "uk"
     const minimal = searchParams.get("minimal") === "1";
     const noCache = searchParams.get("nocache") === "1";
+    const exactTax = searchParams.get("exactTax") === "1";
 
     // `nocache=1` (used by the admin editor) bypasses the read cache entirely so
     // edits are visible immediately even before tag revalidation propagates.
@@ -161,7 +162,8 @@ export async function GET(request: Request) {
       mediaGated,
       country,
       searchParams.get("regionId"),
-      incomeBandIndexByCountry
+      incomeBandIndexByCountry,
+      exactTax
     );
 
     return NextResponse.json(withEstimates, {

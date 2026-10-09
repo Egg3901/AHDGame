@@ -205,6 +205,22 @@ export function getOperatingSectorType(
 }
 
 /**
+ * Player-facing label for a persisted sector's operating model. Folded
+ * vehicle and entertainment lanes are named for the canonical sector they now
+ * belong to, not the retired type.
+ */
+export function getOperatingSectorLabel(
+  sectorType: string,
+  industryModel?: string | null,
+  mediaDiscriminator?: string | null
+): string | null {
+  const operating = getOperatingSectorType(sectorType, industryModel, mediaDiscriminator);
+  if (operating === "manufacturing_vehicles") return "Vehicle manufacturing";
+  if (operating === "media_entertainment") return "Entertainment media";
+  return null;
+}
+
+/**
  * Resolve a strategy for a persisted sector and its optional manufacturing
  * production model. Vehicle models reuse the unchanged automobile recipes.
  */

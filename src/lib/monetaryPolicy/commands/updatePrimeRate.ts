@@ -27,6 +27,7 @@ import { emitBankingAuditEvent } from "@/lib/banking/auditEvents";
 import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
 import { COMMAND_CEILING, scheduledMarketizationLevel } from "@/lib/constants/commandEconomy";
 import { getNationalBudgetId } from "@/lib/bonds/sovereign";
+import { loadInflationVsTarget } from "@/lib/monetaryGovernance/inflationGap";
 
 type PrimeRateActor = {
   userId: string;
@@ -176,6 +177,9 @@ async function updatePrimeRateInner(params: {
     ...(myChar ? { characterId: myChar._id.toString() } : {}),
     countryId: bankHomeCountryId,
   };
+  const inflationGap = isAdmin
+    ? null
+    : ((await loadInflationVsTarget(db, bankHomeCountryId, currentYear))?.gap ?? null);
   const now = new Date();
   const decision = decideGovernance(
     bankToJurisdictionState(bank, {
@@ -183,6 +187,7 @@ async function updatePrimeRateInner(params: {
       governmentControlled,
       fxCommitment,
       commandEconomy,
+      inflationGap,
     }),
     { type: "set_rate", rate, countryId },
     machineActor,

@@ -321,6 +321,17 @@ export async function loadCountryCentralBankDetail(params: {
   const recentHistory = policyBank.rateHistory.slice(-20).reverse();
 
   const currentInflation = budgetDoc?.economicFactors?.inflationRate ?? 2.5;
+  // The rate API measures the widened hike cap on the bank's home country, which
+  // differs from the viewed country only inside a shared-currency area.
+  const anchorBudgetDoc =
+    bankHomeCountryId === countryId
+      ? budgetDoc
+      : await db
+          .collection<FederalBudget>("federalBudget")
+          .findOne({ _id: getNationalBudgetId(bankHomeCountryId) } as { _id: "federal" }, {
+            projection: { "economicFactors.inflationRate": 1 },
+          });
+  const rateInflationValue = anchorBudgetDoc?.economicFactors?.inflationRate ?? null;
   const currentTurn = gameState?.currentTurn ?? 0;
 
   const nationalDocId = getNationalDocId(countryId);
@@ -656,6 +667,10 @@ export async function loadCountryCentralBankDetail(params: {
       currentSavingsPressure: bank.currentSavingsPressure ?? 0,
       currentInflation: displayInflation,
       targetInflation: getInflationTarget(countryId, gameState?.currentYear),
+      // The pair the rate API measures the widened hike cap against: stored
+      // national inflation and the bank's home-country target.
+      rateInflation: rateInflationValue,
+      rateTargetInflation: getInflationTarget(bankHomeCountryId, gameState?.currentYear),
       neutralPrimeRate:
         policyCurrency === "EUR"
           ? undefined

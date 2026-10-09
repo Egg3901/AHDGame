@@ -1,5 +1,7 @@
 "use client";
 
+import { useGameEvents } from "@/hooks/useGameEvents";
+
 import { useState, useEffect, Suspense, useMemo, useCallback, useRef } from "react";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import * as Sentry from "@sentry/nextjs";
@@ -282,6 +284,12 @@ function PortfolioPageInner({ initialPortfolio }: PortfolioClientProps) {
     });
   }, [corpQuery, applyPortfolio, applySecondary]);
 
+  const [marketRefreshKey, setMarketRefreshKey] = useState(0);
+  useGameEvents(() => {
+    setMarketRefreshKey((key) => key + 1);
+    void loadPortfolioAndMe().catch(reportPortfolioLoadError);
+  }, ["turn_complete", "market_tick"]);
+
   // Seeded first paint: the portfolio came from the server, so only the wallet
   // (me), CEO-corp detail, and LoC still need a client fetch. Uses the seeded
   // portfolio's savingsBalances for the wallet's savings figure.
@@ -349,7 +357,7 @@ function PortfolioPageInner({ initialPortfolio }: PortfolioClientProps) {
     return () => {
       cancelled = true;
     };
-  }, [myCharacterId]);
+  }, [myCharacterId, marketRefreshKey]);
 
   const setPortfolioOwner = (owner: "character" | "corporation") => {
     const params = new URLSearchParams(searchParams.toString());

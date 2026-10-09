@@ -119,6 +119,9 @@ export interface PolicyStackInput {
   inflationModifier?: number | null;
   debtToGdpModifier?: number | null;
   deficitToGdpModifier?: number | null;
+  soeEfficiencyModifier?: number | null;
+  expropriationRiskModifier?: number | null;
+  economicModelAlignmentModifier?: number | null;
 }
 
 const POLICY_STACK_LABELS: { key: keyof PolicyStackInput; label: string }[] = [
@@ -147,6 +150,9 @@ const POLICY_STACK_LABELS: { key: keyof PolicyStackInput; label: string }[] = [
   { key: "inflationModifier", label: "Inflation" },
   { key: "debtToGdpModifier", label: "National debt" },
   { key: "deficitToGdpModifier", label: "Deficit spending" },
+  { key: "soeEfficiencyModifier", label: "State enterprise efficiency" },
+  { key: "expropriationRiskModifier", label: "Expropriation risk" },
+  { key: "economicModelAlignmentModifier", label: "Economic model fit" },
 ];
 
 /**
@@ -158,7 +164,7 @@ const POLICY_STACK_LABELS: { key: keyof PolicyStackInput; label: string }[] = [
  * sum to the line they explain EXACTLY. That factor is not a fudge: it is the
  * soft cap the engine applies to the stacked total (a big pile asymptotes
  * instead of pinning), plus the handful of terms the read path cannot see
- * itemized (the nationalization penalty, SOE efficiency). Folding it in is what
+ * itemized (the nationalization transition, strike). Folding it in is what
  * lets a player add the rows up and land on the line.
  *
  * Pass `appliedPolicyPp` (`plantsPnl.policyPp`) so those unlisted terms land

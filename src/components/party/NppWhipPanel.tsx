@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useToast } from "@/contexts/ToastContext";
@@ -46,6 +47,7 @@ interface CandidacyInfo {
 interface LeadershipElectionItem {
   id: string;
   type?: string;
+  targetType?: "cabinetNomination" | "scotusNomination";
   /** Chamber the item is voted in. Impeachments move chamber between stages. */
   chamber?: string;
   candidacies: CandidacyInfo[];
@@ -59,7 +61,7 @@ interface LeadershipElectionItem {
 }
 
 function isCabinetWhipItem(item: LeadershipElectionItem): boolean {
-  return item.type?.startsWith("Cabinet:") ?? false;
+  return item.targetType === "scotusNomination" || (item.type?.startsWith("Cabinet:") ?? false);
 }
 
 function isSupportedNppLeadershipItem(item: LeadershipElectionItem): boolean {
@@ -100,6 +102,7 @@ export function NppWhipPanel({
   eligibleStates,
   endpointConfig,
 }: NppWhipPanelProps) {
+  const t = useTranslations("parties.whips");
   const { showToast } = useToast();
   const resolvedCountryId = (countryId ?? COUNTRY_CONFIGS.US.id).toUpperCase() as CountryId;
   const effectiveCountryId = resolvedCountryId.toLowerCase();
@@ -405,7 +408,8 @@ export function NppWhipPanel({
     }
   };
 
-  const handleCabinetWhip = async (nominationId: string, direction: "for" | "against") => {
+  const handleCabinetWhip = async (item: LeadershipElectionItem, direction: "for" | "against") => {
+    const nominationId = item.id;
     setWhippingId(`cab_${nominationId}_${direction}`);
     try {
       const config = getCountryConfig((countryId ?? "US").toUpperCase() as CountryId);
@@ -422,7 +426,7 @@ export function NppWhipPanel({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           audience: "npp",
-          targetType: "cabinetNomination",
+          targetType: item.targetType ?? "cabinetNomination",
           targetId: nominationId,
           chamber,
           direction,
@@ -787,9 +791,7 @@ export function NppWhipPanel({
         }}
         renderCabinet={() => {
           if (cabinetItems.length === 0) {
-            return (
-              <p className="text-sm text-muted italic">No active cabinet nominations to whip.</p>
-            );
+            return <p className="text-sm text-muted italic">{t("noActiveNominations")}</p>;
           }
           return (
             <div className="space-y-3">
@@ -802,7 +804,11 @@ export function NppWhipPanel({
                   <div key={item.id} className="rounded-lg border border-card-border bg-card p-4">
                     <h4 className="font-medium text-sm mb-3">
                       <Link
-                        href={`/congress/nominations/${item.id}`}
+                        href={
+                          item.targetType === "scotusNomination"
+                            ? `/congress/scotus-nominations/${item.id}`
+                            : `/congress/nominations/${item.id}`
+                        }
                         className="hover:text-primary transition-colors"
                       >
                         {item.type ?? "Cabinet nomination"}
@@ -815,14 +821,14 @@ export function NppWhipPanel({
                     )}
                     <div className="flex flex-wrap gap-2">
                       <button
-                        onClick={() => handleCabinetWhip(item.id, "for")}
+                        onClick={() => handleCabinetWhip(item, "for")}
                         disabled={!whip.canWhip || whippingId === `cab_${item.id}_for`}
                         className="px-3 py-1.5 text-xs font-medium rounded-md border border-card-border bg-card hover:bg-muted/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         {whippingId === `cab_${item.id}_for` ? "Issuing..." : "Whip FOR"}
                       </button>
                       <button
-                        onClick={() => handleCabinetWhip(item.id, "against")}
+                        onClick={() => handleCabinetWhip(item, "against")}
                         disabled={!whip.canWhip || whippingId === `cab_${item.id}_against`}
                         className="px-3 py-1.5 text-xs font-medium rounded-md border border-card-border bg-card hover:bg-muted/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                       >

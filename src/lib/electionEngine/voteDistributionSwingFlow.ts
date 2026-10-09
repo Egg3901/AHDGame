@@ -38,12 +38,9 @@ import type { DemographicCategory, StateDemographics } from "@/lib/db/types";
 import { calcAppeal, approvalScalar } from "@/lib/utils/demographicAppeal";
 import { normalizeNPI, normalizeNationalReachPresidentialPrimary } from "@/lib/utils/normalizeNPI";
 import { infamyPenaltyMultiplier } from "@/lib/utils/infamy";
-import { partitionMajorParties } from "./majorParties";
-import { getMajorPartiesForRegion } from "@/lib/constants/countries";
 import { calcEffectiveFavorability } from "./voteCalculations";
 import { splitGroupPoolBySlate } from "./slateAllocation";
 import {
-  FPTP_SPOILER_RATE,
   NPP_GENERAL_WEIGHT_MULTIPLIER,
   MAX_STATE_ORG_BONUS_GENERAL,
   MAX_STATE_ORG_BONUS_PRIMARY,
@@ -64,19 +61,7 @@ import { personalStatTenureRetentionForCandidate } from "./rules/tenureRetention
 import { persuasionDrivers } from "./persuasionDrivers";
 import type { EnrichedCandidate, DistributeVotesOptions, AppealWeightTrace } from "./types";
 import { democraticHealthMultiplierForCandidate } from "./democraticHealth";
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, value));
-}
-
-function spoilerOrgFactor(
-  thirdPartyOrg: number | undefined,
-  nearestMajorOrg: number | undefined
-): number {
-  const third = clamp(thirdPartyOrg ?? 0, 0, 100);
-  const major = clamp(nearestMajorOrg ?? 0, 0, 100);
-  return clamp(1 + (third - major) / 100, 0.25, 2);
-}
+import { applyFptpSpoilerTransfers } from "./rules/spoilerTransfers";
 
 /**
  * Per-candidate within-group weight for the §7.3.2 nominal_share line:
@@ -532,39 +517,7 @@ export function distributeVotesBySwingFlow(
   // peel-vs-resistance mechanic (it models within-coalition leakage, not
   // cross-coalition persuasion), so it stays as a post-step.
   if (options?.votingSystem !== "rcv") {
-    const majorPartySet = getMajorPartiesForRegion(
-      options?.countryId ?? "US",
-      options?.parentRegionId
-    );
-    const { major: majorParties, third: thirdParties } = partitionMajorParties(
-      enriched,
-      majorPartySet,
-      (ec) => votesPerCandidate[ec.candidateId] ?? 0
-    );
-
-    if (thirdParties.length > 0 && majorParties.length > 0) {
-      const rate = options?.spoilerRate ?? FPTP_SPOILER_RATE;
-      for (const tp of thirdParties) {
-        let nearest = majorParties[0];
-        let minDist = Infinity;
-        for (const mp of majorParties) {
-          const dist = Math.abs(tp.charEP - mp.charEP) + Math.abs(tp.charSP - mp.charSP);
-          if (dist < minDist) {
-            minDist = dist;
-            nearest = mp;
-          }
-        }
-
-        const localOrgFactor = options?.useOrgAwareSpoiler
-          ? spoilerOrgFactor(partyOrgByParty.get(tp.party), partyOrgByParty.get(nearest.party))
-          : 1;
-        const spoiled = votesPerCandidate[tp.candidateId] * rate * localOrgFactor;
-        const available = votesPerCandidate[nearest.candidateId];
-        const actualSpoiled = Math.min(spoiled, available);
-        votesPerCandidate[nearest.candidateId] -= actualSpoiled;
-        votesPerCandidate[tp.candidateId] += actualSpoiled;
-      }
-    }
+    applyFptpSpoilerTransfers(enriched, votesPerCandidate, partyOrgByParty, options);
   }
 
   // Ledger tee (close-out): record support plus the swing and spoiler deltas

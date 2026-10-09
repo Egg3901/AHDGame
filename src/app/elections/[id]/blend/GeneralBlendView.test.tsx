@@ -1,8 +1,35 @@
 /** @vitest-environment happy-dom */
-import { describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { CandidateDetail, ElectionDetail } from "../components/ElectionDetailTypes";
 import { GeneralBlendView } from "./GeneralBlendView";
+
+vi.mock("./presMap/usStatesGeo", () => ({
+  MAP_WIDTH: 960,
+  MAP_HEIGHT: 600,
+  COUNTY_OFFSET_Y: 50,
+  loadUsStateGeo: () =>
+    Promise.resolve([
+      {
+        id: "PA",
+        d: "M600 200h60v40h-60z",
+        centroid: [630, 220],
+        width: 60,
+        height: 40,
+        x0: 600,
+        y0: 200,
+      },
+      {
+        id: "CA",
+        d: "M100 200h60v120h-60z",
+        centroid: [130, 260],
+        width: 60,
+        height: 120,
+        x0: 100,
+        y0: 200,
+      },
+    ]),
+}));
 
 function candidate(over: Partial<CandidateDetail> = {}): CandidateDetail {
   return {
@@ -25,6 +52,7 @@ const CANDIDATES = [
   candidate({ id: "c1", characterName: "First Ticket", isYou: true }),
   candidate({
     id: "c2",
+    characterId: "ch2",
     characterName: "Second Ticket",
     party: "2",
     partyName: "Republican Party",
@@ -74,6 +102,38 @@ function election(): ElectionDetail {
   } as unknown as ElectionDetail;
 }
 
+/**
+ * The campaign operations the tickets table joins on. Only the first ticket
+ * (the reader, character `ch1`) has a campaign: a rival without one must still
+ * get a row.
+ */
+const CAMPAIGNS = [
+  {
+    id: "camp1",
+    candidateId: "ch1",
+    candidateName: "First Ticket",
+    party: "1",
+    partyName: "Democratic Party",
+    currencyCode: "USD",
+    funds: 1_250_000,
+    actions: 3,
+    levels: { fundraising: 2, oppositionResearch: 1, groundGame: 3, mediaSpending: 0 },
+    managerName: "Casey Manager",
+    isExact: true,
+    isMine: true,
+  },
+];
+
+function stubCampaigns(campaigns: unknown[] = CAMPAIGNS) {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockResolvedValue({ ok: true, json: async () => ({ campaigns }) })
+  );
+}
+
+beforeEach(() => stubCampaigns());
+afterEach(() => vi.unstubAllGlobals());
+
 function renderView() {
   return render(
     <GeneralBlendView election={election()} electionId="e1" wire={[]} onRefresh={() => {}} />
@@ -87,25 +147,37 @@ function renderView() {
  * is how these shipped invisible on mobile.
  */
 describe("GeneralBlendView", () => {
-  it("shows the reader their own ticket's standing on both layouts", () => {
+  it("shows the reader their own ticket's standing", () => {
     renderView();
     // 276 EV against 251 is a 25 EV lead.
-    expect(screen.getAllByText("+25 EV lead")).toHaveLength(2);
-    expect(screen.getAllByText("Your ticket")).toHaveLength(2);
+    expect(screen.getAllByText("+25 EV lead")).toHaveLength(1);
+    expect(screen.getAllByText("Your ticket")).toHaveLength(1);
   });
 
-  it("carries the board's margin-tier legend to both layouts", () => {
+  it("carries the board's margin-tier legend", () => {
     renderView();
-    expect(screen.getAllByText("MARGIN TIERS:")).toHaveLength(2);
+    expect(screen.getAllByText("MARGIN TIERS:")).toHaveLength(1);
   });
 
-  it("keeps the tiles themselves on both layouts", () => {
+  it("draws one map and no tile board", async () => {
     renderView();
-    expect(screen.getAllByText("PA")).toHaveLength(2);
+    expect(screen.getAllByRole("group", { name: /US presidential map/ })).toHaveLength(1);
+    expect(await screen.findAllByRole("button", { name: /Pennsylvania/ })).toHaveLength(1);
+    expect(screen.queryByText(/battleground board/i)).toBeNull();
   });
 
-  it("shows democratic health and both presidential drag levels on both layouts", () => {
-    render(
+  it("owns its gestures on the desktop stage, with no lock to undo", () => {
+    // The desktop stage is the whole viewport and nothing scrolls under it, so
+    // it pans and zooms from the start. (A phone keeps the lock: the stage map
+    // there sits in a scrolling page.)
+    renderView();
+    const maps = screen.getAllByRole("group", { name: /US presidential map/ });
+    expect(maps.map((m) => m.getAttribute("data-locked"))).toEqual(["false"]);
+    expect(screen.queryByRole("button", { name: /Unlock map/ })).toBeNull();
+  });
+
+  it("shows democratic health and both presidential drag levels", () => {
+    const { container } = render(
       <GeneralBlendView
         election={{
           ...election(),
@@ -127,10 +199,12 @@ describe("GeneralBlendView", () => {
         onRefresh={() => {}}
       />
     );
-    expect(screen.getAllByText("Democratic health")).toHaveLength(2);
-    expect(screen.getAllByText("Ruling party drag")).toHaveLength(2);
-    expect(screen.getAllByText("Sitting President drag")).toHaveLength(2);
-    expect(screen.getAllByText(/Temporary constitutional relief/)).toHaveLength(2);
+    // The stage's context rail shows it open, at every width.
+    expect(container).toBeTruthy();
+    expect(screen.getAllByText("Democratic health")).toHaveLength(1);
+    expect(screen.getAllByText("Ruling party drag")).toHaveLength(1);
+    expect(screen.getAllByText("Sitting President drag")).toHaveLength(1);
+    expect(screen.getAllByText(/Temporary constitutional relief/)).toHaveLength(1);
   });
 });
 
@@ -138,14 +212,26 @@ describe("nothing on this screen is won", () => {
   // GeneralBlendView renders only while a race is RUNNING; a concluded one gets
   // ResultsBlendView. So every figure here is a forecast from the votes banked
   // so far, and the screen has to say so rather than reading as a called result.
-  it("says the figures are projected, on both layouts", () => {
+  it("raises the contingent election beside the college bar", () => {
+    const e = election();
+    e.generalVotes!.electoralVotesByCandidate = { c1: 54, c2: 40, c3: 19 };
+    render(<GeneralBlendView election={e} electionId="e1" wire={[]} onRefresh={() => {}} />);
+    expect(screen.getAllByText("Contingent election risk")).toHaveLength(1);
+  });
+
+  it("raises no contingent election when a ticket holds the majority", () => {
     renderView();
-    expect(screen.getAllByText(/No state is won until the race resolves/)).toHaveLength(2);
+    expect(screen.queryByText("Contingent election risk")).toBeNull();
+  });
+
+  it("says the figures are projected", () => {
+    renderView();
+    expect(screen.getAllByText(/No state is won until the race resolves/)).toHaveLength(1);
   });
 
   it("labels the hero's figures as projected", () => {
     renderView();
-    expect(screen.getAllByText(/No state is won until the race resolves/)).toHaveLength(2);
+    expect(screen.getAllByText(/No state is won until the race resolves/)).toHaveLength(1);
   });
 
   it("uses one masthead label across both layouts", () => {
@@ -154,32 +240,106 @@ describe("nothing on this screen is won", () => {
     // even is.
     renderView();
     const mastheads = screen.getAllByText(/^(Election Night|The Campaign)$/);
-    expect(mastheads).toHaveLength(2);
+    expect(mastheads).toHaveLength(1);
     expect(new Set(mastheads.map((n) => n.textContent)).size).toBe(1);
   });
 });
 
+describe("the tickets and the campaign operations are one table", () => {
+  it("draws the tickets for a two-way race, which the hero alone could not carry", () => {
+    renderView();
+    // One heading per tree.
+    expect(screen.getAllByText("The tickets")).toHaveLength(1);
+  });
+
+  it("no longer draws a separate campaign operations list", () => {
+    renderView();
+    expect(screen.queryByText("Campaign operations")).toBeNull();
+  });
+
+  it("puts every column on a row: ticket, mate, manager, standing and campaign", async () => {
+    renderView();
+    const table = screen.getByRole("table");
+    expect(
+      within(table)
+        .getAllByRole("columnheader")
+        .map((h) => h.textContent)
+    ).toEqual([
+      "Ticket",
+      "Mate and manager",
+      "Proj. EV",
+      "Share",
+      "Votes",
+      "Funds",
+      "Actions",
+      "Levels",
+      "Endorse and campaign",
+    ]);
+    // Campaigns load after mount; the manager is the first thing to land.
+    await waitFor(() => expect(within(table).getByText("Manager: Casey Manager")).toBeTruthy());
+    const row = within(table).getByRole("link", { name: "First Ticket" }).closest("tr")!;
+    const cells = within(row).getAllByRole("cell");
+    expect(cells[0].textContent).toContain("Democratic Party");
+    expect(cells[2].textContent).toBe("276");
+    expect(cells[3].textContent).toBe("50.8%");
+    expect(cells[4].textContent).toBe("69.5M");
+    expect(cells[5].textContent).toMatch(/1[.,]25|1\.3M|1,250,000/);
+    // Levels are summed across the four operations.
+    expect(cells[7].textContent).toBe("6");
+    expect(cells[6].textContent).toBe("3");
+    expect(within(row).getByRole("link", { name: "View campaign" }).getAttribute("href")).toBe(
+      "/campaign/camp1"
+    );
+  });
+
+  it("keeps a rival without a campaign as a row, with no campaign link", async () => {
+    renderView();
+    const table = screen.getByRole("table");
+    await waitFor(() => expect(within(table).getByText("Manager: Casey Manager")).toBeTruthy());
+    const row = within(table).getByRole("link", { name: "Second Ticket" }).closest("tr")!;
+    expect(within(row).queryByRole("link", { name: "View campaign" })).toBeNull();
+    expect(within(row).getByRole("button", { name: /Endorse/ })).toBeTruthy();
+  });
+
+  it("draws a compact card per ticket on the phone, with the same fields", async () => {
+    const { container } = renderView();
+    const cards = Array.from(container.querySelectorAll("article"));
+    expect(cards).toHaveLength(2);
+    await waitFor(() => expect(within(cards[0]).getByText("Manager: Casey Manager")).toBeTruthy());
+    expect(within(cards[0]).getByRole("link", { name: "View campaign" })).toBeTruthy();
+    expect(within(cards[0]).getByText("Funds")).toBeTruthy();
+    expect(within(cards[0]).getByText("Levels")).toBeTruthy();
+    expect(within(cards[1]).getByRole("button", { name: /Endorse/ })).toBeTruthy();
+    expect(within(cards[1]).queryByRole("link", { name: "View campaign" })).toBeNull();
+  });
+
+  it("notes that campaign levels are approximate when none are exact", async () => {
+    stubCampaigns([{ ...CAMPAIGNS[0], isExact: false }]);
+    renderView();
+    await waitFor(() =>
+      expect(screen.getAllByText("Campaign levels are approximate (fog of war)")).toHaveLength(2)
+    );
+  });
+
+  it("skips the campaign request outside the US", () => {
+    const e = election();
+    (e as unknown as Record<string, unknown>).countryId = "GB";
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    render(<GeneralBlendView election={e} electionId="e1" wire={[]} onRefresh={() => {}} />);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(screen.getAllByText("The tickets")).toHaveLength(1);
+  });
+});
+
 describe("the hero is the ticket list in a two-way race", () => {
-  // The table repeated the hero's name, electoral votes, share and popular vote
-  // for the same two people, adding only the running mate and the endorse
-  // button. Both of those now live on the hero, so the table earns its place
-  // only once a third ticket exists.
-  it("draws no separate tickets table for two tickets", () => {
-    renderView();
-    expect(screen.queryByText("The tickets")).toBeNull();
-  });
-
-  it("offers no dead Tickets pane in the rail", () => {
-    renderView();
-    expect(screen.queryByRole("button", { name: /^Tickets/ })).toBeNull();
-  });
-
-  it("puts the endorse control on both layouts, which the table never did", () => {
+  it("puts the endorse control, which the table never did", () => {
     // The table was desktop-only, so a player on a phone could not endorse
     // anybody at all. One button per rival per tree: the fixture's c1 is the
     // reader, so only c2 gets one.
     renderView();
-    expect(screen.getAllByRole("button", { name: /Endorse/ })).toHaveLength(2);
+    // Hero and tickets table, one tree each way: 2 hero + 1 table + 1 card.
+    expect(screen.getAllByRole("button", { name: /Endorse/ })).toHaveLength(3);
   });
 
   it("offers no endorse button on the reader's own ticket", () => {
@@ -188,28 +348,26 @@ describe("the hero is the ticket list in a two-way race", () => {
     // was silent. c1 is the reader; two tickets, two trees, so an ungated
     // version of this would render four buttons rather than two.
     renderView();
-    expect(screen.getAllByRole("button", { name: /Endorse/ })).toHaveLength(2);
+    expect(screen.getAllByRole("button", { name: /Endorse/ })).toHaveLength(3);
     expect(screen.getAllByText("First Ticket").length).toBeGreaterThan(0);
   });
 
   it("still offers it on a rival's ticket", () => {
     // The fixture's c1 is the reader and c2 is the rival, so exactly one
-    // button per tree survives the guard.
+    // button per tree survives the guard, in the hero and in the tickets.
     renderView();
-    expect(screen.getAllByRole("button", { name: /Endorse/ })).toHaveLength(2);
+    expect(screen.getAllByRole("button", { name: /Endorse/ })).toHaveLength(3);
   });
 
   it("prints the leader's electoral votes only where each one earns its place", () => {
     renderView();
     // Three bare figures, every one deliberate: the reader's own "Your ticket"
-    // standing once per tree, plus the rail's nav badge. The hero's own two
-    // now carry their unit and sit under a "Current projection" label, so they
-    // read as "276 EV" instead. The bar used to label its own segment too,
-    // ~20px under a 50px rendering of the same number, and the tickets table
-    // repeated it a third time. If either count rises, something started
-    // echoing the hero again.
+    // standing, and the figure in the tickets table and its phone card, which
+    // is where each ticket's campaign sits next to its standing. The hero's
+    // own carries its unit under a "Current projection" label, so it reads as
+    // "276 EV". If the count rises, something started echoing the hero again.
     expect(screen.getAllByText("276")).toHaveLength(3);
-    expect(screen.getAllByText("276 EV")).toHaveLength(2);
+    expect(screen.getAllByText("276 EV")).toHaveLength(1);
   });
 });
 
@@ -242,7 +400,7 @@ describe("the hero's two sides stay level", () => {
   // rather than the first one they find.
   it("draws the hero once per tree, from one shared function", () => {
     const { container } = renderView();
-    expect(heroGrids(container)).toHaveLength(2);
+    expect(heroGrids(container)).toHaveLength(1);
   });
 
   it("lays each pair out as a two-column grid, not two free columns", () => {
@@ -255,7 +413,7 @@ describe("the hero's two sides stay level", () => {
   it("fills every row for both tickets, so no row can be half empty", () => {
     const { container } = renderView();
     const grids = heroGrids(container);
-    expect(grids).toHaveLength(2);
+    expect(grids).toHaveLength(1);
     for (const grid of grids) {
       // Name, party, two labelled figures and a share for each ticket, plus an
       // endorse row the rival fills and the reader's own side leaves empty. An
@@ -277,14 +435,6 @@ describe("the hero's two sides stay level", () => {
         expect(cell.style.minWidth).toBe("0");
       }
     }
-  });
-
-  it("renders both heroes from the same figures", () => {
-    const { container } = renderView();
-    const [mobile, desktop] = heroGrids(container).map(cellText);
-    // The trees differ in type size and nothing else. Any divergence here means
-    // a layout has started deciding for itself what to show.
-    expect(mobile).toEqual(desktop);
   });
 });
 
@@ -323,51 +473,47 @@ describe("the hero separates what is counted from what is forecast", () => {
     renderView();
     // Two hero cells and one rail block per tree: (2 + 1) x 2. The rail carried
     // the same derived figure at 34px with nothing saying what it was.
-    expect(screen.getAllByText("Current projection")).toHaveLength(6);
+    expect(screen.getAllByText("Current projection")).toHaveLength(3);
   });
 });
 
 describe("names link out and states open", () => {
-  it("links each hero ticket to its candidate profile, on both layouts", () => {
+  it("links each hero ticket to its candidate profile", () => {
     renderView();
-    expect(screen.getAllByRole("link", { name: "First Ticket" })).toHaveLength(2);
+    // The hero, then the tickets table and its phone card below the stage.
+    expect(screen.getAllByRole("link", { name: "First Ticket" })).toHaveLength(3);
     const hrefs = screen
       .getAllByRole("link", { name: "First Ticket" })
       .map((a) => a.getAttribute("href"));
     expect(new Set(hrefs)).toEqual(new Set(["/character/ch1"]));
   });
 
-  it("links each hero party to its party page, on both layouts", () => {
+  it("links each hero party to its party page", () => {
     renderView();
     const links = screen.getAllByRole("link", { name: "Democratic Party" });
-    expect(links).toHaveLength(2);
+    expect(links).toHaveLength(3);
     for (const a of links) {
       expect(a.getAttribute("href")).toBe("/country/us/parties/1");
     }
   });
 
-  it("links every board tile to its state detail, on both layouts", () => {
+  it("opens a state on the stage and puts it in the URL", async () => {
+    // The old per-state page now redirects here; the stage's open state is the
+    // state view, shareable as `?state=PA`.
+    vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("offline"));
     renderView();
-    const tiles = screen.getAllByRole("link", { name: /PA/ });
-    expect(tiles).toHaveLength(2);
-    for (const a of tiles) {
-      expect(a.getAttribute("href")).toBe("/elections/e1/state/PA");
-    }
-  });
-});
-
-describe("the close is explicit", () => {
-  it("prints the turns left on both layouts", () => {
-    // Fixture: endTurn 4186, currentTurn 4182, no endTime, so turns alone.
-    renderView();
-    expect(screen.getAllByText("4 TURNS LEFT")).toHaveLength(2);
+    fireEvent.click((await screen.findAllByRole("button", { name: /Pennsylvania/ }))[0]);
+    expect(await screen.findByText("Projected vote")).toBeTruthy();
+    expect(new URL(window.location.href).searchParams.get("state")).toBe("PA");
+    expect(screen.queryByRole("link", { name: /Open full Pennsylvania page/ })).toBeNull();
+    vi.restoreAllMocks();
   });
 
   it("pairs the turns with the local close time when the race has one", () => {
     const e = election();
     (e as unknown as Record<string, unknown>).endTime = "2026-11-10T15:24:00.000Z";
     render(<GeneralBlendView election={e} electionId="e1" wire={[]} onRefresh={() => {}} />);
-    expect(screen.getAllByText(/4 TURNS LEFT, CLOSES /)).toHaveLength(2);
+    expect(screen.getAllByText(/4 TURNS LEFT, CLOSES /)).toHaveLength(1);
   });
 });
 
@@ -395,9 +541,9 @@ describe("a third ticket pages the hero", () => {
     render(
       <GeneralBlendView election={threeWay()} electionId="e1" wire={[]} onRefresh={() => {}} />
     );
-    expect(screen.getAllByText("1-2 OF 3")).toHaveLength(2);
+    expect(screen.getAllByText("1-2 OF 3")).toHaveLength(1);
     fireEvent.click(screen.getAllByRole("button", { name: "Show next tickets" })[0]);
-    expect(screen.getAllByText("3-3 OF 3")).toHaveLength(2);
+    expect(screen.getAllByText("3-3 OF 3")).toHaveLength(1);
   });
 
   it("draws no pager for a two-way race", () => {
@@ -410,7 +556,7 @@ describe("explanations live in tooltips", () => {
   it("demotes the vote-weighting line from the rail footnote", () => {
     renderView();
     expect(screen.queryByText(/final four turns/)).toBeNull();
-    expect(screen.getAllByText("Turn weighting.")).toHaveLength(2);
+    expect(screen.getAllByText("Turn weighting.")).toHaveLength(1);
   });
 
   it("tooltips the referendum figure instead of leaving it bare", () => {
@@ -449,7 +595,7 @@ describe("a refused endorsement says why", () => {
     // Once per tree: the message sits under the electoral-vote bar, which both
     // layouts draw.
     await waitFor(() =>
-      expect(screen.getAllByText("That endorsement is already spent")).toHaveLength(2)
+      expect(screen.getAllByText("That endorsement is already spent")).toHaveLength(1)
     );
   });
 
@@ -457,13 +603,13 @@ describe("a refused endorsement says why", () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, json: async () => ({}) }));
     renderView();
     fireEvent.click(screen.getAllByRole("button", { name: /Endorse/ })[0]);
-    await waitFor(() => expect(screen.getAllByText(/did not go through/)).toHaveLength(2));
+    await waitFor(() => expect(screen.getAllByText(/did not go through/)).toHaveLength(1));
   });
 
   it("says so when the request never lands", async () => {
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("offline")));
     renderView();
     fireEvent.click(screen.getAllByRole("button", { name: /Endorse/ })[0]);
-    await waitFor(() => expect(screen.getAllByText(/Network error/)).toHaveLength(2));
+    await waitFor(() => expect(screen.getAllByText(/Network error/)).toHaveLength(1));
   });
 });

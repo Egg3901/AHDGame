@@ -221,8 +221,9 @@ export async function ratifyCharter(
 
   // Phase 6 closeout fix F2 — join all 3 founders to the new party. Each
   // founder co-signed the charter; ratification commits them to membership.
-  // Old-party memberCounts are decremented; mismatched primary candidacies
-  // are withdrawn so the party-switch is clean.
+  // Old-party memberCounts are decremented. Independent founders keep their
+  // governmental candidacies under the new party, while founders departing
+  // another party are withdrawn from mismatched candidacies.
   //
   // Founder identity is `characterId` so the lookup is direct (no
   // userId→characters pivot). This also makes multi-character users work
@@ -268,8 +269,13 @@ export async function ratifyCharter(
       departuresByOldParty.set(oldPartySeqId, departing);
     }
     try {
-      const { withdrawFromMismatchedPrimaries } = await import("@/lib/utils/electionCandidacy");
-      await withdrawFromMismatchedPrimaries(ch._id, partyIdStr);
+      const { transferIndependentCandidaciesToParty, withdrawFromMismatchedPrimaries } =
+        await import("@/lib/utils/electionCandidacy");
+      if (!oldPartyStr || oldPartyStr === "independent") {
+        await transferIndependentCandidaciesToParty(db, ch._id, partyIdStr, now);
+      } else {
+        await withdrawFromMismatchedPrimaries(ch._id, partyIdStr);
+      }
     } catch {
       /* non-fatal */
     }

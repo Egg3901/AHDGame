@@ -22,6 +22,27 @@ function baseResult(overrides: Partial<SourcingResult> = {}): SourcingResult {
 }
 
 describe("buildSourcingDocs", () => {
+  it("persists full buyer demand and freight supply with the billed sourcing snapshot", () => {
+    const result = baseResult({
+      freightChargesByDestState: new Map([["WA", new Map([["vehicles", 698_000]])]]),
+      haulRevenueByOriginState: new Map([["CA", 698_000]]),
+    });
+    const { networkDoc } = buildSourcingDocs(result, 27, new Date(), {
+      includeFreightBilling: true,
+      billingRampFraction: 0.25,
+      billingBalancesByState: new Map<
+        string,
+        Map<CommodityType, { supply: number; demand: number }>
+      >([
+        ["WA", new Map([["vehicles", { supply: 0, demand: 10_000.123456 }]])],
+        ["CA", new Map([["freight", { supply: 100.123456, demand: 20 }]])],
+      ]),
+    });
+    expect(networkDoc.freightDemand).toEqual({ WA: { vehicles: 10_000.123456 } });
+    expect(networkDoc.freightSupply).toEqual({ CA: 100.123456 });
+    expect(networkDoc.freightCharges).toEqual({ WA: { vehicles: 174_500 } });
+    expect(networkDoc.freightHaulRevenue).toEqual({ CA: 174_500 });
+  });
   it("persists the buyer-intent denominator and basis marker", () => {
     const result: SourcingResult = {
       flows: [],

@@ -148,8 +148,8 @@ export const BOT_READ_LIMITS = { maxRequests: 60, windowMs: 60_000 };
 /** Limit for Discord bot financial read endpoints (bonds, financials, stock-chart). */
 export const BOT_FINANCIAL_LIMITS = { maxRequests: 30, windowMs: 60_000 };
 
-/** Limit for Discord bot blackjack mutation endpoints (place-wager, resolve, wager). */
-export const BOT_BLACKJACK_LIMITS = { maxRequests: 20, windowMs: 60_000 };
+/** Discord casino: per-player cap, plus a ceiling across every player. */
+export const BOT_CASINO_LIMITS = { maxRequests: 30, globalMaxRequests: 600, windowMs: 60_000 };
 
 /** First-party page-view ingest — generous per-IP cap for SPA navigations. */
 export const ANALYTICS_PAGE_VIEW_LIMITS = { maxRequests: 200, windowMs: 60_000 };

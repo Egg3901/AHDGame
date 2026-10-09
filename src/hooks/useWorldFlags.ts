@@ -23,6 +23,8 @@ export interface WorldFlags {
   startingYear: number | null;
   /** Per-country realized-growth index for the medianIncome era band; null flag-off. */
   incomeBandIndexByCountry: Partial<Record<string, number>> | null;
+  /** Income vintage provenance for the medianIncome anchor; null flag-off or legacy data. */
+  incomeStartVintages: Partial<Record<string, string>> | null;
   /** Live election results page master gate; gates "Live Results" links. */
   liveElectionResultsEnabled: boolean;
   /** Reset choice: "none" means the playable countries opened with no parties. */
@@ -53,10 +55,16 @@ const DEFAULT_FLAGS: WorldFlags = {
   currentEraId: null,
   startingYear: null,
   incomeBandIndexByCountry: null,
+  incomeStartVintages: null,
   liveElectionResultsEnabled: false,
   startingPartiesMode: "default",
   foundingRound: null,
-  resetSystemVersions: { metrics: "v1", legislation: "v1", cabinet: "v1" },
+  resetSystemVersions: {
+    metrics: "v1",
+    legislation: "v1",
+    cabinet: "v1",
+    demographics: "v1",
+  },
   resetV2Countries: [],
   failed: false,
   loaded: false,
@@ -80,7 +88,7 @@ function refreshFlags(): Promise<void> {
       if (
         !Array.isArray(data.resetV2Countries) ||
         !data.resetSystemVersions ||
-        (["metrics", "legislation", "cabinet"] as const).some(
+        (["metrics", "legislation", "cabinet", "demographics"] as const).some(
           (system) =>
             data.resetSystemVersions[system] !== "v1" && data.resetSystemVersions[system] !== "v2"
         )

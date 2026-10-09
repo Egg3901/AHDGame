@@ -84,9 +84,9 @@ The game runs on a **48-turn year** (1 turn = 1 game week). The fiscal year proc
 - Tax bases already grow every turn by 1/48 of that turn's wage, trade, and GDP rates
 - Fiscal close snapshots the budget and does not apply a second annual tax-base jump
 
-## Debt ceiling crisis (US only)
+## Debt ceiling raises
 
-When total sovereign debt principal exceeds the statutory **debt ceiling**, a crisis is triggered at fiscal year close. The crisis state is set to active but there is no automatic resolution path currently wired: it must be resolved by legislative action to raise the ceiling or eliminate the underlying deficit.
+Each country has a statutory **debt ceiling**. At fiscal year close, when total sovereign debt principal has reached 95% of the ceiling or passed it, the legislature raises the ceiling to 110% of the current debt and the US debt ceiling crisis flag is cleared. Ceilings no longer sit permanently just above the debt after a run of deficits.
 
 The crisis flag does not independently block sovereign bond issuance or apply additional penalties beyond those already imposed by the credit rating tiers. The real economic consequences of high debt (corporate margin penalties and public-trust penalties) are driven by the debt-to-GDP ratio and apply automatically every fiscal year, regardless of whether the statutory ceiling has been breached.
 

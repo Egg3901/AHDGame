@@ -19,6 +19,7 @@ import {
 } from "@/lib/currency/grantCashBuilder";
 import { ENERGY_MAX_ACTION_CAP } from "@/lib/stats/statsConstants";
 import { emitTxBulk, loadTxThresholds } from "@/lib/financialTxLog/emit";
+import { POSITION_UPDATE_VOUCHER_GRANT_AMOUNT } from "@/lib/positionUpdateVouchers/rules";
 
 export async function POST(request: Request) {
   try {
@@ -30,7 +31,15 @@ export async function POST(request: Request) {
     if (!parsed.success) {
       return errorResponse(parsed.status, parsed.error);
     }
-    const { characterIds, allPlayers, actions, funds, cashOnHand, currency } = parsed.data;
+    const {
+      characterIds,
+      allPlayers,
+      actions,
+      funds,
+      cashOnHand,
+      currency,
+      positionUpdateVoucher,
+    } = parsed.data;
 
     const db = await getDb();
     const forexEnabled = await isForexEnabled();
@@ -95,6 +104,11 @@ export async function POST(request: Request) {
         setStage.cashOnHand = { $add: [{ $ifNull: ["$cashOnHand", 0] }, cashOnHand] };
       }
     }
+    if (positionUpdateVoucher) {
+      setStage.positionUpdateVouchers = {
+        $add: [{ $ifNull: ["$positionUpdateVouchers", 0] }, POSITION_UPDATE_VOUCHER_GRANT_AMOUNT],
+      };
+    }
 
     let affectedCount = 0;
 
@@ -130,6 +144,9 @@ export async function POST(request: Request) {
       resourceParts.push(
         `${cashOnHand > 0 ? "+" : "-"}₳${Math.abs(cashOnHand).toLocaleString()} ${currLabel}`
       );
+    }
+    if (positionUpdateVoucher) {
+      resourceParts.push("+1 Positions Update Voucher");
     }
     const resourceDesc = resourceParts.join(", ");
 

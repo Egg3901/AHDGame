@@ -287,7 +287,12 @@ describe("processRegionalBudgets", () => {
       ],
     });
 
-    await processRegionalBudgets(db as never, 10);
+    await processRegionalBudgets(db as never, 10, 1, false, true, "world-test");
+
+    expect(db.collectionMocks["resetLawPrograms"]!.find).toHaveBeenCalledWith(
+      expect.objectContaining({ country: "UK", worldId: "world-test" }),
+      expect.any(Object)
+    );
 
     const setData = written();
     expect(setData.enactedBillCosts).toBe(1_000_000_000);

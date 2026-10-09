@@ -632,7 +632,7 @@ export async function seedAllCountryData(
   // engine evolves) and stamp turn-0 derived population metrics (sexRatio /
   // dependencyRatio / realizedMigrationRate), now that every country's states and
   // stateMetrics (with era-correct medianAge/birthRate) exist. Era-aware via preset.
-  await seedCohortVectors(db, preset, log);
+  await seedCohortVectors(db, preset, log, { replace: true });
 
   // Normalize regional gdp so Σ state.gdp matches each country's authored
   // national GDP (pre-1999 eras only + tolerance-guarded; see
@@ -944,6 +944,11 @@ export async function bootstrapGameWorld(options: BootstrapOptions) {
       .collection<GameState>("gameState")
       .updateOne({ _id: "current" }, { $set: { startingPartiesMode: startingParties } });
   }
+  // On an empty database the metric seed writers ran before this doc existed,
+  // so their income vintage stamps were dropped. seedAllCountryData above wrote
+  // this preset's incomes in this run; re-apply the matching stamps.
+  const { stampSeededIncomeVintages } = await import("@/lib/admin/seed/incomeStartVintage");
+  await stampSeededIncomeVintages(db, preset);
   log(`Game state ready at turn ${gameState.currentTurn}`);
   const coldWarFoundation = await seedColdWarFoundations(
     db,

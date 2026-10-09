@@ -2,14 +2,22 @@ import type { ObjectId } from "mongodb";
 import type { RankedBallot, PrStvResult } from "@/lib/turn/election/rules/prStv";
 import type { DemocraticHealthElectionSnapshot } from "@/lib/electionEngine/democraticHealth";
 import type { FactorLedgerSnapshot } from "@/lib/electionEngine/factorLedger";
+import type { ParticipationSummary } from "@/lib/demographics/v2/rules";
 
 export interface VoteTurnSnapshot {
   turn: number;
+  /**
+   * Half of a split turn: "early" is banked by the half-hour results tick
+   * ahead of the turn, "rest" by the turn itself. Absent: the whole turn.
+   */
+  slicePart?: "early" | "rest";
   recordedAt: Date;
   cumulativeVotes: Record<string, number>;
   sharesPct: Record<string, number>;
   /** Multi-seat races only (house, stateSenate, commons, …): Hamilton seat projection at this turn. */
   seatsEstimate?: Record<string, number>;
+  /** Demographics v2's electorate-wide turnout explanation for this turn. */
+  participation?: ParticipationSummary;
   /** Native Council snapshots count valid voters separately from candidate marks. */
   russianCouncilBallot?: {
     registeredVoters: number;
@@ -138,6 +146,11 @@ export interface ElectionVoteTally {
    * stalled turn that is cleared and re-run cannot count the slice twice.
    */
   lastAccruedTurn?: number;
+  /**
+   * Set when `lastAccruedTurn` holds only the early half of a split turn
+   * (banked by the half-hour results tick); the turn's rest clears it.
+   */
+  lastAccruedSlice?: "early";
   createdAt: Date;
   updatedAt: Date;
 
@@ -178,6 +191,49 @@ export interface ElectionVoteTally {
     deadlockBreakerUsed?: boolean;
     deadlockBreakerReason?: string;
     topElectoralVoteTotal: number;
+    /** No House majority: an acting president serves while the House keeps voting. */
+    houseDeadlocked?: boolean;
+  };
+  /**
+   * President only: the House vote that stays open after a contingent deadlock.
+   * The Senate's vice-presidential pick serves as acting president meanwhile.
+   */
+  contingentHouseVote?: {
+    status: "open" | "closed";
+    openedTurn: number;
+    closesTurn: number;
+    /** Contingent person id (character id, or `npp_<id>`). */
+    actingPresidentId: string;
+    actingPresidentName: string;
+    eligibleCandidateIds: string[];
+    /** House member id to the candidacy they back. */
+    votes: Record<string, string>;
+    /** Set when the House reaches a majority and the president is seated. */
+    presidentWinnerId?: string;
+    closedTurn?: number;
+    /** Set at close when the House elected a president whose seating has not completed. */
+    seatingPending?: boolean;
+    /** Turn of the latest ballot; a ballot is claimed at most once per turn. */
+    lastBallotTurn?: number;
+    /** Latest turn on which House members who had not voted were reminded. */
+    lastReminderTurn?: number;
+    /** One ballot per turn after the opening one, oldest first. */
+    ballots?: Array<{
+      turn: number;
+      delegationVotes: Record<string, string | null>;
+      /** Delegations backing each active candidacy. */
+      totals: Record<string, number>;
+      /** Candidacy holding a delegation majority on this ballot, if any. */
+      winnerId: string | null;
+    }>;
+    /**
+     * Whips set by party chairs (`party:<sequentialId>`) and coalition chairs
+     * (`coalition:<sequentialId>`). `candidateId` is a candidacy id or "free".
+     */
+    whips?: Record<
+      string,
+      { candidateId: string; setBy: string; setByName: string; setAt: Date; turn: number }
+    >;
   };
   /** President only: per-unit turn snapshots for EV projection */
   unitTurnSnapshots?: Record<string, VoteTurnSnapshot[]>;

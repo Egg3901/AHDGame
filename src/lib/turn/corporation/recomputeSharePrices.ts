@@ -10,6 +10,7 @@
  * batch into bondTurn + recompute ensures every downstream snapshot consumer
  * sees the post-recompute price.
  */
+import { formalizedSubsidiaryCountByParentId } from "@/lib/corporations/subsidiaries/helpers";
 import { ObjectId, type Db, type AnyBulkWriteOperation } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import type { Corporation, CorporationHistory } from "@/lib/db/types";
@@ -51,6 +52,19 @@ export interface RecomputeSharePricesResult {
   corpsSkipped: number;
 }
 
+export interface RecomputeSharePricesOptions {
+  /**
+   * Quarter-hour market tick between turns (src/lib/turn/subhour/marketTick.ts).
+   * Re-prices from what moves inside the hour (cash, bonds, FX, rates, index
+   * ownership) against the last completed turn's history row, with the same
+   * smoothing prior that turn used, so repeated ticks never compound the
+   * smoothing and the next turn's price chain is unchanged. Writes only the
+   * live corporation price, never corporationHistory, and only when no other
+   * writer moved fundamentalSharePrice since it was read.
+   */
+  intraHour?: boolean;
+}
+
 // Last-resort cost-of-capital input when a corp's countryId has no
 // CountryConfig entry. Not a designed economic parameter — just prevents a
 // bad countryId from crashing repricing for every corporation.
@@ -72,8 +86,10 @@ const TRAILING_GROWTH_WINDOW_TURNS = 3;
  */
 export async function recomputeSharePricesAfterBondTurn(
   turn: number,
-  db?: Db
+  db?: Db,
+  options?: RecomputeSharePricesOptions
 ): Promise<RecomputeSharePricesResult> {
+  const intraHour = options?.intraHour === true;
   const database = db ?? (await getDb());
   const [lookups, gameState, marketMode] = await Promise.all([
     buildCorporationLookups(database, { omitBuildQueue: true }),
@@ -153,6 +169,7 @@ export async function recomputeSharePricesAfterBondTurn(
     totalSharesById
   );
 
+  const subsidiaryCountByParentId = formalizedSubsidiaryCountByParentId(lookups.corporations);
   const inputs: SharePriceInput[] = [];
   let skipped = 0;
   for (const corp of lookups.corporations) {
@@ -301,15 +318,20 @@ export async function recomputeSharePricesAfterBondTurn(
       //     history here would be the PRE-SPLIT price, undoing the scaling.
       //   - Outside cooldown: use turn-1 history as the true prior (avoids
       //     double-applying smoothing already baked into corp.sharePrice this turn).
+      //   - Intra-hour tick in cooldown: the turn's own persisted price, a
+      //     fixed prior, so ticks cannot compound on each other's output.
       previousSharePrice: readCorpEconomicAnchor(
         isInSplitCooldown(corp.lastShareStructureTurn ?? null, turn)
-          ? (corp.sharePrice ?? 0.1)
+          ? intraHour
+            ? (hist.sharePrice ?? corp.sharePrice ?? 0.1)
+            : (corp.sharePrice ?? 0.1)
           : (prevPriceByCorpId.get(id) ?? corp.sharePrice ?? 0.1),
         homeCurrency,
         fxRate
       ),
       imfBailoutActive: corp.imfBailoutActive === true,
       lastShareStructureTurn: corp.lastShareStructureTurn ?? null,
+      subsidiaryCount: subsidiaryCountByParentId.get(id) ?? 0,
       techAssetValueAnchor: computeTechAssetValueAnchor(corp, currentYear),
     });
   }
@@ -338,12 +360,18 @@ export async function recomputeSharePricesAfterBondTurn(
     const localPrice = writeCorpEconomicLocal(anchorPrice, code, rate);
     corpOps.push({
       updateOne: {
-        filter: { _id: oid },
+        // Between turns there is no turn lock: an IPO, share issue or vote
+        // effect may write fundamentalSharePrice concurrently. Its write wins;
+        // this tick skips that corp until the next one.
+        filter: intraHour
+          ? { _id: oid, fundamentalSharePrice: corp?.fundamentalSharePrice }
+          : { _id: oid },
         update: {
           $set: { sharePrice: localPrice, fundamentalSharePrice: localPrice, updatedAt: now },
         },
       },
     });
+    if (intraHour) continue;
     histOps.push({
       updateOne: {
         filter: { corporationId: oid, turn },
@@ -365,10 +393,20 @@ export async function recomputeSharePricesAfterBondTurn(
   }
 
   if (corpOps.length > 0) {
-    await Promise.all([
-      database.collection<Corporation>("corporations").bulkWrite(corpOps),
-      database.collection<CorporationHistory>("corporationHistory").bulkWrite(histOps),
+    const [corpResult] = await Promise.all([
+      database
+        .collection<Corporation>("corporations")
+        .bulkWrite(corpOps, intraHour ? { ordered: false } : undefined),
+      histOps.length > 0
+        ? database.collection<CorporationHistory>("corporationHistory").bulkWrite(histOps)
+        : null,
     ]);
+    if (intraHour) {
+      return {
+        corpsRepriced: corpResult.matchedCount,
+        corpsSkipped: skipped + corpOps.length - corpResult.matchedCount,
+      };
+    }
   }
 
   return { corpsRepriced: corpOps.length, corpsSkipped: skipped };

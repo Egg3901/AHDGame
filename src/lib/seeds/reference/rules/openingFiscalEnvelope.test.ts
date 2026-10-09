@@ -37,4 +37,18 @@ describe("opening fiscal envelope", () => {
       stateGrants: 0,
     });
   });
+
+  it("fills the envelope from below while keeping the authored mix", () => {
+    const result = fitOpeningFiscalEnvelope({
+      gdp: 1_000,
+      annualRevenue: 200,
+      annualDebtService: 40,
+      byCategory: { healthcare: 20, education: 40 },
+      stateGrants: 20,
+      maximumDeficitGdpShare: 0.005,
+      fillEnvelope: true,
+    });
+    // 165 affordable over 80 authored: every line grows by 2.0625.
+    expect(result).toEqual({ byCategory: { healthcare: 41, education: 82 }, stateGrants: 41 });
+  });
 });

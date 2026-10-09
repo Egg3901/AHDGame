@@ -6,10 +6,13 @@ import { RESET_V2_SEED_REVISION } from "@/lib/resetVersions/rules";
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 vi.mock("@/lib/api/requireAdmin", () => ({ requireAdmin: vi.fn() }));
 vi.mock("@/lib/resetVersions/availability", () => ({
-  RESET_V2_READY: { metrics: true, legislation: true, cabinet: true },
+  RESET_V2_READY: { metrics: true, legislation: true, cabinet: true, demographics: true },
 }));
 
-function request(system: "metrics" | "legislation" | "cabinet", value: "v1" | "v2") {
+function request(
+  system: "metrics" | "legislation" | "cabinet" | "demographics",
+  value: "v1" | "v2"
+) {
   return new Request("http://localhost/api/admin/feature-gates", {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -69,7 +72,12 @@ describe("reset system version dependency and concurrent admin changes", () => {
     const response = await GET();
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toMatchObject({
-      resetSystemVersions: { metrics: "v1", legislation: "v1", cabinet: "v1" },
+      resetSystemVersions: {
+        metrics: "v1",
+        legislation: "v1",
+        cabinet: "v1",
+        demographics: "v1",
+      },
     });
   });
 
@@ -84,6 +92,16 @@ describe("reset system version dependency and concurrent admin changes", () => {
       });
     }
     expect(db.collection("gameState").updateOne).not.toHaveBeenCalled();
+  });
+
+  it("stages Demographics v2 independently of Metrics", async () => {
+    db.collection("gameState").findOne.mockResolvedValue({ _id: "current" });
+    const { POST } = await import("./route");
+    const response = await POST(request("demographics", "v2"));
+    expect(response.status).toBe(200);
+    const [, update] = db.collection("gameState").updateOne.mock.calls[0];
+    expect(update.$set["resetSystemSelections.demographics"]).toBe("v2");
+    expect(update.$set).not.toHaveProperty("demographicsSystemVersion");
   });
 
   it("uses a conditional write so concurrent selection changes cannot be lost", async () => {

@@ -10,7 +10,7 @@ import type { Corporation, CorporateSector } from "@/lib/db/types";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 
 import type { CommodityType } from "@/lib/constants/commodities";
-import { eraScaledBasePrices } from "@/lib/constants/commodities";
+import { commodityMixWeight, eraScaledBasePrices } from "@/lib/constants/commodities";
 import { trendProductionPolicy, getRevenueMultiplier } from "@/lib/utils/productionPolicy";
 import {
   calculateDailyGrowthCost,
@@ -470,6 +470,7 @@ export function processSector(
     clearingFactor,
     clearingStartTurn,
     currentTurn,
+    preset: lookups.preset,
     priceRealization,
     priceRatioByCommodity: lookups.priceRatioByCommodity,
     embargoLegacyMothball,
@@ -500,6 +501,17 @@ export function processSector(
       isStateScopedCommodity(commodity)
         ? lookups.statePriceRatioByState?.get(sector.stateId)?.get(commodity)
         : lookups.reachablePriceRatioByCountry?.get(sectorCountryId)?.get(commodity),
+    throttleLegBalance: (commodity) =>
+      isStateScopedCommodity(commodity)
+        ? lookups.rawStateBalances?.get(sector.stateId)?.get(commodity)
+        : (lookups.countryClearingBooks?.get(sectorCountryId)?.get(commodity) ??
+          lookups.globalCommodityBalances?.get(commodity)),
+    throttleLegMixWeight: (commodity) =>
+      commodityMixWeight(
+        strategyRates.supply,
+        eraScaledBasePrices(lookups.eraUnitScale),
+        commodity
+      ),
   });
   if (capacityBindingEvent) {
     pendingCapacityBindingEvents.push(capacityBindingEvent);
@@ -511,8 +523,11 @@ export function processSector(
   // price/realization lift, not extra workers. Maintenance, growth realization
   // and regulatory legs below all scale with the boosted figure, so margins
   // are preserved and the lift lands in profit, then NPV, then share price.
+  // A released product venture lifts revenue the same way, for a few days.
   const hourlyRevenue =
-    realizedHourlyRevenue * sectorRevenueBoostMultiplier(currentTurn, operatingSectorType);
+    realizedHourlyRevenue *
+    sectorRevenueBoostMultiplier(currentTurn, operatingSectorType) *
+    (lookups.productVentureBoostBySectorId?.get(sector._id.toString()) ?? 1);
   // (moved to resolvePlantsRevenue: trade-exposure embargo legs)
   // (moved to resolvePlantsRevenue: P3b extraction hard min)
   // (moved to resolvePlantsRevenue: pre-plants counterfactual baseline)
@@ -679,6 +694,20 @@ export function processSector(
       labourOutputFactor,
     });
 
+  // Canonical freight billing (issue #897, gameConfig gate, default off):
+  // last turn's state-scoped shipping money as this sector's own named legs,
+  // ₳/turn. Charge rides `costs` and credit rides the returned revenue below;
+  // both legs and the flag-off stale-clear behavior live in
+  // `resolveSectorFreightBillingLegs`. Off ⇒ both 0 and no fields written.
+  const freightBilling = resolveSectorFreightBillingLegs({
+    market,
+    sector,
+    embargoLegacyMothball,
+    currentTurn,
+    sectorCurrencyCode,
+    sectorFxRate,
+  });
+
   // ─── P3.5: physical cost decomposition (plants only) ──────────────────────
   // Pure computation in `sectorTurn/sectorCosts.ts`; names are unchanged.
   const {
@@ -711,6 +740,7 @@ export function processSector(
     priceRatioByCommodity: lookups.priceRatioByCommodity,
     reachableInputPriceRatiosByCountry: lookups.reachableInputPriceRatiosByCountry,
     plantsCapacity,
+    activeFraction,
     producedUnits,
     retoolCapacityRatio,
     newPolicyLevel,
@@ -723,6 +753,7 @@ export function processSector(
     capitalEnabled: market.capitalEnabled,
     prevCapitalBookAnchor: sector.capitalBookAnchor,
     npvBoostMultiplier: sectorNpvBoostMultiplier(currentTurn),
+    freightNetHourly: freightBilling.credit - freightBilling.charge,
   });
 
   const productProject = lookups.productLinesV2Enabled
@@ -800,20 +831,6 @@ export function processSector(
     ? inventoryTurn.drainedRevenueAnchor / TURNS_PER_DAY
     : 0;
   const hourlyInventoryCarry = inventoryTurn ? inventoryTurn.carryCostAnchor / TURNS_PER_DAY : 0;
-
-  // Canonical freight billing (issue #897, gameConfig gate, default off):
-  // last turn's state-scoped shipping money as this sector's own named legs,
-  // ₳/turn. Charge rides `costs` and credit rides the returned revenue below;
-  // both legs and the flag-off stale-clear behavior live in
-  // `resolveSectorFreightBillingLegs`. Off ⇒ both 0 and no fields written.
-  const freightBilling = resolveSectorFreightBillingLegs({
-    market,
-    sector,
-    embargoLegacyMothball,
-    currentTurn,
-    sectorCurrencyCode,
-    sectorFxRate,
-  });
 
   // Persist countryId so API endpoints don't need to re-derive it from the state.
   // newRevenue / newGrowthCost are ₳ (computed from anchor inputs); convert

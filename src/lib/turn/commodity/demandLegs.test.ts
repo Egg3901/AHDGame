@@ -6,7 +6,11 @@ import {
   applyDemandCalibration,
   applyDemographicsUplift,
   applyGovernmentDemand,
+  GOVERNMENT_DEMAND_SUPPLY_CAP,
+  governmentSupplyCapFactors,
+  sumHouseholdDemand,
   applyLatentFinancialDemand,
+  bondIssuanceAnchor,
   applyRateSensitiveDemand,
   buildStatesByCountry,
 } from "./demandLegs";
@@ -207,6 +211,7 @@ describe("applyLatentFinancialDemand", () => {
         allCorporations: [],
         recentBonds: [{ issuerType: "sovereign", countryId: "US", totalIssued: 10000000 }] as never,
         centralBankByCountry: new Map([["US", 5]]),
+        fxRateForBond: () => 1,
       },
       global,
       byState
@@ -225,12 +230,213 @@ describe("applyLatentFinancialDemand", () => {
         allCorporations: [],
         recentBonds: [{ issuerType: "sovereign", countryId: "US", totalIssued: 10000000 }] as never,
         centralBankByCountry: new Map(),
+        fxRateForBond: () => 1,
       },
       global,
       byState
     );
     expect(global.get("financial_services")!.demand).toBe(0);
     expect(byState.has("s1")).toBe(false);
+  });
+});
+
+describe("latent financial demand currency", () => {
+  const run = (bonds: unknown[], fx: (code?: string) => number, corps: unknown[] = []) => {
+    const { global, byState } = blankLedgers();
+    applyLatentFinancialDemand(
+      {
+        statesByCountry: new Map([
+          ["US", new Map([["s1", 100]])],
+          ["IT", new Map([["it1", 100]])],
+        ]),
+        allCorporations: corps as never,
+        recentBonds: bonds as never,
+        centralBankByCountry: new Map([
+          ["US", 5],
+          ["IT", 5],
+        ]),
+        fxRateForBond: (bond) => fx(bond.currencyCode),
+      },
+      global,
+      byState
+    );
+    return global.get("financial_services")!.demand;
+  };
+
+  it("converts a lira issue to anchor before it becomes demand", () => {
+    // 1.358 trillion lira at 1,358 lira per anchor is a 1 billion anchor issue.
+    const lira = run(
+      [
+        {
+          issuerType: "sovereign",
+          countryId: "IT",
+          currencyCode: "ITL",
+          totalIssued: 1_358_000_000_000,
+        },
+      ],
+      (code) => (code === "ITL" ? 1358 : 1)
+    );
+    const dollars = run(
+      [
+        {
+          issuerType: "sovereign",
+          countryId: "US",
+          currencyCode: "USD",
+          totalIssued: 1_000_000_000,
+        },
+      ],
+      () => 1
+    );
+    expect(dollars).toBeGreaterThan(0);
+    expect(lira).toBeCloseTo(dollars, 1);
+  });
+
+  it("converts corporate issues at the bond's currency", () => {
+    const corps = [{ _id: { toString: () => "c1" }, headquartersState: "it1", countryId: "IT" }];
+    const lira = run(
+      [
+        {
+          issuerType: "corporate",
+          corporationId: "c1",
+          currencyCode: "ITL",
+          totalIssued: 135_800_000_000,
+        },
+      ],
+      (code) => (code === "ITL" ? 1358 : 1),
+      corps
+    );
+    const anchor = run(
+      [{ issuerType: "corporate", corporationId: "c1", totalIssued: 100_000_000 }],
+      () => 1,
+      corps
+    );
+    expect(lira).toBeCloseTo(anchor, 1);
+  });
+
+  it("treats a missing or non-positive rate as anchor", () => {
+    expect(
+      bondIssuanceAnchor(
+        { totalIssued: 500, issuerType: "sovereign", countryId: "US" } as never,
+        () => 0
+      )
+    ).toBe(500);
+    expect(
+      bondIssuanceAnchor({ totalIssued: 500, currencyCode: "JPY" } as never, () => 136)
+    ).toBeCloseTo(500 / 136, 9);
+  });
+});
+
+describe("government demand supply cap", () => {
+  const BASE_100 = Object.fromEntries(COMMODITY_TYPES.map((c) => [c, 100])) as Record<
+    CommodityType,
+    number
+  >;
+  const run = (
+    prior: Map<CommodityType, number> | undefined,
+    truncated = new Map<CommodityType, number>(),
+    householdDemand?: Map<CommodityType, number>
+  ) => {
+    const { global, byState } = blankLedgers();
+    const byCountry = aggregateByCountry(byState, new Map());
+    applyGovernmentDemand(
+      {
+        federalBudgets: [
+          { countryId: "US", spending: { byCategory: { healthcare: 480_000 } } },
+          { countryId: "UK", spending: { byCategory: { healthcare: 160_000 } } },
+        ] as never,
+        ledgerBasePrices: BASE_100,
+        fxRateForCountry: () => 1,
+        ledgerCurrentYear: null,
+        ledgerCommandEconomyEnabled: false,
+        statesByCountry: new Map([
+          ["US", new Map([["s1", 100]])],
+          ["UK", new Map([["u1", 100]])],
+        ]),
+        stateToCountry: new Map([
+          ["s1", "US"],
+          ["u1", "UK"],
+        ]),
+        priorGlobalSupply: prior,
+        householdDemand,
+      },
+      global,
+      byCountry,
+      byState,
+      truncated
+    );
+    return { global, byCountry, truncated };
+  };
+
+  it("holds government purchases to the cap times last turn's supply, keeping shares", () => {
+    const uncapped = run(undefined).global.get("healthcare_services")!.demand;
+    // Last turn's supply is a tenth of what governments ask for.
+    const supply = uncapped / 10;
+    const { global, byCountry, truncated } = run(new Map([["healthcare_services", supply]]));
+    const capped = global.get("healthcare_services")!.demand;
+    expect(capped).toBeCloseTo(supply * GOVERNMENT_DEMAND_SUPPLY_CAP, 9);
+    const us = byCountry.get("US")!.get("healthcare_services")!.demand;
+    const uk = byCountry.get("UK")!.get("healthcare_services")!.demand;
+    expect(us / uk).toBeCloseTo(3, 9);
+    expect(truncated.get("healthcare_services")).toBeCloseTo(uncapped - capped, 6);
+  });
+
+  it("shares the ceiling with household demand instead of stacking a second one", () => {
+    const uncapped = run(undefined).global.get("healthcare_services")!.demand;
+    const supply = uncapped / 10;
+    const ceiling = supply * GOVERNMENT_DEMAND_SUPPLY_CAP;
+    // Households already sit at the ceiling: nothing is left for government.
+    const full = run(
+      new Map([["healthcare_services", supply]]),
+      new Map(),
+      new Map([["healthcare_services", ceiling]])
+    );
+    expect(full.global.get("healthcare_services")!.demand).toBe(0);
+    expect(full.truncated.get("healthcare_services")).toBeCloseTo(uncapped, 6);
+
+    // Households take a third of it: government gets the remaining two thirds.
+    const shared = run(
+      new Map([["healthcare_services", supply]]),
+      new Map(),
+      new Map([["healthcare_services", ceiling / 3]])
+    );
+    expect(shared.global.get("healthcare_services")!.demand).toBeCloseTo((ceiling * 2) / 3, 9);
+    const us = shared.byCountry.get("US")!.get("healthcare_services")!.demand;
+    const uk = shared.byCountry.get("UK")!.get("healthcare_services")!.demand;
+    expect(us / uk).toBeCloseTo(3, 9);
+  });
+
+  it("sums household demand across states", () => {
+    const totals = sumHouseholdDemand(
+      new Map([
+        ["a", new Map<CommodityType, number>([["food", 2]])],
+        [
+          "b",
+          new Map<CommodityType, number>([
+            ["food", 3],
+            ["energy", 1],
+          ]),
+        ],
+      ])
+    );
+    expect(totals.get("food")).toBe(5);
+    expect(totals.get("energy")).toBe(1);
+  });
+
+  it("leaves a commodity with no recorded supply uncapped", () => {
+    const uncapped = run(undefined).global.get("healthcare_services")!.demand;
+    expect(
+      run(new Map([["healthcare_services", 0]])).global.get("healthcare_services")!.demand
+    ).toBeCloseTo(uncapped, 9);
+  });
+
+  it("bounds calibrated demand", () => {
+    const f = governmentSupplyCapFactors(
+      [{ commodity: "ordnance", units: 100 }],
+      new Map([["ordnance", 10]]),
+      () => 2
+    );
+    // cap = 10 x 1.5 / 2 = 7.5 of the 100 requested
+    expect(f.get("ordnance")).toBeCloseTo(0.075, 9);
   });
 });
 

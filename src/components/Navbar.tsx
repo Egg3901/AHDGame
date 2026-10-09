@@ -110,6 +110,7 @@ interface NavbarProps {
   activePresidentElectionSeatId?: string;
   unreadCount?: number;
   myCorporationId?: number | null;
+  myUnionId?: string | null;
   onOpenFeedback?: () => void;
   feedbackCapturing?: boolean;
   adminCharacters?: AdminCharacter[];
@@ -118,6 +119,7 @@ interface NavbarProps {
   wikiDisabled?: boolean;
   conflictsEnabled?: boolean;
   unionsEnabled?: boolean;
+  settlementCrisisLive?: boolean;
   initialPageCountry?: CountryId | null;
 }
 
@@ -153,6 +155,7 @@ export const Navbar = React.memo(function Navbar({
   activePresidentElectionSeatId,
   unreadCount = 0,
   myCorporationId = null,
+  myUnionId = null,
   onOpenFeedback,
   feedbackCapturing = false,
   adminCharacters,
@@ -161,6 +164,7 @@ export const Navbar = React.memo(function Navbar({
   wikiDisabled = false,
   conflictsEnabled = false,
   unionsEnabled = false,
+  settlementCrisisLive = false,
   initialPageCountry,
 }: NavbarProps) {
   const t = useTranslations("nav");
@@ -504,9 +508,21 @@ export const Navbar = React.memo(function Navbar({
                 isUKContext={isUKContext}
                 countryId={pageCountry}
                 myCorporationId={myCorporationId}
+                myUnionId={myUnionId}
                 conflictsEnabled={conflictsEnabled}
                 unionsEnabled={unionsEnabled}
+                settlementCrisisLive={settlementCrisisLive}
               />
+            )}
+
+            {!user?.singleplayer && (
+              <Link
+                href="/contests"
+                className={`relative px-2.5 py-1 text-sm transition-colors hover:text-foreground ${isNavActive(pathname, "/contests") ? "font-medium text-foreground after:absolute after:bottom-0 after:left-1 after:right-1 after:h-px after:rounded-full after:bg-primary after:opacity-70" : "text-muted"}`}
+                aria-current={isNavActive(pathname, "/contests") ? "page" : undefined}
+              >
+                {t("common.contests")}
+              </Link>
             )}
 
             <HelpDropdown
@@ -1171,8 +1187,10 @@ export const Navbar = React.memo(function Navbar({
                     {visibleWorldNavItems({
                       countryId: pageCountry,
                       myCorporationId,
+                      myUnionId,
                       conflictsEnabled,
                       unionsEnabled,
+                      settlementCrisisLive,
                     }).map((item) => (
                       <Link
                         key={item.id}
@@ -1203,6 +1221,17 @@ export const Navbar = React.memo(function Navbar({
                   </div>
                 )}
               </div>
+            )}
+
+            {!user?.singleplayer && (
+              <Link
+                href="/contests"
+                onClick={closeMobileMenu}
+                className={`flex w-full items-center rounded-lg px-3 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-white/5 ${isNavActive(pathname, "/contests") ? "bg-white/5" : ""}`}
+                aria-current={isNavActive(pathname, "/contests") ? "page" : undefined}
+              >
+                {t("common.contests")}
+              </Link>
             )}
 
             {/* Help/Information section — collapsible, collapsed by default */}

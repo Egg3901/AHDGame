@@ -5,6 +5,8 @@ import { computeHoldingsValueAnchor } from "@/lib/indexFunds/fundAllocation";
 import { loadOpenOrdersEscrowByFundId } from "@/lib/indexFunds/fundValuation";
 import {
   cancelFundShareOrder,
+  cancelFundShareOrdersBatch,
+  placeFundQuotesBatch,
   placeFundShareBuyOrder,
   placeFundShareSellOrder,
 } from "@/lib/indexFunds/fundShareOrders";
@@ -193,13 +195,26 @@ export async function refreshEquityLiquidityFacility(input: {
     async (orders) => {
       const ledgerEntries: TxInput[] = [];
       try {
-        for (const order of orders) {
-          await cancelFundShareOrder(db, order._id, turn, {
-            thresholds: thresholds ?? undefined,
-            turnLengthMinutes,
-            fund: fundById.get(order.placerFundId?.toString() ?? ""),
-            ledgerSink: ledgerEntries,
-          });
+        const fund = fundById.get(orders[0]?.placerFundId?.toString() ?? "");
+        const batched =
+          !!fund &&
+          orders.every((order) => order.placerFundId?.equals(fund._id)) &&
+          (await cancelFundShareOrdersBatch(
+            db,
+            fund,
+            orders.map((order) => order._id),
+            turn,
+            { ledgerSink: ledgerEntries }
+          ));
+        if (!batched) {
+          for (const order of orders) {
+            await cancelFundShareOrder(db, order._id, turn, {
+              thresholds: thresholds ?? undefined,
+              turnLengthMinutes,
+              fund: fundById.get(order.placerFundId?.toString() ?? ""),
+              ledgerSink: ledgerEntries,
+            });
+          }
         }
       } finally {
         // A later cancellation can fail after earlier refunds committed.
@@ -299,6 +314,90 @@ export async function refreshEquityLiquidityFacility(input: {
         (reservedSharesByFundCorp.get(key) ?? 0) + ask.sharesRemaining
       );
     }
+    // One fund's quotes in a fixed number of round trips. Returns false, with
+    // nothing written, when the fund's cash moved underneath; the per-quote
+    // loop then places them exactly as before.
+    const placeFundPlansBatch = async (
+      fundPlans: EquityLiquidityQuotePlan[],
+      outcome: {
+        quotePairsPlaced: number;
+        quotePairsFailed: number;
+        bidQuotesPlaced: number;
+        askQuotesPlaced: number;
+        bidDepthAnchor: number;
+        askDepthAnchor: number;
+        stressLossAtRiskAnchor: number;
+        participatingFundId: string | null;
+      },
+      transactions: Omit<IndexFundTransaction, "_id">[],
+      ledgerEntries: TxInput[]
+    ): Promise<boolean> => {
+      const fund = fundById.get(fundPlans[0]?.fundId.toString() ?? "");
+      if (!fund) return false;
+      const placeable = fundPlans.filter((plan) => listingById.has(plan.corporationId.toString()));
+      const missing = fundPlans.length - placeable.length;
+      const reservedByCorp = new Map<string, number>();
+      for (const plan of placeable) {
+        const key = askKey(plan.fundId, plan.corporationId);
+        reservedByCorp.set(plan.corporationId.toString(), reservedSharesByFundCorp.get(key) ?? 0);
+      }
+      const placements = placeable.map((plan) => {
+        const listing = listingById.get(plan.corporationId.toString())!;
+        const liquidityQuote = { turn, referencePrice: plan.referencePriceLocal };
+        return {
+          bid: {
+            fund,
+            corp: listing.corporation,
+            shares: plan.bidShares,
+            limitPriceLocal: plan.bidPriceLocal,
+            fxRate: listing.fxRate,
+            turn,
+            liquidityQuote,
+          },
+          ...(plan.askShares > 0
+            ? {
+                ask: {
+                  corp: listing.corporation,
+                  shares: plan.askShares,
+                  limitPriceLocal: plan.askPriceLocal,
+                  liquidityQuote,
+                },
+              }
+            : {}),
+        };
+      });
+      const placed = await placeFundQuotesBatch(db, fund, placements, reservedByCorp);
+      if (!placed) return false;
+      transactions.push(...placed.escrowTxs);
+      ledgerEntries.push(...placed.ledgerEntries);
+      outcome.quotePairsFailed += missing;
+      placed.results.forEach(({ bid, ask }, i) => {
+        const plan = placeable[i];
+        const listing = listingById.get(plan.corporationId.toString())!;
+        if (!bid.ok) {
+          outcome.quotePairsFailed++;
+          return;
+        }
+        outcome.bidQuotesPlaced++;
+        outcome.bidDepthAnchor += (plan.bidShares * plan.bidPriceLocal) / listing.fxRate;
+        if (plan.askShares > 0) {
+          if (!ask?.ok) {
+            outcome.quotePairsFailed++;
+          } else {
+            outcome.quotePairsPlaced++;
+            outcome.askQuotesPlaced++;
+            outcome.askDepthAnchor += (plan.askShares * plan.askPriceLocal) / listing.fxRate;
+          }
+        }
+        outcome.stressLossAtRiskAnchor += plan.stressLossAnchor;
+        outcome.participatingFundId = plan.fundId.toString();
+      });
+      for (const plan of placeable) {
+        const key = askKey(plan.fundId, plan.corporationId);
+        reservedSharesByFundCorp.set(key, reservedByCorp.get(plan.corporationId.toString()) ?? 0);
+      }
+      return true;
+    };
     const outcomes = await boundedParallelMap(
       [...plansByFund.values()],
       EQUITY_LIQUIDITY_FUND_CONCURRENCY,
@@ -316,6 +415,9 @@ export async function refreshEquityLiquidityFacility(input: {
           participatingFundId: null as string | null,
         };
         try {
+          if (await placeFundPlansBatch(fundPlans, outcome, transactions, ledgerEntries)) {
+            return outcome;
+          }
           for (const plan of fundPlans) {
             const fund = fundById.get(plan.fundId.toString());
             const listing = listingById.get(plan.corporationId.toString());

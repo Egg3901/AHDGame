@@ -15,7 +15,8 @@ import {
 import { validateDepartmentProgramAllocations } from "@/lib/governmentFinance/departmentAllocation";
 import { getDb } from "@/lib/mongodb";
 import { RESET_V2_READY } from "@/lib/resetVersions/availability";
-import { resetSystemVersionsForCountry } from "@/lib/resetVersions/rules";
+import { isResetV2Country, resetSystemVersionsForCountry } from "@/lib/resetVersions/rules";
+import type { ResetCountry } from "@/lib/resetLegislation/fundingOwner";
 import { setResetDepartmentAllocations } from "@/lib/resetCabinet/setDepartmentAllocations";
 
 const schema = z.object({
@@ -34,7 +35,7 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     const { code, positionId } = await params;
     const countryId = code.toUpperCase() as CountryId;
-    if (!COUNTRY_CONFIGS[countryId] || !["US", "UK", "JP"].includes(countryId)) {
+    if (!COUNTRY_CONFIGS[countryId] || !isResetV2Country(countryId)) {
       return errorResponse(400, "Invalid country");
     }
     const parsed = await parseJsonBody(request, schema);
@@ -61,7 +62,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       const result = await setResetDepartmentAllocations({
         db,
         worldId: String(gameState?.resetWorldId ?? ""),
-        countryId: countryId as "US" | "UK" | "JP",
+        countryId: countryId as ResetCountry,
         departmentId: parsed.data.departmentId,
         positionId,
         turn: gameState?.currentTurn ?? 0,

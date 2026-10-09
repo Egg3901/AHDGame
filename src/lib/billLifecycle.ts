@@ -14,6 +14,7 @@ import { getDb } from "@/lib/mongodb";
 import { getGameState } from "@/lib/gameState";
 import { runBillLifecycle, type BillLifecycleResult } from "@/lib/turn/billLifecycle/engine";
 import { US_NATIONAL_CONFIG } from "@/lib/turn/billLifecycle/configs/us";
+import type { BillLifecycleRuntimeContext } from "@/lib/turn/billLifecycle/types";
 
 // Re-exported for external consumers (admin route, unit tests) that import from
 // "@/lib/billLifecycle".
@@ -23,9 +24,11 @@ export {
 } from "@/lib/turn/billLifecycle/lifecycleHelpers";
 export type { BillLifecycleResult };
 
-export async function processBillLifecycle(now: Date): Promise<BillLifecycleResult> {
-  const db = await getDb();
-  const gameState = await getGameState();
-  const currentTurn = gameState?.currentTurn ?? 1;
-  return runBillLifecycle(db, US_NATIONAL_CONFIG, now, currentTurn);
+export async function processBillLifecycle(
+  now: Date,
+  context?: BillLifecycleRuntimeContext
+): Promise<BillLifecycleResult> {
+  const db = context?.db ?? (await getDb());
+  const currentTurn = context?.currentTurn ?? (await getGameState())?.currentTurn ?? 1;
+  return runBillLifecycle(db, US_NATIONAL_CONFIG, now, currentTurn, context?.preset, context?.rng);
 }

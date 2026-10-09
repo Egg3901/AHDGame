@@ -2,7 +2,7 @@
 
 import { useTranslations } from "next-intl";
 import { useCurrency } from "@/contexts/CurrencyContext";
-import { TURNS_PER_DAY } from "@/lib/constants/corporations";
+import { investmentForecastInput } from "../lib/investment";
 import { forecastSectorInvestment } from "@/lib/corporations/investment/rules";
 import type { PlantsData } from "../types";
 
@@ -15,38 +15,9 @@ export default function InvestmentForecast({
 }) {
   const t = useTranslations("corporations.sectorInvestment");
   const { formatAmount } = useCurrency();
-  const pnl = plants.pnl;
   const assumptions = plants.investment;
-  const forecast = assumptions
-    ? forecastSectorInvestment({
-        units,
-        constructionPerUnitAnchor: plants.buildQuote.perUnitAnchor,
-        chargedPerUnitAnchor: plants.buildQuote.perUnitChargedAnchor,
-        buildTurns: plants.buildTurns,
-        depreciationPerTurn: plants.depreciationPerTurn,
-        turnsPerDay: TURNS_PER_DAY,
-        capacityUnits: plants.capacityUnits ?? 0,
-        activeFraction: plants.mothballed ? 0 : (plants.activeCapacityPercent ?? 100) / 100,
-        producedUnits: plants.producedUnits ?? 0,
-        soldUnits: plants.soldUnits ?? 0,
-        demandGapUnits: plants.demandGapUnits ?? 0,
-        revenueDailyAnchor: Math.max(
-          0,
-          pnl.revenueAnchor - (assumptions.inventoryRevenueDailyAnchor ?? 0)
-        ),
-        operatingCostDailyAnchor:
-          pnl.inputsAnchor +
-          pnl.labourAnchor +
-          pnl.complianceAnchor +
-          pnl.otherOperatingAnchor +
-          pnl.growthAndBuildAnchor +
-          (assumptions.freightNetCostDailyAnchor ?? 0),
-        policyCreditDailyAnchor: pnl.policyAnchor ?? 0,
-        overheadDailyAnchor: assumptions.overheadDailyAnchor,
-        upkeepDailyAnchor: pnl.upkeepAnchor,
-        taxRatePercent: assumptions.taxRatePercent,
-      })
-    : null;
+  const input = investmentForecastInput(plants, units);
+  const forecast = input ? forecastSectorInvestment(input) : null;
   return (
     <div className="rounded-lg border border-card-border p-3">
       <h3 className="text-body-sm font-semibold text-foreground">{t("forecastTitle")}</h3>

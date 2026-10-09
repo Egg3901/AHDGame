@@ -282,6 +282,173 @@ describe("sovereign primary settlement", () => {
     assertLedger(db);
   });
 
+  describe("funded Treasury cash with an autonomous chair (#3401)", () => {
+    function fundedWorld(poolCash: number) {
+      const db = world(poolCash);
+      db.collection("gameConfig").docs[0].treasuryCashLedgerEnabled = true;
+      db.collection("centralBanks").docs[0].chairMode = "npp";
+      return db;
+    }
+    function units(db: InMemoryDb, field: string) {
+      return db.collection("bonds").docs.reduce((n, b) => n + Number(b[field] ?? 0), 0);
+    }
+
+    it.each([0, 10_000])(
+      "quarterly issuance with %i of pool cash leaves the gap unsold instead of minting",
+      async (poolCash) => {
+        const db = fundedWorld(poolCash);
+        const before = cash(db);
+        expect(await issueScheduledSovereignBondSeries(db as unknown as Db, TURN, NOW)).toBe(3);
+        expect(cash(db)).toBe(before);
+        const paid = face(db);
+        expect(paid).toBeLessThanOrEqual(poolCash);
+        expect(principal(db)).toBe(paid);
+        expect(budget(db).treasuryCashLocal ?? 0).toBe(paid);
+        expect(budget(db).treasuryBalance).toBe(100 + paid);
+        expect(units(db, "centralBankHoldings")).toBe(0);
+        expect(units(db, "unsoldUnits")).toBe(100 - paid / 1000);
+        const bank = db.collection("centralBanks").docs[0];
+        expect(bank.netMoneyCreatedLifetime).toBe(0);
+        expect(bank.monetaryOperations ?? []).toEqual([]);
+        assertLedger(db);
+
+        // Replay of the same quarter adds nothing.
+        expect(await issueScheduledSovereignBondSeries(db as unknown as Db, TURN, NOW)).toBe(0);
+        expect(cash(db)).toBe(before);
+        expect(principal(db)).toBe(paid);
+        expect(units(db, "unsoldUnits")).toBe(100 - paid / 1000);
+      }
+    );
+
+    it("rollover issuance keeps existing principal and holder claims", async () => {
+      const db = fundedWorld(0);
+      const holder = new ObjectId();
+      await db
+        .collection("federalBudget")
+        .updateOne(
+          { _id: "federal" },
+          { $set: { "spending.total": 600_000, surplus: 0, "debt.principal": 100_000 } }
+        );
+      const id = new ObjectId();
+      const existing = {
+        _id: id,
+        issuerType: "sovereign",
+        countryId: "US",
+        currencyCode: "USD",
+        totalIssued: 100_000,
+        publicFloat: 60,
+        holders: [{ holderType: "character", holderId: holder, units: 40 }],
+        matured: false,
+        defaulted: false,
+        issuedAtTurn: 192,
+        maturityTurn: 245,
+        couponRate: 5,
+      };
+      db.seed("bonds", [existing]);
+      await issueScheduledSovereignBondSeries(db as unknown as Db, TURN, NOW);
+      expect(principal(db)).toBe(100_000);
+      expect(face(db)).toBe(100_000);
+      expect(await db.collection("bonds").findOne({ _id: id })).toEqual(existing);
+      expect(units(db, "unsoldUnits")).toBe(100);
+      expect(db.collection("centralBanks").docs[0].netMoneyCreatedLifetime).toBe(0);
+    });
+
+    it("admin issuance stays pool funded", async () => {
+      const db = fundedWorld(5_000);
+      const result = await issueAdminSovereignBondSeries(db as unknown as Db, {
+        countryId: "US",
+        turn: TURN,
+        now: NOW,
+        faceValue: 25_000,
+        useQuarterDeficit: false,
+      });
+      const paid = face(db);
+      expect(paid).toBeGreaterThan(0);
+      expect(paid).toBeLessThanOrEqual(5_000);
+      expect(result?.issueAmount).toBe(paid);
+      expect(principal(db)).toBe(paid);
+      expect(units(db, "unsoldUnits")).toBe(25 - paid / 1000);
+      expect(units(db, "centralBankHoldings")).toBe(0);
+      expect(db.collection("centralBanks").docs[0].netMoneyCreatedLifetime).toBe(0);
+    });
+
+    it("reconcile securitization stays cash neutral and mints nothing", async () => {
+      const db = fundedWorld(0);
+      await db
+        .collection("federalBudget")
+        .updateOne({ _id: "federal" }, { $set: { "debt.principal": 100_000 } });
+      const before = cash(db);
+      await reconcileSovereignDebt(db as unknown as Db, { countryId: "US", turn: TURN, now: NOW });
+      expect(cash(db)).toBe(before);
+      expect(principal(db)).toBe(100_000);
+      expect(units(db, "centralBankHoldings")).toBe(0);
+      expect(db.collection("centralBanks").docs[0].netMoneyCreatedLifetime).toBe(0);
+      expect(db.collection("bankMoneyMoves").docs).toHaveLength(0);
+    });
+
+    it("direct unsold monetization declines without touching cash, debt or units", async () => {
+      const db = fundedWorld(0);
+      const id = new ObjectId();
+      db.seed("bonds", [
+        {
+          _id: id,
+          issuerType: "sovereign",
+          countryId: "US",
+          currencyCode: "USD",
+          totalIssued: 0,
+          unsoldUnits: 10,
+          centralBankHoldings: 0,
+          couponRate: 5,
+        },
+      ]);
+      const before = cash(db);
+      expect(
+        await monetizeUnsoldSovereignUnits(db as unknown as Db, {
+          bondId: id,
+          bank: { _id: "US" as const },
+          units: 2,
+          considerationLocal: 2000,
+          turn: TURN,
+          now: NOW,
+        })
+      ).toBe(false);
+      expect(cash(db)).toBe(before);
+      expect(principal(db)).toBe(0);
+      expect(units(db, "unsoldUnits")).toBe(10);
+      expect(units(db, "centralBankHoldings")).toBe(0);
+      expect(db.collection("bankMoneyMoves").docs).toHaveLength(0);
+    });
+
+    it("keeps the low-level funded-money guard", async () => {
+      const db = fundedWorld(0);
+      await expect(
+        commitSovereignPrimary(
+          db as unknown as Db,
+          {
+            key: "funded-guard",
+            turn: TURN,
+            countryId: "US",
+            currency: "USD",
+            budgetId: "federal",
+            centralBankId: "US",
+            poolCash: 0,
+            monetaryCash: 1000,
+            face: 1000,
+            annualCoupon: 50,
+            now: NOW,
+          },
+          [],
+          {
+            ledgerShadow: true,
+            treasuryCashLedgerEnabled: true,
+            turnLengthMinutes: 60,
+            rates: new Map([["USD", 1]]),
+          }
+        )
+      ).rejects.toThrow("Funded Treasury cash cannot use monetary financing");
+    });
+  });
+
   it("later unsold placement credits ask proceeds but books face only", async () => {
     const db = world(100_000);
     const before = cash(db);
@@ -301,6 +468,7 @@ describe("sovereign primary settlement", () => {
         matured: false,
         defaulted: false,
         issuedAtTurn: TURN - 1,
+        maturityTurn: TURN + 96,
       },
     ]);
     const placed = await placeUnsoldBondUnits(db as unknown as Db, TURN, NOW);
@@ -314,6 +482,40 @@ describe("sovereign primary settlement", () => {
     expect((await placeUnsoldBondUnits(db as unknown as Db, TURN, NOW)).unitsPlaced).toBe(0);
     expect(cash(db)).toBe(before);
     expect(principal(db)).toBe(9000);
+  });
+
+  it("keeps due and overdue inventory unchanged while placing future bonds", async () => {
+    const db = world(100_000);
+    const bonds = [TURN - 1, TURN, TURN + 1].map((maturityTurn) => ({
+      _id: new ObjectId(),
+      issuerType: "sovereign",
+      countryId: "US",
+      currencyCode: "USD",
+      totalIssued: 0,
+      publicFloat: 0,
+      unsoldUnits: 500,
+      requestedUnits: 500,
+      couponRate: 5,
+      marketPrice: 1,
+      matured: false,
+      defaulted: false,
+      issuedAtTurn: TURN - 10,
+      maturityTurn,
+    }));
+    db.seed("bonds", bonds);
+
+    const placed = await placeUnsoldBondUnits(db as unknown as Db, TURN, NOW);
+
+    expect(placed.unitsPlaced).toBe(9);
+    for (const due of bonds.slice(0, 2)) {
+      expect(
+        db.collection("bonds").docs.find((row) => String(row._id) === String(due._id))
+      ).toEqual(due);
+    }
+    expect(db.collection("bonds").docs[2]).toMatchObject({
+      publicFloat: 9,
+      unsoldUnits: 491,
+    });
   });
 
   it("checks settlement status only for placements already recorded, and still refuses a pending one", async () => {
@@ -335,6 +537,7 @@ describe("sovereign primary settlement", () => {
         matured: false,
         defaulted: false,
         issuedAtTurn: TURN - 2 + index,
+        maturityTurn: TURN + 96,
       }))
     );
     const journal = db.collection("bankMoneyMoves");

@@ -488,6 +488,19 @@ export function StockList({
           <span className="text-xs text-muted">—</span>
         )}
       </td>
+      <td className="px-4 py-3 text-right">
+        {listingTradable(listing) && (listing.publicFloat ?? 0) > 0 ? (
+          <Link
+            href={`/corporation/${listing.sequentialId ?? listing._id}?tab=shares&trade=1`}
+            className="inline-flex items-center rounded-md border border-primary/30 bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary hover:bg-primary/20 transition-colors"
+            aria-label={`Trade ${listing.tickerSymbol ?? listing.name}`}
+          >
+            Trade
+          </Link>
+        ) : (
+          <span className="text-xs text-muted">—</span>
+        )}
+      </td>
     </tr>
   );
 
@@ -594,6 +607,7 @@ export function StockList({
               <span className="text-xs text-muted">—</span>
             )}
           </td>
+          <td className="px-4 py-3" />
         </tr>
         {isExpanded &&
           [...group.members]
@@ -684,12 +698,15 @@ export function StockList({
                   Float
                   <Tooltip content="Shares available for immediate purchase. Zero means no shares are on the open market." />
                 </th>
+                <th className="px-4 py-3 text-muted text-body-sm font-medium text-right">
+                  <span className="sr-only">Trade</span>
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-card-border">
               {sortedRows.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="px-4 py-8 text-center text-muted">
+                  <td colSpan={10} className="px-4 py-8 text-center text-muted">
                     No corporations found matching your criteria.
                   </td>
                 </tr>

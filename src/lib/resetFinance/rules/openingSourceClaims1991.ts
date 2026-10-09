@@ -1,7 +1,7 @@
 import { PLAYER_RESET_DEFICIT_GDP_SHARE_1991 } from "@/lib/seeds/reference/rules/openingFiscalEnvelope";
 import { fitOpeningObligations } from "./openingObligations";
 
-export type ResetOpeningCountry = "US" | "UK" | "JP";
+export type ResetOpeningCountry = "US" | "UK" | "JP" | "IE";
 
 export const SOURCE_SIGNATURE: Record<
   ResetOpeningCountry,
@@ -38,6 +38,14 @@ export const SOURCE_SIGNATURE: Record<
     ceiling: 195_000_000_000_000,
     interest: 0.058,
   },
+  IE: {
+    revenue: 12_799_224_185.566666,
+    spending: 12_953_891_355,
+    gdp: 30_933_434_751.04,
+    debt: 28_355_454_256,
+    ceiling: 33_672_101_928.999992,
+    interest: 0.1,
+  },
 };
 
 /** Reviewed period obligation mix, independently guarded from the legacy seed. */
@@ -45,6 +53,7 @@ const SOURCE_OPERATING_SIGNATURE = {
   US: 752_823_998_100,
   UK: 220_156_575_000,
   JP: 110_864_060_000_000,
+  IE: 14_166_159_780,
 } as const;
 
 /** Foreign aid has no proposed law family but remains a funded period obligation. */
@@ -54,6 +63,7 @@ export const STANDALONE_CONTINUITY = {
   JP: [
     { id: "jp_foreign_affairs_continuity", sourceId: "jp_foreign_aid", amount: 1_736_000_000_000 },
   ],
+  IE: [],
 } as const;
 
 interface OpeningReferenceSource {
@@ -74,8 +84,8 @@ export function fitReviewedOpeningClaims1991(
 ) {
   const signature = SOURCE_SIGNATURE[country];
   const fitted = fitOpeningObligations({
-    revenue: signature.revenue,
-    gdp: signature.gdp,
+    revenue: Math.round(signature.revenue),
+    gdp: Math.round(signature.gdp),
     interest: Math.round(signature.debt * signature.interest),
     maximumDeficitGdpShare: PLAYER_RESET_DEFICIT_GDP_SHARE_1991,
     obligations: [

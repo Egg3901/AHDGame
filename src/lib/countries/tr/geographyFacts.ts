@@ -1,7 +1,7 @@
 import type { AdjacencyMap } from "@/lib/constants/stateAdjacency";
 import type { CountryMapConfig } from "@/lib/commodity-map/commodityMapRegistry";
 import type { Continent } from "@/lib/constants/countryContinents";
-import type { NormalAnchor } from "@/lib/era/metricCatalog";
+import type { IncomeStartVintage, NormalAnchor } from "@/lib/era/metricCatalog";
 
 import type { WorldEntityRegion } from "@/lib/world/worldEntityManifest";
 
@@ -129,6 +129,16 @@ export const TR_INCOME_ANCHORS: NormalAnchor[] = [
     value: 1900,
   },
 ];
+
+/**
+ * Income anchor for a world that STARTS in the given year. Used only at the
+ * exact start year; never interpolated, so a 1953 world running forward keeps
+ * its flat 1953 anchor. 1991 is the derived old-lira household median from
+ * seeds/reference/income1991 (#3371).
+ */
+export const TR_INCOME_START_VINTAGES: Record<number, IncomeStartVintage> = {
+  1991: { value: 25145041, id: "tr-1991-household-r1" },
+};
 
 /*
  * ⚠ THESE TWO ARE INDEPENDENT, AND NESTING THEM COST ELEVEN COUNTRIES. The

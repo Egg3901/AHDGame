@@ -351,7 +351,8 @@ export async function reabsorbSpunOutCorp(
     shell._id,
     ledger,
     now,
-    "privatizationAuction:dissolveShell"
+    "privatizationAuction:dissolveShell",
+    { reason: "privatization_reabsorbed", successorId: primaryNationalCorporationId }
   );
   await Promise.all(
     shellSectors.map((sector) =>

@@ -88,6 +88,32 @@ describe("mergeNationalCorporations", () => {
     expect(deleted).toContain(GHOST_ENERGY_ID.toString());
   });
 
+  it("records an exit row for every absorbed shell, pointing at the survivor", async () => {
+    db.collectionMocks.corporations.find.mockImplementation((filter: unknown) => {
+      const f = filter as { countryOwnerId?: string };
+      if (f?.countryOwnerId === "DE") return cursorOf([ghostPrimary(), ghostEnergySplitOff()]);
+      return cursorOf([survivorPrimary()]);
+    });
+
+    await mergeNationalCorporations(db as unknown as Db, {
+      fromCountryId: "DE",
+      toCountryId: "DD",
+    });
+
+    const calls = db.collectionMocks.corporationExits.updateOne.mock.calls;
+    expect(calls.map((c) => (c[0] as { _id: ObjectId })._id.toString()).sort()).toEqual(
+      [GHOST_PRIMARY_ID.toString(), GHOST_ENERGY_ID.toString()].sort()
+    );
+    for (const call of calls) {
+      expect(call[1].$setOnInsert).toMatchObject({
+        reason: "national_corporation_merged",
+        ownerKind: "state",
+      });
+      expect(call[1].$setOnInsert.successorId).toBeDefined();
+      expect(call[2]).toEqual({ upsert: true });
+    }
+  });
+
   it("routes sectors to the survivor split-off claiming the type, else the survivor primary", async () => {
     db.collectionMocks.corporations.find.mockImplementation((filter: unknown) => {
       const f = filter as { countryOwnerId?: string };

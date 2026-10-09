@@ -1,10 +1,6 @@
 import { Slider } from "@/components/ui";
-import { DEFAULT_LEGACY_COUNTRY_ID } from "@/lib/constants/countries";
-import { DOLLARS_PER_TURNOUT_POINT } from "@/lib/utils/demographicAlignment";
-import {
-  REG_DRIVE_MAX_BOOST_PER_STATE,
-  calculateRegistrationDriveBoost,
-} from "@/lib/parties/registrationDrive";
+import { useTranslations } from "next-intl";
+import { REG_DRIVE_MAX_BOOST_PER_STATE } from "@/lib/parties/registrationDrive";
 import type { PartyData } from "./types";
 import type { TreasuryAction } from "./treasuryReducer";
 import { fmt } from "./helpers";
@@ -25,16 +21,10 @@ export function TreasuryRegistrationControl({
   dispatch,
   onSave,
 }: TreasuryRegistrationControlProps) {
+  const t = useTranslations("parties.registrationPresence");
   const registrationSpend = Math.floor(
     party.expectedHourlyIncome * (registrationForm.percent / 100)
   );
-  // Estimate divides spend across this country's regions (matching the GOTV
-  // readout) and applies the same $/point curve, capped per state.
-  // Falls back to 51 for cached responses predating regionCount (ticket #1265).
-  const regionCount = party.regionCount || 51;
-  const isUS = party.countryId === DEFAULT_LEGACY_COUNTRY_ID;
-  const rawPerState = registrationSpend / regionCount;
-  const estBoost = calculateRegistrationDriveBoost(rawPerState, DOLLARS_PER_TURNOUT_POINT);
   const dirty = registrationForm.percent !== party.registrationBudgetPercent;
 
   return (
@@ -55,11 +45,7 @@ export function TreasuryRegistrationControl({
         </svg>
         <div className="text-xs font-semibold text-muted">Registration drive</div>
       </div>
-      <p className="text-body-sm text-muted mb-3 ml-6">
-        Fund voter registration to grow your party&apos;s registered base. Spending is divided
-        equally across all {regionCount} {isUS ? "state parties" : "regions"} and converts
-        unregistered voters each turn.
-      </p>
+      <p className="text-body-sm text-muted mb-3 ml-6">{t("description")}</p>
 
       <div className="flex items-center gap-4">
         <Slider
@@ -93,27 +79,13 @@ export function TreasuryRegistrationControl({
       {registrationForm.percent > 0 && (
         <div className="mt-3 ml-6 rounded-lg bg-background/50 border border-card-border/30 p-3 space-y-1.5">
           <div className="flex items-center justify-between text-xs">
-            <span className="text-muted">Total spending</span>
+            <span className="text-muted">{t("allocated")}</span>
             <span className="font-semibold tabular-nums">
               {fmt(registrationSpend, party.countryId)} / hr
             </span>
           </div>
-          <div className="flex items-center justify-between text-xs">
-            <span className="text-muted">
-              Per {isUS ? "state" : "region"} ({regionCount})
-            </span>
-            <span className="font-medium tabular-nums text-muted">
-              {fmt(rawPerState, party.countryId)} / hr
-            </span>
-          </div>
-          <div className="flex items-center justify-between text-xs">
-            <span className="text-muted">Est. registration / state</span>
-            <span className="font-bold tabular-nums text-success">
-              +{estBoost.toFixed(3)}% / turn
-            </span>
-          </div>
           <p className="text-body-sm text-muted pt-0.5">
-            Capped at +{REG_DRIVE_MAX_BOOST_PER_STATE.toFixed(2)}% per state each turn.
+            {t("limit", { cap: REG_DRIVE_MAX_BOOST_PER_STATE.toFixed(2) })}
           </p>
         </div>
       )}

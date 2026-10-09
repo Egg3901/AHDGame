@@ -62,4 +62,17 @@ describe("ConsentBillStatus", () => {
     expect(screen.getByText(/Both consent bills must pass/i)).toBeTruthy();
     expect(screen.getByText("Passed")).toBeTruthy();
   });
+
+  it("explains the Westminster-only path for a dormant Ireland", () => {
+    render(
+      <ConsentBillStatus
+        kind="reunification"
+        bills={[westminster]}
+        deadlineTurn={420}
+        currentTurn={408}
+      />
+    );
+    expect(screen.getByText(/The Westminster consent bill must pass/i)).toBeTruthy();
+    expect(screen.queryByText(/Both consent bills/i)).toBeNull();
+  });
 });

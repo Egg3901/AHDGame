@@ -30,6 +30,190 @@ describe("player action analytics", () => {
     vi.stubGlobal("window", makeWindow(vi.fn()));
   });
 
+  it("does not reassign a delayed action response after switching accounts", async () => {
+    let release!: (response: Response) => void;
+    const delegate = vi.fn(
+      () =>
+        new Promise<Response>((resolve) => {
+          release = resolve;
+        })
+    );
+    vi.stubGlobal("window", makeWindow(delegate));
+    const { installPlayerActionAnalytics, setPlayerActionContext, classifyPlayerActionRoute } =
+      await import("./playerActionAnalytics");
+    expect(classifyPlayerActionRoute("/api/actions/execute", "POST")).not.toBeNull();
+    const { setAnalyticsAccount } = await import("./accountContext");
+    setAnalyticsAccount({ id: "first" });
+    setPlayerActionContext({ userId: "first", characterId: "first-character" });
+    const uninstall = installPlayerActionAnalytics();
+    const pending = window.fetch("/api/actions/execute", {
+      method: "POST",
+      body: JSON.stringify({ actionType: "fundraise" }),
+    });
+    setAnalyticsAccount({ id: "second" });
+    setPlayerActionContext({ userId: "second", characterId: "second-character" });
+    release(new Response(JSON.stringify({ success: true }), { status: 200 }));
+    await pending;
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(state.captureProductEvent).not.toHaveBeenCalled();
+    expect(state.captureFirstMeaningfulAction).not.toHaveBeenCalled();
+    uninstall();
+  });
+
+  it.each([
+    [200, true, "player_action_succeeded", undefined],
+    [200, false, "player_action_rejected", "action_rejected"],
+    [400, false, "player_action_rejected", "validation_failed"],
+    [409, false, "player_action_rejected", "conflict"],
+    [429, false, "player_action_rejected", "rate_limited"],
+  ] as const)(
+    "labels execute operations on HTTP %i success=%s without replacing action_type",
+    async (status, success, event, failureCode) => {
+      vi.stubGlobal(
+        "window",
+        makeWindow(
+          vi
+            .fn()
+            .mockResolvedValue(
+              new Response(
+                JSON.stringify({ success, error: "private response", code: "private code" }),
+                { status }
+              )
+            )
+        )
+      );
+      const { installPlayerActionAnalytics, setPlayerActionContext } =
+        await import("./playerActionAnalytics");
+      setPlayerActionContext({ userId: "account", characterId: "character" });
+      const uninstall = installPlayerActionAnalytics();
+      await window.fetch("/api/actions/execute?private=private-query", {
+        method: "POST",
+        body: JSON.stringify({
+          actionType: "buildDonorBase",
+          action_operation: "private injection",
+          comment: "private request",
+        }),
+      });
+      await vi.waitFor(() =>
+        expect(state.captureProductEvent).toHaveBeenCalledWith(
+          event,
+          expect.objectContaining({
+            action_type: "execute",
+            action_operation: "character_action_execute",
+            requested_action: "buildDonorBase",
+            ...(failureCode ? { failure_code: failureCode } : {}),
+          })
+        )
+      );
+      expect(JSON.stringify(state.captureProductEvent.mock.calls)).not.toContain("private");
+      uninstall();
+    }
+  );
+
+  it.each([
+    ["/api/country/US/parties", "party_create", "post"],
+    ["/api/country/US/region/CA/party/12/build-org", "party_build_org_regional", "post"],
+    ["/api/country/US/parties/12/influence", "party_influence_national", "influence"],
+    ["/api/country/US/region/CA/party/12/influence", "party_influence_regional", "influence"],
+  ])(
+    "uses the same operation label for accepted and rejected %s",
+    async (path, operation, actionType) => {
+      vi.stubGlobal(
+        "window",
+        makeWindow(
+          vi
+            .fn()
+            .mockResolvedValueOnce(new Response(JSON.stringify({ success: true }), { status: 200 }))
+            .mockResolvedValueOnce(
+              new Response(JSON.stringify({ error: "private reason" }), { status: 429 })
+            )
+        )
+      );
+      const { installPlayerActionAnalytics, setPlayerActionContext } =
+        await import("./playerActionAnalytics");
+      setPlayerActionContext({ userId: "account", characterId: "character" });
+      const uninstall = installPlayerActionAnalytics();
+      await window.fetch(path, {
+        method: "POST",
+        body: JSON.stringify({ actionType: "fundraise" }),
+      });
+      await vi.waitFor(() =>
+        expect(state.captureProductEvent).toHaveBeenCalledWith(
+          "player_action_succeeded",
+          expect.objectContaining({ action_type: actionType, action_operation: operation })
+        )
+      );
+      await window.fetch(path, {
+        method: "POST",
+        body: JSON.stringify({ actionType: "fundraise" }),
+      });
+      await vi.waitFor(() =>
+        expect(state.captureProductEvent).toHaveBeenCalledWith(
+          "player_action_rejected",
+          expect.objectContaining({
+            action_type: actionType,
+            action_operation: operation,
+            failure_code: "rate_limited",
+          })
+        )
+      );
+      const generic = state.captureProductEvent.mock.calls.filter(([event]) =>
+        event.startsWith("player_action_")
+      );
+      expect(generic).toHaveLength(2);
+      expect(generic.every(([, properties]) => !("requested_action" in properties))).toBe(true);
+      const domain = state.captureProductEvent.mock.calls.find(
+        ([event]) => event === "party_action_succeeded"
+      );
+      expect(domain?.[1]).not.toHaveProperty("action_operation");
+      expect(JSON.stringify(state.captureProductEvent.mock.calls)).not.toContain("private");
+      uninstall();
+    }
+  );
+
+  it("sanitizes unknown operations and requested actions while preserving the legacy body.action override", async () => {
+    vi.stubGlobal(
+      "window",
+      makeWindow(
+        vi.fn(() =>
+          Promise.resolve(
+            new Response(JSON.stringify({ success: true, code: "private reason" }), { status: 200 })
+          )
+        )
+      )
+    );
+    const { installPlayerActionAnalytics, setPlayerActionContext } =
+      await import("./playerActionAnalytics");
+    setPlayerActionContext({ userId: "account", characterId: "character" });
+    const uninstall = installPlayerActionAnalytics();
+    await window.fetch("/api/actions/execute", {
+      method: "POST",
+      body: JSON.stringify({ actionType: "private action", action: "donate" }),
+    });
+    await vi.waitFor(() =>
+      expect(state.captureProductEvent).toHaveBeenCalledWith(
+        "player_action_succeeded",
+        expect.objectContaining({
+          action_type: "donate",
+          action_operation: "character_action_execute",
+          requested_action: "unknown",
+        })
+      )
+    );
+    await window.fetch("/api/country/US/parties/12/private-operation", {
+      method: "POST",
+      body: JSON.stringify({ actionType: "fundraise", action_operation: "private override" }),
+    });
+    await vi.waitFor(() =>
+      expect(state.captureProductEvent).toHaveBeenCalledWith(
+        "player_action_succeeded",
+        expect.objectContaining({ action_type: "post", action_operation: "unknown" })
+      )
+    );
+    expect(JSON.stringify(state.captureProductEvent.mock.calls)).not.toContain("private");
+    uninstall();
+  });
+
   it("captures successful election actions with allowlisted scalar props only", async () => {
     const electionId = "0123456789abcdef01234567";
     const delegate = vi.fn().mockResolvedValue(
@@ -139,6 +323,10 @@ describe("player action analytics", () => {
     const uninstall = installPlayerActionAnalytics();
 
     await window.fetch("/api/congress/bills", { method: "POST", body: "{}" });
+    await window.fetch("/api/actions/execute", {
+      method: "POST",
+      body: JSON.stringify({ actionType: "fundraise" }),
+    });
 
     await vi.waitFor(() =>
       expect(state.captureProductEvent).toHaveBeenCalledWith(
@@ -359,6 +547,10 @@ describe("player action analytics", () => {
     const uninstall = installPlayerActionAnalytics();
     state.consent = "rejected";
     await window.fetch("/api/congress/bills", { method: "POST", body: "{}" });
+    await window.fetch("/api/actions/execute", {
+      method: "POST",
+      body: JSON.stringify({ actionType: "fundraise" }),
+    });
     expect(state.captureProductEvent).not.toHaveBeenCalled();
     uninstall();
   });

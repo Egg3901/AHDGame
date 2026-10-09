@@ -84,7 +84,7 @@ describe("public copy stays derived", () => {
     expect(readme).not.toMatch(/\d+ playable countries/);
   });
 
-  it("the FAQ's sector count matches the sector registry", () => {
+  it("the FAQ's sector count matches the foundable sector registry", () => {
     const faq = read("src/app/faq/page.tsx");
     expect(faq).toContain("${OPERATING_SECTOR_TYPES.length} sectors");
     expect(faq).not.toMatch(/\b\d+ sectors\b/);

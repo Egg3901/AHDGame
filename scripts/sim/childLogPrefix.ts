@@ -11,6 +11,7 @@
  */
 
 import { spawn } from "child_process";
+import { join } from "node:path";
 
 /** Stable identity every concurrent child line must carry. */
 export interface ChildRunIdentity {
@@ -34,6 +35,7 @@ export function prefixChildLine(prefix: string, line: string): string {
 
 export interface SpawnResult {
   code: number | null;
+  timedOut?: boolean;
 }
 
 /**
@@ -50,15 +52,29 @@ export function spawnWithPrefixedLogs(
   args: string[],
   identity: ChildRunIdentity,
   sink?: (line: string) => void,
-  options?: { cwd?: string; env?: NodeJS.ProcessEnv }
+  options?: { cwd?: string; env?: NodeJS.ProcessEnv; timeoutMs?: number }
 ): Promise<SpawnResult> {
+  if (
+    options?.timeoutMs !== undefined &&
+    (!Number.isFinite(options.timeoutMs) || options.timeoutMs <= 0)
+  )
+    return Promise.reject(new Error("timeoutMs must be positive and finite"));
+  if (options?.timeoutMs && process.platform === "win32")
+    return Promise.reject(new Error("Budgeted process-group termination requires POSIX"));
   const prefix = buildChildLogPrefix(identity);
   return new Promise<SpawnResult>((resolve, reject) => {
-    const child = spawn(command, args, {
-      cwd: options?.cwd,
-      env: options?.env,
-      stdio: ["ignore", "pipe", "pipe"],
-    });
+    const budgeted = options?.timeoutMs !== undefined;
+    const child = spawn(
+      budgeted ? process.execPath : command,
+      budgeted
+        ? [join(__dirname, "budgetProcess.mjs"), String(options.timeoutMs), command, ...args]
+        : args,
+      {
+        cwd: options?.cwd,
+        env: options?.env,
+        stdio: ["ignore", "pipe", "pipe"],
+      }
+    );
     child.on("error", reject);
     const pump = (stream: "stdout" | "stderr") => {
       const source = stream === "stdout" ? child.stdout : child.stderr;
@@ -86,6 +102,8 @@ export function spawnWithPrefixedLogs(
     };
     pump("stdout");
     pump("stderr");
-    child.on("close", (code) => resolve({ code }));
+    child.on("close", (code) =>
+      resolve({ code, ...(budgeted && code === 124 ? { timedOut: true } : {}) })
+    );
   });
 }

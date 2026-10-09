@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { getMessageStyle } from "@/lib/utils/formatters";
 import { getPartyTextColor } from "@/lib/utils/politics";
 import { CURRENCY_SYMBOLS, type CurrencyCode } from "@/lib/constants/currencies";
@@ -35,10 +35,12 @@ export function ResourceGrantManager({ context = "admin" }: ResourceGrantManager
   const [actionsAmount, setActionsAmount] = useState<number>(0);
   const [fundsAmount, setFundsAmount] = useState<number>(0);
   const [cashOnHandAmount, setCashOnHandAmount] = useState<number>(0);
+  const [grantPositionUpdateVoucher, setGrantPositionUpdateVoucher] = useState(false);
   const [fxRates, setFxRates] = useState<Partial<Record<CurrencyCode, number>>>({});
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
+  const grantInFlightRef = useRef(false);
 
   useEffect(() => {
     fetchCharacters();
@@ -118,13 +120,20 @@ export function ResourceGrantManager({ context = "admin" }: ResourceGrantManager
   };
 
   const handleGrant = async () => {
+    if (grantInFlightRef.current) return;
+
     if (!grantToAll && selectedIds.size === 0) {
       setMessage("Error: Select at least one player or enable 'Grant to All'");
       return;
     }
 
-    if (actionsAmount === 0 && fundsAmount === 0 && cashOnHandAmount === 0) {
-      setMessage("Error: Enter an amount for Actions, Campaign Funds, or Cash on Hand");
+    if (
+      actionsAmount === 0 &&
+      fundsAmount === 0 &&
+      cashOnHandAmount === 0 &&
+      !grantPositionUpdateVoucher
+    ) {
+      setMessage("Error: Enter an amount or select the Positions Update Voucher");
       return;
     }
 
@@ -151,11 +160,13 @@ export function ResourceGrantManager({ context = "admin" }: ResourceGrantManager
       resourceDesc.push(
         `${formatAnchor(cashOnHandAmount)} cash on hand (auto-converted to home currency)`
       );
+    if (grantPositionUpdateVoucher) resourceDesc.push("+1 Positions Update Voucher");
 
     if (!confirm(`Grant ${resourceDesc.join(" and ")} to ${targetDesc}?`)) {
       return;
     }
 
+    grantInFlightRef.current = true;
     setLoading(true);
     setMessage("");
 
@@ -169,6 +180,7 @@ export function ResourceGrantManager({ context = "admin" }: ResourceGrantManager
           actions: actionsAmount !== 0 ? actionsAmount : undefined,
           funds: fundsAmount !== 0 ? fundsAmount : undefined,
           cashOnHand: cashOnHandAmount !== 0 ? cashOnHandAmount : undefined,
+          positionUpdateVoucher: grantPositionUpdateVoucher || undefined,
         }),
       });
 
@@ -179,6 +191,7 @@ export function ResourceGrantManager({ context = "admin" }: ResourceGrantManager
         setActionsAmount(0);
         setFundsAmount(0);
         setCashOnHandAmount(0);
+        setGrantPositionUpdateVoucher(false);
         setSelectedIds(new Set());
         setGrantToAll(false);
         // Refresh character list to show updated values
@@ -189,6 +202,7 @@ export function ResourceGrantManager({ context = "admin" }: ResourceGrantManager
     } catch {
       setMessage("Error: Network error");
     } finally {
+      grantInFlightRef.current = false;
       setLoading(false);
     }
   };
@@ -328,6 +342,24 @@ export function ResourceGrantManager({ context = "admin" }: ResourceGrantManager
           </div>
         </div>
 
+        {context === "admin" && (
+          <label className="mb-6 flex cursor-pointer items-start gap-3 rounded-lg border border-card-border bg-background p-4">
+            <input
+              type="checkbox"
+              checked={grantPositionUpdateVoucher}
+              onChange={(event) => setGrantPositionUpdateVoucher(event.target.checked)}
+              className="mt-0.5 h-4 w-4 rounded border-gray-600 bg-gray-700"
+            />
+            <span>
+              <span className="block text-sm font-medium">Positions Update Voucher</span>
+              <span className="mt-1 block text-xs text-muted">
+                Grant one voucher to each selected player. A voucher allows one policy position
+                shift without its normal costs.
+              </span>
+            </span>
+          </label>
+        )}
+
         {/* Grant to All Toggle */}
         <div
           className={`mb-4 flex items-center gap-3 rounded-lg border p-3 cursor-pointer transition-colors ${
@@ -369,7 +401,10 @@ export function ResourceGrantManager({ context = "admin" }: ResourceGrantManager
           onClick={handleGrant}
           disabled={
             loading ||
-            (actionsAmount === 0 && fundsAmount === 0 && cashOnHandAmount === 0) ||
+            (actionsAmount === 0 &&
+              fundsAmount === 0 &&
+              cashOnHandAmount === 0 &&
+              !grantPositionUpdateVoucher) ||
             (!grantToAll && selectedIds.size === 0)
           }
           className="w-full rounded-lg bg-primary px-4 py-2 font-medium text-white transition-colors hover:bg-primary/90 disabled:opacity-50"

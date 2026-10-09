@@ -1,3 +1,4 @@
+import type { TicketPlatform } from "@/lib/tickets/platform";
 import type { ObjectId } from "mongodb";
 
 /**
@@ -68,6 +69,8 @@ export interface Ticket {
     corporationUrl?: string;
   };
   category: TicketCategory;
+  /** Where the reporter was playing (bot picker value), when known. */
+  platform?: TicketPlatform;
   title: string;
   /** Optional free-form tags for grouping/filtering. */
   tags?: string[];

@@ -35,6 +35,7 @@ import { isVotingDeadlinePassed } from "@/lib/legislature/billVotingWindow";
 import { isVoteClosed } from "@/lib/turn/parliamentaryGovernment";
 import { isLeadershipElectionClosed } from "@/lib/congress/leadershipElections";
 import { impeachmentStageChamberKey } from "@/lib/impeachment/impeachmentTally";
+import type { ScotusNomination } from "@/lib/db/types/scotus";
 import type { Impeachment } from "@/lib/db/types/impeachment";
 import { getGameTime } from "@/lib/time/gameTime";
 import { getPartyMap } from "@/lib/db/partyMap";
@@ -75,6 +76,7 @@ interface PlayerWhipSummary {
 interface LeadershipElectionItem {
   id: string;
   type: string;
+  targetType?: "cabinetNomination" | "scotusNomination";
   chamber: string;
   endsAt: Date;
   candidacies: CandidacyInfo[];
@@ -287,6 +289,7 @@ export async function GET(request: Request, { params }: RouteParams) {
             "pmAppointmentVote",
             "noConfidenceVote",
             "cabinetNomination",
+            "scotusNomination",
             "speakerVacateMotion",
             "impeachmentVote",
           ],
@@ -589,8 +592,43 @@ export async function GET(request: Request, { params }: RouteParams) {
         result[cabinetChamberKey].push({
           id: nom._id.toString(),
           type: `Cabinet: ${nom.nomineeCharacterName}`,
+          targetType: "cabinetNomination",
           chamber: cabinetChamberKey,
           endsAt: nom.votingEndsAt ?? new Date(now.getTime() + 24 * 3_600_000),
+          candidacies: [],
+          nppWhip: nppSummary,
+          playerWhip: playerSummary,
+          existingWhips: nppSummary.existingWhips,
+          canWhip: nppSummary.canWhip,
+        });
+      }
+    }
+
+    if (countryId === COUNTRY_CONFIGS.US.id && hasUpperNPPs) {
+      const nominations = await db
+        .collection<ScotusNomination>("scotusNominations")
+        .find({ countryId, status: "active" })
+        .toArray();
+      for (const nomination of nominations) {
+        if (
+          isVotingDeadlinePassed(
+            nomination.votingEndsAt,
+            now,
+            nomination.votingEndsOnTurn,
+            currentTurnForLeadership
+          )
+        )
+          continue;
+        const { nppSummary, playerSummary } = buildSummaries(
+          `scotusNomination_${nomination._id}_senate`
+        );
+        result.senate = result.senate ?? [];
+        result.senate.push({
+          id: nomination._id.toString(),
+          type: `Supreme Court: ${nomination.nomineeName}`,
+          targetType: "scotusNomination",
+          chamber: "senate",
+          endsAt: nomination.votingEndsAt ?? new Date(now.getTime() + 24 * 3_600_000),
           candidacies: [],
           nppWhip: nppSummary,
           playerWhip: playerSummary,

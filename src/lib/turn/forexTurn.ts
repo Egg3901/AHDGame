@@ -83,7 +83,7 @@ function finiteOr(value: unknown, fallback: number): number {
  * Extract macro indicators from a CentralBank document.
  * Falls back to 0 (and rejects NaN) for missing fields — safe default for rate math.
  */
-function extractMacroInputs(bank: CentralBank): MacroInputs {
+export function extractMacroInputs(bank: CentralBank): MacroInputs {
   return {
     primeRate: finiteOr(bank.primeRate, 0),
     inflationRate: finiteOr(bank.inflationHistory?.at(-1)?.rate, 0),

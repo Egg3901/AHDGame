@@ -1,6 +1,8 @@
 import type { CountryId } from "../../constants/countries";
 import type { CorporationType, OperatingSectorType } from "../../constants/corporations";
 import type { ConflictCapacityApplied } from "./conflictCapacity";
+import type { SubhourStepStamp } from "../../turn/subhour/stepFraction";
+import type { SubhourGrowthStateBase } from "../../turn/subhour/stepBase";
 
 export type RegionType = "state" | "constituency" | "nation" | "province" | "region";
 
@@ -59,6 +61,10 @@ export interface State {
    * Cold-starts at 0 (no gap assumed) when absent.
    */
   outputGap?: number;
+  /** The :30 half tick's stamp (turn/subhour/stepFraction.ts). */
+  subhourStep?: SubhourStepStamp;
+  /** Start-of-hour GDP and output gap the :30 half tick overwrote (turn/subhour/stepBase.ts). */
+  subhourBase?: { growth?: SubhourGrowthStateBase };
   /**
    * P2/D7 (plants mode): Σ owned-sector realized revenue as of
    * `sectorRealizedRevenueTurn`. The engine's cyclical sector signal reads this
@@ -156,7 +162,7 @@ export interface State {
       revenue: number;
       /**
        * `"primary"` when this sector matches `sectorSpecializations.primary`
-       * (state grants +10pp margin bonus); `"secondary"` for +5pp.
+       * (state grants +5pp margin bonus); `"secondary"` for +2.5pp.
        * `null` when the live sector isn't a seeded specialization.
        */
       specializationBonus: "primary" | "secondary" | null;

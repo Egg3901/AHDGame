@@ -229,6 +229,12 @@ describe("static region shards stay outside the maintenance gate", () => {
     }
   });
 
+  it("serves Android's Digital Asset Links file untouched", () => {
+    // The AHDClient Android app verifies its Discord sign-in return link
+    // against this file; a maintenance redirect would break app sign-in.
+    expect(matches("/.well-known/assetlinks.json")).toBe(false);
+  });
+
   it("still gates ordinary pages", () => {
     for (const page of ["/dashboard", "/world", "/country/us"]) {
       expect(matches(page), `${page} must stay gated`).toBe(true);

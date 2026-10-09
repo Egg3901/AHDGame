@@ -14,7 +14,6 @@ import {
   getStateSectorSpecializationMarginBonus,
   calculateWorkers,
   getDominanceRegulatoryBurden,
-  getExpropriationRiskMarginModifier,
   softCapEffectiveMargin,
 } from "@/lib/constants/corporations";
 import type { StateMetricValues } from "@/lib/constants/corporations";
@@ -24,10 +23,11 @@ import {
 } from "@/lib/constants/techTree/selectors";
 import { computeBlendedMarginModifiers } from "@/lib/constants/commodities";
 import type { CommodityType } from "@/lib/constants/commodities";
-import { computeSoeEfficiencyPenalty } from "@/lib/nationalization/soeEfficiency";
+import {
+  computeOwnershipMarginTerms,
+  roundOwnershipTerms,
+} from "@/lib/nationalization/ownershipMarginTerms";
 import { isStateOwned } from "@/lib/nationalization/nationalCorporation";
-import { sociMultiplier } from "@/lib/nationalization/concentration";
-import { resolveSectorMandate } from "@/lib/nationalization/soeMandates";
 import { getRevenueMultiplier, getInputMultiplier } from "@/lib/utils/productionPolicy";
 import { priceRealizationFactor } from "@/lib/market/priceRealization";
 import { isLabourWagesEnabled } from "@/lib/labour/featureFlag";
@@ -179,6 +179,8 @@ export interface SectorFinancialTotals {
   totalSubsidyBenefit: number;
   totalRegulatoryBurden: number;
   totalLaborCosts: number;
+  totalFreightCosts?: number;
+  totalFreightIncome?: number;
 }
 
 export interface PhysicalRollups {
@@ -226,6 +228,7 @@ export function buildSectorDetails(ctx: SectorRowContext) {
     macroByCountry,
     sociByCountry,
     investorConfidenceByCountry,
+    economicModelByCountry,
     gameState,
   } = stateCtx;
   const {
@@ -253,6 +256,8 @@ export function buildSectorDetails(ctx: SectorRowContext) {
   let totalSubsidyBenefit = 0;
   let totalRegulatoryBurden = 0;
   let totalLaborCosts = 0;
+  let totalFreightCosts = 0;
+  let totalFreightIncome = 0;
   const wageBillAnchorPerTurnBySectorId = new Map<string, number>();
 
   // Corp-level physical rollups (plants only). These are the physical P&L's
@@ -456,31 +461,27 @@ export function buildSectorDetails(ctx: SectorRowContext) {
         : null;
     const sectorLaborCostLocal =
       typeof sector.laborCost === "number" ? sectorFieldToCorpCcy(sector.laborCost, sector) : null;
+    const freightCost = sectorFieldToCorpCcy(sector.freightBillingCharge ?? 0, sector);
+    const freightIncome = sectorFieldToCorpCcy(sector.freightBillingCredit ?? 0, sector);
     const financialRevenue =
-      sectorRealizedRevenueLocal ??
-      sectorRevenueLocal * revenueMultiplier * revenueRealizationRatio;
-    // Dynamic SOE efficiency (spec §11.3) — same shared function as the turn math
-    // and the budget estimate, so display stays aligned. Private corps get 0.
-    const soeMandate = resolveSectorMandate(corporation, sector);
-    const soeEfficiency = isStateOwned(corporation)
-      ? computeSoeEfficiencyPenalty({
-          corruptionIndex: metrics.fullMetrics?.governance?.corruptionIndex?.value ?? null,
-          governmentTransparency:
-            metrics.fullMetrics?.governance?.governmentTransparency?.value ?? null,
-          priceControlled: soeMandate.priceControlled === true,
-          employmentGuaranteed: soeMandate.employmentGuaranteed === true,
-          concentrationMultiplier: sociMultiplier(
-            sociByCountry.get(corporation.countryOwnerId ?? "") ?? 0
-          ),
-        })
-      : 0;
-    // Expropriation-risk drag (spec §12.4 feed 1) — private corps only, same fn
-    // and per-country confidence the turn uses.
-    const expropriationRisk = isStateOwned(corporation)
-      ? 0
-      : getExpropriationRiskMarginModifier(
-          investorConfidenceByCountry.get(sectorCountryId) ?? null
-        );
+      (sectorRealizedRevenueLocal ??
+        sectorRevenueLocal * revenueMultiplier * revenueRealizationRatio) + freightIncome;
+    // Ownership terms the turn applies inside the margin stack: SOE efficiency
+    // (spec §11.3), expropriation risk (spec §12.4 feed 1), economic-model
+    // alignment (§6.2). Same shared functions and inputs as the turn.
+    const ownershipTerms = computeOwnershipMarginTerms({
+      corporation,
+      sector,
+      sectorType: st,
+      corruptionIndex: metrics.fullMetrics?.governance?.corruptionIndex?.value ?? null,
+      governmentTransparency:
+        metrics.fullMetrics?.governance?.governmentTransparency?.value ?? null,
+      ownerSoci: sociByCountry.get(corporation.countryOwnerId ?? "") ?? 0,
+      investorConfidence: investorConfidenceByCountry.get(sectorCountryId),
+      economicModel: economicModelByCountry.get(sectorCountryId),
+    });
+    const soeEfficiency = ownershipTerms.soeEfficiencyModifier;
+    const expropriationRisk = ownershipTerms.expropriationRiskModifier;
     const techEffects =
       currentYear != null
         ? getSectorTechEffectsForYear(
@@ -493,7 +494,11 @@ export function buildSectorDetails(ctx: SectorRowContext) {
         : getSectorTechEffects(techCorpView, st, sector.industryModel, sector.mediaDiscriminator);
     const techMarginBonus = techEffects.marginBonusPp;
     const stackMargin = softCapEffectiveMargin(
-      mods.effective + soeEfficiency + expropriationRisk + techMarginBonus
+      mods.effective +
+        soeEfficiency +
+        expropriationRisk +
+        ownershipTerms.economicModelAlignmentModifier +
+        techMarginBonus
     );
     // The margin the engine ACTUALLY applied last turn. Under plants the stored
     // field is an OUTPUT of the physical P&L (sectorTurn.ts P3.5:
@@ -518,12 +523,18 @@ export function buildSectorDetails(ctx: SectorRowContext) {
     // profit includes. The inversion stays as the fallback for rows that
     // predate the field. See `plantsPnlBasis.ts`.
     const enginePnl = readPlantsPnl(sector);
+    // The corporation pays the full physical bill, not only the operating-margin
+    // subset. Compliance and stored growth have their own statement lines.
     const maintenance = enginePnl
-      ? sectorFieldToCorpCcy(enginePnl.operatingCost, sector)
-      : financialRevenue * (1 - effectiveProfitMargin / 100);
-    const profit = enginePnl
-      ? sectorFieldToCorpCcy(enginePnl.profit, sector)
-      : financialRevenue - maintenance - sectorGrowthCostLocal;
+      ? sectorFieldToCorpCcy(enginePnl.totalCost - enginePnl.compliance, sector) -
+        sectorGrowthCostLocal
+      : (financialRevenue - freightIncome) * (1 - effectiveProfitMargin / 100);
+    const profit =
+      (enginePnl
+        ? sectorFieldToCorpCcy(enginePnl.profit, sector)
+        : financialRevenue - freightIncome - maintenance - sectorGrowthCostLocal) +
+      freightIncome -
+      freightCost;
     // Physical cost decomposition for the margin drilldown (ticket 1072: the
     // additive modifier list could not explain a physically-derived margin —
     // base + modifiers summed 40pts above the engine figure with no line
@@ -598,8 +609,13 @@ export function buildSectorDetails(ctx: SectorRowContext) {
     // buildNationalDominanceShareBySectorId) isn't available here without a
     // country-wide query. Displayed burden is a lower bound for a spread champion.
     const regulatoryBurdenRate = getDominanceRegulatoryBurden(sectorMarketSharePct);
-    const sectorRegulatoryBurden = financialRevenue * regulatoryBurdenRate;
+    const sectorRegulatoryBurden = enginePnl
+      ? sectorFieldToCorpCcy(enginePnl.compliance, sector)
+      : financialRevenue * regulatoryBurdenRate;
+    // Freight settles alongside plantsPnl, so neither leg is in its totals.
     totalRevenue += financialRevenue;
+    totalFreightCosts += freightCost;
+    totalFreightIncome += freightIncome;
     totalMaintenanceCosts += maintenance;
     if (labourWagesEnabled && sectorLaborCostLocal != null && sectorLaborCostLocal > 0) {
       totalLaborCosts += sectorLaborCostLocal;
@@ -680,7 +696,7 @@ export function buildSectorDetails(ctx: SectorRowContext) {
       ? plantsNetMarginPct({
           profit,
           revenue: financialRevenue,
-          totalCost: maintenance + sectorGrowthCostLocal,
+          totalCost: maintenance + sectorGrowthCostLocal + sectorRegulatoryBurden + freightCost,
         })
       : null;
     const fillAdjustedMarginPct =
@@ -733,6 +749,7 @@ export function buildSectorDetails(ctx: SectorRowContext) {
       techMarginBonus: techMarginBonus !== 0 ? techMarginBonus : null,
       marketSharePercent: sectorMarketSharePct,
       ...mods,
+      ...roundOwnershipTerms(ownershipTerms),
       commoditySupplyDemandBlendPct,
       profit: Math.round(profit),
       workers:
@@ -789,6 +806,8 @@ export function buildSectorDetails(ctx: SectorRowContext) {
       totalSubsidyBenefit,
       totalRegulatoryBurden,
       totalLaborCosts,
+      totalFreightCosts,
+      totalFreightIncome,
     },
     wageBillAnchorPerTurnBySectorId,
     physicalRollups: {

@@ -13,6 +13,12 @@ export function fitOpeningFiscalEnvelope(input: {
   byCategory: Readonly<Record<string, number>>;
   stateGrants: number;
   maximumDeficitGdpShare: number;
+  /**
+   * Scale up as well as down, landing exactly on the deficit limit. For an
+   * authored composition whose absolute figures no longer match the opening
+   * revenue, so the mix is kept and the size is set by receipts.
+   */
+  fillEnvelope?: boolean;
 }): { byCategory: Record<string, number>; stateGrants: number } {
   const entries = Object.entries(input.byCategory);
   const operatingTotal =
@@ -22,7 +28,8 @@ export function fitOpeningFiscalEnvelope(input: {
     0,
     input.annualRevenue + input.gdp * input.maximumDeficitGdpShare - input.annualDebtService
   );
-  const scale = operatingTotal > 0 ? Math.min(1, affordableOperating / operatingTotal) : 1;
+  const fit = operatingTotal > 0 ? affordableOperating / operatingTotal : 1;
+  const scale = input.fillEnvelope ? fit : Math.min(1, fit);
   return {
     byCategory: Object.fromEntries(
       entries.map(([category, amount]) => [category, Math.floor(Math.max(0, amount) * scale)])

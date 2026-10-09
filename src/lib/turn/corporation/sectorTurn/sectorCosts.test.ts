@@ -145,16 +145,27 @@ describe("decomposePhysicalCosts — P3.5 calibration exactness (#588)", () => {
         storedOtherOpexAnchor: -100,
       })
     );
-    expect(r.otherOpex).toBeCloseTo(320, 10);
+    expect(r.otherOpex).toBeCloseTo(360, 10);
     expect(r.solvedOtherOpexPerUnit).toBeNull();
-    expect(r.physicalPnl?.profit).toBeCloseTo(7330, 10);
+    expect(r.physicalPnl?.profit).toBeCloseTo(7290, 10);
   });
 
   it("does not calibrate a new margin residual under explicit costs", () => {
     const r = decomposePhysicalCosts(physicalInput({ explicitPlantCostsEnabled: true }));
     expect(r.otherOpexCalibrated).toBe(false);
     expect(r.solvedOtherOpexPerUnit).toBeNull();
-    expect(r.otherOpex).toBeCloseTo(320, 10);
+    expect(r.otherOpex).toBeCloseTo(360, 10);
+  });
+
+  it("bills a starved plant more overhead per unit produced than a full one", () => {
+    const full = decomposePhysicalCosts(
+      physicalInput({ explicitPlantCostsEnabled: true, producedUnits: 1000 })
+    );
+    const starved = decomposePhysicalCosts(
+      physicalInput({ explicitPlantCostsEnabled: true, producedUnits: 400 })
+    );
+    expect(starved.otherOpex / 400).toBeGreaterThan(full.otherOpex / 1000);
+    expect(starved.otherOpex).toBeGreaterThan(0.4 * full.otherOpex);
   });
 
   it("is inert when plants are off", () => {
@@ -220,5 +231,44 @@ describe("decomposePhysicalCosts — P3.5 calibration exactness (#588)", () => {
     expect(r.hourlyProfit).toBe(r.physicalPnl!.profit);
     expect(r.sectorNPV).toBeGreaterThanOrEqual(0);
     expect(r.capitalBookAnchor).toBe(0);
+  });
+
+  describe("freight billing legs in the going-concern value", () => {
+    it("leaves NPV unchanged when no freight is billed", () => {
+      const base = decomposePhysicalCosts(physicalInput());
+      const zero = decomposePhysicalCosts(physicalInput({ freightNetHourly: 0 }));
+      expect(zero.sectorNPV).toBe(base.sectorNPV);
+      expect(zero.yearlyProfit).toBe(base.yearlyProfit);
+    });
+
+    it("values a sector on profit after its freight charge, not before", () => {
+      const base = decomposePhysicalCosts(physicalInput());
+      expect(base.hourlyProfit).toBeGreaterThan(0);
+      const billed = decomposePhysicalCosts(
+        physicalInput({ freightNetHourly: -(base.hourlyProfit + 1) })
+      );
+      expect(billed.hourlyProfit).toBe(base.hourlyProfit);
+      expect(billed.yearlyProfit).toBeLessThan(0);
+      expect(billed.sectorNPV).toBe(0);
+    });
+
+    it("adds haul income to the value of a freight carrier", () => {
+      const base = decomposePhysicalCosts(physicalInput());
+      const earning = decomposePhysicalCosts(physicalInput({ freightNetHourly: 1_000 }));
+      expect(earning.sectorNPV).toBeGreaterThan(base.sectorNPV);
+    });
+
+    it("drops a capital book anchor that freight has made unprofitable", () => {
+      const base = decomposePhysicalCosts(physicalInput({ capitalEnabled: true }));
+      const peak = base.capitalBookAnchor * 4;
+      const billed = decomposePhysicalCosts(
+        physicalInput({
+          capitalEnabled: true,
+          prevCapitalBookAnchor: peak,
+          freightNetHourly: -(base.hourlyProfit + 1),
+        })
+      );
+      expect(billed.capitalBookAnchor).toBe(0);
+    });
   });
 });

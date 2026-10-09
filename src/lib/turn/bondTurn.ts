@@ -7,6 +7,7 @@ import { euroSettlementRates } from "@/lib/currency/euro/rules";
 import { purchaseSpreadRate } from "@/lib/currency/rules/purchaseConversion";
 import { loadConversionQuoteContext } from "@/lib/currency/euro/quotes";
 import { roundedAggregateCredit } from "@/lib/bonds/rules/roundedAggregateCredit";
+import { readForcedRolloverFaceLocal } from "@/lib/bonds/forcedSovereignRollover";
 import { getDb } from "@/lib/mongodb";
 import { ObjectId, type AnyBulkWriteOperation } from "mongodb";
 import type {
@@ -91,6 +92,10 @@ import { treasuryAnchorValuation } from "@/lib/budget/rules/treasuryAccrual";
 import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
 import { roundSavingsAmount } from "@/lib/currency/savingsInterest";
 import { resumeSettlement } from "@/lib/banking/settlementJournal";
+import { KeyedQueue, interleaveByKey, runInLanes } from "@/lib/turn/settlementLanes";
+
+/** Concurrent sovereign maturity settlements; one Treasury still runs one at a time. */
+const SOVEREIGN_MATURITY_LANES = 8;
 
 export interface BondTurnResult {
   bondsProcessed: number;
@@ -1123,216 +1128,258 @@ export async function processBondTurn(
   }
 
   // ── Phase 5: Settle matured bonds ─────────────────────────────────────────
-  for (const bond of maturedBonds) {
-    if (
+  // Sovereign maturities settle first, in bounded lanes. Each one is a chain of
+  // dependent journal round trips (freeze, fund, pay), and running them bond by
+  // bond made a ladder maturity turn take ~20 s. The loop below emits their
+  // ledger rows in the original bond order.
+  const dueSovereignBonds = maturedBonds.filter(
+    (bond) =>
       config?.treasuryCashLedgerEnabled === true &&
       sovereignMaturityCandidateIds.has(bond._id.toHexString()) &&
       bond.countryId
-    ) {
-      const bondCcy = resolveBondCurrency(bond);
-      const budgetId = getNationalBudgetId(bond.countryId);
-      const treasuryValuation = treasuryAnchorValuation({
-        countryId: bond.countryId,
-        currencyCode: bondCcy,
-        preset: gameState?.preset ?? DEFAULT_SEED_PRESET,
-        observedRate: authoritativeRates?.get(bondCcy),
+  );
+  const budgetsWithBankClaims = new Set<string>(
+    dueSovereignBonds.length > 0
+      ? (
+          await db
+            .collection<FederalBudget>("federalBudget")
+            .find(
+              {
+                _id: {
+                  $in: [
+                    ...new Set(
+                      dueSovereignBonds.map((bond) => getNationalBudgetId(bond.countryId!))
+                    ),
+                  ],
+                },
+                "bankSovereignClaims.0": { $exists: true },
+              },
+              { projection: { _id: 1 } }
+            )
+            .toArray()
+        ).map((budget) => String(budget._id))
+      : []
+  );
+  const lock = new KeyedQueue();
+  const settleDueSovereignBond = (bond: Bond): Promise<PartialTxEntry[] | null> => {
+    if (!bond.countryId) return Promise.resolve(null);
+    const countryId = bond.countryId;
+    const bondCcy = resolveBondCurrency(bond);
+    const budgetId = getNationalBudgetId(countryId);
+    const treasuryValuation = treasuryAnchorValuation({
+      countryId: countryId,
+      currencyCode: bondCcy,
+      preset: gameState?.preset ?? DEFAULT_SEED_PRESET,
+      observedRate: authoritativeRates?.get(bondCcy),
+    });
+    if (!treasuryValuation || !(treasuryValuation.anchorRate > 0)) return Promise.resolve(null);
+
+    const bankUnits = (bond.holders ?? []).reduce(
+      (sum, holder) =>
+        sum +
+        (holder.bankId && Number.isSafeInteger(holder.charteredTurn)
+          ? Math.max(0, holder.units)
+          : 0),
+      0
+    );
+    const bankAmountLocal = roundSavingsAmount(bankUnits * BOND_UNIT_FACE_VALUE, bondCcy);
+    const totalUnits =
+      (bond.holders ?? []).reduce((sum, holder) => sum + Math.max(0, holder.units), 0) +
+      Math.max(0, bond.publicFloat) +
+      Math.max(0, bond.centralBankHoldings ?? 0);
+    const totalRepaymentLocal = totalUnits * BOND_UNIT_FACE_VALUE;
+    const nonBankRepaymentLocal = Math.max(0, totalRepaymentLocal - bankAmountLocal);
+
+    const holderLegs: Array<{
+      collection: string;
+      filter: Record<string, unknown>;
+      path: string;
+      amount: number;
+      currencyCode: CurrencyCode;
+      localPerAnchor: number;
+      note: string;
+    }> = [];
+    const maturityEntries: PartialTxEntry[] = [];
+    const addHolderLeg = (
+      collection: string,
+      id: ObjectId | string,
+      path: string,
+      amount: number,
+      currencyCode: CurrencyCode,
+      localPerAnchor: number,
+      note: string
+    ) => {
+      if (!(amount > 0)) return;
+      holderLegs.push({
+        collection,
+        filter: { _id: id },
+        path,
+        amount,
+        currencyCode,
+        localPerAnchor,
+        note,
       });
-      if (!treasuryValuation || !(treasuryValuation.anchorRate > 0)) continue;
-
-      const bankUnits = (bond.holders ?? []).reduce(
-        (sum, holder) =>
-          sum +
-          (holder.bankId && Number.isSafeInteger(holder.charteredTurn)
-            ? Math.max(0, holder.units)
-            : 0),
-        0
-      );
-      const bankAmountLocal = roundSavingsAmount(bankUnits * BOND_UNIT_FACE_VALUE, bondCcy);
-      const totalUnits =
-        (bond.holders ?? []).reduce((sum, holder) => sum + Math.max(0, holder.units), 0) +
-        Math.max(0, bond.publicFloat) +
-        Math.max(0, bond.centralBankHoldings ?? 0);
-      const totalRepaymentLocal = totalUnits * BOND_UNIT_FACE_VALUE;
-      const nonBankRepaymentLocal = Math.max(0, totalRepaymentLocal - bankAmountLocal);
-
-      const holderLegs: Array<{
-        collection: string;
-        filter: Record<string, unknown>;
-        path: string;
-        amount: number;
-        currencyCode: CurrencyCode;
-        localPerAnchor: number;
-        note: string;
-      }> = [];
-      const maturityEntries: PartialTxEntry[] = [];
-      const addHolderLeg = (
-        collection: string,
-        id: ObjectId | string,
-        path: string,
-        amount: number,
-        currencyCode: CurrencyCode,
-        localPerAnchor: number,
-        note: string
-      ) => {
-        if (!(amount > 0)) return;
-        holderLegs.push({
-          collection,
-          filter: { _id: id },
-          path,
-          amount,
-          currencyCode,
-          localPerAnchor,
-          note,
+    };
+    const bondFxRate = fxByCurrency.get(bondCcy) ?? 1;
+    for (const holder of bond.holders ?? []) {
+      if (!(holder.units > 0) || holder.bankId) continue;
+      const faceAnchor =
+        holder.units * corpCapitalToAnchor(BOND_UNIT_FACE_VALUE, bondCcy, bondFxRate);
+      if (holder.characterId) {
+        const personalPath = Object.keys(buildPersonalBalanceInc(1, bondCcy, forexEnabled))[0]!;
+        addHolderLeg(
+          "characters",
+          holder.characterId,
+          personalPath,
+          holder.units * BOND_UNIT_FACE_VALUE,
+          bondCcy,
+          bondFxRate,
+          "Pay matured sovereign bond to character"
+        );
+        maturityEntries.push({
+          type: "bond_maturity",
+          turn,
+          createdAt: now,
+          subjectType: "character",
+          subjectId: holder.characterId,
+          charId: holder.characterId.toHexString(),
+          amount: holder.units * BOND_UNIT_FACE_VALUE,
+          currencyCode: bondCcy,
+          meta: {
+            bondId: bond._id.toHexString(),
+            units: holder.units,
+            couponRate: bond.couponRate,
+          },
         });
-      };
-      const bondFxRate = fxByCurrency.get(bondCcy) ?? 1;
-      for (const holder of bond.holders ?? []) {
-        if (!(holder.units > 0) || holder.bankId) continue;
-        const faceAnchor =
-          holder.units * corpCapitalToAnchor(BOND_UNIT_FACE_VALUE, bondCcy, bondFxRate);
-        if (holder.characterId) {
-          const personalPath = Object.keys(buildPersonalBalanceInc(1, bondCcy, forexEnabled))[0]!;
-          addHolderLeg(
-            "characters",
-            holder.characterId,
-            personalPath,
-            holder.units * BOND_UNIT_FACE_VALUE,
-            bondCcy,
-            bondFxRate,
-            "Pay matured sovereign bond to character"
-          );
-          maturityEntries.push({
-            type: "bond_maturity",
-            turn,
-            createdAt: now,
-            subjectType: "character",
-            subjectId: holder.characterId,
-            charId: holder.characterId.toHexString(),
-            amount: holder.units * BOND_UNIT_FACE_VALUE,
-            currencyCode: bondCcy,
-            meta: {
-              bondId: bond._id.toHexString(),
-              units: holder.units,
-              couponRate: bond.couponRate,
-            },
-          });
-        } else if (holder.imperialCharacterId) {
-          const personalPath = Object.keys(buildPersonalBalanceInc(1, bondCcy, forexEnabled))[0]!;
-          addHolderLeg(
-            "imperialCharacters",
-            holder.imperialCharacterId,
-            personalPath,
-            holder.units * BOND_UNIT_FACE_VALUE,
-            bondCcy,
-            bondFxRate,
-            "Pay matured sovereign bond to imperial character"
-          );
-          maturityEntries.push({
-            type: "bond_maturity",
-            turn,
-            createdAt: now,
-            subjectType: "character",
-            subjectId: holder.imperialCharacterId,
-            charId: holder.imperialCharacterId.toHexString(),
-            isImperial: true,
-            amount: holder.units * BOND_UNIT_FACE_VALUE,
-            currencyCode: bondCcy,
-            meta: {
-              bondId: bond._id.toHexString(),
-              units: holder.units,
-              couponRate: bond.couponRate,
-              imperial: true,
-            },
-          });
-        } else if (holder.corporationId) {
-          const holderCorp = corpMap.get(holder.corporationId.toHexString());
-          const holderCurrency = (resolveCorpLiquidCurrencyCode(holderCorp) ??
-            "USD") as CurrencyCode;
-          const holderFxRate = fxRateForCorpFromMap(holderCorp, fxByCurrency);
-          const localAmount = anchorToCorpCapital(faceAnchor, holderCurrency, holderFxRate);
-          addHolderLeg(
-            "corporations",
-            holder.corporationId,
-            "liquidCapital",
-            localAmount,
-            holderCurrency,
-            holderFxRate,
-            "Pay matured sovereign bond to corporation"
-          );
-          maturityEntries.push({
-            type: "bond_maturity",
-            turn,
-            createdAt: now,
-            subjectType: "corporation",
-            subjectId: holder.corporationId,
-            amount: localAmount,
-            currencyCode: holderCurrency,
-            meta: {
-              bondId: bond._id.toHexString(),
-              units: holder.units,
-              couponRate: bond.couponRate,
-            },
-          });
-        } else if (holder.fundId) {
-          addHolderLeg(
-            "indexFunds",
-            holder.fundId,
-            "cashAnchor",
-            faceAnchor,
-            "USD",
-            1,
-            "Pay matured sovereign bond to investment fund"
-          );
-          maturityEntries.push({
-            type: "bond_maturity",
-            turn,
-            createdAt: now,
-            subjectType: "fund",
-            subjectId: holder.fundId,
-            amount: faceAnchor,
-            anchorAmount: faceAnchor,
-            currencyCode: fundLedgerCurrency(holder.fundId.toHexString()) ?? "USD",
-            meta: {
-              bondId: bond._id.toHexString(),
-              units: holder.units,
-              couponRate: bond.couponRate,
-            },
-          });
-        } else if (holder.nppId) {
-          addHolderLeg(
-            "npps",
-            holder.nppId,
-            "nppInvestmentCashAnchor",
-            faceAnchor,
-            "USD",
-            1,
-            "Pay matured sovereign bond to NPP investment account"
-          );
-        }
-      }
-      if (bond.publicFloat > 0) {
+      } else if (holder.imperialCharacterId) {
+        const personalPath = Object.keys(buildPersonalBalanceInc(1, bondCcy, forexEnabled))[0]!;
         addHolderLeg(
-          "bondMarketPools",
-          bondPoolCurrency(bond),
-          "cashLocal",
-          bond.publicFloat * BOND_UNIT_FACE_VALUE,
+          "imperialCharacters",
+          holder.imperialCharacterId,
+          personalPath,
+          holder.units * BOND_UNIT_FACE_VALUE,
           bondCcy,
           bondFxRate,
-          "Redeem public sovereign bond float to its funded pool"
+          "Pay matured sovereign bond to imperial character"
         );
-      }
-      if ((bond.centralBankHoldings ?? 0) > 0) {
+        maturityEntries.push({
+          type: "bond_maturity",
+          turn,
+          createdAt: now,
+          subjectType: "character",
+          subjectId: holder.imperialCharacterId,
+          charId: holder.imperialCharacterId.toHexString(),
+          isImperial: true,
+          amount: holder.units * BOND_UNIT_FACE_VALUE,
+          currencyCode: bondCcy,
+          meta: {
+            bondId: bond._id.toHexString(),
+            units: holder.units,
+            couponRate: bond.couponRate,
+            imperial: true,
+          },
+        });
+      } else if (holder.corporationId) {
+        const holderCorp = corpMap.get(holder.corporationId.toHexString());
+        const holderCurrency = (resolveCorpLiquidCurrencyCode(holderCorp) ?? "USD") as CurrencyCode;
+        const holderFxRate = fxRateForCorpFromMap(holderCorp, fxByCurrency);
+        const localAmount = anchorToCorpCapital(faceAnchor, holderCurrency, holderFxRate);
         addHolderLeg(
-          "centralBanks",
-          bond.countryId,
-          "reserveBalance",
-          (bond.centralBankHoldings ?? 0) * BOND_UNIT_FACE_VALUE,
-          bondCcy,
-          bondFxRate,
-          "Redeem central-bank sovereign holdings to reserves"
+          "corporations",
+          holder.corporationId,
+          "liquidCapital",
+          localAmount,
+          holderCurrency,
+          holderFxRate,
+          "Pay matured sovereign bond to corporation"
+        );
+        maturityEntries.push({
+          type: "bond_maturity",
+          turn,
+          createdAt: now,
+          subjectType: "corporation",
+          subjectId: holder.corporationId,
+          amount: localAmount,
+          currencyCode: holderCurrency,
+          meta: {
+            bondId: bond._id.toHexString(),
+            units: holder.units,
+            couponRate: bond.couponRate,
+          },
+        });
+      } else if (holder.fundId) {
+        addHolderLeg(
+          "indexFunds",
+          holder.fundId,
+          "cashAnchor",
+          faceAnchor,
+          "USD",
+          1,
+          "Pay matured sovereign bond to investment fund"
+        );
+        maturityEntries.push({
+          type: "bond_maturity",
+          turn,
+          createdAt: now,
+          subjectType: "fund",
+          subjectId: holder.fundId,
+          amount: faceAnchor,
+          anchorAmount: faceAnchor,
+          currencyCode: fundLedgerCurrency(holder.fundId.toHexString()) ?? "USD",
+          meta: {
+            bondId: bond._id.toHexString(),
+            units: holder.units,
+            couponRate: bond.couponRate,
+          },
+        });
+      } else if (holder.nppId) {
+        addHolderLeg(
+          "npps",
+          holder.nppId,
+          "nppInvestmentCashAnchor",
+          faceAnchor,
+          "USD",
+          1,
+          "Pay matured sovereign bond to NPP investment account"
         );
       }
+    }
+    if (bond.publicFloat > 0) {
+      addHolderLeg(
+        "bondMarketPools",
+        bondPoolCurrency(bond),
+        "cashLocal",
+        bond.publicFloat * BOND_UNIT_FACE_VALUE,
+        bondCcy,
+        bondFxRate,
+        "Redeem public sovereign bond float to its funded pool"
+      );
+    }
+    if ((bond.centralBankHoldings ?? 0) > 0) {
+      addHolderLeg(
+        "centralBanks",
+        countryId,
+        "reserveBalance",
+        (bond.centralBankHoldings ?? 0) * BOND_UNIT_FACE_VALUE,
+        bondCcy,
+        bondFxRate,
+        "Redeem central-bank sovereign holdings to reserves"
+      );
+    }
 
+    // Every document this maturity writes. Bonds of one country share its
+    // Treasury, and a holder can sit on several countries' bonds; the queue
+    // runs those in bond order while unrelated countries settle at once.
+    const keys = [
+      `federalBudget:${budgetId}`,
+      `bonds:${bond._id.toHexString()}`,
+      ...holderLegs.map((leg) => `${leg.collection}:${String(leg.filter._id)}`),
+    ];
+    // Bank claims settle the whole budget's claim book against bank escrows
+    // and the insurance funds, so any bond that may touch them takes one
+    // shared key.
+    if (bankUnits > 0 || budgetsWithBankClaims.has(budgetId)) keys.push("bankSovereignClaims");
+    return lock.run(keys, async () => {
       // Lock the bond-owned due quote before creating or paying bank claims.
       // A short Treasury can leave those claims pending across turns, so the
       // holder snapshot must already be immutable during that interval.
@@ -1348,7 +1395,7 @@ export async function processBondTurn(
 
       const newClaims = await addBankMaturityClaims(db, {
         budgetId,
-        countryId: bond.countryId,
+        countryId: countryId,
         currencyCode: bondCcy,
         turn,
         bond,
@@ -1378,7 +1425,7 @@ export async function processBondTurn(
               (claim) => claim.kind === "maturity" && claim.bondId === bond._id.toHexString()
             )
           )
-            continue;
+            return null;
         }
       }
       // Claims returned by this attempt or removed by an earlier completed
@@ -1405,27 +1452,54 @@ export async function processBondTurn(
         (fundedSettlement.status !== "applied" &&
           !(fundedSettlement.status === "replayed" && !fundedSettlement.error))
       )
-        continue;
+        return null;
 
-      txBondEntries.push(...maturityEntries);
-      txBondEntries.push({
-        type: "gov_bond_maturity_payment",
-        turn,
-        createdAt: now,
-        subjectType: "government",
-        countryId: bond.countryId,
-        amount: -nonBankRepaymentLocal,
-        currencyCode: bondCcy,
-        anchorAmount: -nonBankRepaymentLocal / treasuryValuation.anchorRate,
-        meta: {
-          bondId: bond._id.toHexString(),
-          units: nonBankRepaymentLocal / BOND_UNIT_FACE_VALUE,
-          couponRate: bond.couponRate,
-          treasuryCashMovement: true,
-          ...treasuryValuation,
+      // A forced rollover moved the pool's face to a replacement bond, so that
+      // face was never paid out of Treasury cash.
+      const paidLocal = nonBankRepaymentLocal - (await readForcedRolloverFaceLocal(db, bond));
+
+      return [
+        ...maturityEntries,
+        {
+          type: "gov_bond_maturity_payment",
+          turn,
+          createdAt: now,
+          subjectType: "government",
+          countryId: countryId,
+          amount: -paidLocal,
+          currencyCode: bondCcy,
+          anchorAmount: -paidLocal / treasuryValuation.anchorRate,
+          meta: {
+            bondId: bond._id.toHexString(),
+            units: paidLocal / BOND_UNIT_FACE_VALUE,
+            couponRate: bond.couponRate,
+            treasuryCashMovement: true,
+            ...treasuryValuation,
+          },
         },
-      });
-      bondsMatured++;
+      ];
+    });
+  };
+  const settledSovereign = new Map<string, PartialTxEntry[] | null>();
+  await runInLanes(
+    interleaveByKey(dueSovereignBonds, (bond) => bond.countryId ?? ""),
+    SOVEREIGN_MATURITY_LANES,
+    async (bond) => {
+      settledSovereign.set(bond._id.toHexString(), await settleDueSovereignBond(bond));
+    }
+  );
+
+  for (const bond of maturedBonds) {
+    if (
+      config?.treasuryCashLedgerEnabled === true &&
+      sovereignMaturityCandidateIds.has(bond._id.toHexString()) &&
+      bond.countryId
+    ) {
+      const entries = settledSovereign.get(bond._id.toHexString());
+      if (entries) {
+        txBondEntries.push(...entries);
+        bondsMatured++;
+      }
       continue;
     }
     // `units × BOND_UNIT_FACE_VALUE` produces LOCAL (bond.currencyCode per

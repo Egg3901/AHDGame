@@ -8,6 +8,8 @@ import { KickerLabel, StatusPill, TheCountRail } from "@/components/legislature/
 import { isVotingDeadlinePassed } from "@/lib/legislature/billVotingWindow";
 import { GameMonthTime } from "@/components/time/GameMonthTime";
 import { useGameClock } from "@/contexts/useGameClock";
+import { Avatar } from "@/components/Avatar";
+import { LegislatureSeal } from "@/components/legislature/LegislatureSeal";
 
 // Humanized chamber labels for the broadsheet row's dateline.
 const CHAMBER_LABELS: Record<string, string> = {
@@ -144,6 +146,13 @@ export function BillCard({
   const eligible = isNationalOverride ? (bill.overrideSeats ?? 0) : cast || 1;
 
   const href = detailHref ?? `/congress/bills/${bill.id}`;
+  const sponsorHref = bill.sponsorId
+    ? `/character/${bill.sponsorSequentialId ?? bill.sponsorId}`
+    : null;
+  const sponsorAvatar = (
+    <Avatar url={bill.sponsorAvatarUrl} name={bill.sponsorName} size="h-6 w-6" />
+  );
+  const displayChamber = isNationalOverride ? bill.overrideChamber! : bill.currentChamber;
   // votingDeadlinePassed shows a muted "Voting Closed" pill; the fallback branch
   // of dispatchStatusMeta renders an unknown label as a muted pill.
   const pillStatus = votingDeadlinePassed && isVoting ? "Voting Closed" : bill.status;
@@ -192,11 +201,19 @@ export function BillCard({
           </p>
         </Link>
         <div className="mt-3 flex flex-wrap items-center gap-2 text-[11.5px]">
+          {sponsorHref ? (
+            // Duplicate of the name link below, so keep it out of the a11y tree.
+            <Link href={sponsorHref} className="shrink-0" aria-hidden tabIndex={-1}>
+              {sponsorAvatar}
+            </Link>
+          ) : (
+            sponsorAvatar
+          )}
           <span className="text-muted">
             By{" "}
-            {bill.sponsorId ? (
+            {sponsorHref ? (
               <Link
-                href={`/character/${bill.sponsorSequentialId ?? bill.sponsorId}`}
+                href={sponsorHref}
                 className="font-semibold hover:underline underline-offset-2"
                 style={{ color: bill.sponsorPartyColor || undefined }}
               >
@@ -212,8 +229,16 @@ export function BillCard({
             )}
           </span>
           <span className="text-card-border">·</span>
-          <span className="italic text-muted">
-            {chamberLabel(isNationalOverride ? bill.overrideChamber! : bill.currentChamber)}
+          <span className="inline-flex items-center gap-1.5 text-muted">
+            <LegislatureSeal
+              // State chambers reuse national keys ("senate"), so only national
+              // bills may resolve a real seal; state bills get the generic glyph.
+              countryId={timelineVariant === "national" ? bill.countryId : null}
+              chamberKey={displayChamber}
+              chamberName={chamberLabel(displayChamber)}
+              size={18}
+            />
+            {chamberLabel(displayChamber)}
           </span>
           <span className="text-card-border">·</span>
           <GameMonthTime value={bill.proposedAt} className="text-muted/70" />

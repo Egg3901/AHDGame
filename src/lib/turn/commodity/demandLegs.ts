@@ -18,6 +18,7 @@ import {
   MARKETING_ADVERTISING_DEMAND_RATE,
   MARKETING_ADVERTISING_REFERENCE_BUDGETS_ANCHOR,
   VEHICLE_RATE_GDP_FRACTION,
+  calibrationMultiplier,
   computeLatentFinancialDemand,
   countryCommodityDemandMultiplier,
   demographicWealthMultiplier,
@@ -262,6 +263,21 @@ export interface LatentFinancialDemandInputs {
   allCorporations: Corporation[];
   recentBonds: Bond[];
   centralBankByCountry: Map<string, number>;
+  /**
+   * Local units per ₳ for a bond's currency. Face value is booked in the
+   * bond's own currency, while the demand formula is calibrated in ₳, so
+   * every issue is converted before it becomes demand.
+   */
+  fxRateForBond: (bond: Pick<Bond, "currencyCode" | "issuerType" | "countryId">) => number;
+}
+
+/** ₳ face value of a bond issue. A non-positive or missing rate counts as ₳. */
+export function bondIssuanceAnchor(
+  bond: Pick<Bond, "totalIssued" | "currencyCode" | "issuerType" | "countryId">,
+  fxRateForBond: LatentFinancialDemandInputs["fxRateForBond"]
+): number {
+  const rate = fxRateForBond(bond);
+  return rate > 0 ? bond.totalIssued / rate : bond.totalIssued;
 }
 
 /**
@@ -275,7 +291,8 @@ export function applyLatentFinancialDemand(
   global: GlobalLedger,
   byState: StateLedger
 ): void {
-  const { statesByCountry, allCorporations, recentBonds, centralBankByCountry } = inputs;
+  const { statesByCountry, allCorporations, recentBonds, centralBankByCountry, fxRateForBond } =
+    inputs;
 
   const corporateHqById = new Map(
     allCorporations.map((corporation: Corporation) => [
@@ -292,6 +309,7 @@ export function applyLatentFinancialDemand(
   const stateDebtIssuanceByCountry = new Map<string, Map<string, number>>();
 
   for (const bond of recentBonds) {
+    const issuedAnchor = bondIssuanceAnchor(bond, fxRateForBond);
     if (bond.issuerType === "sovereign" && bond.countryId) {
       const stateGdp = statesByCountry.get(bond.countryId);
       if (!stateGdp || stateGdp.size === 0) continue;
@@ -303,7 +321,7 @@ export function applyLatentFinancialDemand(
       }
       const issuanceByState = stateDebtIssuanceByCountry.get(bond.countryId)!;
       for (const [stateId, gdp] of stateGdp) {
-        const allocation = bond.totalIssued * (gdp / countryTotalGdp);
+        const allocation = issuedAnchor * (gdp / countryTotalGdp);
         issuanceByState.set(stateId, (issuanceByState.get(stateId) ?? 0) + allocation);
       }
       continue;
@@ -317,7 +335,7 @@ export function applyLatentFinancialDemand(
       stateDebtIssuanceByCountry.set(countryId, new Map());
     }
     const issuanceByState = stateDebtIssuanceByCountry.get(countryId)!;
-    issuanceByState.set(hqState, (issuanceByState.get(hqState) ?? 0) + bond.totalIssued);
+    issuanceByState.set(hqState, (issuanceByState.get(hqState) ?? 0) + issuedAnchor);
   }
 
   for (const [countryId, stateDebtIssuance] of stateDebtIssuanceByCountry) {
@@ -436,6 +454,19 @@ export function aggregateByCountry(
   return byCountry;
 }
 
+/** World total of a per-state household demand map, per commodity. */
+export function sumHouseholdDemand(
+  byState: ReadonlyMap<string, ReadonlyMap<CommodityType, number>>
+): Map<CommodityType, number> {
+  const totals = new Map<CommodityType, number>();
+  for (const contribution of byState.values()) {
+    for (const [commodity, units] of contribution) {
+      totals.set(commodity, (totals.get(commodity) ?? 0) + units);
+    }
+  }
+  return totals;
+}
+
 export interface GovernmentDemandInputs {
   federalBudgets: FederalBudget[];
   ledgerBasePrices: Record<CommodityType, number>;
@@ -445,7 +476,37 @@ export interface GovernmentDemandInputs {
   statesByCountry: Map<string, Map<string, number>>;
   stateToCountry: Map<string, string>;
   turnsPerYear?: number;
+  /**
+   * Prior turn's world supply per commodity. When present, government
+   * purchases of a commodity are capped at GOVERNMENT_DEMAND_SUPPLY_CAP times
+   * it, exactly as household demand is (PLANTS_HOUSEHOLD_SUPPLY_CAP). Absent
+   * (legacy worlds) leaves demand uncapped.
+   */
+  priorGlobalSupply?: Map<CommodityType, number>;
+  /**
+   * Household final demand already booked this turn, per commodity. Households
+   * and governments are buyers of the same finished goods, so they share ONE
+   * ceiling of GOVERNMENT_DEMAND_SUPPLY_CAP x prior supply instead of each
+   * getting their own: with two independent 1.5x caps a saturated market read
+   * 3x its supply (healthcare services, entertainment) and its supply/demand
+   * ratio could never rise above a third however much capacity was built.
+   * Households are served first; government gets the room that is left.
+   */
+  householdDemand?: ReadonlyMap<CommodityType, number>;
+  /** The era calibration applied after every leg; the cap bounds calibrated demand. */
+  demandCalibration?: (commodity: CommodityType) => number;
 }
+
+/**
+ * Government purchases of a commodity may not exceed this multiple of last
+ * turn's world supply, less whatever households already take of it. Health and defense budgets were bought as commodity
+ * demand with no bound, so in the 1991 world health care ran at 10% of demand
+ * met and ordnance at 15%, pinning both near three times their base price.
+ * A government cannot buy what was never produced: like households, demand
+ * beyond the cap is destroyed (and recorded as truncated, so the shortage still
+ * signals investment), not carried as price pressure.
+ */
+export const GOVERNMENT_DEMAND_SUPPLY_CAP = 1.5;
 
 /**
  * Government spending -> commodity demand. National budgets add demand
@@ -459,7 +520,8 @@ export function applyGovernmentDemand(
   inputs: GovernmentDemandInputs,
   global: GlobalLedger,
   byCountry: CountryLedger,
-  byState: StateLedger
+  byState: StateLedger,
+  truncated?: Map<CommodityType, number>
 ): void {
   const {
     federalBudgets,
@@ -469,8 +531,17 @@ export function applyGovernmentDemand(
     ledgerCommandEconomyEnabled,
     statesByCountry,
     stateToCountry,
+    priorGlobalSupply,
+    householdDemand,
+    demandCalibration,
   } = inputs;
   const turnsPerYear = inputs.turnsPerYear ?? 48;
+  const purchases: Array<{
+    commodity: CommodityType;
+    cid: FederalBudget["countryId"];
+    units: number;
+    regional?: boolean;
+  }> = [];
   for (const { category, commodity, rate, plannedOnly, regional } of GOVERNMENT_COMMODITY_DEMAND) {
     const basePrice = ledgerBasePrices[commodity];
     const aliases = GOVT_SPEND_CATEGORY_ALIASES[category] ?? [category];
@@ -487,26 +558,76 @@ export function applyGovernmentDemand(
       const annualSpendAnchor = annualSpendLocal / fxRateForCountry(cid);
       const units = (annualSpendAnchor / turnsPerYear / basePrice) * rate;
       if (units <= 0) continue;
-      global.get(commodity)!.demand += units;
-      if (!cid) continue;
-      if (!byCountry.has(cid)) {
-        const countryBals = new Map<CommodityType, { supply: number; demand: number }>();
-        for (const c of COMMODITY_TYPES) countryBals.set(c, { supply: 0, demand: 0 });
-        byCountry.set(cid, countryBals);
-      }
-      byCountry.get(cid)!.get(commodity)!.demand += units;
-      if (regional) {
-        distributeDemandToStates({
-          countryId: cid,
-          commodity,
-          units,
-          statesByCountry,
-          stateToCountry,
-          byState,
-        });
-      }
+      purchases.push({ commodity, cid, units, regional });
     }
   }
+  const scale = governmentSupplyCapFactors(
+    purchases,
+    priorGlobalSupply,
+    demandCalibration,
+    truncated,
+    householdDemand
+  );
+  for (const purchase of purchases) {
+    const { commodity, cid, regional } = purchase;
+    const units = purchase.units * (scale.get(commodity) ?? 1);
+    if (units <= 0) continue;
+    global.get(commodity)!.demand += units;
+    if (!cid) continue;
+    if (!byCountry.has(cid)) {
+      const countryBals = new Map<CommodityType, { supply: number; demand: number }>();
+      for (const c of COMMODITY_TYPES) countryBals.set(c, { supply: 0, demand: 0 });
+      byCountry.set(cid, countryBals);
+    }
+    byCountry.get(cid)!.get(commodity)!.demand += units;
+    if (regional) {
+      distributeDemandToStates({
+        countryId: cid,
+        commodity,
+        units,
+        statesByCountry,
+        stateToCountry,
+        byState,
+      });
+    }
+  }
+}
+
+/**
+ * Per-commodity scale factor that holds total government purchases to
+ * GOVERNMENT_DEMAND_SUPPLY_CAP x last turn's world supply (in calibrated
+ * units) minus the household demand already booked against that same ceiling.
+ * Every government keeps its share; only the total is cut. Commodities
+ * with no recorded supply are left unscaled, as for households. The removed
+ * units are added to `truncated` so latent-shortage signals still see them.
+ */
+export function governmentSupplyCapFactors(
+  purchases: ReadonlyArray<{ commodity: CommodityType; units: number }>,
+  priorGlobalSupply: Map<CommodityType, number> | undefined,
+  demandCalibration: ((commodity: CommodityType) => number) | undefined,
+  truncated?: Map<CommodityType, number>,
+  householdDemand?: ReadonlyMap<CommodityType, number>
+): Map<CommodityType, number> {
+  const factors = new Map<CommodityType, number>();
+  if (!priorGlobalSupply) return factors;
+  const totals = new Map<CommodityType, number>();
+  for (const { commodity, units } of purchases) {
+    totals.set(commodity, (totals.get(commodity) ?? 0) + units);
+  }
+  for (const [commodity, total] of totals) {
+    const supply = priorGlobalSupply.get(commodity);
+    if (!(typeof supply === "number" && supply > 0)) continue;
+    const calibration = calibrationMultiplier(demandCalibration, commodity);
+    const cap = Math.max(
+      0,
+      (supply * GOVERNMENT_DEMAND_SUPPLY_CAP) / calibration - (householdDemand?.get(commodity) ?? 0)
+    );
+    if (total <= cap) continue;
+    factors.set(commodity, cap / total);
+    if (truncated)
+      truncated.set(commodity, (truncated.get(commodity) ?? 0) + (total - cap) * calibration);
+  }
+  return factors;
 }
 
 export interface DemandCalibrationInputs {

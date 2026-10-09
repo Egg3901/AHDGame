@@ -134,7 +134,7 @@ const SEED_TARGETS: SeedTarget[] = [
     id: "stateSectorSpecializations",
     label: "State sector bonuses",
     description:
-      "Primary (+10pp) and secondary (+5pp) sector profit margin bonuses per state/region",
+      "Primary (+5pp) and secondary (+2.5pp) sector profit margin bonuses per state/region",
   },
   // UK targets
   {

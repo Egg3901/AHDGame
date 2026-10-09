@@ -8,6 +8,7 @@ import {
   targetAudience,
   audienceTurnout,
   CAMPAIGN_RULES_VERSION,
+  TURNOUT_CAP,
 } from "@/lib/campaignTargeting/rules";
 import { loadCampaignAudience } from "@/lib/campaignTargeting/audience";
 import { calculateCanvassingBoost } from "@/lib/turn/demographicTurnoutCalculations";
@@ -321,10 +322,14 @@ export async function POST(req: NextRequest) {
     );
     const modernCategory = (campaignModifiers[modifierCategoryKey] ??= {});
     const beforeModifier = modernCategory[group] ?? 0;
-    modernCategory[group] = addTurnoutBoost(
-      beforeModifier,
-      canvassingBoost(candidatePosition, targetPosition, isActiveCampaign),
-      count
+    const modernBoost = canvassingBoost(candidatePosition, targetPosition, isActiveCampaign);
+    modernCategory[group] = addTurnoutBoost(beforeModifier, modernBoost, count);
+    const realizedContact = modernCategory[group] - beforeModifier;
+    const campaignContactModifiers = structuredClone(turnoutData.campaignContactModifiers ?? {});
+    const contactCategory = (campaignContactModifiers[modifierCategoryKey] ??= {});
+    contactCategory[group] = Math.max(
+      -TURNOUT_CAP,
+      Math.min(TURNOUT_CAP, (contactCategory[group] ?? 0) + realizedContact)
     );
     const afterAudience = audience?.build({ ...turnoutData, campaignModifiers });
     const turnoutBefore =
@@ -359,6 +364,7 @@ export async function POST(req: NextRequest) {
           modifierPath: `modifiers.${modifierCategoryKey}.${group}`,
           modifierValue: currentModifier,
           campaignModifiers,
+          campaignContactModifiers,
         },
         fingerprint,
         idempotencyKey: flowKey,

@@ -13,7 +13,8 @@
  * Per settled agreement:
  *   qty        = the supplier's contracted units that actually cleared, split
  *                across its agreements for that commodity pro-rata by volumeCap
- *   unitPriceₐ = COMMODITY_BASE_PRICES[commodity] × laggedPriceRatio  (in ₳)
+ *   unitPriceₐ = COMMODITY_BASE_PRICES[commodity] × priceRealizationFactor(laggedRatio)
+ *                ÷ TURNS_PER_DAY  (₳ per daily-basis unit, per turn)
  *   premiumₐ   = qty × unitPriceₐ × pricePremium
  *   supplier `liquidCapital` += premiumₐ (→ its currency); buyer -= premiumₐ.
  *
@@ -38,6 +39,10 @@
  * learn a new ledger row.
  */
 
+import {
+  energyProductivityMultiplier,
+  plantUtilizationForInputs,
+} from "@/lib/corporations/rules/energyProductivityRamp";
 import { substepMarker } from "@/lib/observability/phaseSubsteps";
 import { ObjectId, type Db, type AnyBulkWriteOperation } from "mongodb";
 import type { Corporation } from "@/lib/db/types";
@@ -50,6 +55,8 @@ import {
 import { getEffectiveStrategyRatesForOperatingModel } from "@/lib/constants/sectorStrategies";
 import { getInputMultiplier } from "@/lib/utils/productionPolicy";
 import { safeUnitScale } from "@/lib/constants/capacityEconomy";
+import { TURNS_PER_DAY } from "@/lib/constants/turnTime";
+import { priceRealizationFactor } from "@/lib/market/priceRealization";
 import {
   CONTRACT_DAMAGES_CAP_FRACTION,
   CONTRACT_SHORTFALL_PENALTY,
@@ -62,6 +69,7 @@ import {
 import type { CorporationLookups } from "./types";
 import type { TxThresholds } from "@/lib/db/types/financialTxLog";
 import { emitTxBulk } from "@/lib/financialTxLog/emit";
+import { getNppCashFloorAnchor } from "@/lib/turn/npp/nppCashReserve";
 import { partitionedBulkWrite } from "./partitionedBulkWrite";
 import {
   resolveCorpLiquidCurrencyCode,
@@ -71,6 +79,7 @@ import {
 } from "@/lib/currency/corporationCapital";
 import {
   MIN_SETTLE_ANCHOR,
+  NPP_PREMIUM_PAYABLE_SHARE,
   scopeOf,
   allocateDeliveriesToBuyers,
   type SettleableSupplyAgreement,
@@ -137,7 +146,11 @@ export function computeSupplyAgreementBuyerDemand(args: {
       typeof sector.producedUnits === "number" &&
       typeof sector.capacityUnits === "number" &&
       sector.capacityUnits > 0
-        ? Math.max(0, Math.min(1, sector.producedUnits / sector.capacityUnits))
+        ? plantUtilizationForInputs(
+            sector.producedUnits,
+            sector.capacityUnits,
+            energyProductivityMultiplier(sector.sectorType, args.currentTurn, args.preset)
+          )
         : 1;
     const inputMultiplier = getInputMultiplier(sector.productionPolicyLevel ?? 0);
     const natcorpMultiplier = sector.isNatcorp ? NATCORP_COMMODITY_MULTIPLIER : 1;
@@ -417,9 +430,17 @@ export function computeSupplyAgreementSettlements(args: {
       };
       deliveries.push(deliveryRecord);
     }
+    // Volumes are DAILY-basis units (capacity, demand and clearing all speak
+    // it), but settlement runs every turn, so one turn's flow is 1/TURNS_PER_DAY
+    // of them. The price is the one both sides actually transact at: the lagged
+    // ratio through the same realization damping the clearing sale and the
+    // buyer's input bill use. Raw ratio x daily units billed buyers ~24x their
+    // real input spend (a retailer paid a premium on a notional above its whole
+    // turn's revenue), and damages and the C6 cap were inflated the same way.
     const unitPriceAnchor =
-      ((COMMODITY_BASE_PRICES[a.commodity] ?? 0) / safeUnitScale(args.eraUnitScale)) *
-      (priceRatioByCommodity.get(a.commodity) ?? 1);
+      (((COMMODITY_BASE_PRICES[a.commodity] ?? 0) / safeUnitScale(args.eraUnitScale)) *
+        priceRealizationFactor(priceRatioByCommodity.get(a.commodity))) /
+      TURNS_PER_DAY;
     const premiumAnchor = filled > 0 ? qty * unitPriceAnchor * a.pricePremium : 0;
 
     // C5: record the priced position before any of the damages, solvency or
@@ -499,7 +520,17 @@ export function computeSupplyAgreementSettlements(args: {
       typeof payer.liquidCapitalAnchor === "number" &&
       Number.isFinite(payer.liquidCapitalAnchor)
     ) {
-      const available = Math.max(0, payer.liquidCapitalAnchor - (paidByCorp.get(payerId) ?? 0));
+      // An NPP buyer paying a premium keeps its growth reserve: only a share of
+      // the cash above the reserve is payable, the rest is logged as unpaid.
+      const premiumBound =
+        rawNetAnchor > 0 &&
+        typeof payer.premiumReserveAnchor === "number" &&
+        Number.isFinite(payer.premiumReserveAnchor);
+      const spendable = premiumBound
+        ? Math.max(0, payer.liquidCapitalAnchor - payer.premiumReserveAnchor!) *
+          NPP_PREMIUM_PAYABLE_SHARE
+        : payer.liquidCapitalAnchor;
+      const available = Math.max(0, spendable - (paidByCorp.get(payerId) ?? 0));
       const payable = Math.min(owedAnchor, available);
       unpaidAnchor = owedAnchor - payable;
       if (deliveryRecord && unpaidAnchor > 0) {
@@ -719,6 +750,13 @@ export async function settleSupplyAgreements(args: {
           resolveCorpLiquidCurrencyCode(corp),
           fxRateForCorpFromMap(corp, lookups.exchangeRatesByCurrency)
         ),
+        ...(corp.ceoType === "npp" && corp.ceoId
+          ? {
+              premiumReserveAnchor: getNppCashFloorAnchor(
+                args.plantsEnabled ? lookups.preset : undefined
+              ),
+            }
+          : {}),
       };
     },
     turn,

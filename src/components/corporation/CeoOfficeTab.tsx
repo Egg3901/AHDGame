@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback } from "react";
-import type { OperatingSectorType } from "@/lib/constants/corporations";
+import { isSprawlExemptSectorType, type OperatingSectorType } from "@/lib/constants/corporations";
 import {
   CEO_SALARY_MAX_REVENUE_MULTIPLE,
   CORP_OVERHEAD_MAX_REVENUE_MULTIPLE,
@@ -230,6 +230,10 @@ export default function CeoOfficeTab({
           corporation={corporation}
           financials={financials}
           sectorCount={sectors.length}
+          allSectorsSprawlExempt={
+            sectors.length > 0 &&
+            sectors.every((sector) => isSprawlExemptSectorType(sector.sectorType))
+          }
           editMarketingBudget={s.editMarketingBudget}
           setEditMarketingBudget={(val) => set({ editMarketingBudget: val })}
           editLogisticsBudget={s.editLogisticsBudget}

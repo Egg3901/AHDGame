@@ -61,6 +61,26 @@ const plan = {
 };
 
 describe("political media order journal", () => {
+  it("preserves fractional action balances while funding an integer-cost ad", async () => {
+    const { memory, db } = setup();
+    memory.collection("characters").docs[0].actions = 4.5;
+    const request = funding();
+    request.payer.currentActions = 4.5;
+    expect((await fundPoliticalMediaOrder(db, request)).status).toBe("applied");
+    expect(memory.collection("characters").docs[0]).toMatchObject({ cash: 150, actions: 3.5 });
+    expect((await fundPoliticalMediaOrder(db, request)).status).toBe("replayed");
+    expect(memory.collection("characters").docs[0].actions).toBe(3.5);
+  });
+
+  it("rejects an ad when the remaining fractional action balance cannot fund it", async () => {
+    const { memory, db } = setup();
+    memory.collection("characters").docs[0].actions = 0.5;
+    const request = funding();
+    request.payer.currentActions = 0.5;
+    expect((await fundPoliticalMediaOrder(db, request)).status).toBe("rejected");
+    expect(memory.collection("characters").docs[0]).toMatchObject({ cash: 250, actions: 0.5 });
+  });
+
   it("projects only order data when loading current and open orders", async () => {
     const { memory, db } = setup();
     expect((await fundPoliticalMediaOrder(db, funding())).status).toBe("applied");

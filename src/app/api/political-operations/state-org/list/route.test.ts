@@ -39,7 +39,9 @@ it("marks only the viewer's current-turn investments and clears them next turn",
   const { GET } = await import("./route");
   const response = await GET();
   expect(response.status).toBe(200);
+  expect(response.headers.get("Cache-Control")).toContain("no-store");
   const payload = await response.json();
+  expect(payload.canBuild).toBe(true);
   expect(
     payload.states.find((row: { stateId: string }) => row.stateId === "IA").spentThisTurn
   ).toBe(123_456);
@@ -68,4 +70,98 @@ it("marks only the viewer's current-turn investments and clears them next turn",
         !row.builtThisTurn && row.spentThisTurn === null
     )
   ).toBe(true);
+});
+
+it("returns only public candidate presence to non-US spectators", async () => {
+  const db = createMockDb();
+  const characterId = new ObjectId();
+  const presence = [
+    {
+      characterId: new ObjectId().toHexString(),
+      name: "Candidate",
+      party: "1",
+      isSelf: false,
+      levelsByState: { IA: 3 },
+    },
+  ];
+  const { loadRacePresence } = await import("@/lib/politicalOperations/racePresence");
+  vi.mocked(loadRacePresence).mockResolvedValueOnce(presence);
+  vi.mocked((await import("@/lib/mongodb")).getDb).mockResolvedValue(db as unknown as Db);
+  vi.mocked((await import("@/lib/api/requireAuth")).requireAuthWithCharacter).mockResolvedValue({
+    ok: true,
+    user: { character: { _id: characterId, countryId: "UK", party: "43" } },
+  } as never);
+  const { GET } = await import("./route");
+  const response = await GET();
+  expect(response.status).toBe(200);
+  const payload = await response.json();
+  expect(payload.canBuild).toBe(false);
+  expect(payload.racePresence).toEqual(presence);
+  expect(payload.states.map((row: { stateId: string }) => row.stateId)).toEqual(["CA", "IA", "NH"]);
+  expect(payload.states.every((row: { level: number }) => row.level === 0)).toBe(true);
+  expect(loadRacePresence).toHaveBeenCalledWith(db, characterId);
+  // No viewer investments, party metadata, or campaign funds are read for spectators.
+  expect(db.collection).not.toHaveBeenCalled();
+  expect((await import("@/lib/currency/campaignFxRate")).loadCampaignFxRate).not.toHaveBeenCalled();
+});
+
+it("still requires an authenticated character", async () => {
+  vi.mocked((await import("@/lib/api/requireAuth")).requireAuthWithCharacter).mockResolvedValue({
+    ok: false,
+    response: new Response(null, { status: 401 }),
+  } as never);
+  const { GET } = await import("./route");
+  expect((await GET()).status).toBe(401);
+  expect((await import("@/lib/mongodb")).getDb).not.toHaveBeenCalled();
+});
+
+it("loads public levels through the real race loader without exposing investment history", async () => {
+  const db = createMockDb();
+  const viewerId = new ObjectId();
+  const candidateId = new ObjectId();
+  const electionId = new ObjectId();
+  db.collection("elections").findOne.mockResolvedValue({ _id: electionId });
+  db.collection("electionCandidates").find.mockReturnValue({
+    toArray: async () => [{ characterId: candidateId, characterName: "Candidate", party: "1" }],
+  });
+  db.collection("characterStateOrg").find.mockReturnValue({
+    toArray: async () => [
+      {
+        characterId: candidateId,
+        stateId: "IA",
+        level: 4,
+        totalInvested: 200,
+        lastBuildFunds: 123456,
+      },
+    ],
+  });
+  const actual = await vi.importActual<typeof import("@/lib/politicalOperations/racePresence")>(
+    "@/lib/politicalOperations/racePresence"
+  );
+  vi.mocked(
+    (await import("@/lib/politicalOperations/racePresence")).loadRacePresence
+  ).mockImplementationOnce(actual.loadRacePresence);
+  vi.mocked((await import("@/lib/mongodb")).getDb).mockResolvedValue(db as unknown as Db);
+  vi.mocked((await import("@/lib/api/requireAuth")).requireAuthWithCharacter).mockResolvedValue({
+    ok: true,
+    user: { character: { _id: viewerId, countryId: "JP" } },
+  } as never);
+  const { GET } = await import("./route");
+  const response = await GET();
+  expect(response.status).toBe(200);
+  expect(response.headers.get("Cache-Control")).toContain("no-store");
+  const payload = await response.json();
+  expect(payload.racePresence).toEqual([
+    {
+      characterId: candidateId.toHexString(),
+      name: "Candidate",
+      party: "1",
+      isSelf: false,
+      levelsByState: { IA: 4 },
+    },
+  ]);
+  expect(db.collectionMocks.characterStateOrg!.find).toHaveBeenCalledExactlyOnceWith(
+    { characterId: { $in: [candidateId] } },
+    { projection: { characterId: 1, stateId: 1, level: 1 } }
+  );
 });

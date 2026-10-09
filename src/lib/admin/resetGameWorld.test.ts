@@ -13,6 +13,10 @@ import {
 import { retireCharacter } from "@/lib/retireCharacter";
 import { getRuntimeCollectionNames } from "@/lib/admin/seed/seedManifest";
 import {
+  STALE_MARKET_MODE_STAMP_UNSET,
+  STALE_PER_WORLD_GAME_CONFIG_UNSET,
+} from "@/lib/admin/seed/coreGameConfigUpdate";
+import {
   DEFAULT_GAME_STATE_FLAGS,
   FRESH_WORLD_GAME_CONFIG_FLAGS,
 } from "@/lib/seeds/reference/featureFlagDefaults";
@@ -314,8 +318,23 @@ describe("resetGameWorld", () => {
     }
     expect(db.collectionMocks.gameConfig.updateOne).toHaveBeenCalledWith(
       { _id: "default" },
-      { $set: { ...FRESH_WORLD_GAME_CONFIG_FLAGS } }
+      {
+        $set: { ...FRESH_WORLD_GAME_CONFIG_FLAGS },
+        $unset: {
+          ...STALE_PER_WORLD_GAME_CONFIG_UNSET,
+          ...STALE_MARKET_MODE_STAMP_UNSET,
+          fresh1991VehicleModelSeed: "",
+          fresh1991MediaTaxonomySeed: "",
+        },
+      }
     );
+    // The ops access gate for sandbox testers (#3294) is neither a fresh-world
+    // flag nor per-world state, so the reset write must not touch it.
+    const [, configUpdate] = db.collectionMocks.gameConfig.updateOne.mock.calls[0];
+    expect(configUpdate.$set).not.toHaveProperty("sandboxTesterAccessEnabled");
+    expect(configUpdate.$unset).not.toHaveProperty("sandboxTesterAccessEnabled");
+    expect(configUpdate.$unset).toHaveProperty("retailDemandTransitionStartTurn");
+    expect(configUpdate.$unset).toHaveProperty("commodityNominalPriceIndex");
   });
 
   it.each(["none", "default"] as const)(
@@ -833,6 +852,7 @@ describe("resetGameWorld", () => {
       "lastMetricActivationYear",
       "eraGdpPerCapitaBaseline",
       "incomeBandIndexByCountry",
+      "incomeStartVintages",
       "presidentialTenureByCountry",
       "votingAgeEligibleByCountry",
       "votingAgeEligible",

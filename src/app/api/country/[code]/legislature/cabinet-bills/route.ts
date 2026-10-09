@@ -22,6 +22,7 @@ import {
 } from "@/lib/congress/billEnrichment";
 import {
   checkDuplicateProvisions,
+  checkDuplicateResetLawFamilies,
   checkCurrentPolicyLevel,
   NATIONAL_TERMINAL_STATUSES,
 } from "@/lib/congress/billProposalLimits";
@@ -36,6 +37,7 @@ import { isPolicyProvision } from "@/lib/db/types/legislation";
 import {
   BILL_PROPOSE_ACTION_COST,
   getProvisionCostTotal,
+  MAX_PROVISIONS,
   NATIONALIZATION_BILL_CATEGORIES,
 } from "@shared/constants/legislation";
 import { validateNationalizationProvisions } from "@/lib/nationalization/billProvisionValidation";
@@ -48,7 +50,13 @@ import { moderatedBillTitle, moderatedBillText } from "@/lib/api/schemas/congres
 import { validateBillAdministration } from "@/lib/legislature/jurisdiction";
 import { findAdministrationConflict } from "@/lib/legislature/administrationConflictCheck";
 import { getGameState } from "@/lib/gameState";
-import { validateBillProvisions } from "@/lib/congress/billProposal";
+import { snapshotBillPolicyProvisions, validateBillProvisions } from "@/lib/congress/billProposal";
+import { RESET_V2_READY } from "@/lib/resetVersions/availability";
+import { isResetV2Country, resetSystemVersionsForCountry } from "@/lib/resetVersions/rules";
+import { loadBillLegislationTypes } from "@/lib/legislature/queries/loadBillLegislationTypes";
+import { resetTaxesFor } from "@/lib/resetLegislation/taxCatalog";
+import type { ResetCountry } from "@/lib/resetLegislation/fundingOwner";
+import { getNationalDocId } from "@/lib/constants/nationalScope";
 
 const CABINET_VOTE_DURATION_MS = 24 * 3_600_000; // 24 hours
 type BillListProvisionDisplay = NonNullable<BillDisplay["provisions"]>[number];
@@ -62,7 +70,7 @@ const proposeCabinetBillSchema = z.object({
   category: z.string().optional().default("general"),
   stateId: z.string().optional(),
   effectDirection: z.number().optional().default(0),
-  provisions: z.array(z.unknown()).optional(),
+  provisions: z.array(z.unknown()).max(MAX_PROVISIONS).optional(),
   confirmElectionRisk: z.boolean().optional(),
 });
 
@@ -83,7 +91,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ cod
     }
 
     const db = await getDb();
-    const [proposalWarning, authUser, gov, bills, activeBillsForProvisions, parties, legTypes] =
+    const [proposalWarning, authUser, gov, bills, activeBillsForProvisions, parties] =
       await Promise.all([
         getBillProposalAutoFailWarning(db, countryId, "cabinet"),
         getAuthUser().catch(() => null),
@@ -105,11 +113,10 @@ export async function GET(_request: Request, { params }: { params: Promise<{ cod
           .collection<{ sequentialId: number; name?: string; color?: string }>("politicalParties")
           .find({ countryId })
           .toArray(),
-        db.collection<LegislationType>("legislationTypes").find({}).toArray(),
       ]);
 
     const partyMap = new Map(parties.map((party) => [String(party.sequentialId), party]));
-    const legislationTypeMap = new Map(legTypes.map((lt) => [lt._id, lt]));
+    const legislationTypeMap = await loadBillLegislationTypes(db, bills);
 
     let myCharacterId: string | null = null;
     let canVoteCabinetReview = false;
@@ -496,10 +503,32 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
         "type" in provision &&
         provision.type === "reset_law"
     );
-    if (rawResetLawProvisions.length > 0) {
-      if (rawResetLawProvisions.length !== parsed.data.provisions?.length) {
+    const resetVersionState = await getGameState(db);
+    const reviewedLegislationV2 =
+      resetSystemVersionsForCountry(resetVersionState, RESET_V2_READY, countryId).legislation ===
+      "v2";
+    const reviewedCountryLegislation = reviewedLegislationV2 && isResetV2Country(countryId);
+    const resetTaxes = reviewedCountryLegislation
+      ? resetTaxesFor(countryId as ResetCountry, "national")
+      : [];
+    const resetTaxByTypeId = new Map(resetTaxes.map((tax) => [tax.existingLegislationTypeId, tax]));
+    const rawResetTaxProvisions = (parsed.data.provisions ?? []).filter((provision) => {
+      const legislationTypeId =
+        typeof provision === "object" && provision !== null && "legislationTypeId" in provision
+          ? String(provision.legislationTypeId)
+          : "";
+      return resetTaxByTypeId.has(legislationTypeId);
+    });
+    const rawReviewedProvisionCount = rawResetLawProvisions.length + rawResetTaxProvisions.length;
+    if (rawResetLawProvisions.length > 0 && !reviewedCountryLegislation) {
+      return errorResponse(409, "Legislation v2 is not enabled.");
+    }
+    if (reviewedCountryLegislation) {
+      if (rawReviewedProvisionCount !== parsed.data.provisions?.length) {
         return NextResponse.json(
-          badRequest("A v2 cabinet bill cannot mix legacy and v2 law provisions.").toJson(),
+          badRequest(
+            "A v2 cabinet bill can contain only reviewed law and tax provisions."
+          ).toJson(),
           { status: 400 }
         );
       }
@@ -512,10 +541,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
       if (!validated.ok) {
         return errorResponse(validated.status, validated.error);
       }
-      if (validated.resetLawProvisions.length === 0) {
-        return NextResponse.json(badRequest("No v2 law provision was selected.").toJson(), {
-          status: 400,
-        });
+      const reviewedProvisionCount =
+        validated.resetLawProvisions.length + validated.policyProvisions.length;
+      if (reviewedProvisionCount === 0) {
+        return NextResponse.json(
+          badRequest("No reviewed law or tax provision was selected.").toJson(),
+          { status: 400 }
+        );
       }
       if (!isPM && !auth.user.isAdmin) {
         const heldSeats = new Set(
@@ -528,14 +560,42 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
             !provision.overseeingSeatIdSnapshot ||
             !heldSeats.has(provision.overseeingSeatIdSnapshot)
         );
-        if (outsidePortfolio) {
+        const outsideTaxPortfolio = validated.policyProvisions.find((provision) => {
+          const tax = resetTaxByTypeId.get(provision.legislationTypeId);
+          return !tax?.overseeingSeatId || !heldSeats.has(tax.overseeingSeatId);
+        });
+        if (outsidePortfolio || outsideTaxPortfolio) {
+          const title =
+            outsidePortfolio?.titleSnapshot ??
+            resetTaxByTypeId.get(outsideTaxPortfolio!.legislationTypeId)?.title ??
+            "This tax instrument";
           return NextResponse.json(
-            forbidden(
-              `${outsidePortfolio.titleSnapshot} is assigned to a different Cabinet portfolio.`
-            ).toJson(),
+            forbidden(`${title} is assigned to a different Cabinet portfolio.`).toJson(),
             { status: 403 }
           );
         }
+      }
+      const activeBillFilter = {
+        countryId,
+        status: { $nin: NATIONAL_TERMINAL_STATUSES as BillStatus[] },
+      };
+      const duplicateCheck = await checkDuplicateProvisions(
+        db,
+        "bills",
+        activeBillFilter,
+        validated.policyProvisions
+      );
+      if (duplicateCheck) {
+        return errorResponse(409, duplicateCheck.error);
+      }
+      const resetLawDuplicateCheck = await checkDuplicateResetLawFamilies(
+        db,
+        "bills",
+        activeBillFilter,
+        validated.resetLawProvisions
+      );
+      if (resetLawDuplicateCheck) {
+        return errorResponse(409, resetLawDuplicateCheck.error);
       }
       const now = new Date();
       const proposalWarning = await getBillProposalAutoFailWarning(db, countryId, "cabinet", now);
@@ -544,7 +604,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
           extra: { autoFailWarning: proposalWarning, requiresElectionRiskConfirmation: true },
         });
       }
-      const npiCost = getProvisionCostTotal(validated.resetLawProvisions.length);
+      const snapshottedTaxProvisions = await snapshotBillPolicyProvisions(
+        db,
+        { scope: "national", countryId },
+        validated.policyProvisions
+      );
+      const npiCost = getProvisionCostTotal(reviewedProvisionCount);
       const actionCost = BILL_PROPOSE_ACTION_COST;
       if (!auth.user.isAdmin) {
         const spendResult = await db.collection<Character>("characters").updateOne(
@@ -569,15 +634,23 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
         }
       }
       const votingEndsAt = new Date(now.getTime() + CABINET_VOTE_DURATION_MS);
+      const firstTax = snapshottedTaxProvisions[0];
       const resetBill: Omit<Bill, "_id"> = {
         title,
         summary,
         fullText,
         category,
-        provisions: validated.resetLawProvisions,
+        provisions: [...snapshottedTaxProvisions, ...validated.resetLawProvisions],
         originChamber: "cabinet",
         currentChamber: config.legislature.lowerChamber.key,
         countryId,
+        stateId: getNationalDocId(countryId) ?? `${countryId.toLowerCase()}_national`,
+        ...(firstTax
+          ? {
+              legislationTypeId: firstTax.legislationTypeId,
+              effectDirection: firstTax.effectDirection,
+            }
+          : {}),
         status: "cabinet_review",
         sponsorId: character._id,
         sponsorName: character.name,
@@ -745,7 +818,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
     }
     const gameState = await getGameState(db);
     const administrationEnabled =
-      gameState?.lawAdministrationEnabled === true && ["US", "UK", "JP"].includes(countryId);
+      gameState?.lawAdministrationEnabled === true && isResetV2Country(countryId);
     const administrationValidation = validateBillAdministration({
       enabled: administrationEnabled,
       legislationTypes: [selectedLegislationType],

@@ -323,3 +323,36 @@ describe("named loan servicing across charter types", () => {
     expect(oldLoan._id.equals(oldLoanId)).toBe(true);
   });
 });
+
+describe("banking turn sub-step telemetry", () => {
+  it("records each banking stage on the phase status", async () => {
+    const { createTurnPhaseRuntime } = await import("@/simulation/engine/turnPhaseRuntime");
+    const world = makeWorld("retail");
+    const { getDb } = await import("@/lib/mongodb");
+    vi.mocked(getDb).mockResolvedValue(world.db as unknown as Db);
+    // The phase runtime only writes status while this process holds the turn lock.
+    await world.db
+      .collection("gameState")
+      .updateOne({ _id: "current" as never }, { $set: { isProcessing: true } });
+    const phaseStatuses: Record<string, { substeps?: Record<string, unknown> }> = {};
+    const runtime = createTurnPhaseRuntime({
+      db: world.db as unknown as Db,
+      phaseStatuses: phaseStatuses as never,
+      warnings: [],
+      currentPhaseRef: { current: null },
+    });
+    await runtime.runPhase("bankingTurn", () =>
+      processBankingTurn(world.db as unknown as Db, TURN + 1)
+    );
+    expect(Object.keys(phaseStatuses.bankingTurn?.substeps ?? {})).toEqual([
+      "resume+recovery",
+      "load",
+      "depositTakers",
+      "loanBookOnly",
+      "deadBankLoans",
+      "interbank",
+      "bankTreasury",
+      "unfinishedCount",
+    ]);
+  });
+});

@@ -234,13 +234,35 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci --no-audit --no-fund
+      # The compile reaches the 16 GB runner's limit (15.7 GB on the last good
+      # build, then the agent killed mid-compile on every run from 2026-10-09).
+      # Swap absorbs the peak instead of losing the runner.
+      - name: Add swap
+        run: |
+          sudo swapoff -a || true
+          sudo fallocate -l 8G /mnt/build.swap
+          sudo chmod 600 /mnt/build.swap
+          sudo mkswap /mnt/build.swap
+          sudo swapon /mnt/build.swap
+          free -m
       - name: Next build
         # env.ts validates lazily, so the build compiles without secrets; the
         # Sentry sourcemap upload is skipped when SENTRY_AUTH_TOKEN is absent.
-        run: npm run verify:build
+        # A background sampler logs runner memory every 10 s, so a build that
+        # starves the runner shows how close it came in the job log.
+        run: |
+          ( while true; do echo "[mem] $(date -u +%H:%M:%S) $(free -m | awk '/Mem:/ {printf "used=%sMB avail=%sMB ", $3, $7} /Swap:/ {printf "swap=%sMB", $3}')"; sleep 10; done ) &
+          sampler=$!
+          trap 'kill "$sampler" 2>/dev/null' EXIT
+          npm run verify:build
         env:
           NODE_OPTIONS: --max-old-space-size=6144
           CI: "true"
+          # One static-generation worker. Three exhausted the 16 GB runner and
+          # got its agent killed in about one build in five; two still did on
+          # 2026-10-08 (killed at 568 of 758 pages). Static generation takes
+          # about 8 s when healthy, so one worker costs little.
+          NEXT_BUILD_CPUS: "1"
 
   federation-transactions:
     needs: changes
@@ -257,6 +279,14 @@ jobs:
       - name: Start isolated Mongo replica set
         run: |
           docker run --detach --name federation-mongo --publish 27991:27017 mongo:8.0 --replSet federationQualification --bind_ip_all
+          # Wait until the entrypoint finishes chown before mongosh can create
+          # files in /data/db. Probing earlier can make that chown fail.
+          mongo_started=0
+          for attempt in $(seq 1 60); do
+            if docker logs federation-mongo 2>&1 | grep -q 'Waiting for connections'; then mongo_started=1; break; fi
+            sleep 1
+          done
+          test "$mongo_started" = 1
           for attempt in $(seq 1 30); do
             if docker exec federation-mongo mongosh --quiet --eval 'quit(db.adminCommand({ping: 1}).ok ? 0 : 1)'; then break; fi
             sleep 1
@@ -269,7 +299,7 @@ jobs:
           done
           test "$federation_ready" = 1
       - name: Qualify federation transactions
-        run: npx vitest run src/lib/turn/federationSettlements.mongo.integration.test.ts src/lib/turn/democratic1991Bills.mongo.integration.test.ts src/lib/countries/ru/dumaElections.mongo.integration.test.ts src/lib/countries/ru/assemblySeating.mongo.integration.test.ts src/lib/countries/ru/assemblyVacancySeating.mongo.integration.test.ts src/lib/countries/ru/assemblyCampaigns.mongo.integration.test.ts src/lib/countries/ru/dumaConvocations.mongo.integration.test.ts src/lib/countries/ru/dumaElectoralProposals1995.mongo.integration.test.ts scripts/sim/experimentReportSummary.mongo.integration.test.ts src/lib/countries/ru/councilComposition.mongo.integration.test.ts src/lib/countries/bg/foundingAssembly1990.mongo.integration.test.ts src/lib/countries/bg/ordinaryAssemblySeating.mongo.integration.test.ts src/lib/countries/hu/assembly1991.mongo.integration.test.ts src/lib/countries/hu/electoralProposals1994.mongo.integration.test.ts src/lib/countries/hu/electoralProposals2011.mongo.integration.test.ts src/lib/countries/ro/electoralProposals1992.mongo.integration.test.ts src/lib/countries/bg/constitutionalProposals1991.mongo.integration.test.ts src/lib/countries/bg/constitutionalInitiative1991.mongo.integration.test.ts src/lib/countries/bg/listVacancies1991.mongo.integration.test.ts src/lib/countries/bg/constituencyByElections1991.mongo.integration.test.ts src/lib/currency/openingPolicyRates.mongo.integration.test.ts src/lib/currency/nativeGdpBasis1991.mongo.integration.test.ts src/lib/admin/seed/backfillMissingRegionLeans.mongo.integration.test.ts src/lib/charters/draftCharter.emptyStart.mongo.integration.test.ts src/lib/npp/mortality.nativeSlate.mongo.integration.test.ts src/lib/turn/bgAssemblyTransition.mongo.test.ts src/lib/admin/seed/indexes/boundedNpcCandidates.mongo.integration.test.ts --maxWorkers=1
+        run: npx vitest run src/lib/turn/federationSettlements.mongo.integration.test.ts src/lib/turn/democratic1991Bills.mongo.integration.test.ts src/lib/countries/ru/dumaElections.mongo.integration.test.ts src/lib/countries/ru/assemblySeating.mongo.integration.test.ts src/lib/countries/ru/assemblyVacancySeating.mongo.integration.test.ts src/lib/countries/ru/assemblyCampaigns.mongo.integration.test.ts src/lib/countries/ru/dumaConvocations.mongo.integration.test.ts src/lib/countries/ru/dumaElectoralProposals1995.mongo.integration.test.ts scripts/sim/experimentReportSummary.mongo.integration.test.ts src/lib/countries/ru/councilComposition.mongo.integration.test.ts src/lib/countries/bg/foundingAssembly1990.mongo.integration.test.ts src/lib/countries/bg/ordinaryAssemblySeating.mongo.integration.test.ts src/lib/countries/hu/assembly1991.mongo.integration.test.ts src/lib/countries/hu/electoralProposals1994.mongo.integration.test.ts src/lib/countries/hu/electoralProposals2011.mongo.integration.test.ts src/lib/countries/ro/electoralProposals1992.mongo.integration.test.ts src/lib/countries/bg/constitutionalProposals1991.mongo.integration.test.ts src/lib/countries/bg/constitutionalInitiative1991.mongo.integration.test.ts src/lib/countries/bg/listVacancies1991.mongo.integration.test.ts src/lib/countries/bg/constituencyByElections1991.mongo.integration.test.ts src/lib/currency/openingPolicyRates.mongo.integration.test.ts src/lib/currency/nativeGdpBasis1991.mongo.integration.test.ts src/lib/admin/seed/backfillMissingRegionLeans.mongo.integration.test.ts src/lib/charters/draftCharter.emptyStart.mongo.integration.test.ts src/lib/npp/mortality.nativeSlate.mongo.integration.test.ts src/lib/turn/bgAssemblyTransition.mongo.test.ts src/lib/admin/seed/indexes/boundedNpcCandidates.mongo.integration.test.ts src/lib/casino/casino.mongo.integration.test.ts src/app/api/discord-bot/casino/casinoRoutes.mongo.integration.test.ts --maxWorkers=1
         env:
           FEDERATION_TEST_MONGO_URI: mongodb://127.0.0.1:27991/?replicaSet=federationQualification&directConnection=true
       - name: Stop isolated Mongo

@@ -13,6 +13,7 @@ export interface ConsentReferendum {
   status: "requested" | "granted" | "campaigning" | "actuating";
   campaignCloseTurn: number | null;
   conversionDeadlineTurn: number | null;
+  dailConsentRequired: boolean;
   yesShare: number;
   /** Current independence/reunification desire in the region (0–100), or null. */
   desire: number | null;
@@ -43,13 +44,20 @@ function desireLabel(kind: "independence" | "reunification"): string {
 }
 
 /** Plain-language explanation of the PM's grant/decline decision. */
-function requestBlurb(kind: "independence" | "reunification", region: string): string {
+function requestBlurb(
+  kind: "independence" | "reunification",
+  region: string,
+  dailConsentRequired: boolean
+): string {
   if (kind === "reunification") {
     return (
       `${region}'s devolved government has petitioned for a referendum on leaving the United ` +
       `Kingdom to reunify with the Republic of Ireland. Granting it opens a public campaign and a ` +
-      `ballot of ${region}'s electorate — and even if that carries, the transfer proceeds only if ` +
-      `both the Commons and the Dáil consent. Declining rejects the petition for now.`
+      `ballot of ${region}'s electorate. If that carries, ${
+        dailConsentRequired
+          ? "both the Commons and the Dáil must consent"
+          : "the Commons must consent; Ireland will open to players when the transfer completes"
+      }. Declining rejects the petition for now.`
     );
   }
   return (
@@ -139,7 +147,7 @@ export function ReferendumConsentCard({
               {r.status === "requested" && (
                 <div className="mt-2 space-y-2">
                   <p className="text-sm text-muted">
-                    {requestBlurb(r.kind, regionName(r.regionId))}
+                    {requestBlurb(r.kind, regionName(r.regionId), r.dailConsentRequired)}
                   </p>
                   {isPM ? (
                     <div className="flex gap-2">
@@ -205,12 +213,14 @@ export function ReferendumConsentCard({
                 <div className="mt-2 space-y-2">
                   <p className="text-sm text-muted">
                     {r.kind === "reunification"
-                      ? "Carried at the ballot box — now before BOTH the Commons and the Dáil. The region transfers only if both bills pass."
+                      ? r.dailConsentRequired
+                        ? "Carried at the ballot box. The Commons and the Dáil must both consent before the region transfers."
+                        : "Carried at the ballot box. Westminster must consent before the region transfers. Ireland will open to players automatically when reunification takes effect."
                       : "Carried at the ballot box — conversion under way."}
                     {r.conversionDeadlineTurn != null &&
                       (r.conversionDeadlineTurn > currentTurn
                         ? r.kind === "reunification"
-                          ? ` The bills' votes close in ${r.conversionDeadlineTurn - currentTurn} turns.`
+                          ? ` The ${r.dailConsentRequired ? "bills' votes" : "bill's vote"} close${r.dailConsentRequired ? "" : "s"} in ${r.conversionDeadlineTurn - currentTurn} turns.`
                           : ` Converts automatically in ${r.conversionDeadlineTurn - currentTurn} turns unless blocked.`
                         : " Resolving…")}
                   </p>

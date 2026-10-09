@@ -63,6 +63,28 @@ describe("getEffectiveTariffRate", () => {
     expect(getEffectiveTariffRate(tariffs, "US", "technology", "US", undefined)).toBe(0);
   });
 
+  it("maps legacy automobiles tariffs onto vehicle plants only", () => {
+    const tariffs = [
+      makeTariff({
+        countryId: "US",
+        scopeType: "sector",
+        targetSectorType: "manufacturing_vehicles",
+        rate: 25,
+      }),
+    ];
+    expect(getEffectiveTariffRate(tariffs, "US", "manufacturing_vehicles", "UK", undefined)).toBe(25);
+    expect(getEffectiveTariffRate(tariffs, "US", "manufacturing", "UK", undefined)).toBe(0);
+    const canonical = [
+      makeTariff({
+        countryId: "US",
+        scopeType: "sector",
+        targetSectorType: "manufacturing",
+        rate: 10,
+      }),
+    ];
+    expect(getEffectiveTariffRate(canonical, "US", "manufacturing_vehicles", "UK", undefined)).toBe(10);
+  });
+
   it("applies sector tariff only to matching sector", () => {
     const tariffs = [
       makeTariff({

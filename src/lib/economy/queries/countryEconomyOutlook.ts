@@ -219,6 +219,13 @@ export async function buildCountryEconomyOutlook(
       : HOUSEHOLD_PRICE_INDEX_BASELINE;
 
   const gdpGrowthHistory = mapHistory(bank?.gdpGrowthHistory);
+  // The budget's growth figure is the live rate (it moves at the :30 half tick
+  // as well as each turn); the history stays the hourly chart series.
+  const budgetGdpGrowth = budget?.economicFactors?.gdpGrowth;
+  const liveGdpGrowth =
+    typeof budgetGdpGrowth === "number" && Number.isFinite(budgetGdpGrowth)
+      ? budgetGdpGrowth
+      : null;
   const inflationHistory = mapHistory(bank?.inflationHistory);
   const primeRateHistory = mapHistory(bank?.interestRateHistory);
 
@@ -243,7 +250,7 @@ export async function buildCountryEconomyOutlook(
       gdpMillions: gdp.gdpMillions,
       gdpPerCapita: round2(gdp.perCapita),
       gdpGrowth: {
-        value: gdpGrowthHistory.at(-1)?.rate ?? null,
+        value: liveGdpGrowth ?? gdpGrowthHistory.at(-1)?.rate ?? null,
         history: gdpGrowthHistory,
       },
       inflation: {

@@ -36,6 +36,7 @@ import { loadPortfolioHoldings } from "./corporationDetail/portfolioHoldings";
 import { computeIncomeStatement } from "./corporationDetail/incomeStatement";
 import { loadSubsidiaryContext } from "./corporationDetail/subsidiaryContext";
 import { buildFinancials } from "./corporationDetail/financials";
+import { loadArrearsView } from "./corporationDetail/arrears";
 import { buildShareholderList, loadShareholderContext } from "./corporationDetail/shareholders";
 import { buildPhysicalPnl } from "./corporationDetail/physicalPnl";
 
@@ -415,7 +416,20 @@ export async function loadCorporationDetailView(args: {
           }
         : null,
     ceoIsInactive,
-    financials,
+    financials: {
+      ...financials,
+      ...(viewerOwnsCorporation && corporation.ceoVacant !== true
+        ? {
+            arrears: await loadArrearsView({
+              db,
+              corporation,
+              viewerUserId,
+              rates: fxByCurrency,
+              turn: portfolio.latestCorpIncomeRow?.turn ?? currentTurn,
+            }),
+          }
+        : {}),
+    },
     sectors: sectorDetails.map((sd) => {
       const tax = income.perSectorTax.get(sd._id.toString());
       return {

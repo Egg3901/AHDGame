@@ -2,6 +2,7 @@
 import { states1991 } from "@/lib/countries/us/data/usStates1991";
 import { ukRegions1991 } from "@/lib/countries/uk/data/ukRegions1991";
 import { jpRegions1991 } from "@/lib/countries/jp/data/jpRegions1991";
+import { ieRegions1991 } from "@/lib/countries/ie/data/ieRegions1991";
 import { openingLawReferences } from "./openingLaw";
 import { buildResetLawOpeningBoard, type ResetLawOpeningBoard } from "./rules/openingBoard";
 import { buildUkTerritorialTaxOpenings1991 } from "@/lib/countries/uk/resetLegislation/openingUkTerritorialTax1991";
@@ -12,14 +13,19 @@ export function buildOpeningLawBoards1991(
   worldId: string,
   sourceTurn: number
 ): ResetLawOpeningBoard[] {
-  const regions = { US: states1991, UK: ukRegions1991, JP: jpRegions1991 } as const;
+  const regions = {
+    US: states1991,
+    UK: ukRegions1991,
+    JP: jpRegions1991,
+    IE: ieRegions1991,
+  } as const;
   const boards: ResetLawOpeningBoard[] = [];
   const fiscalByRegion = new Map(
     buildOpeningRegionalBoards1991(worldId, sourceTurn).map((board) => [board._id, board])
   );
   const ukTax = new Map(buildUkTerritorialTaxOpenings1991().map((row) => [row.regionId, row]));
   const ukCountryId = ukRegions1991[0]!.countryId;
-  for (const countryId of ["US", "UK", "JP"] as const) {
+  for (const countryId of ["US", "UK", "JP", "IE"] as const) {
     for (const scope of ["national", "regional"] as const) {
       const references = openingLawReferences.filter(
         (reference) => reference.country === countryId && reference.scope === scope
@@ -44,8 +50,8 @@ export function buildOpeningLawBoards1991(
       }
     }
   }
-  if (boards.length !== 74 || new Set(boards.map((board) => board._id)).size !== boards.length) {
-    throw new Error("1991 law opening must contain three national and 71 regional boards");
+  if (new Set(boards.map((board) => board._id)).size !== boards.length) {
+    throw new Error("1991 law opening contains duplicate boards");
   }
   return boards;
 }

@@ -2,6 +2,10 @@
  * NPP corporation decisions use shared market and funding observations.
  * processNppCorporationDecisions loads them and prepares corporation and sector writes.
  */
+import {
+  challengerBoost,
+  computeSectorConcentration,
+} from "@/lib/turn/npp/rules/sectorConcentration";
 import { makeNppCorpDecision } from "@/lib/turn/npp/makeCorpDecision";
 import { strategyStateNeedsPersist } from "@/lib/turn/npp/rules/strategyCadence";
 export { makeNppCorpDecision } from "@/lib/turn/npp/makeCorpDecision";
@@ -238,6 +242,7 @@ export async function processNppCorporationDecisions(
             corporationId: 1,
             nationalizedAtTurn: 1,
             mothballed: 1,
+            capitalStock: 1,
           },
         }
       )
@@ -249,6 +254,15 @@ export async function processNppCorporationDecisions(
   // Rival index for capacity-decision telemetry, off the already-loaded
   // `globalSectors` snapshot: no turn-path reads. See capacityDecisionTelemetry.
   const competitorsByBucket = buildCapacityCompetitorIndex(globalSectors);
+  // Sector concentration off the same snapshot, so reinvestment can lean growth
+  // toward the firms behind a dominant leader. No extra read.
+  const concentrationBySector = computeSectorConcentration(
+    globalSectors.map((s) => ({
+      sectorType: s.sectorType,
+      corporationId: s.corporationId.toString(),
+      weight: s.capitalStock ?? 0,
+    }))
+  );
 
   const manufacturingProductProjectState = await loadNppProductProjectsV2(db, nppCorps);
   const plantsEnabled = manufacturingProductProjectState.plantsEnabled;
@@ -384,6 +398,8 @@ export async function processNppCorporationDecisions(
       now,
       fxRate: corpFxRate,
       competitorCountOf: makeCapacityCompetitorCounter(competitorsByBucket),
+      challengerBoostOf: (sectorType, ownCorporationId) =>
+        challengerBoost(concentrationBySector.get(sectorType), ownCorporationId),
       fxByCurrency,
       strategy: corp.nppStrategy,
       strategyEligible: entryCohortEligible,

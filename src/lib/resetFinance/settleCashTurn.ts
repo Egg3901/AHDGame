@@ -8,7 +8,11 @@ import type { GameState } from "@/lib/db/types/gameState";
 import type { BondTurnResult } from "@/lib/turn/bondTurn";
 import { includedAuthorityPerTurn } from "@/lib/governmentFinance/rules/appropriation";
 import { RESET_V2_READY } from "@/lib/resetVersions/availability";
-import { resetSystemVersionsForCountry, type ResetSystem } from "@/lib/resetVersions/rules";
+import {
+  RESET_V2_COUNTRIES,
+  resetSystemVersionsForCountry,
+  type ResetV2Readiness,
+} from "@/lib/resetVersions/rules";
 import { settleResetCashTurn } from "./rules/cashTurn";
 import { buildResetAuthorityClaims } from "./rules/authorityClaims";
 import type { ResetNationalTreasurySnapshot } from "./rules/treasurySnapshot";
@@ -28,10 +32,10 @@ export async function settleResetTreasuryCashTurn(input: {
   gameState: GameState;
   turn: number;
   bondFlows: BondTurnResult;
-  ready?: Record<ResetSystem, boolean>;
+  ready?: ResetV2Readiness;
 }) {
   const { db, gameState, turn, bondFlows } = input;
-  const countries = (["US", "UK", "JP"] as const).filter(
+  const countries = RESET_V2_COUNTRIES.filter(
     (country) =>
       resetSystemVersionsForCountry(gameState, input.ready ?? RESET_V2_READY, country).cabinet ===
       "v2"

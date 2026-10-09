@@ -32,6 +32,11 @@ export const CONTINGENT_HOUSE_STATE_IDS = Object.keys(HOUSE_SEATS).sort();
 
 /** Party-line default; kept modest so ideology distance (~0–20) can swing close races. */
 const PARTY_MATCH_BONUS = 35;
+/**
+ * A coalition partner's candidate: nearly as strong as the voter's own party,
+ * so a coalition votes as a bloc unless its own party is on the ballot.
+ */
+const COALITION_MATCH_BONUS = 30;
 
 export interface ContingentCandidateProfile {
   id: string;
@@ -47,6 +52,8 @@ export interface ContingentVoterProfile {
   social: number;
   /** Seat weight for aggregated NPP bloc officials (default 1). */
   weight?: number;
+  /** Other parties in this voter's coalition; their candidates count as allies. */
+  coalitionParties?: string[];
 }
 
 export interface ContingentHouseDelegation {
@@ -77,6 +84,12 @@ export interface ContingentElectionResult {
   vicePresidentWinnerId: string | null;
   houseThreshold: number;
   senateThreshold: number;
+  /**
+   * No candidate reached the House majority. The presidency is then held by the
+   * Senate's vice-presidential pick as acting president while the House keeps
+   * voting; `presidentWinnerId` is only the delegation plurality leader.
+   */
+  houseDeadlocked?: boolean;
   deadlockBreakerUsed: boolean;
   deadlockBreakerReason?: string;
   topElectoralVoteTotal: number;
@@ -127,6 +140,8 @@ export function scoreContingentPreference(
   let score = 0;
   if (voter.party && candidate.party && voter.party === candidate.party) {
     score += PARTY_MATCH_BONUS;
+  } else if (candidate.party && voter.coalitionParties?.includes(candidate.party)) {
+    score += COALITION_MATCH_BONUS;
   }
   const ideologyDistance =
     Math.abs(voter.economic - candidate.economic) + Math.abs(voter.social - candidate.social);
@@ -493,6 +508,7 @@ export function resolveContingentElection(
     vicePresidentWinnerId,
     houseThreshold,
     senateThreshold,
+    houseDeadlocked: houseOutcome.deadlockBreakerUsed,
     deadlockBreakerUsed,
     deadlockBreakerReason: deadlockReasons || undefined,
     topElectoralVoteTotal: rankedEv[0]?.[1] ?? 0,

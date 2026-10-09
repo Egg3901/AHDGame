@@ -1,5 +1,5 @@
 /** Dealer half-spread around the turn-priced equity fair value. */
-export const EQUITY_POOL_HALF_SPREAD = 0.02;
+export const EQUITY_POOL_HALF_SPREAD = 0.01;
 /** How strongly a cash shortfall moves both sides of the quote down. */
 export const EQUITY_POOL_CASH_SKEW_RATE = 0.05;
 /** Maximum quote movement caused by the pool's cash position. */

@@ -146,6 +146,50 @@ describe("performRelocation", () => {
     expect(setOp.partyInfluence).toBe(0);
   });
 
+  it("confirmed domestic party departure cleans membership without resetting national influence or rearming cooldown", async () => {
+    vi.mocked(cleanupCaucusParticipationForCharacters).mockClear();
+    const character = makeCharacter({ lastPartySwitchAt: new Date("2026-01-01") });
+    db.collectionMocks.politicalParties!.findOne.mockResolvedValue({
+      _id: new ObjectId(),
+      name: "Synthetic Party",
+    });
+    const outcome = await performRelocation(db as unknown as Db, character, makeState("NY"), {
+      leaveParty: true,
+    });
+    const op = db.collectionMocks.characters!.updateOne.mock.calls.at(-1)![1];
+    expect(op.$set).toMatchObject({ party: "independent", partyInfluence: 0, homeState: "NY" });
+    expect(op.$set).not.toHaveProperty("nationalInfluence");
+    expect(op.$set).not.toHaveProperty("lastPartySwitchAt");
+    expect(op.$unset).toMatchObject({ partyJoinedAt: "", partyJoinedTurn: "", foundedPartyId: "" });
+    expect(outcome.leftPartyName).toBe("Synthetic Party");
+    expect(outcome.countryChanged).toBe(false);
+    expect(cleanupCaucusParticipationForCharacters).toHaveBeenCalledOnce();
+    expect(db.collectionMocks.politicalParties!.updateOne).toHaveBeenCalledWith(
+      expect.any(Object),
+      expect.objectContaining({ $inc: { memberCount: -1 } })
+    );
+    expect(db.collectionMocks.electedOfficials!.updateMany).toHaveBeenCalledWith(
+      { characterId: character._id },
+      expect.objectContaining({ $set: expect.objectContaining({ party: "independent" }) })
+    );
+  });
+
+  it.each([undefined, new Date("2026-01-01"), new Date("2026-01-03")])(
+    "party departure preserves the latest existing cooldown anchor (%s)",
+    async (lastPartySwitchAt) => {
+      const partyJoinedAt = new Date("2026-01-02");
+      const character = makeCharacter({ partyJoinedAt, lastPartySwitchAt });
+      await performRelocation(db as unknown as Db, character, makeState("NY"), {
+        leaveParty: true,
+      });
+      const op = db.collectionMocks.characters!.updateOne.mock.calls.at(-1)![1];
+      expect(op.$set.lastPartySwitchAt ?? lastPartySwitchAt).toEqual(
+        lastPartySwitchAt && lastPartySwitchAt > partyJoinedAt ? lastPartySwitchAt : partyJoinedAt
+      );
+      expect(op.$unset).toHaveProperty("partyJoinedAt");
+    }
+  );
+
   it("cross-country move: clears the tenure anchor and founder marker with the party", async () => {
     // Emigrating drops the character to independent, which ends party
     // membership exactly as leave/purge do — so it must clear the same two

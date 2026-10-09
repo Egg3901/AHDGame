@@ -1,6 +1,8 @@
 "use client";
 
 import { getOperatingSectorType } from "@/lib/constants/sectorStrategies";
+import { useGameEvents } from "@/hooks/useGameEvents";
+
 import { InlineError } from "@/components/ui/InlineError";
 import { apiErrorText } from "@/lib/errors/catalog";
 import { useState, useEffect, useCallback, useRef } from "react";
@@ -63,8 +65,8 @@ import {
 } from "@/components/corporation/CorporationPageTabs";
 import { BankConsoleTab } from "./bank/BankConsoleTab";
 import { EditorialStancePanel } from "@/components/corporation/EditorialStancePanel";
-import { ManufacturingProductStudio } from "@/components/corporation/ManufacturingProductStudio";
-import { MediaProductStudio } from "@/components/corporation/MediaProductStudio";
+import { ProductStudio } from "@/components/corporation/ProductStudio";
+import { LegacyProductProjects } from "@/components/corporation/LegacyProductProjects";
 import AdvertisingAgreementsPanel from "@/components/corporation/AdvertisingAgreementsPanel";
 import type {
   CorporationDetail,
@@ -237,6 +239,7 @@ export default function CorporationDetailPage() {
   useEffect(() => {
     fetchCorporation();
   }, [fetchCorporation]);
+  useGameEvents(() => void fetchCorporation(), ["turn_complete", "market_tick"]);
 
   useEffect(() => {
     let cancelled = false;
@@ -860,6 +863,14 @@ export default function CorporationDetailPage() {
           // figure is already net of the payout, so netting the projection-derived
           // `dividendDistribution` off it read as a loss on a profitable corp (#1098).
           retainedDaily={financials != null ? corpIncomeBasis(financials).retained : null}
+          revenueGrowth={
+            financials != null
+              ? {
+                  pct: financials.currentGrowthRate,
+                  realized: financials.growthRateIsRealized === true,
+                }
+              : null
+          }
           effectiveDividendRate={financials?.effectiveDividendRate ?? null}
           periodView={periodView}
           financialFogOfWar={financialFogOfWar}
@@ -1131,20 +1142,14 @@ export default function CorporationDetailPage() {
 
                 {tab === "sectors" && (
                   <div className="space-y-6">
-                    {corporation.mediaProductSlatesEnabled === true &&
-                      sectors.some((sector) => sector.sectorType === "media") && (
-                        <MediaProductStudio corporationId={id} onUpdate={fetchCorporation} />
-                      )}
+                    <ProductStudio corporationId={id} onUpdate={fetchCorporation} />
                     {isCeo && corporation.mediaOperatingModelsEnabled === true && (
-                      <AdvertisingAgreementsPanel corpId={id} />
+                      <AdvertisingAgreementsPanel
+                        corpId={id}
+                        ownsMediaSector={sectors.some((sector) => sector.sectorType === "media")}
+                      />
                     )}
-                    {corporation.productLinesV2Enabled &&
-                      sectors.some((sector) => sector.sectorType === "manufacturing") && (
-                        <ManufacturingProductStudio
-                          corporationId={id}
-                          onUpdate={fetchCorporation}
-                        />
-                      )}
+                    {isCeo && <LegacyProductProjects corporationId={id} />}
                     <SectorsTab
                       sectors={sectors}
                       isCeo={isCeo}

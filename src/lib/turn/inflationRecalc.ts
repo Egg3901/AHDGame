@@ -33,10 +33,21 @@ import { getCentralBankScope } from "@/lib/centralBank/helpers";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { COUNTRY_CURRENCY_MAP, getCountryIdForCurrency } from "@/lib/constants/currencies";
 import { getNationalDocId } from "@/lib/constants/nationalScope";
+import { getNationalBudgetId } from "@/lib/bonds/sovereign";
 import { ensureFederalBudget } from "@/lib/turn/ensureFederalBudget";
 import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
 import { TURNS_PER_YEAR } from "@/lib/constants/turnTime";
-import { advanceHouseholdPriceIndex } from "@/lib/economy/householdPriceIndex";
+import {
+  advanceHouseholdPriceIndex,
+  HOUSEHOLD_PRICE_INDEX_BASELINE,
+} from "@/lib/economy/householdPriceIndex";
+import { subhourStepStamp } from "@/lib/turn/subhour/stepFraction";
+import {
+  activeSubhourBase,
+  restoreAdditive,
+  restoreMultiplicative,
+  type SubhourInflationBase,
+} from "@/lib/turn/subhour/stepBase";
 import { calculateFxInflationPressure } from "@/lib/turn/rules/fxInflationPressure";
 import {
   countryTurnTariffInflationExposure,
@@ -116,6 +127,22 @@ function median(values: number[]): number {
   return sorted.length % 2 === 1 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
 }
 
+export interface InflationRecalcOptions {
+  /**
+   * Share of the coming turn's step to apply now, in (0, 1). Set only by the
+   * :30 half tick (see turn/subhour/stepFraction.ts). Omitted = the turn.
+   */
+  stepFraction?: number;
+}
+
+export interface InflationRecalcStats {
+  updated: number;
+  /** Half tick only: budgets already half-stepped for this turn. */
+  alreadyStepped: number;
+  /** Turn only: budgets restored to their pre-:30 start before stepping. */
+  rewound: number;
+}
+
 /**
  * Recalculate inflation for every country that has a central bank and
  * a federal budget, then persist the updated rate to the budget document.
@@ -123,7 +150,150 @@ function median(values: number[]): number {
  * Returns the number of countries updated.
  */
 export async function recalculateInflationPerTurn(db: Db, turn: number): Promise<number> {
+  return (await runInflationRecalc(db, turn)).updated;
+}
+
+/**
+ * Inflation step for every country.
+ *
+ * Turn (no stepFraction): a budget the :30 tick stamped for this turn is first
+ * restored to its start-of-hour inflation and household price index (keeping
+ * any shock applied since as an offset), then takes the full step as before.
+ * The result therefore equals the no-tick result whenever the inputs do; an
+ * unstamped budget computes and writes byte-identically to before.
+ *
+ * Half tick (stepFraction 0.5): the same model on the state last settled,
+ * moving each budget part way along the turn's own adjustment path. It stores
+ * the start values with the stamp in the same update and leaves savings
+ * pressure alone (a chart series the turn snapshots). Writes go out in one
+ * bulkWrite and no missing budget is created.
+ */
+export async function runInflationRecalc(
+  db: Db,
+  turn: number,
+  options: InflationRecalcOptions = {}
+): Promise<InflationRecalcStats> {
+  const fraction = options.stepFraction;
+  const halfStep =
+    typeof fraction === "number" && Number.isFinite(fraction) && fraction > 0 && fraction < 1;
+  const stepFraction = halfStep ? fraction : undefined;
+  const halfFraction = stepFraction ?? 1;
+  // Only the half tick passes a fraction; the turn calls with the same
+  // arguments as before.
+  const stepArgs: [] | [number] = stepFraction === undefined ? [] : [stepFraction];
+  // Same-turn series (this turn's commodity price row, its sourcing flows) only
+  // exist once the turn has run; the half tick reads the last settled turn's.
+  const priceTurn = halfStep ? turn - 1 : turn;
+  const stats: InflationRecalcStats = { updated: 0, alreadyStepped: 0, rewound: 0 };
+  const halfStepOps: Array<{
+    updateOne: { filter: { _id: FederalBudget["_id"] }; update: { $set: Record<string, unknown> } };
+  }> = [];
+  const now = new Date();
+
+  /**
+   * Step one budget and persist it. `compute` returns the new annual rate from
+   * the budget it is handed (the start-of-hour budget at the turn).
+   */
+  const settle = async (
+    budget: FederalBudget,
+    compute: (start: FederalBudget) => Promise<number>
+  ): Promise<boolean> => {
+    const stamped = activeSubhourBase(budget.subhourStep, budget.subhourBase?.inflation, turn);
+    if (halfStep) {
+      // Already half-stepped this hour (a retried tick): never apply it twice.
+      if (stamped) {
+        stats.alreadyStepped++;
+        return false;
+      }
+      const startInflation = budget.economicFactors?.inflationRate;
+      if (typeof startInflation !== "number" || !Number.isFinite(startInflation)) return false;
+      const rawIndex = budget.economicFactors?.householdPriceIndex;
+      // advanceHouseholdPriceIndex reads a missing or broken index as the
+      // baseline, so storing the baseline restores the same start.
+      const startIndex =
+        typeof rawIndex === "number" && Number.isFinite(rawIndex) && rawIndex > 0
+          ? rawIndex
+          : HOUSEHOLD_PRICE_INDEX_BASELINE;
+      const newInflation = await compute(budget);
+      const householdPriceIndex = advanceHouseholdPriceIndex(
+        startIndex,
+        newInflation,
+        halfFraction
+      );
+      const base: SubhourInflationBase = {
+        turn,
+        inflationRate: { base: startInflation, written: newInflation },
+        householdPriceIndex: { base: startIndex, written: householdPriceIndex },
+      };
+      halfStepOps.push({
+        updateOne: {
+          filter: { _id: budget._id },
+          update: {
+            $set: {
+              "economicFactors.inflationRate": newInflation,
+              "economicFactors.householdPriceIndex": householdPriceIndex,
+              "economicFactors.lastUpdated": now,
+              subhourStep: subhourStepStamp(turn, halfFraction),
+              "subhourBase.inflation": base,
+            },
+          },
+        },
+      });
+      return true;
+    }
+
+    const start: FederalBudget = stamped
+      ? {
+          ...budget,
+          economicFactors: {
+            ...budget.economicFactors,
+            inflationRate: restoreAdditive(
+              budget.economicFactors?.inflationRate,
+              stamped.inflationRate
+            ),
+            householdPriceIndex: restoreMultiplicative(
+              budget.economicFactors?.householdPriceIndex,
+              stamped.householdPriceIndex
+            ),
+          },
+        }
+      : budget;
+    const newInflation = await compute(start);
+    // Household prices trail the newly settled CPI, but never feed back
+    // into its calculation. This gives inflation a visible purchasing-
+    // power consequence without turning it into a nominal unit rescaler.
+    const householdPriceIndex = advanceHouseholdPriceIndex(
+      start.economicFactors?.householdPriceIndex,
+      newInflation
+    );
+    const set = {
+      "economicFactors.inflationRate": newInflation,
+      "economicFactors.householdPriceIndex": householdPriceIndex,
+      "economicFactors.lastUpdated": new Date(),
+    };
+    await db.collection<FederalBudget>("federalBudget").updateOne(
+      { _id: budget._id },
+      stamped
+        ? { $set: set, $unset: { "subhourBase.inflation": "" } }
+        : {
+            $set: set,
+          }
+    );
+    if (stamped) stats.rewound++;
+    return true;
+  };
+
   const banks = await db.collection<CentralBank>("centralBanks").find({}).toArray();
+  // The half tick reads every budget once up front; it never self-heals a
+  // missing one (the turn does, through ensureFederalBudget).
+  const halfStepBudgets = halfStep
+    ? new Map(
+        (await db.collection<FederalBudget>("federalBudget").find({}).toArray()).map((b) => [
+          String(b._id),
+          b,
+        ])
+      )
+    : null;
 
   const gameStateDoc = await db.collection<GameState>("gameState").findOne({ _id: "current" });
   const preset = gameStateDoc?.preset ?? DEFAULT_SEED_PRESET;
@@ -148,7 +318,7 @@ export async function recalculateInflationPerTurn(db: Db, turn: number): Promise
       .toArray(),
     db
       .collection<CommodityPriceHistory>("commodityPriceHistory")
-      .find({ turn }, { projection: { commodity: 1, nationalPrices: 1 } })
+      .find({ turn: priceTurn }, { projection: { commodity: 1, nationalPrices: 1 } })
       .toArray(),
     db.collection<ExchangeRate>("exchangeRates").find({}).toArray(),
     db
@@ -186,7 +356,7 @@ export async function recalculateInflationPerTurn(db: Db, turn: number): Promise
         },
       ])
       .toArray(),
-    loadTurnTariffInflationExposure(db, turn),
+    loadTurnTariffInflationExposure(db, priceTurn),
   ]);
   // `annualizedM2GrowthPct` is null until the lookback window reaches a
   // game-quarter (see MIN_MONEY_GROWTH_BASE_TURNS) — annualizing a stock jump
@@ -205,7 +375,10 @@ export async function recalculateInflationPerTurn(db: Db, turn: number): Promise
   const priorHistoryFor = (lookbackTurns: number): Promise<CommodityPriceHistory[]> =>
     db
       .collection<CommodityPriceHistory>("commodityPriceHistory")
-      .find({ turn: turn - lookbackTurns }, { projection: { commodity: 1, nationalPrices: 1 } })
+      .find(
+        { turn: priceTurn - lookbackTurns },
+        { projection: { commodity: 1, nationalPrices: 1 } }
+      )
       .toArray();
   const [commodityPriorYearDocs, commodityPriorQuarterDocs] = await Promise.all([
     priorHistoryFor(COMMODITY_INFLATION_LOOKBACK_TURNS),
@@ -237,7 +410,6 @@ export async function recalculateInflationPerTurn(db: Db, turn: number): Promise
     else if (type === "withdraw") entry.withdrawals += row.total;
   }
 
-  let updated = 0;
   // `?? fallback` / `!= null` checks do NOT reject NaN (typeof NaN === "number");
   // any NaN in a persisted price or rate would poison inflation and recurse every
   // turn. Guard all derived pressure signals with a finite-only filter.
@@ -352,7 +524,9 @@ export async function recalculateInflationPerTurn(db: Db, turn: number): Promise
             exchangeRateByCountry.get(countryId) ?? exchangeRateByCountry.get(currencyAnchorId);
           const forexPressure = calculateFxInflationPressure(fxDoc?.rateHistory ?? [], turn);
 
-          const budget = await ensureFederalBudget(db, countryId, preset);
+          const budget = halfStepBudgets
+            ? (halfStepBudgets.get(String(getNationalBudgetId(countryId))) ?? null)
+            : await ensureFederalBudget(db, countryId, preset);
           if (!budget) return;
 
           const nationalDocId = getNationalDocId(countryId);
@@ -375,45 +549,31 @@ export async function recalculateInflationPerTurn(db: Db, turn: number): Promise
             PEGGED_MONEY_GROWTH_COEFF
           );
 
-          const newInflation = await calculateCountryInflation(
-            db,
-            countryId,
-            budget,
-            commodityPressure,
-            forexPressure,
-            savingsPressure,
-            policyStancePressure,
-            moneySupplyGrowthPct,
-            bwMoneyGrowthCoeff,
-            measuredTariffInflationRate(
-              countryTurnTariffInflationExposure(tariffExposureSnapshot, countryId)
+          const stepped = await settle(budget, (start) =>
+            calculateCountryInflation(
+              db,
+              countryId,
+              start,
+              commodityPressure,
+              forexPressure,
+              savingsPressure,
+              policyStancePressure,
+              moneySupplyGrowthPct,
+              bwMoneyGrowthCoeff,
+              measuredTariffInflationRate(
+                countryTurnTariffInflationExposure(tariffExposureSnapshot, countryId)
+              ),
+              ...stepArgs
             )
           );
-          // Household prices trail the newly settled CPI, but never feed back
-          // into its calculation. This gives inflation a visible purchasing-
-          // power consequence without turning it into a nominal unit rescaler.
-          const householdPriceIndex = advanceHouseholdPriceIndex(
-            budget.economicFactors?.householdPriceIndex,
-            newInflation
-          );
-
-          await db.collection<FederalBudget>("federalBudget").updateOne(
-            { _id: budget._id },
-            {
-              $set: {
-                "economicFactors.inflationRate": newInflation,
-                "economicFactors.householdPriceIndex": householdPriceIndex,
-                "economicFactors.lastUpdated": new Date(),
-              },
-            }
-          );
+          if (!stepped) return;
 
           membersUpdated++;
-          updated++;
+          stats.updated++;
         })
       );
 
-      if (membersUpdated > 0) {
+      if (membersUpdated > 0 && !halfStep) {
         // Persist current pressure so interestRateSnapshot can chart it without
         // re-aggregating. Stored as a percentage (×100) to match the chart's %
         // y-axis convention. Keyed by the bank doc's _id — the previous
@@ -454,35 +614,28 @@ export async function recalculateInflationPerTurn(db: Db, turn: number): Promise
       const tariffRate = measuredTariffInflationRate(
         countryTurnTariffInflationExposure(tariffExposureSnapshot, countryId)
       );
-      const newInflation = await calculateCountryInflation(
-        db,
-        countryId,
-        budget,
-        0,
-        0,
-        0,
-        0,
-        undefined,
-        undefined,
-        tariffRate
+      const stepped = await settle(budget, (start) =>
+        calculateCountryInflation(
+          db,
+          countryId,
+          start,
+          0,
+          0,
+          0,
+          0,
+          undefined,
+          undefined,
+          tariffRate,
+          ...stepArgs
+        )
       );
-      const householdPriceIndex = advanceHouseholdPriceIndex(
-        budget.economicFactors?.householdPriceIndex,
-        newInflation
-      );
-      await db.collection<FederalBudget>("federalBudget").updateOne(
-        { _id: budget._id },
-        {
-          $set: {
-            "economicFactors.inflationRate": newInflation,
-            "economicFactors.householdPriceIndex": householdPriceIndex,
-            "economicFactors.lastUpdated": new Date(),
-          },
-        }
-      );
-      updated++;
+      if (!stepped) return;
+      stats.updated++;
     })
   );
 
-  return updated;
+  if (halfStepOps.length > 0) {
+    await db.collection<FederalBudget>("federalBudget").bulkWrite(halfStepOps, { ordered: false });
+  }
+  return stats;
 }

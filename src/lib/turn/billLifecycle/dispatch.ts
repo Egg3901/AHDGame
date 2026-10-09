@@ -3,7 +3,7 @@ import { getGameState } from "@/lib/gameState";
 import { runBillLifecycle } from "./engine";
 import { JP_NATIONAL_CONFIG } from "./configs/jp";
 import { buildConfiguredCountryBillLifecycle } from "./configs/configuredCountry";
-import type { BillLifecycleConfig } from "./types";
+import type { BillLifecycleConfig, BillLifecycleRuntimeContext } from "./types";
 import type { CountryId } from "@/lib/constants/countries";
 
 /**
@@ -17,12 +17,19 @@ import type { CountryId } from "@/lib/constants/countries";
  */
 export async function runBillLifecycleForCountry(
   config: BillLifecycleConfig,
-  now: Date
+  now: Date,
+  context?: BillLifecycleRuntimeContext
 ): Promise<{ enacted: number; failed: number }> {
-  const db = await getDb();
-  const gameState = await getGameState();
-  const currentTurn = gameState?.currentTurn ?? 1;
-  const result = await runBillLifecycle(db, config, now, currentTurn);
+  const db = context?.db ?? (await getDb());
+  const currentTurn = context?.currentTurn ?? (await getGameState())?.currentTurn ?? 1;
+  const result = await runBillLifecycle(
+    db,
+    config,
+    now,
+    currentTurn,
+    context?.preset,
+    context?.rng
+  );
   return { enacted: result.billsPassed, failed: result.billsFailed };
 }
 
@@ -33,12 +40,14 @@ export async function runBillLifecycleForCountry(
  * nor a fail; cabinet→active is a distinct "passed review").
  */
 export async function runBillLifecycleForJP(
-  now: Date
+  now: Date,
+  context?: BillLifecycleRuntimeContext
 ): Promise<{ enacted: number; failed: number; overrides: number; cabinetPassed: number }> {
-  const db = await getDb();
-  const gameState = await getGameState();
-  const currentTurn = gameState?.currentTurn ?? 1;
-  const t = (await runBillLifecycle(db, JP_NATIONAL_CONFIG, now, currentTurn)).transitionedTo;
+  const db = context?.db ?? (await getDb());
+  const currentTurn = context?.currentTurn ?? (await getGameState())?.currentTurn ?? 1;
+  const t = (
+    await runBillLifecycle(db, JP_NATIONAL_CONFIG, now, currentTurn, context?.preset, context?.rng)
+  ).transitionedTo;
   return {
     enacted: t.signed ?? 0,
     failed: t.failed ?? 0,
@@ -50,12 +59,23 @@ export async function runBillLifecycleForJP(
 /** Resolve an era-aware country lifecycle and run it against the current world. */
 export async function runBillLifecycleForConfiguredCountry(
   countryId: CountryId,
-  now: Date
+  now: Date,
+  context?: BillLifecycleRuntimeContext
 ): Promise<{ enacted: number; failed: number }> {
-  const db = await getDb();
-  const gameState = await getGameState();
-  const currentTurn = gameState?.currentTurn ?? 1;
-  const config = buildConfiguredCountryBillLifecycle(countryId, gameState?.preset);
-  const result = await runBillLifecycle(db, config, now, currentTurn);
+  const db = context?.db ?? (await getDb());
+  const gameState = context ? null : await getGameState();
+  const currentTurn = context?.currentTurn ?? gameState?.currentTurn ?? 1;
+  const config = buildConfiguredCountryBillLifecycle(
+    countryId,
+    context?.preset ?? gameState?.preset
+  );
+  const result = await runBillLifecycle(
+    db,
+    config,
+    now,
+    currentTurn,
+    context?.preset ?? gameState?.preset,
+    context?.rng
+  );
   return { enacted: result.billsPassed, failed: result.billsFailed };
 }

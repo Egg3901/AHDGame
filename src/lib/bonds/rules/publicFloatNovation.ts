@@ -37,6 +37,15 @@ export interface PublicFloatNovationPlan {
 
 const VALID_MATURITIES: readonly BondMaturityTurns[] = [48, 96, 240];
 
+/**
+ * Share of a maturing public float the pool will exchange at par instead of
+ * redeeming in cash. Zero when the issuer has no usable appetite.
+ */
+export function publicFloatNovationShare(appetite: number | undefined): number {
+  if (typeof appetite !== "number" || !Number.isFinite(appetite) || appetite <= 0) return 0;
+  return Math.min(1, appetite / BASE_DEMAND);
+}
+
 /** Freeze a conservative pool acceptance at par, without cash or net new debt. */
 export function planPublicFloatNovation(input: PublicFloatNovationInput): PublicFloatNovationPlan {
   const sourceUnits =
@@ -57,11 +66,8 @@ export function planPublicFloatNovation(input: PublicFloatNovationInput): Public
     return refused("non_par_quote");
   if (!VALID_MATURITIES.includes(input.maturityTurns as BondMaturityTurns))
     return refused("invalid_maturity");
-  const appetite = input.appetite;
-  if (typeof appetite !== "number" || !Number.isFinite(appetite) || appetite <= 0)
-    return refused("no_appetite");
-
-  const appetiteShare = Math.min(1, appetite / BASE_DEMAND);
+  const appetiteShare = publicFloatNovationShare(input.appetite);
+  if (appetiteShare <= 0) return refused("no_appetite");
   const acceptedUnits = Math.min(sourceUnits, Math.floor(sourceUnits * appetiteShare));
   if (acceptedUnits <= 0) return refused("no_appetite");
   return {

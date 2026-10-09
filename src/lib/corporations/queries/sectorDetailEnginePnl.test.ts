@@ -120,6 +120,37 @@ function panelIdentity(pnl: {
 }
 
 describe("sector page profit under plants (ticket 1122)", () => {
+  it("includes freight charged beside the persisted physical P&L", () => {
+    const engine = enginePnl({
+      revenue: 1000,
+      inputs: 500,
+      labour: 100,
+      upkeep: 10,
+      compliance: 20,
+      otherOpex: 30,
+      policyCredit: 0,
+    });
+    const s = buildSectorPlantsSection({
+      ...BASE_ARGS,
+      sector: sectorFixture(),
+      money: {
+        realizedRevenueAnchor: 1000,
+        maintenanceNetAnchor: 530,
+        labourAnchor: 100,
+        growthCostAnchor: 0,
+        profitAnchor: 40,
+        inputsAnchor: 500,
+        enginePnl: engine,
+        ...{ freightCostAnchor: 400, freightIncomeAnchor: 100 },
+      },
+    });
+    expect(s.pnl.revenueAnchor).toBe(1100);
+    expect(s.pnl.freightCostAnchor).toBe(400);
+    expect(s.pnl.profitAnchor).toBe(40);
+    expect(s.truth?.fillAdjustedMarginPct).toBeCloseTo((40 / 1100) * 100);
+    expect(panelIdentity(s.pnl) - (s.pnl.freightCostAnchor ?? 0)).toBe(40);
+  });
+
   it("shows the engine's profit, not revenue, when the derived margin saturates at 100", () => {
     // Washington DC newsroom, prod 6a779f41e464c15609c01cbf. The policy credit
     // outruns the operating bill, so operating cost is negative and the booked

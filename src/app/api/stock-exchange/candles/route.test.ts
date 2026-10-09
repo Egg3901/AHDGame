@@ -21,6 +21,16 @@ const state = {
     updatedAt: Date;
   }[],
   volumes: [] as { _id: number; volume: number; invalidTrades: number }[],
+  ticks: [] as {
+    turn: number;
+    at: Date;
+    open: number;
+    high: number;
+    low: number;
+    last: number;
+    prints: number;
+  }[],
+  quarterVolumes: [] as { _id: Date; volume: number }[],
   currentTurn: 3,
 };
 const find = vi.fn();
@@ -42,6 +52,8 @@ describe("market candle API", () => {
     vi.clearAllMocks();
     state.prints = [];
     state.volumes = [];
+    state.ticks = [];
+    state.quarterVolumes = [];
     fixture(3);
     const { getDb } = await import("@/lib/mongodb");
     vi.mocked(getDb).mockResolvedValue({
@@ -63,7 +75,12 @@ describe("market candle API", () => {
             sort: () => cursor,
             project: () => cursor,
             toArray: async () => {
-              const rows = name === "marketCapHistory" ? state.history : state.prints;
+              const rows =
+                name === "marketCapHistory"
+                  ? state.history
+                  : name === "marketCapTicks"
+                    ? state.ticks
+                    : state.prints;
               return rows.filter(
                 (r) => !query.turn || (r.turn >= query.turn.$gte && r.turn <= query.turn.$lte)
               );
@@ -71,9 +88,10 @@ describe("market candle API", () => {
           };
           return cursor;
         },
-        aggregate: (pipeline: unknown) => {
+        aggregate: (pipeline: { $group?: { _id?: unknown } }[]) => {
           aggregate(pipeline);
-          return { toArray: async () => state.volumes };
+          const byQuarter = typeof pipeline[1]?.$group?._id === "object";
+          return { toArray: async () => (byQuarter ? state.quarterVolumes : state.volumes) };
         },
       }),
     } as unknown as Db);
@@ -92,6 +110,34 @@ describe("market candle API", () => {
       calendar: { startingYear: 1953, preIterationTurns: 48 },
     });
     expect(response.headers.get("cache-control")).toContain("private");
+  });
+  it("draws 15-minute candles for ticked turns on short ranges", async () => {
+    const at = (turn: number, q: number) => new Date(turn * 3600_000 + q * 900_000);
+    state.ticks = [0, 1, 2, 3].map((q) => ({
+      turn: 3,
+      at: at(3, q),
+      open: 35 + q,
+      high: 36 + q,
+      low: 35 + q,
+      last: 36 + q,
+      prints: 1,
+    }));
+    state.quarterVolumes = [{ _id: at(3, 1), volume: 9 }];
+    const body = await (await request(24)).json();
+    expect(body.resolution).toBe("15m");
+    expect(body.points).toHaveLength(2 + 4);
+    expect(body.points.slice(2).map((p: { close: number }) => p.close)).toEqual([36, 37, 38, 39]);
+    expect(body.points[3]).toMatchObject({ open: 36, volume: 9, time: 3 * 3600 + 900 });
+    expect(find).toHaveBeenCalledWith("marketCapTicks", {
+      exchange: "global",
+      turn: { $gte: 1, $lte: 3 },
+    });
+  });
+  it("keeps one candle per turn on long ranges and without ticks", async () => {
+    expect((await (await request(24)).json()).resolution).toBe("turn");
+    fixture(300);
+    state.ticks = [{ turn: 300, at: new Date(), open: 1, high: 1, low: 1, last: 1, prints: 1 }];
+    expect((await (await request(240)).json()).resolution).toBe("turn");
   });
   it("bounds by actual turn numbers despite missing records and loads the predecessor", async () => {
     fixture(30);

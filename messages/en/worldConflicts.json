@@ -35,6 +35,13 @@
       "risk": "Unpaid contributions reduce successor stability. Later contributions repay the overdraft."
     },
     "federationDecisions": {
+      "custodian": "Custodian for {asset} {number}",
+      "chooseSuccessor": "Choose a successor",
+      "assetKinds": {
+        "public-enterprise": "public enterprise",
+        "conventional-force": "conventional force",
+        "strategic-force": "strategic force"
+      },
       "assets": "Public financial asset shares",
       "debt": "Public debt and cash-deficit shares",
       "population": "Use live population shares",
@@ -46,6 +53,11 @@
       "approved": "approved",
       "rejected": "rejected",
       "freshVote": "Revised terms require a new legislative vote and fresh consent from every successor. Previous approvals do not carry over."
+    },
+    "russianLegislature": {
+      "eyebrow": "1991 legislature",
+      "overview": "In the 1991 world, this legislature handles the Soviet federation settlement and changes to Russia's institutions. Each change requires its own parliamentary decision. Every successor must consent before a settlement changes sovereignty.",
+      "eligibility": "Only a seated federal legislator or an administrator can introduce a settlement vote. Viewing this page does not give you an office or voting rights. Institutional changes remain subject to the dates and requirements shown below."
     },
     "russianConstitution": {
       "title": "Russian institutional decisions",

@@ -23,6 +23,8 @@ export const POSITION_BY_ELECTION_TYPE: Readonly<Record<string, ElectionPosition
   snap_shugiin: "lowerChamber",
   npcDelegate: "lowerChamber",
   supremeSovietDeputy: "lowerChamber",
+  // RU 1991 Soviet Congress of People's Deputies.
+  unionCongressDeputy: "lowerChamber",
   // Union-republic Supreme Soviets (UKR/BLR/BAL): same slot as the RU chambers.
   supremeSoviet: "lowerChamber",
   volkskammerDeputy: "lowerChamber",

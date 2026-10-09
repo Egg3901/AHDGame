@@ -12,7 +12,7 @@ import type { RegionCensus } from "@/lib/seeds/regionCensusData";
 import type { EraId, ResetPresetId } from "@/lib/seeds/presetSelector";
 import type { CalibrationTarget } from "@/lib/seeds/calibration/types";
 import type { CabinetIdentity } from "@/lib/constants/cabinetIdentity";
-import type { CountryConfig, EraCountryConfigOverride } from "@/lib/constants/countries";
+import type { CountryConfig, CountryId, EraCountryConfigOverride } from "@/lib/constants/countries";
 import type { EconomyIdentity } from "@/lib/constants/economyIdentity";
 import type { ExecutiveSeal } from "@/lib/constants/executiveSeals";
 import type { ExecutiveSurfaceConfig } from "@/lib/constants/executiveSurface";
@@ -52,8 +52,8 @@ import type { WorldEntityRegion } from "@/lib/world/worldEntityManifest";
  * Which files each member absorbs, and which phase does it, is tracked
  * mechanically in `singleCountryData.ts` -- not in prose here.
  *
- * NOTHING IMPLEMENTS THIS YET. D1 builds the shape and the harness; D2 onward
- * fill it in one subject at a time.
+ * Every configured country now implements this shape. The runtime forwarding
+ * harness verifies that each registry still resolves to the folder's values.
  */
 
 /**
@@ -521,12 +521,12 @@ export interface CountryEraOverride {
 }
 
 /** One country's folder. */
-export interface CountryFolder {
-  readonly id: string;
+export interface CountryFolder<Id extends CountryId = CountryId> {
+  readonly id: Id;
   readonly identity: CountryIdentity;
   readonly institutions: CountryInstitutions;
   readonly elections: CountryElections;
   readonly economy: CountryEconomy;
   readonly geography: CountryGeography;
-  readonly eras: Partial<Record<ShippingPreset, CountryEraOverride>>;
+  readonly eras: Record<ShippingPreset, CountryEraOverride>;
 }

@@ -1,3 +1,5 @@
+import { substepMarker } from "@/lib/observability/phaseSubsteps";
+import { KeyedQueue, interleaveByKey, runInLanes } from "@/lib/turn/settlementLanes";
 import { quoteLoanOrigination } from "@/lib/banking/rules/loanFees";
 import { resumeTreasuryReserveTransfers } from "@/lib/budget/treasuryReserveTransfer";
 /**
@@ -22,7 +24,11 @@ import { processBankTreasuryTurn } from "@/lib/banking/bankTreasury";
 import { savingsReadsAuthoritative } from "@/lib/banking/rules/policy";
 import { recoverBankingSettlements } from "@/lib/banking/recovery";
 import { emitBankingAuditEvent } from "@/lib/banking/auditEvents";
-import { recordBankingStage, timedBankingStage } from "@/lib/banking/telemetry";
+import {
+  recordBankingStage,
+  timedBankingStage,
+  withBankingTelemetryBatch,
+} from "@/lib/banking/telemetry";
 import { MONEY_MOVE_COLLECTION } from "@/lib/banking/moneyMove";
 import { computeNpcDepositShare, equityCappedDepositCeiling } from "@/lib/banking/deposits";
 import { domesticDepositRetention } from "@/lib/centralBank/marketEffects";
@@ -98,6 +104,15 @@ type DepositTaker = {
  * the turn explicitly for idempotency keys.
  */
 export async function processBankingTurn(db: Db, turn: number): Promise<BankingTurnSummary> {
+  // Every settlement in the pass bumps the turn's banking telemetry document.
+  // Unbatched, that was about 150 concurrent increments on one document per
+  // turn; batched, one write when the pass ends. Counts are unchanged.
+  return withBankingTelemetryBatch(db, turn, () => runBankingTurn(db, turn));
+}
+
+async function runBankingTurn(db: Db, turn: number): Promise<BankingTurnSummary> {
+  // Persisted per-stage timings and round trips for this phase (#2689).
+  const steps = substepMarker();
   await resumeReservePoolTransfers(db);
   await resumeMonetaryOperations(db, MONETARY_OPERATION_COOLDOWN_TURNS);
   await resumeLiquidityAdvances(db, MONETARY_OPERATION_COOLDOWN_TURNS);
@@ -123,6 +138,7 @@ export async function processBankingTurn(db: Db, turn: number): Promise<BankingT
   // that crashed between two legs, an estate claimed and never settled. Doing
   // it first means nothing below builds on money still in flight.
   const recovered = await recoverBankingSettlements(db, turn, policy);
+  steps.mark("resume+recovery");
   const recovery = {
     resumedSettlements: recovered.resumedSettlements.length,
     stillPartial: recovered.stillPartial.length,
@@ -219,18 +235,28 @@ export async function processBankingTurn(db: Db, turn: number): Promise<BankingT
   }
 
   const summary: BankingTurnSummary = { ...ZERO_BANKING_TURN_SUMMARY, recovery };
+  steps.mark("load");
 
-  for (const row of depositTakers) {
-    const bankResult = await processOneBank(
-      db,
-      turn,
-      row,
-      {
-        npcShareByBankId,
-        cbById,
-        premiumReceiptByKey,
-      },
-      policy
+  // Banks settle in bounded lanes. Each holds every document its pass writes:
+  // itself, its currency's household pool (which the pass also reads through
+  // the shared in-memory central bank, so same-currency banks keep their
+  // order), the currency's insurance fund, and each depositor and borrower.
+  // A depositor saving in two currencies at two banks orders those banks.
+  const lockKeysByBank = await bankPassLockKeys(db, turn, depositTakers);
+  const lock = new KeyedQueue();
+  const runBank = async (row: DepositTaker) => {
+    const bankResult = await lock.run(lockKeysByBank.get(row.corp._id.toString()) ?? [], () =>
+      processOneBank(
+        db,
+        turn,
+        row,
+        {
+          npcShareByBankId,
+          cbById,
+          premiumReceiptByKey,
+        },
+        policy
+      )
     );
     summary.banksProcessed += 1;
     summary.depositInterestPaid += bankResult.depositInterestPaid;
@@ -241,7 +267,14 @@ export async function processBankingTurn(db: Db, turn: number): Promise<BankingT
     summary.npcDepositDelta += bankResult.npcDepositDelta;
     summary.npcBulkShortfall += bankResult.npcBulkShortfall;
     summary.premiumShortfall += bankResult.premiumShortfall;
-  }
+  };
+  await runInLanes(
+    interleaveByKey(depositTakers, (row) => String(row.charter.currency)),
+    BANKING_LANES,
+    runBank
+  );
+
+  steps.mark("depositTakers");
 
   // Charters with a loan book but no deposit base: the named loans still have
   // to advance every turn, exactly as they do for a deposit taker.
@@ -253,6 +286,8 @@ export async function processBankingTurn(db: Db, turn: number): Promise<BankingT
     summary.loanPrincipalRepaid += loanResult.principalRepaid;
     summary.defaultsWrittenOff += loanResult.writtenOff;
   }
+
+  steps.mark("loanBookOnly");
 
   // Loans owed to banks that have already been wound up. They are not part of
   // any live bank's pass, and before this they were serviced by nobody: the
@@ -297,10 +332,12 @@ export async function processBankingTurn(db: Db, turn: number): Promise<BankingT
   summary.deadBankRecoveredToEstate = deadBankResult.recoveredToEstate;
   summary.deadBankRecoveredToInsurer = deadBankResult.recoveredToInsurer;
   recordBankingStage(db, turn, "deadBankLoans", Date.now() - deadBankStarted);
+  steps.mark("deadBankLoans");
 
   await timedBankingStage(db, turn, "interbank", () =>
     serviceInterbankAndCbMargin(db, turn, summary, policy.propTrading, cbById)
   );
+  steps.mark("interbank");
 
   if (policy.bankTreasury) {
     await timedBankingStage(db, turn, "bankTreasury", async () => {
@@ -311,9 +348,11 @@ export async function processBankingTurn(db: Db, turn: number): Promise<BankingT
   // What this pass leaves behind for the repair queue. Reported on the turn
   // summary so a half-applied move shows up in phase results the same turn,
   // not when somebody thinks to open the admin page.
+  steps.mark("bankTreasury");
   summary.unfinishedSettlements = await db
     .collection(MONEY_MOVE_COLLECTION)
     .countDocuments({ status: "partial" });
+  steps.mark("unfinishedCount");
 
   return summary;
 }
@@ -340,6 +379,72 @@ type BankPassResult = {
   insurancePremiumPaid: number;
   bankingIncome: number;
 };
+
+/** Concurrent bank passes; a shared document still orders them. */
+const BANKING_LANES = 8;
+
+/**
+ * Lock keys for each deposit taker's pass, as `<collection>:<id>`: the bank,
+ * its currency's central bank and insurance fund, every player depositor and
+ * every borrower of a loan this pass services.
+ */
+async function bankPassLockKeys(
+  db: Db,
+  turn: number,
+  depositTakers: readonly DepositTaker[]
+): Promise<Map<string, string[]>> {
+  const keys = new Map<string, string[]>();
+  const bankIdsByCurrency = new Map<string, string[]>();
+  for (const { corp, charter } of depositTakers) {
+    const currency = charter.currency as CurrencyCode;
+    keys.set(corp._id.toString(), [
+      `corporations:${corp._id.toString()}`,
+      `centralBanks:${getBankId(getCountryIdForCurrency(currency))}`,
+      `depositInsuranceFunds:${currency}`,
+    ]);
+    bankIdsByCurrency.set(currency, [
+      ...(bankIdsByCurrency.get(currency) ?? []),
+      corp._id.toString(),
+    ]);
+  }
+  if (!depositTakers.length) return keys;
+  const [depositors, loans] = await Promise.all([
+    db
+      .collection<Character>("characters")
+      .find(
+        {
+          $or: [...bankIdsByCurrency].map(([currency, ids]) => ({
+            [`currencyBalances.savingsHolder.${currency}`]: { $in: ids },
+          })),
+        },
+        { projection: { _id: 1, "currencyBalances.savingsHolder": 1 } }
+      )
+      .toArray(),
+    db
+      .collection<BankLoan>("bankLoans")
+      .find(
+        {
+          bankCorporationId: { $in: depositTakers.map((row) => row.corp._id) },
+          borrowerType: { $in: ["character", "corporation"] },
+          status: { $in: ["current", "arrears"] },
+          lastProcessedTurn: { $ne: turn },
+        },
+        { projection: { bankCorporationId: 1, borrowerType: 1, borrowerId: 1 } }
+      )
+      .toArray(),
+  ]);
+  for (const depositor of depositors) {
+    const holders = (depositor.currencyBalances?.savingsHolder ?? {}) as Record<string, unknown>;
+    for (const bankId of Object.values(holders))
+      keys.get(String(bankId))?.push(`characters:${depositor._id.toString()}`);
+  }
+  for (const loan of loans) {
+    if (!loan.borrowerId) continue;
+    const collection = loan.borrowerType === "character" ? "characters" : "corporations";
+    keys.get(String(loan.bankCorporationId))?.push(`${collection}:${String(loan.borrowerId)}`);
+  }
+  return keys;
+}
 
 async function processOneBank(
   db: Db,

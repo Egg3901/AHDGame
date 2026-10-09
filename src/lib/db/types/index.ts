@@ -97,6 +97,7 @@ export type { WikiTemplate, TemplateField, TemplateFieldType } from "./wikiTempl
 export * from "./politicianOverride";
 export * from "./achievement";
 export * from "./campaign";
+export * from "./campaignFieldOffice";
 export * from "./billWhip";
 export * from "./impeachment";
 export * from "./billDiscussion";
@@ -211,7 +212,13 @@ export type { TradeEmbargo } from "./tradeEmbargo";
 export type { TradeEmbargoCooldown } from "./tradeEmbargoCooldown";
 export type { MarketCapHistory } from "./marketCapHistory";
 export type { MarketIndexIntraday } from "./marketIndexIntraday";
+export type { MarketCapTick } from "./marketCapTick";
 export type { CorporationHistory } from "./corporationHistory";
+export type {
+  CorporationExit,
+  CorporationExitOwnerKind,
+  CorporationExitReason,
+} from "./corporationExit";
 export type { SavingsLedgerEntry } from "./savingsLedger";
 export type { LocLedgerEntry, LocLedgerType } from "./locLedger";
 export type { PortfolioHistory } from "./portfolioHistory";

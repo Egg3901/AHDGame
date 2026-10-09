@@ -90,12 +90,23 @@ import {
   isClosingVotingTurn,
 } from "@/lib/elections/presidentialGeneralRules";
 import { getGroundGameSwingBonus, getGroundGameGotvBonus } from "@/lib/campaigns/opsEffects";
+import {
+  buildFieldOfficeMultiplier,
+  loadFieldOfficesForElection,
+} from "@/lib/campaigns/fieldOffices/engine";
 import { loadPartyGroupFavorability } from "@/lib/governorOffice/address/partyGroupFavorabilityLoader";
-import { buildGranularElectorateSubstrate } from "@/lib/demographics/granularElectorate";
+import {
+  buildGranularElectorateSubstrate,
+  campaignContactByBucket,
+} from "@/lib/demographics/granularElectorate";
+import { loadDemographicsV2Preload } from "@/lib/electionEngine/demographicsV2Preload";
+import { summarizeParticipation, type ParticipationSummary } from "@/lib/demographics/v2/rules";
+import { demographicsV2CalibrationForCountry } from "@/lib/demographics/v2/calibration";
 import { eraYearContextFromGameState } from "@/lib/era/context";
 import { getEraMonetaryBaseline } from "@/lib/constants/monetaryEra";
 import { MONETARY_BASELINES } from "@/lib/constants/currencies";
 import { getStartingYearForPreset } from "@/lib/constants/turnTime";
+import { planTurnSlice, sameTurnSliceParts } from "@/lib/electionEngine/rules/turnSlice";
 import { loadRegionalBonusMapsWithLookup } from "@/lib/primaryRegionalBonusLoader";
 import { campaignStrengthLookupKey } from "@/lib/campaigns/suspendEndorseLifecycle";
 import { computeSuspendTransferFraction } from "@/lib/campaigns/suspendEndorseAffinity";
@@ -347,13 +358,17 @@ export interface PresidentVoteTurnDryRun {
   democraticHealth?: DemocraticHealthElectionSnapshot;
   /** The descriptive factor-ledger snapshot the engine teed this turn. */
   factorLedger?: FactorLedgerSnapshot;
+  /** Electorate-weighted Method 4 turnout receipt, when Demographics v2 is active. */
+  participation?: ParticipationSummary;
 }
 
 export async function accumulatePresidentVoteTurn(
   electionId: ObjectId,
   turnNumber: number,
   now: Date,
-  calibration?: PresidentVoteTurnCalibration
+  calibration?: PresidentVoteTurnCalibration,
+  /** "early": the half-hour results tick banks half of this turn's slice. */
+  options?: { slice?: "early" }
 ): Promise<PresidentVoteTurnDryRun | void> {
   const db = await getDb();
 
@@ -368,9 +383,14 @@ export async function accumulatePresidentVoteTurn(
 
   if (!tally || !tally.totalVotesByUnit || candidates.length === 0 || !election?.endTime) return;
   // Per-turn idempotency (see tallyManagement): a re-run of a stalled turn
-  // must not bank this turn's slice again. Dry runs never persist, so they
-  // may recompute a recorded turn.
-  if (!calibration?.dryRun && tally.turnSnapshots?.some((s) => s.turn === turnNumber)) return;
+  // must not bank this turn's slice again, and a split turn banks its early
+  // and rest halves once each. Dry runs never persist, so they may recompute
+  // a recorded turn, always whole.
+  const slicePlan = calibration?.dryRun
+    ? { fraction: 1 }
+    : planTurnSlice(sameTurnSliceParts(tally.turnSnapshots, turnNumber), options?.slice);
+  if (!slicePlan) return;
+  const { slicePart, fraction: sliceFraction } = slicePlan;
 
   // Rules family: legacy races resolve to v1. The active v3 family receives
   // v3 balance corrections prospectively; accumulated ballots are untouched.
@@ -384,17 +404,7 @@ export async function accumulatePresidentVoteTurn(
   // match the unit set initPresidentVoteTally bucketed (P1d-2). The state set
   // is derived from the same live list so an era without DC, or before a
   // state's admission, does not accumulate a unit that cannot cast a vote.
-  const gsDoc = await db
-    .collection<{
-      _id: string;
-      preset?: string;
-      currentYear?: number;
-      currentTurn?: number;
-      startingYear?: number;
-      eraSystemEnabled?: boolean;
-      presidentialTenureByCountry?: GameState["presidentialTenureByCountry"];
-    }>("gameState")
-    .findOne({ _id: "current" });
+  const gsDoc = await db.collection<GameState>("gameState").findOne({ _id: "current" });
   const { electoralVoteUnits } = await loadApportionment(db, gsDoc?.preset, gsDoc?.currentYear);
   const uniqueStateIds = [...new Set(electoralVoteUnits.map((u) => u.stateId))];
   // Granular-cell electorate engine (fail-closed): swap the archetype
@@ -449,6 +459,15 @@ export async function accumulatePresidentVoteTurn(
   const demographicsMap = new Map(demographics.map((d) => [d._id as string, d]));
   const turnoutMap = new Map(turnoutDocs.map((t) => [t._id as string, t]));
   const registrationPoolMap = new Map(registrationPools.map((pool) => [pool.stateId, pool]));
+  const electionCountryId = (election.countryId ?? "US") as CountryId;
+  const demographicsV2 = await loadDemographicsV2Preload({
+    db,
+    countries: [electionCountryId],
+    regionFilter: { _id: { $in: uniqueStateIds } },
+    states,
+    nationwideCountries: [],
+    gameState: gsDoc,
+  });
   const statePartyOrgsByState = new Map<string, StatePartyOrg[]>();
   for (const po of statePartyOrgs) {
     const list = statePartyOrgsByState.get(po.stateId) ?? [];
@@ -491,7 +510,7 @@ export async function accumulatePresidentVoteTurn(
   }
 
   // Fetch campaign ground-game bonuses. Strategic Operations v2 splits this into
-  // two channels: `swing` (+% in swing states, from starter + Field Offices) and
+  // two channels: `swing` (+% in swing states, from starter + Swing Canvassing) and
   // `gotv` (+% in ALL areas, from the Get-Out-The-Vote branch). Legacy rows fall
   // back to the old `groundGameLevel * 0.03` swing-only bonus (gotv = 0).
   // Ground-game and strength fields only. This runs for every presidential
@@ -509,6 +528,14 @@ export async function accumulatePresidentVoteTurn(
       gotv: getGroundGameGotvBonus(c.groundGameTree),
     });
   }
+
+  // Field offices: per (candidate, state) turnout multiplier. Null when no
+  // campaign in this race has opened one.
+  const fieldOfficeMultiplier = buildFieldOfficeMultiplier(
+    await loadFieldOfficesForElection(db, electionId),
+    election.countryId ?? "US",
+    turnNumber
+  );
 
   const campaignStrengthByCandidate = new Map<string, number>();
   for (const c of campaigns) {
@@ -576,7 +603,6 @@ export async function accumulatePresidentVoteTurn(
 
   // Per-party demographic favorability — single fetch for the whole loop
   // since the rows are country-scoped, not state-scoped.
-  const electionCountryId = (election.countryId ?? "US") as CountryId;
   const partyGroupFavorabilityByKey = await loadPartyGroupFavorability(
     db,
     electionCountryId,
@@ -776,6 +802,7 @@ export async function accumulatePresidentVoteTurn(
   // no vote math. Assembled and persisted after the loop as a descriptive,
   // read-only field (see `factorLedger.ts`).
   const ledgerSink = createLedgerSink();
+  const participationRows: Array<{ share: number; ledger: ParticipationSummary }> = [];
 
   for (const unit of electoralVoteUnits) {
     // A ME/NE at-large leg is not simulated: it is summed from that state's
@@ -788,7 +815,8 @@ export async function accumulatePresidentVoteTurn(
     const stateId = getDemographicsStateId(unit);
     const state = resolveElectoralUnitState(stateMap, stateId);
     const demographics = demographicsMap.get(stateId);
-    const turnoutDoc = turnoutForElection(turnoutMap.get(stateId), election);
+    const rawTurnoutDoc = turnoutMap.get(stateId);
+    const turnoutDoc = turnoutForElection(rawTurnoutDoc, election);
     const statePartyOrgs = statePartyOrgsByState.get(stateId) ?? [];
 
     if (!state || !demographics) continue;
@@ -836,6 +864,7 @@ export async function accumulatePresidentVoteTurn(
     let effTotalPool = resolvedTotalPool;
     let effEnriched = enriched;
     let effPartyGroupFavorabilityByKey = partyGroupFavorabilityByKey;
+    let participationSummary: ParticipationSummary | undefined;
     // Per-cell census bucketWeights for the ledger's bucket-appeal aggregation.
     // Populated only on the granular substrate; the legacy archetype path leaves
     // it undefined so the ledger emits no bucket appeal (never archetype keys).
@@ -857,6 +886,22 @@ export async function accumulatePresidentVoteTurn(
         enriched,
         partyGroupFavorabilityByKey,
         demographicDefaults: demographicDefaultsByState?.get(stateId) ?? null,
+        ...(demographicsV2.demographicsV2Countries.has(electionCountryId) &&
+        demographicsV2.regionDemographicsByState.has(stateId)
+          ? {
+              v2: {
+                regionAges: demographicsV2.regionDemographicsByState.get(stateId)!.ages,
+                votingAge: demographicsV2.votingAgeByCountry.get(electionCountryId) ?? 18,
+                registeredShare: (() => {
+                  const unregistered = registrationPoolMap.get(stateId)?.unregistered;
+                  return typeof unregistered === "number" && Number.isFinite(unregistered)
+                    ? 1 - Math.max(0, Math.min(100, unregistered)) / 100
+                    : 1;
+                })(),
+                contactByBucket: campaignContactByBucket(rawTurnoutDoc, electionCountryId),
+              },
+            }
+          : {}),
       });
       if (substrate) {
         effDemographics = substrate.demographics;
@@ -867,6 +912,10 @@ export async function accumulatePresidentVoteTurn(
         effPartyGroupFavorabilityByKey =
           substrate.partyGroupFavorabilityByKey ?? partyGroupFavorabilityByKey;
         effLedgerBucketWeights = new Map(substrate.units.map((u) => [u.id, u.bucketWeights]));
+        participationSummary = substrate.participationSummary;
+        if (participationSummary) {
+          participationRows.push({ share: electorate, ledger: participationSummary });
+        }
       }
     }
 
@@ -875,10 +924,11 @@ export async function accumulatePresidentVoteTurn(
     // electoral vote) are invariant; only ballot magnitudes change. Applied to
     // the TURN pool only — the distribution normalises group contributions by
     // `effTotalPool`, so scaling both would cancel to a no-op.
-    const turnPool = scalePoolToRegistered(
-      turnVoteWeight(totalTurns, turnIndex, effTotalPool),
-      registrationPoolMap.get(stateId)?.unregistered
-    );
+    // A split turn's half carries its share of the slice, before every cap.
+    const rawTurnPool = turnVoteWeight(totalTurns, turnIndex, effTotalPool) * sliceFraction;
+    const turnPool = participationSummary
+      ? rawTurnPool
+      : scalePoolToRegistered(rawTurnPool, registrationPoolMap.get(stateId)?.unregistered);
 
     const approvalPct = approvalMap.get(stateId.toUpperCase()) ?? BASE_APPROVAL;
     const approvalDecimal = approvalPct / 100;
@@ -1033,7 +1083,7 @@ export async function accumulatePresidentVoteTurn(
       }
       const afterLean = votes;
 
-      // Ground game (suspended campaigns forfeit): Field Offices boost swing
+      // Ground game (suspended campaigns forfeit): Swing Canvassing boosts swing
       // areas only; Get-Out-The-Vote boosts turnout in EVERY area. Both stack.
       if (!isSuspended) {
         const csKey =
@@ -1045,6 +1095,10 @@ export async function accumulatePresidentVoteTurn(
           if (multiplier !== 1) {
             votes = Math.round(votes * multiplier);
           }
+        }
+        if (fieldOfficeMultiplier) {
+          const officeMult = fieldOfficeMultiplier(csKey, stateId);
+          if (officeMult !== 1) votes = Math.round(votes * officeMult);
         }
       }
 
@@ -1151,7 +1205,9 @@ export async function accumulatePresidentVoteTurn(
   const unitTurnSnapshots = { ...(tally.unitTurnSnapshots ?? {}) };
   for (const unit of electoralVoteUnits) {
     const unitTotals = newTotalVotesByUnit[unit.unitId] ?? {};
-    const existing = unitTurnSnapshots[unit.unitId] ?? [];
+    // One cumulative row per unit per turn: a split turn's rest replaces its
+    // early row, so the 96-turn history and per-turn readers stay whole.
+    const existing = (unitTurnSnapshots[unit.unitId] ?? []).filter((s) => s.turn !== turnNumber);
     unitTurnSnapshots[unit.unitId] = [
       ...existing.slice(-95),
       {
@@ -1171,17 +1227,35 @@ export async function accumulatePresidentVoteTurn(
     ];
   }
 
+  const firstParticipation = participationRows[0]?.ledger;
+  const participation = firstParticipation
+    ? (summarizeParticipation({
+        calibration: demographicsV2CalibrationForCountry(electionCountryId),
+        competitiveness: firstParticipation.competitivenessScore,
+        issueSalience: {
+          economic: firstParticipation.economicSalience,
+          social: firstParticipation.socialSalience,
+          overall: 0,
+        },
+        rows: participationRows,
+      }) ?? undefined)
+    : undefined;
+  const nationalTotalVotes = Object.values(newTotalVotes).reduce((sum, votes) => sum + votes, 0);
   const snapshot: VoteTurnSnapshot = {
     turn: turnNumber,
+    ...(slicePart ? { slicePart } : {}),
     recordedAt: now,
     cumulativeVotes: { ...newTotalVotes },
     sharesPct: Object.fromEntries(
       enriched.map((ec) => {
-        const total = Object.values(newTotalVotes).reduce((s, v) => s + v, 0);
         const votes = newTotalVotes[ec.candidateId] ?? 0;
-        return [ec.candidateId, total > 0 ? Math.round((votes / total) * 1000) / 10 : 0];
+        return [
+          ec.candidateId,
+          nationalTotalVotes > 0 ? Math.round((votes / nationalTotalVotes) * 1000) / 10 : 0,
+        ];
       })
     ),
+    ...(participation && { participation }),
   };
 
   // Assemble the descriptive factor ledger from the sink. Read-only and purely
@@ -1202,11 +1276,24 @@ export async function accumulatePresidentVoteTurn(
       ...(referendum && { referendum }),
       ...(democraticHealth && { democraticHealth }),
       ...(factorLedger && { factorLedger }),
+      ...(participation && { participation }),
     };
   }
 
+  // The write only lands on the tally state this run read: a concurrent run
+  // that already banked this turn (or this half) leaves nothing to match.
   await db.collection<ElectionVoteTally>("electionVoteTallies").updateOne(
-    { electionId },
+    {
+      electionId,
+      turnSnapshots: {
+        $not: {
+          $elemMatch:
+            slicePart === "rest"
+              ? { turn: turnNumber, slicePart: { $ne: "early" } }
+              : { turn: turnNumber },
+        },
+      },
+    },
     {
       $set: {
         totalVotes: newTotalVotes,

@@ -6,6 +6,7 @@ import { getEnabledCountryIds } from "@/lib/countryAccess";
 import type { CountryId } from "@/lib/constants/countries";
 import type { GameState, MarketCapHistory, Corporation } from "@/lib/db/types";
 import type { MarketIndexIntraday } from "@/lib/db/types/marketIndexIntraday";
+import type { MarketCapTick } from "@/lib/db/types/marketCapTick";
 import type { ShareTradeHistory, ShareTradeKind } from "@/lib/db/types/shareTradeHistory";
 import { EXCHANGE_API_KEYS, getCountryForExchange } from "@/lib/constants/exchangeRegistry";
 import {
@@ -19,11 +20,16 @@ import {
   buildCandles,
   bucketCandles,
   chartBucketTurns,
+  mergeQuarterCandles,
   type CandleInput,
 } from "@/lib/stockExchange/candles";
 
 // Game-calendar ranges plus older client ranges retained for compatibility.
 const VALID_TURNS = new Set([4, 12, 24, 48, 168, 240, 480, 720, 8760, 0]);
+// Ranges short enough to draw one candle per 15-minute market tick (at most
+// 48 turns x 4 quarters = 192 candles, inside the chart's 250-candle budget).
+const QUARTER_RANGE_MAX_TURNS = 48;
+const QUARTER_SECONDS = 15 * 60;
 const TURNOVER_KINDS: ShareTradeKind[] = [
   "market_buy",
   "market_sell",
@@ -247,7 +253,60 @@ export async function GET(request: Request) {
         : undefined
     );
     const bucketTurns = chartBucketTurns(turns, lastTurn - firstTurn + 1);
-    const points = bucketCandles(raw, bucketTurns);
+    let points = bucketCandles(raw, bucketTurns);
+    let resolution: "15m" | "turn" = "turn";
+    if (bucketTurns === 1 && turns !== 0 && turns <= QUARTER_RANGE_MAX_TURNS) {
+      const ticks = await db
+        .collection<MarketCapTick>("marketCapTicks")
+        .find({
+          exchange: sector ? `sector:${sector}` : exchange,
+          turn: { $gte: firstTurn, $lte: lastTurn },
+        })
+        .project<MarketCapTick>({ turn: 1, at: 1, open: 1, high: 1, low: 1, last: 1, prints: 1 })
+        .sort({ at: 1 })
+        .toArray();
+      if (ticks.length > 0) {
+        // Executable turnover per quarter from trade timestamps.
+        const quarterTurnover = await db
+          .collection<ShareTradeHistory>("shareTradeHistory")
+          .aggregate<{ _id: Date; volume: number }>([
+            {
+              $match: {
+                createdAt: { $gte: ticks[0].at },
+                kind: { $in: TURNOVER_KINDS },
+                shares: { $gt: 0 },
+                ...(corps ? { corporationId: { $in: corps.map((c) => c._id) } } : {}),
+              },
+            },
+            {
+              $group: {
+                _id: { $dateTrunc: { date: "$createdAt", unit: "minute", binSize: 15 } },
+                volume: { $sum: { $cond: [finiteTotal, "$totalAnchor", 0] } },
+              },
+            },
+          ])
+          .toArray();
+        points = mergeQuarterCandles(
+          points,
+          ticks.map((t) => ({
+            turn: t.turn,
+            time: Math.floor(new Date(t.at).getTime() / 1000),
+            open: t.open,
+            high: t.high,
+            low: t.low,
+            last: t.last,
+            prints: t.prints,
+          })),
+          new Map(
+            quarterTurnover.map((r) => [
+              Math.floor(new Date(r._id).getTime() / 1000 / QUARTER_SECONDS) * QUARTER_SECONDS,
+              r.volume,
+            ])
+          )
+        );
+        resolution = "15m";
+      }
+    }
     const calendar = gameState ? gameDateAnchorFromState(gameState) : null;
     const asOf = intradayRows.at(-1)?.updatedAt ?? history.at(-1)?.createdAt ?? null;
     return conditionalJson(request, {
@@ -257,6 +316,7 @@ export async function GET(request: Request) {
       metric: "raw-market-cap",
       bucketed: bucketTurns > 1,
       bucketTurns,
+      resolution,
       points,
       intradayTurns: raw.filter((c) => c.intraday).length,
       totalTurns: raw.length,

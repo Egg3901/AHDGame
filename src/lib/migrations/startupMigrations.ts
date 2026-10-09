@@ -18,6 +18,10 @@ import { migration as manufacturingProductProjectsV2Index } from "./entries/2026
 import { migration as underwritingRecoveryIndexes } from "./entries/2026-10-04-underwriting-recovery-indexes";
 import { migration as advertisingAgreementIndexes } from "./entries/2026-10-05-advertising-agreement-indexes";
 import { migration as foldAutomobileEntertainmentTypes } from "./entries/2026-10-05-fold-automobile-entertainment-types";
+import { migration as productVentureIndexes } from "./entries/2026-10-08-product-venture-indexes";
+import { migration as campaignFieldOfficeIndexes } from "./entries/2026-10-09-campaign-field-office-indexes";
+import { migration as marketCapTickIndexes } from "./entries/2026-10-09-market-cap-tick-indexes";
+import { migration as subhourWikiCadence } from "./entries/2026-10-09-subhour-wiki-cadence";
 import { runMigrations, type RunSummary } from "./runner";
 import type { Migration } from "./types";
 
@@ -66,6 +70,10 @@ export const REQUIRED_STARTUP_MIGRATIONS: readonly Migration[] = [
   // The retired automobile and entertainment types are unreadable by this
   // build, so their stored rows must be re-keyed before the first turn.
   foldAutomobileEntertainmentTypes,
+  productVentureIndexes,
+  campaignFieldOfficeIndexes,
+  marketCapTickIndexes,
+  subhourWikiCadence,
 ];
 
 /** Index metadata can disappear on reset even when migration markers survive. */
@@ -79,6 +87,9 @@ export const REQUIRED_STARTUP_INDEX_MIGRATIONS: readonly Migration[] = [
   mediaProductProjectsV1Index,
   manufacturingProductProjectsV2Index,
   underwritingRecoveryIndexes,
+  productVentureIndexes,
+  campaignFieldOfficeIndexes,
+  marketCapTickIndexes,
 ];
 
 export async function runRequiredStartupMigrations(db: Db): Promise<RunSummary> {

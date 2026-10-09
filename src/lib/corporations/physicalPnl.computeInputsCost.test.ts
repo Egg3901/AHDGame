@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import type { CommodityType } from "@/lib/constants/commodities";
 import { computeInputsCost } from "./physicalPnl";
+import { PRICE_REALIZATION_MAX } from "@/lib/market/priceRealization";
 
 const basePrices: Record<CommodityType, number> = {
   coal: 100,
@@ -66,15 +67,14 @@ describe("computeInputsCost — money wiring statePremiums", () => {
 
 describe("computeInputsCost — buy-sell realization symmetry", () => {
   it("prices a shortage input through priceRealizationFactor, not the raw ratio", () => {
-    // ratio 2.75 (the live freight shortage that helped sink corp 445) must
-    // bill at the same clamp(sqrt(ratio), 0.7, 1.5) the revenue side realizes
-    // at — i.e. the 1.5 cap — never the raw 2.75.
+    // A deep shortage (ratio 9) must bill at the same clamp(sqrt(ratio), 0.7,
+    // MAX) the revenue side realizes at, i.e. the cap, never the raw 9.
     const shocked = computeInputsCost({
       ...baseArgs(),
-      priceRatios: new Map<CommodityType, number>([["coal", 2.75]]),
+      priceRatios: new Map<CommodityType, number>([["coal", 9]]),
     });
-    expect(shocked.lines[0].unitPrice).toBeCloseTo(100 * 1.5);
-    expect(shocked.total).toBeCloseTo(computeInputsCost(baseArgs()).total * 1.5);
+    expect(shocked.lines[0].unitPrice).toBeCloseTo(100 * PRICE_REALIZATION_MAX);
+    expect(shocked.total).toBeCloseTo(computeInputsCost(baseArgs()).total * PRICE_REALIZATION_MAX);
   });
 
   it("floors a deep-glut input at the same 0.7 the revenue side floors at", () => {

@@ -20,6 +20,7 @@ import { useActivePreset } from "@/contexts/RegisteredCountriesContext";
 import type { RegionElectorate } from "@/lib/elections/blendRegionViewModel";
 import type { CountryId } from "@/lib/constants/countries";
 import type { CandidateDetail, GeneralVotes } from "./ElectionDetailTypes";
+import { countedTurns } from "@/lib/elections/snapshotTurns";
 
 interface NonPresidentialResultsPanelProps {
   sorted: CandidateDetail[];
@@ -98,7 +99,7 @@ export function NonPresidentialResultsPanel({
           sorted.find((c) => c.party === partyId)?.partyName ||
           partyId,
         electorate,
-        turnCount: tally.turnSnapshots.length,
+        turnCount: countedTurns(tally.turnSnapshots),
       }),
     [
       sorted,

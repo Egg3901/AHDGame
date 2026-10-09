@@ -12,7 +12,7 @@ import { savingsReadsAuthoritative } from "@/lib/banking/rules/policy";
 import { lifecycleStage, stageActions } from "@/lib/banking/rules/lifecycle";
 import {
   checkCharterEligibility,
-  getCharterCapitalRequirement,
+  loadCharterCapitalRequirements,
   isChairOfCurrencyBank,
 } from "@/lib/banking/charter";
 import { getLegalCharterTypes } from "@/lib/banking/separationLaw";
@@ -234,10 +234,8 @@ async function handleGET(_request: Request, { params }: RouteParams) {
     const legalTypes = await getLegalCharterTypes(db, countryId);
     // Per type: an investment charter posts a fraction of the retail bar,
     // because it has no depositors for that capital to stand in front of.
-    const [retailRequirement, investmentRequirement] = await Promise.all([
-      getCharterCapitalRequirement(db, currency, "retail"),
-      getCharterCapitalRequirement(db, currency, "investment"),
-    ]);
+    const capitalRequirements = await loadCharterCapitalRequirements(db, currency);
+    const { retail: retailRequirement, investment: investmentRequirement } = capitalRequirements;
     const capitalRequirement = retailRequirement;
     const corridors = await getRateCorridors(db, countryId);
     const reserveRatio = await getReserveRequirement(db, currency);
@@ -259,16 +257,14 @@ async function handleGET(_request: Request, { params }: RouteParams) {
     const eligibleTypes: BankCharterType[] = [];
     if (!hasActiveCharter && privateEnabled) {
       for (const type of legalTypes) {
-        const result = await checkCharterEligibility(db, corporation, type, currency);
+        const result = await checkCharterEligibility(db, corporation, type, currency, {
+          capitalRequirements,
+        });
         if (result.eligible) {
           eligibleTypes.push(type);
         } else if (eligibilityReasons.length === 0) {
           eligibilityReasons = result.reasons;
         }
-      }
-      if (eligibleTypes.length === 0 && legalTypes.length > 0) {
-        const probe = await checkCharterEligibility(db, corporation, legalTypes[0], currency);
-        eligibilityReasons = probe.reasons;
       }
     }
 

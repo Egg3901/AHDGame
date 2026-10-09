@@ -14,6 +14,7 @@
       "pricing": "{nation} shares a {cap}-point movement ceiling across all plays and background effects each turn. Opposing pressure cancels before that ceiling applies. One play stops gaining influence from spending above {spend}. Extra plays can counter opposition, but cannot raise the shared turn ceiling.",
       "preview": "Estimated effective gain: {points} points from this play alone, using current resistance, channel strength, bloc strain and share normalization. Other plays and background effects can change the result at resolution.",
       "overPlay": "Anything above {spend} on one play is wasted, even against opposition.",
+      "rivalPressure": "A rival is pushing {points} points a turn here. That is netted against this play before the movement ceiling, so a single play near the cap can leave the nation almost where it was. A second play in the same turn adds its own pressure against the same opposition.",
       "overTurn": "This reaches the shared {cap}-point movement ceiling before share normalization. Extra pressure only helps counter opposition; it does not raise that ceiling.",
       "settlement": "The fund is debited now; effective gains are recorded under Recent plays when the turn resolves. A target that locks before resolution triggers a full refund. Opposition or the shared cap reducing the gain to zero does not trigger a refund."
     },

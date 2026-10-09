@@ -247,6 +247,7 @@ export async function applyPassedVoteEffects(opts: {
       await withCorporationSettlementLock(db, corporation._id, "dissolutionInProgressAt", now, () =>
         executeCorporationBondDefaultDissolution(db, corporation, {
           requireDefaultedBonds: false,
+          exitReason: "shareholder_vote",
         })
       );
       break;

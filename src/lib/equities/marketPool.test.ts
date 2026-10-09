@@ -57,8 +57,8 @@ describe("equity market pool", () => {
 
   it("returns executable bid, ask, and whole-share depth", async () => {
     db.collectionMocks.equityMarketPools.findOne.mockResolvedValueOnce({
-      cashLocal: 980,
-      targetCashLocal: 980,
+      cashLocal: 990,
+      targetCashLocal: 990,
     });
     const quote = await loadEquityQuote(
       db as unknown as Db,
@@ -71,7 +71,7 @@ describe("equity market pool", () => {
         totalShares: 100,
       } as never
     );
-    expect(quote).toMatchObject({ active: true, bidPriceLocal: 9.8, askPriceLocal: 10.2 });
+    expect(quote).toMatchObject({ active: true, bidPriceLocal: 9.9, askPriceLocal: 10.1 });
     expect(quote.bidDepthShares).toBe(100);
     expect(quote.askDepthShares).toBe(80);
   });

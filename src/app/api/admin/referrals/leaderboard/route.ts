@@ -7,6 +7,8 @@ import { parseJsonBody } from "@/lib/api/validate";
 import { createAdminLog } from "@/lib/adminLog";
 import type { GameConfig } from "@/lib/db/types";
 import type { ObjectId } from "mongodb";
+import { ReferralAwardError } from "@/lib/contests/referralAward";
+import { awardIterationReferralsNow } from "@/lib/contests/engine";
 
 const TOP_N = 100;
 
@@ -16,6 +18,9 @@ const patchSchema = z.discriminatedUnion("action", [
   }),
   z.object({
     action: z.literal("reset-contest"),
+  }),
+  z.object({
+    action: z.literal("award-and-restart"),
   }),
 ]);
 
@@ -98,7 +103,7 @@ export async function GET() {
   }
 }
 
-// PATCH /api/admin/referrals/leaderboard — Start or reset the rolling referral contest window
+// PATCH /api/admin/referrals/leaderboard — Start, reset, or award and restart the referral contest
 // Auth: requireAdmin
 // Errors: 400, 403
 export async function PATCH(request: Request) {
@@ -113,6 +118,42 @@ export async function PATCH(request: Request) {
 
     const db = await getDb();
     const now = new Date();
+
+    if (parsed.data.action === "award-and-restart") {
+      let result;
+      try {
+        result = await awardIterationReferralsNow(db, auth.admin.username, now);
+      } catch (err) {
+        if (err instanceof ReferralAwardError) return errorResponse(400, err.message);
+        throw err;
+      }
+
+      const names = result.winners
+        .map(
+          (w, i) =>
+            `#${w.rank} ${result.usernames[i]} (${w.score})${w.alreadySupporter ? " already supporter" : ""}`
+        )
+        .join(", ");
+      await createAdminLog({
+        category: "system",
+        action: "referral_contest_awarded",
+        username: auth.admin.username,
+        adminUsername: auth.admin.username,
+        details: `Referral contest awarded: ${names || "no qualifying referrers"}. Supporter until the next award; ${result.revoked} earlier contest grant(s) ended. Contest restarted.`,
+      });
+
+      return NextResponse.json({
+        success: true,
+        contestMode: true,
+        contestStartedAt: result.restartedAt.toISOString(),
+        winners: result.winners.map((w, i) => ({
+          rank: w.rank,
+          name: result.usernames[i],
+          count: w.score,
+          alreadySupporter: w.alreadySupporter === true,
+        })),
+      });
+    }
 
     if (parsed.data.action === "start-contest") {
       await Promise.all([

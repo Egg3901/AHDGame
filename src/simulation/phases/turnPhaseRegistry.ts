@@ -32,6 +32,7 @@ import { sweepExpiredCountryModifiers } from "@/lib/events/substrate/countryModi
 import { processWorldEventsTurn } from "@/lib/events/worldEvents/driver";
 import { processCampaignSpendReset } from "@/lib/turn/elections/campaignSpendReset";
 import { resolveGeneralElections } from "@/lib/turn/electionResolution";
+import { closeDueContingentHouseVotes } from "@/lib/turn/election/contingentHouseVoteClose";
 import { processPostConversionElections } from "@/lib/turn/postConversionElections";
 import {
   resolvePrimariesIfNeeded,
@@ -102,6 +103,10 @@ import { resolveProspects } from "@/lib/turn/prospecting/resolveProspects";
 import { settleExtractionContracts } from "@/lib/turn/extraction/contractSettlement";
 import { isProspectingEnabled, isContractIssuanceEnabled } from "@/lib/extraction/featureFlag";
 import { processBondTurn } from "@/lib/turn/bondTurn";
+import {
+  hasCompleteSovereignFlows,
+  TurnPhaseResultIncompleteError,
+} from "@/simulation/engine/turnPhaseResumeResults";
 import { RESET_V2_READY } from "@/lib/resetVersions/availability";
 import { settleResetTreasuryCashTurn } from "@/lib/resetFinance/settleCashTurn";
 import { resetSystemVersionsFrom } from "@/lib/resetVersions/rules";
@@ -546,7 +551,20 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
           runtime.runPhase("commodityPrices", () => processCommodityPriceTurn(newTurn)),
         ]);
         if (captureV2SovereignCash) {
-          if (!bondTurnResult) throw new Error("V2 treasury requires completed bond settlement");
+          // On a crash resume this is the result bondTurn stored with its
+          // completed status, never a rerun and never an assumed zero (#3429).
+          const bondFlows = runtime.requirePhaseResult(
+            "bondTurn",
+            bondTurnResult,
+            "resetTreasuryCash"
+          );
+          if (!hasCompleteSovereignFlows(bondFlows)) {
+            throw new TurnPhaseResultIncompleteError(
+              "bondTurn",
+              "resetTreasuryCash",
+              "sovereign flow maps missing"
+            );
+          }
           (phaseResults as Record<string, unknown>).resetTreasuryCash = await runtime.runPhase(
             "resetTreasuryCash",
             () =>
@@ -554,7 +572,7 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
                 db: context.db,
                 gameState: context.gameState,
                 turn: newTurn,
-                bondFlows: bondTurnResult,
+                bondFlows,
               })
           );
         }
@@ -605,15 +623,25 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
           );
         }
 
-        const lineOfCreditResult = await runtime.runPhase("lineOfCreditTurn", () =>
-          processLineOfCreditTurn(
+        const lineOfCreditResult = await runtime.runPhase("lineOfCreditTurn", async () => {
+          // Currency income comes only from this turn's corporationTurn result.
+          // When that phase ran but left no result (it failed, or a crash resume
+          // skipped it), the income is unknown, not zero: stop before auto-pay
+          // can size anything from an empty map (#3429). A paused corporation
+          // turn really earned nothing.
+          if (gameState.forexEnabled === true && !corpActionsPaused && !corpTurnResults) {
+            throw new Error(
+              "lineOfCreditTurn needs this turn's corporationTurn currency income, which is unavailable"
+            );
+          }
+          return processLineOfCreditTurn(
             context.db,
             newTurn,
             corpTurnResults?.currencyIncomeInternalByCharacterId ?? new Map(),
             corpTurnResults?.currencyIncomeFaceByCharacterId ?? new Map(),
             gameState.forexEnabled === true
-          )
-        );
+          );
+        });
         if (lineOfCreditResult) {
           phaseResults.lineOfCreditTurn = {
             charactersProcessed: lineOfCreditResult.charactersProcessed,
@@ -903,12 +931,21 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
         const countryBillPhaseEntries = Object.entries(COUNTRY_BILL_PHASES).filter(([id]) =>
           registeredForBills.has(id as CountryId)
         );
+        const billLifecycleContext = {
+          db,
+          currentTurn: newTurn,
+          preset: gameState.preset,
+        };
         const billPhaseResults = await Promise.all([
-          runtime.runPhase("billLifecycle", () => processBillLifecycle(realNow)),
-          ...countryBillPhaseEntries.map(([, entry]) =>
-            runtime.runPhase(entry.phaseName, () => entry.fn(realNow))
+          runtime.runPhase("billLifecycle", () =>
+            processBillLifecycle(realNow, billLifecycleContext)
           ),
-          runtime.runPhase("stateBillTimers", () => processStateBillTimers(realNow)),
+          ...countryBillPhaseEntries.map(([, entry]) =>
+            runtime.runPhase(entry.phaseName, () => entry.fn(realNow, billLifecycleContext))
+          ),
+          runtime.runPhase("stateBillTimers", () =>
+            processStateBillTimers(realNow, undefined, billLifecycleContext)
+          ),
           runtime.runPhase("cabinetNominations", () => processCabinetNominationLifecycle(realNow)),
           // SCOTUS (#3598): runs in the same parallel group as cabinetNominations
           // (a like-shaped Senate-confirmation lifecycle) and BEFORE
@@ -1013,7 +1050,7 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
 
         const resetLawReconciliation = await runtime.runPhase(
           "resetLawEnactmentReconciliation",
-          () => reconcileResetLawEnactments(db, newTurn)
+          () => reconcileResetLawEnactments(db, newTurn, gameState)
         );
         if (resetLawReconciliation) {
           phaseResultsRecord.resetLawEnactmentReconciliation = resetLawReconciliation;
@@ -1107,6 +1144,13 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
             totalActionsGenerated: campaignResults.totalActionsGenerated,
           };
         }
+
+        // Field-office upkeep after campaign income lands. Also sweeps offices
+        // whose campaign or race has ended, whichever resolution path ended it.
+        await runtime.runPhase("campaignFieldOffices", async () => {
+          const { processFieldOfficeUpkeep } = await import("@/lib/campaigns/fieldOffices/upkeep");
+          return processFieldOfficeUpkeep(db);
+        });
 
         // In-game year for era-gated events (same formula as fiscalYearBoundary).
         const eventsCurrentYear =
@@ -1219,9 +1263,12 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
         );
         phaseResults.primarySnapshots = { snapshotsTaken: snapshotResult ?? 0 };
 
-        const generalResolved = await runtime.runPhase("electionResolution", () =>
-          resolveGeneralElections(gameNow)
-        );
+        const generalResolved = await runtime.runPhase("electionResolution", async () => {
+          const resolved = await resolveGeneralElections(gameNow);
+          // A deadlocked House vote that has run its full window closes here.
+          await closeDueContingentHouseVotes(db, gameNow, newTurn);
+          return resolved;
+        });
         phaseResults.electionResolution = {
           electionsResolved: generalResolved ?? 0,
           winners: [],

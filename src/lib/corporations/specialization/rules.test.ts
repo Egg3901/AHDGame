@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { computeSectorLaborCost } from "@/lib/labour/laborCost";
-import { softCapEffectiveMargin } from "@/lib/constants/corporations";
+import {
+  getHomeLocationMarginBonus,
+  getStateSectorSpecializationMarginBonus,
+  softCapEffectiveMargin,
+} from "@/lib/constants/corporations";
 import {
   getSectorTypeMatchModifier,
   specializationMaintenance,
@@ -9,8 +13,8 @@ import {
 
 describe("productive corporate specialization", () => {
   it.each([
-    ["energy", 10, 5],
-    ["retail", 5, 2.5],
+    ["energy", 5, 5],
+    ["retail", 2.5, 2.5],
     ["media", -15, -15],
   ])("prices %s specialization while preserving its payroll basis", (type, bonus, payroll) => {
     expect(getSectorTypeMatchModifier(type, "energy", "retail")).toBe(bonus);
@@ -40,6 +44,23 @@ describe("productive corporate specialization", () => {
     expect(after.laborCost).toBe(before.laborCost);
     expect(after.maintenance - operatingSaving).toBeLessThan(before.maintenance);
     expect(operatingSaving).toBeLessThan(50);
+  });
+
+  it("no longer stacks a universal +10 for operating your own type at home", () => {
+    // Own type (+5), home state (+5) and a primary state specialization (+5)
+    // used to be +30 on a 35% base. They now total +15.
+    const stack =
+      getSectorTypeMatchModifier("energy", "energy") +
+      getHomeLocationMarginBonus("TX", "TX", "US", "US") +
+      getStateSectorSpecializationMarginBonus({ primary: "energy", secondary: "retail" }, "energy");
+    expect(stack).toBe(15);
+    expect(getHomeLocationMarginBonus("CA", "TX", "US", "US")).toBe(2.5);
+    expect(getHomeLocationMarginBonus("ON", "TX", "CA", "US")).toBe(0);
+    expect(
+      getStateSectorSpecializationMarginBonus({ primary: "energy", secondary: "retail" }, "retail")
+    ).toBe(2.5);
+    // Matching your own type at home is still worth more than a mismatch.
+    expect(getSectorTypeMatchModifier("media", "energy")).toBe(-15);
   });
 
   it("does not create operating savings without sales", () => {

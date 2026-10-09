@@ -12,7 +12,10 @@ const MARGIN_OVERRIDE = /(^|\s)(m|my|mb)-/;
 export function SectionLabel({ children, as: Tag = "h2", className }: SectionLabelProps) {
   const margin = className && MARGIN_OVERRIDE.test(className) ? "" : "mb-3";
   return (
-    <Tag className={`text-sm font-semibold text-muted ${margin} ${className ?? ""}`.trim()}>
+    <Tag
+      className={`section-label text-sm font-semibold text-muted ${margin} ${className ?? ""}`.trim()}
+    >
+      <span className="interface-section-accent shrink-0" aria-hidden />
       {children}
     </Tag>
   );

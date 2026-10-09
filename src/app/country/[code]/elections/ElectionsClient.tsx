@@ -1,5 +1,7 @@
 "use client";
 
+import { useGameEvents } from "@/hooks/useGameEvents";
+
 import {
   useCallback,
   useEffect,
@@ -178,21 +180,24 @@ export default function ElectionsClient({ code, initialElections }: ElectionsCli
     }
   }, [countryId]);
 
-  const fetchData = useCallback(async () => {
-    setLoading(true);
-    setFetchError(null);
-    try {
-      const result = await fetchAllElections(countryId);
-      setElections(result.elections);
-      if (result.error) setFetchError(apiErrorText(result, "Request failed. Try again."));
-      await fetchSecondary();
-    } catch (err) {
-      console.error("Error fetching elections:", err);
-      setFetchError(String(err));
-    } finally {
-      setLoading(false);
-    }
-  }, [countryId, fetchSecondary]);
+  const fetchData = useCallback(
+    async (background = false) => {
+      if (!background) setLoading(true);
+      setFetchError(null);
+      try {
+        const result = await fetchAllElections(countryId);
+        setElections(result.elections);
+        if (result.error) setFetchError(apiErrorText(result, "Request failed. Try again."));
+        await fetchSecondary();
+      } catch (err) {
+        console.error("Error fetching elections:", err);
+        setFetchError(String(err));
+      } finally {
+        setLoading(false);
+      }
+    },
+    [countryId, fetchSecondary]
+  );
 
   useEffect(() => {
     if (skipInitialFetch.current) {
@@ -202,9 +207,17 @@ export default function ElectionsClient({ code, initialElections }: ElectionsCli
     }
     fetchData();
   }, [fetchData, fetchSecondary]);
+  useGameEvents(() => void fetchData(true), ["turn_complete", "market_tick"]);
 
-  const { actionLoading, message, handleEnterRace, handleWithdraw, isInRace, isInAnyRace } =
-    useElectionActions({ character, elections, onSuccess: fetchData });
+  const {
+    actionLoading,
+    message,
+    handleEnterRace,
+    handleWithdraw,
+    isInRace,
+    isInAnyRace,
+    confirmDialog,
+  } = useElectionActions({ character, elections, onSuccess: fetchData });
   const { liveElectionResultsEnabled } = useWorldFlags();
 
   const allRegions = useMemo(() => [...new Set(elections.map((e) => e.state))].sort(), [elections]);
@@ -309,6 +322,7 @@ export default function ElectionsClient({ code, initialElections }: ElectionsCli
 
   return (
     <div className="min-h-screen bg-background pb-16">
+      {confirmDialog}
       <main className="mx-auto min-w-0 max-w-7xl space-y-8 overflow-x-hidden px-4 py-8 sm:px-6 sm:py-12">
         {loading ? (
           <ElectionsSkeleton />

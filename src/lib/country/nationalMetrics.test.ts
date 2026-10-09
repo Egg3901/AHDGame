@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { loadNationalMetrics } from "./nationalMetrics";
+import { loadNationalMetrics, serializeNationalMetricsForClient } from "./nationalMetrics";
 import { getDb } from "@/lib/mongodb";
 import { findMergedRegionMetricsMany } from "@/lib/macroMetrics/merge";
 
@@ -60,5 +60,45 @@ describe("loadNationalMetrics dictionaries", () => {
       JSON.parse(JSON.stringify(response)).categories.economic.unemploymentRate
         .populationWeightedAverage
     ).toBe(5);
+  });
+
+  it("copies dictionaries into plain objects for the client without changing values", async () => {
+    vi.mocked(findMergedRegionMetricsMany).mockResolvedValue([
+      { _id: "TX", countryId: "US", economic: { unemploymentRate: { value: 4, trend: 2 } } },
+      { _id: "NY", countryId: "US", economic: { unemploymentRate: { value: 8, trend: 6 } } },
+    ] as never);
+    const response = await loadNationalMetrics("US");
+    const client = serializeNationalMetricsForClient(response)!;
+
+    for (const dictionary of [
+      client.categories,
+      client.stateRankings,
+      client.categories.economic,
+      client.stateRankings.economic,
+      client.categories.education,
+    ]) {
+      expect(Object.getPrototypeOf(dictionary)).toBe(Object.prototype);
+    }
+    expect(JSON.parse(JSON.stringify(client))).toEqual(JSON.parse(JSON.stringify(response)));
+    expect(client.categories.education).toEqual({});
+    expect(client.stateRankings.education).toEqual({});
+    // The loader keeps its null-prototype dictionaries for the JSON API.
+    expect(Object.getPrototypeOf(response!.categories)).toBeNull();
+    expect(Object.getPrototypeOf(response!.stateRankings.economic)).toBeNull();
+    expect(serializeNationalMetricsForClient(null)).toBeNull();
+  });
+
+  it("copies an own __proto__ key as data without polluting Object.prototype", () => {
+    const categories = Object.create(null);
+    categories.economic = Object.create(null);
+    categories.economic["__proto__"] = { average: 999 };
+    const client = serializeNationalMetricsForClient({
+      categories,
+      stateRankings: Object.create(null),
+    } as never)!;
+
+    expect(Object.hasOwn(client.categories.economic, "__proto__")).toBe(true);
+    expect(Object.getPrototypeOf(client.categories.economic)).toBe(Object.prototype);
+    expect(Object.hasOwn(Object.prototype, "average")).toBe(false);
   });
 });

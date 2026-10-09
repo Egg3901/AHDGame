@@ -20,8 +20,18 @@ import { recoverAllQueuedPayouts } from "./queuedPayoutSettlement";
 import { recoverAllFundFloatSettlements } from "./fundFloatSettlement";
 import { loadFloatAuditContext, type FloatAuditContext } from "./fundFloatTradePlan";
 export { executeFundShareBuy, type FundShareBuyBatch } from "./fundFloatBuyExecution";
-import { processQueuedRedemptions } from "./processQueuedRedemptions";
-export { processQueuedRedemptions } from "./processQueuedRedemptions";
+import {
+  processQueuedRedemptions,
+  QUEUED_REDEMPTION_CLAIMS_PER_PASS,
+} from "./processQueuedRedemptions";
+export {
+  processQueuedRedemptions,
+  QUEUED_REDEMPTION_CLAIMS_PER_PASS,
+} from "./processQueuedRedemptions";
+import {
+  orderQueuedRedemptionFunds,
+  queuedRedemptionClaimShare,
+} from "./rules/queuedRedemptionRotation";
 import { assertTransactionSupportAtBoot } from "@/lib/db/transactionSupport";
 import { substepMarker } from "@/lib/observability/phaseSubsteps";
 import type { Db } from "mongodb";
@@ -100,14 +110,20 @@ export type { FundCronResult, RebalanceOutcome } from "./fundCronRebalance";
  * Step 6 NPP investing (throttled by NPP_FUND_INVESTMENT_INTERVAL); Step 7
  * sponsored fees and wind-down. Gated behind indexFundsMode.
  */
+export interface IndexFundCronOptions {
+  currentTurn?: number;
+  /** Test seam: claim budget for the queued-redemption pass. */
+  queuedRedemptionClaimsPerPass?: number;
+}
+
 export async function runIndexFundCron(
   db: Db,
-  options?: { currentTurn?: number }
+  options?: IndexFundCronOptions
 ): Promise<FundCronResult> {
   return withBondPoolLedgerSnapshot(db, options?.currentTurn, () => runFundCron(db, options));
 }
 
-async function runFundCron(db: Db, options?: { currentTurn?: number }): Promise<FundCronResult> {
+async function runFundCron(db: Db, options?: IndexFundCronOptions): Promise<FundCronResult> {
   const result: FundCronResult = {
     fundsProcessed: 0,
     navUpdates: 0,
@@ -434,7 +450,13 @@ async function runFundCron(db: Db, options?: { currentTurn?: number }): Promise<
   for (const fund of funds) {
     // Bond funds hold no equities: nothing to select or rebalance here.
     if (fund.kind === "bond") continue;
-    if (!shouldRebalanceIndexFundConstituents(currentTurn, fund.targetConstituents.length)) {
+    if (
+      !shouldRebalanceIndexFundConstituents(
+        currentTurn,
+        fund.targetConstituents.length,
+        fund._id.toString()
+      )
+    ) {
       continue;
     }
 
@@ -572,17 +594,52 @@ async function runFundCron(db: Db, options?: { currentTurn?: number }): Promise<
   funds = await listFundsByIds(db, redemptionServiceFundIds);
   // Snapshots are upserts keyed by (fund, turn); one bulk write replaces one per fund.
   const fundSnapshots: Parameters<typeof insertFundSnapshotsBulk>[1] = [];
+  // One claim budget for the whole pass, split evenly over the funds still
+  // waiting so an early fund's queue cannot starve the rest. Claims a fund does
+  // not use roll forward to the funds after it. Funds are served in stable-id
+  // order rotated by turn, so with more queued funds than claims the funds left
+  // out this turn are first in line on a later one. Snapshots below keep the
+  // original fund order.
+  const fundsById = new Map(funds.map((f) => [f._id.toString(), f]));
+  const claimsPerPass = options?.queuedRedemptionClaimsPerPass ?? QUEUED_REDEMPTION_CLAIMS_PER_PASS;
+  const claimOrder = orderQueuedRedemptionFunds(
+    funds.map((f) => f._id.toString()).filter((id) => queuedUnitsByFundId.has(id)),
+    claimsPerPass,
+    currentTurn
+  );
+  const redemptionFailedFundIds = new Set<string>();
+  let claimsLeft = claimsPerPass;
+  let queuedFundsLeft = claimOrder.length;
+  for (const fundId of claimOrder) {
+    const fund = fundsById.get(fundId)!;
+    const allotted = queuedRedemptionClaimShare(claimsLeft, queuedFundsLeft);
+    const share = { claimsLeft: allotted };
+    queuedFundsLeft--;
+    try {
+      result.redemptionsPaid += await processQueuedRedemptions(
+        db,
+        fund,
+        forexEnabled,
+        currentTurn,
+        true,
+        share
+      );
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      result.errors.push(`Fund ${fund.slug}: ${message}`);
+      redemptionFailedFundIds.add(fundId);
+    } finally {
+      claimsLeft -= allotted - share.claimsLeft;
+    }
+  }
   for (const fund of funds) {
+    // A failed redemption pass skips the fund's snapshot, as before.
+    if (redemptionFailedFundIds.has(fund._id.toString())) continue;
     try {
       // `funds` was just re-read above and nothing writes between; the old
       // per-fund re-read here was a duplicate round trip.
       const refreshedFund = fund;
-
       const hasQueuedRedemptions = queuedUnitsByFundId.has(fund._id.toString());
-      const paidRedemptions = hasQueuedRedemptions
-        ? await processQueuedRedemptions(db, refreshedFund, forexEnabled, currentTurn, true)
-        : 0;
-      result.redemptionsPaid += paidRedemptions;
 
       if (currentTurn > 0) {
         // A fund with no queued units cannot have been mutated by the

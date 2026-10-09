@@ -1,8 +1,10 @@
 /**
  * Opening plant balance compares a starter's price with its nominal revenue.
- * openingPlantScenario uses the same input, payroll and overhead costs as plants.
+ * openingPlantScenario uses the same input, payroll and overhead costs as plants,
+ * plus the own-type and home-state margin a founder always has.
  */
-import type { CorporationType } from "@/lib/constants/corporations";
+import { HOME_STATE_MARGIN_BONUS, type CorporationType } from "@/lib/constants/corporations";
+import { SECTOR_TYPE_MATCH_BONUS } from "@/lib/corporations/specialization/rules";
 import { sectorEntryFeeAnchor, foundingStarterUnits } from "@/lib/corporations/foundingPlant";
 import {
   computeBuildCost,
@@ -65,7 +67,9 @@ export function openingPlantScenario(type: CorporationType, primeRate: number, s
     complianceCost: 0,
     financialLegs: 0,
     growthCost: 0,
-    policyCredit: 0,
+    // A starter plant is always the founder's own type in their home state, so
+    // that stack is part of the plant's real margin; subsidies and the rest are not.
+    policyCredit: (hourlyRevenue * (SECTOR_TYPE_MATCH_BONUS + HOME_STATE_MARGIN_BONUS)) / 100,
   });
   return {
     type,

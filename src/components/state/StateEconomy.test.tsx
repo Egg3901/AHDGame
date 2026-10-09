@@ -2,8 +2,16 @@
  * @vitest-environment happy-dom
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { StateEconomy } from "./StateEconomy";
+
+const tick = vi.hoisted(() => ({ callback: null as (() => void) | null, types: [] as string[] }));
+vi.mock("@/hooks/useGameEvents", () => ({
+  useGameEvents: (callback: () => void, types: string[]) => {
+    tick.callback = callback;
+    tick.types = types;
+  },
+}));
 
 vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams(),
@@ -77,6 +85,23 @@ beforeEach(() => {
 });
 
 describe("StateEconomy", () => {
+  it("updates the macro header on a tick and preserves the selected sector", async () => {
+    render(<StateEconomy stateId="TX" countryId="US" />);
+    await waitFor(() => expect(screen.getByText("$1.82T")).toBeTruthy());
+    fireEvent.change(screen.getByRole("combobox", { name: /select sector/i }), {
+      target: { value: "financial" },
+    });
+    expect(tick.types).toContain("market_tick");
+    vi.mocked(fetch).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ ...payload, stateGdp: 2_000_000 }),
+    } as Response);
+    await act(async () => tick.callback?.());
+    await waitFor(() => expect(screen.getByText("$2.00T")).toBeTruthy());
+    expect(
+      (screen.getByRole("combobox", { name: /select sector/i }) as HTMLSelectElement).value
+    ).toBe("financial");
+  });
   it("renders the macro header and a sector-board tile per sector", async () => {
     render(<StateEconomy stateId="TX" countryId="US" />);
     await waitFor(() => expect(screen.getByText("$1.82T")).toBeTruthy());

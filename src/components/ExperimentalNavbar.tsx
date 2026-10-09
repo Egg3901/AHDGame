@@ -3,9 +3,8 @@
 /**
  * ExperimentalNavbar — the redesigned primary navigation, imported from the
  * "AHD Navbar" Claude Design doc. This is now the DEFAULT navbar, selected in
- * NavbarWrapper; the classic {@link Navbar} is the opt-out for users who set
- * `enableExperimentalUI === false` (Settings → Appearance → "Use the classic
- * interface"). The name is kept for continuity.
+ * NavbarWrapper; the classic {@link Navbar} is used when a player selects the
+ * classic interface in Settings → Appearance. The name is kept for continuity.
  *
  * Visuals use the app's themed Tailwind tokens (foreground/muted/card/primary…)
  * so it inherits all 11 themes. The desktop bar mirrors the classic {@link Navbar}
@@ -825,6 +824,17 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
                   );
                 })}
 
+                {!user?.singleplayer && (
+                  <Link
+                    href="/contests"
+                    aria-current={isNavActive(pathname, "/contests") ? "page" : undefined}
+                    className={navTabClassName(isNavActive(pathname, "/contests"))}
+                  >
+                    <NavIcon name="Contests" />
+                    <NavItemLabel>{t("common.contests")}</NavItemLabel>
+                  </Link>
+                )}
+
                 {/* Help — classic-nav order: after World */}
                 <div
                   className="relative shrink-0"
@@ -1076,7 +1086,9 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
                   }}
                   aria-label={t("common.profile")}
                   aria-expanded={navigationVariant === "b" ? mobileProfileOpen : mobileMenuOpen}
-                  className="relative flex h-9 w-9 items-center justify-center overflow-hidden rounded-lg border border-card-border bg-card"
+                  // No clipping or own border: the avatar draws its supporter frame
+                  // around itself, and the clip cut it to a sliver (ticket 1386).
+                  className="relative flex h-9 w-9 items-center justify-center rounded-lg"
                 >
                   <Avatar
                     url={characterProfile?.avatarUrl}

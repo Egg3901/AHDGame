@@ -2,6 +2,7 @@ import { ObjectId } from "mongodb";
 import type { Db } from "@/lib/mongodb";
 import type {
   Character,
+  Coalition,
   ElectionCandidate,
   ElectionVoteTally,
   ElectedOfficial,
@@ -58,6 +59,28 @@ function buildVoterProfile(
 
 export type ContingentChamberSnapshot = NonNullable<ElectionVoteTally["contingentChamberSnapshot"]>;
 
+/** Party sequential id to the other parties in its coalition, for one country. */
+async function loadCoalitionPartners(db: Db, countryId: string): Promise<Map<string, string[]>> {
+  let coalitions: Pick<Coalition, "members">[] = [];
+  try {
+    coalitions = await db
+      .collection<Coalition>("coalitions")
+      .find({ countryId: countryId as CountryId })
+      .project<Pick<Coalition, "members">>({ members: 1 })
+      .toArray();
+  } catch {
+    // No coalition data: the ballot falls back to party and ideology alone.
+  }
+  const partners = new Map<string, string[]>();
+  for (const coalition of coalitions) {
+    const ids = (coalition.members ?? []).map((m) => String(m.partySequentialId));
+    for (const id of ids) {
+      partners.set(id, [...(partners.get(id) ?? []), ...ids.filter((other) => other !== id)]);
+    }
+  }
+  return partners;
+}
+
 export type LoadContingentElectionDataResult = Omit<
   ResolveContingentElectionInput,
   "electionId" | "electoralVotesByCandidate"
@@ -104,6 +127,17 @@ function chamberSnapshotFromChamberData(
 }
 
 /**
+ * House/Senate rows to ballot in place of the seated chamber. The live-race
+ * projection passes the Congress it expects the concurrent races to seat, so
+ * those rows go through the same voter-profile and executive-exclusion rules
+ * the real ballot applies to `electedOfficials`.
+ */
+export interface ContingentChamberOfficials {
+  house: ElectedOfficial[];
+  senate: ElectedOfficial[];
+}
+
+/**
  * Load current House/Senate composition and candidate profiles for a contingent
  * presidential election.
  */
@@ -113,31 +147,43 @@ export async function loadContingentElectionData(
   countryId: string,
   candidates: ElectionCandidate[],
   electoralVotesByCandidate: Record<string, number>,
-  options?: { chamberSnapshot?: ContingentChamberSnapshot }
+  options?: {
+    chamberSnapshot?: ContingentChamberSnapshot;
+    chamberOfficials?: ContingentChamberOfficials;
+  }
 ): Promise<LoadContingentElectionDataResult> {
   const frozenChamber = options?.chamberSnapshot;
+  const suppliedChamber = options?.chamberOfficials;
   const [houseOfficials, senateOfficials, parties] = await Promise.all([
     frozenChamber
       ? Promise.resolve([] as ElectedOfficial[])
-      : db
-          .collection<ElectedOfficial>("electedOfficials")
-          .find({
-            countryId: countryId as CountryId,
-            officeType: "house",
-            state: { $exists: true, $ne: CONTINGENT_EXCLUDED_HOUSE_STATE },
-            $or: [{ characterId: { $ne: null } }, { nppId: { $exists: true }, isNPP: true }],
-          })
-          .toArray(),
+      : suppliedChamber
+        ? Promise.resolve(
+            suppliedChamber.house.filter(
+              (o) => o.state && o.state !== CONTINGENT_EXCLUDED_HOUSE_STATE
+            )
+          )
+        : db
+            .collection<ElectedOfficial>("electedOfficials")
+            .find({
+              countryId: countryId as CountryId,
+              officeType: "house",
+              state: { $exists: true, $ne: CONTINGENT_EXCLUDED_HOUSE_STATE },
+              $or: [{ characterId: { $ne: null } }, { nppId: { $exists: true }, isNPP: true }],
+            })
+            .toArray(),
     frozenChamber
       ? Promise.resolve([] as ElectedOfficial[])
-      : db
-          .collection<ElectedOfficial>("electedOfficials")
-          .find({
-            countryId: countryId as CountryId,
-            officeType: "senate",
-            $or: [{ characterId: { $ne: null } }, { nppId: { $exists: true }, isNPP: true }],
-          })
-          .toArray(),
+      : suppliedChamber
+        ? Promise.resolve(suppliedChamber.senate)
+        : db
+            .collection<ElectedOfficial>("electedOfficials")
+            .find({
+              countryId: countryId as CountryId,
+              officeType: "senate",
+              $or: [{ characterId: { $ne: null } }, { nppId: { $exists: true }, isNPP: true }],
+            })
+            .toArray(),
     db
       .collection<PoliticalParty>("politicalParties")
       .find({ countryId: countryId as CountryId })
@@ -297,6 +343,22 @@ export async function loadContingentElectionData(
       const voter = policiesForOfficial(official);
       if (voter) senators.push({ ...voter, weight: 1 });
     }
+  }
+
+  // A coalition votes as a bloc: each legislator treats partner parties'
+  // candidates as allies (see COALITION_MATCH_BONUS). Read live membership at
+  // ballot time, including for a frozen chamber snapshot.
+  const coalitionPartners = await loadCoalitionPartners(db, countryId);
+  if (coalitionPartners.size > 0) {
+    const withPartners = (v: ContingentVoterProfile): ContingentVoterProfile => {
+      const partners = coalitionPartners.get(v.party);
+      return partners ? { ...v, coalitionParties: partners } : v;
+    };
+    houseDelegations = houseDelegations.map((d) => ({
+      ...d,
+      voters: d.voters.map(withPartners),
+    }));
+    senators = senators.map(withPartners);
   }
 
   const presidentCandidates: ContingentCandidateProfile[] = [];

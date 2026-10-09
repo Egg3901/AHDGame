@@ -4,6 +4,7 @@ import { apiErrorText } from "@/lib/errors/catalog";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui";
+import { PartySwitchElectionWarning } from "@/components/party/PartySwitchElectionWarning";
 
 /**
  * Phase 6 D6 — sign / reject buttons for a charter detail page.
@@ -17,9 +18,15 @@ interface CharterActionsProps {
   charterId: string;
   alreadySigned: boolean;
   alreadyRejected: boolean;
+  showPartySwitchWarning?: boolean;
 }
 
-export function CharterActions({ charterId, alreadySigned, alreadyRejected }: CharterActionsProps) {
+export function CharterActions({
+  charterId,
+  alreadySigned,
+  alreadyRejected,
+  showPartySwitchWarning = false,
+}: CharterActionsProps) {
   const router = useRouter();
   const [pending, setPending] = useState<"sign" | "reject" | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -98,6 +105,7 @@ export function CharterActions({ charterId, alreadySigned, alreadyRejected }: Ch
           {showRejectInput ? "Cancel reject" : "Reject charter"}
         </Button>
       </div>
+      {showPartySwitchWarning ? <PartySwitchElectionWarning /> : null}
       {showRejectInput && (
         <div className="space-y-2">
           <textarea

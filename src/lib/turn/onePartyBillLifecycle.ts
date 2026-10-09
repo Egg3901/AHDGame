@@ -62,6 +62,7 @@ import {
   bg1991ConstituentDisposition,
 } from "@/lib/countries/bg/rules/constitutionalDecision1991";
 import { buildConfiguredCountryBillLifecycle } from "@/lib/turn/billLifecycle/configs/configuredCountry";
+import type { BillLifecycleRuntimeContext } from "@/lib/turn/billLifecycle/types";
 import type { CountryGameState } from "@/lib/db/types/gameState";
 import {
   RO_1992_PROPOSALS_COLLECTION,
@@ -93,14 +94,16 @@ const DEMOCRATIC_1991_COUNTRIES: readonly CountryId[] = ["PL", "CS", "HU", "RO",
  */
 export async function processOnePartyBillLifecycleForCountry(
   countryId: CountryId,
-  now: Date
+  now: Date,
+  context?: BillLifecycleRuntimeContext
 ): Promise<{ enacted: number; failed: number }> {
   if (!COUNTRY_CONFIGS[countryId]) return { enacted: 0, failed: 0 };
-  const db = await getDb();
+  const db = context?.db ?? (await getDb());
   const runtime = await getCountryState(db, countryId);
-  const gameState = await getGameState();
-  const currentTurn = gameState?.currentTurn ?? 1;
-  const preset = typeof gameState?.preset === "string" ? gameState.preset : undefined;
+  const gameState = context ? null : await getGameState();
+  const currentTurn = context?.currentTurn ?? gameState?.currentTurn ?? 1;
+  const preset =
+    context?.preset ?? (typeof gameState?.preset === "string" ? gameState.preset : undefined);
   if (runtime.governmentType !== "onePartyState") {
     // These registry entries also host the democratic 1991 institutions.
     // Other converted one-party countries keep their existing conversion guard.
@@ -209,7 +212,7 @@ export async function processOnePartyBillLifecycleForCountry(
             };
           }
       }
-      const result = await runBillLifecycle(db, lifecycle, now, currentTurn);
+      const result = await runBillLifecycle(db, lifecycle, now, currentTurn, preset, context?.rng);
       return {
         enacted: result.transitionedTo.signed ?? 0,
         failed: result.transitionedTo.failed ?? 0,
@@ -221,7 +224,7 @@ export async function processOnePartyBillLifecycleForCountry(
   // config decides `upperKey` — and therefore `originChambers`, which every stage's
   // expired-filter scopes on.
   const config = getCountryConfig(countryId, preset);
-  return processCountryBills(db, config, now, currentTurn, preset);
+  return processCountryBills(db, config, now, currentTurn, preset, context?.rng);
 }
 
 /**
@@ -269,7 +272,8 @@ async function processCountryBills(
   config: CountryConfig,
   now: Date,
   currentTurn: number,
-  preset?: string
+  preset?: string,
+  rng?: () => number
 ): Promise<{ enacted: number; failed: number }> {
   const countryId = config.id;
 
@@ -293,7 +297,9 @@ async function processCountryBills(
     db,
     buildOnePartyBillConfig(config, preset),
     now,
-    currentTurn
+    currentTurn,
+    preset,
+    rng
   );
   const enacted = engineResult.transitionedTo.signed ?? 0;
   const failed = engineResult.transitionedTo.failed ?? 0;
@@ -447,8 +453,8 @@ async function processCountryConfidenceDrift(
  *
  * @deprecated Use `processOnePartyBillLifecycleForCountry("CN", now)` instead.
  */
-export const processCNBillLifecycle = (now: Date) =>
-  processOnePartyBillLifecycleForCountry("CN", now);
+export const processCNBillLifecycle = (now: Date, context?: BillLifecycleRuntimeContext) =>
+  processOnePartyBillLifecycleForCountry("CN", now, context);
 
 /** Compatibility export; the Russian shell selects its active constitution. */
 export { processRUBillLifecycle } from "./ruBillLifecycle";
@@ -458,22 +464,22 @@ export { processRUBillLifecycle } from "./ruBillLifecycle";
  * CN pattern; no upper-chamber crossover). Bound to DD so the per-country
  * registry entry stays single-country.
  */
-export const processDDBillLifecycle = (now: Date) =>
-  processOnePartyBillLifecycleForCountry("DD", now);
+export const processDDBillLifecycle = (now: Date, context?: BillLifecycleRuntimeContext) =>
+  processOnePartyBillLifecycleForCountry("DD", now, context);
 
 /** Eastern-bloc unicameral one-party lifecycle bindings (DD/CN pattern). */
-export const processPLBillLifecycle = (now: Date) =>
-  processOnePartyBillLifecycleForCountry("PL", now);
-export const processCSBillLifecycle = (now: Date) =>
-  processOnePartyBillLifecycleForCountry("CS", now);
-export const processHUBillLifecycle = (now: Date) =>
-  processOnePartyBillLifecycleForCountry("HU", now);
-export const processROBillLifecycle = (now: Date) =>
-  processOnePartyBillLifecycleForCountry("RO", now);
-export const processBGBillLifecycle = (now: Date) =>
-  processOnePartyBillLifecycleForCountry("BG", now);
-export const processYUBillLifecycle = (now: Date) =>
-  processOnePartyBillLifecycleForCountry("YU", now);
+export const processPLBillLifecycle = (now: Date, context?: BillLifecycleRuntimeContext) =>
+  processOnePartyBillLifecycleForCountry("PL", now, context);
+export const processCSBillLifecycle = (now: Date, context?: BillLifecycleRuntimeContext) =>
+  processOnePartyBillLifecycleForCountry("CS", now, context);
+export const processHUBillLifecycle = (now: Date, context?: BillLifecycleRuntimeContext) =>
+  processOnePartyBillLifecycleForCountry("HU", now, context);
+export const processROBillLifecycle = (now: Date, context?: BillLifecycleRuntimeContext) =>
+  processOnePartyBillLifecycleForCountry("RO", now, context);
+export const processBGBillLifecycle = (now: Date, context?: BillLifecycleRuntimeContext) =>
+  processOnePartyBillLifecycleForCountry("BG", now, context);
+export const processYUBillLifecycle = (now: Date, context?: BillLifecycleRuntimeContext) =>
+  processOnePartyBillLifecycleForCountry("YU", now, context);
 
 /**
  * Union-republic Supreme Soviet bindings. Unicameral like the satellites: the
@@ -481,9 +487,9 @@ export const processYUBillLifecycle = (now: Date) =>
  * there is no D8/D9 crossover branch the way RU's own bicameral Supreme Soviet
  * has one.
  */
-export const processUKRBillLifecycle = (now: Date) =>
-  processOnePartyBillLifecycleForCountry("UKR", now);
-export const processBLRBillLifecycle = (now: Date) =>
-  processOnePartyBillLifecycleForCountry("BLR", now);
-export const processBALBillLifecycle = (now: Date) =>
-  processOnePartyBillLifecycleForCountry("BAL", now);
+export const processUKRBillLifecycle = (now: Date, context?: BillLifecycleRuntimeContext) =>
+  processOnePartyBillLifecycleForCountry("UKR", now, context);
+export const processBLRBillLifecycle = (now: Date, context?: BillLifecycleRuntimeContext) =>
+  processOnePartyBillLifecycleForCountry("BLR", now, context);
+export const processBALBillLifecycle = (now: Date, context?: BillLifecycleRuntimeContext) =>
+  processOnePartyBillLifecycleForCountry("BAL", now, context);

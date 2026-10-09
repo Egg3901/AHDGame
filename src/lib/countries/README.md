@@ -1,13 +1,13 @@
 # Country folders
 
-A country's facts live in one directory. `jp/` is the worked example; it is the
-only country moved so far.
+A country's facts live in one directory. All configured countries have been
+converted; `jp/` remains the most heavily documented worked example.
 
 ```
 src/lib/countries/
   contract.ts        the shape a folder must satisfy
   contract.test.ts   asserts a real country can satisfy it, with nothing absent
-  jpCoverage.ts      which files carry Japan, and in which bucket
+  singleCountryData.ts  the exact converted roster and outside-folder exceptions
   jp/
     index.ts         the barrel - SERVER-SIDE CONSUMERS ONLY
     identity.ts institutions.ts elections.ts economy.ts geography.ts
@@ -46,6 +46,27 @@ written outside the folder** - see [Measuring](#measuring).
 
 Work through `CountryFolder` in `contract.ts`. It is the checklist; each member
 is one module.
+
+Before judging feature completeness, identify the country's requirement level
+for the active preset with `countryRequirementLevel.ts`:
+
+| level           | required completeness                                           |
+| --------------- | --------------------------------------------------------------- |
+| Background      | folder contract and an explicit entry for every shipping preset |
+| Economy Preview | Background requirements plus autonomous readiness               |
+| Player Enabled  | Economy Preview requirements plus player readiness              |
+
+The level is preset-dependent. `player` maps to Player Enabled, `econ` maps to
+Economy Preview, and `npp`, `latent`, and `absent` map to Background. Runtime
+access uses the same precedence: `enabledForPlayers`, then `economyPreview`,
+then Background. Browsable read-only access is not itself a completeness tier.
+
+Background keeps its era mode so the admin readiness surface can distinguish a
+registered NPP country, a seeded latent country, and a country absent from the
+era. Economy Preview activation is gated on autonomous readiness. Player
+Enabled is gated on player mechanical readiness. Flavor and era-fidelity gaps
+are reported separately so they remain visible without disabling a mechanically
+safe country.
 
 ### 1. `identity` - what the country is called, and how it looks
 
@@ -193,12 +214,12 @@ duplicating it or importing it back.
 ```
 npm run typecheck
 npx vitest run src/lib/countries
-npx tsx scripts/countries/verify-jp-runtime.ts
+npx tsx scripts/countries/verify-country-runtime.ts --all
 ```
 
-The last one is deliberately **not** a vitest file. Vitest resolves modules
-through vite, which is not the app's module-init order, so a cycle or an
-init-order bug can pass under vitest and fail in the app.
+The last command also has a Vitest wrapper for CI, but running the script keeps
+the production module-init order visible. Vitest resolves modules through Vite,
+so a cycle or init-order bug can pass there and fail in the app.
 
 The progress metric is literal lines outside the folder, by bucket - not file
 count. For Japan, measured against the branch point:

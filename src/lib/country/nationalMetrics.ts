@@ -69,6 +69,34 @@ interface NationalMetricsResponse {
   }[];
 }
 
+// Object.fromEntries defines own data properties, so a hostile key could never
+// reach Object.prototype here; the loader already drops them regardless.
+function toPlainDictionary<T, R>(dictionary: Record<string, T>, map: (value: T) => R) {
+  return Object.fromEntries(
+    Object.entries(dictionary).map(([key, value]) => [key, map(value)])
+  ) as Record<string, R>;
+}
+
+/**
+ * React cannot pass the loader's null-prototype dictionaries from a Server
+ * Component to a Client Component. Copy them into plain objects at that
+ * boundary; the JSON API serializes the loader result directly.
+ */
+export function serializeNationalMetricsForClient(
+  response: NationalMetricsResponse | null
+): NationalMetricsResponse | null {
+  if (!response) return null;
+  return {
+    ...response,
+    categories: toPlainDictionary(response.categories, (category) =>
+      toPlainDictionary(category, (summary) => summary)
+    ),
+    stateRankings: toPlainDictionary(response.stateRankings, (category) =>
+      toPlainDictionary(category, (rows) => rows)
+    ),
+  };
+}
+
 /**
  * Compute the aggregated national metrics response for a country. Shared by the
  * GET route and server components (the approval page) so a page can load its

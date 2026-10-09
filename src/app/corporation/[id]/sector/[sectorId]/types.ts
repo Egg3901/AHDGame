@@ -272,6 +272,10 @@ export interface AvailableStrategy {
 
 export interface StrategyData {
   currentStrategyId: string;
+  /** Strategy catalog the sector runs (vehicles resolve to automobiles). */
+  operatingSectorType?: CorporationType;
+  /** Whether media operating-model strategies are offered in this world. */
+  mediaOperatingModelsEnabled?: boolean;
   currentStrategyName: string;
   isTransitioning: boolean;
   isReversing: boolean;
@@ -305,6 +309,12 @@ export interface Margins {
   homeLocationModifier: number;
   stateSectorSpecializationModifier: number;
   sectorTypeMatchModifier: number;
+  /** State enterprise efficiency (pp, <= 0). 0 for private corps. */
+  soeEfficiencyModifier?: number;
+  /** Expropriation-risk drag from low investor confidence (pp). 0 for state enterprises. */
+  expropriationRiskModifier?: number;
+  /** Fit with the host country's economic model (pp, signed). */
+  economicModelAlignmentModifier?: number;
   sprawlModifier: number;
   inflationModifier: number;
   debtToGdpModifier: number;
@@ -541,7 +551,15 @@ export interface ForSaleInfo {
 // `formatAmount` with no currency code. UNITS: output units per financial day.
 
 export type PlantIdleCauseKey =
-  "inputs" | "demand" | "strike" | "disaster" | "policy" | "deposits" | "mothballed" | "other";
+  | "inputs"
+  | "demand"
+  | "ramping"
+  | "strike"
+  | "disaster"
+  | "policy"
+  | "deposits"
+  | "mothballed"
+  | "other";
 
 export interface PlantIdleCause {
   cause: PlantIdleCauseKey;
@@ -593,11 +611,13 @@ export interface PlantsData {
   };
   headroomUnits: number;
   /**
-   * True buyers' room in sector output units (unmet demand across the output
-   * mix, min over legs; 0 in a glut). `headroomUnits` is claimable market
-   * share, NOT demand, optional because payloads predating the split omit it.
+   * Weighted expansion appetite across the output mix, including latent demand.
+   * This is not a limit at which every output sells. Use measuredDemandGapUnits
+   * for automatic sizing. headroomUnits measures claimable market share.
    */
   demandGapUnits?: number;
+  /** Measured room for every output after known queues; excludes latent demand. */
+  measuredDemandGapUnits?: number | null;
   /** This sector's own demand throttle bound last turn, so its room to build reads 0. */
   roomHeldByOwnIdle?: boolean;
   /** Unowned pool over owned capacity plus that pool, percent. */
@@ -609,6 +629,8 @@ export interface PlantsData {
   capacityRecovery?: { coldUpkeepFraction: number; coldUpkeepDailyAnchor: number };
   investment?: {
     overheadDailyAnchor: number;
+    /** One turn of company running costs; null when liabilities or current costs are unknown. */
+    operatingReserveAnchor?: number | null;
     taxRatePercent: number;
     freightNetCostDailyAnchor?: number;
     inventoryRevenueDailyAnchor?: number;
@@ -645,6 +667,8 @@ export interface PlantsData {
     /** The same stack in percentage points of revenue. */
     policyPp?: number;
     otherOperatingAnchor: number;
+    freightCostAnchor?: number;
+    freightIncomeAnchor?: number;
     growthAndBuildAnchor: number;
     profitAnchor: number;
     financialEventsAnchor: number;

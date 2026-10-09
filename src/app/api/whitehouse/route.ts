@@ -103,6 +103,7 @@ export async function GET(request: Request) {
           administrationStartDate: presidentOfficial!.electedAt?.toISOString() ?? null,
           administrationStartGameDate: seatedGameDate(presidentOfficial!.electedAt),
           isNPP: false,
+          ...(presidentOfficial!.isActing ? { isActing: true } : {}),
         };
       }
     } else if (presidentOfficial?.nppId) {
@@ -122,6 +123,7 @@ export async function GET(request: Request) {
           administrationStartDate: holder.administrationStartDate,
           administrationStartGameDate: seatedGameDate(presidentOfficial.electedAt),
           isNPP: true,
+          ...(presidentOfficial.isActing ? { isActing: true } : {}),
         };
       }
     }

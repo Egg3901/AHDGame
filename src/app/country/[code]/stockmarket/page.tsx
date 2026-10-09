@@ -44,13 +44,14 @@ import { useCountryDisplayName } from "@/contexts/RegisteredCountriesContext";
 import { buildRuntimeExchangeMeta, getStockMarketBasePath } from "./stockMarketRouting";
 import { requestCharacterStatsRefetch } from "@/lib/characterStatsSync";
 import { Tooltip } from "@/components/Tooltip";
-import { useGameTurnStatus } from "@/hooks/useGameEvents";
+import { useGameEvents, useGameTurnStatus, type GameEvent } from "@/hooks/useGameEvents";
 import { useAuthMe } from "@/contexts/AuthDataContext";
 import { fetchJson } from "@/lib/observability/fetchJson";
 import { aggregateExchangeTotals } from "@/lib/stockExchange/aggregate";
 
 /** Complete recorded history for year-by-year market statistics. */
 const HISTORY_LIMIT = 0;
+const MARKET_TICK_EVENTS: GameEvent["type"][] = ["market_tick"];
 
 const VALID_TABS: StockTab[] = [
   "stocks",
@@ -514,6 +515,12 @@ function StockMarketPageInner({ params }: { params: Promise<{ code: string }> })
     );
     return () => window.clearInterval(id);
   }, [fetchData]);
+
+  // Prices re-price every 15 minutes; pick each market tick up as it lands.
+  useGameEvents(
+    useCallback(() => void fetchData({ background: true }), [fetchData]),
+    MARKET_TICK_EVENTS
+  );
 
   // Open privatization auctions for the selected exchange (global ⇒ all countries).
   // Fetched only while the auctions tab is active (#2168), avoiding an extra

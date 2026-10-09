@@ -118,6 +118,7 @@ export function getOfficeCountry(officeType: string | undefined): CountryId | un
     case "supremeSovietDeputy":
     case "nationalitiesDeputy":
     case "republicSupremeSoviet":
+    case "unionCongressDeputy":
       return "RU";
     case "volkskammerDeputy":
       return "DD";

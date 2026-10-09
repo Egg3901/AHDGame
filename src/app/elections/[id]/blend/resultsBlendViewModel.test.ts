@@ -141,6 +141,51 @@ describe("winner", () => {
     expect(vm.winnerName).toBeNull();
     expect(vm.winnerLine).toMatch(/no ticket/i);
   });
+
+  it("explains a president chosen by the House", () => {
+    const house = data({
+      summary: {
+        ...data().summary,
+        projectedWinner: "c1",
+        resolutionMode: "contingent_deadlock",
+        contingentResult: {
+          presidentWinnerId: "c1",
+          houseVoteTotals: { c1: 11, c2: 7 },
+          houseThreshold: 26,
+          deadlockBreakerUsed: true,
+        } as never,
+      },
+    });
+    const vm = buildResultsBlendViewModel(input({ data: house }));
+    expect(vm.winnerName).toBe("First Ticket");
+    expect(vm.winnerLine).toContain("Elected by the House with 11 state delegations");
+    expect(vm.winnerLine).toContain("deadlock rule");
+  });
+});
+
+describe("House vote after a deadlock", () => {
+  const acting = (status: "open" | "closed") =>
+    data({
+      summary: {
+        ...data().summary,
+        projectedWinner: null,
+        resolutionMode: "contingent_deadlock",
+        contingentHouseVote: { status, actingPresidentName: "Alex Acting", closesTurn: 34 },
+      },
+    });
+
+  it("says the House is still voting while the window is open", () => {
+    const vm = buildResultsBlendViewModel(input({ data: acting("open") }));
+    expect(vm.winnerLine).toContain("until turn 34");
+    expect(vm.winnerLine).toContain("Alex Acting serves as acting president");
+  });
+
+  it("says the acting president continues when the House closes without a majority", () => {
+    const vm = buildResultsBlendViewModel(input({ data: acting("closed") }));
+    expect(vm.winnerLine).toBe(
+      "The House closed without electing a president. Alex Acting continues as acting president."
+    );
+  });
 });
 
 describe("electoral college", () => {

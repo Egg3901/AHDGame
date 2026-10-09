@@ -1,5 +1,7 @@
 "use client";
 
+import { useGameEvents } from "@/hooks/useGameEvents";
+
 import { apiErrorText } from "@/lib/errors/catalog";
 import { Fragment, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
@@ -69,39 +71,43 @@ export function FundHoldingsPanel({
   const [error, setError] = useState("");
   const [expandedFundId, setExpandedFundId] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError("");
-    try {
-      const res = await fetch(`/api/character/${characterId}/fund-portfolio`, {
-        cache: "no-store",
-      });
-      if (res.status === 403) {
-        setDisabled(true);
-        setPositions([]);
-        return;
+  const load = useCallback(
+    async (background = false) => {
+      if (!background) setLoading(true);
+      setError("");
+      try {
+        const res = await fetch(`/api/character/${characterId}/fund-portfolio`, {
+          cache: "no-store",
+        });
+        if (res.status === 403) {
+          setDisabled(true);
+          setPositions([]);
+          return;
+        }
+        if (!res.ok) {
+          const body = (await res.json()) as { error?: string };
+          setError(apiErrorText(body, "Failed to load fund portfolio"));
+          return;
+        }
+        const data = (await res.json()) as {
+          positions: FundPosition[];
+          transactions: FundTransaction[];
+        };
+        setPositions(data.positions ?? []);
+        setTransactions(data.transactions ?? []);
+      } catch {
+        setError("Network error");
+      } finally {
+        setLoading(false);
       }
-      if (!res.ok) {
-        const body = (await res.json()) as { error?: string };
-        setError(apiErrorText(body, "Failed to load fund portfolio"));
-        return;
-      }
-      const data = (await res.json()) as {
-        positions: FundPosition[];
-        transactions: FundTransaction[];
-      };
-      setPositions(data.positions ?? []);
-      setTransactions(data.transactions ?? []);
-    } catch {
-      setError("Network error");
-    } finally {
-      setLoading(false);
-    }
-  }, [characterId]);
+    },
+    [characterId]
+  );
 
   useEffect(() => {
     void load();
   }, [load]);
+  useGameEvents(() => void load(true), ["turn_complete", "market_tick"]);
 
   if (loading) {
     return (

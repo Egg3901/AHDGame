@@ -9,7 +9,6 @@
 
 import * as topojson from "topojson-client";
 import type { Topology, GeometryCollection } from "topojson-specification";
-// @ts-expect-error - d3-geo v3 type definitions issue
 import { geoPath, geoAlbersUsa } from "d3-geo";
 import * as fs from "fs/promises";
 import * as path from "path";

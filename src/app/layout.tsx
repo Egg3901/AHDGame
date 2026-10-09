@@ -4,7 +4,7 @@ import {
   isInAppWebViewUserAgent,
   isStoreAppUserAgent,
 } from "@/lib/displayMode";
-import { Geist, Geist_Mono, JetBrains_Mono } from "next/font/google";
+import { Fraunces, Geist, Geist_Mono, JetBrains_Mono, Lora } from "next/font/google";
 import { redirect } from "next/navigation";
 import Script from "next/script";
 import { cookies, headers } from "next/headers";
@@ -20,7 +20,7 @@ import { ThemeProvider } from "@/contexts/ThemeContext";
 import { BrowserPreferencesProvider } from "@/contexts/BrowserPreferencesContext";
 import { ToastProvider } from "@/contexts/ToastContext";
 import { CharacterStatsProvider } from "@/contexts/CharacterStatsContext";
-import { AuthDataProvider } from "@/contexts/AuthDataContext";
+import { AppInterfaceProvider } from "@/contexts/InterfaceContext";
 import { CurrencyProvider } from "@/contexts/CurrencyContext";
 import { RegisteredCountriesProvider } from "@/contexts/RegisteredCountriesContext";
 import { getRegisteredCountryIds } from "@/lib/country/registeredCountries";
@@ -94,6 +94,24 @@ const geistSans = Geist({
 
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
+  subsets: ["latin"],
+  display: "swap",
+  preload: false,
+});
+
+// Classic interface headings use the same editorial families that shipped
+// before the October 3 redesign. Neither is preloaded because modern mode is
+// the default and should not pay for fonts it never renders.
+const lora = Lora({
+  variable: "--font-lora",
+  subsets: ["latin"],
+  style: ["normal", "italic"],
+  display: "swap",
+  preload: false,
+});
+
+const fraunces = Fraunces({
+  variable: "--font-fraunces",
   subsets: ["latin"],
   display: "swap",
   preload: false,
@@ -215,6 +233,8 @@ export default async function RootLayout({
   const pathname = requestHeaders.get("x-pathname") ?? "/";
   const displayMode = cookieStore.get("ahd-display-mode")?.value as
     "focused" | "classic" | undefined;
+  const interfaceMode =
+    cookieStore.get("ahd-interface-mode")?.value === "classic" ? "classic" : "modern";
 
   // Runtime country sets hydrated into the client tree via RegisteredCountriesProvider:
   //  - `registered` (COUNTRY_ORDER ∪ activated latent countries, e.g. a seceded SCO/WAL) for
@@ -308,7 +328,8 @@ export default async function RootLayout({
     <html
       lang={locale}
       data-store-app={isStoreApp ? "true" : undefined}
-      className={`${geistSans.variable} ${geistMono.variable} ${jetbrainsMono.variable}`}
+      data-interface={interfaceMode}
+      className={`${geistSans.variable} ${geistMono.variable} ${lora.variable} ${fraunces.variable} ${jetbrainsMono.variable}`}
     >
       <body className="antialiased">
         <Script
@@ -369,7 +390,7 @@ export default async function RootLayout({
               nameOverrides: countryNameOverrides,
             }}
           >
-            <AuthDataProvider>
+            <AppInterfaceProvider initialMode={interfaceMode}>
               <CurrencyProvider>
                 <ThemeProvider>
                   <BrowserPreferencesProvider>
@@ -414,7 +435,12 @@ export default async function RootLayout({
                           {!isWikiSubdomain && !isNativeApp && <AdSlot />}
                           {!isWikiSubdomain && !isNativeApp && <AdSenseSlot />}
                           {!isWikiSubdomain && <SiteFooter displayMode={displayMode} />}
-                          {!isWikiSubdomain && <StatusBar showOnlineStatus={!isClientShell} />}
+                          {!isWikiSubdomain && (
+                            <StatusBar
+                              showOnlineStatus={!isClientShell}
+                              turnStatusLink={!singleplayer}
+                            />
+                          )}
                           {!isWikiSubdomain && singleplayer && <TurnProgressToast />}
                           {!isWikiSubdomain && <TutorialCoachMount />}
                           {!isWikiSubdomain && <LiveRefreshBanner />}
@@ -475,7 +501,7 @@ export default async function RootLayout({
                   </BrowserPreferencesProvider>
                 </ThemeProvider>
               </CurrencyProvider>
-            </AuthDataProvider>
+            </AppInterfaceProvider>
           </RegisteredCountriesProvider>
         </NextIntlClientProvider>
       </body>

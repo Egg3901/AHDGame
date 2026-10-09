@@ -162,6 +162,33 @@ describe("runPatreonReconcile audit and retry history", () => {
     expect(service.clearExpiredPatreonBenefits).not.toHaveBeenCalled();
   });
 
+  it("never starts a grace period on a referral contest grant with a lapsed Patreon link", async () => {
+    const { listPatreonMembers } = await import("@/lib/patreon/members");
+    const service = await import("@/lib/patreon/service");
+    const user = {
+      _id: { toString: () => "contest-user" },
+      username: "player",
+      email: "player@example.com",
+      patreonTier: "supporter",
+      supporterProvider: "contest",
+      patreonUserId: "patron-2",
+      patreonExpiresAt: null,
+    };
+    vi.mocked(service.findUserByPatreonUserId).mockResolvedValue(null);
+    vi.mocked(db.collection("users").find).mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([user]),
+    } as never);
+    vi.mocked(listPatreonMembers).mockResolvedValueOnce([
+      { patreonUserId: "patron-2", email: user.email, tier: null, active: false },
+    ]);
+    const { runPatreonReconcile } = await import("./reconcile");
+
+    await runPatreonReconcile(db as unknown as Db, true);
+
+    expect(service.startPatreonGracePeriod).not.toHaveBeenCalled();
+    expect(service.clearExpiredPatreonBenefits).not.toHaveBeenCalled();
+  });
+
   it("fails closed when its apply lease expires before a benefit write", async () => {
     const { listPatreonMembers } = await import("@/lib/patreon/members");
     const service = await import("@/lib/patreon/service");

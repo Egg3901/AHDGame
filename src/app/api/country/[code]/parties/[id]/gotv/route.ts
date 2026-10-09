@@ -13,6 +13,8 @@ import {
   resetPartyBudgetSpending,
   savePartyBudgetForScope,
 } from "@/lib/partyBudgetGuards";
+import { getGameStatePresetOrDefault } from "@/lib/db/collections/gameState";
+import { isValidPartyTurnoutTarget } from "@/lib/demographics/partyTurnoutTargetResolver";
 
 interface RouteParams {
   params: Promise<{ code: string; id: string }>;
@@ -40,7 +42,18 @@ export async function POST(request: Request, { params }: RouteParams) {
     }
     const { gotvBudgetPercent: percent, gotvTargetCategory, gotvTargetGroup } = parsed.data;
 
+    if (Boolean(gotvTargetCategory) !== Boolean(gotvTargetGroup)) {
+      return errorResponse(400, "Target category and group must be provided together");
+    }
+
     const db = await getDb();
+
+    if (gotvTargetCategory && gotvTargetGroup) {
+      const preset = await getGameStatePresetOrDefault(db);
+      if (!isValidPartyTurnoutTarget(countryId, gotvTargetCategory, gotvTargetGroup, preset)) {
+        return errorResponse(400, "Select a demographic target available in this country");
+      }
+    }
 
     const party = await findPartyBySequentialId(db, partyId, countryId);
     if (!party) {

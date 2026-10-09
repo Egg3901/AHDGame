@@ -114,6 +114,10 @@ import {
 import { applyMediaEditorialEffects } from "@/lib/mediaEditorial/applyEffects";
 import { addSettledPoliticalAttention } from "@/lib/mediaOperatingModels/reach";
 import { applyOperatingCashThenDevelopmentCash } from "./manufacturingDevelopmentCashSettlement";
+import { loadVentureBoostBySectorId, processProductVentures } from "@/lib/products/venture/turn";
+import { ventureDomainsEnabled } from "@/lib/products/venture/access";
+import { startNppVentures } from "@/lib/products/venture/nppStart";
+import { getNppCashFloorAnchor } from "@/lib/turn/npp/nppCashReserve";
 import { resumeFoundingUnderwritingPlans } from "@/lib/banking/underwritingSettlement";
 import {
   processMediaProductProjectsV1,
@@ -301,6 +305,19 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
       bySector.set(project.sectorId, sectorProjects);
       lookups.mediaProductProjectsBySectorId = bySector;
     }
+  }
+  // Product ventures reuse the existing product flags: media titles follow the
+  // slates flag, manufactured lines follow product lines v2. Read through the same helper the venture routes use. The governor
+  // projection above does not carry mediaProductSlatesEnabled, so reading it
+  // from there left every media venture unprocessed while players could start
+  // them.
+  const productVentureDomainsEnabled = await ventureDomainsEnabled(db);
+  if (productVentureDomainsEnabled.media || productVentureDomainsEnabled.manufacturing) {
+    lookups.productVentureBoostBySectorId = await loadVentureBoostBySectorId(db, {
+      turn: turn ?? 1,
+      sectorsByCorp: lookups.sectorsByCorp,
+      enabled: productVentureDomainsEnabled,
+    });
   }
   const politicalMediaMarketEnabled = marketGovernorConfig?.politicalMediaMarketEnabled === true;
   const politicalMediaOrders: PoliticalMediaOrderForClearing[] = politicalMediaMarketEnabled
@@ -904,6 +921,43 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
         }
       },
     });
+  }
+  if (productVentureDomainsEnabled.media || productVentureDomainsEnabled.manufacturing) {
+    try {
+      // Computer-run companies start their own products first; the debit,
+      // events and outcome then run through the same path as a player's.
+      await startNppVentures(db, {
+        turn: typeof turn === "number" ? turn : 1,
+        corporations: lookups.corporations,
+        sectorsByCorp: lookups.sectorsByCorp,
+        exchangeRatesByCurrency: lookups.exchangeRatesByCurrency,
+        enabled: productVentureDomainsEnabled,
+        reserveAnchor: getNppCashFloorAnchor(
+          plantsEnabledForMarketShare ? lookups.preset : undefined
+        ),
+        priceRatioOf: (commodity, countryId) =>
+          lookups.reachablePriceRatioByCountry?.get(countryId)?.get(commodity as never) ??
+          lookups.priceRatioByCommodity.get(commodity as never),
+        currentYear: gameState?.currentYear,
+        techTreesEnabled: gameState?.sectorTechTreesEnabled === true,
+      });
+    } catch (error) {
+      console.error("[corporationTurn] NPP product venture start failed", error);
+    }
+    try {
+      await processProductVentures({
+        db,
+        turn: typeof turn === "number" ? turn : 1,
+        corporations: lookups.corporations,
+        sectorsByCorp: lookups.sectorsByCorp,
+        exchangeRatesByCurrency: lookups.exchangeRatesByCurrency,
+        enabled: productVentureDomainsEnabled,
+      });
+    } catch (error) {
+      // A venture fault must never stop the corporation turn.
+      console.error("[corporationTurn] product venture processing failed", error);
+    }
+    mark("productVentures");
   }
   let constructionFinanceFundedCount = 0;
   let constructionFinancePendingCount = 0;

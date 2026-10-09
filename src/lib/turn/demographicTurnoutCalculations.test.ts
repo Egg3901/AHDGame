@@ -196,8 +196,20 @@ describe("applyBoost", () => {
   it("skips when category does not exist in state modifiers", () => {
     const state = makeTurnoutState({});
     // Should not throw; nothing to mutate
-    applyBoost(state, { category: "nonexistent", group: "group1" }, 5.0);
+    expect(applyBoost(state, { category: "nonexistent", group: "group1" }, 5.0)).toBe(false);
     expect(state.modifiers).toEqual({});
+  });
+
+  it("initializes a validated census category missing from a legacy turnout document", () => {
+    const state = makeTurnoutState({ uk_voterGroups: { urban_progressives: 0 } });
+
+    expect(
+      applyBoost(state, { category: "education", group: "degree_plus" }, 2, 2, {
+        initializeMissingCategory: true,
+      })
+    ).toBe(true);
+    expect(state.modifiers.education!.degree_plus).toBe(2);
+    expect(state.campaignModifiers?.education?.degree_plus).toBe(2);
   });
 
   it("treats missing group modifier as starting at 0", () => {

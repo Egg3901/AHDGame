@@ -20,6 +20,9 @@ import { substepMarker } from "@/lib/observability/phaseSubsteps";
 import type { Db } from "mongodb";
 import { ObjectId } from "mongodb";
 import type { Corporation, CorporateSector, GameConfig, GameState } from "@/lib/db/types";
+import type { TradeEmbargo } from "@/lib/db/types/tradeEmbargo";
+import type { SupplyListing } from "@/lib/db/types/supplyListing";
+import { isCurtained, isPlannedEconomy } from "@/lib/constants/commandEconomy";
 import type { CommodityType } from "@/lib/constants/commodities";
 import { SECTOR_DEMAND, SECTOR_SUPPLY } from "@/lib/constants/commodities";
 import type {
@@ -99,7 +102,13 @@ export type ExistingNppAgreement = {
   volumeCap: number;
   pricePremium: number;
   status: SupplyAgreement["status"];
+  /** Corporation that authored the standing offer (a buyer-authored pending proposal). */
+  proposedByCorpId?: string;
+  durationTurns?: number;
 };
+
+/** A non-NPP counterparty whose inbound proposals an NPP supplier may accept. */
+export type ExternalBuyer = { countryId: string };
 
 export type NppAgreementDecision =
   | { action: "activate"; agreementId: string }
@@ -271,6 +280,14 @@ export function decideNppSupplyAgreements(args: {
   agreements: readonly ExistingNppAgreement[];
   priceRatioOf: (commodity: CommodityType, countryId: string) => number | null;
   staggerEligible: (corpId: string) => boolean;
+  /** Player buyers by corp id, for supplier-side accepts of their proposals. */
+  externalBuyers?: ReadonlyMap<string, ExternalBuyer>;
+  /** True when trade between the two countries is walled off for this commodity. */
+  tradeBlocked?: (
+    commodity: CommodityType,
+    supplierCountry: string,
+    buyerCountry: string
+  ) => boolean;
 }): NppAgreementDecision[] {
   const { turn, plantsEnabled, parties, agreements, priceRatioOf, staggerEligible } = args;
   // Threaded into every capacity check so the head-room the matcher proposes
@@ -282,6 +299,11 @@ export function decideNppSupplyAgreements(args: {
   };
   const byId = new Map(parties.map((p) => [p.corpId, p]));
   const out: NppAgreementDecision[] = [];
+  // Contracted volume for the supplier-side accept test: settled contracts
+  // only, so one pending proposal does not count against another.
+  const liveBeforeAccepts = args.externalBuyers
+    ? indexLiveAgreements(agreements.filter((a) => a.status !== "pending"))
+    : null;
   const acceptedBuyer = new Set<string>();
   const proposedSupplier = new Set<string>();
   const proposedBuyer = new Set<string>();
@@ -313,6 +335,46 @@ export function decideNppSupplyAgreements(args: {
     if (!uses) continue;
     out.push({ action: "activate", agreementId: a.id });
     acceptedBuyer.add(buyer.corpId);
+  }
+
+  // 1b. An AI supplier accepts a player buyer's pending proposal when it has
+  // spare capacity, the discount is no deeper than the glut discount, and no
+  // embargo or curtain lies between the two countries.
+  if (plantsEnabled && args.externalBuyers) {
+    const accepted = new Map<string, number>();
+    for (const a of agreements) {
+      if (a.status !== "pending") continue;
+      if (!agreementHasScope(a)) continue;
+      const buyer = args.externalBuyers.get(a.buyerCorpId);
+      if (!buyer || a.proposedByCorpId !== a.buyerCorpId) continue;
+      const supplier = byId.get(a.supplierCorpId);
+      if (!supplier || supplier.isNatcorp || supplier.isPlayer) continue;
+      if (a.pricePremium < NPP_CONTRACT_GLUT_PREMIUM) continue;
+      if (a.pricePremium > SUPPLY_AGREEMENT_PRICE_BAND) continue;
+      if (
+        buyer.countryId !== supplier.countryId &&
+        args.tradeBlocked?.(a.commodity, supplier.countryId, buyer.countryId)
+      ) {
+        continue;
+      }
+      const capacity = computeSupplierCommodityCapacityUnits({
+        sectors: supplier.sectors,
+        commodity: a.commodity,
+        isNatcorp: supplier.isNatcorp,
+        turn,
+        ...economy,
+        stateId: a.stateId,
+      });
+      const key = `${supplier.corpId}|${a.commodity}|${a.stateId ?? NO_STATE}`;
+      const taken = accepted.get(key) ?? 0;
+      const spare =
+        capacity * CONTRACT_OVERCOMMIT_TOLERANCE -
+        liveBeforeAccepts!.committedVolume(supplier.corpId, a.commodity, a.stateId) -
+        taken;
+      if (!(a.volumeCap > 0) || a.volumeCap > spare) continue;
+      out.push({ action: "activate", agreementId: a.id });
+      accepted.set(key, taken + a.volumeCap);
+    }
   }
 
   // 2. Serve cancel notice when the supplier has gone cold on that commodity.
@@ -450,6 +512,184 @@ export function decideNppSupplyAgreements(args: {
   return out;
 }
 
+/** Sell and buy listings one AI corporation may keep up; well inside the ten-slot cap. */
+export const AI_LISTINGS_PER_SIDE = 3;
+/** Share of spare capacity one standing sell listing advertises. */
+export const AI_LISTING_CAPACITY_FRACTION = 0.5;
+/** Turns an AI listing stays on the board before it must be refreshed. */
+export const AI_LISTING_TTL_TURNS = 24;
+const AI_LISTING_MIN_PREMIUM = NPP_CONTRACT_GLUT_PREMIUM;
+const AI_LISTING_MAX_PREMIUM = NPP_CONTRACT_MAX_ACCEPT_PREMIUM;
+
+export type AiListingSpec = {
+  corpId: string;
+  side: "buy" | "sell";
+  commodity: CommodityType;
+  stateId?: string;
+  volumeCap: number;
+  pricePremium: number;
+};
+
+/** Stable key an AI listing upserts on: (corporation, side, commodity[, state]). */
+export function aiListingId(
+  spec: Pick<AiListingSpec, "corpId" | "side" | "commodity" | "stateId">
+): string {
+  return `${spec.corpId}:ai:${spec.side}:${spec.commodity}${spec.stateId ? `:${spec.stateId}` : ""}`;
+}
+
+function listingPremium(priceRatio: number | null): number {
+  if (priceRatio == null) return 0;
+  const raw = Math.round((priceRatio - 1) * 1000) / 1000;
+  return Math.min(AI_LISTING_MAX_PREMIUM, Math.max(AI_LISTING_MIN_PREMIUM, raw));
+}
+
+/**
+ * Pure: the standing listings AI market-economy corporations want on the board.
+ * Sell listings come from spare capacity net of contracted volume; buy
+ * listings from input demand the corp cannot cover (starved plants or a
+ * shortage price). Planned economies and player corps never list.
+ */
+export function decideAiSupplyListings(args: {
+  currentYear?: number | null;
+  commandEconomyEnabled?: boolean | null;
+  turn: number;
+  plantsEnabled: boolean;
+  parties: readonly NppAgreementParty[];
+  agreements: readonly ExistingNppAgreement[];
+  priceRatioOf: (commodity: CommodityType, countryId: string) => number | null;
+}): AiListingSpec[] {
+  const { turn, parties, priceRatioOf } = args;
+  if (!args.plantsEnabled) return [];
+  const economy = {
+    currentYear: args.currentYear,
+    commandEconomyEnabled: args.commandEconomyEnabled,
+  };
+  const live = indexLiveAgreements(args.agreements);
+  const out: AiListingSpec[] = [];
+  for (const party of parties) {
+    if (party.isPlayer) continue;
+    if (isPlannedEconomy(party.countryId, args.currentYear, args.commandEconomyEnabled)) continue;
+
+    const sells: AiListingSpec[] = [];
+    const buys: AiListingSpec[] = [];
+    const seenSell = new Set<string>();
+    const seenBuy = new Set<string>();
+    for (const s of party.sectors) {
+      if (s.mothballed === true) continue;
+      for (const c of commoditiesOf(
+        s.sectorType,
+        "supply",
+        s.strategyId,
+        s.transitionFromStrategyId,
+        s.transitionStartTurn,
+        turn,
+        s.industryModel,
+        s.mediaDiscriminator
+      )) {
+        const stateId = supplyAgreementRequiresState(c) ? (s.stateId ?? undefined) : undefined;
+        if (supplyAgreementRequiresState(c) && !stateId) continue;
+        const key = `${c}|${stateId ?? NO_STATE}`;
+        if (seenSell.has(key)) continue;
+        seenSell.add(key);
+        const capacity = computeSupplierCommodityCapacityUnits({
+          sectors: party.sectors,
+          commodity: c,
+          isNatcorp: party.isNatcorp,
+          turn,
+          ...economy,
+          stateId,
+        });
+        const spare = Math.max(
+          0,
+          capacity * CONTRACT_OVERCOMMIT_TOLERANCE - live.committedVolume(party.corpId, c, stateId)
+        );
+        const volumeCap = spare * AI_LISTING_CAPACITY_FRACTION;
+        if (!(volumeCap > 0)) continue;
+        sells.push({
+          corpId: party.corpId,
+          side: "sell",
+          commodity: c,
+          ...(stateId ? { stateId } : {}),
+          volumeCap,
+          pricePremium: listingPremium(priceRatioOf(c, party.countryId)),
+        });
+      }
+      for (const c of commoditiesOf(
+        s.sectorType,
+        "demand",
+        s.strategyId,
+        s.transitionFromStrategyId,
+        s.transitionStartTurn,
+        turn,
+        s.industryModel,
+        s.mediaDiscriminator
+      )) {
+        const stateId = supplyAgreementRequiresState(c) ? (s.stateId ?? undefined) : undefined;
+        if (supplyAgreementRequiresState(c) && !stateId) continue;
+        const key = `${c}|${stateId ?? NO_STATE}`;
+        if (seenBuy.has(key)) continue;
+        seenBuy.add(key);
+        const ratio = priceRatioOf(c, party.countryId);
+        if (!buyerStarved(party, c, turn, ratio, stateId)) continue;
+        // Unmet demand proxy: output the starved plants in scope fail to make.
+        let unmet = 0;
+        for (const t of supplyAgreementSectorsInScope(party.sectors, stateId)) {
+          if (t.mothballed === true) continue;
+          const th = typeof t.throughputFactor === "number" ? t.throughputFactor : 1;
+          unmet += Math.max(0, 1 - th) * Math.max(0, t.producedUnits ?? 0);
+        }
+        buys.push({
+          corpId: party.corpId,
+          side: "buy",
+          commodity: c,
+          ...(stateId ? { stateId } : {}),
+          volumeCap: Math.max(1, unmet),
+          pricePremium: listingPremium(ratio),
+        });
+      }
+    }
+    sells.sort((a, b) => b.volumeCap - a.volumeCap);
+    buys.sort((a, b) => b.volumeCap - a.volumeCap);
+    out.push(...sells.slice(0, AI_LISTINGS_PER_SIDE), ...buys.slice(0, AI_LISTINGS_PER_SIDE));
+  }
+  return out;
+}
+
+/** Walls between two countries for a commodity: live blocking embargoes or the iron curtain. */
+export function buildTradeBlocked(args: {
+  embargoes: readonly Pick<
+    TradeEmbargo,
+    "sourceCountry" | "targetCountry" | "commodity" | "direction" | "mode" | "expiresTurn"
+  >[];
+  turn: number;
+  currentYear?: number | null;
+  commandEconomyEnabled?: boolean | null;
+}): (commodity: CommodityType, supplierCountry: string, buyerCountry: string) => boolean {
+  const active = args.embargoes.filter(
+    (e) => e.mode === "block" && (e.expiresTurn == null || e.expiresTurn >= args.turn)
+  );
+  return (commodity, supplierCountry, buyerCountry) => {
+    if (supplierCountry === buyerCountry) return false;
+    if (
+      isCurtained(supplierCountry, args.currentYear, args.commandEconomyEnabled) !==
+      isCurtained(buyerCountry, args.currentYear, args.commandEconomyEnabled)
+    ) {
+      return true;
+    }
+    return active.some((e) => {
+      if (e.commodity !== "all" && e.commodity !== commodity) return false;
+      const direction = e.direction ?? "export";
+      if (e.sourceCountry === supplierCountry && e.targetCountry === buyerCountry) {
+        return direction === "export" || direction === "both";
+      }
+      if (e.sourceCountry === buyerCountry && e.targetCountry === supplierCountry) {
+        return direction === "import" || direction === "both";
+      }
+      return false;
+    });
+  };
+}
+
 /**
  * Only what `toParty` and the agreement map below read. The pass loads every
  * NPP sector and every live NPP agreement each turn; full documents were about
@@ -482,6 +722,8 @@ export const NPP_SUPPLY_AGREEMENT_PROJECTION = {
   volumeCap: 1,
   pricePremium: 1,
   status: 1,
+  proposedByCorpId: 1,
+  durationTurns: 1,
 } as const;
 
 export function toExistingNppAgreement(a: SupplyAgreement): ExistingNppAgreement {
@@ -494,6 +736,8 @@ export function toExistingNppAgreement(a: SupplyAgreement): ExistingNppAgreement
     volumeCap: a.volumeCap,
     pricePremium: a.pricePremium,
     status: a.status,
+    ...(a.proposedByCorpId ? { proposedByCorpId: a.proposedByCorpId.toString() } : {}),
+    ...(a.durationTurns != null ? { durationTurns: a.durationTurns } : {}),
   };
 }
 
@@ -523,6 +767,67 @@ export function toParty(corp: Corporation, sectors: CorporateSector[]): NppAgree
       stateId: s.stateId,
     })),
   };
+}
+
+/**
+ * Refresh the AI corporations' standing listings: upsert what the rules want
+ * (only when terms moved or the listing nears expiry), delete the rest. Three
+ * batched calls regardless of corporation count.
+ */
+export async function syncAiSupplyListings(
+  db: Db,
+  args: Parameters<typeof decideAiSupplyListings>[0] & { now: Date }
+): Promise<{ upserted: number; removed: number }> {
+  const { turn, now } = args;
+  const desired = decideAiSupplyListings(args);
+  const collection = db.collection<SupplyListing>("supplyListings");
+  const corpObjectIds = args.parties.map((p) => new ObjectId(p.corpId));
+  const existing = await collection
+    .find(
+      { aiListed: true, corporationId: { $in: corpObjectIds } },
+      { projection: { volumeCap: 1, pricePremium: 1, expiresAtTurn: 1 } }
+    )
+    .toArray();
+  const existingById = new Map(existing.map((e) => [e._id, e]));
+  const slotByCorp = new Map<string, number>();
+  const wanted = new Set<string>();
+  const writes = [];
+  for (const spec of desired) {
+    const id = aiListingId(spec);
+    wanted.add(id);
+    const slot = slotByCorp.get(spec.corpId) ?? 0;
+    slotByCorp.set(spec.corpId, slot + 1);
+    const prior = existingById.get(id);
+    const volumeCap = Math.round(spec.volumeCap * 100) / 100;
+    if (
+      prior &&
+      prior.pricePremium === spec.pricePremium &&
+      Math.abs(prior.volumeCap - volumeCap) <= prior.volumeCap * 0.05 &&
+      prior.expiresAtTurn > turn + AI_LISTING_TTL_TURNS / 2
+    ) {
+      continue;
+    }
+    const row: SupplyListing = {
+      _id: id,
+      corporationId: new ObjectId(spec.corpId),
+      aiListed: true,
+      slot,
+      side: spec.side,
+      commodity: spec.commodity,
+      ...(spec.stateId ? { stateId: spec.stateId } : {}),
+      volumeCap,
+      pricePremium: spec.pricePremium,
+      expiresAtTurn: turn + AI_LISTING_TTL_TURNS,
+      updatedAt: now,
+    };
+    writes.push({ replaceOne: { filter: { _id: id }, replacement: row, upsert: true } });
+  }
+  const stale = existing.filter((e) => !wanted.has(e._id)).map((e) => e._id);
+  await Promise.all([
+    writes.length > 0 ? collection.bulkWrite(writes, { ordered: false }) : null,
+    stale.length > 0 ? collection.deleteMany({ _id: { $in: stale }, aiListed: true }) : null,
+  ]);
+  return { upserted: writes.length, removed: stale.length };
 }
 
 /**
@@ -559,7 +864,7 @@ export async function processNppSupplyAgreements(
   // These reads share only the already-resolved NPP cohort. Launching them
   // together removes three sequential database waits from the turn's NPP
   // supply-agreement phase.
-  const [sectors, rawAgreements, commodityPriceDocs, gameState] = await Promise.all([
+  const [sectors, rawAgreements, commodityPriceDocs, gameState, embargoes] = await Promise.all([
     db
       .collection<CorporateSector>("corporateSectors")
       .find({ corporationId: { $in: corpIds } }, { projection: NPP_SUPPLY_SECTOR_PROJECTION })
@@ -587,8 +892,52 @@ export async function processNppSupplyAgreements(
     db
       .collection<GameState>("gameState")
       .findOne({ _id: "current" }, { projection: { currentYear: 1 } }),
+    db
+      .collection<TradeEmbargo>("tradeEmbargoes")
+      .find(
+        {
+          mode: "block",
+          $or: [{ expiresTurn: { $exists: false } }, { expiresTurn: { $gte: turn } }],
+        },
+        {
+          projection: {
+            sourceCountry: 1,
+            targetCountry: 1,
+            commodity: 1,
+            direction: 1,
+            mode: 1,
+            expiresTurn: 1,
+          },
+        }
+      )
+      .toArray(),
   ]);
   step.mark("nppSupply.load");
+
+  // Player buyers with a pending proposal at an AI supplier: one batched read.
+  const externalBuyerIds = [
+    ...new Set(
+      rawAgreements
+        .filter(
+          (a) =>
+            a.status === "pending" &&
+            !corpIds.some((id) => id.equals(a.buyerCorpId)) &&
+            a.proposedByCorpId?.equals(a.buyerCorpId)
+        )
+        .map((a) => a.buyerCorpId.toString())
+    ),
+  ];
+  const externalBuyers = new Map<string, ExternalBuyer>();
+  if (externalBuyerIds.length > 0) {
+    const docs = await db
+      .collection<Corporation>("corporations")
+      .find(
+        { _id: { $in: externalBuyerIds.map((id) => new ObjectId(id)) } },
+        { projection: { countryId: 1 } }
+      )
+      .toArray();
+    for (const d of docs) externalBuyers.set(d._id.toString(), { countryId: d.countryId });
+  }
   const sectorsByCorp = new Map<string, CorporateSector[]>();
   for (const s of sectors) {
     const key = s.corporationId.toString();
@@ -638,6 +987,13 @@ export async function processNppSupplyAgreements(
     staggerEligible: (id) => glutStaggerEligible(id, turn),
     currentYear,
     commandEconomyEnabled: cfg?.commandEconomyEnabled === true,
+    externalBuyers,
+    tradeBlocked: buildTradeBlocked({
+      embargoes,
+      turn,
+      currentYear,
+      commandEconomyEnabled: cfg?.commandEconomyEnabled === true,
+    }),
   });
 
   step.mark("nppSupply.decide");
@@ -676,15 +1032,27 @@ export async function processNppSupplyAgreements(
   }
 
   const agreementsCollection = db.collection<SupplyAgreement>("supplyAgreements");
+  const durationById = new Map(agreements.map((a) => [a.id, a.durationTurns]));
   const [activationResult, cancellationResult] = await Promise.all([
     activations.length > 0
       ? agreementsCollection.bulkWrite(
-          activations.map((decision) => ({
-            updateOne: {
-              filter: { _id: new ObjectId(decision.agreementId), status: "pending" },
-              update: { $set: { status: "active", updatedAt: now } },
-            },
-          }))
+          activations.map((decision) => {
+            const durationTurns = durationById.get(decision.agreementId);
+            return {
+              updateOne: {
+                filter: { _id: new ObjectId(decision.agreementId), status: "pending" },
+                // Same lifecycle stamps as the player accept path.
+                update: {
+                  $set: {
+                    status: "active" as const,
+                    startsAtTurn: turn,
+                    ...(durationTurns != null ? { expiresAtTurn: turn + durationTurns } : {}),
+                    updatedAt: now,
+                  },
+                },
+              },
+            };
+          })
         )
       : null,
     cancellations.length > 0
@@ -712,5 +1080,18 @@ export async function processNppSupplyAgreements(
   }
 
   step.mark("nppSupply.write");
+
+  await syncAiSupplyListings(db, {
+    turn,
+    now,
+    plantsEnabled,
+    parties,
+    // Live and pending contracts, so spare capacity is net of committed volume.
+    agreements,
+    priceRatioOf,
+    currentYear,
+    commandEconomyEnabled: cfg?.commandEconomyEnabled === true,
+  });
+  step.mark("nppSupply.listings");
   return { accepted, cancelled, proposed };
 }

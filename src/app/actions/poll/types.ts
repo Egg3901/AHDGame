@@ -114,6 +114,10 @@ export interface PollData {
   /** Intellect-scaled ANCHOR fund cost per tier (display both cards from one quote each). */
   fundCostSmall: number;
   fundCostLarge: number;
+  /** LOCAL campaign-currency twins at the frozen campaign rate: what POST debits. */
+  fundCostLocal: number;
+  fundCostSmallLocal: number;
+  fundCostLargeLocal: number;
   /** Canonical flat AP cost per tier, from getPollActionCost (display both tier cards). */
   actionCostSmall: number;
   actionCostLarge: number;

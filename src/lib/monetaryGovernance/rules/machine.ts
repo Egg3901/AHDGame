@@ -22,6 +22,9 @@ import {
   FOMC_VOTE_WINDOW_TURNS,
   MAX_RATE_CHANGE_DELTA,
   MAX_RATE_CUT_DELTA,
+  NPP_CHAIR_HIGH_INFLATION_HIKE_DELTA,
+  PRIME_RATE_CEILING,
+  maxHikeDeltaFor,
   PRIME_RATE_STEP,
   RATE_CHANGES_PER_TERM,
   RATE_CHANGE_COOLDOWN_TURNS,
@@ -259,10 +262,12 @@ export function committeeRateExecutionRefusal(
   if (state.commandEconomy) return "command-economy";
   if (rateChangeRefusalFor(state.fxCommitment)) return "fx-committed";
   if (!Number.isFinite(delta) || !Number.isFinite(state.primeRate)) return "invalid-rate";
-  if (delta > MAX_RATE_CHANGE_DELTA + EPSILON) return "delta-hike";
+  // Committee motions are always the Taylor step, which widens its hike clamp
+  // when inflation is far over target (see computeNppChairRateStep).
+  if (delta > NPP_CHAIR_HIGH_INFLATION_HIKE_DELTA + EPSILON) return "delta-hike";
   if (delta < -(MAX_RATE_CUT_DELTA + EPSILON)) return "delta-cut";
   const requested = snapToPrimeRateGrid(state.primeRate) + delta;
-  if (requested < 0 || requested > 25) return "out-of-range";
+  if (requested < 0 || requested > PRIME_RATE_CEILING) return "out-of-range";
   if (state.rateChangesThisTerm >= RATE_CHANGES_PER_TERM) return "term-cap";
   if (
     typeof state.lastRateChangeTurn === "number" &&
@@ -734,10 +739,11 @@ function handleSetRate(
   const delta = requested - stored;
   const isAdmin = actor.kind === "admin";
   if (!isAdmin) {
-    if (delta > MAX_RATE_CHANGE_DELTA + EPSILON) {
+    const maxHike = maxHikeDeltaFor(state.inflationGap);
+    if (delta > maxHike + EPSILON) {
       return refuse(
         "delta-hike",
-        `Rate hikes are limited to +${MAX_RATE_CHANGE_DELTA.toFixed(2)}% per adjustment.`
+        `Rate hikes are limited to +${maxHike.toFixed(2)}% per adjustment.`
       );
     }
     if (delta < -(MAX_RATE_CUT_DELTA + EPSILON)) {
@@ -927,7 +933,7 @@ export function nextCadenceTurn(state: JurisdictionState): number | null {
 export function normalizedRateChoices(state: JurisdictionState): number[] {
   const stored = snapToPrimeRateGrid(state.primeRate);
   const floor = Math.max(0, stored - MAX_RATE_CUT_DELTA);
-  const ceiling = Math.min(25, stored + MAX_RATE_CHANGE_DELTA);
+  const ceiling = Math.min(PRIME_RATE_CEILING, stored + maxHikeDeltaFor(state.inflationGap));
   const choices: number[] = [];
   const start = Math.ceil((floor - EPSILON) / PRIME_RATE_STEP) * PRIME_RATE_STEP;
   for (let rate = start; rate <= ceiling + EPSILON; rate += PRIME_RATE_STEP) {

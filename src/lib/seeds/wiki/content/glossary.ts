@@ -64,7 +64,7 @@ Alphabetical definitions of terms used throughout A House Divided and its wiki.
 
 **GOTV (Get Out The Vote)**: The party action that boosts demographic turnout modifiers. Controlled by party chair GOTV budget allocation. Stacks additively with player canvassing, subject to the ±20 cap.
 
-**Ground game**: A campaign branch tree (starter node plus Field Offices, Get-Out-The-Vote, and Volunteer Corps branches) that boosts turnout in a race's competitive areas. Costs ongoing maintenance; unaffordable branches auto-downgrade.
+**Ground game**: A campaign branch tree (starter node plus Swing Canvassing, Get-Out-The-Vote, and Volunteer Corps branches) that boosts turnout in a race's competitive areas. Costs ongoing maintenance; unaffordable branches auto-downgrade.
 
 **Home state / region**: The sub-national unit (US state, UK region, DE Land, JP prefecture, or another country's configured region) where your character is based. Determines which elections you can enter, where you can canvass, and where your in-state party org applies.
 
@@ -132,13 +132,13 @@ Alphabetical definitions of terms used throughout A House Divided and its wiki.
 
 **Total Appeal Pipeline**: The per-turn formula used to calculate how many votes each candidate receives from each demographic group. Components: reach, appeal, approval scalar, party org scalar. Used identically for vote accumulation and polling projections.
 
-**Turn**: One unit of game time = one game week = one real hour. The hourly cron processes all game phases during a turn.
+**Turn**: One unit of game time = one game week. In normal multiplayer mode, the main turn runs once per real hour. Quarter-hour market updates and the half-hour election, growth, inflation and exchange-rate updates do not grant another action refresh or advance race deadlines. Sub-hour updates wait while a main turn is processing; fast mode uses its own main-turn cadence.
 
 **Turn log**: A record of everything that happened during a turn: which elections resolved, which bills advanced, which phases ran. Stored for 24 hours. Visible to admins; key events visible to players via notifications.
 
 **Whip directive**: An instruction from party leadership to NPP legislators on how to vote on a specific bill. NPPs in the party generally follow the whip. Players can defy the whip freely; it costs leadership trust, not infamy. A vote a whip writes onto you never moves your own positions.
 
-**Withdrawal**: Cancelling an active candidacy. Once withdrawn, you cannot re-enter the same election. Your votes are permanently removed from the tally. Candidates whose party changes mid-election are auto-withdrawn.
+**Withdrawal**: Cancelling an active candidacy. Once withdrawn, you cannot re-enter the same election. Your votes are permanently removed from the tally. Candidates who switch from one party to another mid-election are auto-withdrawn. Independent candidates who join a party stay in the race under their new party.
 
 **World events**: Scheduled country-scope events offered to a head of government. At most one pending offer per country per turn. See [World Events](/wiki/world-events).
 

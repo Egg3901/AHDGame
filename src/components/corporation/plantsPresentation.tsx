@@ -164,7 +164,7 @@ export function DeliveryLimitedPill({
   // verb go on the face, because the tooltip does not exist on touch at all.
   return (
     <span
-      className={`inline-flex items-center gap-1 text-[11px] font-medium text-warning ${className}`.trim()}
+      className={`inline-flex max-w-full flex-wrap items-center justify-end gap-x-1 text-right text-[11px] font-medium leading-tight text-warning ${className}`.trim()}
       title={`${label} limited. ${formatFillPercent(fraction)} of this sector's output could not reach buyers outside this state. ${explanation} ${action} Cutting production is not the fix.`}
     >
       {label}

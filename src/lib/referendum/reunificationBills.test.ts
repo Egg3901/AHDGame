@@ -35,6 +35,11 @@ describe("createReunificationConsentBills", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     db = createMockDb();
+    db.collection("countryGameStates").findOne.mockResolvedValue({
+      _id: "IE",
+      status: "active",
+      enabledForPlayers: true,
+    });
   });
 
   it("creates a Westminster Commons bill and a Dáil bill, both active + provision-less", async () => {
@@ -62,5 +67,18 @@ describe("createReunificationConsentBills", () => {
 
     expect(String(ids.westminsterBillId)).toBe(String(uk._id));
     expect(String(ids.dailBillId)).toBe(String(ie._id));
+  });
+
+  it("omits the Dáil bill while Ireland is not player enabled", async () => {
+    db.collection("countryGameStates").findOne.mockResolvedValue({
+      _id: "IE",
+      status: "coming-soon",
+      enabledForPlayers: false,
+    });
+    const ids = await createReunificationConsentBills(db as unknown as Db, refDoc(), 176);
+    const bills = db.collectionMocks["bills"].insertOne.mock.calls.map((call) => call[0]);
+    expect(bills).toHaveLength(1);
+    expect(bills[0].countryId).toBe("UK");
+    expect(ids.dailBillId).toBeNull();
   });
 });

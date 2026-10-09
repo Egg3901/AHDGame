@@ -8,7 +8,7 @@ vi.mock("@/lib/notifications", () => ({
   createNotifications: (...args: unknown[]) => createNotifications(...args),
 }));
 
-const { notifyChambersVoteOpen } = await import("../lifecycleHelpers");
+const { notifyBillsVoteOpen, notifyChambersVoteOpen } = await import("../lifecycleHelpers");
 
 /**
  * The chamber name in this notice was hardcoded to House/Senate, so every
@@ -24,6 +24,9 @@ describe("notifyChambersVoteOpen", () => {
     db.collection("electedOfficials");
     db.collection("characters");
     db.collectionMocks["electedOfficials"]!.find.mockReturnValue({
+      project: vi.fn().mockReturnValue({
+        toArray: async () => [{ characterId, officeType, countryId }],
+      }),
       toArray: async () => [{ characterId, officeType, countryId }],
     });
     db.collectionMocks["characters"]!.find.mockReturnValue({
@@ -56,5 +59,23 @@ describe("notifyChambersVoteOpen", () => {
 
     const [rows] = createNotifications.mock.calls[0] as [{ message: string }[]];
     expect(rows[0]!.message).toContain("Senate");
+  });
+
+  it("batches several openings without duplicating a multi-row office holder", async () => {
+    const db = setup("US", "house");
+    db.collectionMocks["electedOfficials"]!.find.mockReturnValue({
+      toArray: async () => [
+        { characterId, officeType: "house", countryId: "US" },
+        { characterId, officeType: "house", countryId: "US" },
+      ],
+    });
+
+    await notifyBillsVoteOpen(db as never, [
+      { bill: bill("US"), chamberType: "house" },
+      { bill: bill("US"), chamberType: "house" },
+    ]);
+
+    const [rows] = createNotifications.mock.calls[0] as [{ message: string }[]];
+    expect(rows).toHaveLength(2);
   });
 });

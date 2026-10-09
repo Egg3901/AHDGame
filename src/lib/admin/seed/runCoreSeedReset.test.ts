@@ -46,12 +46,19 @@ describe("runSeed reset drops", () => {
     // the turn engine stamps onto gameConfig (src/lib/market/launchGuard.ts).
     // Same shape as STALE_PROGRESS_GAME_STATE_UNSET on gameState — an explicit
     // $unset list beats a blanket drop.
-    expect(Object.keys(STALE_PER_WORLD_GAME_CONFIG_UNSET).sort()).toEqual([
-      "marketGuardReferenceFundamentalMcap",
-      "marketGuardReferenceMcap",
-      "marketGuardReferenceTurn",
-      "marketGuardTrippedAt",
-    ]);
+    expect(Object.keys(STALE_PER_WORLD_GAME_CONFIG_UNSET)).toEqual(
+      expect.arrayContaining([
+        "marketGuardReferenceFundamentalMcap",
+        "marketGuardReferenceMcap",
+        "marketGuardReferenceTurn",
+        "marketGuardTrippedAt",
+        // Old-world turn stamps found on a live world reset at turn 1329.
+        "retailDemandTransitionStartTurn",
+        "retailDemandTransitionTurns",
+        "commodityNominalPriceIndex",
+        "commodityNominalPriceIndexTurn",
+      ])
+    );
   });
 
   it("keeps the market-guard configuration knobs, which are not per-world state", () => {

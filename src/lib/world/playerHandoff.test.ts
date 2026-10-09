@@ -129,6 +129,7 @@ describe("enterCountryForPlayers", () => {
       {
         $set: expect.objectContaining({
           enabledForPlayers: true,
+          economyPreview: false,
           status: "active",
         }),
       },

@@ -59,14 +59,29 @@ export {
 } from "./privateEnterpriseRegime";
 
 /**
- * The live blocked set for every registered country: the persisted
+ * The live marketization level of every country that carries a
+ * MARKETIZATION_SCHEDULE entry: the persisted
  * `economicFactors.marketizationLevel` where present, else the era schedule.
+ * Countries without a schedule are absent (they are market economies).
  *
- * Resolve ONCE per sweep and reuse - this is one `gameState` read plus one
- * `federalBudget` `$in`, regardless of how many countries are registered.
+ * One `gameState` read plus one `federalBudget` `$in`, regardless of how many
+ * countries are registered. Resolve once per sweep and reuse.
  */
-export async function loadPrivateEnterpriseBlockedCountries(db: Db): Promise<Set<CountryId>> {
-  const ids = Object.keys(COUNTRY_CONFIGS) as CountryId[];
+export async function loadLiveMarketizationLevels(db: Db): Promise<Map<CountryId, number>> {
+  // ONLY a country modelled as planned (i.e. carrying a marketization
+  // trajectory) is considered, and only such a country's PERSISTED level is
+  // trusted.
+  //
+  // Without this guard a stray persisted value on a market economy blocks it
+  // outright: live prod carries `DE.economicFactors.marketizationLevel =
+  // 0.0919`, which is noise from an unrelated write, and reading it would have
+  // closed West Germany to private enterprise entirely. The previous gate was
+  // accidentally immune because it only ever considered scheduled countries as
+  // dynamic candidates; this makes that protection explicit rather than
+  // incidental.
+  const ids = (Object.keys(COUNTRY_CONFIGS) as CountryId[]).filter(
+    (id) => !!MARKETIZATION_SCHEDULE[id]
+  );
 
   const gameState = await db
     .collection<GameState>("gameState")
@@ -84,26 +99,26 @@ export async function loadPrivateEnterpriseBlockedCountries(db: Db): Promise<Set
     budgets.map((b) => [b._id, b.economicFactors?.marketizationLevel])
   );
 
-  const blocked = new Set<CountryId>();
+  const levels = new Map<CountryId, number>();
   for (const id of ids) {
-    // ONLY a country modelled as planned (i.e. carrying a marketization
-    // trajectory) may be blocked, and only such a country's PERSISTED level is
-    // trusted.
-    //
-    // Without this guard a stray persisted value on a market economy blocks it
-    // outright: live prod carries `DE.economicFactors.marketizationLevel =
-    // 0.0919`, which is noise from an unrelated write, and reading it would have
-    // closed West Germany to private enterprise entirely. The previous gate was
-    // accidentally immune because it only ever considered scheduled countries as
-    // dynamic candidates; this makes that protection explicit rather than
-    // incidental.
-    if (!MARKETIZATION_SCHEDULE[id]) continue;
-
     const persisted = persistedByBudgetId.get(getNationalBudgetId(id));
-    const level =
+    levels.set(
+      id,
       typeof persisted === "number" && Number.isFinite(persisted)
         ? persisted
-        : scheduledMarketizationLevel(id, currentYear);
+        : scheduledMarketizationLevel(id, currentYear)
+    );
+  }
+  return levels;
+}
+
+/**
+ * The live blocked set for every registered country, derived from
+ * {@link loadLiveMarketizationLevels}. Market economies are never blocked.
+ */
+export async function loadPrivateEnterpriseBlockedCountries(db: Db): Promise<Set<CountryId>> {
+  const blocked = new Set<CountryId>();
+  for (const [id, level] of await loadLiveMarketizationLevels(db)) {
     if (!isPrivateEnterprisePermittedAtLevel(level)) blocked.add(id);
   }
   return blocked;

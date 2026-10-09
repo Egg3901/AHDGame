@@ -8,6 +8,7 @@ import { ObjectId } from "mongodb";
 import type { Db } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 
+vi.mock("@/lib/time/gameTime", () => ({ getGameTime: vi.fn() }));
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 vi.mock("@/lib/api/requireAuth", () => ({
   requireAuthWithCharacter: vi.fn(),
@@ -17,9 +18,11 @@ vi.mock("@/lib/db/partyLookup", () => ({
 }));
 vi.mock("@/lib/mail/systemMail", () => ({
   sendSystemMail: vi.fn().mockResolvedValue(undefined),
+  sendSystemMails: vi.fn().mockResolvedValue(undefined),
 }));
 vi.mock("@/lib/notifications", () => ({
   createNotification: vi.fn().mockResolvedValue(undefined),
+  createNotifications: vi.fn().mockResolvedValue(undefined),
 }));
 vi.mock("@/lib/api/rateLimit", () => ({
   checkRateLimit: vi
@@ -101,6 +104,198 @@ describe("POST /api/country/[code]/parties/[id]/whip — character audience", ()
 
     // NPPs (empty so the NPP-audience path can resolve too when we want back-compat check)
     db.collection("npps").find.mockReturnValue({ toArray: async () => [] });
+  });
+
+  async function postScotus(overrides: Record<string, unknown> = {}) {
+    const { POST } = await import("./route");
+    return POST(
+      new Request("http://localhost/api/country/US/parties/1/whip", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          targetType: "scotusNomination",
+          targetId: billId.toString(),
+          chamber: "senate",
+          direction: "against",
+          audience: "character",
+          ...overrides,
+        }),
+      }),
+      { params: Promise.resolve({ code: "US", id: partyId }) }
+    );
+  }
+
+  async function setupScotus() {
+    const { getGameTime } = await import("@/lib/time/gameTime");
+    vi.mocked(getGameTime).mockResolvedValue({
+      currentTurn: 100,
+      effectiveNow: new Date("2026-09-01T00:00:00Z"),
+    } as never);
+    db.collection("scotusNominations").findOne.mockResolvedValue({
+      _id: billId,
+      countryId: "US",
+      status: "active",
+      nomineeName: "Test Nominee",
+      votingEndsOnTurn: 124,
+      votes: { [c1.toString()]: "abstain" },
+    });
+    const chars = [{ _id: c1, userId: new ObjectId(), name: "Test Senator", sequentialId: 42 }];
+    db.collection("characters").find.mockReturnValue({
+      project() {
+        return this;
+      },
+      toArray: async () => chars,
+    });
+  }
+
+  it.each(["for", "against"])(
+    "applies a hard player Supreme Court whip %s with a revert snapshot",
+    async (direction) => {
+      await setupScotus();
+      const response = await postScotus({ direction });
+      expect(response.status).toBe(200);
+      expect(db.collectionMocks.scotusNominations!.updateOne).toHaveBeenCalledWith(
+        { _id: billId },
+        expect.objectContaining({
+          $set: expect.objectContaining({
+            [`votes.${c1}`]: direction,
+            [`whippedFromVote.${c1}`]: "abstain",
+          }),
+          $inc: { [direction === "for" ? "votesFor" : "votesAgainst"]: 1, votesAbstain: -1 },
+        })
+      );
+      expect(db.collectionMocks.billWhips!.insertOne).toHaveBeenCalledWith(
+        expect.objectContaining({
+          targetType: "scotusNomination",
+          targetId: billId,
+          chamber: "senate",
+          audience: "character",
+        })
+      );
+      expect(db.collection("cabinetNominations").updateOne).not.toHaveBeenCalled();
+      const { sendSystemMails } = await import("@/lib/mail/systemMail");
+      expect(vi.mocked(sendSystemMails).mock.calls[0]?.[1]?.[0]?.subject).toContain(
+        "Supreme Court"
+      );
+    }
+  );
+
+  it("sends a soft Supreme Court recommendation without changing votes", async () => {
+    await setupScotus();
+    const response = await postScotus({ mode: "soft" });
+    expect(response.status).toBe(200);
+    expect(db.collectionMocks.scotusNominations!.updateOne).not.toHaveBeenCalled();
+  });
+
+  it.each(["for", "against"])(
+    "applies an NPP Supreme Court whip %s using Senate seat weights",
+    async (direction) => {
+      await setupScotus();
+      const nppId = new ObjectId();
+      db.collection("electedOfficials").find.mockReturnValue({
+        toArray: async () => [
+          { nppId, isNPP: true, officeType: "senate", seatsHeld: 7 },
+          { nppId, isNPP: true, officeType: "senate", seatsHeld: 7 },
+        ],
+      });
+      db.collection("npps").find.mockReturnValue({
+        toArray: async () => [{ _id: nppId, party: "1" }],
+      });
+      db.collection("scotusNominations").findOne.mockResolvedValue({
+        _id: billId,
+        countryId: "US",
+        status: "active",
+        votingEndsOnTurn: 124,
+        votes: { [`npp_${nppId}`]: direction === "for" ? "against" : "for" },
+      });
+      const response = await postScotus({ direction, audience: "npp" });
+      expect(response.status).toBe(200);
+      expect(db.collectionMocks.scotusNominations!.updateOne).toHaveBeenCalledWith(
+        { _id: billId },
+        expect.objectContaining({
+          $set: expect.objectContaining({ [`votes.npp_${nppId}`]: direction }),
+          $inc: {
+            [direction === "for" ? "votesFor" : "votesAgainst"]: 7,
+            [direction === "for" ? "votesAgainst" : "votesFor"]: -7,
+          },
+        })
+      );
+    }
+  );
+
+  it("rejects Supreme Court whips outside the Senate before recording a directive", async () => {
+    await setupScotus();
+    expect((await postScotus({ chamber: "house" })).status).toBe(400);
+    expect(db.collectionMocks.billWhips!.insertOne).not.toHaveBeenCalled();
+  });
+
+  it("rejects an expired Supreme Court vote even while its status is active", async () => {
+    await setupScotus();
+    db.collection("scotusNominations").findOne.mockResolvedValue({
+      _id: billId,
+      countryId: "US",
+      status: "active",
+      votingEndsOnTurn: 99,
+    });
+    expect((await postScotus()).status).toBe(409);
+    expect(db.collectionMocks.billWhips!.insertOne).not.toHaveBeenCalled();
+  });
+
+  it("rejects a closed or cross-country Supreme Court nomination", async () => {
+    await setupScotus();
+    db.collection("scotusNominations").findOne.mockResolvedValue(null);
+    expect((await postScotus()).status).toBe(404);
+    expect(db.collectionMocks.scotusNominations!.findOne).toHaveBeenCalledWith({
+      _id: billId,
+      countryId: "US",
+      status: "active",
+    });
+    expect(db.collectionMocks.billWhips!.insertOne).not.toHaveBeenCalled();
+  });
+
+  it("retains the two-attempt NPP cap for Supreme Court nominations", async () => {
+    await setupScotus();
+    db.collection("billWhips").find.mockReturnValue({ toArray: async () => [{}, {}] });
+    expect((await postScotus({ audience: "npp" })).status).toBe(400);
+    expect(db.collectionMocks.billWhips!.insertOne).not.toHaveBeenCalled();
+  });
+
+  it("batches mail and notifications for eleven player recipients", async () => {
+    const recipients = Array.from({ length: 11 }, (_, index) => ({
+      _id: new ObjectId(),
+      userId: new ObjectId(),
+      name: `Player ${index}`,
+      sequentialId: index + 1,
+    }));
+    db.collection("electedOfficials").find.mockReturnValue({
+      toArray: async () => recipients.map((char) => ({ characterId: char._id, isNPP: false })),
+    });
+    db.collection("characters").find.mockReturnValue({
+      project: () => ({ toArray: async () => recipients }),
+    });
+    const { POST } = await import("./route");
+    const req = new Request("http://localhost/api/country/US/parties/1/whip", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        audience: "character",
+        targetType: "bill",
+        targetId: billId.toString(),
+        chamber: "house",
+        direction: "for",
+      }),
+    });
+    const res = await POST(req, { params: Promise.resolve({ code: "US", id: partyId }) });
+    expect(res.status).toBe(200);
+    expect((await res.json()).mailedCount).toBe(11);
+    const { sendSystemMail, sendSystemMails } = await import("@/lib/mail/systemMail");
+    const { createNotification, createNotifications } = await import("@/lib/notifications");
+    expect(sendSystemMail).not.toHaveBeenCalled();
+    expect(createNotification).not.toHaveBeenCalled();
+    expect(sendSystemMails).toHaveBeenCalledOnce();
+    expect(vi.mocked(sendSystemMails).mock.calls[0]?.[1]).toHaveLength(11);
+    expect(createNotifications).toHaveBeenCalledOnce();
+    expect(vi.mocked(createNotifications).mock.calls[0]?.[0]).toHaveLength(11);
   });
 
   it("issues a character whip and writes a BillWhip with audience=character", async () => {

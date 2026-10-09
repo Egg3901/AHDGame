@@ -1,4 +1,5 @@
 import { scoreMetric } from "@/lib/utils/metricScoring";
+import type { IncomeVintageStamps } from "@/lib/era/metricCatalog";
 
 export interface CategoryRollup {
   /** Mean 0–100 score across scorable metrics. */
@@ -27,7 +28,9 @@ export function categoryRollup(
   year?: number | null,
   /** medianIncome era-band inputs (null/omitted = legacy band). */
   incomeIndex?: number | null,
-  startingYear?: number | null
+  startingYear?: number | null,
+  /** Income vintage provenance (null/omitted = legacy anchor). */
+  incomeVintages?: IncomeVintageStamps | null
 ): CategoryRollup {
   let sum = 0;
   let count = 0;
@@ -41,7 +44,8 @@ export function categoryRollup(
       preset,
       year,
       incomeIndex,
-      startingYear
+      startingYear,
+      incomeVintages
     );
     if (score === null) continue;
     sum += score;

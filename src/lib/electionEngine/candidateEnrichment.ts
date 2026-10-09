@@ -6,10 +6,11 @@ import { combinedAds } from "@/lib/campaignTargeting/rules";
 import { ObjectId, type Db } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import type { Character, ElectionCandidate, NPP, PoliticalParty } from "@/lib/db/types";
+import type { CountryState } from "@/lib/db/types/countryState";
 import { type CountryId, type CountryConfig } from "@/lib/constants/countries";
 import { resolveRegimeMultiplier } from "@/lib/turn/onePartyConstraints";
 import { isBlocListCountry } from "@/lib/constants/blocList";
-import { getCountryState, updateCountryState } from "@/lib/countryState";
+import { getCountryState } from "@/lib/countryState";
 import type { NPPEndorsement } from "@/lib/db/types/nppInfluence";
 import type { EnrichedCandidate } from "./types";
 import {
@@ -59,6 +60,106 @@ export interface CandidateEnrichmentPreload {
   endorsementCountByKey: Map<string, number>;
 }
 
+export type EnrichmentCountryConfig = Pick<CountryConfig, "governmentType" | "opsVoteMultipliers">;
+
+export function resolveEnrichmentCountryConfig(
+  runtime: CountryState,
+  countryId: CountryId,
+  applyHonestOverride = true
+): EnrichmentCountryConfig {
+  let effectiveMultipliers = runtime.opsVoteMultipliers ?? undefined;
+  if (runtime.governmentType === "onePartyState" && isBlocListCountry(countryId)) {
+    effectiveMultipliers = { ruling: 1, approved: 1, independent: 1, banned: 0 };
+  }
+  if (applyHonestOverride && runtime.pendingHonestByElection) {
+    const multiplier = runtime.pendingHonestByElection.atMultiplier;
+    effectiveMultipliers = {
+      ruling: multiplier,
+      approved: multiplier,
+      independent: multiplier,
+      banned: multiplier,
+    };
+  }
+  return {
+    governmentType: runtime.governmentType,
+    opsVoteMultipliers: effectiveMultipliers,
+  };
+}
+
+/** Load every actor and endorsement row used by enrichment in four bounded reads. */
+export async function loadCandidateEnrichmentPreload(
+  db: Db,
+  candidates: readonly ElectionCandidate[],
+  electionIds: readonly ObjectId[],
+  preloadedStatePartyChairRows?: Pick<StatePartyOrg, "chairId" | "stateId">[]
+): Promise<CandidateEnrichmentPreload> {
+  const characterIds = [
+    ...new Map(
+      candidates
+        .filter((candidate) => !candidate.isNPP && candidate.characterId)
+        .map((candidate) => [candidate.characterId.toString(), candidate.characterId])
+    ).values(),
+  ];
+  const nppIds = [
+    ...new Map(
+      candidates
+        .filter((candidate) => candidate.isNPP && candidate.nppId)
+        .map((candidate) => [candidate.nppId!.toString(), candidate.nppId!])
+    ).values(),
+  ];
+  const candidateTargetIds = [
+    ...new Map(
+      candidates
+        .filter((candidate) => candidate.characterId)
+        .map((candidate) => [candidate.characterId.toString(), candidate.characterId])
+    ).values(),
+  ];
+  const [characters, npps, statePartyChairRows, endorsements] = await Promise.all([
+    characterIds.length
+      ? db
+          .collection<Character>("characters")
+          .find({ _id: { $in: characterIds } })
+          .toArray()
+      : Promise.resolve([]),
+    nppIds.length
+      ? db
+          .collection<NPP>("npps")
+          .find({ _id: { $in: nppIds } }, { projection: { "policies.domainPositions": 0 } })
+          .toArray()
+      : Promise.resolve([]),
+    preloadedStatePartyChairRows
+      ? Promise.resolve(preloadedStatePartyChairRows)
+      : characterIds.length
+        ? db
+            .collection<StatePartyOrg>("statePartyOrg")
+            .find({ chairId: { $in: characterIds } }, { projection: { chairId: 1, stateId: 1 } })
+            .toArray()
+        : Promise.resolve([] as Pick<StatePartyOrg, "chairId" | "stateId">[]),
+    electionIds.length && candidateTargetIds.length
+      ? db
+          .collection<NPPEndorsement>("nppEndorsements")
+          .find(
+            buildActiveVisibleNppEndorsementFilter({
+              electionId: { $in: electionIds },
+              candidateId: { $in: candidateTargetIds },
+            })
+          )
+          .toArray()
+      : Promise.resolve([]),
+  ]);
+  const endorsementCountByKey = new Map<string, number>();
+  for (const endorsement of endorsements) {
+    const key = `${endorsement.electionId.toString()}:${endorsement.candidateId.toString()}`;
+    endorsementCountByKey.set(key, (endorsementCountByKey.get(key) ?? 0) + 1);
+  }
+  return {
+    charactersById: new Map(characters.map((character) => [character._id.toString(), character])),
+    nppsById: new Map(npps.map((npp) => [npp._id.toString(), npp])),
+    statePartyChairRows,
+    endorsementCountByKey,
+  };
+}
+
 /**
  * The party table enrichment needs, for one country (or every party when the
  * country is unknown, preserving the legacy behaviour documented above). A
@@ -104,6 +205,8 @@ export async function fetchEnrichedCandidates(
     partiesCache?: Map<string, Promise<EnrichmentParty[]>>;
     /** Sweep-level actor and endorsement rows shared by every election. */
     preload?: CandidateEnrichmentPreload;
+    /** Sweep-resolved runtime election config; keeps enrichment read-only. */
+    countryConfig?: EnrichmentCountryConfig;
     /**
      * Caller's Db handle (#2695). Sharing one handle across a phase lets the
      * per-Db country-state cache hit; `getDb()` returns a new handle per call.
@@ -149,35 +252,12 @@ export async function fetchEnrichedCandidates(
   // post-Stage-4 conversion stops applying the OPS-specific weighting
   // immediately and reform-action vote-multiplier changes flow through.
   const electionCountry = options?.countryId;
-  let electionConfig: Pick<CountryConfig, "governmentType" | "opsVoteMultipliers"> | null = null;
+  let electionConfig: EnrichmentCountryConfig | null = options?.countryConfig ?? null;
   if (electionCountry) {
-    const runtime = await getCountryState(db, electionCountry);
-    // Phase-5 reform: "Hold an honest by-election" sets a one-shot
-    // pendingHonestByElection flag. When present, override every regime
-    // multiplier with the uniform `atMultiplier` (1.0 by default — fully
-    // equal weight) for this election only, then clear the flag.
-    const honestOverride = runtime.pendingHonestByElection;
-    let effectiveMultipliers = runtime.opsVoteMultipliers ?? undefined;
-    // Bloc-list chambers weight nothing. The quota already fixes the party
-    // split (see `@/lib/constants/blocList`), so a ruling-party multiplier can
-    // no longer change who is seated; all it would still do is skew the
-    // DISPLAYED vote by 8x. Since the only thing the vote decides here is the
-    // order inside a party's own block, and the multiplier is uniform within a
-    // party and therefore cancels there, the honest reading is 1.0 across the
-    // board: the pie becomes real popularity, and the quota does the regime's
-    // work in the open.
-    if (runtime.governmentType === "onePartyState" && isBlocListCountry(electionCountry)) {
-      effectiveMultipliers = { ruling: 1, approved: 1, independent: 1, banned: 0 };
-    }
-    if (honestOverride) {
-      const m = honestOverride.atMultiplier;
-      effectiveMultipliers = { ruling: m, approved: m, independent: m, banned: m };
-      await updateCountryState(db, electionCountry, { pendingHonestByElection: undefined });
-    }
-    electionConfig = {
-      governmentType: runtime.governmentType,
-      opsVoteMultipliers: effectiveMultipliers,
-    };
+    electionConfig ??= resolveEnrichmentCountryConfig(
+      await getCountryState(db, electionCountry),
+      electionCountry
+    );
   }
   const isOps = electionConfig?.governmentType === "onePartyState";
 

@@ -1,3 +1,4 @@
+import type { ScotusNomination } from "@/lib/db/types/scotus";
 import { ObjectId, type Db, type Filter } from "mongodb";
 import type {
   Bill,
@@ -230,6 +231,22 @@ function loadCabinetTarget(
   };
 }
 
+function loadScotusTarget(
+  whip: BillWhip,
+  nominationsById: ReadonlyMap<string, ScotusNomination>
+): TargetContext | null {
+  const nomination = nominationsById.get(whip.targetId.toString());
+  if (!nomination) return null;
+  return {
+    label: `Supreme Court: ${nomination.nomineeName}`,
+    votes: Object.entries(nomination.votes ?? {}).map(([voterKey, vote]) => ({
+      voterKey,
+      comparableVote: toComparableStandardVote(vote),
+      displayVote: toDisplayStandardVote(vote),
+    })),
+  };
+}
+
 async function loadVacateTarget(db: Db, whip: BillWhip): Promise<TargetContext | null> {
   const motion = await db
     .collection<SpeakerVacateMotion>("speakerVacateMotions")
@@ -444,7 +461,16 @@ async function buildWhipDefianceSnapshotsForScopes(
         .map((whip) => [whip.targetId.toString(), whip.targetId as ObjectId])
     ).values(),
   ];
-  const [bills, nominations] = await Promise.all([
+  const scotusIds = [
+    ...new Map(
+      allWhips
+        .filter(
+          (whip) => whip.targetType === "scotusNomination" && whip.targetId instanceof ObjectId
+        )
+        .map((whip) => [whip.targetId.toString(), whip.targetId as ObjectId])
+    ).values(),
+  ];
+  const [bills, nominations, scotusNominations] = await Promise.all([
     billIds.length
       ? db
           .collection<Bill>("bills")
@@ -457,12 +483,21 @@ async function buildWhipDefianceSnapshotsForScopes(
           .find({ _id: { $in: cabinetIds }, status: "active" })
           .toArray()
       : Promise.resolve([] as CabinetNomination[]),
+    scotusIds.length
+      ? db
+          .collection<ScotusNomination>("scotusNominations")
+          .find({ _id: { $in: scotusIds }, status: "active" })
+          .toArray()
+      : Promise.resolve([] as ScotusNomination[]),
   ]);
   const billsById = new Map(bills.map((bill) => [bill._id.toString(), bill]));
   const nominationsById = new Map(
     nominations.map((nomination) => [nomination._id.toString(), nomination])
   );
 
+  const scotusById = new Map(
+    scotusNominations.map((nomination) => [nomination._id.toString(), nomination])
+  );
   const targetPromises = new Map<string, Promise<TargetContext | null>>();
   for (const whip of allWhips) {
     const key = targetCacheKey(whip);
@@ -473,7 +508,9 @@ async function buildWhipDefianceSnapshotsForScopes(
           ? loadBillTarget(whip, billsById)
           : whip.targetType === "cabinetNomination"
             ? Promise.resolve(loadCabinetTarget(whip, nominationsById))
-            : loadTargetContext(db, whip, billsById, nominationsById)
+            : whip.targetType === "scotusNomination"
+              ? Promise.resolve(loadScotusTarget(whip, scotusById))
+              : loadTargetContext(db, whip, billsById, nominationsById)
       );
     }
   }

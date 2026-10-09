@@ -97,7 +97,8 @@ function pct(value: number): string {
 export function describeOpsCurrentEffect(
   category: UpgradeCategory,
   tree: OpsTreeState | undefined,
-  currencySymbol: string
+  currencySymbol: string,
+  monetaryScale = 1
 ): string {
   if (!tree?.starter) return "Not yet unlocked";
 
@@ -106,7 +107,7 @@ export function describeOpsCurrentEffect(
   if (category === "fundraising") {
     const base = t.incomeFlat ?? 0;
     const multiplied = base * (1 + (t.incomeMultiplier ?? 0));
-    return `+${money(multiplied, currencySymbol)}/turn income`;
+    return `+${money(multiplied * monetaryScale, currencySymbol)}/turn income`;
   }
 
   if (category === "oppositionResearch") {

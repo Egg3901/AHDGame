@@ -14,6 +14,12 @@ import OpenOrdersPanel from "./shares/OpenOrdersPanel";
 import PrivateSalePanel from "./shares/PrivateSalePanel";
 import ShareStructurePanel from "./shares/ShareStructurePanel";
 import ShareHistoryPanel from "./shares/ShareHistoryPanel";
+import {
+  totalVotingPower as computeTotalVotingPower,
+  shareholderVotingPower,
+} from "@/lib/corporations/superShares";
+import OwnershipOverview from "./shares/OwnershipOverview";
+import OwnershipHistoryPanel from "./shares/OwnershipHistoryPanel";
 import SignInPrompt from "./shares/SignInPrompt";
 import SharePurchaseModal from "./shares/SharePurchaseModal";
 import ShareIssuanceModal from "./shares/ShareIssuanceModal";
@@ -136,25 +142,14 @@ export default function SharesTab({
     void refreshOrders();
   }
 
-  // Vote weights for dual-class (supershare) corps: founder supershares count
-  // superShareMultiplier votes each; everything else is one share one vote.
-  const superMultiplier = corporation.superShareMultiplier ?? 1;
-  const totalVotingPower =
-    (corporation.totalShares ?? 0) +
-    (superMultiplier > 1
-      ? corporation.shareholders.reduce(
-          (sum, sh) => sum + Math.min(sh.superShares ?? 0, sh.shares) * (superMultiplier - 1),
-          0
-        )
-      : 0);
+  const totalVotingPower = computeTotalVotingPower(corporation);
   const myEntry = myCharacterId
     ? corporation.shareholders.find((sh) => sh.characterId === myCharacterId)
     : undefined;
-  const myVotingPower =
-    (trading.myShares ?? 0) +
-    (superMultiplier > 1 && myEntry
-      ? Math.min(myEntry.superShares ?? 0, myEntry.shares) * (superMultiplier - 1)
-      : 0);
+  const myVotingPower = shareholderVotingPower(corporation, {
+    shares: trading.myShares ?? 0,
+    superShares: myEntry?.superShares,
+  });
 
   return (
     <div className="space-y-6">
@@ -195,6 +190,8 @@ export default function SharesTab({
           onSuccess={handleTradeSuccess}
         />
       )}
+
+      <OwnershipOverview corporation={corporation} />
 
       <Segmented
         ariaLabel="Shares view"
@@ -285,7 +282,12 @@ export default function SharesTab({
         </div>
       )}
 
-      {activeSubTab === "history" && <ShareHistoryPanel corpId={corpId} />}
+      {activeSubTab === "history" && (
+        <div className="space-y-6">
+          <OwnershipHistoryPanel corpId={corpId} corporation={corporation} />
+          <ShareHistoryPanel corpId={corpId} />
+        </div>
+      )}
     </div>
   );
 }

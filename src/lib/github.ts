@@ -1,3 +1,5 @@
+import { formatTicketPlatform } from "@/lib/tickets/platform";
+
 /**
  * Create a GitHub issue from feedback.
  * Requires GIT_TOKEN and GITHUB_REPO (owner/repo) in env.
@@ -6,6 +8,7 @@
 export async function createGitHubIssue(opts: {
   issueNumber: number;
   type: "bug" | "suggestion";
+  platform?: string;
   title: string;
   description: string;
   category: string;
@@ -55,6 +58,7 @@ export async function createGitHubIssue(opts: {
 
   body +=
     `---\n\n` +
+    (opts.platform ? `**Platform:** ${formatTicketPlatform(opts.platform)}\n` : "") +
     `**Page:** ${opts.context.pathname || "/"}\n` +
     `**URL:** ${opts.context.url}\n` +
     `**Captured:** ${opts.context.capturedAt}\n` +

@@ -3,10 +3,12 @@
  * detection rework plan §3.1 "Anomaly scanners", Phase 3 T3.1).
  *
  * Candidate-narrowed, never a full collection scan: every detector runs
- * over a single bounded query — `actionAuditLog` rows from the last
+ * over a single streamed query, `actionAuditLog` rows from the last
  * `windowTurns` turns (an indexed range on `{turn:-1}`, the same idiom
- * `runFinancialSuspectScan` uses over `financialTxLog`) — never an
- * unindexed or unbounded read. Detectors are pure functions over plain rows
+ * `runFinancialSuspectScan` uses over `financialTxLog`) narrowed to rows a
+ * detector can act on. The turn's system-actor mirror of every
+ * `financialTxLog` row is excluded in Mongo: materializing those took the
+ * process past the heap watchdog (#3366). Detectors are pure functions over plain rows
  * so each is independently unit-testable; `runAuditAnomalyScan` is the thin
  * DB wrapper that feeds them from Mongo, stamps `flags[]` back onto the
  * offending `actionAuditLog` rows, and writes one compact summary to
@@ -20,7 +22,7 @@
  * turn (same contract `financialSuspectScan`/`suspiciousDetection` rely on).
  */
 import * as Sentry from "@sentry/nextjs";
-import { ObjectId, type Db } from "mongodb";
+import { ObjectId, type Collection, type Db, type Document } from "mongodb";
 import { getActionAuditLogCollection } from "@/lib/db/collections/actionAuditLog";
 import { getAuditAnomaliesCollection } from "@/lib/db/collections/auditAnomalies";
 import { isAuditLogEnabled } from "@/lib/audit/featureFlag";
@@ -29,8 +31,14 @@ import type { AuditAnomalyFinding, AuditAnomalyType } from "@/lib/db/types/audit
 import {
   detectCircularWire as detectTransferCircularWire,
   detectWireFanInFanOut as detectTransferWireFanInFanOut,
+  SUPPLY_AGREEMENT_SETTLEMENT_ACTION,
   type AnomalyAuditRow,
+  type TransferFlowOptions,
 } from "@/lib/audit/rules/transferFlows";
+import {
+  agreementIdMatchValues,
+  loadRelatedSupplyAgreementIds,
+} from "@/lib/audit/relatedSupplyAgreements";
 
 export type { AnomalyAuditRow } from "@/lib/audit/rules/transferFlows";
 export { SYSTEM_SETTLEMENT_ACTIONS } from "@/lib/audit/rules/transferFlows";
@@ -188,15 +196,19 @@ export function detectRapidRepeat(
   };
 }
 
-export function detectCircularWire(rows: AnomalyAuditRow[]): DetectorResult {
-  return detectTransferCircularWire(rows);
+export function detectCircularWire(
+  rows: AnomalyAuditRow[],
+  options: TransferFlowOptions = {}
+): DetectorResult {
+  return detectTransferCircularWire(rows, options);
 }
 
 export function detectWireFanInFanOut(
   rows: AnomalyAuditRow[],
-  config: Pick<AnomalyScanConfig, "fanInThreshold" | "fanOutThreshold"> = ANOMALY_SCAN_DEFAULTS
+  config: Pick<AnomalyScanConfig, "fanInThreshold" | "fanOutThreshold"> = ANOMALY_SCAN_DEFAULTS,
+  options: { additionalExcludedSettlementRows?: number } = {}
 ): DetectorResult {
-  return detectTransferWireFanInFanOut(rows, config);
+  return detectTransferWireFanInFanOut(rows, config, options);
 }
 
 // ── Detector: wash_trade ─────────────────────────────────────────────────
@@ -389,6 +401,111 @@ export function detectOffHoursPrivilegedAction(
 
 // ── DB wrapper / turn-phase entry point ─────────────────────────────────
 
+/** Rows per getMore while streaming the scan window. */
+const ANOMALY_SCAN_BATCH_SIZE = 2_000;
+
+/** Only the fields `toAnomalyRow` reads. Names, roles, refs and net are
+ * never used by a detector, so they stay in Mongo. */
+const ANOMALY_SCAN_PROJECTION = {
+  _id: 1,
+  ts: 1,
+  traceId: 1,
+  seq: 1,
+  turn: 1,
+  action: 1,
+  category: 1,
+  "actor.kind": 1,
+  "actor.userId": 1,
+  "actor.characterId": 1,
+  "subject.type": 1,
+  "subject.id": 1,
+  "counterparty.type": 1,
+  "counterparty.id": 1,
+  amount: 1,
+  delta: 1,
+  "meta.agreementId": 1,
+} as const;
+
+const PRE_ELECTION_FUNDING_ACTIONS = ["party.donate", "party.transfer"];
+
+/**
+ * The rows any detector can use, as Mongo clauses. Each detector filters
+ * rows independently, so a row matching none of these clauses can never be
+ * flagged or change another row's result:
+ *  - actor key present: `rapid_repeat`, `wash_trade`, and transfers whose
+ *    actor kind is missing;
+ *  - player/npp/admin actor: `circular_wire`, `wire_fanin_fanout`;
+ *  - admin category: `off_hours_privileged_action`;
+ *  - party funding money rows, only inside a pre-election window:
+ *    `pre_election_funding_surge` (it ignores the actor entirely).
+ * Keep this in step with the detectors; the equivalence test in
+ * anomalyScan.test.ts runs every detector on both row sets.
+ */
+export function anomalyCandidateClauses(
+  isPreElectionWindow: boolean,
+  relatedAgreementIds: ReadonlySet<string> = new Set()
+): Document[] {
+  const clauses: Document[] = [
+    { "actor.userId": { $ne: null } },
+    { "actor.characterId": { $ne: null } },
+    { "actor.kind": { $in: ["player", "npp", "admin"] } },
+    { category: "admin" },
+  ];
+  if (relatedAgreementIds.size > 0) {
+    // Supply settlement is system-actor and routine, except between related
+    // parties, whose rows `circular_wire` must see.
+    clauses.push({
+      action: SUPPLY_AGREEMENT_SETTLEMENT_ACTION,
+      "meta.agreementId": { $in: agreementIdMatchValues(relatedAgreementIds) },
+    });
+  }
+  if (isPreElectionWindow) {
+    clauses.push({
+      category: "money",
+      $or: [{ action: { $in: PRE_ELECTION_FUNDING_ACTIONS } }, { "counterparty.type": "party" }],
+    });
+  }
+  return clauses;
+}
+
+export function anomalyCandidateFilter(
+  minTurn: number,
+  isPreElectionWindow: boolean,
+  relatedAgreementIds: ReadonlySet<string> = new Set()
+): Document {
+  return {
+    turn: { $gte: minTurn },
+    $or: anomalyCandidateClauses(isPreElectionWindow, relatedAgreementIds),
+  };
+}
+
+/**
+ * The fan-in/fan-out finding reports how many routine or system money rows
+ * it left out of the hub baseline. Rows the candidate filter kept in Mongo
+ * are all of that kind, so they are counted server side, and only when a
+ * finding exists to carry the number.
+ */
+async function detectWireFanInFanOutWithSkippedRows(
+  col: Collection<ActionAuditRecord>,
+  rows: AnomalyAuditRow[],
+  config: AnomalyScanConfig,
+  minTurn: number,
+  isPreElectionWindow: boolean,
+  relatedAgreementIds: ReadonlySet<string>
+): Promise<DetectorResult> {
+  const result = detectWireFanInFanOut(rows, config);
+  if (!result.finding) return result;
+  const skippedMoneyRows = await col.countDocuments({
+    turn: { $gte: minTurn },
+    category: "money",
+    $nor: anomalyCandidateClauses(isPreElectionWindow, relatedAgreementIds),
+  });
+  if (skippedMoneyRows === 0) return result;
+  return detectWireFanInFanOut(rows, config, {
+    additionalExcludedSettlementRows: skippedMoneyRows,
+  });
+}
+
 interface MinimalElection {
   _id: unknown;
   status?: string;
@@ -442,42 +559,41 @@ export async function runAuditAnomalyScan(
 
     const minTurn = currentTurn - config.windowTurns + 1;
     const col = await getActionAuditLogCollection(db);
-    const docs = await col
-      .find(
-        { turn: { $gte: minTurn } },
-        {
-          projection: {
-            _id: 1,
-            ts: 1,
-            traceId: 1,
-            seq: 1,
-            turn: 1,
-            action: 1,
-            category: 1,
-            actor: 1,
-            subject: 1,
-            counterparty: 1,
-            amount: 1,
-            delta: 1,
-            "meta.agreementId": 1,
-          },
-        }
-      )
-      .toArray();
-
-    if (docs.length === 0) return null;
-
-    const rows = docs.map(toAnomalyRow);
+    // Resolved before the read: it decides whether system-actor party
+    // funding rows are candidates at all.
     const isPreElectionWindow = await resolveIsPreElectionWindow(
       db,
       currentTurn,
       config.preElectionWindowTurns
     );
 
+    // Stream compact rows instead of materializing every projected document.
+    // The filter keeps only rows some detector can act on, so the system
+    // mirror of every financialTxLog row never leaves Mongo.
+    const relatedAgreementIds = await loadRelatedSupplyAgreementIds(db);
+    const rows: AnomalyAuditRow[] = [];
+    const cursor = col.find(
+      anomalyCandidateFilter(minTurn, isPreElectionWindow, relatedAgreementIds),
+      {
+        projection: ANOMALY_SCAN_PROJECTION,
+        batchSize: ANOMALY_SCAN_BATCH_SIZE,
+      }
+    );
+    for await (const doc of cursor) rows.push(toAnomalyRow(doc as ActionAuditRecord));
+
+    if (rows.length === 0) return null;
+
     const results: DetectorResult[] = [
       detectRapidRepeat(rows, config),
-      detectCircularWire(rows),
-      detectWireFanInFanOut(rows, config),
+      detectCircularWire(rows, { relatedAgreementIds }),
+      await detectWireFanInFanOutWithSkippedRows(
+        col,
+        rows,
+        config,
+        minTurn,
+        isPreElectionWindow,
+        relatedAgreementIds
+      ),
       detectWashTrade(rows, config),
       detectPreElectionFundingSurge(rows, { isPreElectionWindow, ...config }),
       detectOffHoursPrivilegedAction(rows, config),

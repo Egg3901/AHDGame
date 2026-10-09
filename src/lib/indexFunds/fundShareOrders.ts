@@ -110,70 +110,15 @@ export async function placeFundShareBuyOrder(
     return { ok: false, reason: "Insufficient fund cash for escrow" };
   }
 
-  const now = new Date();
   const orderId = new ObjectId();
+  const rows = fundBuyOrderRows(input, orderId, escrowAmount, escrowAnchor, new Date());
   try {
-    await db.collection<ShareOrder>("shareOrders").insertOne({
-      _id: orderId,
-      corporationId: corp._id,
-      placerFundId: fund._id,
-      type: "buy",
-      shares,
-      sharesRemaining: shares,
-      pricePerShare: limitPriceLocal,
-      escrowAmount,
-      escrowAnchor,
-      ...(input.liquidityQuote
-        ? {
-            liquidityProvider: true,
-            liquidityQuotedTurn: input.liquidityQuote.turn,
-            liquidityReferencePrice: input.liquidityQuote.referencePrice,
-          }
-        : {}),
-      status: "open",
-      createdAt: now,
-      updatedAt: now,
-    });
-
-    const escrowTx = {
-      fundId: fund._id,
-      kind: "public_float_buy" as const,
-      corporationId: corp._id,
-      shares,
-      amountAnchor: escrowAnchor,
-      note: "limit_buy_order_escrow",
-      createdAt: now,
-    };
-    if (input.txSink) input.txSink.push(escrowTx);
-    else await insertFundTransaction(db, escrowTx);
-
-    // #992 tranche 4: fund-subject escrow leg. The debit above already moved
-    // cashAnchor, so this row evidences it (same order_escrow reason as the
-    // character/corporation placement rows; the refund shares it so a
-    // placement nets against its own cancel per currency). Fund-subject rows
-    // never mirror, so this is the only ledger row for the debit.
-    const ledgerEntry: TxInput = {
-      type: "stock_order_escrow",
-      turn: input.turn,
-      createdAt: now,
-      subjectType: "fund",
-      subjectId: fund._id,
-      subjectName: fund.name,
-      amount: -escrowAnchor,
-      anchorAmount: -escrowAnchor,
-      currencyCode: fund.anchorCurrencyCode,
-      counterpartyType: "system",
-      counterpartyName: "Order book escrow",
-      meta: {
-        orderId: orderId.toString(),
-        orderType: "buy",
-        targetCorporationId: corp._id.toString(),
-        escrowAmountAnchor: escrowAnchor,
-      },
-    };
-    if (input.ledgerSink) input.ledgerSink.push(ledgerEntry);
+    await db.collection<ShareOrder>("shareOrders").insertOne(rows.order);
+    if (input.txSink) input.txSink.push(rows.escrowTx);
+    else await insertFundTransaction(db, rows.escrowTx);
+    if (input.ledgerSink) input.ledgerSink.push(rows.ledgerEntry);
     else
-      await emitTx(db, ledgerEntry, input.thresholds, {
+      await emitTx(db, rows.ledgerEntry, input.thresholds, {
         turnLengthMinutes: input.turnLengthMinutes,
       });
   } catch (err) {
@@ -183,6 +128,188 @@ export async function placeFundShareBuyOrder(
   }
 
   return { ok: true, orderId };
+}
+
+/** The resting order, escrow transaction and escrow ledger row of one fund bid. */
+function fundBuyOrderRows(
+  input: PlaceFundShareBuyOrderInput,
+  orderId: ObjectId,
+  escrowAmount: number,
+  escrowAnchor: number,
+  now: Date
+): {
+  order: ShareOrder;
+  escrowTx: Omit<IndexFundTransaction, "_id">;
+  ledgerEntry: TxInput;
+} {
+  const { fund, corp, shares, limitPriceLocal } = input;
+  const order = {
+    _id: orderId,
+    corporationId: corp._id,
+    placerFundId: fund._id,
+    type: "buy",
+    shares,
+    sharesRemaining: shares,
+    pricePerShare: limitPriceLocal,
+    escrowAmount,
+    escrowAnchor,
+    ...(input.liquidityQuote
+      ? {
+          liquidityProvider: true,
+          liquidityQuotedTurn: input.liquidityQuote.turn,
+          liquidityReferencePrice: input.liquidityQuote.referencePrice,
+        }
+      : {}),
+    status: "open",
+    createdAt: now,
+    updatedAt: now,
+  } as ShareOrder;
+  const escrowTx = {
+    fundId: fund._id,
+    kind: "public_float_buy" as const,
+    corporationId: corp._id,
+    shares,
+    amountAnchor: escrowAnchor,
+    note: "limit_buy_order_escrow",
+    createdAt: now,
+  };
+  // #992 tranche 4: fund-subject escrow leg. The debit already moved
+  // cashAnchor, so this row evidences it (same order_escrow reason as the
+  // character/corporation placement rows; the refund shares it so a
+  // placement nets against its own cancel per currency). Fund-subject rows
+  // never mirror, so this is the only ledger row for the debit.
+  const ledgerEntry: TxInput = {
+    type: "stock_order_escrow",
+    turn: input.turn,
+    createdAt: now,
+    subjectType: "fund",
+    subjectId: fund._id,
+    subjectName: fund.name,
+    amount: -escrowAnchor,
+    anchorAmount: -escrowAnchor,
+    currencyCode: fund.anchorCurrencyCode,
+    counterpartyType: "system",
+    counterpartyName: "Order book escrow",
+    meta: {
+      orderId: orderId.toString(),
+      orderType: "buy",
+      targetCorporationId: corp._id.toString(),
+      escrowAmountAnchor: escrowAnchor,
+    },
+  };
+  return { order, escrowTx, ledgerEntry };
+}
+
+export interface FundQuotePlacement {
+  bid: PlaceFundShareBuyOrderInput;
+  /** Ask placed only after this pair's bid lands, as in the one-at-a-time path. */
+  ask?: Omit<PlaceFundShareSellOrderInput, "fund" | "reservedOpenShares">;
+}
+
+/**
+ * Place one fund's bid/ask quote pairs in a fixed number of round trips. The
+ * one-at-a-time path debits each bid's escrow against the running balance and
+ * skips a pair whose bid it cannot fund; this replays exactly that decision
+ * sequence in memory from the fund's current cash, then takes the whole
+ * escrow in one balance-guarded debit and inserts every order together.
+ * Returns null (nothing written) if the cash moved underneath, so the caller
+ * can fall back to placing the quotes one at a time.
+ */
+export async function placeFundQuotesBatch(
+  db: Db,
+  fund: Pick<IndexFund, "_id" | "name" | "anchorCurrencyCode" | "holdings">,
+  placements: readonly FundQuotePlacement[],
+  reservedSharesByCorp: Map<string, number>
+): Promise<{
+  results: { bid: PlaceFundShareBuyOrderResult; ask?: PlaceFundShareBuyOrderResult }[];
+  escrowTxs: Omit<IndexFundTransaction, "_id">[];
+  ledgerEntries: TxInput[];
+} | null> {
+  const current = await db
+    .collection<IndexFund>("indexFunds")
+    .findOne({ _id: fund._id }, { projection: { cashAnchor: 1 } });
+  if (!current) return null;
+  let cash = current.cashAnchor;
+  let totalEscrow = 0;
+  const reserved = new Map(reservedSharesByCorp);
+  const now = new Date();
+  const orders: ShareOrder[] = [];
+  const escrowTxs: Omit<IndexFundTransaction, "_id">[] = [];
+  const ledgerEntries: TxInput[] = [];
+  const results: { bid: PlaceFundShareBuyOrderResult; ask?: PlaceFundShareBuyOrderResult }[] = [];
+  for (const { bid, ask } of placements) {
+    const { shares, limitPriceLocal, corp, fxRate } = bid;
+    if (!Number.isFinite(shares) || shares <= 0) {
+      results.push({ bid: { ok: false, reason: "Invalid share quantity" } });
+      continue;
+    }
+    if (!Number.isFinite(limitPriceLocal) || limitPriceLocal <= 0) {
+      results.push({ bid: { ok: false, reason: "Invalid limit price" } });
+      continue;
+    }
+    const escrowAmount = shares * limitPriceLocal;
+    const escrowAnchor = corpLiquidCapitalToAnchor(escrowAmount, corp, fxRate);
+    // Same gate as atomicallyDebitFundCashAnchor, against the running balance.
+    if (!Number.isFinite(escrowAnchor) || escrowAnchor <= 0 || !(cash >= escrowAnchor)) {
+      results.push({ bid: { ok: false, reason: "Insufficient fund cash for escrow" } });
+      continue;
+    }
+    cash -= escrowAnchor;
+    totalEscrow += escrowAnchor;
+    const orderId = new ObjectId();
+    const rows = fundBuyOrderRows({ ...bid, fund }, orderId, escrowAmount, escrowAnchor, now);
+    orders.push(rows.order);
+    escrowTxs.push(rows.escrowTx);
+    ledgerEntries.push(rows.ledgerEntry);
+    const result: { bid: PlaceFundShareBuyOrderResult; ask?: PlaceFundShareBuyOrderResult } = {
+      bid: { ok: true, orderId },
+    };
+    if (ask) {
+      const corpKey = ask.corp._id.toString();
+      const held = reserved.get(corpKey) ?? 0;
+      const decision = fundSellOrderDecision(fund, { ...ask, reservedOpenShares: held });
+      if (!decision.ok) {
+        result.ask = decision;
+      } else {
+        const askId = new ObjectId();
+        orders.push(fundSellOrderDoc({ ...ask, fund }, askId, now));
+        reserved.set(corpKey, held + ask.shares);
+        result.ask = { ok: true, orderId: askId };
+      }
+    }
+    results.push(result);
+  }
+  if (totalEscrow > 0) {
+    const debited = await db
+      .collection<IndexFund>("indexFunds")
+      .updateOne(
+        { _id: fund._id, cashAnchor: current.cashAnchor },
+        { $inc: { cashAnchor: -totalEscrow }, $set: { updatedAt: now } }
+      );
+    if (!debited.matchedCount) return null;
+  }
+  if (orders.length) {
+    try {
+      await db.collection<ShareOrder>("shareOrders").insertMany(orders, { ordered: true });
+    } catch (err) {
+      // Roll back the escrow of every bid whose order did not persist.
+      const landed = new Set(
+        (
+          await db
+            .collection<ShareOrder>("shareOrders")
+            .find({ _id: { $in: orders.map((order) => order._id) } }, { projection: { _id: 1 } })
+            .toArray()
+        ).map((row) => row._id.toString())
+      );
+      const lost = orders
+        .filter((order) => order.type === "buy" && !landed.has(order._id.toString()))
+        .reduce((sum, order) => sum + (order.escrowAnchor ?? 0), 0);
+      await refundFundCashAnchor(db, fund._id, lost);
+      throw err;
+    }
+  }
+  for (const [key, value] of reserved) reservedSharesByCorp.set(key, value);
+  return { results, escrowTxs, ledgerEntries };
 }
 
 export interface PlaceFundShareSellOrderInput {
@@ -206,15 +333,7 @@ export async function placeFundShareSellOrder(
   db: Db,
   input: PlaceFundShareSellOrderInput
 ): Promise<PlaceFundShareBuyOrderResult> {
-  const { fund, corp, shares, limitPriceLocal } = input;
-  if (!Number.isFinite(shares) || shares <= 0) {
-    return { ok: false, reason: "Invalid share quantity" };
-  }
-  if (!Number.isFinite(limitPriceLocal) || limitPriceLocal <= 0) {
-    return { ok: false, reason: "Invalid limit price" };
-  }
-
-  const holding = fund.holdings.find((row) => row.corporationId.toString() === corp._id.toString());
+  const { fund, corp } = input;
   const reserved =
     input.reservedOpenShares ??
     (
@@ -228,13 +347,47 @@ export async function placeFundShareSellOrder(
         })
         .toArray()
     ).reduce((sum, order) => sum + order.sharesRemaining, 0);
-  if ((holding?.shares ?? 0) - reserved < shares) {
+  const decision = fundSellOrderDecision(fund, { ...input, reservedOpenShares: reserved });
+  if (!decision.ok) return decision;
+
+  const orderId = new ObjectId();
+  await db
+    .collection<ShareOrder>("shareOrders")
+    .insertOne(fundSellOrderDoc(input, orderId, new Date()));
+  return { ok: true, orderId };
+}
+
+/** Validation and inventory check of one fund ask, given its open reservations. */
+function fundSellOrderDecision(
+  fund: Pick<IndexFund, "holdings">,
+  input: Pick<PlaceFundShareSellOrderInput, "corp" | "shares" | "limitPriceLocal"> & {
+    reservedOpenShares: number;
+  }
+): PlaceFundShareBuyOrderResult {
+  const { corp, shares, limitPriceLocal } = input;
+  if (!Number.isFinite(shares) || shares <= 0) {
+    return { ok: false, reason: "Invalid share quantity" };
+  }
+  if (!Number.isFinite(limitPriceLocal) || limitPriceLocal <= 0) {
+    return { ok: false, reason: "Invalid limit price" };
+  }
+  const holding = fund.holdings.find((row) => row.corporationId.toString() === corp._id.toString());
+  if ((holding?.shares ?? 0) - input.reservedOpenShares < shares) {
     return { ok: false, reason: "Insufficient unreserved fund shares" };
   }
+  return { ok: true };
+}
 
-  const now = new Date();
-  const orderId = new ObjectId();
-  await db.collection<ShareOrder>("shareOrders").insertOne({
+function fundSellOrderDoc(
+  input: Pick<
+    PlaceFundShareSellOrderInput,
+    "fund" | "corp" | "shares" | "limitPriceLocal" | "liquidityQuote"
+  >,
+  orderId: ObjectId,
+  now: Date
+): ShareOrder {
+  const { fund, corp, shares, limitPriceLocal } = input;
+  return {
     _id: orderId,
     corporationId: corp._id,
     placerFundId: fund._id,
@@ -253,9 +406,7 @@ export async function placeFundShareSellOrder(
     status: "open",
     createdAt: now,
     updatedAt: now,
-  });
-
-  return { ok: true, orderId };
+  } as ShareOrder;
 }
 
 /**
@@ -346,4 +497,70 @@ export async function cancelFundShareOrder(
       }
     }
   }
+}
+
+/**
+ * Cancel many open orders of one fund in three round trips: claim them in one
+ * bulk write, read back exactly which claims landed, refund their remaining
+ * escrow in one credit. Same claim-then-refund order, refund amounts and
+ * refund rows as {@link cancelFundShareOrder} one at a time; an order another
+ * worker already filled or cancelled is left alone. Returns true once the
+ * orders are handled.
+ */
+export async function cancelFundShareOrdersBatch(
+  db: Db,
+  fund: Pick<IndexFund, "_id" | "name" | "anchorCurrencyCode">,
+  orderIds: readonly ObjectId[],
+  turn: number | undefined,
+  options: { ledgerSink: TxInput[] }
+): Promise<boolean> {
+  if (!orderIds.length) return true;
+  const claimId = new ObjectId();
+  const now = new Date();
+  await db.collection<ShareOrder>("shareOrders").bulkWrite(
+    orderIds.map((_id) => ({
+      updateOne: {
+        filter: { _id, status: "open", placerFundId: fund._id },
+        update: { $set: { status: "cancelled", updatedAt: now, cancelClaimId: claimId } },
+      },
+    })),
+    { ordered: false }
+  );
+  const position = new Map(orderIds.map((id, i) => [id.toString(), i]));
+  const claimed = (
+    await db
+      .collection<ShareOrder>("shareOrders")
+      .find(
+        { _id: { $in: [...orderIds] }, cancelClaimId: claimId },
+        { projection: { _id: 1, type: 1, corporationId: 1, escrowAnchor: 1 } }
+      )
+      .toArray()
+  ).sort((a, b) => (position.get(a._id.toString()) ?? 0) - (position.get(b._id.toString()) ?? 0));
+  const refunds = claimed.filter((order) => (order.escrowAnchor ?? 0) > 0);
+  const refundAnchor = refunds.reduce((sum, order) => sum + (order.escrowAnchor ?? 0), 0);
+  if (refundAnchor > 0) await refundFundCashAnchor(db, fund._id, refundAnchor);
+  if (turn === undefined) return true;
+  for (const order of refunds) {
+    const amount = order.escrowAnchor ?? 0;
+    options.ledgerSink.push({
+      type: "stock_order_refund",
+      turn,
+      createdAt: now,
+      subjectType: "fund",
+      subjectId: fund._id,
+      subjectName: fund.name,
+      amount,
+      anchorAmount: amount,
+      currencyCode: fund.anchorCurrencyCode,
+      counterpartyType: "system",
+      counterpartyName: "Order book escrow",
+      meta: {
+        orderId: order._id.toString(),
+        orderType: order.type,
+        targetCorporationId: order.corporationId.toString(),
+        escrowAmountAnchor: amount,
+      },
+    });
+  }
+  return true;
 }

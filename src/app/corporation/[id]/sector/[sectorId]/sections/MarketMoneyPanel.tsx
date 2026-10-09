@@ -136,6 +136,16 @@ export default function MarketMoneyPanel({
           },
         ]
       : []),
+    ...(pnl.freightCostAnchor
+      ? [
+          {
+            key: "freight",
+            label: "Freight charges",
+            value: pnl.freightCostAnchor,
+            help: "Shipping paid for inbound commodities, billed separately from plant operating costs.",
+          },
+        ]
+      : []),
     {
       key: "other",
       label: "Other running costs",

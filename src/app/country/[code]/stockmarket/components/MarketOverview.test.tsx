@@ -13,6 +13,15 @@ const { createChart, setCandleData, setCompareData, setVolumeData, applyPriceOpt
   })
 );
 
+// The chart subscribes to market ticks; tests drive it by hand instead of the
+// shared turn-status poller (which would add its own fetches).
+const gameEvents = vi.hoisted(() => ({ handler: null as null | (() => void) }));
+vi.mock("@/hooks/useGameEvents", () => ({
+  useGameEvents: (handler: () => void) => {
+    gameEvents.handler = handler;
+  },
+}));
+
 vi.mock("@/contexts/CurrencyContext", () => ({
   useCurrency: () => ({ formatAmount: (value: number) => `${value}` }),
 }));
@@ -90,6 +99,32 @@ describe("MarketOverview loading", () => {
     expect(createChart.mock.calls[0][1].timeScale.tickMarkFormatter(1000)).toBe("T10");
     expect(createChart.mock.calls[0][1].localization.timeFormatter(1000)).toBe("T10");
     expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("reloads on each market tick and labels 15-minute candles with their clock time", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({ points: [candle], intradayTurns: 1, resolution: "15m" }),
+      }))
+    );
+    render(<MarketOverview exchangeFilter="global" />);
+    await waitFor(() => expect(setCandleData).toHaveBeenCalled());
+    expect(fetch).toHaveBeenCalledTimes(1);
+    // Quarter-hour candles: the axis shows the clock, the crosshair turn plus clock.
+    const expectedClock = new Date(1000 * 1000).toLocaleTimeString([], {
+      hour: "numeric",
+      minute: "2-digit",
+      timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    });
+    expect(createChart.mock.calls[0][1].timeScale.tickMarkFormatter(1000)).toBe(expectedClock);
+    expect(createChart.mock.calls[0][1].localization.timeFormatter(1000)).toBe(
+      `T10 ${expectedClock}`
+    );
+
+    gameEvents.handler?.();
+    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(2));
   });
 
   it("resolves color-mix theme tokens to colors accepted by the canvas chart", async () => {

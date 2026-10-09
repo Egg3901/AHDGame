@@ -60,6 +60,11 @@ export function idleCauseMeta(
       tone: "warning",
       help: "Recent sales did not support a full run, so your plants are producing less to avoid making more unsold goods. Output rises as buyers take more.",
     },
+    ramping: {
+      label: "Ramping up",
+      tone: "info",
+      help: `You sold everything you made last turn, so your ${sites} are stepping back up toward a full run. Output rises each turn while buyers keep taking it, faster when the market is short.`,
+    },
     strike: {
       label: "Strike",
       tone: "error",

@@ -405,6 +405,11 @@ describe("reabsorbSpunOutCorp", () => {
     const { resolveNationalCorporationForSector } = await import("./nationalCorporation");
     vi.mocked(resolveNationalCorporationForSector).mockResolvedValue({ _id: primaryId } as never);
 
+    db.collectionMocks.corporations.findOne.mockResolvedValue({
+      _id: shellId,
+      countryId: "US",
+      liquidCapital: 500,
+    });
     const { reabsorbSpunOutCorp } = await import("./privatizationAuction");
     await reabsorbSpunOutCorp(
       db as unknown as Db,
@@ -438,6 +443,16 @@ describe("reabsorbSpunOutCorp", () => {
     expect(corpUpd).toBeDefined();
     // Shell dissolved.
     expect(db.collectionMocks.corporations.deleteOne).toHaveBeenCalledWith({ _id: shellId });
+    expect(db.collectionMocks.corporationExits.updateOne).toHaveBeenCalledWith(
+      { _id: shellId },
+      {
+        $setOnInsert: expect.objectContaining({
+          reason: "privatization_reabsorbed",
+          successorId: primaryId,
+        }),
+      },
+      { upsert: true }
+    );
   });
 });
 

@@ -1,0 +1,275 @@
+/**
+ * Regional variation in presidential primaries.
+ *
+ * Almost every lever in the primary vote weight is national: reach, approval,
+ * party fit, party influence, the NPP penalty, mood and momentum are the same
+ * number in every state, so each candidate's ratio to their rivals carried
+ * straight through to every state's share. Rivals in one party also sit on the
+ * same side of both axes, so the per-state ideology term barely told them
+ * apart. The result was a primary map that read the same coast to coast.
+ *
+ * Three levers, all presidential-primary only (general elections are not
+ * touched):
+ *
+ * 1. A fixed per-state swing per candidate: a log-normal multiplier drawn from
+ *    a hash of the race, the state and the candidate. It is a pure function of
+ *    those ids, so a race always replays identically (singleplayer reloads, the
+ *    projection and the live wave agree) and no rng has to be threaded through.
+ * 2. Ideology counts for more: each demographic group's appeal is raised to a
+ *    power above one before the group's vote is split, which widens the gap
+ *    between a candidate who fits a state's primary voters and one who does
+ *    not.
+ * 3. A home-region pull: a candidate does a little better across their home
+ *    state's census division, not only in the home state itself.
+ *
+ * Plain data in, plain data out: no database, clock, environment or
+ * `Math.random`.
+ */
+
+/** Spread of the per-state swing: the log-normal sigma. 0.15 is about ±15% at one sigma. */
+export const PRIMARY_STATE_SWING_SIGMA = 0.15;
+/** The swing's z-score is clamped here so no state gets a freak multiplier. */
+export const PRIMARY_STATE_SWING_Z_CAP = 2.5;
+/** Exponent applied to group appeal in presidential primaries. 1 would be the old behaviour. */
+export const PRIMARY_APPEAL_SHARPNESS = 1.5;
+/** Bonus across the candidate's home census division, outside the home state itself. */
+export const HOME_DIVISION_BONUS_PRIMARY = 0.06;
+
+/** FNV-1a 32-bit, mapped into the open interval (0, 1). */
+export function hashUnit(key: string): number {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < key.length; i++) {
+    h ^= key.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  // Keep away from 0 and 1 so the log in Box-Muller is finite.
+  return ((h >>> 0) + 0.5) / 4294967296;
+}
+
+/** A standard normal draw that is a pure function of `key` (Box-Muller). */
+export function hashNormal(key: string): number {
+  const u1 = hashUnit(`${key}#u1`);
+  const u2 = hashUnit(`${key}#u2`);
+  return Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
+}
+
+/**
+ * The fixed swing for one candidate in one state of one race, a multiplier
+ * around 1 (median exactly 1). `seed` identifies the race; a missing seed or
+ * state means no swing.
+ */
+export function primaryStateSwing(
+  seed: string | null | undefined,
+  stateId: string | null | undefined,
+  candidateId: string,
+  sigma: number = PRIMARY_STATE_SWING_SIGMA
+): number {
+  if (!seed || !stateId || sigma <= 0) return 1;
+  const z = hashNormal(`${seed}|${stateId}|${candidateId}`);
+  const capped = Math.max(-PRIMARY_STATE_SWING_Z_CAP, Math.min(PRIMARY_STATE_SWING_Z_CAP, z));
+  return Math.exp(sigma * capped);
+}
+
+/** Group appeal sharpened for a presidential primary. Non-positive appeal stays at zero. */
+export function sharpenPrimaryAppeal(
+  appeal: number,
+  sharpness: number = PRIMARY_APPEAL_SHARPNESS
+): number {
+  return appeal > 0 ? Math.pow(appeal, sharpness) : 0;
+}
+
+/** US Census Bureau divisions. DC sits in the South Atlantic division. */
+// prettier-ignore
+export const US_CENSUS_DIVISION: Readonly<Record<string, string>> = {
+  CT: "NE", ME: "NE", MA: "NE", NH: "NE", RI: "NE", VT: "NE",
+  NJ: "MA", NY: "MA", PA: "MA",
+  IL: "ENC", IN: "ENC", MI: "ENC", OH: "ENC", WI: "ENC",
+  IA: "WNC", KS: "WNC", MN: "WNC", MO: "WNC", NE: "WNC", ND: "WNC", SD: "WNC",
+  DE: "SA", DC: "SA", FL: "SA", GA: "SA", MD: "SA", NC: "SA", SC: "SA", VA: "SA", WV: "SA",
+  AL: "ESC", KY: "ESC", MS: "ESC", TN: "ESC",
+  AR: "WSC", LA: "WSC", OK: "WSC", TX: "WSC",
+  AZ: "MT", CO: "MT", ID: "MT", MT: "MT", NV: "MT", NM: "MT", UT: "MT", WY: "MT",
+  AK: "PAC", CA: "PAC", HI: "PAC", OR: "PAC", WA: "PAC",
+};
+
+/**
+ * The home-region multiplier for a candidate in `stateId`: the division bonus
+ * when the state shares the home state's division, 1 otherwise. The home
+ * state itself is excluded; it has its own, larger bonus.
+ */
+export function homeDivisionMultiplier(
+  homeStateId: string | null | undefined,
+  stateId: string | null | undefined,
+  bonus: number = HOME_DIVISION_BONUS_PRIMARY
+): number {
+  if (!homeStateId || !stateId || homeStateId === stateId) return 1;
+  const home = US_CENSUS_DIVISION[homeStateId.toUpperCase()];
+  const here = US_CENSUS_DIVISION[stateId.toUpperCase()];
+  return home && home === here ? 1 + bonus : 1;
+}
+
+// ── County results inside a state's primary ─────────────────────────────────
+
+/**
+ * How strongly a candidate's ideology, relative to the rest of the field,
+ * moves their share between a state's left- and right-leaning counties.
+ */
+export const PRIMARY_COUNTY_LEAN_BETA = 0.15;
+/** County lean (Cook PVI points) that counts as one unit of "more left / more right". */
+export const PRIMARY_COUNTY_LEAN_SCALE = 12;
+/** Fixed per-county texture, smaller than the state swing. */
+export const PRIMARY_COUNTY_SWING_SIGMA = 0.08;
+
+export interface PrimaryCountyInput {
+  id: string;
+  name: string;
+  /** Population or electorate; the county's share of the state's turnout. */
+  electorate: number;
+  /** PVI-like lean: negative left, positive right. */
+  lean?: number;
+}
+
+export interface PrimaryCountyResult {
+  id: string;
+  name: string;
+  votes: Record<string, number>;
+}
+
+/**
+ * Split one party's primary result in a state across its counties.
+ *
+ * The state-level votes are the truth: every candidate's county votes add back
+ * up to their state total. Inside that, a candidate to the left of the field
+ * (vote-weighted mean economic position) does better in the state's
+ * left-leaning counties and worse in its right-leaning ones, measured against
+ * the state's own average lean so a deep-red state still has relative swing.
+ * A small fixed per-county texture keeps neighbouring counties from reading as
+ * one block. Pure: same inputs, same counties.
+ */
+export function distributePrimaryCounties(
+  counties: PrimaryCountyInput[],
+  stateVotes: Record<string, number>,
+  econByCandidate: Record<string, number>,
+  seed: string,
+  stateId: string,
+  /**
+   * Extra pull per county per candidate (countyId → candidateId → multiplier),
+   * e.g. a field office. Moves a candidate's state votes toward those counties;
+   * the state totals do not change.
+   */
+  countyBoost?: Readonly<Record<string, Readonly<Record<string, number>>>>
+): PrimaryCountyResult[] {
+  const ids = Object.keys(stateVotes).filter((id) => stateVotes[id] > 0);
+  const totalVotes = ids.reduce((s, id) => s + stateVotes[id], 0);
+  const totalElectorate = counties.reduce((s, c) => s + Math.max(0, c.electorate), 0);
+  if (ids.length === 0 || totalVotes <= 0 || totalElectorate <= 0) return [];
+
+  const meanLean =
+    counties.reduce((s, c) => s + (c.lean ?? 0) * Math.max(0, c.electorate), 0) / totalElectorate;
+  const fieldEcon =
+    ids.reduce((s, id) => s + (econByCandidate[id] ?? 0) * stateVotes[id], 0) / totalVotes;
+
+  const rows = counties.map((c) => {
+    const turnout = totalVotes * (Math.max(0, c.electorate) / totalElectorate);
+    const dLean = ((c.lean ?? meanLean) - meanLean) / PRIMARY_COUNTY_LEAN_SCALE;
+    const raw: Record<string, number> = {};
+    let rawTotal = 0;
+    for (const id of ids) {
+      const rel = (econByCandidate[id] ?? fieldEcon) - fieldEcon;
+      // Left of the field (rel < 0) gains where the county leans left (dLean < 0).
+      // rel = 2 points left of the field in a county 2 units more left than
+      // the state: exp(0.15 * 2 * 2), about 1.8x before normalisation.
+      const tilt = Math.exp(PRIMARY_COUNTY_LEAN_BETA * rel * dLean);
+      const texture = primaryStateSwing(seed, `${stateId}:${c.id}`, id, PRIMARY_COUNTY_SWING_SIGMA);
+      const boost = countyBoost?.[c.id]?.[id] ?? 1;
+      raw[id] = (stateVotes[id] / totalVotes) * tilt * texture * boost;
+      rawTotal += raw[id];
+    }
+    const votes: Record<string, number> = {};
+    for (const id of ids) votes[id] = rawTotal > 0 ? (raw[id] / rawTotal) * turnout : 0;
+    return { id: c.id, name: c.name, votes };
+  });
+
+  // Rescale each candidate so the counties sum to their state total exactly.
+  for (const id of ids) {
+    const sum = rows.reduce((s, r) => s + r.votes[id], 0);
+    const scale = sum > 0 ? stateVotes[id] / sum : 0;
+    for (const r of rows) r.votes[id] = Math.round(r.votes[id] * scale);
+  }
+  return rows;
+}
+
+// ── Win momentum ─────────────────────────────────────────────────────────────
+
+/**
+ * Winning primaries builds momentum: each state a candidate has won in an
+ * earlier wave adds a moderate vote boost in later waves. Older wins count for
+ * less, and the total is capped, so momentum tips close states without
+ * flattening the regional swing.
+ */
+/** Percent of vote per state won, in the wave just gone. */
+export const PRIMARY_WIN_MOMENTUM_PER_STATE = 1.5;
+/** Weight of a win per wave of age: a win two waves back counts 0.85^2. */
+export const PRIMARY_WIN_MOMENTUM_DECAY = 0.85;
+/** Ceiling on the boost, in percent. */
+export const PRIMARY_WIN_MOMENTUM_CAP = 8;
+
+/**
+ * Momentum multiplier per candidate, from the waves already run.
+ *
+ * `waves` is the wave history in order (oldest first), each the states that
+ * voted in it; `stateVotes` is stateId → candidateId → votes for one party (or
+ * several, since candidate ids are unique across parties). A state counts as a
+ * win for its top vote-getter; ties and empty states count for nobody.
+ */
+export function primaryWinMomentum(
+  waves: readonly { statesVoted: readonly string[] }[],
+  stateVotes: Readonly<Record<string, Readonly<Record<string, number>>>>,
+  {
+    perState = PRIMARY_WIN_MOMENTUM_PER_STATE,
+    decay = PRIMARY_WIN_MOMENTUM_DECAY,
+    cap = PRIMARY_WIN_MOMENTUM_CAP,
+  }: { perState?: number; decay?: number; cap?: number } = {}
+): Record<string, number> {
+  const points: Record<string, number> = {};
+  const last = waves.length - 1;
+  waves.forEach((wave, i) => {
+    const weight = Math.pow(decay, last - i);
+    for (const stateId of wave.statesVoted) {
+      const ranked = Object.entries(stateVotes[stateId] ?? {})
+        .filter(([, v]) => v > 0)
+        .sort((a, b) => b[1] - a[1]);
+      if (ranked.length === 0) continue;
+      if (ranked.length > 1 && ranked[0][1] === ranked[1][1]) continue;
+      const winner = ranked[0][0];
+      points[winner] = (points[winner] ?? 0) + perState * weight;
+    }
+  });
+  const out: Record<string, number> = {};
+  for (const [id, pts] of Object.entries(points)) out[id] = 1 + Math.min(cap, pts) / 100;
+  return out;
+}
+
+/**
+ * Win momentum for every candidate in a race, from its vote tally. Merges all
+ * parties (candidate ids are unique across them). Empty before the first wave.
+ */
+export function primaryWinMomentumFromTally(
+  tally:
+    | {
+        primaryWaveHistory?: readonly { statesVoted: readonly string[] }[];
+        primaryStateVotes?: Readonly<
+          Record<string, Readonly<Record<string, Readonly<Record<string, number>>>>>
+        >;
+      }
+    | null
+    | undefined
+): Record<string, number> {
+  const waves = tally?.primaryWaveHistory ?? [];
+  if (waves.length === 0) return {};
+  const out: Record<string, number> = {};
+  for (const byState of Object.values(tally?.primaryStateVotes ?? {})) {
+    Object.assign(out, primaryWinMomentum(waves, byState));
+  }
+  return out;
+}

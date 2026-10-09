@@ -94,6 +94,73 @@ describe("accumulateNGPresidentVoteTurn", () => {
     expect(tallies.updateOne.mock.calls[0][1].$set.lastAccruedTurn).toBe(461);
   });
 
+  describe("half-hour split turns", () => {
+    async function run(tally: Record<string, unknown>, slice?: "early") {
+      const db = createMockDb();
+      const electionId = new ObjectId();
+      const tallies = db.collection("electionVoteTallies");
+      tallies.findOne.mockResolvedValue({
+        electionId,
+        candidateParties: { a: "apc", b: "pdp" },
+        totalVotes: {},
+        totalVotesByUnit: {},
+        finalized: false,
+        ...tally,
+      });
+      db.collection("states").find.mockReturnValue({
+        toArray: vi
+          .fn()
+          .mockResolvedValue(NG_ZONES.map((z) => ({ _id: z, population: 1_000_000 }))),
+      });
+      db.collection("statePartyOrg").find.mockReturnValue({
+        toArray: vi.fn().mockResolvedValue(
+          NG_ZONES.flatMap((z) => [
+            { countryId: "NG", stateId: z, partyId: "apc", organization: 70 },
+            { countryId: "NG", stateId: z, partyId: "pdp", organization: 30 },
+          ])
+        ),
+      });
+      await accumulateNGPresidentVoteTurn(
+        db as unknown as Db,
+        electionId,
+        NOW,
+        461,
+        slice ? { slice } : undefined
+      );
+      return tallies.updateOne;
+    }
+
+    it("banks half the slice early and the rest on the turn, exactly one slice", async () => {
+      const whole = await run({ lastAccruedTurn: 460 });
+      const early = await run({ lastAccruedTurn: 460 }, "early");
+      const rest = await run({ lastAccruedTurn: 461, lastAccruedSlice: "early" });
+      const [wholeFilter, wholeUpdate] = whole.mock.calls[0];
+      const [earlyFilter, earlyUpdate] = early.mock.calls[0];
+      const [restFilter, restUpdate] = rest.mock.calls[0];
+      for (const id of ["a", "b"]) {
+        expect(earlyUpdate.$set.totalVotes[id] + restUpdate.$set.totalVotes[id]).toBe(
+          wholeUpdate.$set.totalVotes[id]
+        );
+      }
+      expect(wholeFilter.lastAccruedTurn).toEqual({ $ne: 461 });
+      expect(earlyFilter.lastAccruedTurn).toEqual({ $ne: 461 });
+      expect(earlyUpdate.$set).toMatchObject({ lastAccruedTurn: 461, lastAccruedSlice: "early" });
+      expect(earlyUpdate.$unset).toBeUndefined();
+      expect(restFilter).toMatchObject({ lastAccruedTurn: 461, lastAccruedSlice: "early" });
+      expect(restUpdate.$set.lastAccruedTurn).toBe(461);
+      expect(restUpdate.$unset).toEqual({ lastAccruedSlice: "" });
+      expect(wholeUpdate.$unset).toEqual({ lastAccruedSlice: "" });
+    });
+
+    it.each<[string, Record<string, unknown>, "early" | undefined]>([
+      ["a second early tick", { lastAccruedTurn: 461, lastAccruedSlice: "early" }, "early"],
+      ["an early tick after the whole turn", { lastAccruedTurn: 461 }, "early"],
+      ["the turn after it was counted whole", { lastAccruedTurn: 461 }, undefined],
+    ])("counts nothing on %s", async (_label, tally, slice) => {
+      expect(await run(tally, slice)).not.toHaveBeenCalled();
+    });
+  });
+
   it("is a no-op once the tally is finalized", async () => {
     const db = createMockDb();
     const electionId = new ObjectId();

@@ -13,13 +13,17 @@ import {
 import { allocateSeats } from "@/lib/turn/election/seatAllocation";
 import type { ElectionVoteTally, PoliticalParty } from "@/lib/db/types";
 import { getPartyHex } from "@/lib/utils/politics";
+import { getGameStatePresetOrDefault } from "@/lib/db/collections/gameState";
 
 // GET /api/elections/[id]/state/[stateId]/subdivision-results — sub-region
 // vote distribution + seat-consistent winners for a region in an election.
+// Optional `?turn=N` (concluded presidential races only): the counties as of
+// that turn, from the tally's per-turn state snapshot, for the race replay. A
+// live race is refused so its past weeks cannot be read ahead of the screen.
 // Auth: public
 // Errors: 400, 404
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string; stateId: string }> }
 ) {
   try {
@@ -28,6 +32,11 @@ export async function GET(
     // regionId feeds a filesystem path — reject anything but region-code shapes.
     if (!/^[A-Z]{2,3}$/.test(regionId)) {
       return errorResponse(400, "Invalid region ID");
+    }
+    const turnParam = req.nextUrl.searchParams.get("turn");
+    const atTurn = turnParam == null ? null : Number(turnParam);
+    if (atTurn != null && (!Number.isInteger(atTurn) || atTurn < 0)) {
+      return errorResponse(400, "Invalid turn");
     }
 
     const db = await getDb();
@@ -45,14 +54,32 @@ export async function GET(
       return errorResponse(404, "Subdivision map data is not available for this election");
     }
 
-    const data = await loadSubdivisionFile(modeEntry.config.dataDir, regionId);
+    // County leans follow the world's era (a 1991 world starts from 1984/1988).
+    const data = await loadSubdivisionFile(modeEntry.config.dataDir, regionId, {
+      preset: await getGameStatePresetOrDefault(db),
+    });
     if (!data) {
       return errorResponse(404, "Subdivision data not available for this region");
     }
 
-    const tally = await db
-      .collection<ElectionVoteTally>("electionVoteTallies")
-      .findOne({ electionId: election._id });
+    // Projected: a presidential tally carries per-turn snapshots for every
+    // state and runs to megabytes; this route needs one state's slice. The map
+    // requests a state at a time as the reader zooms, so the full read made
+    // every county load crawl.
+    const tally = await db.collection<ElectionVoteTally>("electionVoteTallies").findOne(
+      { electionId: election._id },
+      {
+        projection: {
+          state: 1,
+          totalVotes: 1,
+          [`totalVotesByUnit.${regionId}`]: 1,
+          candidateNames: 1,
+          candidateParties: 1,
+          seatsEstimate: 1,
+          ...(atTurn != null ? { [`unitTurnSnapshots.${regionId}`]: 1 } : {}),
+        },
+      }
+    );
     if (!tally) return errorResponse(404, "No tally found");
     // Presidential tallies span all regions (aggregated below); everything else
     // must be the requested region's own tally — legacy county-results behavior.
@@ -61,9 +88,23 @@ export async function GET(
       return errorResponse(400, "Tally state mismatch");
     }
 
-    const regionVotes = isPresident
+    let regionVotes = isPresident
       ? (tally.totalVotesByUnit?.[regionId] ?? tally.totalVotes)
       : tally.totalVotes;
+    if (atTurn != null) {
+      if (!isPresident || !["resolved", "completed"].includes(String(election.status))) {
+        return errorResponse(
+          400,
+          "Turn replay is only available for a concluded presidential race"
+        );
+      }
+      // The state's last snapshot at or before the turn.
+      const snap = (tally.unitTurnSnapshots?.[regionId] ?? [])
+        .filter((s) => s.turn <= atTurn)
+        .sort((a, b) => b.turn - a.turn)[0];
+      if (!snap) return errorResponse(404, "No result for this state at that turn");
+      regionVotes = snap.cumulativeVotes;
+    }
 
     // Party docs: colors, economic positions, and abbreviations for baselines.
     const uniquePartySeqIds = [...new Set(Object.values(tally.candidateParties ?? {}))]

@@ -14,6 +14,10 @@ import { COUNTRY_CURRENCY_MAP, type CurrencyCode } from "@/lib/constants/currenc
 import { getNextSequentialId } from "@/lib/db/sequentialId";
 import { getGameStatePresetOrDefault } from "@/lib/db/collections/gameState";
 import { getEraFounderShares } from "@/lib/constants/sectorSeedEra";
+import { autoGrantedNodeIds } from "@/lib/constants/techTree";
+import { STARTING_YEAR } from "@/lib/constants/turnTime";
+import { resolveGameYear } from "@/lib/era/era";
+import { getGameState } from "@/lib/gameState";
 import {
   generateTickerSymbol,
   insertCorporationWithTickerRetry,
@@ -203,6 +207,14 @@ export async function spinOff(
       CEO_INITIAL_SHARES,
       await getGameStatePresetOrDefault(db)
     );
+    // Passed-decade baseline tech, exactly as a newly founded corp gets it
+    // (suggestion #363). Without it the moved sectors lost their tech margin,
+    // build discount and input/output bonuses the moment they changed hands.
+    const gameState = await getGameState(db);
+    const baselineTechNodeIds =
+      gameState?.sectorTechTreesEnabled === true
+        ? autoGrantedNodeIds(sectorType, resolveGameYear(gameState) ?? STARTING_YEAR)
+        : [];
     // Create the wholly parent-owned private corp. Parent holds 100% of shares.
     const corpDoc: Omit<Corporation, "_id"> & { _id: ObjectId } = {
       _id: newCorpId,
@@ -251,6 +263,7 @@ export async function spinOff(
       spunOffAtTurn: turn,
       subsidiaryFormalizedAtTurn: turn,
       foundedAtTurn: turn,
+      ...(baselineTechNodeIds.length > 0 ? { unlockedTechNodeIds: baselineTechNodeIds } : {}),
       createdAt: now,
       updatedAt: now,
     };

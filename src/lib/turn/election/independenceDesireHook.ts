@@ -1,11 +1,10 @@
 /**
  * Soft electoral hook for UK SCO/WAL/NIR Independence/Reunification Desire.
  *
- * When resolving a SCO/WAL/NIR general election, the seated FM's policy + the
- * region's `independenceDesire` metric translate into a small vote-share
- * nudge: pro-independence parties get a boost when desire is high, main
- * unionist rivals split the corresponding penalty. Capped at ±5pp per party
- * by the linear formula (desire − 50) × 0.001 (range −0.05 .. +0.05).
+ * When resolving a SCO/WAL/NIR general election, the region's
+ * `independenceDesire` metric translates into a small vote-share nudge for the
+ * legacy independence parties and a stepped bonus for the current First
+ * Minister's party when the office is pursuing independence or reunification.
  *
  * See docs/design/uk-devolution-policy.md §"Soft electoral hook".
  *
@@ -15,8 +14,11 @@
  */
 import type { Db } from "mongodb";
 import type { MacroMetricsDoc } from "@/lib/db/types/macroMetrics";
-import type { PoliticalParty } from "@/lib/db/types";
-import { isUKDevolutionRegion, proIndyHighDesireBonus } from "@/lib/constants/devolution";
+import type { ElectedOfficial, GovernorOfficeState, PoliticalParty } from "@/lib/db/types";
+import type { DevolutionPolicy } from "@/lib/db/types/governorOfficeState";
+import { getRegionalExecutiveOfficeKey } from "@/lib/constants/countries";
+import { isUKDevolutionRegion } from "@/lib/constants/devolution";
+import { applyFirstMinisterHighDesireBonus } from "@/lib/turn/election/rules/highDesireElectionBonus";
 
 /** Election types where the hook is applied. */
 const HOOKED_ELECTION_TYPES = new Set(["commons", "snap_commons", "regionalCouncil", "governor"]);
@@ -37,6 +39,68 @@ function shareNudgeFromDesire(desire: number): number {
 export interface CandidateLite {
   _id: import("mongodb").ObjectId;
   party: string;
+}
+
+export interface FirstMinisterBonusContext {
+  firstMinisterPartyId: string | null;
+  devolutionPolicy: DevolutionPolicy | null;
+}
+
+/**
+ * Batch-load the office inputs used by the high-desire bonus. Call once before
+ * resolving a group of elections, never once per election.
+ */
+export async function loadFirstMinisterBonusContexts(
+  db: Db,
+  regions: readonly string[]
+): Promise<Map<string, FirstMinisterBonusContext>> {
+  const normalizedRegions = [
+    ...new Set(regions.map((region) => region.toUpperCase()).filter(isUKDevolutionRegion)),
+  ];
+  if (normalizedRegions.length === 0) return new Map();
+
+  const [officeHolders, officeStates] = await Promise.all([
+    db
+      .collection<ElectedOfficial>("electedOfficials")
+      .find(
+        {
+          countryId: "UK",
+          officeType: getRegionalExecutiveOfficeKey("UK"),
+          state: { $in: normalizedRegions },
+        },
+        { projection: { state: 1, party: 1 } }
+      )
+      .toArray(),
+    db
+      .collection<GovernorOfficeState>("governorOfficeState")
+      .find(
+        { countryId: "UK", stateId: { $in: normalizedRegions } },
+        { projection: { stateId: 1, devolutionPolicy: 1 } }
+      )
+      .toArray(),
+  ]);
+
+  const partyByRegion = new Map(
+    officeHolders
+      .filter((holder): holder is ElectedOfficial & { state: string } => !!holder.state)
+      .map((holder) => [holder.state.toUpperCase(), holder.party ?? null])
+  );
+  const policyByRegion = new Map(
+    officeStates.map((officeState) => [
+      officeState.stateId.toUpperCase(),
+      officeState.devolutionPolicy ?? null,
+    ])
+  );
+
+  return new Map(
+    normalizedRegions.map((region) => [
+      region,
+      {
+        firstMinisterPartyId: partyByRegion.get(region) ?? null,
+        devolutionPolicy: policyByRegion.get(region) ?? null,
+      },
+    ])
+  );
 }
 
 /**
@@ -121,49 +185,6 @@ export function applyIndependenceDesireNudge(args: {
   return { adjustedVotes: adjusted, nudgeApplied: nudge };
 }
 
-/**
- * Apply the stepped high-desire vote-gain bonus to the region's pro-indy
- * party. Pure ADDITION — no rival penalty, total votes increase. Stacks
- * on top of the soft electoral transfer (`applyIndependenceDesireNudge`).
- *
- * Bonus magnitude comes from `proIndyHighDesireBonus(desire)` (stepped at
- * 60/70/80/90/100 thresholds). Applied as a per-candidate multiplier:
- *   votes[c] = votes[c] × (1 + bonus)
- * for every candidate whose party is the region's pro-indy slug.
- */
-export function applyProIndyHighDesireBonus(args: {
-  effectiveVotes: Record<string, number>;
-  candidates: CandidateLite[];
-  partyBySeq: Map<string, string>;
-  desire: number;
-  region: string;
-}): { adjustedVotes: Record<string, number>; bonusApplied: number } {
-  const { effectiveVotes, candidates, partyBySeq, desire, region } = args;
-  const regionMap = REGION_PARTY_MAP[region.toUpperCase()];
-  if (!regionMap) return { adjustedVotes: effectiveVotes, bonusApplied: 0 };
-
-  const bonus = proIndyHighDesireBonus(desire);
-  if (bonus === 0) return { adjustedVotes: effectiveVotes, bonusApplied: 0 };
-
-  const proIndyIds: string[] = [];
-  for (const c of candidates) {
-    const slug = partyBySeq.get(c.party);
-    if (!slug) continue;
-    if (regionMap.proIndy.includes(slug)) {
-      proIndyIds.push(c._id.toString());
-    }
-  }
-  if (proIndyIds.length === 0) {
-    return { adjustedVotes: effectiveVotes, bonusApplied: 0 };
-  }
-
-  const adjusted: Record<string, number> = { ...effectiveVotes };
-  for (const id of proIndyIds) {
-    adjusted[id] = (adjusted[id] ?? 0) * (1 + bonus);
-  }
-  return { adjustedVotes: adjusted, bonusApplied: bonus };
-}
-
 /** Distribute `delta` across `cands` proportional to their existing votes.
  *  When all candidates have 0 votes, splits evenly. */
 function distributeWithinParty(
@@ -229,9 +250,9 @@ function deriveUKSlug(name: string, abbr: string): string | null {
 
 /**
  * High-level entry: looks up the region's independenceDesire + party-slug
- * map, applies BOTH (a) the soft electoral transfer nudge and (b) the
- * stepped pro-indy high-desire bonus, in that order. Returns the input
- * unchanged if the election doesn't qualify.
+ * map, applies BOTH (a) the soft electoral transfer nudge and (b) the stepped
+ * First Minister party bonus, in that order. Returns the input unchanged if
+ * the election doesn't qualify.
  */
 export async function maybeApplyIndependenceDesireHook(
   db: Db,
@@ -242,14 +263,20 @@ export async function maybeApplyIndependenceDesireHook(
     effectiveVotes: Record<string, number>;
     candidates: CandidateLite[];
     totalVotes: number;
+    bonusContext?: FirstMinisterBonusContext | null;
   }
 ): Promise<{
   adjustedVotes: Record<string, number>;
   nudgeApplied: number;
-  proIndyBonusApplied: number;
+  firstMinisterBonusApplied: number;
 }> {
-  const noop = { adjustedVotes: args.effectiveVotes, nudgeApplied: 0, proIndyBonusApplied: 0 };
-  const { countryId, electionType, state, effectiveVotes, candidates, totalVotes } = args;
+  const noop = {
+    adjustedVotes: args.effectiveVotes,
+    nudgeApplied: 0,
+    firstMinisterBonusApplied: 0,
+  };
+  const { countryId, electionType, state, effectiveVotes, candidates, totalVotes, bonusContext } =
+    args;
   if (countryId !== "UK") return noop;
   if (!state || !isUKDevolutionRegion(state)) return noop;
   if (!HOOKED_ELECTION_TYPES.has(electionType)) return noop;
@@ -273,19 +300,23 @@ export async function maybeApplyIndependenceDesireHook(
     region: state,
   });
 
-  // Step 2: stepped pro-indy bonus (additive vote gain, no rival penalty)
-  // applied on top of the already-transferred tally.
-  const boost = applyProIndyHighDesireBonus({
+  // Step 2: additive vote gain for the qualifying First Minister's party,
+  // applied on top of the already-transferred tally with no rival penalty.
+  const boost = applyFirstMinisterHighDesireBonus({
     effectiveVotes: transfer.adjustedVotes,
-    candidates,
-    partyBySeq,
+    candidates: candidates.map((candidate) => ({
+      id: candidate._id.toString(),
+      partyId: candidate.party,
+    })),
     desire,
     region: state,
+    firstMinisterPartyId: bonusContext?.firstMinisterPartyId ?? null,
+    devolutionPolicy: bonusContext?.devolutionPolicy ?? null,
   });
 
   return {
     adjustedVotes: boost.adjustedVotes,
     nudgeApplied: transfer.nudgeApplied,
-    proIndyBonusApplied: boost.bonusApplied,
+    firstMinisterBonusApplied: boost.bonusApplied,
   };
 }

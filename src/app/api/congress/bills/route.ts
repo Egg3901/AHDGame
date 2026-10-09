@@ -2,17 +2,14 @@
  * GET  /api/congress/bills?chamber=house|senate|joint&status=...&page=1
  * POST /api/congress/bills  — propose a new bill (immediately opens voting)
  */
-import { validateElectoralLawProvision } from "@/lib/elections/electoralLaws";
-import type { ElectoralLawProvision } from "@/lib/db/types/legislation";
 import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { getAuthUser } from "@/lib/auth";
-import { getEnabledCountryIds } from "@/lib/countryAccess";
 import { getCharacterByUserId } from "@/lib/db/characterLookup";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError, errorResponse } from "@/lib/api/errors";
+import { handleRouteError, errorResponse, statusResponse } from "@/lib/api/errors";
 import { checkRateLimit, CONGRESS_LIMITS, rateLimitResponse } from "@/lib/api/rateLimit";
 import { logRequest } from "@/lib/api/requestLog";
 import { proposeBillSchema } from "@/lib/api/schemas/congress";
@@ -24,69 +21,16 @@ import {
   buildOverrideDisplay,
   type OverrideChamberDisplay,
 } from "@/lib/congress/vetoOverrideTally";
-import {
-  checkDuplicateProvisions,
-  checkDuplicateResetLawFamilies,
-  checkDuplicateTariffProvisions,
-  checkCurrentPolicyLevel,
-  NATIONAL_TERMINAL_STATUSES,
-} from "@/lib/congress/billProposalLimits";
-import { snapshotBillPolicyProvisions, validateBillProvisions } from "@/lib/congress/billProposal";
-import { resolveTaxSliderProvisionFields } from "@/lib/politicalLegislation/taxSlider";
+import { NATIONAL_TERMINAL_STATUSES } from "@/lib/congress/billProposalLimits";
 import { canonicalizeLegislationTypeId } from "@/lib/legislationTypeAliases";
-import { getEraContext } from "@/lib/era/context";
-import { isLegislationTypeActive } from "@/lib/era/legislationCatalog";
-import type {
-  Bill,
-  BillChamber,
-  BillStatus,
-  BillProvision,
-  Character,
-  ElectedOfficial,
-  GameState,
-  LegislationType,
-  PoliticalParty,
-} from "@/lib/db/types";
+import type { Bill, Character, ElectedOfficial, PoliticalParty } from "@/lib/db/types";
 import { isPolicyProvision } from "@/lib/db/types/legislation";
-import type {
-  EmbargoProvision,
-  EndEmbargoProvision,
-  UnionLawProvision,
-  ResetLawProvision,
-} from "@/lib/db/types/legislation";
-import type { CountryId } from "@/lib/constants/countries";
-import type { OperatingSectorType } from "@/lib/constants/corporations";
-import type { CommodityType } from "@/lib/constants/commodities";
 import type { BillDisplay, BillsResponse } from "@/lib/legislature/dto/billDisplay";
-import {
-  CATEGORY_TO_POLICY_DOMAINS,
-  SUBSIDY_BILL_CATEGORIES,
-  NATIONALIZATION_BILL_CATEGORIES,
-  UNION_LAW_BILL_CATEGORIES,
-  BILL_PROPOSE_ACTION_COST,
-  countProvisionsChargedNationalInfluence,
-  getProvisionCostTotal,
-} from "@shared/constants/legislation";
-import {
-  UNION_LAW_BIAS_MIN,
-  UNION_LAW_BIAS_MAX,
-  clampUnionLawBias,
-  isUnionLawBanAction,
-} from "@/lib/labour/unionLaws";
-import { validateNationalizationProvisions } from "@/lib/nationalization/billProvisionValidation";
-import type { SubsidyProvision, EndSubsidyProvision } from "@/lib/db/types";
 import { mayRuleByDecree } from "@/lib/singleplayerHeadOfState";
-import { enactSingleplayerDecree } from "@/lib/legislature/commands/enactSingleplayerDecree";
-import {
-  getBillProposalAutoFailWarning,
-  getBillProposalAutoFailWarningError,
-  type BillProposalOriginChamber,
-} from "@/lib/legislature/billAutoFailWarning";
-import { validateBillAdministration } from "@/lib/legislature/jurisdiction";
-import { findAdministrationConflict } from "@/lib/legislature/administrationConflictCheck";
+import { getBillProposalAutoFailWarning } from "@/lib/legislature/billAutoFailWarning";
+import { loadBillLegislationTypes } from "@/lib/legislature/queries/loadBillLegislationTypes";
+import { proposeNationalBill } from "@/lib/legislature/commands/proposeNationalBill";
 export type { BillDisplay, BillsResponse } from "@/lib/legislature/dto/billDisplay";
-
-const VOTING_DURATION_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 // GET /api/congress/bills — Returns a paginated list of bills, optionally filtered by chamber and status.
 // Auth: public
@@ -124,7 +68,7 @@ export async function GET(request: Request) {
     }
     if (statusFilter && statusFilter !== "all") query.status = statusFilter;
 
-    const [bills, parties, legislationTypesList, total] = await Promise.all([
+    const [bills, parties, total] = await Promise.all([
       db
         .collection<Bill>("bills")
         .aggregate<Bill>([
@@ -153,12 +97,11 @@ export async function GET(request: Request) {
         .toArray(),
       // Congress bills are US-only - filter parties by countryId to avoid cross-country collisions
       db.collection<PoliticalParty>("politicalParties").find({ countryId: "US" }).toArray(),
-      db.collection<LegislationType>("legislationTypes").find({}).toArray(),
       db.collection<Bill>("bills").countDocuments(query),
     ]);
 
     const partyMap = new Map(parties.map((p) => [String(p.sequentialId), p]));
-    const legislationTypeMap = new Map(legislationTypesList.map((lt) => [lt._id, lt]));
+    const legislationTypeMap = await loadBillLegislationTypes(db, bills);
 
     const chamberOfficials: ScopedVoteOfficial[] = await db
       .collection<ElectedOfficial>("electedOfficials")
@@ -307,22 +250,21 @@ export async function GET(request: Request) {
   }
 }
 
-// POST /api/congress/bills — Proposes a new bill, opening it immediately for congressional voting.
+// POST /api/congress/bills — Proposes a new bill through the shared national command.
 // Auth: requireBasicAuth
 // Errors: 400, 401, 403, 429
 export async function POST(request: Request) {
+  const start = Date.now();
+  const path = new URL(request.url).pathname;
   try {
-    const start = Date.now();
-    const path = new URL(request.url).pathname;
     const auth = await requireBasicAuth();
     if (!auth.ok) {
       logRequest("POST", path, 401, Date.now() - start);
       return auth.response;
     }
-    const authUser = auth.user;
 
     const limit = checkRateLimit(
-      `congress:${authUser.userId}`,
+      `congress:${auth.user.userId}`,
       CONGRESS_LIMITS.maxRequests,
       CONGRESS_LIMITS.windowMs
     );
@@ -331,66 +273,12 @@ export async function POST(request: Request) {
       return rateLimitResponse(limit.retryAfter);
     }
 
-    const db = await getDb();
-    const { year: eraYear } = await getEraContext(db);
-    const character = await getCharacterByUserId(db, authUser.userId);
-    if (!character) {
-      logRequest("POST", path, 400, Date.now() - start);
-      return errorResponse(400, "No character");
-    }
-
-    const official = await db.collection<ElectedOfficial>("electedOfficials").findOne({
-      characterId: character._id,
-      officeType: { $in: ["house", "senate"] },
-    });
-    const isAdmin = authUser.isAdmin === true;
-    const usingSovereignOverride = mayRuleByDecree(character, "US");
-    const usingAdminOverride = isAdmin && !official;
-    if (!official && !isAdmin && !usingSovereignOverride) {
-      logRequest("POST", path, 403, Date.now() - start);
-      return errorResponse(403, "You must be a sitting member of Congress to propose legislation.");
-    }
-
-    // One active bill at a time per player (admins bypass)
-    if (!isAdmin && !usingSovereignOverride) {
-      const existingActiveBill = await db.collection<Bill>("bills").findOne({
-        sponsorId: character._id,
-        status: { $nin: NATIONAL_TERMINAL_STATUSES as BillStatus[] },
-      });
-      if (existingActiveBill) {
-        logRequest("POST", path, 403, Date.now() - start);
-        return errorResponse(
-          403,
-          "You already have a bill in progress. Wait for it to pass, fail, or be signed before proposing another."
-        );
-      }
-    }
-
     const parsed = await parseJsonBody(request, proposeBillSchema);
     if (!parsed.success) {
       logRequest("POST", path, parsed.status, Date.now() - start);
       return errorResponse(parsed.status, parsed.error);
     }
-    const {
-      title,
-      summary,
-      chamber,
-      category,
-      fullText,
-      provisions: clientProvisions,
-      confirmElectionRisk,
-    } = parsed.data;
-
-    // Custom (flavor/roleplay) bills carry no provisions and have no mechanical
-    // effect. Force the provision list empty so a client cannot smuggle real
-    // effects in under category:"custom".
-    const rawProvisions = category === "custom" ? [] : clientProvisions;
-
-    // proposeBillSchema is country-neutral so country configs can add chamber
-    // keys without changing the shared body shape. This route is US-only;
-    // reject foreign chamber values before constructing a US bill.
-    const US_CONGRESS_CHAMBERS = ["house", "senate", "joint"] as const;
-    if (!(US_CONGRESS_CHAMBERS as readonly string[]).includes(chamber)) {
+    if (!["house", "senate", "joint"].includes(parsed.data.chamber)) {
       logRequest("POST", path, 400, Date.now() - start);
       return errorResponse(
         400,
@@ -398,800 +286,26 @@ export async function POST(request: Request) {
       );
     }
 
-    // Validate chamber matches user's membership (admins can bypass)
-    if (!isAdmin && official && !usingSovereignOverride) {
-      const userChamber = official.officeType; // "house" or "senate"
-      if (chamber === "house" && userChamber !== "house") {
-        logRequest("POST", path, 403, Date.now() - start);
-        return errorResponse(403, "Only House members can propose House bills.");
-      }
-      if (chamber === "senate" && userChamber !== "senate") {
-        logRequest("POST", path, 403, Date.now() - start);
-        return errorResponse(403, "Only Senators can propose Senate bills.");
-      }
-      // Joint bills can be proposed by either chamber
-    }
+    const db = await getDb();
+    const result = await proposeNationalBill(db, "US", auth.user, parsed.data);
+    logRequest("POST", path, result.status, Date.now() - start);
 
-    // ── State-ownership (nationalization) bills: a dedicated provision family,
-    // validated by the shared helper and stored as-is. No policy/tariff/subsidy. ──
-    if (NATIONALIZATION_BILL_CATEGORIES.has(category)) {
-      const natValidation = await validateNationalizationProvisions(db, rawProvisions, "US");
-      if (!natValidation.ok) {
-        logRequest("POST", path, natValidation.status, Date.now() - start);
-        return errorResponse(natValidation.status, natValidation.error);
-      }
-
-      const now = new Date();
-      const proposalWarning = await getBillProposalAutoFailWarning(
-        db,
-        "US",
-        chamber as BillProposalOriginChamber,
-        now
-      );
-      if (proposalWarning && !confirmElectionRisk && !usingSovereignOverride) {
-        logRequest("POST", path, 409, Date.now() - start);
-        return errorResponse(409, getBillProposalAutoFailWarningError(proposalWarning), {
-          extra: { autoFailWarning: proposalWarning, requiresElectionRiskConfirmation: true },
-        });
-      }
-
-      const npiCost = getProvisionCostTotal(
-        countProvisionsChargedNationalInfluence({
-          policyProvisionCount: natValidation.provisions.length,
-          subsidyProvisionCount: 0,
-        })
-      );
-      const actionCost = BILL_PROPOSE_ACTION_COST;
-      const currentNational = character.nationalInfluence ?? 0;
-      if (!isAdmin) {
-        const currentActions = character.actions ?? 0;
-        if (npiCost > 0 && currentNational < npiCost) {
-          logRequest("POST", path, 400, Date.now() - start);
-          return errorResponse(
-            400,
-            `This bill costs ${npiCost} national political influence (you have ${currentNational.toFixed(0)}).`
-          );
-        }
-        if (currentActions < actionCost) {
-          logRequest("POST", path, 400, Date.now() - start);
-          return errorResponse(
-            400,
-            `Proposing a bill costs ${actionCost} action points (you have ${currentActions}).`
-          );
-        }
-        const spendResult = await db.collection<Character>("characters").updateOne(
-          {
-            _id: character._id,
-            actions: { $gte: actionCost },
-            ...(npiCost > 0 ? { nationalInfluence: { $gte: npiCost } } : {}),
-          },
-          {
-            $set: {
-              updatedAt: new Date(),
-            },
-            $inc: {
-              actions: -actionCost,
-              ...(npiCost > 0 ? { nationalInfluence: -npiCost } : {}),
-            },
-          }
-        );
-        if (spendResult.modifiedCount === 0) {
-          logRequest("POST", path, 409, Date.now() - start);
-          return errorResponse(
-            409,
-            "Your actions or national influence changed. Please try again."
-          );
-        }
-      }
-
-      const votingEndsAt = new Date(now.getTime() + VOTING_DURATION_MS);
-      const originChamber: BillChamber = chamber;
-      const currentChamber: BillChamber = chamber === "joint" ? "house" : chamber;
-      const natBill: Omit<Bill, "_id"> = {
-        countryId: "US",
-        title: title.trim(),
-        summary: summary.trim(),
-        ...(fullText?.trim() ? { fullText: fullText.trim() } : {}),
-        originChamber,
-        currentChamber,
-        sponsorId: character._id,
-        sponsorName: character.name,
-        sponsorParty: character.party ?? undefined,
-        ...(usingAdminOverride ? { adminProposed: true } : {}),
-        status: "active",
-        votesFor: 0,
-        votesAgainst: 0,
-        votesAbstain: 0,
-        votes: {},
-        category,
-        provisions: natValidation.provisions,
-        ...(npiCost > 0 ? { proposalNpiCost: npiCost } : {}),
-        ...(!isAdmin ? { proposalActionCost: actionCost } : {}),
-        proposedAt: now,
-        votingStartedAt: now,
-        votingEndsAt,
-        createdAt: now,
-        updatedAt: now,
-      };
-      try {
-        const result = await db.collection<Omit<Bill, "_id">>("bills").insertOne(natBill);
-        if (usingSovereignOverride) {
-          await enactSingleplayerDecree(db, { ...natBill, _id: result.insertedId } as Bill);
-        }
-        logRequest("POST", path, 201, Date.now() - start);
-        return NextResponse.json(
-          {
-            id: result.insertedId.toString(),
-            message: usingSovereignOverride
-              ? "Law enacted by head-of-state authority."
-              : "Bill proposed; voting is now open.",
-            ...(usingSovereignOverride ? { enacted: true } : {}),
-          },
-          { status: 201 }
-        );
-      } catch (error) {
-        if (!isAdmin) {
-          await db.collection<Character>("characters").updateOne(
-            { _id: character._id },
-            {
-              $inc: {
-                actions: actionCost,
-                ...(npiCost > 0 ? { nationalInfluence: npiCost } : {}),
-              },
-              $set: { updatedAt: new Date() },
-            }
-          );
-        }
-        throw error;
-      }
-    }
-
-    const allowedDomains = CATEGORY_TO_POLICY_DOMAINS[category] ?? [];
-    const validatedPolicyProvisions: {
-      legislationTypeId: string;
-      policyOptionId?: string;
-      effectDirection: number;
-      /** Omitted when the provision takes no stance on this axis (0 is not centre, ticket #1116). */
-      economic?: number;
-      social?: number;
-      /** Tax-slider laws (ruling #16): validated rate + rate-labeled snapshots. */
-      proposedRate?: number;
-      policyOptionNameSnapshot?: string;
-      currentPolicyOptionNameSnapshot?: string;
-    }[] = [];
-    const validatedTariffProvisions: {
-      type: "tariff";
-      scopeType: "economy_wide" | "sector" | "origin_country" | "corporation";
-      targetSectorType?: OperatingSectorType;
-      targetOriginCountryId?: CountryId;
-      targetCorporationId?: ObjectId;
-      rate: number;
-    }[] = [];
-    const validatedSubsidyProvisions: (SubsidyProvision | EndSubsidyProvision)[] = [];
-    const validatedEmbargoProvisions: (EmbargoProvision | EndEmbargoProvision)[] = [];
-    const validatedUnionLawProvisions: UnionLawProvision[] = [];
-    const validatedElectoralLawProvisions: ElectoralLawProvision[] = [];
-    const validatedResetLawProvisions: ResetLawProvision[] = [];
-    // This is the US Congress route; every bill it creates is countryId "US".
-    // Named so the self-embargo guard isn't a bare literal if the route ever
-    // becomes country-agnostic.
-    const sourceCountry: CountryId = "US";
-
-    // One $in fetch for every referenced legislation type; the per-provision
-    // findOne this replaces was N round-trips for an N-provision bill.
-    const referencedLtIds = Array.from(
-      new Set(
-        rawProvisions
-          .map((p) =>
-            String((p as { legislationTypeId?: unknown })?.legislationTypeId ?? "").trim()
-          )
-          .filter((id) => id.length > 0)
-      )
-    );
-    const legislationTypeById = new Map(
-      (
-        await db
-          .collection<LegislationType>("legislationTypes")
-          .find({ _id: { $in: referencedLtIds } })
-          .toArray()
-      ).map((lt) => [lt._id, lt])
-    );
-    const administrationState = await db
-      .collection<GameState>("gameState")
-      .findOne({ _id: "current" }, { projection: { lawAdministrationEnabled: 1 } });
-    const administrationEnabled = administrationState?.lawAdministrationEnabled === true;
-
-    const rawResetLawProvisions = rawProvisions.filter(
-      (provision) => "type" in provision && provision.type === "reset_law"
-    );
-    if (rawResetLawProvisions.length > 0) {
-      const reviewed = await validateBillProvisions(db, rawResetLawProvisions, category, "US");
-      if (!reviewed.ok) {
-        logRequest("POST", path, reviewed.status, Date.now() - start);
-        return errorResponse(reviewed.status, reviewed.error);
-      }
-      validatedResetLawProvisions.push(...reviewed.resetLawProvisions);
-    }
-
-    for (const rawP of rawProvisions) {
-      if ("type" in rawP && rawP.type === "reset_law") {
-        continue;
-      }
-      // Central-bank independence is carried by the country-legislature route,
-      // which runs `validateBillProvisions`; this route validates provisions
-      // inline and has no branch for it. The shared body schema is deliberately
-      // country-neutral, so it admits the provision here too, and without this
-      // refusal it would fall through to the policy branch and be rejected as
-      // "Each provision must have a legislation type" — a message that names
-      // the wrong problem entirely.
-      if ("type" in rawP && rawP.type === "economic_system_reform") {
-        logRequest("POST", path, 400, Date.now() - start);
-        return errorResponse(
-          400,
-          "Economic system reform is proposed through the country legislature, not this chamber."
-        );
-      }
-
-      if ("type" in rawP && rawP.type === "central_bank_independence") {
-        logRequest("POST", path, 400, Date.now() - start);
-        return errorResponse(
-          400,
-          "Central-bank-independence provisions are proposed through the country legislature, not this chamber."
-        );
-      }
-
-      // Handle electoral-law provisions (franchise + registration access)
-      if ("type" in rawP && rawP.type === "electoral_law") {
-        const res = validateElectoralLawProvision(rawP, category);
-        if (!res.ok) {
-          logRequest("POST", path, 400, Date.now() - start);
-          return errorResponse(400, res.error);
-        }
-        validatedElectoralLawProvisions.push(res.provision);
-        continue;
-      }
-
-      // Handle durable embargo / end_embargo provisions (trade bills only)
-      if ("type" in rawP && (rawP.type === "embargo" || rawP.type === "end_embargo")) {
-        if (category !== "trade") {
-          logRequest("POST", path, 400, Date.now() - start);
-          return errorResponse(400, "Embargo provisions can only be included in trade bills.");
-        }
-        const p = rawP as {
-          type: "embargo" | "end_embargo";
-          targetCountry: CountryId;
-          commodity: CommodityType | "all";
-          direction: "export" | "import" | "both";
-          mode?: "block" | "cap";
-          cap?: number;
-        };
-        if (p.targetCountry === sourceCountry) {
-          logRequest("POST", path, 400, Date.now() - start);
-          return errorResponse(400, "A country cannot embargo itself.");
-        }
-        if (p.type === "end_embargo") {
-          validatedEmbargoProvisions.push({
-            type: "end_embargo",
-            targetCountry: p.targetCountry,
-            commodity: p.commodity,
-            direction: p.direction,
-          });
-        } else {
-          const mode = p.mode ?? "block";
-          if (mode === "cap" && !(typeof p.cap === "number" && p.cap >= 0)) {
-            logRequest("POST", path, 400, Date.now() - start);
-            return errorResponse(400, "A capped embargo requires a non-negative cap.");
-          }
-          validatedEmbargoProvisions.push({
-            type: "embargo",
-            targetCountry: p.targetCountry,
-            commodity: p.commodity,
-            direction: p.direction,
-            mode,
-            ...(mode === "cap" && typeof p.cap === "number" ? { cap: p.cap } : {}),
-          });
-        }
-        continue;
-      }
-
-      // Handle subsidy / end_subsidy provisions
-      if ("type" in rawP && (rawP.type === "subsidy" || rawP.type === "end_subsidy")) {
-        if (
-          !SUBSIDY_BILL_CATEGORIES.has(
-            category as Parameters<typeof SUBSIDY_BILL_CATEGORIES.has>[0]
-          )
-        ) {
-          logRequest("POST", path, 400, Date.now() - start);
-          return errorResponse(400, "Subsidy provisions can only be included in industry bills.");
-        }
-        const p = rawP as {
-          type: "subsidy" | "end_subsidy";
-          scopeType: "economy_wide" | "sector";
-          targetSectorType?: string;
-          targetStrategyId?: string;
-          domesticOnly?: boolean;
-        };
-        if (p.scopeType === "sector" && !p.targetSectorType) {
-          logRequest("POST", path, 400, Date.now() - start);
-          return errorResponse(
-            400,
-            "Sector-scoped subsidy provisions must specify a target sector type."
-          );
-        }
-        if (p.type === "subsidy") {
-          validatedSubsidyProvisions.push({
-            type: "subsidy",
-            scopeType: p.scopeType,
-            ...(p.targetSectorType && {
-              targetSectorType: p.targetSectorType as OperatingSectorType,
-            }),
-            ...(p.targetStrategyId && { targetStrategyId: p.targetStrategyId }),
-            domesticOnly: p.domesticOnly ?? false,
-          });
-        } else {
-          validatedSubsidyProvisions.push({
-            type: "end_subsidy",
-            scopeType: p.scopeType,
-            ...(p.targetSectorType && {
-              targetSectorType: p.targetSectorType as OperatingSectorType,
-            }),
-            ...(p.targetStrategyId && { targetStrategyId: p.targetStrategyId }),
-          });
-        }
-        continue;
-      }
-
-      // Handle union-law provisions (v3 Phase 7b)
-      if ("type" in rawP && rawP.type === "union_law") {
-        if (
-          !UNION_LAW_BILL_CATEGORIES.has(
-            category as Parameters<typeof UNION_LAW_BILL_CATEGORIES.has>[0]
-          )
-        ) {
-          logRequest("POST", path, 400, Date.now() - start);
-          return errorResponse(400, "Union-law provisions can only be included in industry bills.");
-        }
-        const p = rawP as { type: "union_law"; bias: number; banAction?: unknown };
-        // Union ban (player suggestion #93): mirrors billProposal.ts's arm —
-        // a banAction provision is validated on its own and carries bias 0.
-        if (p.banAction !== undefined) {
-          if (!isUnionLawBanAction(p.banAction)) {
-            logRequest("POST", path, 400, Date.now() - start);
-            return errorResponse(400, 'Union-law ban action must be "ban" or "repeal_ban".');
-          }
-          validatedUnionLawProvisions.push({ type: "union_law", bias: 0, banAction: p.banAction });
-          continue;
-        }
-        if (typeof p.bias !== "number" || !Number.isFinite(p.bias)) {
-          logRequest("POST", path, 400, Date.now() - start);
-          return errorResponse(400, "Union-law provisions must specify a numeric bias.");
-        }
-        if (p.bias < UNION_LAW_BIAS_MIN || p.bias > UNION_LAW_BIAS_MAX) {
-          logRequest("POST", path, 400, Date.now() - start);
-          return errorResponse(
-            400,
-            `Union-law bias must be between ${UNION_LAW_BIAS_MIN} and ${UNION_LAW_BIAS_MAX}.`
-          );
-        }
-        validatedUnionLawProvisions.push({ type: "union_law", bias: clampUnionLawBias(p.bias) });
-        continue;
-      }
-
-      // Handle tariff provisions
-      if ("type" in rawP && rawP.type === "tariff") {
-        const p = rawP as {
-          type: "tariff";
-          scopeType: "economy_wide" | "sector" | "origin_country" | "corporation";
-          targetSectorType?: OperatingSectorType;
-          targetOriginCountryId?: CountryId;
-          targetCorporationId?: ObjectId;
-          rate: number;
-        };
-
-        // Validate trade bills have valid tariff scopes
-        if (category !== "trade") {
-          logRequest("POST", path, 400, Date.now() - start);
-          return errorResponse(400, "Tariff provisions can only be included in trade bills.");
-        }
-
-        // Validate sector scope has targetSectorType
-        if (p.scopeType === "sector" && !p.targetSectorType) {
-          logRequest("POST", path, 400, Date.now() - start);
-          return errorResponse(400, "Sector-scoped tariffs must specify a target sector type.");
-        }
-
-        // Validate origin_country scope has targetOriginCountryId
-        if (p.scopeType === "origin_country" && !p.targetOriginCountryId) {
-          logRequest("POST", path, 400, Date.now() - start);
-          return errorResponse(
-            400,
-            "Origin-country-scoped tariffs must specify a target origin country."
-          );
-        }
-
-        // Validate corporation scope has targetCorporationId
-        if (p.scopeType === "corporation" && !p.targetCorporationId) {
-          logRequest("POST", path, 400, Date.now() - start);
-          return errorResponse(
-            400,
-            "Corporation-scoped tariffs must specify a target corporation."
-          );
-        }
-
-        validatedTariffProvisions.push({
-          type: "tariff",
-          scopeType: p.scopeType,
-          ...(p.targetSectorType && { targetSectorType: p.targetSectorType }),
-          ...(p.targetOriginCountryId && { targetOriginCountryId: p.targetOriginCountryId }),
-          ...(p.targetCorporationId && {
-            targetCorporationId: new ObjectId(p.targetCorporationId),
-          }),
-          rate: Math.max(0, Math.min(100, p.rate)),
-        });
-        continue;
-      }
-
-      // Handle policy provisions
-      const p = rawP as {
-        legislationTypeId: string;
-        policyOptionId?: string;
-        effectDirection: number;
-        economic?: number;
-        social?: number;
-        proposedRate?: number;
-      };
-
-      const ltId = String(p?.legislationTypeId ?? "").trim();
-      if (!ltId) {
-        logRequest("POST", path, 400, Date.now() - start);
-        return errorResponse(400, "Each provision must have a legislation type.");
-      }
-      const lt = legislationTypeById.get(ltId) ?? null;
-      if (!lt) {
-        logRequest("POST", path, 400, Date.now() - start);
-        return errorResponse(400, `Invalid legislation type: ${ltId}.`);
-      }
-      if (!isLegislationTypeActive(lt._id, eraYear)) {
-        logRequest("POST", path, 400, Date.now() - start);
-        return errorResponse(400, "This legislation is not available in this era.");
-      }
-      if (!allowedDomains.includes(lt.policyDomain)) {
-        logRequest("POST", path, 400, Date.now() - start);
-        return errorResponse(
-          400,
-          `Legislation type "${lt.name}" is not in the selected category (${category}).`
-        );
-      }
-
-      // Tax-slider laws (ruling #16): server-side bounds/grid/min-step
-      // validation against the CURRENT rate, with stamped delta-derived fields.
-      if (lt.taxSlider) {
-        const resolved = await resolveTaxSliderProvisionFields(
-          db,
-          lt,
-          p?.proposedRate,
-          typeof p?.policyOptionId === "string" ? p.policyOptionId : undefined,
-          "US"
-        );
-        if (!resolved.ok) {
-          logRequest("POST", path, 400, Date.now() - start);
-          return errorResponse(400, resolved.error);
-        }
-        validatedPolicyProvisions.push({
-          legislationTypeId: lt._id,
-          ...resolved.fields,
-        });
-        continue;
-      }
-      const effectDirection =
-        p?.effectDirection != null && typeof p.effectDirection === "number"
-          ? Math.max(-1, Math.min(1, Math.round(p.effectDirection)))
-          : 0;
-      // 0 means "no stance on this axis", not a centre target (ticket #1116).
-      const economic =
-        p?.economic != null && typeof p.economic === "number"
-          ? Math.max(-3, Math.min(3, Math.round(p.economic)))
-          : undefined;
-      const social =
-        p?.social != null && typeof p.social === "number"
-          ? Math.max(-3, Math.min(3, Math.round(p.social)))
-          : undefined;
-      const policyOptionId = typeof p?.policyOptionId === "string" ? p.policyOptionId : undefined;
-      validatedPolicyProvisions.push({
-        legislationTypeId: lt._id,
-        ...(policyOptionId && { policyOptionId }),
-        effectDirection,
-        ...(economic ? { economic } : {}),
-        ...(social ? { social } : {}),
-      });
-    }
-
-    // Validate embargo targets: never self (US), must be an enabled country.
-    if (validatedEmbargoProvisions.length > 0) {
-      const enabledForEmbargo = new Set(await getEnabledCountryIds());
-      for (const provision of validatedEmbargoProvisions) {
-        if (!enabledForEmbargo.has(provision.targetCountry)) {
-          logRequest("POST", path, 400, Date.now() - start);
-          return errorResponse(400, "Embargo target must be an enabled country.");
-        }
-      }
-    }
-
-    // Trade bills carry tariff OR embargo provisions (not both), and no policy.
-    if (category === "trade") {
-      if (validatedTariffProvisions.length === 0 && validatedEmbargoProvisions.length === 0) {
-        logRequest("POST", path, 400, Date.now() - start);
-        return errorResponse(
-          400,
-          "Trade bills must contain at least one tariff or embargo provision."
-        );
-      }
-      if (validatedTariffProvisions.length > 0 && validatedEmbargoProvisions.length > 0) {
-        logRequest("POST", path, 400, Date.now() - start);
-        return errorResponse(
-          400,
-          "A trade bill is either tariffs or embargoes — propose them as separate bills."
-        );
-      }
-      if (validatedPolicyProvisions.length > 0) {
-        logRequest("POST", path, 400, Date.now() - start);
-        return errorResponse(
-          400,
-          "Trade bills cannot mix policy provisions with trade restrictions."
-        );
-      }
-    }
-
-    // Industry bills must contain at least one subsidy or union-law provision
-    if (
-      category === "industry" &&
-      validatedSubsidyProvisions.length === 0 &&
-      validatedUnionLawProvisions.length === 0
-    ) {
-      logRequest("POST", path, 400, Date.now() - start);
-      return errorResponse(
-        400,
-        "Industry bills must contain at least one subsidy or union-law provision."
-      );
-    }
-
-    // Constraint 2: no duplicate provision at same policy level across active US Congress bills
-    const administrationValidation = validateBillAdministration({
-      enabled: administrationEnabled,
-      legislationTypes: validatedPolicyProvisions
-        .map((provision) => legislationTypeById.get(provision.legislationTypeId))
-        .filter((type): type is LegislationType => type !== undefined),
-    });
-    if (!administrationValidation.ok) {
-      logRequest("POST", path, 400, Date.now() - start);
-      return errorResponse(
-        400,
-        administrationValidation.error ?? "Invalid administration metadata."
-      );
-    }
-
-    if (administrationEnabled) {
-      const conflict = await findAdministrationConflict(
-        db,
-        "US",
-        validatedPolicyProvisions
-          .map((provision) => legislationTypeById.get(provision.legislationTypeId))
-          .filter((type): type is LegislationType => type !== undefined)
-      );
-      if (conflict) {
-        logRequest("POST", path, 409, Date.now() - start);
-        return errorResponse(
-          409,
-          `This bill conflicts with active law ${conflict.existingLegislationTypeId} through ${conflict.conflictSetId}. Repeal or replace that regime first.`
-        );
-      }
-    }
-
-    // Constraint 2: no duplicate provision at same policy level across active US Congress bills
-    const duplicateCheck = await checkDuplicateProvisions(
-      db,
-      "bills",
-      { countryId: "US", status: { $nin: NATIONAL_TERMINAL_STATUSES } },
-      validatedPolicyProvisions
-    );
-    if (duplicateCheck) {
-      logRequest("POST", path, 409, Date.now() - start);
-      return errorResponse(409, duplicateCheck.error);
-    }
-
-    const resetLawDuplicateCheck = await checkDuplicateResetLawFamilies(
-      db,
-      "bills",
-      { countryId: "US", status: { $nin: NATIONAL_TERMINAL_STATUSES } },
-      validatedResetLawProvisions
-    );
-    if (resetLawDuplicateCheck) {
-      logRequest("POST", path, 409, Date.now() - start);
-      return errorResponse(409, resetLawDuplicateCheck.error);
-    }
-
-    const tariffDuplicateCheck = await checkDuplicateTariffProvisions(
-      db,
-      "bills",
-      { countryId: "US", status: { $nin: NATIONAL_TERMINAL_STATUSES } },
-      validatedTariffProvisions
-    );
-    if (tariffDuplicateCheck) {
-      logRequest("POST", path, 409, Date.now() - start);
-      return errorResponse(409, tariffDuplicateCheck.error);
-    }
-
-    // Constraint 3: no proposing a law at its current active level
-    const currentLevelCheck = await checkCurrentPolicyLevel(
-      db,
-      "federal",
-      validatedPolicyProvisions
-    );
-    if (currentLevelCheck) {
-      logRequest("POST", path, 409, Date.now() - start);
-      return errorResponse(409, currentLevelCheck.error);
-    }
-
-    const snapshottedPolicyProvisions = await snapshotBillPolicyProvisions(
-      db,
-      { scope: "national", countryId: "US" },
-      validatedPolicyProvisions
-    );
-
-    const now = new Date();
-    const proposalWarning = await getBillProposalAutoFailWarning(
-      db,
-      "US",
-      chamber as BillProposalOriginChamber,
-      now
-    );
-    if (proposalWarning && !confirmElectionRisk) {
-      logRequest("POST", path, 409, Date.now() - start);
-      return errorResponse(409, getBillProposalAutoFailWarningError(proposalWarning), {
-        extra: { autoFailWarning: proposalWarning, requiresElectionRiskConfirmation: true },
-      });
-    }
-
-    // NPI cost: policy, subsidy, union-law and standalone rows share one ladder;
-    // tariffs do not cost NPI
-    const influenceProvisionCount = countProvisionsChargedNationalInfluence({
-      policyProvisionCount: validatedPolicyProvisions.length,
-      subsidyProvisionCount: validatedSubsidyProvisions.length,
-      unionLawProvisionCount: validatedUnionLawProvisions.length,
-      standaloneProvisionCount:
-        validatedElectoralLawProvisions.length + validatedResetLawProvisions.length,
-    });
-    const npiCost = getProvisionCostTotal(influenceProvisionCount);
-    const actionCost = BILL_PROPOSE_ACTION_COST;
-    const currentNational = character.nationalInfluence ?? 0;
-    if (!isAdmin) {
-      const currentActions = character.actions ?? 0;
-      if (npiCost > 0 && currentNational < npiCost) {
-        logRequest("POST", path, 400, Date.now() - start);
-        return errorResponse(
-          400,
-          `This bill costs ${npiCost} national political influence (you have ${currentNational.toFixed(0)}).`
-        );
-      }
-      if (currentActions < actionCost) {
-        logRequest("POST", path, 400, Date.now() - start);
-        return errorResponse(
-          400,
-          `Proposing a bill costs ${actionCost} action points (you have ${currentActions}).`
-        );
-      }
-      const spendResult = await db.collection<Character>("characters").updateOne(
-        {
-          _id: character._id,
-          actions: { $gte: actionCost },
-          ...(npiCost > 0 ? { nationalInfluence: { $gte: npiCost } } : {}),
-        },
-        {
-          $set: {
-            updatedAt: new Date(),
-          },
-          $inc: {
-            actions: -actionCost,
-            ...(npiCost > 0 ? { nationalInfluence: -npiCost } : {}),
-          },
-        }
-      );
-      if (spendResult.modifiedCount === 0) {
-        logRequest("POST", path, 409, Date.now() - start);
-        return errorResponse(409, "Your actions or national influence changed. Please try again.");
-      }
-    }
-
-    const votingEndsAt = new Date(now.getTime() + VOTING_DURATION_MS);
-    const originChamber: BillChamber = chamber;
-    const currentChamber: BillChamber = chamber === "joint" ? "house" : chamber;
-    const first = snapshottedPolicyProvisions[0];
-
-    // Combine policy, tariff, subsidy, embargo, and union-law provisions for storage
-    const allProvisions: BillProvision[] = [
-      ...snapshottedPolicyProvisions,
-      ...validatedTariffProvisions,
-      ...validatedSubsidyProvisions,
-      ...validatedEmbargoProvisions,
-      ...validatedUnionLawProvisions,
-      ...validatedElectoralLawProvisions,
-      ...validatedResetLawProvisions,
-    ];
-
-    const bill: Omit<Bill, "_id"> = {
-      countryId: "US",
-      title: title.trim(),
-      summary: summary.trim(),
-      ...(fullText?.trim() ? { fullText: fullText.trim() } : {}),
-      originChamber,
-      currentChamber,
-      sponsorId: character._id,
-      sponsorName: character.name,
-      sponsorParty: character.party ?? undefined,
-      ...(usingAdminOverride ? { adminProposed: true } : {}),
-      status: "active",
-      votesFor: 0,
-      votesAgainst: 0,
-      votesAbstain: 0,
-      votes: {},
-      category,
-      provisions: allProvisions,
-      legislationTypeId: first?.legislationTypeId ?? null,
-      effectDirection: first?.effectDirection ?? null,
-      ...(npiCost > 0 ? { proposalNpiCost: npiCost } : {}),
-      ...(!isAdmin ? { proposalActionCost: actionCost } : {}),
-      proposedAt: now,
-      votingStartedAt: now,
-      votingEndsAt,
-      createdAt: now,
-      updatedAt: now,
-    };
-
-    try {
-      const result = await db.collection<Omit<Bill, "_id">>("bills").insertOne(bill);
-      if (usingSovereignOverride) {
-        await enactSingleplayerDecree(db, { ...bill, _id: result.insertedId } as Bill);
-      }
-      try {
-        const { checkBillSponsoredAchievements } = await import("@/lib/achievements/triggers");
-        await checkBillSponsoredAchievements(new ObjectId(authUser.userId), character._id);
-      } catch (e) {
-        console.error(
-          JSON.stringify({
-            error: "achievement_check_failed",
-            operation: "bill_sponsored_achievement",
-            timestamp: new Date().toISOString(),
-            details: e instanceof Error ? e.message : "Unknown error",
-          })
-        );
-      }
-      logRequest("POST", path, 201, Date.now() - start);
+    if (result.status === 201 && typeof result.body.billId === "string") {
       return NextResponse.json(
         {
-          id: result.insertedId.toString(),
-          message: usingSovereignOverride
-            ? "Law enacted by head-of-state authority."
-            : "Bill proposed; voting is now open.",
-          ...(usingSovereignOverride ? { enacted: true } : {}),
+          id: result.body.billId,
+          message:
+            typeof result.body.message === "string"
+              ? result.body.message
+              : "Bill proposed; voting is now open.",
+          ...(result.body.enacted === true ? { enacted: true } : {}),
         },
         { status: 201 }
       );
-    } catch (error) {
-      if (!isAdmin) {
-        await db.collection<Character>("characters").updateOne(
-          { _id: character._id },
-          {
-            $inc: {
-              actions: actionCost,
-              ...(npiCost > 0 ? { nationalInfluence: npiCost } : {}),
-            },
-            $set: { updatedAt: new Date() },
-          }
-        );
-      }
-      throw error;
     }
+    return statusResponse(result.status, result.body);
   } catch (error) {
+    logRequest("POST", path, 500, Date.now() - start);
     return handleRouteError(error);
   }
 }

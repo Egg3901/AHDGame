@@ -1,5 +1,11 @@
 "use client";
 
+import {
+  setAnalyticsAccount,
+  getAnalyticsAccount,
+  isAnalyticsGenerationCurrent,
+} from "@/lib/analytics/accountContext";
+import { resetAmplitudeUser } from "@/lib/analytics/amplitudeClient";
 import { useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { useAuthMe } from "@/contexts/AuthDataContext";
@@ -85,6 +91,29 @@ export function PostHogTracker() {
   }, []);
 
   useEffect(() => {
+    const previous = getAnalyticsAccount().account?.id;
+    setAnalyticsAccount(
+      accepted && userId
+        ? {
+            id: userId,
+            signupDate: user?.signupDate,
+            isAdmin: user?.isAdmin,
+            isModerator: user?.isModerator,
+          }
+        : null
+    );
+    if ((previous && previous !== (accepted ? userId : null)) || (accepted && !userId)) {
+      lastCapturedPath.current = null;
+      lastVisitUser.current = null;
+      void resetAmplitudeUser();
+      const { generation } = getAnalyticsAccount();
+      void getPostHogClient().then((client) => {
+        if (client && isAnalyticsGenerationCurrent(generation)) resetPostHogUser(client);
+      });
+    }
+  }, [accepted, userId, user?.signupDate, user?.isAdmin, user?.isModerator]);
+
+  useEffect(() => {
     setPlayerActionContext({
       userId,
       characterId,
@@ -132,8 +161,14 @@ export function PostHogTracker() {
     const area = pathname ? productArea(pathname) : null;
     if (!accepted) return;
     let cancelled = false;
+    const { generation } = getAnalyticsAccount();
     void getPostHogClient().then((client) => {
-      if (!client || cancelled || getStoredConsent() !== "accepted") return;
+      if (
+        cancelled ||
+        !isAnalyticsGenerationCurrent(generation) ||
+        getStoredConsent() !== "accepted"
+      )
+        return;
       const personProperties = {
         ...(typeof user?.signupDate === "string" ? { signup_date: user.signupDate } : {}),
         ...(navData?.characterCountryId ? { nation: navData.characterCountryId } : {}),
@@ -148,11 +183,11 @@ export function PostHogTracker() {
         userId &&
         (previousUserId.current !== userId || previousPersonProperties.current !== propertiesKey)
       ) {
-        identifyPostHogUser(client, userId, personProperties);
+        if (client) identifyPostHogUser(client, userId, personProperties);
         previousUserId.current = userId;
         previousPersonProperties.current = propertiesKey;
       } else if (!userId && previousUserId.current) {
-        resetPostHogUser(client);
+        if (client) resetPostHogUser(client);
         previousUserId.current = null;
         previousPersonProperties.current = null;
         lastVisitUser.current = null;
@@ -163,12 +198,18 @@ export function PostHogTracker() {
       } else if (!area) {
         lastCapturedPath.current = null;
       }
+      if (userId && lastVisitUser.current !== userId) {
+        void captureProductEvent("game_visit");
+        lastVisitUser.current = userId;
+      }
       if (userId) void capturePendingAccountCreated();
       if (userId) void capturePendingWarDeclaration(userId);
       if (userId && characterId) {
-        void capturePendingCharacterCreated(characterId).then(() =>
-          captureFirstTurnIfReady(characterId)
-        );
+        void capturePendingCharacterCreated(characterId).then(() => {
+          if (isAnalyticsGenerationCurrent(generation)) {
+            return captureFirstTurnIfReady(characterId);
+          }
+        });
       }
     });
     return () => {
@@ -184,19 +225,6 @@ export function PostHogTracker() {
     navData?.characterCountryId,
     navData?.currentParty?.id,
   ]);
-
-  useEffect(() => {
-    if (!accepted || !userId || lastVisitUser.current === userId) return;
-    void getPostHogClient().then((client) => {
-      if (!client || getStoredConsent() !== "accepted" || lastVisitUser.current === userId) return;
-      if (previousUserId.current !== userId) {
-        identifyPostHogUser(client, userId);
-        previousUserId.current = userId;
-      }
-      void captureProductEvent("game_visit");
-      lastVisitUser.current = userId;
-    });
-  }, [accepted, userId]);
 
   return null;
 }

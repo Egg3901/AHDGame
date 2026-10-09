@@ -33,7 +33,7 @@ Potential falls back to 2% only when the country has no seeded value. When macro
 
 ### Inflation
 
-Inflation is recalculated **every turn** (not just annually), incorporating:
+In multiplayer, inflation advances halfway at half past each hour, with the hourly turn applying the rest of the step. The model incorporates:
 - Central bank prime rate (higher rates dampen inflation)
 - GDP growth (higher growth adds demand-pull pressure)
 - Unemployment (lower unemployment adds wage-push pressure)

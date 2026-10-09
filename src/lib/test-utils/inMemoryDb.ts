@@ -176,6 +176,8 @@ function matchesCondition(value: unknown, condition: unknown): boolean {
             return !(operand as unknown[]).some((o) => equalsAny(value, o));
           case "$exists":
             return (value !== undefined) === Boolean(operand);
+          case "$size":
+            return Array.isArray(value) && value.length === operand;
           case "$regex": {
             if (typeof value !== "string") return false;
             const flags = typeof condition["$options"] === "string" ? condition["$options"] : "";
@@ -312,6 +314,8 @@ function evalExpr(expr: unknown, doc: Doc, variables: Doc = {}): unknown {
       return args.every(Boolean);
     case "$or":
       return args.some(Boolean);
+    case "$not":
+      return !args[0];
     case "$gte":
       return (args[0] as number) >= (args[1] as number);
     case "$gt":
@@ -343,6 +347,18 @@ function evalExpr(expr: unknown, doc: Doc, variables: Doc = {}): unknown {
       return args[0] === undefined || args[0] === null ? args[1] : args[0];
     case "$abs":
       return typeof args[0] === "number" ? Math.abs(args[0]) : null;
+    case "$type": {
+      const value = args[0];
+      if (value === undefined) return "missing";
+      if (value === null) return "null";
+      if (typeof value === "string") return "string";
+      if (typeof value === "boolean") return "bool";
+      if (typeof value === "number") return Number.isInteger(value) ? "int" : "double";
+      if (value instanceof Date) return "date";
+      if (value instanceof ObjectId) return "objectId";
+      if (Array.isArray(value)) return "array";
+      return "object";
+    }
     default:
       throw new Error(`inMemoryDb: unsupported expression operator ${op}`);
   }
@@ -511,9 +527,11 @@ function applyUpdate(doc: Doc, update: Update): void {
         setPath(doc, path, base);
       }
     } else if (op === "$pull") {
-      // Selector form only (`$pull: { path: { field: value } }`): drop every
-      // array element matching ALL selector fields. Pulling an absent element
-      // is a no-op, which is what makes pull-then-credit legs replay-safe.
+      // Selector form only (`$pull: { path: { field: condition } }`): drop every
+      // array element matching ALL selector fields, conditions evaluated as a
+      // query the way the server does (`{ id: { $in: [...] } }`). Pulling an
+      // absent element is a no-op, which is what makes pull-then-credit legs
+      // replay-safe.
       for (const [path, selector] of Object.entries(fields as Doc)) {
         const current = getPath(doc, path);
         if (current === undefined) continue;
@@ -526,12 +544,7 @@ function applyUpdate(doc: Doc, update: Update): void {
         setPath(
           doc,
           path,
-          current.filter(
-            (item) =>
-              !Object.entries(selector).every(([key, want]) =>
-                sameValue(isPlainObject(item) ? (item as Doc)[key] : undefined, want)
-              )
-          )
+          current.filter((item) => !(isPlainObject(item) && matchesFilter(item as Doc, selector)))
         );
       }
     } else if (op === "$max") {

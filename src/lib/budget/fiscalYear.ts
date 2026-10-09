@@ -24,7 +24,8 @@ import {
   normalizeStateSpending,
 } from "./spending";
 import { applyLegacyTrustDelta } from "@/lib/sovereignDefault/sideEffects/trustHit";
-import { processAnnualDebt, triggerDebtCeilingCrisis, getDebtThreshold } from "./debt";
+import { processAnnualDebt, resolveDebtCeilingCrisis, getDebtThreshold } from "./debt";
+import { raisedDebtCeiling } from "./rules/debtCeilingRaise";
 import { loadSovereignCouponBooks } from "@/lib/bonds/sovereignCouponBook";
 import { processFormulaGrants, updateStateGrantRevenue } from "./grants";
 import { calculateCountryInflation } from "./inflation";
@@ -55,6 +56,8 @@ import {
 import { withLawAdministration } from "@/lib/governmentFinance/lawAdministrationCatalog";
 import type { ResetLawProgramDocument } from "@/lib/resetLegislation/program";
 import { buildResetRegionalProgramClaims } from "@/lib/resetLegislation/rules/regionalClaims";
+import { RESET_V2_READY } from "@/lib/resetVersions/availability";
+import { resetSystemVersionsForCountry } from "@/lib/resetVersions/rules";
 
 // The current turn engine still processes fiscal-year rollover as one shared phase.
 // Pulling the anchor from country-systems makes the rule source explicit now, while
@@ -112,10 +115,21 @@ export async function processFiscalYear(
     return;
   }
 
-  const financeState = await db
-    .collection<GameState>("gameState")
-    .findOne({ _id: "current" }, { projection: { regionalLegislationFinanceEnabled: 1 } });
+  const financeState = await db.collection<GameState>("gameState").findOne(
+    { _id: "current" },
+    {
+      projection: {
+        regionalLegislationFinanceEnabled: 1,
+        resetWorldId: 1,
+        metricsSystemVersion: 1,
+        legislationSystemVersion: 1,
+        resetVersionSeeds: 1,
+      },
+    }
+  );
   const regionalFinanceEnabled = financeState?.regionalLegislationFinanceEnabled === true;
+  const usResetLegislationV2 =
+    resetSystemVersionsForCountry(financeState, RESET_V2_READY, "US").legislation === "v2";
   const regionalLegislationTypes = regionalFinanceEnabled
     ? await db
         .collection<LegislationType>("legislationTypes")
@@ -147,21 +161,24 @@ export async function processFiscalYear(
     db.collection<State>("states").find({}).toArray(),
     db.collection<StateMetrics>("macroMetrics").find({}).toArray(),
   ]);
-  const usResetRegionalPrograms = await db
-    .collection<ResetLawProgramDocument>("resetLawPrograms")
-    .find(
-      { country: "US", scope: "regional" },
-      {
-        projection: {
-          _id: 1,
-          regionId: 1,
-          familyId: 1,
-          choice: 1,
-          annualAgencyAllocation: 1,
-        },
-      }
-    )
-    .toArray();
+  const usResetRegionalPrograms =
+    usResetLegislationV2 && financeState?.resetWorldId
+      ? await db
+          .collection<ResetLawProgramDocument>("resetLawPrograms")
+          .find(
+            { country: "US", scope: "regional", worldId: financeState.resetWorldId },
+            {
+              projection: {
+                _id: 1,
+                regionId: 1,
+                familyId: 1,
+                choice: 1,
+                annualAgencyAllocation: 1,
+              },
+            }
+          )
+          .toArray()
+      : [];
   const usResetProgramsByRegion = new Map<string, ResetLawProgramDocument[]>();
   for (const program of usResetRegionalPrograms) {
     if (!program.regionId) continue;
@@ -438,6 +455,13 @@ export async function processFiscalYear(
       }
     }
 
+    // The legislature raises the statutory ceiling as the stock nears it; no law
+    // does, so the stored limit would otherwise only ever be breached.
+    const raisedCeiling = raisedDebtCeiling({
+      principal: debtResult.newPrincipal,
+      ceiling: federalBudget.debt.ceiling,
+    });
+
     // `debt.principal` is owned by the bond ledger (see bonds/sovereignPrincipal.ts)
     // and is deliberately absent from this write: the old rollover re-derived it
     // from the treasury balance here, clobbering same-turn issuance/maturity state
@@ -455,6 +479,9 @@ export async function processFiscalYear(
             ? { financialCrisisAusterityBaseSpending: federalSpending }
             : {}),
           "debt.interestRate": debtResult.interestRate,
+          ...(raisedCeiling !== null
+            ? { "debt.ceiling": raisedCeiling, "debt.ceilingLastRaisedYear": newFiscalYear }
+            : {}),
           debtToGdpRatio: debtResult.debtToGdpRatio,
           creditRating: debtResult.creditRating,
           surplus: finalSurplus,
@@ -470,9 +497,11 @@ export async function processFiscalYear(
         `Debt/GDP ${(debtResult.debtToGdpRatio * 100).toFixed(1)}% (${debtResult.creditRating})`
     );
 
-    if (countryId === COUNTRY_CONFIGS.US.id && debtResult.ceilingExceeded) {
-      await triggerDebtCeilingCrisis(db, newFiscalYear);
-      console.log(`[FiscalYear] DEBT CEILING EXCEEDED - Crisis triggered for FY${newFiscalYear}`);
+    if (countryId === COUNTRY_CONFIGS.US.id && raisedCeiling !== null) {
+      // Any breach is cured by the raise above, which is the resolution the
+      // crisis flag was waiting for (nothing else ever cleared it).
+      await resolveDebtCeilingCrisis(db);
+      console.log(`[FiscalYear] US debt ceiling raised to ${raisedCeiling} for FY${newFiscalYear}`);
     }
 
     const countryStates = states.filter((state) => state.countryId === countryId);

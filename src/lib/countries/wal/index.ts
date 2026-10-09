@@ -14,7 +14,7 @@ import { WAL_ERAS } from "./eras";
  * MongoDB driver into the browser. Client surfaces take `./identity` or
  * `./geographyFacts`, never this file and never `./geography`.
  */
-export const WAL: CountryFolder = {
+export const WAL: CountryFolder<"WAL"> = {
   id: "WAL",
   identity: WAL_IDENTITY,
   institutions: WAL_INSTITUTIONS,

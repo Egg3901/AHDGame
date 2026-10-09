@@ -11,6 +11,7 @@
  *   resolveElections()  - batch (one round of queries, then _enrichElection)
  *   _enrichElection()   - low-level enrichment on pre-fetched data
  */
+import { oneRowPerTurn } from "@/lib/electionEngine/rules/turnSlice";
 import { usesCampaignRules } from "@/lib/campaignTargeting/rules";
 import { applyStandingAds } from "@/lib/campaignTargeting/standingAds";
 
@@ -18,6 +19,7 @@ import { loadRegionalCampaignCells } from "@/lib/campaignTargeting/audience";
 import { isPrimaryEnded } from "@/lib/elections/phases";
 import { loadApportionment } from "./apportionment";
 import { parseSeatId } from "@/lib/seats/seatId";
+import { findVoluntaryWithdrawals } from "@/lib/elections/voluntaryWithdrawal";
 import type { Db, ObjectId as MongoObjectId } from "mongodb";
 import { ObjectId } from "mongodb";
 import type {
@@ -190,7 +192,13 @@ export async function resolveElection(
       .toArray();
   }
 
-  return _enrichElection(election, deps, options, gameTime, gameState, db, adjacentElections);
+  const [response, withdrew] = await Promise.all([
+    _enrichElection(election, deps, options, gameTime, gameState, db, adjacentElections),
+    options.activeCharacterId && ObjectId.isValid(options.activeCharacterId)
+      ? findVoluntaryWithdrawals(db, new ObjectId(options.activeCharacterId), [election._id])
+      : Promise.resolve(new Set<string>()),
+  ]);
+  return withdrew.size > 0 ? { ...response, viewerWithdrew: true } : response;
 }
 
 // ---------------------------------------------------------------------------
@@ -416,9 +424,9 @@ export async function resolveElections(
         .collection<PlayerEndorsement>("playerEndorsements")
         .find({ electionId: { $in: electionIds }, isActive: true })
         .toArray(),
-      // Only the last 72 snapshots per election are kept (see snapsLimited),
+      // Only the last 72 turns per election are kept (see snapsLimited),
       // so cap the fetch in the DB instead of loading full history and
-      // slicing in JS.
+      // slicing in JS. 144 rows: a split turn holds an early and a rest row.
       db
         .collection<PrimarySnapshot>("primarySnapshots")
         .aggregate<PrimarySnapshot>([
@@ -427,7 +435,7 @@ export async function resolveElections(
           {
             $group: { _id: "$electionId", docs: { $push: "$$ROOT" } },
           },
-          { $project: { docs: { $slice: ["$docs", 72] } } },
+          { $project: { docs: { $slice: ["$docs", 144] } } },
           { $unwind: "$docs" },
           { $replaceRoot: { newRoot: "$docs" } },
           { $sort: { recordedAt: 1 } },
@@ -619,7 +627,8 @@ export async function resolveElections(
 
       const snapsForElection = snapshotsByElection.get(eid) ?? [];
       // Limit snapshot history to last 72 entries (matching single-election logic)
-      const snapsLimited = isFull ? snapsForElection.slice(-72) : [];
+      // A split turn holds an early and a rest row; keep one per turn.
+      const snapsLimited = isFull ? oneRowPerTurn(snapsForElection).slice(-72) : [];
 
       const deps: ElectionDeps = {
         apportionment: sharedApportionment,
@@ -651,5 +660,21 @@ export async function resolveElections(
     })
   );
 
-  return results;
+  // Every candidacy row is already loaded, so the viewer's voluntary
+  // withdrawals cost no extra query.
+  const { activeCharacterId } = options;
+  if (!activeCharacterId) return results;
+  const withdrewFrom = new Set(
+    allCandidatesRaw
+      .filter(
+        (c) =>
+          c.status === "withdrawn" &&
+          c.withdrawnBy === "candidate" &&
+          c.characterId.toString() === activeCharacterId
+      )
+      .map((c) => c.electionId.toString())
+  );
+  return withdrewFrom.size > 0
+    ? results.map((r) => (withdrewFrom.has(r.id) ? { ...r, viewerWithdrew: true } : r))
+    : results;
 }

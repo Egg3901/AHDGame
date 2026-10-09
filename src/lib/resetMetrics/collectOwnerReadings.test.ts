@@ -48,6 +48,33 @@ function mockOwnerSources(db: ReturnType<typeof createMockDb>) {
 }
 
 describe("first live v2 metric owners", () => {
+  it("refreshes playable-region health from its current board when the retired store is absent", async () => {
+    const db = createMockDb();
+    mockOwnerSources(db);
+    const ct = boards.find((board) => board._id === "US:CT")!;
+    db.collection("stateMetrics").find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([]),
+    });
+    db.collection("politicalMetrics").find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([
+        {
+          _id: "CT",
+          countryId: "US",
+          values: {
+            "health.outcomes": 65,
+            "health.prevention": 70,
+            "health.universalCare": 75,
+            "health.systemEfficiency": 60,
+          },
+        },
+      ]),
+    });
+    const readings = await collectResetMetricOwnerReadings(db as unknown as Db, [ct], 13);
+    expect(readings[ct._id]!.updates["16"]?.value).toEqual(expect.any(Number));
+    expect(readings[ct._id]!.updates["18"]?.value).toEqual(expect.any(Number));
+    expect(readings[ct._id]!.updates["16"]?.source).toContain("political board");
+    expect(readings[ct._id]!.updates["16"]?.status).toBe("proxy");
+  });
   it("updates health proxies on cadence with fixed reference stocks and retains the NHS wait index", async () => {
     const db = createMockDb();
     mockOwnerSources(db);
@@ -107,11 +134,37 @@ describe("first live v2 metric owners", () => {
     expect(readings[pa._id]!.updates["16"]).toBeUndefined();
     expect(readings[pa._id]!.updates["18"]).toBeUndefined();
   });
+  it("does not hide an incomplete or mismatched current board behind legacy health stocks", async () => {
+    const db = createMockDb();
+    mockOwnerSources(db);
+    const ct = boards.find((board) => board._id === "US:CT")!;
+    db.collection("stateMetrics").find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([
+        {
+          _id: "CT",
+          countryId: "US",
+          healthcare: {
+            physicianRate: { value: 3 },
+            publicHealthPreparedness: { value: 80 },
+            uninsuredRate: { value: 10 },
+          },
+        },
+      ]),
+    });
+    for (const countryId of ["US", "UK"]) {
+      db.collection("politicalMetrics").find.mockReturnValue({
+        toArray: vi.fn().mockResolvedValue([{ _id: "CT", countryId, values: {} }]),
+      });
+      const readings = await collectResetMetricOwnerReadings(db as unknown as Db, [ct], 13, 1991);
+      expect(readings[ct._id]!.updates["16"]).toBeUndefined();
+      expect(readings[ct._id]!.updates["18"]).toBeUndefined();
+    }
+  });
   it("collects per-turn fiscal and purchasing readings in two projected reads", async () => {
     const db = createMockDb();
     mockOwnerSources(db);
     const readings = await collectResetMetricOwnerReadings(db as unknown as Db, boards, 2);
-    expect(Object.keys(readings)).toHaveLength(74);
+    expect(Object.keys(readings)).toHaveLength(83);
     expect(readings["US:national"]!.updates["07"]?.value).toBe(4);
     expect(readings["US:national"]!.updates["09"]?.value).toBe(-1);
     expect(readings["US:national"]!.updates["10"]?.value).toBe(50);
@@ -252,7 +305,9 @@ describe("first live v2 metric owners", () => {
       source: "provisional continuity owner: higher_education",
     });
     expect(readings["US:PA"]!.updates["16"]).toBeUndefined();
-    expect(db.collectionMocks.politicalMetrics).toBeUndefined();
+    // Health proxies may use the current health board; economic values above
+    // still come exclusively from macroMetrics.
+    expect(db.collectionMocks.politicalMetrics!.find).toHaveBeenCalledTimes(1);
   });
 
   it("rejects a macro row assigned to another country", async () => {

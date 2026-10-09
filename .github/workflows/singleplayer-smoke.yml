@@ -80,6 +80,16 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci --no-audit --no-fund
+      # Match the validated web-build safeguard for the Linux compiler peak.
+      - name: Add Linux build swap
+        if: runner.os == 'Linux'
+        run: |
+          sudo swapoff -a || true
+          sudo fallocate -l 8G /mnt/build.swap
+          sudo chmod 600 /mnt/build.swap
+          sudo mkswap /mnt/build.swap
+          sudo swapon /mnt/build.swap
+          free -m
       - name: Package the singleplayer runtime
         run: npm run singleplayer:package
         env:

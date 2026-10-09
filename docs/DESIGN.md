@@ -549,6 +549,8 @@ interface ModalProps {
    * want edge-to-edge bordered sections inside the body.
    */
   bodyClassName?: string;
+  /** A restrained, internally scrolling panel for desktop settings forms. */
+  variant?: "default" | "panel";
 }
 ```
 

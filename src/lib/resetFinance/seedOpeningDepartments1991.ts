@@ -4,6 +4,7 @@ import type { Db } from "mongodb";
 import type { GameState } from "@/lib/db/types/gameState";
 import type { ResetSystemSeedReceipt } from "@/lib/resetVersions/rules";
 import { RESET_V2_SEED_REVISION } from "@/lib/resetVersions/rules";
+import { RESET_V2_OPENING_COUNTRIES } from "@/lib/resetVersions/rules";
 import { DEPARTMENT_DEFINITIONS } from "@/lib/governmentFinance/departmentCatalog";
 import { openingFiscalBooks1991 } from "./opening1991";
 import { openingNamedGrantClaims1991 } from "./openingOwnership1991";
@@ -29,11 +30,13 @@ import {
   openingCabinetActionStates,
   type ResetCabinetActionState,
 } from "@/lib/resetCabinet/rules/actionState";
+import type { ResetOpeningCountry } from "./opening1991";
 
 export async function seedOpeningDepartmentBoards1991(
   db: Db,
   worldId: string,
-  sourceTurn: number
+  sourceTurn: number,
+  countries: readonly ResetOpeningCountry[] = RESET_V2_OPENING_COUNTRIES
 ): Promise<ResetSystemSeedReceipt> {
   const state = await db
     .collection<GameState>("gameState")
@@ -48,7 +51,9 @@ export async function seedOpeningDepartmentBoards1991(
   ) {
     throw new Error("The 1991 v2 Cabinet opening lacks its historical US education seat");
   }
-  const expected = buildOpeningDepartmentBoards1991(worldId, sourceTurn);
+  const expected = buildOpeningDepartmentBoards1991(worldId, sourceTurn).filter((board) =>
+    countries.includes(board.countryId as ResetOpeningCountry)
+  );
   const fiscal = openingFiscalBooks1991();
   const partition = buildOpeningDepartmentFundingPartition(
     expected,
@@ -57,6 +62,7 @@ export async function seedOpeningDepartmentBoards1991(
       US: fiscal.US.grants,
       UK: fiscal.UK.grants,
       JP: fiscal.JP.grants,
+      IE: fiscal.IE.grants,
     },
     openingNamedGrantClaims1991()
   );
@@ -67,7 +73,7 @@ export async function seedOpeningDepartmentBoards1991(
     })),
     { ordered: true }
   );
-  const persisted = await collection.find({}).toArray();
+  const persisted = await collection.find({ countryId: { $in: [...countries] } }).toArray();
   const expectedPayload = departmentOpeningBoardPayload(expected);
   if (
     persisted.length !== expected.length ||
@@ -82,7 +88,7 @@ export async function seedOpeningDepartmentBoards1991(
     })),
     { ordered: true }
   );
-  const persistedAccounts = await accounts.find({}).toArray();
+  const persistedAccounts = await accounts.find({ countryId: { $in: [...countries] } }).toArray();
   const expectedAccountsPayload = openingDepartmentAccountsPayload(partition.accounts);
   if (
     persistedAccounts.length !== partition.accounts.length ||
@@ -97,7 +103,9 @@ export async function seedOpeningDepartmentBoards1991(
     })),
     { ordered: true }
   );
-  const persistedContinuity = await continuity.find({}).toArray();
+  const persistedContinuity = await continuity
+    .find({ countryId: { $in: [...countries] } })
+    .toArray();
   const expectedContinuityPayload = openingDepartmentContinuityPayload(partition.continuity);
   if (
     persistedContinuity.length !== partition.continuity.length ||
@@ -110,7 +118,7 @@ export async function seedOpeningDepartmentBoards1991(
     sourceTurn,
     fiscal,
     partition.accounts
-  );
+  ).filter((row) => countries.includes(row.countryId as ResetOpeningCountry));
   const treasuries = db.collection<ResetNationalTreasurySnapshot>("resetNationalTreasuries");
   await treasuries.bulkWrite(
     openingTreasuries.map((row) => ({
@@ -118,7 +126,9 @@ export async function seedOpeningDepartmentBoards1991(
     })),
     { ordered: true }
   );
-  const persistedTreasuries = await treasuries.find({}).toArray();
+  const persistedTreasuries = await treasuries
+    .find({ countryId: { $in: [...countries] } })
+    .toArray();
   const expectedTreasuryPayload = openingNationalTreasuryPayload(openingTreasuries);
   if (
     persistedTreasuries.length !== openingTreasuries.length ||
@@ -126,7 +136,9 @@ export async function seedOpeningDepartmentBoards1991(
   ) {
     throw new Error("The persisted 1991 v2 national treasury failed readback verification");
   }
-  const openingActions = openingCabinetActionStates(worldId, sourceTurn);
+  const openingActions = openingCabinetActionStates(worldId, sourceTurn).filter((row) =>
+    countries.includes(row.countryId as ResetOpeningCountry)
+  );
   const actionStates = db.collection<ResetCabinetActionState>("resetCabinetActionStates");
   await actionStates.bulkWrite(
     openingActions.map((row) => ({
@@ -134,7 +146,9 @@ export async function seedOpeningDepartmentBoards1991(
     })),
     { ordered: true }
   );
-  const persistedActions = await actionStates.find({}).toArray();
+  const persistedActions = await actionStates
+    .find({ countryId: { $in: [...countries] } })
+    .toArray();
   const expectedActionsPayload = cabinetActionStatesPayload(openingActions);
   if (
     persistedActions.length !== openingActions.length ||
@@ -154,5 +168,6 @@ export async function seedOpeningDepartmentBoards1991(
       .update(expectedTreasuryPayload)
       .update(expectedActionsPayload)
       .digest("hex"),
+    countries: [...countries],
   };
 }

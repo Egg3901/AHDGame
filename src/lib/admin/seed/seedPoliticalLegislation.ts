@@ -34,6 +34,7 @@ import {
 import { LAW_COUNTRY_IDS, type LawCountryId } from "@/lib/politicalLegislation/types";
 import { DD_LAND_STATE_IDS } from "@/lib/politicalLegislation/laws/ddLandLaws";
 import { refreshNationalBudgetRevenue } from "@/lib/budget/revenue";
+import { openingNonLawResidual } from "@/lib/budget/rules/nonLawSpending";
 import { getNationalBudgetId } from "@/lib/bonds/sovereign";
 import { NATIONAL_POLICY_STATE_IDS } from "@/lib/policy/nationalStateId";
 import type { CountryId } from "@/lib/constants/countries";
@@ -45,11 +46,8 @@ import {
   scaleProgramCostModel,
 } from "@/lib/seeds/reference/rules/openingProgramCostScale";
 
-/**
- * Player books refit per category to their authored 1991 composition. The US
- * keeps the book-wide fit until its own composition is reviewed.
- */
-const OPENING_COMPOSITION_REFIT_1991: ReadonlySet<string> = new Set(["UK"]);
+/** Player books refit per category to their authored 1991 composition. */
+const OPENING_COMPOSITION_REFIT_1991: ReadonlySet<string> = new Set(["US", "UK"]);
 
 // The gate lives in ONE place (politicalMetrics/pipelinePreset) so the four
 // seed call sites cannot drift apart again. Re-exported under the historical
@@ -274,7 +272,14 @@ export async function seedPoliticalLegislationBaseline(
     const targetSpending = Math.round(
       (budget.gdp * SUCCESSOR_1991_GENERAL_GOVERNMENT_GDP_PERCENT.RU.expenditure) / 100
     );
-    const residual = targetSpending - budget.spending.total;
+    // The union grant pool is booked as spending once the regional budgets
+    // exist; keep it inside the envelope instead of on top of it.
+    const residual = openingNonLawResidual({
+      targetSpending,
+      measuredTotal: budget.spending.total,
+      bookedStateGrants: budget.spending.stateGrants,
+      baselineStateGrants: budget.baselineStateGrants,
+    });
     if (residual < 0) {
       throw new Error(`1991 Russian law spending exceeds the fiscal envelope by ${-residual}`);
     }
@@ -314,6 +319,20 @@ async function calibratePlayerOpeningPrograms1991(
     const authored = OPENING_COMPOSITION_REFIT_1991.has(countryId)
       ? (await import("@/lib/seeds/reference/budgets")).getAuthoredNationalSpending1991(countryId)
       : null;
+    // The book-wide fit stays the regional (state) program scale and the
+    // fallback for any national category the refit does not price.
+    const bookProgramCost = items.reduce((sum, item) => sum + item.amount, 0);
+    const bookScale = openingProgramCostScale({
+      gdp: budget.gdp,
+      annualRevenue: budget.revenue.total,
+      annualDebtService: budget.spending.debtInterest,
+      fixedOperatingCost: Math.max(
+        0,
+        budget.spending.total - budget.spending.debtInterest - bookProgramCost
+      ),
+      programCost: bookProgramCost,
+      maximumDeficitGdpShare: PLAYER_RESET_DEFICIT_GDP_SHARE_1991,
+    });
     let scaleFor: (category: string) => number;
     let scaleSet: Partial<FederalBudget>;
     let scaleNote: string;
@@ -340,28 +359,18 @@ async function calibratePlayerOpeningPrograms1991(
         targetByCategory: authored,
         maximumDeficitGdpShare: PLAYER_RESET_DEFICIT_GDP_SHARE_1991,
       });
-      scaleFor = (category) => scales[category] ?? 1;
-      scaleSet = { programCostScaleBaseline: 1, programCostScaleByCategoryBaseline: scales };
+      scaleFor = (category) => scales[category] ?? bookScale;
+      scaleSet = {
+        programCostScaleBaseline: bookScale,
+        programCostScaleByCategoryBaseline: scales,
+      };
       scaleNote = Object.entries(scales)
         .map(([category, scale]) => `${category}=${scale.toFixed(4)}`)
         .join(", ");
     } else {
-      const programCost = items.reduce((sum, item) => sum + item.amount, 0);
-      const fixedOperatingCost = Math.max(
-        0,
-        budget.spending.total - budget.spending.debtInterest - programCost
-      );
-      const scale = openingProgramCostScale({
-        gdp: budget.gdp,
-        annualRevenue: budget.revenue.total,
-        annualDebtService: budget.spending.debtInterest,
-        fixedOperatingCost,
-        programCost,
-        maximumDeficitGdpShare: PLAYER_RESET_DEFICIT_GDP_SHARE_1991,
-      });
-      scaleFor = () => scale;
-      scaleSet = { programCostScaleBaseline: scale };
-      scaleNote = scale.toFixed(6);
+      scaleFor = () => bookScale;
+      scaleSet = { programCostScaleBaseline: bookScale };
+      scaleNote = bookScale.toFixed(6);
     }
     await db
       .collection<FederalBudget>("federalBudget")

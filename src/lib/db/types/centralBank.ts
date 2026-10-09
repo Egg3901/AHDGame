@@ -36,6 +36,31 @@ export const NPP_CHAIR_STEP_FRACTION = 0.5;
 /** Target real GDP growth for the autonomous chair (matches TARGET_GROWTH in centralBankChairTurn.ts). */
 export const NPP_CHAIR_TARGET_GROWTH = 2.0;
 
+/**
+ * Inflation overshoot (pp above target) at which an autonomous chair or the
+ * committee's Taylor motion stops being bound by MAX_RATE_CHANGE_DELTA. At the
+ * ordinary 0.75pp cap a 60% inflation economy needs ~85 moves, over a decade of
+ * game time, to reach its own Taylor target.
+ */
+export const NPP_CHAIR_HIGH_INFLATION_GAP = 5;
+/** Per-move hike cap (pp) for Taylor-driven moves while inflation is that far over target. */
+export const NPP_CHAIR_HIGH_INFLATION_HIKE_DELTA = 3;
+/** Highest policy rate a Taylor-driven move may reach (the ceiling every other rate writer already honours). */
+export const PRIME_RATE_CEILING = 25;
+
+/**
+ * Per-move hike cap (pp) given inflation minus target. Autonomous chairs, human
+ * chairs, government rate setters and the committee all read this one rule, so
+ * the widened cap cannot drift between the server checks and the rate UI.
+ */
+export function maxHikeDeltaFor(inflationGap: number | null | undefined): number {
+  return typeof inflationGap === "number" &&
+    Number.isFinite(inflationGap) &&
+    inflationGap >= NPP_CHAIR_HIGH_INFLATION_GAP
+    ? NPP_CHAIR_HIGH_INFLATION_HIKE_DELTA
+    : MAX_RATE_CHANGE_DELTA;
+}
+
 /** Maximum rate cut (percentage points) per chair action — chairs may cut more aggressively at the cost of scrutiny. */
 export const MAX_RATE_CUT_DELTA = 1.75;
 
@@ -44,6 +69,13 @@ export const AGGRESSIVE_CUT_SCRUTINY = 10;
 
 /** Number of turns a chair must wait between rate changes. */
 export const RATE_CHANGE_COOLDOWN_TURNS = 6;
+
+/**
+ * Turns a government that holds the policy rate may leave it untouched before
+ * the Treasury acts on the bank's standing advice (one quarter at 48 turns per
+ * year). The government can still set the rate at any time.
+ */
+export const GOVERNMENT_RATE_IDLE_TURNS = 12;
 
 /**
  * Rate-change records kept on a bank. Every writer must slice to this same
@@ -321,6 +353,12 @@ export interface CentralBank {
   bankReserveRequirement?: number;
   /** Turn number of the chair's most recent rate change. Used to enforce a cooldown between adjustments. */
   lastRateChangeTurn?: number;
+  /**
+   * Turn of the most recent standing-advice move on a government-controlled
+   * bank (see `processNppChairAutoRate`). Kept apart from `lastRateChangeTurn`
+   * so the fallback never starts or extends the government's own cooldown.
+   */
+  lastStandingAdviceTurn?: number;
   /** Chair infamy (0-100). Ticks up with high inflation / low growth, down with the inverse. */
   chairInfamy: number;
   /**

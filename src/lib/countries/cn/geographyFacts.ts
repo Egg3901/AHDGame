@@ -2,7 +2,7 @@ import type { AdjacencyMap } from "@/lib/constants/stateAdjacency";
 import type { CountryMapConfig } from "@/lib/commodity-map/commodityMapRegistry";
 import type { Continent } from "@/lib/constants/countryContinents";
 import type { ConscriptionPolicy } from "@/lib/demographics/conscription";
-import type { NormalAnchor } from "@/lib/era/metricCatalog";
+import type { IncomeStartVintage, NormalAnchor } from "@/lib/era/metricCatalog";
 import type { ScoreThreshold } from "@/lib/utils/metricScoring";
 import type { WorldEntityRegion } from "@/lib/world/worldEntityManifest";
 
@@ -258,6 +258,9 @@ export const CN_INCOME_ANCHORS: NormalAnchor[] = [
   },
   {
     year: 1991,
+    // Interpolation point only. A world STARTING in 1991 scores against
+    // CN_INCOME_START_VINTAGES instead; this value stays so worlds starting
+    // in 1999 and 2007 keep their existing bands (#3316).
     value: 9000,
   },
   {
@@ -265,6 +268,16 @@ export const CN_INCOME_ANCHORS: NormalAnchor[] = [
     value: 90000,
   },
 ];
+
+/**
+ * Income anchor for a world that STARTS in the given year, when that year's
+ * seed is dated to a different currency vintage than the interpolation series
+ * above. Used only at the exact start year; never interpolated. 1991 is the
+ * derived household median from seeds/reference/income1991 (#3376).
+ */
+export const CN_INCOME_START_VINTAGES: Record<number, IncomeStartVintage> = {
+  1991: { value: 3187, id: "cn-1991-household-r1" },
+};
 
 /*
  * ⚠ THESE TWO ARE INDEPENDENT, AND NESTING THEM COST ELEVEN COUNTRIES. The

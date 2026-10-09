@@ -8,7 +8,7 @@ import {
 import { selectStatesBundleForPreset } from "./seedStates";
 import { policies } from "@/lib/seeds/reference/policies";
 import { gameConfig } from "@/lib/seeds/reference/gameConfig";
-import { coreGameConfigUpdate } from "./coreGameConfigUpdate";
+import { STALE_PER_WORLD_GAME_CONFIG_UNSET, coreGameConfigUpdate } from "./coreGameConfigUpdate";
 import { demographicCategories } from "@/lib/seeds/demographicCategories";
 import { registerAndGenerate, stateCensusData } from "@/lib/seeds/stateDemographics";
 import { stateCensusData1953 } from "@/lib/seeds/stateCensusData1953";
@@ -178,28 +178,10 @@ export const RESET_DROP_COLLECTIONS: ReadonlyArray<{
   },
 ];
 
-/**
- * Per-world markers the turn engine stamps onto `gameConfig`, cleared on reset.
- *
- * These are the one thing the old blanket `gameConfig` drop legitimately bought.
- * `src/lib/market/launchGuard.ts` stamps a reference market cap and turn on the
- * config doc and compares later turns against it; carried into a new world they
- * would measure the new market's drawdown against the dead world's valuation.
- *
- * Same shape and rationale as `STALE_PROGRESS_GAME_STATE_UNSET` on `gameState`
- * — an explicit `$unset` list, not a blanket drop, so the ~100 operational
- * fields beside them survive. ⚠️ The market-guard *configuration* knobs
- * (`marketGuardEnabled`, `marketGuardDropPct`, `marketGuardGraceTurns`) are
- * admin settings, not per-world state, and must NOT be listed here.
- */
-export const STALE_PER_WORLD_GAME_CONFIG_UNSET: Readonly<Record<string, "">> = Object.freeze({
-  marketGuardReferenceMcap: "",
-  marketGuardReferenceFundamentalMcap: "",
-  marketGuardReferenceTurn: "",
-  marketGuardTrippedAt: "",
-});
-
-export { STALE_MARKET_MODE_STAMP_UNSET } from "./coreGameConfigUpdate";
+export {
+  STALE_MARKET_MODE_STAMP_UNSET,
+  STALE_PER_WORLD_GAME_CONFIG_UNSET,
+} from "./coreGameConfigUpdate";
 
 export type RunSeedOptions = {
   db: Db;

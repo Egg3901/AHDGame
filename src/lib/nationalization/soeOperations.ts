@@ -4,7 +4,13 @@
  * pure (testable without DB); `processSoeOperations` orchestrates the writes.
  */
 import type { Db, AnyBulkWriteOperation } from "mongodb";
-import type { Corporation, CorporateSector, StateMetrics } from "@/lib/db/types";
+import type {
+  Corporation,
+  CorporateSector,
+  FederalBudget,
+  SectorBuildOrder,
+  StateMetrics,
+} from "@/lib/db/types";
 import type { CountryId } from "@/lib/constants/countries";
 import {
   loadFxRatesByCurrency,
@@ -30,7 +36,12 @@ import {
   type MandateContribution,
 } from "./soeMandates";
 import * as Sentry from "@sentry/nextjs";
-import { coverSoeOperatingLoss, debitTreasurySoeCapex, loadTreasuryCurrency } from "./treasury";
+import {
+  coverSoeOperatingLoss,
+  debitTreasurySoeCapex,
+  loadTreasuryCurrency,
+  settleFundedSoeCapexGrant,
+} from "./treasury";
 import {
   resolveTreasuryCashOptions,
   witnessTreasuryCash,
@@ -44,7 +55,16 @@ import {
 import { readCorpEconomicAnchor } from "@/lib/currency/corpEconomyFields";
 import { sectorDailyProfitAnchor } from "@/lib/corporations/sectorProfitBasis";
 import { getMarketSystemModeForDb, marketAtLeast } from "@/lib/market/featureFlag";
-import { capacityPricePerUnit, CAPACITY_ANCHOR_YEAR } from "@/lib/constants/capacityEconomy";
+import {
+  capacityPricePerUnit,
+  CAPACITY_ANCHOR_YEAR,
+  CAPACITY_BUILD_TURNS,
+} from "@/lib/constants/capacityEconomy";
+import { buildNppPriceSignals } from "@/lib/turn/npp/priceSignals";
+import { sectorShortageScore } from "@/lib/turn/npp/marketSignals";
+import { readGovBudgetAnchor } from "@/lib/currency/govBudgetFields";
+import type { CommodityPrice } from "@/lib/db/types/commodityPrice";
+import { planSoeCapexGrowth, soeGrowthBudgetAnchor } from "./rules/soeGrowth";
 import { CAPITAL_DEPRECIATION_PER_TURN } from "@/lib/market/capital";
 import { TURNS_PER_DAY } from "@/lib/constants/turnTime";
 import type { CurrencyCode } from "@/lib/constants/currencies";
@@ -55,6 +75,7 @@ import {
   NATCORP_RD_DECAY_PER_TURN,
   NATCORP_RD_RAMP_UP_PER_TURN,
 } from "./constants";
+import { SETTLEMENT_HISTORY_EXCLUDED } from "@/lib/banking/settlementHistory";
 
 interface MetricOpInput {
   countryId: CountryId;
@@ -405,9 +426,10 @@ export async function processSoeOperations(
   // them entirely. The post-filter keeps the canonical reader as the final word.
   const corps = await db
     .collection<Corporation>("corporations")
-    .find({
-      $or: [{ countryOwnerId: { $exists: true } }, { ownershipState: "stateOwned" }],
-    })
+    .find(
+      { $or: [{ countryOwnerId: { $exists: true } }, { ownershipState: "stateOwned" }] },
+      { projection: SETTLEMENT_HISTORY_EXCLUDED }
+    )
     .toArray();
   const soeCorps = corps.filter((c) => isStateOwned(c));
   if (soeCorps.length === 0) return { soeCorps: 0, backing: [] };
@@ -542,9 +564,16 @@ export async function processSoeOperations(
   // Bounded by construction — see `soeCapacityReplacementCostAnchor`: it buys
   // back exactly the units that wore out this turn, at the standing list price
   // (`capacityBookAnchor` is raised by the cash actually paid, so no exit can
-  // mint against it), leaving `capitalStock` flat. It can never fund growth,
-  // and it never touches `liquidCapital`, so an SOE cannot divert it into a
-  // build order of its own choosing. The P3b exploit stays closed.
+  // mint against it), leaving `capitalStock` flat. The replacement itself never
+  // grows the enterprise, and nothing here touches `liquidCapital`, so an SOE
+  // cannot divert it into a build order of its own choosing. The P3b exploit
+  // stays closed.
+  //
+  // Growth is a separate, rule-bound leg (`planSoeCapexGrowth`): where the
+  // market a sector sells into is short, the same treasury may also pay for one
+  // small build order per sector, which goes through the normal build queue and
+  // lands after the usual build time. The state, not the enterprise, decides and
+  // pays, and a treasury near its debt ceiling pays nothing.
   if (plantsEnabled) {
     await applyStateCapexGrants(
       db,
@@ -913,39 +942,85 @@ async function applyStateCapexGrants(
   now: Date,
   treasuryLedger: () => Promise<TreasuryCashOptions>
 ): Promise<void> {
-  const ops: AnyBulkWriteOperation<CorporateSector>[] = [];
-  const grantByCountry = new Map<CountryId, number>();
+  const grantByCountry = new Map<CountryId, { grantAnchor: number; buys: SoeCapexSectorBuy[] }>();
+  const sectorsByOwner = new Map<CountryId, CorporateSector[]>();
   const grantUnitScale = await loadWorldEraUnitScale(db);
   for (const corp of soeCorps) {
     if (corp.soe) continue; // command economy — funded by directed credit
     const countryId = (corp.countryOwnerId ?? corp.countryId) as CountryId | undefined;
     if (!countryId) continue;
-    const { grantAnchor, buys } = buildSoeCapexGrant(
-      sectorsByCorpId.get(corp._id.toString()) ?? [],
-      currentYear,
-      grantUnitScale
+    const corpSectors = sectorsByCorpId.get(corp._id.toString()) ?? [];
+    sectorsByOwner.set(countryId, [...(sectorsByOwner.get(countryId) ?? []), ...corpSectors]);
+    const { grantAnchor, buys } = buildSoeCapexGrant(corpSectors, currentYear, grantUnitScale);
+    if (!(grantAnchor > 0) || buys.length === 0) continue;
+    const grant = grantByCountry.get(countryId) ?? { grantAnchor: 0, buys: [] };
+    grant.grantAnchor += grantAnchor;
+    grant.buys.push(...buys);
+    grantByCountry.set(countryId, grant);
+  }
+  if (grantByCountry.size === 0) return;
+  const cashLedger = await treasuryLedger();
+  const turn = cashLedger.context?.turn ?? 0;
+  const capacityUpdate = (buy: SoeCapexSectorBuy) =>
+    plantCapacityDeltaPipeline(
+      buy.sectorType,
+      buy.unitsAdded,
+      { capacityBookAnchor: buy.nextBookAnchor, updatedAt: now },
+      buy.industryModel,
+      buy.mediaDiscriminator
     );
-    if (!(grantAnchor > 0)) continue;
-    for (const buy of buys) {
-      ops.push({
-        updateOne: {
+
+  if (cashLedger.context?.treasuryCashLedgerEnabled) {
+    // Funded cash: each country's capacity rides its Treasury debit's receipt,
+    // so an unaffordable grant buys nothing and blocks no other country.
+    for (const [countryId, { grantAnchor, buys }] of grantByCountry) {
+      const outcome = await settleFundedSoeCapexGrant(db, {
+        countryId,
+        grantAnchor,
+        fxByCurrency,
+        now,
+        ledger: cashLedger,
+        treasuryCurrency: treasuryCurrencyByCountry.get(countryId),
+        key: `soe-capex-grant:${turn}:${countryId}`,
+        capacity: buys.map((buy) => ({
+          collection: "corporateSectors",
           filter: { _id: buy.sectorId },
-          update: plantCapacityDeltaPipeline(
-            buy.sectorType,
-            buy.unitsAdded,
-            { capacityBookAnchor: buy.nextBookAnchor, updatedAt: now },
-            buy.industryModel,
-            buy.mediaDiscriminator
-          ),
-        },
+          pipelineUpdate: capacityUpdate(buy),
+          note: "Install the state capex grant's replacement capacity",
+        })),
+      });
+      if (outcome.status !== "paid") {
+        Sentry.addBreadcrumb({
+          category: "soe.capexGrant",
+          level: "warning",
+          message: `State capex grant for ${countryId} not paid this turn (${outcome.status})`,
+          data: { countryId, turn, grantAnchor, error: outcome.error },
+        });
+        continue;
+      }
+      await applyStateCapexGrowth(db, {
+        countryId,
+        sectors: sectorsByOwner.get(countryId) ?? [],
+        year: currentYear,
+        unitScale: grantUnitScale,
+        fxByCurrency,
+        treasuryCurrency: treasuryCurrencyByCountry.get(countryId),
+        now,
+        ledger: cashLedger,
+        turn,
       });
     }
-    grantByCountry.set(countryId, (grantByCountry.get(countryId) ?? 0) + grantAnchor);
+    return;
   }
-  if (ops.length === 0) return;
+
+  const ops: AnyBulkWriteOperation<CorporateSector>[] = [];
+  for (const { buys } of grantByCountry.values()) {
+    for (const buy of buys) {
+      ops.push({ updateOne: { filter: { _id: buy.sectorId }, update: capacityUpdate(buy) } });
+    }
+  }
   await db.collection<CorporateSector>("corporateSectors").bulkWrite(ops);
-  for (const [countryId, grantAnchor] of grantByCountry) {
-    const cashLedger = await treasuryLedger();
+  for (const [countryId, { grantAnchor }] of grantByCountry) {
     await debitTreasurySoeCapex(
       db,
       countryId,
@@ -954,7 +1029,143 @@ async function applyStateCapexGrants(
       now,
       cashLedger,
       treasuryCurrencyByCountry.get(countryId),
-      `soe-capex-grant:${cashLedger.context?.turn ?? 0}:${countryId}`
+      `soe-capex-grant:${turn}:${countryId}`
     );
+  }
+}
+
+/**
+ * Fund growth orders for one owning country's short sectors (funded Treasury
+ * cash only). Paid through the same settlement as the replacement grant, under
+ * its own key: an unaffordable growth leg buys nothing and never blocks the
+ * replacement. The order lands in the sector's normal `buildQueue`, so the
+ * capacity arrives after the usual build time and is booked at what was paid.
+ */
+async function applyStateCapexGrowth(
+  db: Db,
+  input: {
+    countryId: CountryId;
+    sectors: readonly CorporateSector[];
+    year: number | null | undefined;
+    unitScale: number;
+    fxByCurrency: ReadonlyMap<CurrencyCode, number>;
+    treasuryCurrency: CurrencyCode | undefined;
+    now: Date;
+    ledger: TreasuryCashOptions;
+    turn: number;
+  }
+): Promise<void> {
+  const { countryId, sectors, ledger, turn, now } = input;
+  const candidates = sectors.filter(
+    (s) => s.sectorType !== "extraction" && (s.capitalStock ?? 0) > 0
+  );
+  if (candidates.length === 0) return;
+  const [budgetDoc, priceDocs, queueDocs] = await Promise.all([
+    db
+      .collection<FederalBudget>("federalBudget")
+      .findOne(
+        { countryId },
+        { projection: { debt: 1, sovereignCrisisState: 1, treasuryCashLocal: 1 } }
+      ),
+    db
+      .collection<CommodityPrice>("commodityPrices")
+      .find(
+        {},
+        {
+          projection: {
+            commodity: 1,
+            basePrice: 1,
+            globalPrice: 1,
+            globalSupply: 1,
+            globalDemand: 1,
+            nationalPrices: 1,
+            nationalSupply: 1,
+            nationalDemand: 1,
+            reachablePrices: 1,
+            demandTruncatedUnits: 1,
+          },
+        }
+      )
+      .toArray(),
+    db
+      .collection<CorporateSector>("corporateSectors")
+      .find({ _id: { $in: candidates.map((s) => s._id) } }, { projection: { buildQueue: 1 } })
+      .toArray(),
+  ]);
+  if (!budgetDoc) return;
+  const currency =
+    input.treasuryCurrency ??
+    ledger.context?.treasuryCurrencies.get(countryId) ??
+    (await loadTreasuryCurrency(db, countryId));
+  const rate = input.fxByCurrency.get(currency) ?? 1;
+  const budgetAnchor = soeGrowthBudgetAnchor({
+    debtPrincipal: budgetDoc.debt?.principal ?? Number.NaN,
+    debtCeiling: budgetDoc.debt?.ceiling ?? 0,
+    crisisState: budgetDoc.sovereignCrisisState,
+    cashAnchor: readGovBudgetAnchor(budgetDoc.treasuryCashLocal ?? 0, currency, rate),
+  });
+  if (!(budgetAnchor > 0)) return;
+
+  const { priceRatioOf } = buildNppPriceSignals(new Map(priceDocs.map((p) => [p.commodity, p])));
+  const pendingById = new Map(queueDocs.map((q) => [String(q._id), q.buildQueue?.length ?? 0]));
+  const priceYear =
+    typeof input.year === "number" && Number.isFinite(input.year)
+      ? input.year
+      : CAPACITY_ANCHOR_YEAR;
+  const byId = new Map(candidates.map((s) => [String(s._id), s]));
+  const { growthAnchor, orders } = planSoeCapexGrowth(
+    candidates.map((s) => ({
+      id: String(s._id),
+      sectorType: s.sectorType,
+      capitalStock: s.capitalStock ?? 0,
+      pendingOrders: pendingById.get(String(s._id)) ?? 0,
+      unitPriceAnchor: capacityPricePerUnit(
+        s.sectorType,
+        priceYear,
+        input.unitScale,
+        s.strategyId ?? null,
+        s.industryModel
+      ),
+      shortage: sectorShortageScore(s.sectorType, s.countryId ?? countryId, priceRatioOf),
+    })),
+    budgetAnchor
+  );
+  if (orders.length === 0) return;
+
+  const outcome = await settleFundedSoeCapexGrant(db, {
+    countryId,
+    grantAnchor: growthAnchor,
+    fxByCurrency: input.fxByCurrency,
+    now,
+    ledger,
+    treasuryCurrency: input.treasuryCurrency,
+    key: `soe-capex-growth:${turn}:${countryId}`,
+    capacity: orders.map((o) => {
+      const sector = byId.get(o.sectorId)!;
+      const buildOrder: SectorBuildOrder = {
+        unitsOrdered: o.units,
+        strategyId: sector.strategyId ?? null,
+        costPaidAnchor: o.costAnchor,
+        startTurn: turn,
+        onlineTurn: turn + Math.max(1, CAPACITY_BUILD_TURNS(sector.sectorType)),
+        smooth: true,
+      };
+      return {
+        collection: "corporateSectors",
+        // Compare-and-swap on an empty queue: a sector that gained an order
+        // since the read above is left alone.
+        filter: { _id: sector._id, buildQueue: { $in: [null, []] } },
+        update: { $push: { buildQueue: buildOrder }, $set: { updatedAt: now } },
+        note: "Queue the state capex growth order",
+      };
+    }),
+  });
+  if (outcome.status !== "paid") {
+    Sentry.addBreadcrumb({
+      category: "soe.capexGrowth",
+      level: "warning",
+      message: `State capex growth for ${countryId} not paid this turn (${outcome.status})`,
+      data: { countryId, turn, growthAnchor, error: outcome.error },
+    });
   }
 }

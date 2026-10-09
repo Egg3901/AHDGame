@@ -93,6 +93,14 @@ describe("nppActionProcessing", () => {
           return {
             find: mockCorpFind,
             findOne: mockFindOne,
+            // Founding reads the per-country sector counts once per sweep.
+            aggregate: vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue([]) }),
+          };
+        }
+        if (name === "corporateSectors") {
+          return {
+            // Founding reads capacity per firm per sector once per sweep.
+            aggregate: vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue([]) }),
           };
         }
         return {

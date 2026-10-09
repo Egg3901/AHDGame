@@ -121,7 +121,7 @@ The selected candidate must **accept** the offer. If they decline, the next elig
 
 ## Setting the prime rate
 
-The Chair sets monetary policy by adjusting the prime rate. The prime rate can be set between **0% and 25%** in **0.25% increments** (e.g., 2.00%, 2.25%, 2.50%). This is done through the character's available actions on the Central Bank page. At the US Federal Reserve the Chair proposes and the FOMC votes (see [FOMC / Rate-Setting Board](/wiki/fomc)); every other bank's governor sets the rate alone, or the government does where the bank is not independent. The prime rate affects:
+The Chair sets monetary policy by adjusting the prime rate. The prime rate can be set between **0% and 25%** in **0.25% increments** (e.g., 2.00%, 2.25%, 2.50%). This is done through the character's available actions on the Central Bank page. A single move can raise the rate by at most **0.75 points** and cut it by at most **1.75 points**, with one change every 6 turns. When inflation is at least **5 points above target**, the hike limit widens to **3 points** for as long as that holds, so a bank can catch up with runaway inflation in a few moves; the Central Bank page shows the range you can use this turn. Cuts below the normal 0.75 point band cost scrutiny. At the US Federal Reserve the Chair proposes and the FOMC votes (see [FOMC / Rate-Setting Board](/wiki/fomc)); every other bank's governor sets the rate alone, or the government does where the bank is not independent. The prime rate affects:
 
 ### 1. Corporate bond costs
 
@@ -133,7 +133,7 @@ Sovereign bonds pay the prime rate plus a term premium for longer maturities, pl
 
 ### 3. Exchange rates
 
-The prime rate is one of four macro factors that drive the exchange rate target each turn. The full macro target formula is:
+The prime rate is one of four macro factors that drive the exchange rate target. In multiplayer, floating rates advance halfway at half past each hour, with the hourly turn applying the rest of the step. The full macro target formula is:
 
 \`\`\`
 macroTarget = baseRate × multiplier
@@ -150,7 +150,7 @@ multiplier = 1
 - **GDP growth**: stronger growth strengthens currency; sensitivity 0.01
 - **Trade growth**: trade surplus strengthens currency; sensitivity 0.005
 
-The actual rate converges toward this target at **5% per turn** (\`DRIFT_SPEED\`), so a full rate shock takes roughly one game year (~48 turns) to work through. On top of macro drift, two additional forces apply each turn:
+The actual rate converges toward this target at **5% per turn** (\`DRIFT_SPEED\`), so a full rate shock takes roughly one game year (~48 turns) to work through. The half-hour update exposes half of this step; the hourly turn completes it. On top of macro drift, two additional forces apply each turn:
 
 - **Volume pressure**: net buy/sell activity creates a short-term offset capped at **±5%** per turn. Volume accounts for **20%** of rate direction; macro fundamentals account for **80%**.
 - **Random noise**: ±0.4% per-turn jitter prevents perfectly predictable movement.
@@ -159,7 +159,7 @@ The actual rate converges toward this target at **5% per turn** (\`DRIFT_SPEED\`
 
 ### 4. Inflation
 
-The prime rate is a direct inflation management tool. High rates dampen borrowing and spending, reducing inflationary pressure. This relationship is captured in the per-turn inflation recalculation, which feeds GDP growth data and prime rate into an inflation model that updates every turn.
+The prime rate is a direct inflation management tool. High rates dampen borrowing and spending, reducing inflationary pressure. The inflation model uses GDP growth data and the prime rate, advances halfway at half past each hour, and completes the step on the hourly turn.
 
 ### 5. Corporate profit margins (via inflation)
 

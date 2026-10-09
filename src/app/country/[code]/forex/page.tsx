@@ -1,5 +1,7 @@
 "use client";
 
+import { useGameEvents } from "@/hooks/useGameEvents";
+
 import { useState, useEffect, use, Suspense, useCallback, useMemo } from "react";
 import { useSearchParams, usePathname, useRouter } from "next/navigation";
 import { Skeleton } from "@/components/ui";
@@ -124,8 +126,8 @@ function ForexPageInner({ params }: { params: Promise<{ code: string }> }) {
     ) ??
     "GBP";
 
-  const fetchData = useCallback(async () => {
-    setLoading(true);
+  const fetchData = useCallback(async (background = false) => {
+    if (!background) setLoading(true);
     setError("");
     try {
       const [exchangeRes, ordersRes, macroRes, countriesRes] = await Promise.all([
@@ -239,6 +241,8 @@ function ForexPageInner({ params }: { params: Promise<{ code: string }> }) {
   useEffect(() => {
     fetchData(); // eslint-disable-line react-hooks/set-state-in-effect -- initial data fetch
   }, [fetchData]);
+
+  useGameEvents(() => void fetchData(true), ["turn_complete", "market_tick"]);
 
   if (enabled === false) {
     return (

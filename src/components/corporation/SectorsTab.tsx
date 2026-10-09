@@ -9,6 +9,7 @@ import {
   SPRAWL_PENALTY_PER_PAIR,
   LOGISTICS_MAX_SPRAWL_EFFECT,
   getSprawlModifier,
+  isSprawlExemptSectorType,
 } from "@/lib/constants/corporations";
 import {
   MONEY_PERIODS,
@@ -41,13 +42,12 @@ import { SectorTypeDossier } from "./SectorTypeDossier";
 import { SectorStrategyPanel } from "./SectorStrategyPanel";
 import type { SectorTypeMetricContext } from "./sectorTypeMetrics";
 import { DenseSection, InlineStatus, Segmented, SmallButton, signTone } from "./dense/DenseKit";
-import { getOperatingSectorType } from "@/lib/constants/sectorStrategies";
+import { getOperatingSectorLabel, getOperatingSectorType } from "@/lib/constants/sectorStrategies";
 
-function sectorIdentity(
+export function sectorIdentity(
   sector: Pick<SectorDetail, "sectorType" | "industryModel" | "mediaDiscriminator">
 ): string {
-  const base = `${sector.sectorType}:${sector.industryModel ?? ""}`;
-  return sector.mediaDiscriminator ? `${base}:${sector.mediaDiscriminator}` : base;
+  return `${sector.sectorType}:${sector.industryModel ?? ""}:${sector.mediaDiscriminator ?? ""}`;
 }
 
 interface SectorsTabProps {
@@ -200,7 +200,11 @@ export default function SectorsTab({
   );
   const effectivePenaltyPerPair =
     SPRAWL_PENALTY_PER_PAIR * (hasSecondaryType ? 2 : 1) * Math.max(0.5, 1 - 0.5 * lsFraction);
-  const currentSprawlPenalty = getSprawlModifier(totalSectors, logisticsStrength, hasSecondaryType);
+  // Logistics sectors never pay sprawl, so an all-logistics corp carries none.
+  const sprawlExposed = sectors.some((sector) => !isSprawlExemptSectorType(sector.sectorType));
+  const currentSprawlPenalty = sprawlExposed
+    ? getSprawlModifier(totalSectors, logisticsStrength, hasSecondaryType)
+    : 0;
 
   // Stored money figures are daily (24-turn) rates; moneyTimescale owns the
   // conversion so every surface shows the same number in the same unit.
@@ -210,18 +214,19 @@ export default function SectorsTab({
   const sectorTypes = useMemo(() => {
     const groups = new Map<
       string,
-      { sectorType: string; industryModel: string | null; lane: string; count: number }
+      {
+        sectorType: string;
+        industryModel: string | null;
+        mediaDiscriminator: string | null;
+        count: number;
+      }
     >();
     for (const sector of sectors) {
       const value = sectorIdentity(sector);
       const group = groups.get(value) ?? {
         sectorType: sector.sectorType,
         industryModel: sector.industryModel ?? null,
-        lane: getOperatingSectorType(
-          sector.sectorType,
-          sector.industryModel,
-          sector.mediaDiscriminator
-        ),
+        mediaDiscriminator: sector.mediaDiscriminator ?? null,
         count: 0,
       };
       group.count += 1;
@@ -233,9 +238,13 @@ export default function SectorsTab({
         value,
         ...group,
         label:
-          group.lane === "manufacturing_vehicles"
-            ? "Vehicle manufacturing"
-            : (OPERATING_SECTOR_TYPE_LABELS[group.lane as OperatingSectorType] ?? group.sectorType),
+          getOperatingSectorLabel(
+            group.sectorType,
+            group.industryModel,
+            group.mediaDiscriminator
+          ) ??
+          OPERATING_SECTOR_TYPE_LABELS[group.sectorType as OperatingSectorType] ??
+          group.sectorType,
       }));
   }, [sectors]);
 
@@ -265,7 +274,13 @@ export default function SectorsTab({
   // onward is a compile-time string. An unowned or unknown type simply gets no
   // dossier, while the table above still filters.
   const selectedSectorGroup = sectorTypes.find((group) => group.value === activeTypeFilter) ?? null;
-  const operatingDossierType = selectedSectorGroup?.lane ?? null;
+  const operatingDossierType = selectedSectorGroup
+    ? getOperatingSectorType(
+        selectedSectorGroup.sectorType,
+        selectedSectorGroup.industryModel,
+        selectedSectorGroup.mediaDiscriminator
+      )
+    : null;
   const dossierType = operatingDossierType
     ? (OPERATING_SECTOR_TYPES.find((t) => t === operatingDossierType) ?? null)
     : null;
@@ -370,9 +385,7 @@ export default function SectorsTab({
         {isCeo && (
           <SmallButton
             tone="primary"
-            onClick={() =>
-              openExpandModal(selectedSectorGroup?.lane as OperatingSectorType | undefined)
-            }
+            onClick={() => openExpandModal(operatingDossierType as OperatingSectorType | undefined)}
           >
             + {buildLabel}
           </SmallButton>
@@ -437,13 +450,15 @@ export default function SectorsTab({
             <span className="font-medium text-foreground">Sprawl. </span>
             {currentSprawlPenalty < 0 ? (
               <span className="font-medium text-error">
-                {currentSprawlPenalty.toFixed(1)}% on every sector margin now.{" "}
+                {currentSprawlPenalty.toFixed(1)}% on every non-logistics sector margin now.{" "}
               </span>
+            ) : !sprawlExposed ? (
+              <span className="text-success">None: logistics sectors are exempt. </span>
             ) : totalSectors >= SPRAWL_SECTOR_THRESHOLD ? (
               <span className="text-success">Offset by Logistics &amp; Operations. </span>
             ) : null}
             The penalty begins at sector {SPRAWL_SECTOR_THRESHOLD + 1}. Every 2 sectors over the
-            threshold reduce all sector margins by{" "}
+            threshold reduce every non-logistics sector margin by{" "}
             {Math.abs(SPRAWL_PENALTY_PER_PAIR * (hasSecondaryType ? 2 : 1)).toFixed(1)}%
             {hasSecondaryType ? " (doubled because you have a secondary type)" : ""}. Logistics
             &amp; Operations strength raises the threshold (now{" "}

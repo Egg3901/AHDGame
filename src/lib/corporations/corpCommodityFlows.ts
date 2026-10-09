@@ -48,6 +48,10 @@ import {
 import { isPlannedEconomy } from "@/lib/constants/commandEconomy";
 import { freshMilitaryDiversion } from "@/lib/military/arsenal";
 import { applyExtractionResourceCapacityToSupply } from "@/lib/corporations/extractionResourceSupply";
+import {
+  energyProductivityMultiplier,
+  plantUtilizationForInputs,
+} from "@/lib/corporations/rules/energyProductivityRamp";
 import { getInputMultiplier, getOutputMultiplier } from "@/lib/utils/productionPolicy";
 
 /** Market context for one commodity, from the latest global flow ledger row. */
@@ -343,7 +347,11 @@ export function computeSectorCommodityUnits(
     typeof sector.producedUnits === "number" &&
     typeof sector.capacityUnits === "number" &&
     sector.capacityUnits > 0
-      ? clamp01(sector.producedUnits / sector.capacityUnits)
+      ? plantUtilizationForInputs(
+          sector.producedUnits,
+          sector.capacityUnits,
+          energyProductivityMultiplier(sector.sectorType, currentTurn, context.preset)
+        )
       : 1;
 
   for (const [commodity, rate] of Object.entries(supplyRates) as [CommodityType, number][]) {

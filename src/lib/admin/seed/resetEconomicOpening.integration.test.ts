@@ -1,5 +1,9 @@
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import type { Db } from "mongodb";
+import type { FederalBudget } from "@/lib/db/types/budget";
+import type { LegislationType } from "@/lib/db/types/legislation";
+import { getLaw } from "@/lib/politicalLegislation/catalog";
+import { programCostScaleForLaw } from "@/lib/politicalLegislation/programCostScale";
 import { checkEconomicOpening } from "../seedDiagnostic/economicOpening";
 import { seedNppCorporations } from "./seedNppCorporations";
 
@@ -61,6 +65,64 @@ describe("1991 reset economic acceptance", () => {
     );
     expect(failures, JSON.stringify(failures, null, 2)).toEqual([]);
   }, 30_000);
+
+  it("fits the US program book to its authored 1991 composition through repeated refreshes", async () => {
+    const { refreshNationalBudgetRevenue } = await import("@/lib/budget/revenue");
+    const { calculateFederalLawAnnualCosts } = await import("@/lib/budget/spending");
+    const { getAuthoredNationalSpending1991 } = await import("@/lib/seeds/reference/budgets");
+    const authored = getAuthoredNationalSpending1991("US")!;
+    const authoredTotal = Object.values(authored).reduce((a, b) => a + b, 0);
+    for (let refresh = 0; refresh < 3; refresh++) {
+      await refreshNationalBudgetRevenue(db, ["federal"]);
+      const budget = (await db.collection<FederalBudget>("federalBudget").findOne({
+        _id: "federal",
+      }))!;
+      expect(Math.abs(budget.surplus / budget.gdp + 0.005)).toBeLessThan(0.0005);
+      const { items } = await calculateFederalLawAnnualCosts(db, budget);
+      const byCategory: Record<string, number> = {};
+      for (const { law, amount } of items) {
+        if (!law.costModelV2) continue;
+        byCategory[law.budgetCategory || "other"] =
+          (byCategory[law.budgetCategory || "other"] ?? 0) + amount;
+      }
+      const programTotal = Object.values(byCategory).reduce((a, b) => a + b, 0);
+      for (const [category, amount] of Object.entries(authored)) {
+        expect((byCategory[category] ?? 0) / programTotal, category).toBeCloseTo(
+          amount / authoredTotal,
+          6
+        );
+      }
+      // The 1953 book-wide fit left defence at 8.5% of GDP and health at 0.3%.
+      expect(byCategory.defense! / budget.gdp).toBeLessThan(0.05);
+      expect(byCategory.healthcare! / budget.gdp).toBeGreaterThan(0.01);
+    }
+
+    // Enacted programs and later bills price on the same per-category scale.
+    const budget = (await db.collection<FederalBudget>("federalBudget").findOne({
+      _id: "federal",
+    }))!;
+    const { items } = await calculateFederalLawAnnualCosts(db, budget);
+    const types = new Map(
+      (
+        await db
+          .collection<LegislationType>("legislationTypes")
+          .find({ _id: { $in: items.map(({ law }) => law.legislationTypeId) } })
+          .toArray()
+      ).map((type) => [type._id, type])
+    );
+    let compared = 0;
+    for (const { law } of items) {
+      if (!law.costModelV2) continue;
+      const option = types.get(law.legislationTypeId)?.policyOptions?.[law.policyOptionIndex ?? -1];
+      expect(option?.costModelV2, law.legislationTypeId).toEqual(law.costModelV2);
+      const catalogLaw = getLaw(law.legislationTypeId)!;
+      const quote = programCostScaleForLaw(budget, catalogLaw);
+      const scale = budget.programCostScaleByCategoryBaseline?.[law.budgetCategory || "other"];
+      expect(quote, law.legislationTypeId).toBe(scale);
+      compared++;
+    }
+    expect(compared).toBeGreaterThan(10);
+  }, 60_000);
 
   it("refills a missing competitor without skipping or duplicating the rest of its country", async () => {
     const before = await db.collection("corporations").countDocuments({ ceoType: "npp" });

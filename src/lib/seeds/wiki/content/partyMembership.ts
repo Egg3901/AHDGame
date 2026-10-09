@@ -17,7 +17,7 @@ You can switch parties from your character's party settings. Switching is not in
 
 Leaving a party to become an independent does **not** trigger the cooldown. You can leave freely at any time. The cooldown only applies when you subsequently join a new party.
 
-If you switch parties mid-campaign or mid-term, your current office does not change. You still hold the seat you won; only your primary eligibility and party actions shift. NPPs and other players in the legislature will notice the switch.
+If you switch from one party to another mid-campaign, you are withdrawn from every active election. Joining a party from Independent is different: you stay in each active race and your candidacy moves to the new party. A party switch does not change an office you already hold. NPPs and other players in the legislature will notice the switch.
 
 ## What membership gives you
 

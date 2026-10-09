@@ -36,6 +36,14 @@ vi.mock("@/lib/patreon/reconcile", () => ({
   runPatreonReconcile: mockRunPatreonReconcile,
 }));
 
+const { mockRunMarketTick, mockRunHalfHourTick } = vi.hoisted(() => ({
+  mockRunMarketTick: vi.fn(),
+  mockRunHalfHourTick: vi.fn(),
+}));
+// Tick bodies (lock handling, pricing) are tested in their own modules.
+vi.mock("@/lib/turn/subhour/marketTick", () => ({ runMarketTick: mockRunMarketTick }));
+vi.mock("@/lib/turn/subhour/halfHourTick", () => ({ runHalfHourTick: mockRunHalfHourTick }));
+
 // Mock mongodb: the recovery sweep calls getDb() when idle. Other callbacks
 // that reach the real getDb do so inside their own try/catch, so a stubbed
 // handle cannot break their assertions.
@@ -52,7 +60,7 @@ vi.mock("@sentry/nextjs", () => ({
 
 /** Cron expressions, so tests can select a callback by what it schedules
  * rather than by the order it happens to be registered in. */
-const STOCK_EXCHANGE_SCHEDULE = "*/15 * * * *";
+const STOCK_EXCHANGE_SCHEDULE = "15,45 * * * *";
 const STUCK_LOCK_SWEEP_SCHEDULE = "*/5 * * * *";
 
 describe("cron jobs", () => {
@@ -135,6 +143,20 @@ describe("cron jobs", () => {
   });
 
   describe("initializeCronJobs", () => {
+    it("does not reconcile production supporters from an unconfigured sandbox worker", async () => {
+      vi.stubEnv("CRON_OWNER", "worker");
+      vi.stubEnv("NODE_ENV", "production");
+      vi.stubEnv("SENTRY_ENVIRONMENT", "sandbox");
+      vi.stubEnv("PATREON_CREATOR_TOKEN", undefined);
+      const { initializeCronJobs, PATREON_RECONCILIATION_SCHEDULE } = await import("./cron");
+      mockGetGameState.mockResolvedValue({ currentTurn: 1, isActive: true });
+      mockSchedule.mockReturnValue({ start: vi.fn(), stop: vi.fn(), getStatus: vi.fn() } as any);
+      await initializeCronJobs();
+      expect(
+        mockSchedule.mock.calls.some(([schedule]) => schedule === PATREON_RECONCILIATION_SCHEDULE)
+      ).toBe(false);
+    });
+
     it("runs Patreon reconciliation in apply mode from the hosted worker schedule", async () => {
       vi.stubEnv("CRON_OWNER", "worker");
       vi.stubEnv("SINGLEPLAYER", undefined);
@@ -1204,73 +1226,33 @@ describe("cron jobs", () => {
     });
   });
 
-  describe("stock exchange cron callback", () => {
-    it("skips refresh when isProcessing is true with a fresh heartbeat", async () => {
+  describe("market tick cron callback", () => {
+    const init = async () => {
       mockInitializeGameState.mockResolvedValue(undefined);
       mockGetGameState.mockResolvedValue({
         currentTurn: 1,
         isActive: true,
-        isProcessing: true,
-        processingHeartbeatAt: new Date(),
         lastProcessed: new Date(),
       });
-      const mockCronJob = {
-        start: vi.fn(),
-        stop: vi.fn(),
-        getStatus: vi.fn(),
-      };
-      mockSchedule.mockReturnValue(mockCronJob as any);
-
+      mockSchedule.mockReturnValue({ start: vi.fn(), stop: vi.fn(), getStatus: vi.fn() } as any);
       const { initializeCronJobs } = await import("./cron");
       await initializeCronJobs();
+    };
 
-      // Select by cron expression, not call index: inserting a schedule ahead
-      // of this one used to silently re-point these assertions at the wrong
-      // callback (adding the stuck-lock sweep did exactly that).
-      const stockCallback = findScheduledCallback(STOCK_EXCHANGE_SCHEDULE);
-      await stockCallback();
-
-      expect(consoleLogSpy).toHaveBeenCalledWith(
-        expect.stringContaining("[Cron] Stock exchange refresh skipped — turn in progress")
-      );
+    it("runs the market tick at :15 and :45", async () => {
+      mockRunMarketTick.mockResolvedValueOnce({ turn: 1, corpsRepriced: 3 });
+      await init();
+      await findScheduledCallback(STOCK_EXCHANGE_SCHEDULE)();
+      expect(mockRunMarketTick).toHaveBeenCalledTimes(1);
     });
 
-    it("does not bail on stuck-isProcessing when the lock is stale", async () => {
-      // Regression: railway logs during the 2026-05-24 sandbox incident show
-      // "[Cron] Stock exchange refresh skipped — turn in progress" repeating
-      // for hours while a crashed turn left isProcessing=true. A stale lock
-      // means no real turn is in flight, so the refresh must proceed.
-      mockInitializeGameState.mockResolvedValue(undefined);
-      const staleHeartbeat = new Date(Date.now() - 25 * 60 * 1000);
-      mockGetGameState.mockResolvedValue({
-        currentTurn: 1,
-        isActive: true,
-        isProcessing: true,
-        processingHeartbeatAt: staleHeartbeat,
-        lastProcessed: new Date(),
-      });
-      const mockCronJob = {
-        start: vi.fn(),
-        stop: vi.fn(),
-        getStatus: vi.fn(),
-      };
-      mockSchedule.mockReturnValue(mockCronJob as any);
-
-      const { initializeCronJobs } = await import("./cron");
-      await initializeCronJobs();
-
-      const stockCallback = findScheduledCallback(STOCK_EXCHANGE_SCHEDULE);
-      await stockCallback();
-
-      // Must NOT have logged the stuck-isProcessing bail-out.
-      const skipLogs = consoleLogSpy.mock.calls.filter((args: unknown[]) =>
-        args.some(
-          (a) =>
-            typeof a === "string" &&
-            a.includes("[Cron] Stock exchange refresh skipped — turn in progress")
-        )
+    it("logs a skip when the tick declines (inactive or live turn lock)", async () => {
+      mockRunMarketTick.mockResolvedValueOnce(null);
+      await init();
+      await findScheduledCallback(STOCK_EXCHANGE_SCHEDULE)();
+      expect(consoleLogSpy).toHaveBeenCalledWith(
+        expect.stringContaining("[Cron] Market tick skipped")
       );
-      expect(skipLogs).toHaveLength(0);
     });
   });
 

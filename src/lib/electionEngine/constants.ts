@@ -406,7 +406,7 @@ export const MAX_STATE_ORG_BONUS_PRIMARY = 0.25;
  * Pairs with HOME_STATE_BONUS_GENERAL (smaller) which the same engine code
  * selects when options.isGeneralElection is true.
  */
-export const HOME_STATE_BONUS_PRIMARY = 0.1;
+export const HOME_STATE_BONUS_PRIMARY = 0.2;
 
 /**
  * Multiplicative party-influence bonus per reference scale of party influence in

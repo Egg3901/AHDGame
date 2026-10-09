@@ -1,5 +1,7 @@
 "use client";
 
+import { useGameEvents } from "@/hooks/useGameEvents";
+
 import { MonetaryAuthorityNotice } from "./components/MonetaryAuthorityNotice";
 
 import { useState, useEffect, useCallback } from "react";
@@ -177,6 +179,7 @@ export default function CentralBankClient({ countryId, apiBasePath, members }: P
       if (!res.ok) throw new Error("Failed to load central bank data");
       const json = await res.json();
       setData(json);
+      setError(null);
       setChairDecisionError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unknown error");
@@ -188,6 +191,8 @@ export default function CentralBankClient({ countryId, apiBasePath, members }: P
   useEffect(() => {
     void fetchData();
   }, [fetchData]);
+
+  useGameEvents(() => void fetchData(), ["turn_complete", "market_tick"]);
 
   const handleResign = async () => {
     if (!confirm("Are you sure you want to resign as chair? This cannot be undone.")) return;
@@ -662,6 +667,8 @@ export default function CentralBankClient({ countryId, apiBasePath, members }: P
                 committeeSeated={data.committeeSeated ?? false}
                 committeeDead={data.committeeDead ?? false}
                 onOpenCommittee={() => setActiveTab("committee")}
+                inflationRate={data.rateInflation}
+                targetInflation={data.rateTargetInflation}
                 lastRateChangeTurn={data.lastRateChangeTurn}
                 currentTurn={data.currentTurn}
                 bankApiBasePath={bankApiBasePath}

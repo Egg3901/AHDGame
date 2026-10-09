@@ -1,6 +1,8 @@
 import type { ObjectId } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
 import type { EconomicSystemTarget, JurisdictionMode, LawImplementationMode } from "./legislation";
+import type { SubhourStepStamp } from "@/lib/turn/subhour/stepFraction";
+import type { SubhourGrowthMetricBase, SubhourInflationBase } from "@/lib/turn/subhour/stepBase";
 
 export type CreditRating = "AAA" | "AA" | "A" | "BBB" | "BB" | "B" | "CCC";
 export type BudgetDocumentId = "federal" | "UK" | string;
@@ -540,10 +542,18 @@ export interface BankSovereignClaim {
 export interface FederalBudget {
   treasuryAccrual?: TreasuryAccrualReceipt;
   bankSovereignClaims?: BankSovereignClaim[];
-  /** Frozen, unpaid non-bank sovereign coupon plans for funded Treasury cash. */
+  /**
+   * Legacy home of frozen, unpaid non-bank sovereign coupon plans. New claims
+   * live in the `sovereignCouponClaims` collection; the funded coupon sweep
+   * drains this array into it.
+   */
   sovereignCouponClaims?: FundedSovereignCouponClaim[];
   /** Highest due turn frozen for each sovereign bond, including already-paid claims. */
   sovereignCouponFrozenThrough?: Record<string, number>;
+  /** The :30 half tick's stamp (turn/subhour/stepFraction.ts). */
+  subhourStep?: SubhourStepStamp;
+  /** Start-of-hour values the :30 half tick overwrote (turn/subhour/stepBase.ts). */
+  subhourBase?: { inflation?: SubhourInflationBase; growth?: SubhourGrowthMetricBase };
   _id: BudgetDocumentId;
   countryId: string;
   fiscalYear: number;
@@ -700,6 +710,8 @@ export interface FederalBudget {
    * law changes. Other countries leave this field absent.
    */
   nonLawSpendingGdpShareBaseline?: number;
+  /** Calibration version that wrote nonLawSpendingGdpShareBaseline (countries outside the law book). */
+  nonLawSpendingCalibration?: string;
   /** Founding-world program expense scale shared by catalog quotes and seeded v2 options. */
   programCostScaleBaseline?: number;
   /**

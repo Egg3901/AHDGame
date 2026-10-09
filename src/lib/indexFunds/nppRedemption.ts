@@ -34,6 +34,7 @@ import {
   enqueueRedemption,
   insertFundTransaction,
 } from "@/lib/indexFunds/fundQueries";
+import { boundedParallelMap } from "@/lib/indexFunds/boundedParallelMap";
 
 /** Mirrors `NPRiskArchetype` in nppInvesting.ts (kept local to avoid an import cycle). */
 export type NppRiskArchetype = "conservative" | "moderate" | "aggressive";
@@ -145,6 +146,9 @@ export type NppRedemptionPassResult = {
  * time (exactly like the player route), so the cron's `processQueuedRedemptions`
  * only has to pay cash and can never leave an orphan position behind.
  */
+/** NPPs whose redemption intents run at once; each NPP's intents stay in order. */
+export const NPP_REDEMPTION_CONCURRENCY = 16;
+
 export async function processNppFundRedemptions(
   db: Db,
   options: {
@@ -198,94 +202,105 @@ export async function processNppFundRedemptions(
   for (const doc of cashDocs) cashByNppId.set(doc._id.toString(), doc.nppInvestmentCashAnchor ?? 0);
 
   const now = new Date();
-  for (const nppId of candidateNppIds) {
-    const nppKey = nppId.toString();
-    const archetype = options.archetypesByNppId.get(nppKey);
-    if (!archetype) continue;
+  // NPPs are independent: each owns its positions, the fund supply burn is an
+  // atomic guarded increment, and the queue and transaction rows are inserts.
+  // Running NPPs in bounded lanes keeps every intent's writes in their
+  // original order and only overlaps the round trips of different NPPs.
+  const perNppErrors = await boundedParallelMap(
+    candidateNppIds,
+    NPP_REDEMPTION_CONCURRENCY,
+    async (nppId): Promise<string[]> => {
+      const nppErrors: string[] = [];
+      const nppKey = nppId.toString();
+      const archetype = options.archetypesByNppId.get(nppKey);
+      if (!archetype) return nppErrors;
 
-    const heldPositions: NppHeldFundPosition[] = [];
-    for (const position of positionsByNppId.get(nppKey) ?? []) {
-      const fund = fundById.get(String(position.fundId));
-      if (!fund || !Number.isFinite(fund.quotedNav) || fund.quotedNav <= 0) continue;
-      heldPositions.push({
-        fundId: position.fundId,
-        units: position.units ?? 0,
-        quotedNav: fund.quotedNav,
-      });
-    }
-
-    const intents = planNppFundRedemptions({
-      archetype,
-      cashAnchor: cashByNppId.get(nppKey) ?? 0,
-      positions: heldPositions,
-    });
-
-    for (const intent of intents) {
-      try {
-        const fund = fundById.get(intent.fundId.toString());
-        if (!fund) continue;
-
-        // Atomic, balance-gated debit: the sole guarantee that we never remove
-        // more units than the NPP holds. A failed debit means a concurrent
-        // change drained the position — skip rather than over-redeem.
-        const debit = await debitFundPosition(db, intent.fundId, "npp", { nppId }, intent.units);
-        if (!debit.ok) continue;
-
-        // Burn the redeemed units from fund supply at request time, mirroring
-        // the player route; the cron then only pays cash. Guarded; if supply
-        // moved under us, restore the position and skip.
-        const burn = await db
-          .collection<IndexFund>(FUND_COLLECTION)
-          .updateOne(
-            { _id: intent.fundId, unitSupply: { $gte: intent.units } },
-            { $inc: { unitSupply: -intent.units }, $set: { updatedAt: now } }
-          );
-        if (burn.matchedCount === 0) {
-          await creditFundPosition(
-            db,
-            intent.fundId,
-            "npp",
-            { nppId },
-            intent.units,
-            fund.quotedNav
-          );
-          continue;
-        }
-
-        const amountAnchor = intent.units * fund.quotedNav;
-        await enqueueRedemption(db, {
-          fundId: intent.fundId,
-          holderKind: "npp",
-          nppId,
-          units: intent.units,
-          requestedNavAnchor: fund.quotedNav,
-          requestedAmountAnchor: amountAnchor,
-          paidAmountAnchor: 0,
-          unitsBurnedAtRequest: true,
-          status: "queued",
-          createdAt: now,
-          updatedAt: now,
+      const heldPositions: NppHeldFundPosition[] = [];
+      for (const position of positionsByNppId.get(nppKey) ?? []) {
+        const fund = fundById.get(String(position.fundId));
+        if (!fund || !Number.isFinite(fund.quotedNav) || fund.quotedNav <= 0) continue;
+        heldPositions.push({
+          fundId: position.fundId,
+          units: position.units ?? 0,
+          quotedNav: fund.quotedNav,
         });
-        await insertFundTransaction(db, {
-          fundId: intent.fundId,
-          kind: "redemption_queued",
-          holderKind: "npp",
-          nppId,
-          units: intent.units,
-          navAnchor: fund.quotedNav,
-          amountAnchor,
-          note: "NPP autonomous rebalance redemption queued",
-          createdAt: now,
-        });
-
-        redemptionsQueued++;
-        unitsRedeemed += intent.units;
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        errors.push(`NPP ${nppKey} redemption: ${message}`);
       }
+
+      const intents = planNppFundRedemptions({
+        archetype,
+        cashAnchor: cashByNppId.get(nppKey) ?? 0,
+        positions: heldPositions,
+      });
+
+      for (const intent of intents) {
+        try {
+          const fund = fundById.get(intent.fundId.toString());
+          if (!fund) continue;
+
+          // Atomic, balance-gated debit: the sole guarantee that we never remove
+          // more units than the NPP holds. A failed debit means a concurrent
+          // change drained the position — skip rather than over-redeem.
+          const debit = await debitFundPosition(db, intent.fundId, "npp", { nppId }, intent.units);
+          if (!debit.ok) continue;
+
+          // Burn the redeemed units from fund supply at request time, mirroring
+          // the player route; the cron then only pays cash. Guarded; if supply
+          // moved under us, restore the position and skip.
+          const burn = await db
+            .collection<IndexFund>(FUND_COLLECTION)
+            .updateOne(
+              { _id: intent.fundId, unitSupply: { $gte: intent.units } },
+              { $inc: { unitSupply: -intent.units }, $set: { updatedAt: now } }
+            );
+          if (burn.matchedCount === 0) {
+            await creditFundPosition(
+              db,
+              intent.fundId,
+              "npp",
+              { nppId },
+              intent.units,
+              fund.quotedNav
+            );
+            continue;
+          }
+
+          const amountAnchor = intent.units * fund.quotedNav;
+          await enqueueRedemption(db, {
+            fundId: intent.fundId,
+            holderKind: "npp",
+            nppId,
+            units: intent.units,
+            requestedNavAnchor: fund.quotedNav,
+            requestedAmountAnchor: amountAnchor,
+            paidAmountAnchor: 0,
+            unitsBurnedAtRequest: true,
+            status: "queued",
+            createdAt: now,
+            updatedAt: now,
+          });
+          await insertFundTransaction(db, {
+            fundId: intent.fundId,
+            kind: "redemption_queued",
+            holderKind: "npp",
+            nppId,
+            units: intent.units,
+            navAnchor: fund.quotedNav,
+            amountAnchor,
+            note: "NPP autonomous rebalance redemption queued",
+            createdAt: now,
+          });
+
+          redemptionsQueued++;
+          unitsRedeemed += intent.units;
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          nppErrors.push(`NPP ${nppKey} redemption: ${message}`);
+        }
+      }
+      return nppErrors;
     }
-  }
+  );
+  for (const list of perNppErrors) errors.push(...list);
 
   return { redemptionsQueued, unitsRedeemed, errors };
 }

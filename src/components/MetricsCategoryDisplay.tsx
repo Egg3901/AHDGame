@@ -22,7 +22,7 @@ interface StateRanking {
 interface MetricsCategoryDisplayProps {
   categoryId: MetricCategoryId;
   categoryName: string;
-  metrics: Record<string, StateMetricValue>;
+  metrics?: Record<string, StateMetricValue>;
   nationalAverages?: Record<string, number | null>;
   /** Per-turn tick rates keyed by metricId, from active policy effects */
   tickRates?: Record<string, number>;
@@ -37,7 +37,7 @@ interface MetricsCategoryDisplayProps {
 export function MetricsCategoryDisplay({
   categoryId,
   categoryName,
-  metrics,
+  metrics = {},
   nationalAverages,
   tickRates,
   nationalRankings,

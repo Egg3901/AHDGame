@@ -31,6 +31,7 @@ export function toElectionDisplay(e: ElectionResponse): ElectionDisplay {
     cycle: e.cycle,
     electionYear: e.electionYear ?? undefined,
     status: e.status,
+    viewerWithdrew: e.viewerWithdrew,
     totalSeats: e.totalSeats ?? undefined,
     startTime: e.startTime ? String(e.startTime) : undefined,
     endTime: e.endTime ? String(e.endTime) : undefined,

@@ -1,5 +1,6 @@
 import type { Db, ObjectId } from "mongodb";
-import type { Corporation } from "@/lib/db/types";
+import type { Corporation, CorporationExitReason } from "@/lib/db/types";
+import { recordCorporationExit } from "@/lib/corporations/exits/recordCorporationExit";
 import { snapshotCorporationCurrency } from "@/lib/ledger/balanceSnapshot";
 import { witnessTreasuryCash, type TreasuryCashOptions } from "./treasuryLedger";
 
@@ -15,15 +16,31 @@ export async function deleteDissolvedCorporation(
   corporationId: ObjectId,
   ledger: TreasuryCashOptions | undefined,
   now: Date,
-  site: string
+  site: string,
+  exit: { reason: CorporationExitReason; successorId?: ObjectId }
 ): Promise<void> {
   const corps = db.collection<Corporation>("corporations");
   const closing = await corps.findOne(
     { _id: corporationId },
-    { projection: { liquidCapital: 1, liquidCurrencyCode: 1 } }
+    {
+      projection: {
+        name: 1,
+        sequentialId: 1,
+        countryId: 1,
+        type: 1,
+        ceoType: 1,
+        countryOwnerId: 1,
+        ownershipState: 1,
+        liquidCapital: 1,
+        liquidCurrencyCode: 1,
+        sharePrice: 1,
+        totalShares: 1,
+      },
+    }
   );
   const deleted = await corps.deleteOne({ _id: corporationId });
   if (!closing || (deleted?.deletedCount ?? 0) === 0) return;
+  await recordCorporationExit(db, closing, { ...exit, now });
   await witnessTreasuryCash(db, ledger, {
     flow: "corporation_liquidation",
     account: {

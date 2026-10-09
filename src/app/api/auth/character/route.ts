@@ -52,6 +52,8 @@ import {
   unplayableTerritoryHomeError,
 } from "@/lib/elections/usPoliticalHome";
 import { isUsResidentPoliticalRegion } from "@/lib/elections/statehoodAdmission";
+import { findPartyBySequentialId } from "@/lib/db/partyLookup";
+import { canCharacterJoinParty } from "@/lib/parties/partyFrontier";
 
 const MIN_STARTING_DONOR_BASE_LEVEL = 1;
 
@@ -249,6 +251,28 @@ export async function POST(request: Request) {
       return errorResponse(403, "This country is not currently available for new characters.");
     }
 
+    // Validate BEFORE insertion: the new member must not create the very
+    // presence that would make their otherwise out-of-reach party eligible.
+    if (selectedParty !== "independent") {
+      if (!/^[1-9]\d*$/.test(selectedParty)) {
+        return errorResponse(400, "Invalid starting party");
+      }
+      const party = await findPartyBySequentialId(db, selectedParty, countryId);
+      if (!party || party.isDefunct) {
+        return errorResponse(400, "Starting party is not available in this country");
+      }
+      if (!isAdmin) {
+        if (party.membershipMode === "approval") {
+          return errorResponse(
+            403,
+            "This party requires approval. Start as Independent and apply to join."
+          );
+        }
+        const frontier = await canCharacterJoinParty(db, { homeState }, party, countryId);
+        if (!frontier.ok) return errorResponse(403, frontier.error);
+      }
+    }
+
     const character: Omit<Character, "_id"> = {
       userId: new ObjectId(userId),
       ...(singleplayerConfig?.mode === "head-of-state" ? { singleplayerHeadOfState: true } : {}),
@@ -357,6 +381,7 @@ export async function POST(request: Request) {
       ...(tutorialTrack ? { tutorialTrack } : {}),
       hasReadWiki: false,
       autoRunForReelection: false,
+      positionUpdateVouchers: 0,
 
       // Sequential ID for stable URLs
       sequentialId: await getNextSequentialId(db, "character"),
@@ -365,6 +390,29 @@ export async function POST(request: Request) {
       createdTurn: gameTime.currentTurn,
       updatedAt: new Date(),
     };
+
+    // Reserve the character slot atomically before inserting. The read-time
+    // check above is only a fast path: two requests (or one request that
+    // inserted and then failed before counting) could otherwise both pass it
+    // and leave the account with an uncounted second character (ticket 1394).
+    const characterLimit = isTestMode ? TEST_MODE_CHARACTER_LIMIT : 1;
+    const slotFilter: Record<string, unknown> = { _id: new ObjectId(userId) };
+    if (!isAdmin) {
+      slotFilter.$or = [
+        { activeCharacterCount: { $exists: false } },
+        { activeCharacterCount: { $lt: characterLimit } },
+      ];
+    }
+    const reserved = await db
+      .collection("users")
+      .updateOne(slotFilter, { $inc: { activeCharacterCount: 1 } });
+    if (reserved.matchedCount === 0) {
+      return errorResponse(409, "You already have a character");
+    }
+    const releaseSlot = () =>
+      db
+        .collection("users")
+        .updateOne({ _id: new ObjectId(userId) }, { $inc: { activeCharacterCount: -1 } });
 
     let result: { insertedId: ObjectId };
     try {
@@ -378,19 +426,37 @@ export async function POST(request: Request) {
             result = await db.collection("characters").insertOne(character);
             // Retry succeeded after removing the stale unique userId index.
           } catch (retryErr) {
+            await releaseSlot();
             if (isUserIdDuplicateKey(retryErr)) {
               return errorResponse(409, "You already have a character");
             }
             throw retryErr;
           }
         } else {
+          await releaseSlot();
           return errorResponse(409, "You already have a character");
         }
       } else {
+        await releaseSlot();
         throw err;
       }
     }
     const characterId = result.insertedId;
+
+    // Point the account at the new character before any best-effort follow-up
+    // work. If a later step throws, the player still lands on this character
+    // instead of being sent back to character creation.
+    await db.collection("users").updateOne(
+      { _id: new ObjectId(userId) },
+      {
+        $set: {
+          hasCompletedSetup: true,
+          activeCharacterId: characterId,
+          accountCountryId: userDoc?.accountCountryId ?? countryId,
+          updatedAt: new Date(),
+        },
+      }
+    );
 
     if (singleplayerConfig?.mode === "head-of-state") {
       await seatSingleplayerHeadOfState(db, {
@@ -487,20 +553,6 @@ export async function POST(request: Request) {
     } catch (e) {
       console.error("Welcome mail failed:", e);
     }
-
-    // Update user to mark setup as complete and track active character
-    await db.collection("users").updateOne(
-      { _id: new ObjectId(userId) },
-      {
-        $set: {
-          hasCompletedSetup: true,
-          activeCharacterId: result.insertedId,
-          accountCountryId: userDoc?.accountCountryId ?? countryId,
-          updatedAt: new Date(),
-        },
-        $inc: { activeCharacterCount: 1 },
-      }
-    );
 
     // Clear the character-creation hint cookie now that the player has a
     // character, so the post-create redirect to /dashboard is not bounced back

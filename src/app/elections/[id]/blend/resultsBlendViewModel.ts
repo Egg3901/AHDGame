@@ -10,7 +10,7 @@
 import type { ElectionResultsResponse, ResultsUnit } from "@/lib/elections/liveResults/types";
 import { readableInk, shadeColorForTier } from "@/lib/elections/marginTierShade";
 import { classifyMarginTier } from "@/lib/elections/generalViewModel";
-import { BLEND } from "@/components/blend/tokens";
+import { BLEND, BLEND_HEX } from "@/components/blend/tokens";
 
 export type ResultsRoute = "concluded" | "dashboard";
 export type ResultsRail = "overview" | "college" | "board" | "states";
@@ -22,6 +22,8 @@ export interface ResultsBlendInput {
   rail: ResultsRail;
   sortBy: StateSortKey;
   sortDesc: boolean;
+  /** Page ground the tier shades fade toward; the theme's, as hex. */
+  ground?: string;
 }
 
 export interface ResultsTicketVM {
@@ -136,10 +138,12 @@ export function buildResultsBlendViewModel(inp: ResultsBlendInput): ResultsBlend
     .map((u) => {
       const leaderId = unitLeader(u);
       const leader = leaderId ? byId.get(leaderId) : undefined;
-      const color = leader?.partyColor ?? BLEND.mutedDimmer;
+      const color = leader?.partyColor ?? BLEND_HEX.mutedDimmer;
       const tier = classifyMarginTier(u.leaderMarginPct);
       const background =
-        u.totalVotes === 0 ? BLEND.track : shadeColorForTier(color, tier, BLEND.page);
+        u.totalVotes === 0
+          ? BLEND.track
+          : shadeColorForTier(color, tier, inp.ground ?? BLEND_HEX.page);
       const ink = readableInk(background);
       return {
         stateId: u.id,
@@ -156,7 +160,7 @@ export function buildResultsBlendViewModel(inp: ResultsBlendInput): ResultsBlend
   const rows: ResultsStateRowVM[] = units.map((u) => {
     const leaderId = unitLeader(u);
     const leader = leaderId ? byId.get(leaderId) : undefined;
-    const color = leader?.partyColor ?? BLEND.mutedDimmer;
+    const color = leader?.partyColor ?? BLEND_HEX.mutedDimmer;
     return {
       id: u.id,
       name: u.name,
@@ -199,9 +203,21 @@ export function buildResultsBlendViewModel(inp: ResultsBlendInput): ResultsBlend
   const popularMargin = winner && runnerUp ? Math.abs(winner.sharePct - runnerUp.sharePct) : 0;
   const statesWon = rows.filter((r) => r.winner === winner?.name).length;
 
-  const winnerLine = winner
-    ? `${winner.ev} electoral votes, ${winner.pct} per cent of the vote`
-    : "No ticket has been projected yet";
+  // A House-decided presidency explains itself: the president-elect may hold
+  // far fewer electoral votes than the college leader.
+  const house = summary.contingentResult;
+  const houseVotes = winner && house ? (house.houseVoteTotals[winner.id] ?? 0) : null;
+  const actingVote = summary.contingentHouseVote;
+  const winnerLine =
+    !winner && actingVote?.status === "open"
+      ? `No president elected yet: the House is still voting, until turn ${actingVote.closesTurn}. ${actingVote.actingPresidentName} serves as acting president.`
+      : !winner && actingVote?.status === "closed"
+        ? `The House closed without electing a president. ${actingVote.actingPresidentName} continues as acting president.`
+        : winner
+          ? house && houseVotes != null
+            ? `Elected by the House with ${houseVotes} state delegations${house.deadlockBreakerUsed ? ` (short of ${house.houseThreshold}; seated under the deadlock rule)` : ""}. ${winner.ev} electoral votes, ${winner.pct} per cent of the vote`
+            : `${winner.ev} electoral votes, ${winner.pct} per cent of the vote`
+          : "No ticket has been projected yet";
 
   const arrow = (col: StateSortKey) => (sortBy === col ? (sortDesc ? " ↓" : " ↑") : "");
 

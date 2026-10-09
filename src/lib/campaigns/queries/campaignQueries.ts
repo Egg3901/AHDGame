@@ -1,3 +1,4 @@
+import { getFieldOfficeScope } from "@/lib/campaigns/fieldOffices/rules";
 import {
   loadCampaignCurrencyRates,
   loadCampaignPriceLevel,
@@ -30,7 +31,7 @@ import { presidentialRulesetFor } from "@/lib/elections/presidentialRuleset";
 import { CAMPAIGN_STRENGTH_MAX_BONUS } from "@/lib/campaigns/campaignStrength";
 import { buildCampaignStatePresence } from "@/lib/elections/campaignStatePresence";
 import { getCampaignCopyForElection } from "@/lib/campaigns/raceFamilyCopy";
-import { getSeedCurrencyCode } from "@/lib/constants/currencies";
+import { CURRENCY_SYMBOLS, getSeedCurrencyCode } from "@/lib/constants/currencies";
 import { getGameStatePresetOrDefault } from "@/lib/db/collections/gameState";
 import {
   campaignAnchorToLocal,
@@ -42,6 +43,7 @@ import { buildOpsTrees } from "@/lib/campaigns/dto/campaignView";
 import {
   buildCashRunway,
   buildCoalitionWeakness,
+  buildParticipationPlan,
   buildDelegatePath,
   buildTippingPath,
 } from "@/lib/campaigns/briefing";
@@ -295,6 +297,8 @@ export async function getCampaignDetail(
           senateClass: election.senateClass ?? null,
           electionYear: election.electionYear ?? null,
           isEnded: election.status === "completed",
+          fieldOfficeScope: getFieldOfficeScope(election.countryId),
+          fieldOfficeCount: campaign.fieldOfficeCount ?? 0,
         }
       : null,
     ...(partyTreasuryAccess ? { partyTreasuryAccess } : {}),
@@ -538,7 +542,13 @@ export async function getCampaignDetail(
     }
   }
 
-  const opsTrees = buildOpsTrees(campaign, electionType, isGeneralPhase, toLocal);
+  const opsTrees = buildOpsTrees(
+    campaign,
+    electionType,
+    isGeneralPhase,
+    toLocal,
+    CURRENCY_SYMBOLS[campaignCurrencyCode]
+  );
   const nextUpgradeCosts: CampaignData["nextUpgradeCosts"] = {
     fundraising: localizeUpgradeCostFunds(
       getEffectiveUpgradeCost(
@@ -700,6 +710,7 @@ async function buildBriefing(args: {
   const cashRunway = buildCashRunway(campaign.funds, args.netPerTurn);
   let path: CampaignBriefing["path"];
   let coalitionWeakness: CampaignBriefing["coalitionWeakness"] = [];
+  let participationPlan: CampaignBriefing["participationPlan"];
 
   if (election?.electionType === "president") {
     const tally = await db
@@ -715,6 +726,10 @@ async function buildBriefing(args: {
       coalitionWeakness = buildCoalitionWeakness(
         tally.factorLedger?.byCandidateNational,
         ownerTallyId
+      );
+      participationPlan = buildParticipationPlan(
+        (tally.turnSnapshots ?? []).at(-1)?.participation,
+        coalitionWeakness
       );
 
       const gameState = await db
@@ -763,6 +778,7 @@ async function buildBriefing(args: {
     ...(path ? { path } : {}),
     cashRunway,
     coalitionWeakness,
+    ...(participationPlan ? { participationPlan } : {}),
   };
 }
 

@@ -2,12 +2,13 @@
 
 import { useState, useEffect, use } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { CountyMap } from "@/components/CountyMap";
 import { SubdivisionMap } from "@/components/SubdivisionMap";
 import { DistrictCardGrid } from "@/components/redistricting/DistrictCardGrid";
 import type { DistrictSquareView } from "@/lib/redistricting/districtSquareResponse";
 import { resolveElectionYear } from "@/lib/utils/formatters";
-import { useGameTurnStatus } from "@/hooks/useGameEvents";
+import { useGameEvents, useGameTurnStatus } from "@/hooks/useGameEvents";
 import { useAuthMe } from "@/contexts/AuthDataContext";
 import { DEFAULT_CYCLE_ANCHOR_CONTEXT } from "@/lib/elections/cycleAnchorContext";
 import { UK_REGION_NAMES, RU_REGION_NAMES } from "@/lib/constants/states";
@@ -263,6 +264,7 @@ export default function StateElectionResultsPage({
   const dbStateId = stateId.toUpperCase();
   const stateUpper = dbStateId;
   const { navData } = useAuthMe();
+  const router = useRouter();
   const viewerPartySeqId = navData?.currentParty?.id;
 
   const [election, setElection] = useState<Election | null>(null);
@@ -279,6 +281,8 @@ export default function StateElectionResultsPage({
   // "rendered more hooks than during the previous render" violation when
   // the loading state flips.
   const turnStatus = useGameTurnStatus();
+  const [refreshKey, setRefreshKey] = useState(0);
+  useGameEvents(() => setRefreshKey((key) => key + 1), ["turn_complete", "market_tick"]);
   const cycleCtx = {
     startingYear: turnStatus?.startingYear ?? DEFAULT_CYCLE_ANCHOR_CONTEXT.startingYear,
     preset: turnStatus?.preset ?? DEFAULT_CYCLE_ANCHOR_CONTEXT.preset,
@@ -295,6 +299,12 @@ export default function StateElectionResultsPage({
         }
         const wrapper = await electionRes.json();
         const electionData: Election = wrapper.election;
+        // A US presidential state lives inside the race's own page now: the
+        // stage opens the state, zoomed, with its counties beside the map.
+        if (electionData.electionType === "president" && code.toUpperCase() === "US") {
+          router.replace(`/elections/${encodeURIComponent(id)}?state=${stateUpper}`);
+          return;
+        }
         setElection(electionData);
 
         const isUS = code.toUpperCase() === "US";
@@ -389,7 +399,7 @@ export default function StateElectionResultsPage({
       }
     }
     fetchData();
-  }, [id, stateUpper, code]);
+  }, [id, stateUpper, code, router, refreshKey]);
 
   if (loading) {
     return (
@@ -438,6 +448,7 @@ export default function StateElectionResultsPage({
     supremeSovietDeputy: "Supreme Soviet Election",
     nationalitiesDeputy: "Soviet of Nationalities Election",
     republicSupremeSoviet: "Republic Supreme Soviet Election",
+    unionCongressDeputy: "Congress of People's Deputies Election",
   };
   const electionTypeTitle = electionTypeLabel[election.electionType] ?? election.electionType;
   const unitLabel = subdivisionResults?.unitLabel ?? "Subdivision";

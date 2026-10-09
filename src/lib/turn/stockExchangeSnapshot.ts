@@ -50,6 +50,7 @@ import {
   getStateSectorSpecializationMarginBonus,
   TYPE_SWITCH_PENALTY_TURNS,
   MAX_DIVIDEND_RATE,
+  type CorporationType,
 } from "@/lib/constants/corporations";
 import { getLegalStructureForCorp } from "@/lib/corporations/legalStructure";
 import { isStateOwned } from "@/lib/nationalization/nationalCorporation";
@@ -684,7 +685,11 @@ export async function generateStockExchangeSnapshots(currentTurn: number, db?: D
           const subsidyMod = getSubsidyMarginModifier(
             allSubsidies,
             corp.headquartersState,
-            sector.sectorType,
+            getOperatingSectorType(
+              sector.sectorType,
+              sector.industryModel,
+              sector.mediaDiscriminator
+            ) as CorporationType,
             stateId,
             sector.strategyId,
             sectorCountryId,

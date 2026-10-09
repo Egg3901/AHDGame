@@ -1,21 +1,16 @@
 /** Bulk persistence shell for owner-supplied v2 metric turn readings. */
 import type { Db } from "mongodb";
-import { states1991 } from "@/lib/countries/us/data/usStates1991";
-import { ukRegions1991 } from "@/lib/countries/uk/data/ukRegions1991";
-import { jpRegions1991 } from "@/lib/countries/jp/data/jpRegions1991";
 import type { GameState } from "@/lib/db/types/gameState";
 import { RESET_V2_READY } from "@/lib/resetVersions/availability";
-import { resetSystemVersionsForCountry, type ResetSystem } from "@/lib/resetVersions/rules";
+import {
+  RESET_V2_COUNTRIES,
+  resetSystemVersionsForCountry,
+  type ResetV2Readiness,
+} from "@/lib/resetVersions/rules";
 import type { OpeningMetricObservation } from "./rules/openingObservation";
 import { refreshResetMetricBoard } from "./rules/refresh";
 import type { ResetMetricSnapshot } from "./rules/snapshot";
 import { appendMetricHistory, metricHistoryDue } from "./rules/history";
-
-const REGION_IDS = {
-  US: states1991.map((region) => region._id),
-  UK: ukRegions1991.map((region) => region._id),
-  JP: jpRegions1991.map((region) => region._id),
-} as const;
 
 export interface MetricOwnerTurnReadings {
   updates: Readonly<Record<string, OpeningMetricObservation>>;
@@ -37,11 +32,11 @@ export async function refreshResetMetricSnapshotsTurn(input: {
   gameState: GameState;
   turn: number;
   ownerReadings: MetricOwnerTurnReadingsByBoard | MetricOwnerTurnReader;
-  ready?: Record<ResetSystem, boolean>;
+  ready?: ResetV2Readiness;
 }): Promise<{ boards: number; advanced: number; replayed: number }> {
   const { db, gameState, turn } = input;
   const ready = input.ready ?? RESET_V2_READY;
-  const activeCountries = (["US", "UK", "JP"] as const).filter(
+  const activeCountries = RESET_V2_COUNTRIES.filter(
     (country) => resetSystemVersionsForCountry(gameState, ready, country).metrics === "v2"
   );
   if (activeCountries.length === 0) return { boards: 0, advanced: 0, replayed: 0 };
@@ -52,11 +47,6 @@ export async function refreshResetMetricSnapshotsTurn(input: {
   ) {
     throw new Error("Reset metric turn lacks its next turn or current world identity");
   }
-  const ids = activeCountries.flatMap((country) => [
-    `${country}:national`,
-    ...REGION_IDS[country].map((regionId) => `${country}:${regionId}`),
-  ]);
-  const idSet = new Set(ids);
   const sourceTurn = gameState.resetVersionSeeds?.metrics?.sourceTurn;
   if (!Number.isSafeInteger(sourceTurn)) {
     throw new Error("Reset metric turn lacks its verified opening turn");
@@ -65,7 +55,7 @@ export async function refreshResetMetricSnapshotsTurn(input: {
   const collection = db.collection<ResetMetricSnapshot>("resetMetricSnapshots");
   const current = await collection
     .find(
-      { _id: { $in: ids }, worldId: gameState.resetWorldId },
+      { countryId: { $in: [...activeCountries] }, worldId: gameState.resetWorldId },
       {
         projection: {
           _id: 1,
@@ -75,25 +65,29 @@ export async function refreshResetMetricSnapshotsTurn(input: {
           regionId: 1,
           sourceTurn: 1,
           asOfTurn: 1,
+          lastRefreshFromTurn: 1,
           observations: 1,
           ...(recordHistory ? { history: 1 } : {}),
         },
       }
     )
     .toArray();
-  if (
-    current.length !== ids.length ||
-    new Set(current.map((board) => board._id)).size !== ids.length
-  ) {
-    throw new Error("Reset metric turn is missing a world-bound board");
+  const ids = current.map((board) => board._id);
+  const idSet = new Set(ids);
+  if (current.length === 0 || idSet.size !== current.length) {
+    throw new Error("Reset metric turn has no usable world-bound boards");
   }
+  const countriesWithNationalBoards = new Set(
+    current.filter((board) => board.scope === "national").map((board) => board.countryId)
+  );
   for (const board of current) {
     if (
       !idSet.has(board._id) ||
       board._id !==
         `${board.countryId}:${board.scope === "national" ? "national" : board.regionId}` ||
       (board.scope === "national" && board.regionId !== undefined) ||
-      (board.scope === "regional" && !REGION_IDS[board.countryId]?.includes(board.regionId!))
+      (board.scope === "regional" && !board.regionId) ||
+      !countriesWithNationalBoards.has(board.countryId)
     ) {
       throw new Error(`Reset metric turn has an invalid board identity ${board._id}`);
     }
@@ -110,7 +104,7 @@ export async function refreshResetMetricSnapshotsTurn(input: {
   }
   const next = current.map((board) => {
     const readings = ownerReadings[board._id]!;
-    const result = refreshResetMetricBoard({ board, turn, ...readings });
+    const result = refreshResetMetricBoard({ board, turn, ...readings, allowCatchUp: true });
     if (result.missingDueIds.length > 0) {
       throw new Error(
         `Reset metric owners did not refresh ${board._id}: ${result.missingDueIds.join(", ")}`
@@ -130,11 +124,12 @@ export async function refreshResetMetricSnapshotsTurn(input: {
             filter: {
               _id: board._id,
               worldId: board.worldId,
-              asOfTurn: turn - 1,
+              asOfTurn: board.lastRefreshFromTurn!,
             },
             update: {
               $set: {
                 asOfTurn: turn,
+                lastRefreshFromTurn: board.lastRefreshFromTurn,
                 observations: board.observations,
                 ...(history ? { history } : {}),
               },

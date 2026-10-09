@@ -135,6 +135,100 @@ describe("GET /api/country/[code]/parties/[id]/whippable-leadership — motion t
     } as never);
   });
 
+  it("surfaces active Supreme Court nominations for Senate whips", async () => {
+    const nominationId = new ObjectId();
+    db.collection("scotusNominations").find.mockReturnValue(
+      makeCursor([
+        {
+          _id: nominationId,
+          countryId: "US",
+          status: "active",
+          nomineeName: "Test Nominee",
+          votingEndsOnTurn: 124,
+          votes: {},
+        },
+      ])
+    );
+    db.collectionMocks["electedOfficials"]!.find.mockReturnValue(
+      makeCursor([{ _id: new ObjectId(), officeType: "senate", party: "1" }])
+    );
+    const result = await itemsFor();
+    expect(result.senate).toContainEqual(
+      expect.objectContaining({
+        id: nominationId.toString(),
+        type: "Supreme Court: Test Nominee",
+        chamber: "senate",
+        canWhip: true,
+      })
+    );
+  });
+
+  it("hides expired Supreme Court nominations and scopes the query to active US votes", async () => {
+    db.collection("scotusNominations").find.mockReturnValue(
+      makeCursor([
+        {
+          _id: new ObjectId(),
+          countryId: "US",
+          status: "active",
+          votingEndsOnTurn: 99,
+        },
+      ])
+    );
+    db.collectionMocks["electedOfficials"]!.find.mockReturnValue(
+      makeCursor([{ _id: new ObjectId(), officeType: "senate", party: "1" }])
+    );
+    const result = await itemsFor();
+    expect(result.senate).toEqual([]);
+    expect(db.collectionMocks.scotusNominations!.find).toHaveBeenCalledWith({
+      countryId: "US",
+      status: "active",
+    });
+  });
+
+  it("shows Supreme Court nominees for a player-only Senate delegation and preserves attempt summaries", async () => {
+    const nominationId = new ObjectId();
+    db.collection("scotusNominations").find.mockReturnValue(
+      makeCursor([
+        {
+          _id: nominationId,
+          countryId: "US",
+          status: "active",
+          nomineeName: "Test Nominee",
+          votingEndsOnTurn: 124,
+        },
+      ])
+    );
+    db.collectionMocks.electedOfficials!.find.mockReturnValue(
+      makeCursor([
+        {
+          _id: new ObjectId(),
+          characterId: new ObjectId(),
+          isNPP: false,
+          officeType: "senate",
+          party: "1",
+        },
+      ])
+    );
+    db.collectionMocks.billWhips!.find.mockReturnValue(
+      makeCursor(
+        [1, 2].map((attemptNumber) => ({
+          targetType: "scotusNomination",
+          targetId: nominationId,
+          chamber: "senate",
+          audience: "npp",
+          attemptNumber,
+        }))
+      )
+    );
+    const result = await itemsFor();
+    expect(result.senate[0]).toMatchObject({
+      targetType: "scotusNomination",
+      canWhip: false,
+      nppWhip: { canWhip: false, existingWhips: [{ attemptNumber: 1 }, { attemptNumber: 2 }] },
+      playerWhip: { canWhip: true, existingWhips: [] },
+    });
+  });
+
   it("surfaces the open motion on the House chamber", async () => {
     const result = await itemsFor();
     const vacate = result.house.find((i) => i.type === "speakerVacateMotion");
@@ -250,6 +344,7 @@ describe("GET /api/country/[code]/parties/[id]/whippable-leadership — motion t
     for (const items of Object.values(result)) {
       expect(items.find((i) => i.type === "speakerVacateMotion")).toBeUndefined();
     }
+    expect(db.collectionMocks.scotusNominations).toBeUndefined();
     // The US-only collection must not even be consulted outside the US.
     expect(db.collectionMocks["speakerVacateMotions"]!.findOne).not.toHaveBeenCalled();
   });
