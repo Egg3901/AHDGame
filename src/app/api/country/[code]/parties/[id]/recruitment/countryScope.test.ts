@@ -94,7 +94,11 @@ describe.each([
   beforeEach(async () => {
     vi.clearAllMocks();
     const { getPartyNppCapacity } = await import("@/lib/npp/partyCapacity");
-    vi.mocked(getPartyNppCapacity).mockResolvedValue({ activeMemberCount: 1, maxNpps: 5, ceiling: 25 });
+    vi.mocked(getPartyNppCapacity).mockResolvedValue({
+      activeMemberCount: 1,
+      maxNpps: 5,
+      ceiling: 25,
+    });
     db = createMockDb();
     // Same party number and even region key in foreign records must not affect capacity.
     roster = [
@@ -239,7 +243,11 @@ describe.each([
 
   it.each(endpoints)("%s blocks recruitment with no active members", async (endpoint) => {
     const { getPartyNppCapacity } = await import("@/lib/npp/partyCapacity");
-    vi.mocked(getPartyNppCapacity).mockResolvedValue({ activeMemberCount: 0, maxNpps: 0, ceiling: 25 });
+    vi.mocked(getPartyNppCapacity).mockResolvedValue({
+      activeMemberCount: 0,
+      maxNpps: 0,
+      ceiling: 25,
+    });
     const response = await invoke(endpoint, code, stateId);
     const body = await response.json();
     if (endpoint.endsWith("recruit")) {

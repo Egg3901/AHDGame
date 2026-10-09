@@ -33,7 +33,11 @@ vi.mock("./mergeEligibility", async (importOriginal) => ({
 vi.mock("@/lib/npp/partyCapacity", () => ({ getPartyNppCapacity: vi.fn() }));
 beforeEach(() => {
   vi.mocked(assertMergeEligibility).mockResolvedValue(undefined);
-  vi.mocked(getPartyNppCapacity).mockResolvedValue({ activeMemberCount: 5, maxNpps: 25, ceiling: 25 });
+  vi.mocked(getPartyNppCapacity).mockResolvedValue({
+    activeMemberCount: 5,
+    maxNpps: 25,
+    ceiling: 25,
+  });
 });
 
 vi.mock("@/lib/time/gameTime", async () => {
@@ -1220,7 +1224,11 @@ describe("processMergeProposal (NPP recruitment-cap enforcement)", () => {
   });
 
   it("uses combined post-transfer membership and culls national overflow across regions", async () => {
-    vi.mocked(getPartyNppCapacity).mockResolvedValue({ activeMemberCount: 1, maxNpps: 5, ceiling: 25 });
+    vi.mocked(getPartyNppCapacity).mockResolvedValue({
+      activeMemberCount: 1,
+      maxNpps: 5,
+      ceiling: 25,
+    });
     const own = Array.from({ length: 4 }, () => ({
       _id: new ObjectId(),
       homeState: "DUB",
@@ -1256,7 +1264,11 @@ describe("processMergeProposal (NPP recruitment-cap enforcement)", () => {
   });
 
   it("keeps the entire surviving roster above the national cap and removes incoming officeholders", async () => {
-    vi.mocked(getPartyNppCapacity).mockResolvedValue({ activeMemberCount: 1, maxNpps: 5, ceiling: 25 });
+    vi.mocked(getPartyNppCapacity).mockResolvedValue({
+      activeMemberCount: 1,
+      maxNpps: 5,
+      ceiling: 25,
+    });
     const own = Array.from({ length: 6 }, () => ({
       _id: new ObjectId(),
       homeState: "DUB",
@@ -1287,7 +1299,11 @@ describe("processMergeProposal (NPP recruitment-cap enforcement)", () => {
   });
 
   it("combines regional and national overflow without reconsidering regional culls", async () => {
-    vi.mocked(getPartyNppCapacity).mockResolvedValue({ activeMemberCount: 1, maxNpps: 5, ceiling: 25 });
+    vi.mocked(getPartyNppCapacity).mockResolvedValue({
+      activeMemberCount: 1,
+      maxNpps: 5,
+      ceiling: 25,
+    });
     const own = Array.from({ length: 4 }, () => ({ _id: new ObjectId(), homeState: "DUB" }));
     const incoming = (homeState: string, politicalInfluence: number) => ({
       _id: new ObjectId(),
@@ -1314,7 +1330,11 @@ describe("processMergeProposal (NPP recruitment-cap enforcement)", () => {
   });
 
   it("deletes all incoming active NPPs at zero national capacity but still transfers retired history", async () => {
-    vi.mocked(getPartyNppCapacity).mockResolvedValue({ activeMemberCount: 0, maxNpps: 0, ceiling: 25 });
+    vi.mocked(getPartyNppCapacity).mockResolvedValue({
+      activeMemberCount: 0,
+      maxNpps: 0,
+      ceiling: 25,
+    });
     const incoming = {
       _id: new ObjectId(),
       homeState: "COR",
