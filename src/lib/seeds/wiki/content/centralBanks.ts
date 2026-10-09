@@ -150,7 +150,7 @@ multiplier = 1
 - **GDP growth**: stronger growth strengthens currency; sensitivity 0.01
 - **Trade growth**: trade surplus strengthens currency; sensitivity 0.005
 
-The actual rate converges toward this target at **5% per turn** (\`DRIFT_SPEED\`), so a full rate shock takes roughly one game year (~48 turns) to work through. The half-hour update exposes half of this step; the hourly turn completes it. On top of macro drift, two additional forces apply each turn:
+The actual rate converges toward this target at **5% per turn**, so a full rate shock takes roughly one game year (~48 turns) to work through. The half-hour update exposes half of this step; the hourly turn completes it. On top of macro drift, two additional forces apply each turn:
 
 - **Volume pressure**: net buy/sell activity creates a short-term offset capped at **±5%** per turn. Volume accounts for **20%** of rate direction; macro fundamentals account for **80%**.
 - **Random noise**: ±0.4% per-turn jitter prevents perfectly predictable movement.

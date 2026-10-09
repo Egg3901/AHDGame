@@ -141,7 +141,7 @@ export function MetricCard({
           </div>
           <div className="flex justify-between text-xs text-muted">
             <span>0</span>
-            <span>Nat&apos;l Avg: {formatValue(nationalAverage)}</span>
+            <span>National average: {formatValue(nationalAverage)}</span>
             <span>{formatValue(nationalAverage * 2)}</span>
           </div>
         </div>

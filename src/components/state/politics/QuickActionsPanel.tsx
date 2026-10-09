@@ -55,7 +55,7 @@ export function QuickActionsPanel({
         {/* Live actions — deep-link to State Party page where mutation lives. */}
         <DeepLinkButton
           href={liveDisabled ? null : partyUrl}
-          label="Org building"
+          label="Organization building"
           subLabel="Set budget"
           disabledSubLabel="No presence yet"
           disabledTitle={liveTitle}
@@ -165,7 +165,7 @@ function OrgBuildEstimate({
               }
             : undefined
         }
-        gain={{ sign: "+", value: preview.projectedGain, unit: "% Org share" }}
+        gain={{ sign: "+", value: preview.projectedGain, unit: "% Organization share" }}
       />
     </span>
   );

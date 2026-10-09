@@ -22,6 +22,7 @@ import { getAuthUser } from "@/lib/auth";
 import { summarizePrimaryProjection } from "@/lib/elections/presidentialPrimaryDisplay";
 import { PrimaryCampaignControls } from "@/components/elections/primary/PrimaryCampaignControls";
 import { EndorseButton } from "./EndorseButton";
+import { GlossaryTerm } from "@/components/ui/GlossaryTerm";
 import { PrimaryShellClient } from "./PrimaryShellClient";
 import {
   buildPrimaryViewModel,
@@ -584,22 +585,26 @@ export default async function PartyPrimaryPage({ params, searchParams }: PagePro
                 <tr className="border-b border-card-border bg-background text-left text-sm font-semibold text-foreground">
                   <th className="px-3 py-2">#</th>
                   <th className="px-3 py-2">Candidate</th>
-                  <th className="px-3 py-2 text-right">Proj. Del.</th>
+                  <th className="px-3 py-2 text-right">Projected delegates</th>
                   <th className="px-3 py-2 text-right">Awarded</th>
                   <th
                     className="px-3 py-2 text-right"
-                    title="National vote share — sum of projected/actual votes across every state, divided by the total. This is what every state-level vote percentage aggregates to."
+                    title="National vote share: projected or actual votes across every state, divided by the total. Every state-level vote percentage adds up to this."
                   >
                     Vote %
                   </th>
                   <th
                     className="px-3 py-2 text-right"
-                    title="Delegate share — projected delegates divided by total delegates. Diverges from vote share when winner-take-all states sweep all delegates to a narrow leader."
+                    title="Delegate share: projected delegates divided by total delegates. Differs from vote share when winner-take-all states give every delegate to a narrow leader."
                   >
-                    Del. Share
+                    Delegate share
                   </th>
-                  <th className="px-3 py-2 text-right">Fav.</th>
-                  <th className="px-3 py-2 text-right">NI</th>
+                  <th className="px-3 py-2 text-right">
+                    <GlossaryTerm term="favorability" label="Fav." />
+                  </th>
+                  <th className="px-3 py-2 text-right">
+                    <GlossaryTerm term="NPI" />
+                  </th>
                   <th className="px-3 py-2 text-right">Endorsed</th>
                   <th className="px-3 py-2">Campaigning in</th>
                   {viewerIsLoggedInWithCharacter && viewerInParty && (

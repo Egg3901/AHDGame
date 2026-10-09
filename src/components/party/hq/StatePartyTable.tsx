@@ -23,13 +23,22 @@ export interface StatePartyTableProps {
   onSort: (key: StatePartySortKey) => void;
 }
 
-const COLUMNS: { key: StatePartySortKey; label: string }[] = [
-  { key: "organization", label: "Org%" },
-  { key: "politicalStrength", label: "PS" },
-  { key: "treasury", label: "Funds" },
-  { key: "registrationPct", label: "Reg%" },
-  { key: "nppCount", label: "NPPs" },
-  { key: "lean", label: "Lean" },
+// Short headers keep the table narrow; `hint` spells each one out on hover.
+const COLUMNS: { key: StatePartySortKey; label: string; hint: string }[] = [
+  {
+    key: "organization",
+    label: "Org%",
+    hint: "Organization: the party's share of the ground game in this state",
+  },
+  { key: "politicalStrength", label: "PS", hint: "Political Strength held by the state party" },
+  { key: "treasury", label: "Funds", hint: "State party treasury" },
+  {
+    key: "registrationPct",
+    label: "Reg%",
+    hint: "Registration: share of voters registered with the party",
+  },
+  { key: "nppCount", label: "NPPs", hint: "Non-player politicians in the state party" },
+  { key: "lean", label: "Lean", hint: "Which way the state leans politically" },
 ];
 
 function fmtMoney(v: number): string {
@@ -77,6 +86,7 @@ export function StatePartyTable({
                 <button
                   type="button"
                   className="hover:text-foreground"
+                  title={c.hint}
                   onClick={() => onSort(c.key)}
                 >
                   {c.label}

@@ -210,8 +210,8 @@ Margin modifiers are computed independently at three scales (**global**, **natio
 
 The state leg adds a stabilizer to both supply and demand to prevent extreme ratios when a state has minimal local production. State *prices* don't get this stabilizer: only the margin path does.
 
-- **Standard commodities:** 250-unit stabilizer (STATE_COMMODITY_SUPPLY_DEMAND = 250)
-- **Extractable resources** (oil, coal, iron, natural gas, timber, rare earth/copper): **2,500-unit stabilizer** (EXTRACTABLE_RESOURCE_STATE_STABILIZER = 2500): these commodities are globally traded, so a state without local deposits can realistically import them. The larger stabilizer prevents states from suffering extreme margin penalties just because they have no local oil fields or iron mines.
+- **Standard commodities:** 250-unit stabilizer
+- **Extractable resources** (oil, coal, iron, natural gas, timber, rare earth/copper): **2,500-unit stabilizer**: these commodities are globally traded, so a state without local deposits can realistically import them. The larger stabilizer prevents states from suffering extreme margin penalties just because they have no local oil fields or iron mines.
 
 Tariffs shift this blend (see [Tariffs](/wiki/tariffs#commodity-blend-weight-shift)). The **local weight stays fixed at 25%**; tariff pressure moves weight from **global -> national** so corporate margins become more sensitive to country-level conditions and less to global ones. At 100% effective tariff coverage the blend becomes 25% global / 50% national / 25% local.
 

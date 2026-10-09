@@ -41,7 +41,7 @@ export function OverviewTab(props: Props) {
 
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-      <Card title="Office AP">
+      <Card title="Office action points">
         <div className="text-2xl font-bold tabular-nums">
           {props.gubernatorialActions} / {GUBERNATORIAL_ACTION_CAP}
         </div>

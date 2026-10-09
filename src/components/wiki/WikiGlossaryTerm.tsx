@@ -1,11 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 
 interface WikiGlossaryTermProps {
   term: string;
   definition: string;
+  /** Trigger text when it differs from the tooltip heading (e.g. "NPI"). */
+  label?: ReactNode;
 }
 
 /**
@@ -13,7 +15,7 @@ interface WikiGlossaryTermProps {
  * this trigger. Opens on hover (mouse), focus (keyboard), and tap (touch).
  * Escape, blur, and outside tap close it.
  */
-export function WikiGlossaryTerm({ term, definition }: WikiGlossaryTermProps) {
+export function WikiGlossaryTerm({ term, definition, label }: WikiGlossaryTermProps) {
   const [open, setOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -109,7 +111,7 @@ export function WikiGlossaryTerm({ term, definition }: WikiGlossaryTermProps) {
           else openPanel();
         }}
       >
-        {term}
+        {label ?? term}
       </button>
       {open &&
         typeof document !== "undefined" &&

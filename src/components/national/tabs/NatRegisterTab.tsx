@@ -280,7 +280,7 @@ export function NatRegisterTab({ vm }: { vm: NationalCorporationViewModel }) {
 
         {/* current standing */}
         <div className="grid grid-cols-3 divide-x divide-card-border border-b border-card-border">
-          <StandTile label="Govt approval" value={standing.approval} delta={net.approval} />
+          <StandTile label="Government approval" value={standing.approval} delta={net.approval} />
           <StandTile label="Legitimacy" value={standing.legitimacy} delta={net.legitimacy} />
           <StandTile label="Unrest" value={null} delta={null} note="future system" />
         </div>

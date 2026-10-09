@@ -43,30 +43,30 @@ describe("PsSpendButtons", () => {
         onSpend={onSpend}
       />
     );
-    fireEvent.click(screen.getByRole("button", { name: /State PS/ }));
+    fireEvent.click(screen.getByRole("button", { name: /\(state PS\)/ }));
     expect(onSpend).toHaveBeenCalledWith("state");
-    expect((screen.getByRole("button", { name: /Nat'l PS/ }) as HTMLButtonElement).disabled).toBe(
-      true
-    );
+    expect(
+      (screen.getByRole("button", { name: /\(national PS\)/ }) as HTMLButtonElement).disabled
+    ).toBe(true);
   });
 
-  it("renders only the Nat'l PS button when eligible for national only", () => {
+  it("renders only the national PS button when eligible for national only", () => {
     const onSpend = vi.fn();
     render(
       <PsSpendButtons {...baseProps} scopes={{ state: false, national: true }} onSpend={onSpend} />
     );
-    expect(screen.queryByRole("button", { name: /State PS/ })).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: /Nat'l PS/ }));
+    expect(screen.queryByRole("button", { name: /\(state PS\)/ })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /\(national PS\)/ }));
     expect(onSpend).toHaveBeenCalledWith("national");
   });
 
-  it("renders only the State PS button when eligible for state only", () => {
+  it("renders only the state PS button when eligible for state only", () => {
     const onSpend = vi.fn();
     render(
       <PsSpendButtons {...baseProps} scopes={{ state: true, national: false }} onSpend={onSpend} />
     );
-    expect(screen.queryByRole("button", { name: /Nat'l PS/ })).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: /State PS/ }));
+    expect(screen.queryByRole("button", { name: /\(national PS\)/ })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /\(state PS\)/ }));
     expect(onSpend).toHaveBeenCalledWith("state");
   });
 });

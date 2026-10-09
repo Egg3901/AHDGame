@@ -68,8 +68,8 @@ describe("StatePartyHQ", () => {
     await waitFor(() => expect(screen.getByText("California")).toBeTruthy());
     expect(screen.getByText("Wyoming")).toBeTruthy();
     expect(screen.getByText("Total treasury")).toBeTruthy();
-    expect(screen.getByText("State PS (sum)")).toBeTruthy();
-    expect(screen.getByText("National PS")).toBeTruthy();
+    expect(screen.getByText("State parties' PS (total)")).toBeTruthy();
+    expect(screen.getByText("National party PS")).toBeTruthy();
     expect(screen.getByText("12.5")).toBeTruthy();
   });
 
@@ -121,7 +121,8 @@ describe("StatePartyHQ", () => {
     fireEvent.click(screen.getByRole("button", { name: "Build org" }));
     await waitFor(() => expect(screen.getByText(/Insufficient national PS/)).toBeTruthy());
     expect(
-      (screen.getByRole("button", { name: /Confirm \(5 Nat'l PS\)/ }) as HTMLButtonElement).disabled
+      (screen.getByRole("button", { name: /Confirm \(5 national PS\)/ }) as HTMLButtonElement)
+        .disabled
     ).toBe(true);
   });
 
@@ -176,7 +177,7 @@ describe("StatePartyHQ", () => {
     setupBulk({ nationalTreasury: 5_000_000 });
     await selectCaliforniaAndOpenBulk();
     await waitFor(() => expect(screen.getAllByText(/\$45K/).length).toBeGreaterThan(0));
-    expect(screen.getByRole("button", { name: /Confirm \(5 Nat'l PS · \$45K\)/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Confirm \(5 national PS · \$45K\)/ })).toBeTruthy();
   });
 
   it("blocks a bulk run the national treasury cannot cover", async () => {
@@ -184,7 +185,7 @@ describe("StatePartyHQ", () => {
     await selectCaliforniaAndOpenBulk();
     await waitFor(() => expect(screen.getByText(/Insufficient national funds/)).toBeTruthy());
     const confirm = screen.getByRole("button", {
-      name: /Confirm \(5 Nat'l PS · \$45K\)/,
+      name: /Confirm \(5 national PS · \$45K\)/,
     }) as HTMLButtonElement;
     expect(confirm.disabled).toBe(true);
   });
@@ -195,7 +196,7 @@ describe("StatePartyHQ", () => {
     await waitFor(() => expect(screen.getAllByText(/\$45K/).length).toBeGreaterThan(0));
     expect(screen.queryByText(/Insufficient national funds/)).toBeNull();
     const confirm = screen.getByRole("button", {
-      name: /Confirm \(5 Nat'l PS · \$45K\)/,
+      name: /Confirm \(5 national PS · \$45K\)/,
     }) as HTMLButtonElement;
     expect(confirm.disabled).toBe(false);
   });
@@ -208,7 +209,7 @@ describe("StatePartyHQ", () => {
     await waitFor(() => expect(screen.getAllByText(/\$45K/).length).toBeGreaterThan(0));
     expect(screen.queryByText(/Insufficient national funds/)).toBeNull();
     const confirm = screen.getByRole("button", {
-      name: /Confirm \(5 Nat'l PS · \$45K\)/,
+      name: /Confirm \(5 national PS · \$45K\)/,
     }) as HTMLButtonElement;
     expect(confirm.disabled).toBe(false);
   });
