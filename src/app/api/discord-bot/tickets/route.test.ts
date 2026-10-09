@@ -136,7 +136,7 @@ describe("PATCH /api/discord-bot/tickets", () => {
 
     expect(response.status).toBe(200);
     expect(db.collectionMocks.tickets.updateOne).toHaveBeenCalledWith(
-      { discordChannelId: "discord-channel-1" },
+      expect.objectContaining({ discordChannelId: "discord-channel-1" }),
       expect.objectContaining({
         $set: expect.objectContaining({
           status: "closed",
@@ -182,13 +182,13 @@ describe("PATCH /api/discord-bot/tickets", () => {
 
     expect(response.status).toBe(200);
     expect(db.collectionMocks.tickets.updateOne).toHaveBeenCalledWith(
-      { discordChannelId: "discord-channel-1" },
+      expect.objectContaining({ discordChannelId: "discord-channel-1" }),
       expect.objectContaining({
         $set: expect.objectContaining({ "resolution.deliveredAt": null }),
       })
     );
     expect(db.collectionMocks.tickets.findOne).toHaveBeenCalledWith(
-      { discordChannelId: "discord-channel-1" },
+      expect.objectContaining({ discordChannelId: "discord-channel-1" }),
       expect.objectContaining({
         projection: expect.objectContaining({ "statusHistory.at": 1 }),
       })
@@ -231,15 +231,7 @@ describe("PATCH /api/discord-bot/tickets", () => {
     );
 
     expect(response.status).toBe(200);
-    expect(db.collectionMocks.tickets.updateOne).toHaveBeenCalledWith(
-      { discordChannelId: "discord-channel-1" },
-      expect.objectContaining({
-        $set: expect.not.objectContaining({
-          "resolution.message": expect.anything(),
-          "resolution.deliveredAt": null,
-        }),
-      })
-    );
+    expect(db.collectionMocks.tickets.updateOne).not.toHaveBeenCalled();
     await expect(response.json()).resolves.toMatchObject({
       ok: true,
       alreadyClosed: true,
@@ -288,7 +280,7 @@ describe("PATCH /api/discord-bot/tickets", () => {
       finalOutcome: "The corrected fix is live.",
     });
     expect(db.collectionMocks.tickets.updateOne).toHaveBeenCalledWith(
-      { discordChannelId: "discord-channel-1" },
+      expect.objectContaining({ discordChannelId: "discord-channel-1" }),
       expect.objectContaining({
         $set: expect.objectContaining({
           "resolution.message": "The corrected fix is live.",
@@ -333,12 +325,7 @@ describe("PATCH /api/discord-bot/tickets", () => {
       channelUpdatePosted: true,
       finalOutcome: "The fix is live.",
     });
-    expect(db.collectionMocks.tickets.updateOne).toHaveBeenCalledWith(
-      { discordChannelId: "discord-channel-1" },
-      expect.objectContaining({
-        $set: expect.not.objectContaining({ "resolution.message": expect.anything() }),
-      })
-    );
+    expect(db.collectionMocks.tickets.updateOne).not.toHaveBeenCalled();
   });
 });
 
