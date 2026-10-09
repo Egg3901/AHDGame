@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { MongoClient, ObjectId, type Db } from "mongodb";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { MIGRATIONS } from "../registry";
 import { REQUIRED_STARTUP_MIGRATIONS } from "../startupMigrations";
 import { migration } from "./2026-10-05-fold-automobile-entertainment-types";
@@ -191,6 +191,33 @@ describe.skipIf(!mongoUri)("2026-10-05-fold-automobile-entertainment-types on a 
       const result = await migration.execute(db, { dryRun: true });
       expect(result.documentsUpdated).toBe(0);
       expect(await legacyCount(db)).toBe(before);
+    });
+  });
+
+  it("does not add market capacity twice when interrupted before source deletion", async () => {
+    await withDb(async (db) => {
+      await seedLegacyWorld(db);
+      const markets = db.collection("unownedSectors");
+      const collection = db.collection.bind(db);
+      const collectionSpy = vi
+        .spyOn(db, "collection")
+        .mockImplementation(((name, options) =>
+          name === "unownedSectors" ? markets : collection(name, options)) as typeof db.collection);
+      const deletion = vi
+        .spyOn(markets, "deleteOne")
+        .mockRejectedValueOnce(new Error("interrupted"));
+      try {
+        await expect(migration.execute(db, { dryRun: false })).rejects.toThrow("interrupted");
+        await migration.execute(db, { dryRun: false });
+        expect(await markets.findOne({ stateId: "MI", industryModel: "vehicles" })).toMatchObject({
+          revenue: 5_000,
+          headroomUnits: 50,
+        });
+        expect(await markets.countDocuments({ sectorType: legacyA })).toBe(0);
+      } finally {
+        deletion.mockRestore();
+        collectionSpy.mockRestore();
+      }
     });
   });
 

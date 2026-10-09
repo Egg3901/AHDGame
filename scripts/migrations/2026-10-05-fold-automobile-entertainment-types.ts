@@ -157,15 +157,29 @@ async function foldUnownedSectors(db: Db, tally: Tally, dryRun: boolean): Promis
           typeof row.headroomUnits === "number" && Number.isFinite(row.headroomUnits)
             ? row.headroomUnits
             : 0;
-        await db
-          .collection("unownedSectors")
-          .updateOne(
-            { _id: twin._id },
-            { $inc: { revenue, headroomUnits: headroom }, $set: { updatedAt: new Date() } }
-          );
-        await db.collection("unownedSectors").deleteOne({ _id: row._id });
-        tally.updated++;
-        tally.deleted++;
+        const sourceId = String(row._id);
+        // Keep a durable receipt in the same atomic write as the increment. A
+        // restart after this write but before deletion must not add capacity twice.
+        const result = await db.collection("unownedSectors").updateOne(
+          { _id: twin._id, taxonomyFoldMergedSourceIds: { $ne: sourceId } },
+          {
+            $inc: { revenue, headroomUnits: headroom },
+            $addToSet: { taxonomyFoldMergedSourceIds: sourceId },
+            $set: { updatedAt: new Date() },
+          }
+        );
+        if (result.matchedCount === 0) {
+          const receipt = await db
+            .collection("unownedSectors")
+            .findOne(
+              { _id: twin._id, taxonomyFoldMergedSourceIds: sourceId },
+              { projection: { _id: 1 } }
+            );
+          if (!receipt) throw new Error("Canonical market disappeared during taxonomy fold");
+        }
+        const deletion = await db.collection("unownedSectors").deleteOne({ _id: row._id });
+        tally.updated += result.modifiedCount;
+        tally.deleted += deletion.deletedCount;
       } else {
         rekeyed++;
         if (dryRun) continue;
