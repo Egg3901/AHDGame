@@ -602,3 +602,10 @@ describe("checkGettingStarted", () => {
     expect(checkGettingStarted(legacy, false, false).length).toBeGreaterThan(0);
   });
 });
+
+describe("corporation founding recommendation", () => {
+  it("links to the market creation controls rather than a corporation ID", () => {
+    const recs = generateRecommendations({ character: createCharacter(), currentTurn: 1 });
+    expect(recs.find((rec) => rec.action.type === "foundCorporation")?.link).toBe("/market");
+  });
+});
