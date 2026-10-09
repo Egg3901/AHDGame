@@ -3,6 +3,7 @@
  * draftCharter protects existing names and abbreviations, while an explicit
  * empty 1991 player start permits absent historical party identities.
  */
+import { isSoloCharterTestingEnabled } from "@/lib/deploymentIdentity";
 import type { Db, ObjectId } from "mongodb";
 import { ObjectId as ObjectIdCtor } from "mongodb";
 import type {
@@ -111,7 +112,12 @@ export type DraftCharterResult =
 
 export async function draftCharter(input: DraftCharterInput, db: Db): Promise<DraftCharterResult> {
   const founders = input.foundersCharacterIds;
-  if (founders.length !== 3) return { ok: false, reason: "founders-not-3" };
+  // Sandbox testers may found alone (1 to 3 founders) when the dedicated
+  // env flag is on; everywhere else exactly 3 are required.
+  const founderCountOk = isSoloCharterTestingEnabled()
+    ? founders.length >= 1 && founders.length <= 3
+    : founders.length === 3;
+  if (!founderCountOk) return { ok: false, reason: "founders-not-3" };
   const seen = new Set<string>();
   for (const cid of founders) {
     const key = cid.toString();
@@ -323,6 +329,13 @@ export async function draftCharter(input: DraftCharterInput, db: Db): Promise<Dr
     }
   } catch {
     /* non-fatal */
+  }
+
+  // A solo charter (sandbox testing only) is fully signed by the proposer's
+  // auto-signature, so ratify now instead of waiting for a second sign call.
+  if (signatures.every((sig) => sig.signedAt)) {
+    const { ratifyCharter } = await import("./ratifyCharter");
+    await ratifyCharter(charter._id, db, now);
   }
 
   return { ok: true, charterId: charter._id };

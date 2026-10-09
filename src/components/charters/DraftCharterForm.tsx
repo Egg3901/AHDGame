@@ -53,6 +53,11 @@ interface DraftCharterFormProps {
    */
   stateNames: Readonly<Record<string, string>>;
   showPartySwitchWarning?: boolean;
+  /**
+   * Server-resolved sandbox flag: when true, co-founders are optional and the
+   * proposer may found the party alone. Never derived from client env.
+   */
+  allowSoloCharter?: boolean;
 }
 
 interface FounderSlot {
@@ -65,6 +70,7 @@ export function DraftCharterForm({
   proposer,
   stateNames,
   showPartySwitchWarning = false,
+  allowSoloCharter = false,
 }: DraftCharterFormProps) {
   const router = useRouter();
   const [name, setName] = useState("");
@@ -97,14 +103,16 @@ export function DraftCharterForm({
     e.preventDefault();
     setError(null);
 
-    const founderCharacterIds = founders.map((f) => f.characterId);
+    const founderCharacterIds = allowSoloCharter
+      ? founders.map((f) => f.characterId).filter((id) => id)
+      : founders.map((f) => f.characterId);
     if (founderCharacterIds.some((id) => !id)) {
       setError("Pick all three founders before submitting.");
       return;
     }
     const unique = new Set(founderCharacterIds);
-    if (unique.size !== 3) {
-      setError("Founders must be 3 distinct characters.");
+    if (unique.size !== founderCharacterIds.length) {
+      setError(`Founders must be ${founderCharacterIds.length} distinct characters.`);
       return;
     }
 
@@ -205,7 +213,15 @@ export function DraftCharterForm({
       </div>
 
       <div className="space-y-3">
-        <h3 className="text-sm font-semibold">Founders (3 required)</h3>
+        <h3 className="text-sm font-semibold">
+          {allowSoloCharter ? "Founders (1 to 3, sandbox testing)" : "Founders (3 required)"}
+        </h3>
+        {allowSoloCharter && (
+          <p className="text-xs text-muted">
+            Sandbox testing: leave the co-founder slots empty to found the party alone. It goes live
+            as soon as you submit.
+          </p>
+        )}
         <p className="text-xs text-muted">
           You&apos;re locked in as <strong>Founder 1</strong> with your active character. Search by
           character name to invite the other two co-founders. They must live in your home state or a

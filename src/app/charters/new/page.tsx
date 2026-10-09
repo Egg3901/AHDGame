@@ -3,6 +3,7 @@ import Link from "next/link";
 import { getAuthUserWithCharacter } from "@/lib/auth";
 import { DraftCharterForm } from "@/components/charters/DraftCharterForm";
 import { type CountryId } from "@/lib/constants/countries";
+import { isSoloCharterTestingEnabled } from "@/lib/deploymentIdentity";
 import { getDb } from "@/lib/mongodb";
 import type { State } from "@/lib/db/types";
 import { resolveCountryIdentity } from "@/lib/country/countryIdentity";
@@ -58,6 +59,7 @@ export default async function NewCharterPage() {
           proposer={proposer}
           stateNames={stateNames}
           showPartySwitchWarning={user.character.party !== "independent"}
+          allowSoloCharter={isSoloCharterTestingEnabled()}
         />
       </div>
 
