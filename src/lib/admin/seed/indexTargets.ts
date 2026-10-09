@@ -222,7 +222,7 @@ export const INDEX_TARGETS = [
   },
   {
     id: "indexesCasino",
-    label: "Indexes: Discord casino",
+    label: "Indexes — Discord casino",
     description:
       "Player and expiry lookups on casinoHighLowSessions, and the open-draw, channel listing and sweeper scans on casinoRounds.",
   },

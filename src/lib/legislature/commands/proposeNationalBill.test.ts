@@ -16,9 +16,6 @@ vi.mock("@/lib/countryState", () => ({
 vi.mock("@/lib/countryAccess", () => ({
   getEnabledCountryIds: vi.fn().mockResolvedValue(["CN", "US"]),
 }));
-vi.mock("@/lib/achievements/triggers", () => ({
-  checkBillSponsoredAchievements: vi.fn().mockResolvedValue(undefined),
-}));
 
 import { proposeNationalBill } from "./proposeNationalBill";
 
