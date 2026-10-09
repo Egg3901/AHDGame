@@ -4,16 +4,8 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react
 import { Button, Modal, Skeleton } from "@/components/ui";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import type { CurrencyCode } from "@/lib/constants/currencies";
-import {
-  DenseSection,
-  InlineStatus,
-  KVList,
-  KVRow,
-  SmallButton,
-  TableScroll,
-  Td,
-  Th,
-} from "./dense/DenseKit";
+import { useTranslations } from "next-intl";
+import { DenseSection, InlineStatus, KVList, KVRow, SmallButton } from "./dense/DenseKit";
 import { apiErrorText } from "@/lib/errors/catalog";
 
 type Lane = "generic" | "sector";
@@ -39,6 +31,8 @@ interface TechNode {
   description: string;
   slot: number;
   parentSlot: number | null;
+  prereqSlots?: number[];
+  exclusiveGroup?: string | null;
   cost: number;
   cashCost: number | null;
   effects: TechEffectView[];
@@ -91,27 +85,14 @@ interface TechTabProps {
   isCeo: boolean;
 }
 
-const LANE_LABEL: Record<Lane, string> = { generic: "Corporate", sector: "Sector" };
-
 /** Decade labels arrive as "2019–2029"; player copy carries no dashes. */
 function decadeLabel(label: string): string {
   return label.replace(/\s*[–—]\s*/g, " to ");
 }
 
-/**
- * The tree's slots, in reading order. Each decade lane is a root, two branches
- * of four researched in order, and (from v3) a pick-one specialization tier of
- * three entries, each with its capstone.
- */
-const SLOT_GROUPS: { label: string; slots: number[] }[] = [
-  { label: "Root", slots: [1] },
-  { label: "Branch A", slots: [2, 4, 6, 8] },
-  { label: "Branch B", slots: [3, 5, 7, 9] },
-  { label: "Specialization, pick one", slots: [10, 13, 11, 14, 12, 15] },
-];
-
 export default function TechTab({ corporationId, isCeo }: TechTabProps) {
   const { toInternalFrom, formatFull, formatAmount } = useCurrency();
+  const t = useTranslations("corporations.techTree");
   const [data, setData] = useState<TechResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -259,7 +240,8 @@ export default function TechTab({ corporationId, isCeo }: TechTabProps) {
               tracks: the Corporate track boosts <em>all</em> your sectors at reduced strength,
               while the Sector track gives full-strength bonuses to your primary{" "}
               {data.sectorLabel?.toLowerCase()} sectors only. Commit to one track per decade and
-              research its branch in order; switch tracks only by abandoning the decade.
+              research its branch in order. {t("firstUnlockCommits")} {t("futureDecadesLocked")}{" "}
+              {t("baselineResearchGrant")}
             </p>
             {current && (
               <p>
@@ -269,8 +251,7 @@ export default function TechTab({ corporationId, isCeo }: TechTabProps) {
                     ? `${decadeLabel(previous.label)} and ${decadeLabel(current.label)}`
                     : decadeLabel(current.label)}
                 </span>
-                . Bonuses apply from the current and previous decade only (a rolling 20 years);
-                older decades are inert baseline tech, and earlier decades cannot be unlocked late.
+                . {t("activeWindowBonuses")} {t("olderDecadesInactive")}
               </p>
             )}
             {data.cashPricing && (
@@ -374,6 +355,8 @@ export default function TechTab({ corporationId, isCeo }: TechTabProps) {
           caption="active decade"
           viewerIsCeo={viewerIsCeo}
           fmtCash={fmtCashShort}
+          rdScore={data.rdScore}
+          liquidCapital={data.liquidCapital}
           busyNode={busyNode}
           onUnlock={(node, lane) => setConfirmNode({ node, lane, decade: current.id })}
           onAbandon={() => setConfirmAbandon(current)}
@@ -409,6 +392,8 @@ export default function TechTab({ corporationId, isCeo }: TechTabProps) {
                 inert={decade.id !== previousDecadeId}
                 viewerIsCeo={viewerIsCeo}
                 fmtCash={fmtCashShort}
+                rdScore={data.rdScore}
+                liquidCapital={data.liquidCapital}
                 busyNode={busyNode}
                 onUnlock={(node, lane) => setConfirmNode({ node, lane, decade: decade.id })}
                 onAbandon={() => setConfirmAbandon(decade)}
@@ -423,16 +408,22 @@ export default function TechTab({ corporationId, isCeo }: TechTabProps) {
             <p className="text-sm text-foreground">
               Spend <strong>{confirmNode.node.cost} R&amp;D points</strong> and{" "}
               <strong>{fmtCash(confirmNode.node.cashCost)}</strong> cash.
-              {confirmNode.node.parentSlot === null && (
-                <>
-                  {" "}
-                  This commits you to the <strong>{LANE_LABEL[confirmNode.lane]}</strong> track for{" "}
-                  {decadeLabel(
-                    reached.find((d) => d.id === confirmNode.decade)?.label ?? confirmNode.decade
-                  )}
-                  .
-                </>
-              )}
+              {confirmNode.node.parentSlot === null &&
+                !reached.find((d) => d.id === confirmNode.decade)?.committedLane && (
+                  <>
+                    {" "}
+                    {t("firstTrackConfirmation", {
+                      track: t(`track.${confirmNode.lane}`),
+                      decade: decadeLabel(
+                        reached.find((d) => d.id === confirmNode.decade)?.label ??
+                          confirmNode.decade
+                      ),
+                    })}{" "}
+                    <strong>{t(`track.${confirmNode.lane}`)}</strong>{" "}
+                    {t("firstTrackConfirmationEnd")}
+                  </>
+                )}
+              {confirmNode.node.exclusiveGroup && <> {t("specializationConfirmation")}</>}
             </p>
             <div className="flex justify-end gap-2">
               <Button
@@ -443,7 +434,7 @@ export default function TechTab({ corporationId, isCeo }: TechTabProps) {
                 Cancel
               </Button>
               <Button variant="primary" onClick={() => void doUnlock()} disabled={!!busyNode}>
-                {busyNode ? "Unlocking…" : "Confirm"}
+                {busyNode ? t("unlocking") : t("unlockTechnology")}
               </Button>
             </div>
           </div>
@@ -483,6 +474,8 @@ function DecadeSection({
   inert = false,
   viewerIsCeo,
   fmtCash,
+  rdScore,
+  liquidCapital,
   busyNode,
   onUnlock,
   onAbandon,
@@ -492,19 +485,18 @@ function DecadeSection({
   inert?: boolean;
   viewerIsCeo: boolean;
   fmtCash: (n: number | null | undefined) => string;
+  rdScore: number | null | undefined;
+  liquidCapital: number | null | undefined;
   busyNode: string | null;
   onUnlock: (node: TechNode, lane: Lane) => void;
   onAbandon: () => void;
 }) {
+  const t = useTranslations("corporations.techTree");
   const canAbandon =
     viewerIsCeo && decade.reached && !decade.autoGrantedDecade && !!decade.committedLane;
-  const meta = [
-    caption,
-    decade.autoGrantedDecade ? "baseline" : null,
-    decade.committedLane ? `${LANE_LABEL[decade.committedLane]} track committed` : null,
-  ]
+  const meta = [caption, decade.autoGrantedDecade ? t("baselineResearch") : null]
     .filter(Boolean)
-    .join(", ");
+    .join(" · ");
   return (
     <DenseSection
       title={decadeLabel(decade.label)}
@@ -512,20 +504,40 @@ function DecadeSection({
       actions={
         canAbandon ? (
           <SmallButton tone="danger" onClick={onAbandon}>
-            Abandon decade
+            {t("abandonDecade")}
           </SmallButton>
         ) : undefined
       }
       className={inert ? "opacity-70" : ""}
     >
-      <div className="grid gap-x-8 gap-y-6 pt-1 xl:grid-cols-2">
+      <div className="mb-3 flex flex-wrap items-center gap-2 border-b border-card-border pb-3 text-xs">
+        {decade.autoGrantedDecade ? (
+          <span className="text-muted">{t("completedBaseline")}</span>
+        ) : decade.committedLane ? (
+          <span className="text-warning">
+            {t("committedTrack", { track: t(`track.${decade.committedLane}`) })}
+          </span>
+        ) : decade.reached ? (
+          <span className="text-muted">{t("chooseTrack")}</span>
+        ) : (
+          <span className="text-muted">{t("decadeOpens", { year: decade.id })}</span>
+        )}
+        {decade.committedLane && !decade.autoGrantedDecade && (
+          <span className="rounded-sm border border-warning/40 px-1.5 py-0.5 text-warning">
+            {t("trackSelected", { track: t(`track.${decade.committedLane}`) })}
+          </span>
+        )}
+      </div>
+      <div className="grid gap-x-6 gap-y-6 pt-1 xl:grid-cols-2">
         {(["generic", "sector"] as Lane[]).map((lane) => (
-          <LaneTable
+          <LaneTree
             key={lane}
             lane={lane}
             decade={decade}
             viewerIsCeo={viewerIsCeo}
             fmtCash={fmtCash}
+            rdScore={rdScore}
+            liquidCapital={liquidCapital}
             busyNode={busyNode}
             onUnlock={onUnlock}
           />
@@ -535,11 +547,13 @@ function DecadeSection({
   );
 }
 
-function LaneTable({
+function LaneTree({
   lane,
   decade,
   viewerIsCeo,
   fmtCash,
+  rdScore,
+  liquidCapital,
   busyNode,
   onUnlock,
 }: {
@@ -547,37 +561,43 @@ function LaneTable({
   decade: TechDecade;
   viewerIsCeo: boolean;
   fmtCash: (n: number | null | undefined) => string;
+  rdScore: number | null | undefined;
+  liquidCapital: number | null | undefined;
   busyNode: string | null;
   onUnlock: (node: TechNode, lane: Lane) => void;
 }) {
+  const t = useTranslations("corporations.techTree");
   const nodes = decade.lanes[lane];
   const bySlot = new Map(nodes.map((n) => [n.slot, n]));
   const dimmed = decade.committedLane != null && decade.committedLane !== lane;
   const owned = nodes.filter((n) => n.owned).length;
-  const chosenSpec = [10, 11, 12].map((s) => bySlot.get(s)).find((n) => n?.owned);
-  const groups = SLOT_GROUPS.map((g) => ({
-    label: g.slots[0] === 10 && chosenSpec ? `Specialization: ${chosenSpec.name}` : g.label,
-    nodes: g.slots.map((s) => bySlot.get(s)).filter((n): n is TechNode => !!n),
-  })).filter((g) => g.nodes.length > 0);
-
-  const status = (node: TechNode) => {
+  const chosenSpec = decade.autoGrantedDecade
+    ? undefined
+    : [10, 11, 12].map((s) => bySlot.get(s)).find((n) => n?.owned);
+  const status = (node: TechNode): ReactNode => {
     if (node.owned) {
-      return <span className="text-success">{node.autoGranted ? "Auto" : "Owned"}</span>;
+      return node.autoGranted ? (
+        <span className="text-muted" title={t("baselineAutoDetail")}>
+          {t("baselineNoCost")}
+        </span>
+      ) : (
+        <span className="text-success">{t("owned")}</span>
+      );
     }
     if (!decade.reached || node.laneLocked || node.pathLocked || !node.prereqMet) {
       return (
         <span className="text-muted">
           {node.laneLocked
-            ? "Other track"
+            ? t("lockedByTrack", { track: t(`track.${decade.committedLane ?? "generic"}`) })
             : node.pathLocked
-              ? "Other path"
+              ? t("specializationLocked")
               : !decade.reached
-                ? "Locked"
-                : "Needs previous"}
+                ? t("availableFrom", { decade: decade.id })
+                : t("unlockPrerequisite", { technology: prerequisiteNames(node, bySlot) })}
         </span>
       );
     }
-    if (!viewerIsCeo) return <span className="text-muted">Available</span>;
+    if (!viewerIsCeo) return <span className="text-muted">{t("available")}</span>;
     if (node.affordable) {
       return (
         <SmallButton
@@ -585,86 +605,206 @@ function LaneTable({
           disabled={busyNode === node.id}
           onClick={() => onUnlock(node, lane)}
         >
-          {busyNode === node.id ? "…" : "Unlock"}
+          {busyNode === node.id ? "…" : t("unlock")}
         </SmallButton>
       );
     }
-    return <span className="text-warning">Can&apos;t afford</span>;
+    const shortfalls = [
+      (rdScore ?? 0) < node.cost ? t("needsRd", { amount: node.cost - (rdScore ?? 0) }) : null,
+      (liquidCapital ?? 0) < (node.cashCost ?? 0)
+        ? t("needsCash", { amount: fmtCash((node.cashCost ?? 0) - (liquidCapital ?? 0)) })
+        : null,
+    ].filter((value): value is string => value !== null);
+    return (
+      <span className="text-warning">
+        {shortfalls.length
+          ? t("needs", { shortfalls: shortfalls.join(t("and")) })
+          : t("notAvailable")}
+      </span>
+    );
   };
 
   return (
-    <div className={`min-w-0 ${dimmed ? "opacity-60" : ""}`}>
-      <h3 className="flex items-baseline justify-between gap-2 pb-1 text-xs font-medium text-foreground">
-        <span>{LANE_LABEL[lane]} track</span>
-        <span className="font-mono text-[11px] font-normal tabular-nums text-muted">
-          {owned}/{nodes.length} owned
-        </span>
-      </h3>
-      <TableScroll>
-        <table className="w-full border-collapse">
-          <thead>
-            <tr>
-              <Th>Technology</Th>
-              <Th>Effects</Th>
-              <Th align="right">Cost</Th>
-              <Th align="right">
-                <span className="sr-only">Status</span>
-              </Th>
-            </tr>
-          </thead>
-          <tbody>
-            {groups.map((group) => (
-              <GroupRows
-                key={group.label}
-                label={group.label}
-                nodes={group.nodes}
-                fmtCash={fmtCash}
-                status={status}
-              />
-            ))}
-          </tbody>
-        </table>
-      </TableScroll>
+    <div
+      className={`min-w-0 overflow-hidden rounded-lg border border-card-border ${dimmed ? "opacity-60" : ""}`}
+    >
+      <div className="relative h-16 overflow-hidden bg-gray-900">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={nodes[0]?.image}
+          alt=""
+          loading="lazy"
+          className="h-full w-full object-cover"
+          onError={(event) => {
+            const image = event.currentTarget;
+            const placeholder = "https://cdn.ahousedividedgame.com/static/tech/placeholder.webp";
+            if (!image.src.endsWith("/placeholder.webp")) image.src = placeholder;
+          }}
+        />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/25 to-transparent" />
+        <div className="absolute inset-x-3 bottom-2 flex items-end justify-between gap-2">
+          <div>
+            <h3 className="text-sm font-semibold text-white">{t(`track.${lane}`)}</h3>
+            <p className="text-[11px] text-white/80">
+              {lane === "generic" ? t("corporateEffect") : t("sectorEffect")}
+            </p>
+          </div>
+          <span className="rounded bg-black/45 px-1.5 py-0.5 text-[11px] text-white">
+            {t("ownedCount", { owned, total: nodes.length })}
+          </span>
+        </div>
+      </div>
+      <div className="space-y-3 p-3">
+        {bySlot.get(1) && (
+          <div className="mx-auto w-full max-w-sm">
+            <TechNodeCard node={bySlot.get(1)!} fmtCash={fmtCash} status={status(bySlot.get(1)!)} />
+          </div>
+        )}
+        {bySlot.has(2) || bySlot.has(3) ? (
+          <>
+            <BranchSplit
+              leftActive={bySlot.get(1)?.owned ?? false}
+              rightActive={bySlot.get(1)?.owned ?? false}
+            />
+            <div className="grid grid-cols-2 gap-3">
+              {(
+                [
+                  [2, 4, 6, 8],
+                  [3, 5, 7, 9],
+                ] as const
+              ).map((branch, branchIndex) => (
+                <div key={branch[0]} className="flex min-w-0 flex-col items-center">
+                  <p className="mb-1 text-[10px] font-medium uppercase tracking-wide text-muted">
+                    {branchIndex === 0 ? t("leftBranch") : t("rightBranch")}
+                  </p>
+                  {branch.map((slot, index) => {
+                    const node = bySlot.get(slot);
+                    if (!node) return null;
+                    const parent = bySlot.get(node.parentSlot ?? -1);
+                    return (
+                      <div key={slot} className="flex w-full flex-col items-center">
+                        {index > 0 && <TreeConnector active={parent?.owned ?? false} />}
+                        <TechNodeCard node={node} fmtCash={fmtCash} status={status(node)} />
+                      </div>
+                    );
+                  })}
+                </div>
+              ))}
+            </div>
+          </>
+        ) : null}
+        {[10, 11, 12].some((slot) => bySlot.has(slot)) && (
+          <>
+            <div className="mt-2 border-t border-card-border pt-3 text-center">
+              <p className="text-xs font-semibold text-foreground">
+                {chosenSpec
+                  ? t("specializationSelected", { name: chosenSpec.name })
+                  : t("specializationChoice")}
+              </p>
+              <p className="mt-0.5 text-[11px] text-muted">
+                {decade.autoGrantedDecade
+                  ? t("allSpecializationsBaseline")
+                  : t("chooseSpecialization")}
+              </p>
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              {[10, 11, 12].map((slot, index) => {
+                const node = bySlot.get(slot);
+                const capstone = bySlot.get(13 + index);
+                if (!node) return null;
+                const parentOwned = (node.prereqSlots ?? [8, 9]).some(
+                  (prereqSlot) => bySlot.get(prereqSlot)?.owned
+                );
+                return (
+                  <div key={slot} className="flex min-w-0 flex-col items-center">
+                    <TreeConnector active={parentOwned} />
+                    <TechNodeCard node={node} fmtCash={fmtCash} status={status(node)} />
+                    {capstone && (
+                      <>
+                        <TreeConnector active={node.owned} />
+                        <TechNodeCard node={capstone} fmtCash={fmtCash} status={status(capstone)} />
+                      </>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </>
+        )}
+      </div>
     </div>
   );
 }
 
-function GroupRows({
-  label,
-  nodes,
+function prerequisiteNames(node: TechNode, bySlot: Map<number, TechNode>): string {
+  const slots = node.prereqSlots ?? (node.parentSlot == null ? [] : [node.parentSlot]);
+  const names = slots.map((slot) => bySlot.get(slot)?.name).filter(Boolean);
+  return names.length ? names.join(" or ") : "a prerequisite technology";
+}
+
+function TreeConnector({ active = false }: { active?: boolean }) {
+  return (
+    <div aria-hidden="true" className={`h-4 w-0.5 ${active ? "bg-success" : "bg-card-border"}`} />
+  );
+}
+
+function BranchSplit({ leftActive, rightActive }: { leftActive: boolean; rightActive: boolean }) {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 100 20" preserveAspectRatio="none" className="h-5 w-full">
+      <path
+        d="M50 0V10H25V20"
+        fill="none"
+        stroke="currentColor"
+        className={leftActive ? "text-success" : "text-card-border"}
+        strokeWidth="1.4"
+      />
+      <path
+        d="M50 10H75V20"
+        fill="none"
+        stroke="currentColor"
+        className={rightActive ? "text-success" : "text-card-border"}
+        strokeWidth="1.4"
+      />
+    </svg>
+  );
+}
+
+function TechNodeCard({
+  node,
   fmtCash,
   status,
 }: {
-  label: string;
-  nodes: TechNode[];
+  node: TechNode;
   fmtCash: (n: number | null | undefined) => string;
-  status: (node: TechNode) => ReactNode;
+  status: ReactNode;
 }) {
+  const isOwned = node.owned;
   return (
-    <>
-      <tr>
-        <td colSpan={4} className="pb-0.5 pt-2 text-[11px] font-medium text-muted">
-          {label}
-        </td>
-      </tr>
-      {nodes.map((node) => (
-        <tr key={node.id} className={node.pathLocked ? "opacity-60" : undefined}>
-          <Td wrap title={node.description}>
-            <span className={node.owned ? "text-foreground" : "text-foreground/90"}>
-              {node.name}
-            </span>
-          </Td>
-          <Td wrap className="text-xs text-muted">
-            {node.effects.map((e) => e.label).join(", ")}
-          </Td>
-          <Td align="right" className="text-xs text-muted">
-            {node.owned ? "" : `${node.cost} R&D, ${fmtCash(node.cashCost)}`}
-          </Td>
-          <Td align="right" numeric={false} className="text-xs">
-            {status(node)}
-          </Td>
-        </tr>
-      ))}
-    </>
+    <article
+      className={`w-full min-w-0 rounded-md border p-2.5 text-center ${
+        isOwned
+          ? "border-success/50 bg-success/5"
+          : node.pathLocked
+            ? "border-card-border bg-surface/40 opacity-60"
+            : "border-card-border bg-surface/60"
+      }`}
+      title={node.description}
+    >
+      <h4 className="text-xs font-semibold leading-snug text-foreground">{node.name}</h4>
+      <p className="mt-1 line-clamp-3 text-[11px] leading-snug text-muted">{node.description}</p>
+      {node.effects.length > 0 && (
+        <ul className="mt-1.5 space-y-1 text-[11px] leading-snug text-muted">
+          {node.effects.map((effect, index) => (
+            <li key={`${effect.category}-${index}`}>{effect.label}</li>
+          ))}
+        </ul>
+      )}
+      {!isOwned && (
+        <p className="mt-1.5 text-[10px] tabular-nums text-muted">
+          {node.cost} R&amp;D · {fmtCash(node.cashCost)}
+        </p>
+      )}
+      <div className="mt-2 text-[10px] leading-snug">{status}</div>
+    </article>
   );
 }
