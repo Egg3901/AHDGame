@@ -149,11 +149,14 @@ describe("GeneralBlendView", () => {
     expect(screen.queryByText(/battleground board/i)).toBeNull();
   });
 
-  it("starts locked on both layouts", () => {
+  it("starts locked on the phone, and the desktop stage owns its gestures", () => {
+    // The phone map sits in a scrolling page, so it must not capture a swipe
+    // until the reader unlocks it. The desktop stage is the whole viewport and
+    // nothing scrolls under it, so it pans and zooms from the start.
     renderView();
     const maps = screen.getAllByRole("group", { name: /US presidential map/ });
-    for (const m of maps) expect(m.getAttribute("data-locked")).toBe("true");
-    expect(screen.getAllByRole("button", { name: /Unlock map/ })).toHaveLength(2);
+    expect(maps.map((m) => m.getAttribute("data-locked")).sort()).toEqual(["false", "true"]);
+    expect(screen.getAllByRole("button", { name: /Unlock map/ })).toHaveLength(1);
   });
 
   it("shows democratic health and both presidential drag levels on both layouts", () => {
@@ -379,15 +382,16 @@ describe("the hero is the ticket list in a two-way race", () => {
 
   it("prints the leader's electoral votes only where each one earns its place", () => {
     renderView();
-    // Five bare figures, every one deliberate: the reader's own "Your ticket"
-    // standing once per tree, the rail's nav badge, and the figure in the
-    // tickets table and card, which is where each ticket's campaign sits next
-    // to its standing. The hero's own two now carry their unit and sit under a
-    // "Current projection" label, so they read as "276 EV" instead. The bar
-    // used to label its own segment too. If the count rises, something started
-    // echoing the hero again.
-    expect(screen.getAllByText("276")).toHaveLength(5);
-    expect(screen.getAllByText("276 EV")).toHaveLength(2);
+    // Four bare figures, every one deliberate: the reader's own "Your ticket"
+    // standing once per tree, and the figure in the tickets table and card,
+    // which is where each ticket's campaign sits next to its standing. The
+    // desktop rail's nav badge went with the rail when the map stage replaced
+    // it. The hero's own two carry their unit and sit under a "Current
+    // projection" label, so they read as "276 EV", as does the stage's field
+    // list. The bar used to label its own segment too. If the count rises,
+    // something started echoing the hero again.
+    expect(screen.getAllByText("276")).toHaveLength(4);
+    expect(screen.getAllByText("276 EV")).toHaveLength(3);
   });
 });
 
