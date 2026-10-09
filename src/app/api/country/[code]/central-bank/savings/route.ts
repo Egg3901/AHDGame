@@ -99,11 +99,13 @@ export async function GET(_request: Request, { params }: { params: Promise<{ cod
     const holder = character.currencyBalances?.savingsHolder?.[nationalCurrency];
     const holderIsCentralBank =
       !holder || holder === "centralBank" || holder === getBankId(countryId);
+    const holderId =
+      typeof holder === "string" && ObjectId.isValid(holder) ? new ObjectId(holder) : null;
     const [bankingPolicy, holderBank] = await Promise.all([
       loadBankingPolicy(db),
-      holderIsCentralBank || !ObjectId.isValid(holder)
+      holderIsCentralBank || !holderId
         ? Promise.resolve(null)
-        : db.collection<Corporation>("corporations").findOne({ _id: new ObjectId(holder) }),
+        : db.collection<Corporation>("corporations").findOne({ _id: holderId }),
     ]);
     const validPrivateHolder =
       holderBank?.bankCharter?.status === "active" &&
