@@ -185,11 +185,22 @@ export async function executeCharacterAction(
   // call after the loop rather than per-iteration.
   const auditEntries: ActionAuditInput[] = [];
 
+  // Batch runs commit each iteration on its own (AP debit + payout in one
+  // atomic update). If a later iteration is refused (AP or funds ran out), the
+  // earlier ones are already paid for, so the run ends as a partial success
+  // instead of an error that hides what was spent and earned.
+  let completed = 0;
+  let stoppedReason: string | null = null;
+
   for (let i = 0; i < count; i++) {
     const current =
       i === 0 ? character : await db.collection<Character>("characters").findOne(characterQuery);
 
     if (!current) {
+      if (completed > 0) {
+        stoppedReason = "Character not found";
+        break;
+      }
       return { ok: false, error: "Character not found", status: 404 };
     }
 
@@ -203,6 +214,10 @@ export async function executeCharacterAction(
       rpgStatsEnabled,
     });
     if (!validation.canPerform) {
+      if (completed > 0) {
+        stoppedReason = validation.reason ?? "Action not allowed";
+        break;
+      }
       return { ok: false, error: validation.reason ?? "Action not allowed", status: 400 };
     }
 
@@ -454,13 +469,16 @@ export async function executeCharacterAction(
       .collection<Character>("characters")
       .findOneAndUpdate(updateFilter, [{ $set: pipelineSet }], { returnDocument: "after" });
     if (!updated) {
-      return {
-        ok: false,
-        error: "Your available resources changed before the action completed. Please try again.",
-        status: 409,
-      };
+      const error =
+        "Your available resources changed before the action completed. Please try again.";
+      if (completed > 0) {
+        stoppedReason = error;
+        break;
+      }
+      return { ok: false, error, status: 409 };
     }
 
+    completed += 1;
     updatedCharacter = updated ?? null;
     lastMessage = effect.message;
 
@@ -538,13 +556,17 @@ export async function executeCharacterAction(
     return { ok: false, error: "No action was executed.", status: 400 };
   }
 
-  const message = buildBatchResultMessage(
-    count,
+  let message = buildBatchResultMessage(
+    completed,
     character,
     updatedCharacter,
     lastMessage,
     homeCurrency
   );
+  if (stoppedReason) {
+    const reason = /[.!?]$/.test(stoppedReason) ? stoppedReason : `${stoppedReason}.`;
+    message = `Stopped after ${completed} of ${count}: ${reason} ${message}`;
+  }
 
   return { ok: true, updatedCharacter, message };
 }
