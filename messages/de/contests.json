@@ -29,7 +29,7 @@
       },
       "approval_gain": {
         "title": "Regierungszustimmung",
-        "rules": "Die meisten Zustimmungspunkte für eine Regierung unter Führung eines Spielers. Dieselbe Person muss die ganze Runde im Amt bleiben, daher nimmt eine nach Rundenbeginn gebildete Regierung erst in der nächsten Runde teil."
+        "rules": "Die meisten Zustimmungspunkte für eine von einem Spieler geführte Regierung, gemessen ab dem Amtsantritt ihres aktuellen Regierungschefs."
       },
       "referrals_weekly": {
         "title": "Empfehlungen der Woche",

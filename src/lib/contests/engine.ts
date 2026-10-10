@@ -192,12 +192,18 @@ async function loadInjections(
   return totals;
 }
 
-async function loadApprovals(db: Db): Promise<Map<string, number>> {
+type ApprovalSnapshot = Pick<GovernmentApproval, "approvalRating"> &
+  Partial<Pick<GovernmentApproval, "history" | "headOfGovernmentSinceTurn">>;
+
+async function loadApprovals(db: Db): Promise<Map<string, ApprovalSnapshot>> {
   const docs = await db
     .collection<GovernmentApproval>("governmentApprovals")
-    .find({}, { projection: { _id: 1, approvalRating: 1 } })
+    .find(
+      {},
+      { projection: { _id: 1, approvalRating: 1, history: 1, headOfGovernmentSinceTurn: 1 } }
+    )
     .toArray();
-  return new Map(docs.map((d) => [String(d._id), d.approvalRating]));
+  return new Map<string, ApprovalSnapshot>(docs.map((d) => [String(d._id), d] as const));
 }
 
 async function loadPlayerHeads(
@@ -323,10 +329,10 @@ async function openingBaselines(
     const approvals = await loadApprovals(db);
     const heads = await loadPlayerHeads(db, world, [...approvals.keys()]);
     const baselines: ContestBaseline[] = [];
-    for (const [countryId, rating] of approvals) {
+    for (const [countryId, approval] of approvals) {
       const head = heads.get(countryId);
-      if (!head || !Number.isFinite(rating)) continue;
-      baselines.push({ subjectId: countryId, characterId: head, value: rating });
+      if (!head || !Number.isFinite(approval.approvalRating)) continue;
+      baselines.push({ subjectId: countryId, characterId: head, value: approval.approvalRating });
     }
     out.set("approval_gain", { baselines });
   }
@@ -578,29 +584,50 @@ async function computeStandings(
 
   // approval_gain
   const approvals = await loadApprovals(db);
-  const heads = await loadPlayerHeads(
-    db,
-    world,
-    baselines.map((b) => b.subjectId)
-  );
-  for (const b of baselines) {
-    if (!approvalEntryEligible(b.characterId, heads.get(b.subjectId) ?? null)) continue;
-    const c = world.players.get(b.characterId);
-    const current = approvals.get(b.subjectId);
-    if (!c || current === undefined) continue;
-    const score = gainScore(b.value, current);
+  const heads = await loadPlayerHeads(db, world, [...approvals.keys()]);
+  const existingByCountry = new Map(baselines.map((baseline) => [baseline.subjectId, baseline]));
+  const updatedBaselines: ContestBaseline[] = [];
+  for (const [countryId, approval] of approvals) {
+    const head = heads.get(countryId) ?? null;
+    if (!head) continue;
+
+    const existing = existingByCountry.get(countryId);
+    let baseline = existing;
+    if (!existing || !approvalEntryEligible(existing.characterId, head)) {
+      const officeTurn = approval.headOfGovernmentSinceTurn;
+      const officeApproval =
+        officeTurn === undefined || officeTurn === null
+          ? undefined
+          : approval.history?.find((entry) => entry.turn === officeTurn)?.approval;
+      const hasOfficeApproval = officeApproval !== undefined && Number.isFinite(officeApproval);
+      const value = hasOfficeApproval ? officeApproval : approval.approvalRating;
+      if (!Number.isFinite(value)) continue;
+      baseline = {
+        subjectId: countryId,
+        characterId: head,
+        value,
+        enteredTurn: hasOfficeApproval ? (officeTurn ?? world.turn) : world.turn,
+      };
+    }
+
+    if (!baseline) continue;
+    updatedBaselines.push(baseline);
+    if (!Number.isFinite(approval.approvalRating)) continue;
+    const c = world.players.get(head);
+    if (!c) continue;
+    const score = gainScore(baseline.value, approval.approvalRating);
     if (score === null) continue;
     standings.push({
-      subjectId: b.subjectId,
-      subjectName: getCountryDisplayName(b.subjectId as CountryId, world.preset),
-      characterId: b.characterId,
+      subjectId: countryId,
+      subjectName: getCountryDisplayName(countryId as CountryId, world.preset),
+      characterId: head,
       characterName: c.name,
-      baseline: b.value,
-      current,
+      baseline: baseline.value,
+      current: approval.approvalRating,
       score,
     });
   }
-  return { standings: rankStandings(standings), baselines };
+  return { standings: rankStandings(standings), baselines: updatedBaselines };
 }
 
 /**
