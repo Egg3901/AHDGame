@@ -43,6 +43,8 @@ interface Snapshot {
   maxDebtInternal: number;
   outstandingInternal: number;
   availableBorrowInternal: number;
+  availableBorrowFace?: number;
+  poolCurrency?: CurrencyCode;
   balances: Partial<Record<CurrencyCode, number>>;
   arrears: Partial<Record<CurrencyCode, number>>;
   accountsOpened: Partial<Record<CurrencyCode, boolean>>;
@@ -343,8 +345,12 @@ export function CentralBankLoanTab({ countryId }: Props) {
         />
         <CentralBankFigure
           label="System pool"
-          value={formatAmount(s.availableBorrowInternal)}
-          hint="Shared across all borrowers"
+          value={
+            s.availableBorrowFace !== undefined
+              ? formatNative(s.availableBorrowFace, cbCurrency)
+              : formatAmount(s.availableBorrowInternal)
+          }
+          hint={`This bank's lending pool, shared across all borrowers. Your credit limit is shared across every bank.`}
           size="lg"
         />
       </div>

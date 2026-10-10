@@ -85,7 +85,7 @@ export async function validateLocDrawAdmission(db: Db, plan: LocPlan): Promise<s
   if (!character?.lineOfCredit?.accountsOpened?.[c] || character.lineOfCredit.drawFrozen)
     return "The credit account is no longer eligible for this draw";
   const { buildLocSnapshot } = await import("./buildSnapshot");
-  const snapshot = await buildLocSnapshot(db, character);
+  const snapshot = await buildLocSnapshot(db, character, c);
   if (!snapshot || plan.drawAdmission.addInternal > snapshot.perPlayerAvailableInternal + 1e-6)
     return "The available credit changed before settlement; request a new draw";
   return null;

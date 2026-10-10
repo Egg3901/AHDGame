@@ -159,4 +159,45 @@ describe("buildLocSnapshot", () => {
       expect.objectContaining({ preset: "2027-default" })
     );
   });
+
+  it("sizes the pool from the requested bank, not the borrower's home bank", async () => {
+    const { computePlayerGrossNetLocInternal, loadExchangeRatesMap } = await import("./netWorth");
+    const { estimatePerTurnCurrencyIncomeHomeFace } = await import("./currencyIncomeEstimate");
+    vi.mocked(getHomeCurrency).mockReturnValue("USD" as never);
+    vi.mocked(loadExchangeRatesMap).mockResolvedValue({ USD: 1, JPY: 100 } as never);
+    vi.mocked(computePlayerGrossNetLocInternal).mockResolvedValue({
+      grossInternal: 1_000_000,
+      locDebtInternal: 0,
+      netInternal: 1_000_000,
+    });
+    vi.mocked(estimatePerTurnCurrencyIncomeHomeFace).mockResolvedValue(100_000);
+    // US pool nearly exhausted (0.7 * 1000 - 700 = 0); JPY pool large.
+    db.collectionMocks["centralBanks"]!.findOne.mockImplementation(async (q: { _id: string }) =>
+      q._id === "US"
+        ? { _id: "US", primeRate: 3, nationalSavingsBalance: 500, reserveBalance: 500 }
+        : { _id: "JP", primeRate: 1, nationalSavingsBalance: 300_000_000, reserveBalance: 0 }
+    );
+    db.collectionMocks["characters"]!.aggregate.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([{ totalBalance: 700, totalArrears: 0 }]),
+    });
+
+    const { buildLocSnapshot } = await import("./buildSnapshot");
+    const character = {
+      _id: new ObjectId(),
+      countryId: "US",
+      lineOfCredit: { balances: {}, arrears: {}, accountsOpened: {}, drawFrozen: false },
+    } as never;
+
+    const home = await buildLocSnapshot(db as unknown as Db, character);
+    expect(home!.poolCurrency).toBe("USD");
+    expect(home!.availableBorrowInternal).toBe(0);
+    expect(home!.perPlayerAvailableInternal).toBe(0);
+
+    const jpy = await buildLocSnapshot(db as unknown as Db, character, "JPY");
+    expect(jpy!.poolCurrency).toBe("JPY");
+    // 0.7 * 300M JPY = 210M face, minus 700 JPY outstanding in that mocked aggregate.
+    expect(jpy!.availableBorrowFace).toBeCloseTo(210_000_000 - 700);
+    expect(jpy!.availableBorrowInternal).toBeCloseTo((210_000_000 - 700) / 100);
+    expect(jpy!.perPlayerAvailableInternal).toBeGreaterThan(0);
+  });
 });

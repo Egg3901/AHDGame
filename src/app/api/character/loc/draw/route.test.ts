@@ -92,6 +92,8 @@ function makeSnapshot(overrides: Partial<LocSnapshot> = {}): LocSnapshot {
     locDebtInternal: 5_000_000_000,
     netWorthInternal: 5_000_000_000,
     maxDebtInternal: 20_000_000_000,
+    poolCurrency: "EUR",
+    availableBorrowFace: 20_000_000,
     outstandingInternal: 5_000_000_000,
     availableBorrowInternal: 20_000_000_000,
     balances: { EUR: 5_000_000_000 },

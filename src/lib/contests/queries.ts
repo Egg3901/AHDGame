@@ -43,6 +43,8 @@ export interface ContestCardData {
   roundNumber: number;
   startedAt: string;
   endsAt: string;
+  /** When the standings were last recomputed; null before the first refresh. */
+  refreshedAt: string | null;
   entrants: number;
   leaders: RankedEntry[];
   /** Viewer's best entry this round, when they have one. */
@@ -119,6 +121,7 @@ export async function loadContestsPage(
       roundNumber: round.roundNumber,
       startedAt: round.startedAt.toISOString(),
       endsAt: round.endsAt.toISOString(),
+      refreshedAt: round.refreshedAt ? round.refreshedAt.toISOString() : null,
       entrants: ranked.length,
       leaders: ranked.slice(0, LEADERS_SHOWN),
       viewer: viewerEntry,

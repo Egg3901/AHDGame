@@ -11,6 +11,7 @@ import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { ModifierList } from "@/components/approval/ModifierChip";
 import { computeRegionalConditionMargin } from "@/lib/states/conditions/marginEffects";
 import { mergeApprovalModifiers } from "./mergeApprovalModifiers";
+import { displayEffect } from "@/lib/country/rules/approvalBreakdown";
 
 interface StateApprovalEntry {
   stateId: string;
@@ -33,6 +34,8 @@ interface ApprovalApiResponse {
   governmentApproval?: number;
   history?: { turn: number; approval: number }[];
   modifiers?: ActiveModifier[];
+  stateAverage?: number;
+  nationalAdjustments?: ActiveModifier[];
 }
 
 function approvalColor(v: number) {
@@ -125,9 +128,20 @@ export default function ApprovalClient({ initialMetrics, initialApproval }: Appr
 
   const history = approvalData?.history ?? [];
 
+  // Regional conditions are already inside the state numbers; national
+  // adjustments are applied after the state average. They are listed apart and
+  // never summed together, so nothing is counted twice.
+  const stateAverage = approvalData?.stateAverage;
+  const nationalAdjustments = approvalData?.nationalAdjustments;
+  const hasBreakdown = stateAverage != null && nationalAdjustments != null;
+  const nationalIds = new Set((nationalAdjustments ?? []).map((m) => m.id));
+  const regionalModifiers = hasBreakdown
+    ? modifiers.filter((m) => !nationalIds.has(m.id))
+    : modifiers;
   const base = approvalData?.governmentApprovalBase ?? metricsData?.governmentApprovalBase;
-  const netApproval =
-    governmentApproval != null && base != null
+  const netApproval = hasBreakdown
+    ? netModifierEffect(regionalModifiers)
+    : governmentApproval != null && base != null
       ? Math.round((governmentApproval - base) * 10) / 10
       : netModifierEffect(modifiers);
   const netMargin = computeRegionalConditionMargin(modifiers);
@@ -183,20 +197,63 @@ export default function ApprovalClient({ initialMetrics, initialApproval }: Appr
                   {governmentApproval.toFixed(1)}%
                 </p>
                 <p className="text-xs text-muted mt-2">
-                  Population-weighted average of {config.regionLabel.toLowerCase()} approval, as of
-                  the latest turn.
+                  {hasBreakdown
+                    ? `Population-weighted average of ${config.regionLabel.toLowerCase()} approval, plus the national adjustments below, as of the latest turn.`
+                    : `Population-weighted average of ${config.regionLabel.toLowerCase()} approval, as of the latest turn.`}
                 </p>
+                {hasBreakdown && (
+                  <dl className="mt-4 space-y-1 border-t border-card-border/40 pt-3 text-sm">
+                    <div className="flex justify-between gap-4">
+                      <dt className="text-muted">
+                        {config.regionLabel} average (population weighted)
+                      </dt>
+                      <dd className="tabular-nums font-medium">{stateAverage.toFixed(1)}%</dd>
+                    </div>
+                    {nationalAdjustments.map((m) => (
+                      <div key={m.id} className="flex justify-between gap-4">
+                        <dt className="text-muted">{m.label}</dt>
+                        <dd
+                          className={
+                            "tabular-nums font-medium " +
+                            (m.effect > 0 ? "text-emerald-500" : "text-rose-500")
+                          }
+                        >
+                          {m.effect > 0 ? "+" : ""}
+                          {displayEffect(m.effect)}
+                        </dd>
+                      </div>
+                    ))}
+                    <div className="flex justify-between gap-4 border-t border-card-border/40 pt-1">
+                      <dt className="font-medium">National approval</dt>
+                      <dd className="tabular-nums font-semibold">
+                        {governmentApproval.toFixed(1)}%
+                      </dd>
+                    </div>
+                  </dl>
+                )}
               </div>
             )}
 
             {/* Active Effects / Modifiers */}
             <div className="rounded-xl border border-card-border bg-card p-6 shadow-panel">
               <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
-                <h2 className="text-sm font-semibold text-muted">Active effects</h2>
-                {modifiers.length > 0 && (
+                <div>
+                  <h2 className="text-sm font-semibold text-muted">
+                    {hasBreakdown ? "Regional conditions" : "Active effects"}
+                  </h2>
+                  {hasBreakdown && (
+                    <p className="mt-1 text-xs text-muted">
+                      Already included in the {config.regionLabel.toLowerCase()} approval numbers,
+                      so not added again at national level.
+                    </p>
+                  )}
+                </div>
+                {regionalModifiers.length > 0 && (
                   <div className="flex gap-4 text-right text-xs">
                     <div>
-                      <div className="text-body-sm font-medium text-muted">Net approval</div>
+                      <div className="text-body-sm font-medium text-muted">
+                        {hasBreakdown ? "Net regional approval" : "Net approval"}
+                      </div>
                       <div
                         className={
                           "mt-0.5 font-semibold tabular-nums " +
@@ -230,7 +287,17 @@ export default function ApprovalClient({ initialMetrics, initialApproval }: Appr
                   </div>
                 )}
               </div>
-              <ModifierList modifiers={modifiers} emptyText="No active effects." />
+              <ModifierList modifiers={regionalModifiers} emptyText="No active effects." />
+              {hasBreakdown && nationalAdjustments.length > 0 && (
+                <div className="mt-5 border-t border-card-border/40 pt-4">
+                  <h3 className="text-sm font-semibold text-muted">National adjustments</h3>
+                  <p className="mt-1 mb-3 text-xs text-muted">
+                    Applied to the {config.regionLabel.toLowerCase()} average to give the national
+                    figure.
+                  </p>
+                  <ModifierList modifiers={nationalAdjustments} />
+                </div>
+              )}
             </div>
 
             {/* Turn history */}

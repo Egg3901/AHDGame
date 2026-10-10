@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canCharacterInteract, canRespondToCrisis } from "./authorization";
+import { canCharacterInteract, canRespondToCrisis, describeRoleRequirement } from "./authorization";
 import type { CrisisDecisionNode } from "@/lib/db/types/crisis";
 
 const node: CrisisDecisionNode = {
@@ -23,5 +23,22 @@ describe("crisis authorization boundaries", () => {
     expect(canRespondToCrisis(crisis, node, "US", "CA")).toBe(false);
     expect(canRespondToCrisis(crisis, node, "US", "NY")).toBe(true);
     expect(canRespondToCrisis(crisis, { ...node, type: "collective" }, "UK", "LON")).toBe(true);
+  });
+});
+
+describe("describeRoleRequirement", () => {
+  it("renders human labels joined with 'or' (any role satisfies the gate)", () => {
+    expect(describeRoleRequirement({ requiredRoles: ["headOfState", "cabinet"] })).toBe(
+      "Head of state or Cabinet minister"
+    );
+  });
+
+  it("names the allowed parties for party leader gates", () => {
+    expect(
+      describeRoleRequirement({
+        requiredRoles: ["partyLeader"],
+        requiredPartyAbbreviations: ["SDLP", "SF"],
+      })
+    ).toBe("Party leader (SDLP, SF)");
   });
 });
