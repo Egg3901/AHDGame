@@ -155,7 +155,7 @@ describe("GET /api/elections/[id]/primary/[partyId]", () => {
     expect(res.status).toBe(200);
     expect(vi.mocked(buildPrimaryPartyDetail).mock.calls[0][1].viewer).toBeNull();
     expect(String(vi.mocked(checkRateLimit).mock.calls[0][0])).toMatch(/^anon:/);
-    expect(res.headers.get("Cache-Control")).toBeNull();
+    expect(res.headers.get("Cache-Control")).toBe("private, no-store");
   });
 
   it("keeps a signed-in body out of shared caches", async () => {
