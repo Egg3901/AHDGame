@@ -24,6 +24,7 @@ import { resolvePositionNiBonus } from "@/lib/actions/positionNiBonus";
 import type { CountryId } from "@/lib/constants/countries";
 import type { SupremeCourtSeat } from "@/lib/db/types/scotus";
 import { getCabinetMembersCollection } from "@/lib/db/collections/cabinetMembers";
+import { awardOfficeHolderAchievements } from "@/lib/achievements/officeHolders";
 import { logger } from "../observability/logger";
 import {
   observeGovernmentAccountability,
@@ -346,6 +347,10 @@ export async function processActionRefresh(
   if (ops.length > 0) {
     await db.collection("characters").bulkWrite(ops);
   }
+
+  // Seat and chair achievements are awarded here, not on profile visits, so a
+  // holder who never opens their profile (or leaves before they do) still earns them.
+  await awardOfficeHolderAchievements(db, characters);
 
   // NPP stat decay mirrors player decay and keeps both stats in the 0-100 range.
   const nppCursor = db.collection<NPP>("npps").find(
