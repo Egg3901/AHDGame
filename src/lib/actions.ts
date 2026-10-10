@@ -871,7 +871,7 @@ export function simulateActionBatch(
   character: Character,
   state: State | undefined,
   actionType: ActionType,
-  count: 5 | 10,
+  count: number,
   forexEnabled = false,
   homeFxRate?: number,
   pricing: Pick<ActionEffectContext, "preset" | "priceLevel"> = {}
@@ -904,6 +904,59 @@ export function simulateActionBatch(
   const finalBalanceLocal = c.currencyBalances?.campaign ?? c.funds ?? 0;
   const netFundsChange = finalBalanceLocal / rate - initialFunds;
   return { ok: true, totalActionPoints, netFundsChange, finalCharacter: c };
+}
+
+export interface BatchAffordability {
+  /** Runs (0 to `count`) the character can pay for in sequence right now. */
+  affordableRuns: number;
+  /** True when all `count` runs can be paid for. */
+  canRunAll: boolean;
+  /** Why the full batch is refused (the first failing run's reason), when it is. */
+  reason?: string;
+  /** Short player-facing explanation for a disabled batch control. */
+  title?: string;
+}
+
+/**
+ * How many of `count` sequential runs the character can afford right now.
+ * Built on simulateActionBatch, so per-run action point tiers, fund costs and
+ * stat drift come from the same shared quotes the execute route validates with.
+ */
+export function getBatchAffordability(
+  character: Character,
+  state: State | undefined,
+  actionType: ActionType,
+  count: number,
+  forexEnabled = false,
+  homeFxRate?: number,
+  pricing: Pick<ActionEffectContext, "preset" | "priceLevel"> = {}
+): BatchAffordability {
+  const full = simulateActionBatch(
+    character,
+    state,
+    actionType,
+    count,
+    forexEnabled,
+    homeFxRate,
+    pricing
+  );
+  if (full.ok) return { affordableRuns: count, canRunAll: true };
+
+  let affordableRuns = 0;
+  for (let n = count - 1; n >= 1; n--) {
+    if (
+      simulateActionBatch(character, state, actionType, n, forexEnabled, homeFxRate, pricing).ok
+    ) {
+      affordableRuns = n;
+      break;
+    }
+  }
+  const detail = full.reason ? ` ${full.reason}` : "";
+  const title =
+    affordableRuns > 0
+      ? `Not enough for ${count} runs (you can afford ${affordableRuns}).${detail}`
+      : `Cannot run this action.${detail}`;
+  return { affordableRuns, canRunAll: false, reason: full.reason, title };
 }
 
 /**
