@@ -1,4 +1,7 @@
 import { loadBankFailureEffects } from "@/lib/banking/failurePolitics";
+import { RESET_V2_READY } from "@/lib/resetVersions/availability";
+import { resetSystemVersionsForCountry } from "@/lib/resetVersions/rules";
+import { cabinetMacroRegistry } from "@/lib/resetCabinet/rules/gameplay";
 import { sumObservedOutput, outputHistorySpanTurns } from "./rules/outputVolume";
 import type { Db } from "mongodb";
 import type { StateMetrics, GameConfig } from "@/lib/db/types";
@@ -76,6 +79,10 @@ import type { NodeId } from "./types";
 import type { EconomicModelState } from "@/lib/constants/economicModels";
 import { loadPoliticalMacroInputs } from "@/lib/politicalLegislation/politicalMacroInputs";
 import {
+  cabinetMacroTargetNudges,
+  cabinetProductionPressure,
+} from "@/lib/resetCabinet/rules/gameplay";
+import {
   DEMOCRATIC_HEALTH_METRIC_IDS,
   scoreGovernanceStyle,
   supportsGovernanceStyle,
@@ -120,6 +127,7 @@ const BESPOKE_NODE_IDS = new Set([
  * remaining nodes' same-turn dependencies still resolve in order.
  */
 const MACRO_NODES = METRIC_REGISTRY_SORTED.filter((n) => MACRO_CATEGORIES.has(n.categoryId));
+const CABINET_V2_MACRO_NODES = cabinetMacroRegistry(MACRO_NODES);
 
 const GENERIC_NODES = MACRO_NODES.filter((n) => !BESPOKE_NODE_IDS.has(n.id));
 const REGISTRY_IDS = new Set(MACRO_NODES.map((n) => n.id));
@@ -245,6 +253,10 @@ export async function runMetricEngine(db: Db, turn: number): Promise<number> {
         macroGrowthV1: 1,
         preset: 1,
         livingConflictsEnabled: 1,
+        resetWorldId: 1,
+        resetVersionSeeds: 1,
+        metricsSystemVersion: 1,
+        cabinetSystemVersion: 1,
       },
     }
   );
@@ -355,7 +367,7 @@ export async function runMetricEngine(db: Db, turn: number): Promise<number> {
     // categories, so playable regions resolved them all to TFP_REFERENCE_INPUTS
     // and their potential growth was near-uniform. Non-playable regions are
     // absent from this map and keep the legacy read untouched.
-    loadPoliticalMacroInputs(db),
+    loadPoliticalMacroInputs(db, turn),
     db
       .collection<{ _id: string; status?: string }>("countryGameStates")
       .find({ status: "active" })
@@ -786,7 +798,10 @@ export async function runMetricEngine(db: Db, turn: number): Promise<number> {
       powerGridReliability: tfpPath("infrastructure.powerGridReliability"),
       urbanizationRate: readMetricPath(prevDocForTfp, "population.urbanizationRate", "value"),
     });
-    const basePotential = potentialGrowth(gL, capStep.annualizedGrowth, tfp);
+    const cabinetEffects = politicalInputs.cabinetEffects?.(state._id, countryId) ?? [];
+    const basePotential =
+      potentialGrowth(gL, capStep.annualizedGrowth, tfp) +
+      cabinetProductionPressure(cabinetEffects);
     // Macro-growth v1 (design §4): add the convergence bonus (O2) OUTSIDE the TFP
     // clamp, then blend the LAGGED sector signal (O3). Flag off ⇒ potential ===
     // basePotential (byte-identical). frontierPc = live max across countries.
@@ -930,6 +945,9 @@ export async function runMetricEngine(db: Db, turn: number): Promise<number> {
     }
     // Fresh copy per state: downstream consumers must not share mutable state.
     const targetNudges: Record<NodeId, number> = { ...cachedNudges };
+    for (const [nodeId, nudge] of Object.entries(cabinetMacroTargetNudges(cabinetEffects))) {
+      targetNudges[nodeId] = (targetNudges[nodeId] ?? 0) + nudge;
+    }
 
     // §6.4 (P7b): coherent (signature-category) spending goes further under a
     // held model. Scale the per-capita rollup before nodes consume it via
@@ -954,7 +972,11 @@ export async function runMetricEngine(db: Db, turn: number): Promise<number> {
     }
     const envelopes = { ...cachedEnvelopes };
 
-    const results = evaluateRegistry(MACRO_NODES, {
+    const registry =
+      resetSystemVersionsForCountry(eraGameState, RESET_V2_READY, countryId).cabinet === "v2"
+        ? CABINET_V2_MACRO_NODES
+        : MACRO_NODES;
+    const results = evaluateRegistry(registry, {
       stateId: state._id,
       countryId,
       prev: prevValue,

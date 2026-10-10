@@ -38,6 +38,10 @@ import {
 } from "@/lib/db/collections/governmentFormation";
 import { castLeadershipVote } from "@/lib/turn/npp/leadershipVoting";
 import { resolveNppWhipSuccess, type NppWhipMode } from "@/lib/partyWhips/whipSuccess";
+import {
+  loadCabinetDiscipline,
+  cabinetDisciplineForParty,
+} from "@/lib/resetCabinet/loadDiscipline";
 
 interface ApplyWhipResult {
   fellInLine: number;
@@ -206,6 +210,7 @@ export async function applyWhipVotesToBill(
   };
 
   const whipDirective = { direction };
+  const cabinetDiscipline = await loadCabinetDiscipline(db, undefined, resolverCtx.currentTurn);
   let fellInLine = 0;
   let ignored = 0;
 
@@ -251,7 +256,17 @@ export async function applyWhipVotesToBill(
     const { forces, donorsLabel } = computeCrossPressureForces(npp, bill, {
       legislationType: resolverCtx.legislationType,
       homeStateDemographics,
-      whips: { partyWhip: whipDirective, caucusWhip: null },
+      whips: {
+        partyWhip: {
+          ...whipDirective,
+          cabinetDiscipline: cabinetDisciplineForParty(
+            cabinetDiscipline,
+            bill.countryId ?? "US",
+            npp.party
+          ),
+        },
+        caucusWhip: null,
+      },
     });
     const rawVerdict = verdictFromForces(forces);
     const whipSuccess = resolveNppWhipSuccess(npp, mode, statecraftBonus);
@@ -392,6 +407,7 @@ export async function applyWhipVotesToStateBill(
   const existingVotes = isOverride ? (bill.overrideVotes ?? {}) : (bill.votes ?? {});
 
   const whipDirective = { direction, mode };
+  const cabinetDiscipline = await loadCabinetDiscipline(db, undefined, resolverCtx.currentTurn);
   const voteUpdates: Record<string, "for" | "against" | "abstain"> = {};
   let incFor = 0;
   let incAgainst = 0;
@@ -430,7 +446,17 @@ export async function applyWhipVotesToStateBill(
     const { forces, donorsLabel } = computeCrossPressureForces(npp, bill, {
       legislationType: resolverCtx.legislationType,
       homeStateDemographics,
-      whips: { partyWhip: whipDirective, caucusWhip: null },
+      whips: {
+        partyWhip: {
+          ...whipDirective,
+          cabinetDiscipline: cabinetDisciplineForParty(
+            cabinetDiscipline,
+            npp.countryId ?? "US",
+            npp.party
+          ),
+        },
+        caucusWhip: null,
+      },
       weights: LOCAL_BILL_FORCE_WEIGHTS,
     });
     const rawVerdict = verdictFromForces(forces);

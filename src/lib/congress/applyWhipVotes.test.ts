@@ -1,4 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
+vi.mock("@/lib/resetCabinet/loadDiscipline", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/resetCabinet/loadDiscipline")>()),
+  loadCabinetDiscipline: vi.fn().mockResolvedValue([]),
+}));
 import { ObjectId, type Db } from "mongodb";
 import type {
   Bill,

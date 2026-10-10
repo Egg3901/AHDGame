@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import type { UnitDomain } from "@/lib/db/types/militaryUnit";
 import type { MilitaryCommand, CommanderRef, ThreatLevel } from "@/lib/military/types";
 import type { ConflictAssignment } from "@/lib/military/assignments";
 import type { CorpsMember } from "@/lib/db/collections/characterGenerals";
 import type { CabinetLeverScope } from "@/lib/cabinet/actingScope";
+import type { ActionBlockReason } from "@/lib/resetCabinet/rules/actions";
 import type {
   DepartmentFinanceReadModel,
   DepartmentProgramReadModel,
@@ -90,6 +91,8 @@ export interface CabinetOfficeData {
       brief: string;
       description: string;
       operatingCost: number;
+      allowed?: boolean;
+      blockReason?: ActionBlockReason | null;
     }>;
     active: Array<{
       actionId: string;
@@ -433,12 +436,15 @@ export interface DefenceContractView {
 }
 
 export function useCabinetOffice(countryCode: string, positionId: string) {
-  const [data, setData] = useState<CabinetOfficeData | null>(null);
+  const key = `${countryCode}:${positionId}`;
+  const [snapshot, setSnapshot] = useState<{ key: string; data: CabinetOfficeData } | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [failure, setFailure] = useState<{ key: string; message: string } | null>(null);
+  const requestId = useRef(0);
 
   const fetchData = useCallback(
     async (opts?: { silent?: boolean }) => {
+      const ownedRequest = ++requestId.current;
       // A silent refresh keeps the existing tree mounted. Flipping `loading` here
       // unmounted the roster after every assign/recruit, which reset the branch
       // tab back to Ground and closed any open Manage panel.
@@ -449,25 +455,36 @@ export function useCabinetOffice(countryCode: string, positionId: string) {
         );
         if (!res.ok) {
           const json = await res.json();
-          setError((json as { error?: string }).error ?? "Failed to load office data");
+          if (ownedRequest === requestId.current)
+            setFailure({
+              key,
+              message: (json as { error?: string }).error ?? "Failed to load office data",
+            });
           return;
         }
-        setData((await res.json()) as CabinetOfficeData);
-        setError(null);
+        const data = (await res.json()) as CabinetOfficeData;
+        if (ownedRequest !== requestId.current) return;
+        setSnapshot({ key, data });
+        setFailure(null);
       } catch {
-        setError("Network error");
+        if (ownedRequest === requestId.current) setFailure({ key, message: "Network error" });
       } finally {
-        setLoading(false);
+        if (ownedRequest === requestId.current) setLoading(false);
       }
     },
-    [countryCode, positionId]
+    [countryCode, positionId, key]
   );
 
   useEffect(() => {
     void fetchData();
+    return () => {
+      requestId.current++;
+    };
   }, [fetchData]);
 
   const refetch = useCallback(() => fetchData({ silent: true }), [fetchData]);
 
-  return { data, loading, error, refetch };
+  const data = snapshot?.key === key ? snapshot.data : null;
+  const error = failure?.key === key ? failure.message : null;
+  return { data, loading: loading || (!data && !error), error, refetch };
 }

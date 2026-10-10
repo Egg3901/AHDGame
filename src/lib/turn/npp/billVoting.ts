@@ -66,6 +66,7 @@ import {
 } from "./rules/mandateWeights";
 import { resolveBillVoteField, type BillVoteField } from "@/lib/congress/billVoteField";
 import { isVotingDeadlinePassed } from "@/lib/legislature/billVotingWindow";
+import { cabinetDisciplineForParty } from "@/lib/resetCabinet/loadDiscipline";
 
 export async function processBillVoting(ctx: NPPContext): Promise<number> {
   const {
@@ -80,6 +81,8 @@ export async function processBillVoting(ctx: NPPContext): Promise<number> {
     stateDemographicsMap,
     currentTurn,
   } = ctx;
+
+  const cabinetDiscipline = ctx.cabinetDiscipline ?? [];
 
   const activeBills = storedBills.map((bill) => ({
     ...bill,
@@ -366,7 +369,19 @@ export async function processBillVoting(ctx: NPPContext): Promise<number> {
       const { forces, donorsLabel } = computeCrossPressureForces(npp, bill, {
         legislationType,
         homeStateDemographics,
-        whips: { partyWhip: applicableWhip, caucusWhip: null },
+        whips: {
+          partyWhip: applicableWhip
+            ? {
+                ...applicableWhip,
+                cabinetDiscipline: cabinetDisciplineForParty(
+                  cabinetDiscipline,
+                  billCountry,
+                  npp.party
+                ),
+              }
+            : null,
+          caucusWhip: null,
+        },
       });
 
       // War-entry bills carry a frozen national pressure snapshot. Fold it into

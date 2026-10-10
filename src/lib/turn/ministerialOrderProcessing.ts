@@ -596,7 +596,7 @@ export async function processMinisterialOrders(currentTurn: number): Promise<{
   // 4d. Cabinet energy — per energy seat, regional plant mixes nudge that region's
   // renewable/carbon/reliability metrics toward mix targets; fleet upkeep vs the
   // energy envelope tilts national budget balance.
-  const energyPoliticalInputs = await loadPoliticalMacroInputs(db);
+  const energyPoliticalInputs = await loadPoliticalMacroInputs(db, currentTurn);
   for (const [cid, positionId] of Object.entries(ENERGY_POSITION_BY_COUNTRY)) {
     if (!positionId) continue;
     ensureCountry(cid);

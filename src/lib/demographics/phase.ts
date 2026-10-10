@@ -250,7 +250,7 @@ export async function runDemographicFlows(
       // Bridge A supplies the healthcare.* mortality inputs. The macro read
       // above carries no political values, so without this every region would
       // share one mortality curve.
-      loadPoliticalMacroInputs(db),
+      loadPoliticalMacroInputs(db, turn),
       db
         .collection<OrganizationMembership>("organizationMemberships")
         .find({ organizationId: "EU" }, { projection: { countryId: 1, status: 1 } })

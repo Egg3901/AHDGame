@@ -229,10 +229,16 @@ export default function ActionsPage() {
         } else {
           setFlash({ type, msg: data.message, ok: true });
         }
-      } else if (viewMode === "compact") {
-        showToast(apiErrorText(data, "Action failed."), "error");
       } else {
-        setFlash({ type, msg: apiErrorText(data, "Action failed."), ok: false });
+        // A refused action can still follow earlier spending (another tab, a
+        // turn), so reload the character: stale action points are what let a
+        // batch look affordable when it was not (ticket 1457).
+        void fetchCharacter();
+        if (viewMode === "compact") {
+          showToast(apiErrorText(data, "Action failed."), "error");
+        } else {
+          setFlash({ type, msg: apiErrorText(data, "Action failed."), ok: false });
+        }
       }
     } catch {
       if (viewMode === "compact") {
