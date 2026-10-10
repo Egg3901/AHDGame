@@ -4,6 +4,11 @@ import { ObjectId, type Db } from "mongodb";
 // Static import so the route module graph transforms at collect time instead
 // of inside the first test's timeout.
 import { GET } from "./route";
+import {
+  calculateFavorabilityAboveThresholdPenalty,
+  calculateNationalInfluenceGain,
+  calculatePoliticalInfluenceDecay,
+} from "@shared/constants/formulas";
 
 vi.mock("@/lib/api/requireAuth", () => ({
   requireBasicAuth: vi.fn(),
@@ -329,6 +334,117 @@ describe("GET /api/client-status", () => {
         active: true,
       });
       expect(typeof (body.turn as { date: unknown }).date).toBe("string");
+    });
+
+    const leading = (userId: ObjectId) => {
+      const base = clocked(userId);
+      const character = (base as Record<string, FakeSeed>).characters!.findOne!;
+      const candidateId = new ObjectId();
+      const electionId = new ObjectId();
+      return {
+        ...base,
+        characters: {
+          findOne: {
+            ...character,
+            politicalInfluence: 40,
+            favorability: 70,
+            nationalInfluence: 12.5,
+          },
+        },
+        corporations: {
+          findOne: {
+            _id: new ObjectId(),
+            sequentialId: 7,
+            name: "Example Corp",
+            sharePrice: 20,
+            totalShares: 1000,
+            liquidCapital: 500,
+            marketingStrength: 3,
+          },
+          find: [],
+        },
+        // Newest first, as the route's sort returns them.
+        corporationHistory: {
+          find: [
+            {
+              turn: 50,
+              sharePrice: 20,
+              marketCap: 20_000,
+              liquidCapital: 500,
+              marketingStrength: 3,
+            },
+            {
+              turn: 49,
+              sharePrice: 18,
+              marketCap: 18_000,
+              liquidCapital: 600,
+              marketingStrength: 3,
+            },
+          ],
+        },
+        electionCandidates: {
+          findOne: { _id: candidateId, electionId, characterId: character._id, status: "active" },
+        },
+        elections: {
+          findOne: { _id: electionId, electionType: "senate", countryId: "US", state: "CA" },
+        },
+        electionVoteTallies: {
+          findOne: {
+            electionId,
+            totalVotes: { [candidateId.toString()]: 60, other: 40 },
+            turnSnapshots: [
+              { turn: 49, sharesPct: { [candidateId.toString()]: 55 } },
+              { turn: 50, sharesPct: { [candidateId.toString()]: 60 } },
+            ],
+          },
+        },
+        congressLeaders: { find: [{ role: "speaker_of_the_house" }] },
+      };
+    };
+
+    it("add market cap, national influence and per-turn changes on request", async () => {
+      const { body } = await getWidgets("layout=full&widgets=1", leading);
+      expect(body.nationalInfluence).toBe(12.5);
+      expect((body.corpNav as { marketCap: unknown }).marketCap).toBe(20_000);
+      const perTurn = body.perTurn as Record<string, number | null>;
+      expect(perTurn.sharePrice).toBe(2);
+      expect(perTurn.marketCap).toBe(2_000);
+      expect(perTurn.liquidCapital).toBe(-100);
+      expect(perTurn.voteShare).toBe(5);
+      // The profile page's rates: influence decay, gain plus the Speaker tier,
+      // favorability cooling above the threshold.
+      expect(perTurn.politicalInfluence).toBeCloseTo(-calculatePoliticalInfluenceDecay(40));
+      expect(perTurn.nationalInfluence).toBeCloseTo(calculateNationalInfluenceGain(40) + 2);
+      expect(perTurn.favorability).toBeCloseTo(-calculateFavorabilityAboveThresholdPenalty(70));
+      expect(perTurn.funds).toBe(
+        (body.campaignIncomeBreakdown as { netPerTurn: number }).netPerTurn
+      );
+    });
+
+    it("keep the web status bar payload and queries unchanged", async () => {
+      const { ops, body } = await getWidgets("layout=full", leading);
+      expect(body).not.toHaveProperty("perTurn");
+      expect(body).not.toHaveProperty("nationalInfluence");
+      expect(body.corpNav).not.toHaveProperty("marketCap");
+      expect(ops.some((op) => op.collection === "congressLeaders")).toBe(false);
+      expect(ops.some((op) => op.collection === "supremeCourtSeats")).toBe(false);
+    });
+
+    it("leave market cap and changes unknown without the data", async () => {
+      const { body } = await getWidgets("layout=full&widgets=1", (userId) => ({
+        ...leading(userId),
+        corporations: {
+          findOne: { _id: new ObjectId(), sequentialId: 7, name: "Old Corp", sharePrice: 20 },
+          find: [],
+        },
+        corporationHistory: { find: [] },
+        electionCandidates: { findOne: null },
+      }));
+      expect((body.corpNav as { marketCap: unknown }).marketCap).toBeNull();
+      const perTurn = body.perTurn as Record<string, number | null>;
+      expect(perTurn.sharePrice).toBeNull();
+      expect(perTurn.marketCap).toBeNull();
+      expect(perTurn.voteShare).toBeNull();
     });
 
     it("respect muted mail and inbox mutes", async () => {

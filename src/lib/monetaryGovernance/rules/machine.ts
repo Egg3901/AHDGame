@@ -34,8 +34,10 @@ import { INTERFERENCE_SCRUTINY } from "@/lib/centralBank/credibility";
 import { rateChangeRefusal } from "@/lib/currency/exchangeRateRegime";
 import {
   boardCanCarryMotions as boardCanCarryMotionsLib,
+  majorityThreshold,
   proposeChairMotion,
   seatPreferredVote,
+  seatedCount,
   tallyMeeting,
   seatedBallots,
 } from "@/lib/centralBank/fomc";
@@ -59,9 +61,9 @@ import { isDeadlineEvent } from "./types";
 const PLAYER_VOTE_WINDOW_MS = 24 * 60 * 60 * 1000;
 const EPSILON = 1e-9;
 
-/** Strict majority of the full board; vacant seats count against it. */
-export function majorityNeeded(boardSize: number): number {
-  return Math.floor(boardSize / 2) + 1;
+/** Strict majority of the governors currently occupying board seats. */
+export function majorityNeeded(board: readonly SeatState[]): number {
+  return majorityThreshold(seatedCount(board));
 }
 
 /** Whether the seated (non-vacant) members can still carry a motion. */
@@ -162,7 +164,7 @@ function resolveMeetingInto(
   const tally = tallyMeeting(
     seatedBallots(meeting.ballots, next.board) as unknown as FomcBallot[],
     meeting.motion,
-    next.board.length
+    seatedCount(next.board)
   );
   if (!tally.decided && !forceDeadline) return noChange;
 
@@ -296,7 +298,7 @@ function macroContext(
 
 /**
  * Table a motion and collect the automatic ballots. NPP seats vote their own
- * preference immediately; player seats vote live and vacant seats abstain.
+ * preference immediately; player seats vote live and vacant seats are excluded.
  */
 function buildMeeting(
   state: JurisdictionState,
@@ -615,7 +617,7 @@ function handleOpenMeeting(
   if (!boardCanCarry(state.board)) {
     return refuse(
       "dead-board",
-      "The board cannot carry a motion: too few seated members. The chair holds the rate until seats are filled."
+      "No governors are seated. The chair sets the rate directly until a governor is seated."
     );
   }
   const last = state.lastMeetingTurn;
@@ -732,6 +734,13 @@ function setRateAuthority(
       ok: false,
       reason: "not-authorized",
       message: "This bank has no operational independence: the government sets the rate.",
+    };
+  }
+  if (state.commandEconomy) {
+    return {
+      ok: false,
+      reason: "command-economy",
+      message: "A command economy does not set an independent policy rate.",
     };
   }
   if (state.board.length > 0 && boardCanCarry(state.board)) {

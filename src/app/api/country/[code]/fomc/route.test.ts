@@ -27,9 +27,9 @@ function seat(i: number): Record<string, unknown> {
   return {
     seatId: `seat-${i + 1}`,
     isChair: i === 0,
-    occupantType: i < 6 ? "npp" : "vacant",
+    occupantType: i < 5 ? "npp" : "vacant",
     characterId: null,
-    characterName: i < 6 ? `Governor ${i + 1}` : null,
+    characterName: i < 5 ? `Governor ${i + 1}` : null,
     nppId: null,
     alignment: i % 2 === 0 ? "hawk" : "dove",
     appointedByPresidentId: null,
@@ -132,9 +132,8 @@ describe("GET /api/country/[code]/fomc", () => {
     expect(body.nextMeetingAtTurn).toBe(388);
     // Term started at turn 192 and runs 192 turns.
     expect(body.termEndsAtTurn).toBe(384);
-    // Majority of the full 7-seat board (ticket #1238: the understaffed-board
-    // banner reads this instead of re-deriving the threshold client-side).
-    expect(body.majorityNeeded).toBe(4);
+    // Five of the seven seats are occupied, so three votes carry a motion.
+    expect(body.majorityNeeded).toBe(3);
 
     expect(body.meetingHistory).toHaveLength(3);
     // Newest-last storage order preserved; client renders newest first.
@@ -145,7 +144,7 @@ describe("GET /api/country/[code]/fomc", () => {
     expect(carried.result).toBe("passed");
     expect(carried.agree).toBe(4);
     expect(carried.disagree).toBe(0);
-    expect(carried.abstain).toBe(3); // vacant seats abstain against
+    expect(carried.abstain).toBe(1); // only seated governors without ballots abstain
 
     const failed = body.meetingHistory[1];
     expect(failed.result).toBe("failed");
@@ -175,7 +174,7 @@ describe("GET /api/country/[code]/fomc", () => {
     expect(body.nextMeetingAtTurn).toBeNull();
     expect(body.meeting.agree).toBe(0);
     expect(body.meeting.disagree).toBe(0);
-    expect(body.meeting.needed).toBe(4);
+    expect(body.meeting.needed).toBe(3);
   });
 
   it("caps meeting history at 10 sessions", async () => {

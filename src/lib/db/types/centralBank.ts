@@ -108,8 +108,8 @@ export interface RateChangeRecord {
 // vote. NPP (technocrat) seats vote automatically off the same Taylor rule the
 // autonomous chair uses, tilted by their hawk/dove alignment. Player seats are
 // notified and given a real-time window to vote; a no-show counts as an abstain.
-// A motion passes only on a majority of the FULL seated board (abstains count
-// against it), so the committee is deliberately biased toward holding.
+// A motion passes on a strict majority of seated governors. Vacancies do not
+// count, while a seated governor without a ballot abstains.
 
 /** Voting seats on the committee (chair included). Odd so majorities are clean. */
 export const FOMC_BOARD_SIZE = 7;

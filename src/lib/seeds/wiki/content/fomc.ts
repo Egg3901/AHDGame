@@ -6,13 +6,13 @@ The **US Federal Reserve** seats a **7-member rate-setting committee**, the FOMC
 
 - **7 seats**, chair included. Odd on purpose so majorities are clean.
 - Seat 1 is the chair seat.
-- Occupants are players, NPPs, or vacant. Vacant seats **abstain**.
+- Occupants are players, NPPs, or vacant. Vacant seats do not count toward motion votes.
 - Terms are **192 turns** (4 game years), staggered so the whole board does not open at once.
 - **The engine does not staff the board.** When a governor's or the chair's term runs out, the seat falls **vacant** and waits for the President to nominate a successor and the Senate to confirm them. The chair seat is never auto-appointed either.
 
-## The board falls below working strength
+## Vacant seats
 
-A motion needs a **majority of the full board** to pass, and vacant seats abstain and count against it. Once enough seats lapse that the seated members can no longer reach that majority (for a 7-seat board: fewer than 4 seated), **no motion can ever carry**. In that state the committee stands down: meetings pause, and the **chair sets the rate directly** using the ordinary central-bank chair controls on the Overview page, bound by the usual cooldown and per-change size limits. The board returns to normal the moment enough governors are confirmed that it can carry a motion again.
+A motion needs a **strict majority of seated governors** to pass. Vacant seats do not count, while seated governors without a ballot abstain. The committee can open meetings whenever at least one governor is seated. If no governors are seated, meetings pause and the **chair sets the rate directly** using the ordinary central-bank chair controls on the Overview page, bound by the usual cooldown and per-change size limits. Meetings resume once a governor is confirmed.
 
 For a **player chair**, direct control appears as the normal Prime Rate adjuster. For an **autonomous (NPP) chair**, the Taylor-rule auto-setter takes over, exactly as for any single-governor bank.
 
@@ -26,7 +26,7 @@ Meetings open every **8 turns** (6 per game year) when the board is due.
 
 The chair proposes **hike**, **cut**, or **hold**, with a signed rate delta (0 for a hold). Player seats get a **24-hour / 24-turn** window to ballot. A no-show is an abstain. NPP seats auto-vote from the same rule the autonomous chair uses, tilted hawk or dove, when the meeting opens, but the motion is not resolved until the window closes, so the chair and seated members always get their vote before it carries.
 
-A motion passes only on a **majority of the full seated board**. Abstains and vacancies count against it, so the committee is biased toward holding.
+A motion passes on a **strict majority of seated governors**. Vacancies do not count; seated governors without a ballot abstain, so the committee is biased toward holding when members do not vote.
 
 ## Rate-change cap
 

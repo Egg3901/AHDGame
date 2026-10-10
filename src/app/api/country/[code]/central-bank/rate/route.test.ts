@@ -336,17 +336,17 @@ describe("POST /api/country/[code]/central-bank/rate", () => {
     vi.mocked(getGameState).mockResolvedValue({ currentTurn: 100 } as never);
   });
 
-  it("lets the chair set the rate directly when the board cannot carry a motion", async () => {
-    // Ticket #1238 prod shape: only the player chair is seated (1 of 7) — a
-    // board where no motion can ever carry. Rate authority returns to the chair.
+  it("lets the chair set the rate directly when no governors are seated", async () => {
+    // Ticket #1238 prod shape: all committee seats are vacant, so rate
+    // authority returns to the chair.
     await setup({
       bank: makeMockBank({
         fomcBoard: [
           {
             seatId: "seat-1",
             isChair: true,
-            occupantType: "player",
-            characterId: chairCharacterId,
+            occupantType: "vacant",
+            characterId: null,
           },
           { seatId: "seat-2", occupantType: "vacant" },
           { seatId: "seat-3", occupantType: "vacant" },

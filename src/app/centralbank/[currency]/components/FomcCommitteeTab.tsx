@@ -86,7 +86,7 @@ interface CommitteeState {
   currentTurn?: number;
   nextMeetingAtTurn?: number | null;
   termEndsAtTurn?: number | null;
-  /** Votes needed to carry a motion: strict majority of the full board. */
+  /** Votes needed to carry a motion: strict majority of seated governors. */
   majorityNeeded?: number;
   meetingHistory?: ResolvedMeeting[];
   canNominate: boolean;
@@ -231,8 +231,8 @@ export function FomcCommitteeTab({ countryId }: { countryId: CountryId }) {
   const budgetLeft = state.rateChangesPerTerm - state.rateChangesThisTerm;
   const currentTurn = state.currentTurn ?? null;
   const vacantSeats = board.filter((s) => s.occupantType === "vacant").length;
-  const majorityNeeded = state.majorityNeeded ?? Math.floor(board.length / 2) + 1;
   const seatedCount = board.length - vacantSeats;
+  const majorityNeeded = state.majorityNeeded ?? Math.floor(seatedCount / 2) + 1;
   const turnsToNextSession =
     meeting === null && state.nextMeetingAtTurn != null && currentTurn != null
       ? Math.max(0, state.nextMeetingAtTurn - currentTurn)
@@ -259,21 +259,15 @@ export function FomcCommitteeTab({ countryId }: { countryId: CountryId }) {
 
   return (
     <div className="space-y-12 pb-16">
-      {/* Understaffed board (ticket #1238): vacant seats make every motion fail
-          on the full-board majority; surface why and who can fix it. When the
-          board cannot carry a motion at all the chair holds the rate directly
-          until nominations restore a working board. */}
+      {/* Vacant seats should be filled for a fully represented committee. The
+          chair fallback applies only when no governor is seated. */}
       {vacantSeats > 0 && (
         <div className="rounded-xl border border-danger/30 bg-danger/10 px-5 py-4">
           <h2 className="text-body font-semibold text-danger">Board understaffed</h2>
           <p className="mt-1 text-body-sm text-foreground">
             {vacantSeats} of {board.length} board seats are vacant. A motion needs {majorityNeeded}{" "}
-            of the full board to pass
-            {seatedCount < majorityNeeded
-              ? `, so with only ${seatedCount} seat${seatedCount === 1 ? "" : "s"} seated no motion can carry`
-              : ""}
-            . While the board cannot carry a motion, the chair sets the rate directly. Seats are
-            filled by presidential nomination and Senate confirmation.
+            vote{majorityNeeded === 1 ? "" : "s"} from seated governors. Vacant seats do not count.
+            Fill the open seats through presidential nomination and Senate confirmation.
             {state.canNominate && " Use the nominate panel below to fill them."}
           </p>
         </div>
@@ -284,9 +278,9 @@ export function FomcCommitteeTab({ countryId }: { countryId: CountryId }) {
         title="Federal Open Market Committee"
         meta={
           <span className="block max-w-3xl">
-            The committee votes on rate moves. A motion passes only on a majority of the full board;
-            no-shows abstain. {budgetLeft} of {state.rateChangesPerTerm} rate changes remain this
-            term.
+            The committee votes on rate moves. A motion passes on a majority of the seated
+            governors; vacant seats do not count. No-shows abstain. {budgetLeft} of{" "}
+            {state.rateChangesPerTerm} rate changes remain this term.
             {budgetLeft <= 0 &&
               (turnsToTermEnd != null
                 ? ` The budget resets when the term ends in ${turnsToTermEnd} turn${turnsToTermEnd === 1 ? "" : "s"}.`

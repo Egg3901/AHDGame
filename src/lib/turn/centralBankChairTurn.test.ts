@@ -588,10 +588,9 @@ describe("processCentralBankChairTurn", () => {
     expect(processNppChairAutoRateMock).not.toHaveBeenCalled();
   });
 
-  it("runs the NPP auto-rate on a committee board too vacant to carry a motion", async () => {
-    // Ticket #1238 follow-up: with the board decayed below the carry-a-motion
-    // threshold the committee owns nothing, so an autonomous (NPP) chair holds
-    // the rate directly via the single-chair setter.
+  it("runs the NPP auto-rate when no governors are seated", async () => {
+    // Ticket #1238 follow-up: with no governors seated, the committee owns
+    // nothing, so an autonomous (NPP) chair holds the rate directly.
     testBanks = [
       {
         _id: "US",
@@ -602,9 +601,9 @@ describe("processCentralBankChairTurn", () => {
         primeRate: 3.0,
         lastRateChangeTurn: 50,
         chairInfamy: 10,
-        // 1 of 7 seated (chair only): the rest vacant.
+        // The chair seat and all governor seats are vacant, so the board is dead.
         fomcBoard: [
-          { seatId: "seat-1", isChair: true, occupantType: "npp", nppId: new ObjectId() },
+          { seatId: "seat-1", isChair: true, occupantType: "vacant" },
           { seatId: "seat-2", occupantType: "vacant" },
           { seatId: "seat-3", occupantType: "vacant" },
           { seatId: "seat-4", occupantType: "vacant" },
