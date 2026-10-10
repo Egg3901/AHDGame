@@ -539,14 +539,11 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
 
   // Below the stage only what the stage does not already show: the race
   // detail tabs (campaign presence, trends, state drivers, turnout and the
-  // factor ledger) for a general or concluded race, and the admin tools for
-  // admins. The old "Also on this race" block (the old header, a second map,
+  // factor ledger) for a presidential race, whichever have data in its
+  // current phase, and the admin tools for admins. The old "Also on this race" block (the old header, a second map,
   // the schedule, a second results table) repeated the stage and is gone.
   const showRaceDetail =
-    election.electionType === "president" &&
-    election.countryId !== "RU" &&
-    !localInPrimary &&
-    !localIsUpcoming;
+    election.electionType === "president" && election.countryId !== "RU" && !localIsUpcoming;
   const desktopTail =
     showRaceDetail || election.isAdmin ? (
       <div className="mx-auto max-w-7xl px-4 pb-10 sm:px-6 lg:px-8">

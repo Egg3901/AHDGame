@@ -24,6 +24,16 @@ beforeEach(() => {
 });
 
 describe("EndorseControl", () => {
+  it("renders nothing for a candidate the viewer cannot endorse", () => {
+    renderControl({ eligible: false });
+    expect(screen.queryByRole("button")).toBeNull();
+  });
+
+  it("keeps an existing endorsement undoable even if no longer eligible", () => {
+    renderControl({ eligible: false, endorsed: true });
+    expect(screen.getByRole("button", { name: "Endorsed" })).toBeTruthy();
+  });
+
   it("renders nothing without a character", () => {
     renderControl({ myCharId: null });
     expect(screen.queryByRole("button")).toBeNull();

@@ -677,6 +677,43 @@ export function PrimaryBlendView({
             ) : null
           }
           nav={stageNav}
+          strip={
+            vm.parties.length > 1 ? (
+              <div
+                role="tablist"
+                aria-label="Party primary"
+                style={{
+                  display: "flex",
+                  gap: 6,
+                  flexWrap: "wrap",
+                  padding: "8px 12px",
+                  borderBottom: `1px solid ${BLEND.hairline}`,
+                }}
+              >
+                {vm.parties.map((p) => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    role="tab"
+                    aria-selected={p.selected}
+                    onClick={() => setPartyId(p.id)}
+                    style={{
+                      ...BLEND_LABEL,
+                      padding: "5px 11px",
+                      font: "inherit",
+                      fontWeight: 700,
+                      cursor: "pointer",
+                      border: `1px solid ${p.selected ? p.color : BLEND.hairlineStrong}`,
+                      background: p.selected ? "rgba(220,38,38,.12)" : "transparent",
+                      color: p.selected ? BLEND.ink : BLEND.muted,
+                    }}
+                  >
+                    {p.name}
+                  </button>
+                ))}
+              </div>
+            ) : null
+          }
           left={
             <>
               <div style={{ ...BLEND_LABEL, paddingBottom: 9 }}>Parties</div>
@@ -734,6 +771,14 @@ export function PrimaryBlendView({
                           myCharId={election.myCharId}
                           isYou={f.isYou}
                           endorsed={endorsedId === f.id}
+                          // The route only takes own-party endorsements in a
+                          // primary; an unknown viewer party (stale payload)
+                          // keeps the button and lets the route answer.
+                          eligible={
+                            !c?.party ||
+                            election.myPartyId === undefined ||
+                            c.party === election.myPartyId
+                          }
                           onChanged={(id) => {
                             setEndorsedOverride({ base: election.myEndorsedCandidateId, id });
                             onRefresh?.();

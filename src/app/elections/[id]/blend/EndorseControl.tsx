@@ -11,8 +11,9 @@ import { BLEND, BLEND_LABEL } from "@/components/blend/tokens";
  * Same route and rules as the general screen's ticket button: one endorsement
  * per player per race, never your own candidate, and the route says no (with a
  * reason, shown under the button) for a closed race or, during a primary, a
- * candidate outside your party. Renders nothing for a reader with no character
- * and for the reader's own candidacy.
+ * candidate outside your party. Renders nothing for a reader with no character,
+ * for the reader's own candidacy, and for a candidate the reader could not
+ * endorse (unless they already have, so it can be undone).
  */
 export function EndorseControl({
   electionId,
@@ -20,6 +21,7 @@ export function EndorseControl({
   myCharId,
   isYou,
   endorsed,
+  eligible = true,
   onChanged,
 }: {
   electionId: string;
@@ -27,12 +29,14 @@ export function EndorseControl({
   myCharId: string | null;
   isYou: boolean;
   endorsed: boolean;
+  /** False for a candidate the route would refuse, such as another party's in a primary. */
+  eligible?: boolean;
   /** Called after the route accepts the change, with the new endorsed candidate id or null. */
   onChanged: (endorsedCandidateId: string | null) => void;
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  if (!myCharId || isYou) return null;
+  if (!myCharId || isYou || (!eligible && !endorsed)) return null;
 
   async function toggle() {
     setBusy(true);

@@ -236,6 +236,10 @@ export function GeneralPhaseView({
   const isPresidentialGeneral =
     election.countryId !== "RU" && election.electionType === "president" && !localInPrimary;
 
+  const isPresidentialRace = election.countryId !== "RU" && election.electionType === "president";
+  const hasTrendData = (election.generalVotes?.turnSnapshots?.length ?? 0) > 0;
+  const hasStateVotes = Object.keys(election.generalVotes?.stateVoteData ?? {}).length > 0;
+
   const factorLedger = (
     <FactorLedgerCard
       countryId={election.countryId}
@@ -314,17 +318,25 @@ export function GeneralPhaseView({
               },
             ]
           : []),
-        ...(trends ? [{ id: "trends", label: "Trends", content: trends }] : []),
-        ...(isUS ? [{ id: "drivers", label: "State drivers", content: stateDrivers }] : []),
+        ...(trends && (!localInPrimary || hasTrendData)
+          ? [{ id: "trends", label: "Trends", content: trends }]
+          : []),
+        ...(isUS && (!localInPrimary || hasStateVotes)
+          ? [{ id: "drivers", label: "State drivers", content: stateDrivers }]
+          : []),
         ...(participation
           ? [{ id: "turnout", label: "Turnout", content: participationLedger }]
           : []),
-        { id: "ledger", label: "Factor ledger", content: factorLedger },
+        ...(!localInPrimary || election.factorLedger
+          ? [{ id: "ledger", label: "Factor ledger", content: factorLedger }]
+          : []),
       ]
     : [];
 
   if (tabbedDetail && detailOnly) {
-    return isPresidentialGeneral ? (
+    // The primary phase has its own stage, so this is only the views that have
+    // something to say yet: tabs with no data are left out, not shown empty.
+    return isPresidentialRace && detailPanes.length > 0 ? (
       <RaceDetailTabs panes={detailPanes} title="Race detail" />
     ) : null;
   }

@@ -106,15 +106,18 @@ describe("the Blend general page does not print the same standing twice", () => 
     expect(generalPhaseProps[0].detailOnly).toBe(true);
   });
 
-  it("puts nothing under the primary stage but the stage", () => {
+  it("puts only the race detail tabs under the primary stage", () => {
     // The primary used to mount the Campaign Presence builder below the stage,
     // which drew a second US map of its own, plus the campaigns list and a
     // Your Campaign card. The stage map carries presence, the field table
-    // carries campaign operations and the rail carries your campaign.
+    // carries campaign operations and the rail carries your campaign. The
+    // detail-only tab section (presence, factor ledger and so on) is all that
+    // joins it, and hides any tab with no data yet.
     const { getByTestId, queryByTestId } = renderPage({ inPrimary: true });
     expect(getByTestId("primary-stage")).toBeTruthy();
     expect(queryByTestId("presence-map")).toBeNull();
-    expect(queryByTestId("general-phase")).toBeNull();
+    expect(getByTestId("general-phase")).toBeTruthy();
+    expect(generalPhaseProps.at(-1)?.detailOnly).toBe(true);
   });
 
   it("keeps the presence builder on an upcoming race, where nothing else carries it", () => {
