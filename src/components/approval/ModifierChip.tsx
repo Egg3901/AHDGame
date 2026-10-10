@@ -1,6 +1,7 @@
 "use client";
 
 import type { ActiveModifier } from "@/lib/utils/approvalModifiers";
+import { displayEffect } from "@/lib/country/rules/approvalBreakdown";
 import { buildModifierTitle, toneFor } from "./modifierTitle";
 
 function marginForModifier(modifier: ActiveModifier): number | null {
@@ -85,7 +86,7 @@ function ModifierChip({ modifier }: { modifier: ActiveModifier }) {
       <span>{modifier.label}</span>
       <span className="tabular-nums font-semibold">
         {positive ? "+" : ""}
-        {modifier.effect} approval
+        {displayEffect(modifier.effect) ?? 0} approval
       </span>
       {margin != null && margin !== 0 && (
         <span
@@ -110,9 +111,11 @@ interface ModifierListProps {
 }
 
 export function ModifierList({
-  modifiers,
+  modifiers: allModifiers,
   emptyText = "No active conditions.",
 }: ModifierListProps) {
+  // An effect that rounds to nothing (a bank backstop of -0.00005) is noise, not a chip.
+  const modifiers = allModifiers.filter((m) => displayEffect(m.effect) !== null);
   if (modifiers.length === 0) {
     return <p className="text-sm italic text-[var(--muted)]">{emptyText}</p>;
   }
