@@ -36,10 +36,11 @@ export async function awardOfficeHolderAchievements(
     const grants = resolveOfficeHolderGrants({
       cabinetCharacterIds,
       chairCharacterIds,
-      characters: characters.map((c) => ({
-        characterId: c._id.toString(),
-        userId: c.userId.toString(),
-      })),
+      // A character row without an owning account (legacy or system rows) must
+      // not throw and silently skip every other holder's award.
+      characters: characters.flatMap((c) =>
+        c.userId ? [{ characterId: c._id.toString(), userId: c.userId.toString() }] : []
+      ),
     });
     if (grants.length === 0) return 0;
 
