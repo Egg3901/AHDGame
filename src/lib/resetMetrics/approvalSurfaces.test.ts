@@ -3,6 +3,8 @@ import type { Db } from "mongodb";
 import { createMockDb } from "@/lib/test-utils/mockDb";
 import { buildOpeningMetricSnapshots1991 } from "./seedOpening1991";
 import { RESET_V2_SEED_REVISION } from "@/lib/resetVersions/rules";
+import { getCabinetPositions } from "@/lib/constants/cabinetMechanics";
+import { resolveCabinetRoster } from "@/lib/cabinet/rosterEra";
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 vi.mock("@/lib/api/stateTickRates", () => ({
   computeStateTickRates: vi.fn().mockResolvedValue({}),
@@ -56,7 +58,14 @@ beforeEach(() => {
     async (filter: { _id: string }) => macro.find((row) => row._id === filter._id) ?? null
   );
   db.collection("resetMetricSnapshots").find().toArray.mockResolvedValue(boards);
-  db.collection("cabinetMembers").find().toArray.mockResolvedValue([{}]);
+  // A full cabinet: the empty seats penalty scales with the seats left vacant.
+  db.collection("cabinetMembers")
+    .find()
+    .toArray.mockResolvedValue(
+      resolveCabinetRoster(getCabinetPositions("UK"), 1991)
+        .filter((position) => !position.isHeadOfGovernment)
+        .map((position) => ({ positionId: position.id }))
+    );
 });
 describe("Metrics v2 approval surface parity", () => {
   it("serves a complete stored national rating without requiring live boards", async () => {
@@ -75,6 +84,8 @@ describe("Metrics v2 approval surface parity", () => {
       governmentApprovalBase: 50,
       history: [],
       modifiers: [{ id: "stored", label: "Stored", effect: -7 }],
+      stateAverage: 50,
+      nationalAdjustments: [{ id: "stored", label: "Stored", effect: -7 }],
     });
     expect(db.collectionMocks.resetMetricSnapshots!.find).not.toHaveBeenCalled();
   });

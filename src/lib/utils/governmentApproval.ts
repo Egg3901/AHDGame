@@ -19,6 +19,22 @@ import { enforcementApprovalModifier } from "@/lib/unions/enforcementCosts";
 import type { StateApprovalHistory } from "@/lib/db/types/stateApproval";
 import { type CountryId } from "@/lib/constants/countries";
 import { actingAppointmentsEnabled } from "@/lib/cabinet/actingEligibility";
+import { getCabinetPositions } from "@/lib/constants/cabinetMechanics";
+import { resolveCabinetRoster } from "@/lib/cabinet/rosterEra";
+import { resolveGameYear } from "@/lib/era/era";
+import type { GameState } from "@/lib/db/types/gameState";
+import { getHeadOfGovernmentReference } from "@/lib/api/headOfGovernmentReference";
+import {
+  PUBLIC_EXPECTATIONS_FULL_EFFECT,
+  advanceHeadTenure,
+  emptyCabinetSeatsModifier,
+  publicExpectationsModifier,
+  turnForDate,
+} from "@/lib/country/rules/approvalHoneymoon";
+import type { LeaderReference } from "@/lib/government/leaderReference";
+import type { ElectedOfficial } from "@/lib/db/types/officials";
+import { getGovernmentFormationsCollection } from "@/lib/db/collections/governmentFormation";
+import { MS_PER_TURN } from "@/lib/constants/turnTime";
 import {
   evaluateModifiers,
   applyModifiers,
@@ -42,7 +58,6 @@ import {
   loadPoliticalApprovalBases,
 } from "@/lib/politicalLegislation/politicalApprovalProvider";
 
-const NO_CABINET_PENALTY = 7.5;
 const ACTING_APPOINTMENT_PENALTY = 0.5;
 
 /**
@@ -59,28 +74,37 @@ const ACTING_APPOINTMENT_PENALTY = 0.5;
  * moved the rating while leaving nothing in `activeNationalModifiers` to explain
  * it: a president could seat four acting secretaries, watch approval fall two
  * points, and find no chip anywhere on the page saying why. The arithmetic is
- * unchanged. Negatives are uncapped in applyModifiers, and both penalties are
- * multiples of 0.5, so they land on the same tenth-of-a-point grid.
+ * unchanged. Negatives are uncapped in applyModifiers. The acting penalty is a
+ * multiple of 0.5 and the empty seats penalty is rounded to a tenth, so both land
+ * on the tenth-of-a-point grid.
+ *
+ * The empty cabinet penalty scales with the share of seats left empty (see
+ * {@link emptyCabinetSeatsModifier}): all vacant costs the full 7.5, a full
+ * cabinet costs nothing.
  *
  * Exported for its own test: this is the only pure part of an otherwise
  * database-wide aggregate, and it shipped without coverage.
  */
 export function buildCabinetApprovalModifiers(
-  cabinetMembers: Array<{ acting?: boolean }>,
-  countryId: CountryId
+  cabinetMembers: Array<{ acting?: boolean; positionId?: string }>,
+  countryId: CountryId,
+  /**
+   * Ids of the appointable seats the country has right now (era-active, head of
+   * government seat excluded). Absent when the roster is unknown, which keeps the
+   * old all-or-nothing empty cabinet penalty.
+   */
+  activeSeatIds?: ReadonlySet<string>
 ): ActiveModifier[] {
   const mods: ActiveModifier[] = [];
 
-  if (cabinetMembers.length === 0) {
-    mods.push({
-      id: "cabinet_none",
-      label: "No cabinet seated",
-      effect: -NO_CABINET_PENALTY,
-      // Explicit, like the war block's. Readers that see no marginEffect derive one
-      // from the modifier id, and a cabinet vacancy is not a profit-margin event.
-      marginEffect: 0,
-    });
-  }
+  // Acting secretaries hold their seat, so they count as seated here; the acting
+  // penalty below is the separate cost of not having them confirmed.
+  const seated = activeSeatIds
+    ? cabinetMembers.filter((m) => m.positionId !== undefined && activeSeatIds.has(m.positionId))
+        .length
+    : cabinetMembers.length;
+  const emptySeats = emptyCabinetSeatsModifier(seated, activeSeatIds?.size);
+  if (emptySeats) mods.push(emptySeats);
 
   // Parliamentary and one-party systems fill cabinet posts directly, so there is
   // no confirmation gap for an acting appointment to bridge and nothing to charge.
@@ -201,11 +225,16 @@ const MAX_CONTRIBUTION = 2;
 /** Default approval when metrics are missing (used for elections and display). */
 export const BASE_APPROVAL = 50;
 
-/** Common below-neutral public-expectations drag, shown in every snapshot. */
+/**
+ * Common below-neutral public-expectations drag at full strength. The snapshot
+ * ramps it up over a new head of government's first turns in office
+ * ({@link publicExpectationsModifier}); this constant is the full value, used
+ * wherever the head's start turn is unknown.
+ */
 export const PUBLIC_EXPECTATIONS_MODIFIER: ActiveModifier = {
   id: "public_expectations",
   label: "Higher public expectations",
-  effect: -5,
+  effect: PUBLIC_EXPECTATIONS_FULL_EFFECT,
   marginEffect: 0,
   source: "metric",
 };
@@ -629,6 +658,35 @@ export function buildStateApprovalBulkOps(
 }
 
 /**
+ * When the records say the sitting head of government took office: the
+ * president's election date for a presidential head, else the government
+ * formation turn (parliamentary PM, separate PM, NPP-led government). `null`
+ * when neither is recorded.
+ */
+async function recordedHeadSinceTurn(
+  db: Db,
+  countryId: CountryId,
+  head: LeaderReference,
+  turn: number
+): Promise<number | null> {
+  if (!("kind" in head)) {
+    const president = await db
+      .collection<ElectedOfficial>("electedOfficials")
+      .findOne(
+        { countryId, officeType: "president", characterId: head },
+        { projection: { electedAt: 1 } }
+      );
+    const fromElection = turnForDate(president?.electedAt, turn, new Date(), MS_PER_TURN);
+    if (fromElection !== null) return fromElection;
+  }
+  const formation = await getGovernmentFormationsCollection(db).findOne(
+    { _id: countryId },
+    { projection: { formedTurn: 1 } }
+  );
+  return typeof formation?.formedTurn === "number" ? formation.formedTurn : null;
+}
+
+/**
  * Snapshot the current approval rating to the governmentApprovals collection.
  * Called each turn. History is capped at the last 20 entries.
  *
@@ -673,9 +731,17 @@ export async function snapshotApprovalHistory(
   // whichever direction the country is currently going, so it only reaches the
   // right value if it is stepped EVERY turn. A country that returned early here
   // would freeze its exhaustion — and, once at peace, never finish healing.
-  const approvalDoc = await db
-    .collection<GovernmentApproval>("governmentApprovals")
-    .findOne({ _id: countryId }, { projection: { warExhaustion: 1, warExhaustionConflictId: 1 } });
+  const approvalDoc = await db.collection<GovernmentApproval>("governmentApprovals").findOne(
+    { _id: countryId },
+    {
+      projection: {
+        warExhaustion: 1,
+        warExhaustionConflictId: 1,
+        headOfGovernmentKey: 1,
+        headOfGovernmentSinceTurn: 1,
+      },
+    }
+  );
   const war = await computeWarApproval(db, countryId, turn, {
     exhaustion: approvalDoc?.warExhaustion,
     conflictId: approvalDoc?.warExhaustionConflictId,
@@ -785,10 +851,58 @@ export async function snapshotApprovalHistory(
   const orgStatementMods = await getActiveOrgStatementModifiersByCountry(db, countryId, turn);
 
   const cabinetMembers = await db
-    .collection<{ acting?: boolean }>("cabinetMembers")
-    .find({ countryId })
+    .collection<{ acting?: boolean; positionId?: string }>("cabinetMembers")
+    .find({ countryId }, { projection: { acting: 1, positionId: 1 } })
     .toArray();
-  const cabinetMods = buildCabinetApprovalModifiers(cabinetMembers, countryId);
+  // One gameState read per country per turn: the live year and the seats created
+  // by legislation decide how many cabinet seats exist right now. No seats
+  // registered for the country leaves the set undefined (binary penalty).
+  const gameStateDoc = await db
+    .collection<GameState>("gameState")
+    .findOne(
+      { _id: "current" },
+      { projection: { currentYear: 1, currentTurn: 1, startingYear: 1, manuallyEnabledSeats: 1 } }
+    );
+  const rosterSeatIds = resolveCabinetRoster(
+    getCabinetPositions(countryId),
+    gameStateDoc ? resolveGameYear(gameStateDoc) : null,
+    new Set(gameStateDoc?.manuallyEnabledSeats ?? [])
+  )
+    .filter((position) => !position.isHeadOfGovernment)
+    .map((position) => position.id);
+  const cabinetMods = buildCabinetApprovalModifiers(
+    cabinetMembers,
+    countryId,
+    rosterSeatIds.length > 0 ? new Set(rosterSeatIds) : undefined
+  );
+
+  // Public expectations ramp up over the sitting head of government's first
+  // turns in office. The head is read once per country per turn and the tenure is
+  // stored on the approval document written below. A failed lookup carries the
+  // stored tenure forward untouched: reading it as a vacancy would restart the
+  // honeymoon when the lookup recovered.
+  const storedTenure =
+    approvalDoc && approvalDoc.headOfGovernmentKey !== undefined
+      ? {
+          key: approvalDoc.headOfGovernmentKey,
+          sinceTurn: approvalDoc.headOfGovernmentSinceTurn ?? null,
+        }
+      : undefined;
+  let tenure = storedTenure ?? { key: null, sinceTurn: null };
+  try {
+    const head = await getHeadOfGovernmentReference(db, countryId);
+    const headKey = head ? ("kind" in head ? `npp:${head.id.toString()}` : head.toString()) : null;
+    // First observation only (one extra read, once per country, ever): seed the
+    // start from the records so a sitting leader keeps the honeymoon they are owed.
+    const seed =
+      storedTenure === undefined && head
+        ? await recordedHeadSinceTurn(db, countryId, head, turn)
+        : null;
+    tenure = advanceHeadTenure(storedTenure, headKey, turn, seed);
+  } catch {
+    // keep the stored tenure
+  }
+  const expectationsMod = publicExpectationsModifier(tenure.sinceTurn, turn);
   const unionBudget = await db
     .collection<FederalBudget>("federalBudget")
     .findOne({ countryId }, { projection: { unionsBanned: 1, unionEnforcementPosture: 1 } });
@@ -813,7 +927,7 @@ export async function snapshotApprovalHistory(
     ...bankFailureMods,
     ...(unionEnforcementMod ? [unionEnforcementMod] : []),
   ];
-  const allNationalMods = [PUBLIC_EXPECTATIONS_MODIFIER, ...nationalMods];
+  const allNationalMods = [expectationsMod, ...nationalMods];
   approval = applyModifiers(approval, allNationalMods);
 
   await db.collection<GovernmentApproval>("governmentApprovals").updateOne(
@@ -857,6 +971,8 @@ export async function snapshotApprovalHistory(
         warExhaustion: war.exhaustion,
         warExhaustionConflictId: war.conflictId,
         activeNationalModifiers: allNationalMods,
+        headOfGovernmentKey: tenure.key,
+        headOfGovernmentSinceTurn: tenure.sinceTurn,
         updatedAt: new Date(),
       },
       $push: {

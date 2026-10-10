@@ -52,7 +52,7 @@ export async function loadCountryCentralBankLoc(params: {
   // query serves a page route, never the turn loop.
   const nationalCurrency = getSeedCurrencyCode(countryId, preset);
   const primeRate = bank?.primeRate ?? DEFAULT_PRIME;
-  const snapshot = await buildLocSnapshot(db, character);
+  const snapshot = await buildLocSnapshot(db, character, nationalCurrency);
   const ledger = snapshot ? await fetchLocLedgerForCharacter(db, character._id, 75) : [];
 
   return {

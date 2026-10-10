@@ -32,6 +32,17 @@ export interface GovernmentApproval {
    * backward compatibility with historical documents.
    */
   source: "president_favorability" | "pm_favorability" | "aggregate";
+  /**
+   * Who led the government at the last snapshot (character id, or `npp:<id>`),
+   * `null` while the seat was vacant. Absent before tracking began.
+   */
+  headOfGovernmentKey?: string | null;
+  /**
+   * Turn that head took office, which times the public expectations ramp. `null`
+   * when unknown (head already in office when tracking began), which keeps the
+   * full drag.
+   */
+  headOfGovernmentSinceTurn?: number | null;
   /** Durable idempotency witnesses for funded country-event effect replay. */
   appliedEventEffects?: string[];
   /** Turn-by-turn history (most recent last, capped at 20 entries) */
