@@ -5,6 +5,7 @@ import {
   demandThrottleFactor,
   soldOutMarketHeadroomUnits,
   throttleSoldUnits,
+  withLatentDemand,
 } from "./demandThrottle";
 
 describe("demandThrottleFactor — flip identity", () => {
@@ -243,5 +244,29 @@ describe("sold-out plants in a short market (ticket 1393)", () => {
     expect(demandThrottleFactor(1_000, 200, 1_000, null, 0)).toBe(
       demandThrottleFactor(1_000, 200, 1_000)
     );
+  });
+});
+
+describe("withLatentDemand", () => {
+  it("restores truncated demand pro rata so a sold-out plant sees the real gap", () => {
+    // Ledger capped demand at 1.5x supply and parked a further 50% as truncated.
+    const capped = { supply: 100, demand: 150 };
+    expect(withLatentDemand(capped, 1.5)).toEqual({ supply: 100, demand: 225 });
+    const headroom = soldOutMarketHeadroomUnits({
+      soldByCommodity: { food: 1 },
+      supplyRates: { food: 1 },
+      mixWeightFor: () => 1,
+      balanceFor: () => withLatentDemand(capped, 1.5),
+      priceRatioFor: () => 2,
+    });
+    expect(headroom).toBe(125);
+  });
+
+  it("returns the balance unchanged without a lifting factor", () => {
+    const b = { supply: 100, demand: 120 };
+    expect(withLatentDemand(b, undefined)).toBe(b);
+    expect(withLatentDemand(b, 1)).toBe(b);
+    expect(withLatentDemand(b, Number.NaN)).toBe(b);
+    expect(withLatentDemand(null, 2)).toBeNull();
   });
 });
