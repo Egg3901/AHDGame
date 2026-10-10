@@ -103,8 +103,9 @@ async function notifyFomcVacancy(
   const execTitle =
     config?.officeTypes.find((o) => o.isExecutive)?.label.toLowerCase() ?? "the executive";
   const vacantCount = board.filter((s) => s.occupantType === "vacant").length;
-  // Any seated governor can carry a motion. Only a board with no seated
-  // governors is dead and uses the chair fallback.
+  // A board with at least one seated governor can carry a motion by unanimous
+  // vote. Only a board with no seated governors is dead and uses the chair
+  // fallback.
   const chairHoldsRate = !boardCanCarryMotions(board);
   const message = chairHoldsRate
     ? `${vacantCount} of ${board.length} committee seats are vacant and no governors are seated. The chair sets the rate directly until at least one governor is confirmed. Nominate replacements from the central bank's committee page; the Senate confirms them.`

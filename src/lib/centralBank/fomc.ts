@@ -99,8 +99,9 @@ export function majorityThreshold(seatedGovernorCount: number): number {
 /**
  * Whether the committee can actually carry a motion right now.
  *
- * Any seated governor can carry a motion by voting for it. Only a board with no
- * seated governors is dead; in that case the chair sets the rate directly.
+ * A board with at least one seated governor can carry a motion with a unanimous
+ * vote. Only a board with no seated governors is dead; in that case the chair
+ * sets the rate directly.
  */
 export function boardCanCarryMotions(board: readonly FomcSeat[]): boolean {
   return seatedCount(board) > 0;
