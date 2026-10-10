@@ -2,9 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   appCallbackIntent,
   appHandbackPage,
-  oauthStateFor,
+  consentStateFor,
   shouldHandBackToApp,
-} from "./appOAuthHandback";
+} from "./discordAppHandback";
 
 const APP_UA =
   "Mozilla/5.0 (Linux; Android 16; SM-S928B; wv) AppleWebKit/537.36 Chrome/141 Mobile Safari/537.36 AHDClient-Mobile/2.5.0";
@@ -15,10 +15,10 @@ const SAMSUNG_BROWSER =
 
 describe("Discord sign-in hand-back to the Android app", () => {
   it("marks only sign-ins started in the Android app", () => {
-    expect(oauthStateFor(APP_UA, "abc")).toBe("app-abc");
-    expect(oauthStateFor(IOS_APP_UA, "abc")).toBe("abc");
-    expect(oauthStateFor(SAMSUNG_BROWSER, "abc")).toBe("abc");
-    expect(oauthStateFor(null, "abc")).toBe("abc");
+    expect(consentStateFor(APP_UA, "abc")).toBe("app-abc");
+    expect(consentStateFor(IOS_APP_UA, "abc")).toBe("abc");
+    expect(consentStateFor(SAMSUNG_BROWSER, "abc")).toBe("abc");
+    expect(consentStateFor(null, "abc")).toBe("abc");
   });
 
   it("hands back a marked callback that landed in a browser", () => {

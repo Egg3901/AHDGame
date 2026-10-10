@@ -39,7 +39,7 @@ import {
 import { assertRegistrationAllowed } from "@/lib/auth/registrationGate";
 import { normalizeIp } from "@/lib/utils/ipNormalize";
 import { classifyDevice } from "@/lib/utils/userAgent";
-import { appHandbackPage, shouldHandBackToApp } from "@/lib/auth/appOAuthHandback";
+import { appHandbackPage, shouldHandBackToApp } from "@/lib/discordAppHandback";
 import { checkIpFireAndForget } from "@/lib/ip/ipteoh";
 import { AUTH_LIMITS, checkRateLimit } from "@/lib/api/rateLimit";
 import type { User, GameConfig } from "@/lib/db/types";

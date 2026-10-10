@@ -14,14 +14,14 @@ import { isStoreAppUserAgent } from "@/lib/displayMode";
  * prefix gets a page that hands the same callback URL back to the app, where
  * the webview still holds the state cookie that authorizes it.
  */
-export const APP_OAUTH_STATE_PREFIX = "app-";
+export const APP_STATE_PREFIX = "app-";
 
 const ANDROID_PACKAGE = "net.lakesidegames.ahdclient";
 
 /** OAuth state for a sign-in starting in this request's browser or app. */
-export function oauthStateFor(userAgent: string | null, random: string): string {
+export function consentStateFor(userAgent: string | null, random: string): string {
   return userAgent && isStoreAppUserAgent(userAgent) && /Android/i.test(userAgent)
-    ? `${APP_OAUTH_STATE_PREFIX}${random}`
+    ? `${APP_STATE_PREFIX}${random}`
     : random;
 }
 
@@ -37,7 +37,7 @@ export function shouldHandBackToApp(
   return (
     !!code &&
     !!state &&
-    state.startsWith(APP_OAUTH_STATE_PREFIX) &&
+    state.startsWith(APP_STATE_PREFIX) &&
     /^[A-Za-z0-9._~-]{1,512}$/.test(state) &&
     /^[A-Za-z0-9._~-]{1,512}$/.test(code) &&
     !(userAgent && isStoreAppUserAgent(userAgent))

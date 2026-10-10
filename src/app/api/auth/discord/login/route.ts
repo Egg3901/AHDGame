@@ -9,7 +9,7 @@ import {
   safeLakesideLoginReturn,
 } from "@/lib/auth/lakesideLoginReturn";
 import { randomBytes } from "crypto";
-import { oauthStateFor } from "@/lib/auth/appOAuthHandback";
+import { consentStateFor } from "@/lib/discordAppHandback";
 
 // GET /api/auth/discord/login — Initiates the Discord OAuth flow for login by redirecting to Discord's authorization page.
 // Auth: public
@@ -31,7 +31,10 @@ export async function GET(request: Request) {
 
     // Generate state token for CSRF protection
     // App-started sign-ins are marked so a browser-side callback can hand back (ticket 1461).
-    const state = oauthStateFor(request.headers.get("user-agent"), randomBytes(32).toString("hex"));
+    const state = consentStateFor(
+      request.headers.get("user-agent"),
+      randomBytes(32).toString("hex")
+    );
 
     // Store state and mode in cookies (shared domain so they survive www ↔ apex hops)
     const cookieStore = await cookies();
