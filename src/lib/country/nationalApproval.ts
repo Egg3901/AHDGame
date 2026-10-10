@@ -78,9 +78,14 @@ export async function loadNationalApproval(
   // that produced this rating, so read them rather than recompute, and the
   // chips a reader shows are exactly the ones folded into the number above.
   const inputs = { allStates, allMetrics, nationalAverages, preset, year };
-  const live = isPoliticalApprovalCountry(countryId, true)
-    ? await recomputePoliticalNationalApproval(db, countryId, inputs, bases)
-    : null;
+  const needsLive =
+    approvalDoc?.approvalRating == null ||
+    approvalDoc.approvalBase == null ||
+    approvalDoc.activeRegionalModifiers == null;
+  const live =
+    needsLive && isPoliticalApprovalCountry(countryId, true)
+      ? await recomputePoliticalNationalApproval(db, countryId, inputs, bases)
+      : null;
   const modifiers = [
     ...(approvalDoc?.activeRegionalModifiers ??
       live?.regionalModifiers ??

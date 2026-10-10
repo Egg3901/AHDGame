@@ -12,7 +12,7 @@
       "beforeEffects": "Before named effects",
       "activeAfterLimits": "{count, plural, one {# active effect} other {# active effects}}, after limits",
       "target": "Approval target",
-      "rankingTargets": "Current approval targets; stored ratings move toward these values each turn."
+      "rankingTargets": "Metric-based approval targets. Stored ratings also include temporary effects and move gradually each turn."
     }
   }
 }

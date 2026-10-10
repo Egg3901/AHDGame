@@ -7,9 +7,7 @@ import { primaryMetrics } from "../catalog";
 import type { OpeningMetricObservation } from "./openingObservation";
 import { evaluateModifiers, type EvaluateModifiersOptions } from "@/lib/utils/approvalModifiers";
 
-export function resetApprovalMetricValues(
-  observations: Readonly<Record<string, OpeningMetricObservation>>
-) {
+function observedMetricValues(observations: Readonly<Record<string, OpeningMetricObservation>>) {
   const metrics: Record<string, Record<string, number>> = {};
   for (const metric of primaryMetrics) {
     const observation = observations[metric.id];
@@ -24,6 +22,13 @@ export function resetApprovalMetricValues(
     const [category, key] = metric.path.split(".");
     (metrics[category] ??= {})[key] = observation.value;
   }
+  return metrics;
+}
+
+export function resetApprovalMetricValues(
+  observations: Readonly<Record<string, OpeningMetricObservation>>
+) {
+  const metrics = observedMetricValues(observations);
   // Coverage and air quality changed polarity in v2, but retain a 0-100 scale.
   const coverage = metrics.healthcare?.coverageRate;
   if (coverage != null) metrics.healthcare.uninsuredRate = 100 - coverage;
@@ -45,37 +50,30 @@ export function evaluateResetApprovalModifiers(
   });
 }
 
-/** Explicit v2 polarity for the shared relative scorer, including renamed inputs. */
-export const resetApprovalDirections: Readonly<Record<string, boolean>> = {
-  ...Object.fromEntries(
-    primaryMetrics.map((metric) => [metric.path.split(".")[1], metric.interpretation === "higher"])
-  ),
-  uninsuredRate: false,
-  airQuality: false, // The condition adapter exposes pollution burden.
-  nhsWaitingTime: false,
-  housingAffordability: false, // The base adapter retains the housing-burden index.
-};
+/** Only monotonic catalog outcomes contribute directly to the relative base. */
+export const resetApprovalDirections: Readonly<Record<string, boolean>> = Object.fromEntries(
+  primaryMetrics
+    .filter((metric) => metric.interpretation === "higher" || metric.interpretation === "lower")
+    .map((metric) => [metric.path.split(".")[1], metric.interpretation === "higher"])
+);
 
-/** Legacy scorer input, restricted to real outcomes with an existing direction. */
+/** Keep owner units and polarity; legacy condition aliases never enter the base. */
 export function resetApprovalBaseMetrics(
   observations: Readonly<Record<string, OpeningMetricObservation>>
 ) {
-  const values = resetApprovalMetricValues(observations);
-  // Band and demographic context readouts have no monotonic approval term.
-  delete values.economic?.priceStability;
-  delete values.population;
-  delete values.security;
-  // Each observation contributes once, even when a condition needs an alias.
-  delete values.healthcare?.coverageRate;
-  delete values.healthcare?.treatmentWait;
-  if (values.social?.housingCostBurden != null) {
-    values.social.housingAffordability = values.social.housingCostBurden;
-    delete values.social.housingCostBurden;
+  const values = observedMetricValues(observations);
+  for (const metric of primaryMetrics) {
+    if (metric.interpretation !== "higher" && metric.interpretation !== "lower") {
+      const [category, key] = metric.path.split(".");
+      delete values[category]?.[key];
+    }
   }
   return Object.fromEntries(
-    Object.entries(values).map(([category, metrics]) => [
-      category,
-      Object.fromEntries(Object.entries(metrics).map(([key, value]) => [key, { value }])),
-    ])
+    Object.entries(values)
+      .filter(([, metrics]) => Object.keys(metrics).length > 0)
+      .map(([category, metrics]) => [
+        category,
+        Object.fromEntries(Object.entries(metrics).map(([key, value]) => [key, { value }])),
+      ])
   );
 }

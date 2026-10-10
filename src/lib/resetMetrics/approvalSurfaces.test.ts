@@ -59,6 +59,25 @@ beforeEach(() => {
   db.collection("cabinetMembers").find().toArray.mockResolvedValue([{}]);
 });
 describe("Metrics v2 approval surface parity", () => {
+  it("serves a complete stored national rating without requiring live boards", async () => {
+    db.collection("governmentApprovals").findOne.mockResolvedValue({
+      _id: "UK",
+      approvalRating: 43,
+      approvalBase: 50,
+      history: [],
+      activeRegionalModifiers: [],
+      activeNationalModifiers: [{ id: "stored", label: "Stored", effect: -7 }],
+    });
+    db.collection("resetMetricSnapshots").find().toArray.mockResolvedValue([]);
+    db.collectionMocks.resetMetricSnapshots!.find.mockClear();
+    expect(await loadNationalApproval("UK")).toEqual({
+      governmentApproval: 43,
+      governmentApprovalBase: 50,
+      history: [],
+      modifiers: [{ id: "stored", label: "Stored", effect: -7 }],
+    });
+    expect(db.collectionMocks.resetMetricSnapshots!.find).not.toHaveBeenCalled();
+  });
   it("regional hero, metrics API and country rankings consume the same conditions and base", async () => {
     const regional = await getRegionalApprovalData(db as unknown as Db, "UK", "SCO");
     const response = await GET(new Request("http://localhost/api/country/uk/region/SCO/metrics"), {

@@ -1277,6 +1277,9 @@ export async function buildCorporationLookups(
         resetWorldId: 1,
         resetVersionSeeds: 1,
         metricsSystemVersion: 1,
+        isProcessing: 1,
+        processingKind: 1,
+        processingTargetTurn: 1,
       },
     }
   );
@@ -1325,7 +1328,7 @@ export async function buildCorporationLookups(
                 )
                 .map((metrics) => String(metrics._id)),
               gameState,
-              gameState?.currentTurn,
+              undefined,
               resetBoards
             ),
           ] as const

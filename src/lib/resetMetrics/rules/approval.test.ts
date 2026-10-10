@@ -51,13 +51,19 @@ describe("Metrics v2 approval conditions", () => {
   });
   it("does not revive retired observations or count polarity aliases twice in the base", () => {
     const base = resetApprovalBaseMetrics(observations);
-    expect(base.healthcare.coverageRate).toBeUndefined();
-    expect(base.healthcare.uninsuredRate).toBeDefined();
-    expect(base.healthcare.treatmentWait).toBeUndefined();
-    expect(base.healthcare.nhsWaitingTime).toBeDefined();
+    expect(base.healthcare.coverageRate.value).toBe(observations["16"].value);
+    expect(base.healthcare.uninsuredRate).toBeUndefined();
+    expect(base.healthcare.treatmentWait).toBeDefined();
+    expect(base.healthcare.nhsWaitingTime).toBeUndefined();
     expect(base.economic.costOfLiving).toBeUndefined();
     expect(base.education.literacyRate).toBeUndefined();
     expect(base.population).toBeUndefined();
+    expect(base.governance.publicTrust).toBeUndefined();
+    expect(base.economic.gdpGrowth).toBeUndefined();
+    expect(base.economic.tradeBalance).toBeUndefined();
+    expect(base.social.incomeInequality).toBeUndefined();
+    expect(base.environment.airQuality.value).toBe(observations["35"].value);
+    expect(base.social.housingCostBurden.value).toBe(observations["24"].value);
   });
   it("scores new v2 crime observations with their catalog polarity", () => {
     const reference = resetApprovalBaseMetrics(observations) as unknown as StateMetrics;

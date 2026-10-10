@@ -29,4 +29,19 @@ describe("national named condition breakdown", () => {
     ]);
     expect(result.reduce((sum, row) => sum + row.effect, 0)).toBe(2);
   });
+  it("ignores nonpositive population and handles an empty country", () => {
+    expect(regionalModifierBreakdown([])).toEqual([]);
+    expect(
+      regionalModifierBreakdown([
+        { base: 50, approval: 55, population: 0, modifiers: [modifier("a", 5)] },
+        { base: 50, approval: 45, population: -1, modifiers: [modifier("b", -5)] },
+      ])
+    ).toEqual([]);
+    expect(
+      regionalModifierBreakdown([
+        { base: 50, approval: 55, population: 10, modifiers: [modifier("a", 5)] },
+        { base: 50, approval: 0, population: -10, modifiers: [modifier("b", -50)] },
+      ])
+    ).toEqual([{ ...modifier("a", 5), marginEffect: 0 }]);
+  });
 });

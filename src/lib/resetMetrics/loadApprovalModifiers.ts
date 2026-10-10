@@ -23,6 +23,7 @@ export const RESET_APPROVAL_BOARD_PROJECTION = {
   regionId: 1,
   sourceTurn: 1,
   asOfTurn: 1,
+  lastRefreshFromTurn: 1,
   ...Object.fromEntries(
     primaryMetrics.flatMap((metric) =>
       ["metricId", "path", "value", "status", "source", "owner"].map((field) => [
@@ -38,7 +39,7 @@ export async function loadResetApprovalModifiers(
   countryId: string,
   stateIds: readonly string[],
   gameState: GameState | null,
-  turn: number = gameState?.currentTurn ?? 0,
+  turn?: number,
   prefetchedBoards?: readonly ResetMetricSnapshot[]
 ): Promise<{ modifiersByRegion: Map<string, ActiveModifier[]>; metrics: StateMetrics[] } | null> {
   if (
@@ -58,6 +59,7 @@ export async function loadResetApprovalModifiers(
       )
       .toArray());
   const byId = new Map(boards.map((board) => [board._id, board]));
+  const expectedTurn = turn ?? gameState!.currentTurn;
   const read = (regionId?: string) => {
     const board = byId.get(`${countryId}:${regionId ?? "national"}`);
     if (
@@ -66,9 +68,19 @@ export async function loadResetApprovalModifiers(
       board.countryId !== countryId ||
       board.regionId !== regionId ||
       board.scope !== (regionId === undefined ? "national" : "regional") ||
-      board.asOfTurn !== turn ||
+      !(
+        board.asOfTurn === expectedTurn ||
+        (turn === undefined &&
+          gameState!.isProcessing === true &&
+          gameState!.processingKind === "turn" &&
+          gameState!.processingTargetTurn === expectedTurn + 1 &&
+          board.asOfTurn === expectedTurn + 1 &&
+          Number.isSafeInteger(board.lastRefreshFromTurn) &&
+          board.lastRefreshFromTurn! >= board.sourceTurn &&
+          board.lastRefreshFromTurn! <= expectedTurn)
+      ) ||
       board.sourceTurn < gameState!.resetVersionSeeds!.metrics!.sourceTurn ||
-      board.sourceTurn > turn
+      board.sourceTurn > board.asOfTurn
     ) {
       throw new Error(
         `Approval needs a current Metrics v2 board for ${countryId}/${regionId ?? "national"}`

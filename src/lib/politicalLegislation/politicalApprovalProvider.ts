@@ -1,3 +1,4 @@
+import { findMergedRegionMetricsMany } from "@/lib/macroMetrics/merge";
 import { resetApprovalDirections } from "@/lib/resetMetrics/rules/approval";
 /**
  * Government approval bases and named conditions share one version-aware loader.
@@ -19,6 +20,8 @@ import {
   BASE_APPROVAL,
   computeStateApprovalBase,
   computeNationalAveragesFromMetrics,
+  loadElectorateGroups,
+  weightingFor,
 } from "@/lib/utils/governmentApproval";
 import { POLITICAL_METRIC_COUNTRY_IDS } from "@/lib/politicalMetrics/types";
 import { NON_PLAYABLE_BOARDS } from "@/lib/politicalMetrics/seeds/nonPlayableBoards";
@@ -97,6 +100,9 @@ export async function loadPoliticalApprovalBases(
           resetWorldId: 1,
           resetVersionSeeds: 1,
           metricsSystemVersion: 1,
+          isProcessing: 1,
+          processingKind: 1,
+          processingTargetTurn: 1,
         },
       }
     ),
@@ -145,6 +151,45 @@ export async function loadPoliticalApprovalBases(
           )
         : BASE_APPROVAL;
     return { byRegion, national, modifiersByRegion: resetInputs.modifiersByRegion };
+  }
+  // Successors in a v1 world still use the original relative metric scorer.
+  // Opting approval into successor routing must not replace that base with 50.
+  if (isResetV2Country(countryId) && !isPoliticalApprovalCountry(countryId)) {
+    const [metrics, groups] = await Promise.all([
+      findMergedRegionMetricsMany(db, {
+        countryId,
+        _id: { $in: states.map((state) => state._id) },
+      }),
+      loadElectorateGroups(db, { countryId }),
+    ]);
+    const averages = computeNationalAveragesFromMetrics(metrics);
+    const year = gameState?.eraSystemEnabled ? resolveGameYear(gameState) : null;
+    const byRegion = new Map(
+      metrics.map((metric) => [
+        String(metric._id),
+        computeStateApprovalBase(
+          metric,
+          averages,
+          weightingFor(groups, countryId, String(metric._id)),
+          gameState?.preset,
+          year
+        ),
+      ])
+    );
+    const totalPop = states.reduce((sum, state) => sum + Math.max(0, state.population ?? 0), 0);
+    const national =
+      totalPop > 0
+        ? round1(
+            states.reduce(
+              (sum, state) =>
+                sum +
+                (byRegion.get(String(state._id)) ?? BASE_APPROVAL) *
+                  Math.max(0, state.population ?? 0),
+              0
+            ) / totalPop
+          )
+        : BASE_APPROVAL;
+    return { byRegion, national };
   }
   const docs = await db
     .collection<PoliticalMetricsDoc>("politicalMetrics")

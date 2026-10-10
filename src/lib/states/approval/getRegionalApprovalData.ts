@@ -101,7 +101,7 @@ export async function getRegionalApprovalData(
     ),
     baseApproval:
       baseOverride ??
-      computeStateApprovalBase(metrics, nationalAverages, undefined, preset ?? undefined),
+      computeStateApprovalBase(metrics, nationalAverages, undefined, preset ?? undefined, year),
     modifiers,
   };
 }

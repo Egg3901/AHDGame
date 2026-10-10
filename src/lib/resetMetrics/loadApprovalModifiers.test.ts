@@ -66,6 +66,35 @@ describe("Metrics v2 approval source", () => {
     );
     await expect(loadPoliticalApprovalBases(db as unknown as Db, "UK")).rejects.toThrow();
   });
+  it("serves current/next boards only within a verified processing window, while snapshots stay exact", async () => {
+    const mixed = boards.map((board, i) => ({
+      ...board,
+      asOfTurn: i % 2 ? 2 : 1,
+      lastRefreshFromTurn: 1,
+    }));
+    db.collection("resetMetricSnapshots").find().toArray.mockResolvedValue(mixed);
+    const processing = {
+      ...game,
+      isProcessing: true,
+      processingKind: "turn" as const,
+      processingTargetTurn: 2,
+    };
+    db.collection("gameState").findOne.mockResolvedValue(processing);
+    expect((await loadPoliticalApprovalBases(db as unknown as Db, "UK"))!.byRegion.size).toBe(
+      states.length
+    );
+    await expect(loadPoliticalApprovalBases(db as unknown as Db, "UK", 2)).rejects.toThrow();
+    db.collection("gameState").findOne.mockResolvedValue({
+      ...processing,
+      processingKind: "forexMigration",
+    });
+    await expect(loadPoliticalApprovalBases(db as unknown as Db, "UK")).rejects.toThrow();
+    db.collection("gameState").findOne.mockResolvedValue(processing);
+    db.collection("resetMetricSnapshots")
+      .find()
+      .toArray.mockResolvedValue(mixed.map((board) => ({ ...board, asOfTurn: 3 })));
+    await expect(loadPoliticalApprovalBases(db as unknown as Db, "UK")).rejects.toThrow();
+  });
   it("does not query the v2 collection when the country is not activated", async () => {
     const count = db.collection("resetMetricSnapshots").find.mock.calls.length;
     expect(await loadResetApprovalModifiers(db as unknown as Db, "DE", [], game)).toBeNull();
