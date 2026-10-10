@@ -17,7 +17,6 @@ import { buildLocSnapshot } from "@/lib/lineOfCredit/buildSnapshot";
 import { loadExchangeRatesMap } from "@/lib/lineOfCredit/netWorth";
 import { toInternalUnits } from "@/lib/lineOfCredit/locMath";
 import { DEFAULT_LOAN_FUNDING_SOURCE } from "@/lib/lineOfCredit/fundingSource";
-import { getHomeCurrency } from "@/lib/currency/characterFunds";
 import { getBankId } from "@/lib/centralBank/helpers";
 import { buildPersonalBalanceInc } from "@/lib/currency/characterFunds";
 import { normalizeSavingsMutationAmount } from "@/lib/api/savings/savingsAmount";
@@ -122,7 +121,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const snapshot = await buildLocSnapshot(db, character);
+    const snapshot = await buildLocSnapshot(db, character, c);
     if (!snapshot) {
       return errorResponse(404, "Line of credit is not available");
     }
@@ -162,7 +161,7 @@ export async function POST(request: Request) {
         (character as Character & { lineOfCreditRevision?: number }).lineOfCreditRevision ?? null,
       request: requestQuote,
       drawAdmission: {
-        bankId: getBankId(getCountryIdForCurrency(getHomeCurrency(character))),
+        bankId: getBankId(getCountryIdForCurrency(c)),
         addInternal,
         exchangeRate: rate,
       },
@@ -218,7 +217,7 @@ export async function POST(request: Request) {
         );
       }
 
-      const freshSnapshot = await buildLocSnapshot(db, freshCharacter);
+      const freshSnapshot = await buildLocSnapshot(db, freshCharacter, c);
       if (!freshSnapshot) {
         return errorResponse(404, "Line of credit is not available");
       }
