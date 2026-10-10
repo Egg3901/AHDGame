@@ -473,7 +473,7 @@
       "copyLink": "Copy link",
       "copy": "Copy",
       "copied": "Copied",
-      "joined": "{count, plural, one {player} other {players}} joined with your code"
+      "joined": "{count, plural, one {player} other {players}} joined with your code, all time"
     },
     "supporterPerks": {
       "loading": "Loading supporter perks...",
