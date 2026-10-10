@@ -106,7 +106,8 @@ function openAction(state: JurisdictionState): AllowedAction {
     return {
       ...base,
       allowed: false,
-      reason: "The board cannot carry a motion until seats are filled.",
+      reason:
+        "No governors are seated. The chair sets the rate directly until a governor is seated.",
     };
   }
   return base;

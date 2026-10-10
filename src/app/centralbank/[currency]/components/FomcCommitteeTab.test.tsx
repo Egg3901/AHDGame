@@ -41,7 +41,7 @@ function committeePayload(vacantCount: number): Record<string, unknown> {
     currentTurn: 514,
     nextMeetingAtTurn: 518,
     termEndsAtTurn: 576,
-    majorityNeeded: 4,
+    majorityNeeded: Math.floor((7 - vacantCount) / 2) + 1,
     meetingHistory: [],
     canNominate: false,
     viewerIsSenator: false,
@@ -107,14 +107,15 @@ afterEach(() => {
 });
 
 describe("FomcCommitteeTab — understaffed board (ticket #1238)", () => {
-  it("shows why motions cannot pass when most seats are vacant", async () => {
+  it("encourages filling vacant seats without saying motions cannot pass", async () => {
     mockFetch(committeePayload(6));
 
     render(<FomcCommitteeTab countryId={"US" as CountryId} />);
 
     await waitFor(() => expect(screen.getByText("Board understaffed")).toBeTruthy());
     expect(screen.getByText(/6 of 7 board seats are vacant/)).toBeTruthy();
-    expect(screen.getByText(/no motion can carry/)).toBeTruthy();
+    expect(screen.getByText(/1 vote from seated governors/)).toBeTruthy();
+    expect(screen.queryByText(/no motion can carry/)).toBeNull();
     expect(screen.getByText(/presidential nomination and Senate confirmation/)).toBeTruthy();
   });
 

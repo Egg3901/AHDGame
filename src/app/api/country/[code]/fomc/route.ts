@@ -28,7 +28,12 @@ import {
 } from "@/lib/db/types/centralBank";
 import type { NPP } from "@/lib/db/types/npp";
 import type { ElectedOfficial } from "@/lib/db/types";
-import { majorityThreshold, seatedBallots, tallyMeeting } from "@/lib/centralBank/fomc";
+import {
+  majorityThreshold,
+  seatedBallots,
+  seatedCount,
+  tallyMeeting,
+} from "@/lib/centralBank/fomc";
 import { getCurrentTurn } from "@/lib/turn/currentTurn";
 
 /** Resolved sessions returned to the panel (newest last in storage). */
@@ -115,9 +120,10 @@ export async function GET(_request: Request, context: RouteContext) {
     }));
 
     const meeting = bank.activeFomcMeeting ?? null;
+    const seatedGovernorCount = seatedCount(board);
     const liveBallots = meeting ? seatedBallots(meeting.ballots, board) : [];
     const votedSeatIds = new Set(liveBallots.map((b) => b.seatId));
-    const tally = meeting ? tallyMeeting(liveBallots, meeting.motion, board.length) : null;
+    const tally = meeting ? tallyMeeting(liveBallots, meeting.motion, seatedGovernorCount) : null;
 
     // Scheduling + budget context so players can see when sessions happen and
     // where their per-term rate-change budget went (ticket #1184).
@@ -215,7 +221,7 @@ export async function GET(_request: Request, context: RouteContext) {
     };
 
     const history = (bank.fomcMeetingHistory ?? []).slice(-MEETING_HISTORY_LIMIT).map((m) => {
-      const t = tallyMeeting(m.ballots, m.motion, board.length);
+      const t = tallyMeeting(m.ballots, m.motion, seatedGovernorCount);
       return {
         motion: m.motion,
         proposedDelta: m.proposedDelta,
@@ -239,8 +245,8 @@ export async function GET(_request: Request, context: RouteContext) {
       currentTurn,
       nextMeetingAtTurn,
       termEndsAtTurn,
-      /** Votes needed to carry a motion: strict majority of the FULL board. */
-      majorityNeeded: majorityThreshold(board.length),
+      /** Votes needed to carry a motion: strict majority of seated governors. */
+      majorityNeeded: majorityThreshold(seatedGovernorCount),
       meetingHistory: history,
       canNominate,
       viewerIsSenator,

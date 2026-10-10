@@ -282,24 +282,16 @@ describe("rate shell", () => {
     return bankFixture({
       chairCharacterId: CHAIR_ID,
       chairCharacterName: "Chair",
-      fomcBoard: [
-        seat("seat-1", {
-          isChair: true,
-          occupantType: "player",
-          characterId: CHAIR_ID,
-          characterName: "Chair",
+      fomcBoard: Array.from({ length: 7 }, (_, index) =>
+        seat(`seat-${index + 1}`, {
+          isChair: index === 0,
+          occupantType: "vacant",
+          characterId: null,
+          characterName: null,
           nppId: null,
-        }),
-        ...["seat-2", "seat-3", "seat-4", "seat-5", "seat-6", "seat-7"].map((seatId) =>
-          seat(seatId, {
-            occupantType: "vacant",
-            characterId: null,
-            characterName: null,
-            nppId: null,
-            termExpiresAtTurn: null,
-          })
-        ),
-      ],
+          termExpiresAtTurn: null,
+        })
+      ),
     });
   }
 
