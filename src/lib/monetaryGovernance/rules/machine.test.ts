@@ -9,6 +9,7 @@
 import { describe, expect, it } from "vitest";
 import { RATE_CHANGES_PER_TERM } from "@/lib/db/types/centralBank";
 import { decideGovernance, normalizedRateChoices } from "./machine";
+import { seatedBallots } from "@/lib/centralBank/fomc";
 import { allowedActionsFor } from "./allowedActions";
 import type {
   GovernanceActor,
@@ -368,6 +369,79 @@ describe("vote window and deadlines", () => {
     if (!decision.allowed) return;
     expect(decision.next.activeMeeting?.status).toBe("voting");
     expect(decision.transition.set.primeRate).toBeUndefined();
+  });
+});
+
+describe("ballots from vacated seats (ticket #1463)", () => {
+  function splitMeeting(): MeetingState {
+    // seat-3 hold, seat-4 cut, seat-5 hold, seat-6 cut, seat-7 hold, chair cut.
+    const votes: Record<string, "hold" | "cut"> = {
+      "seat-1": "cut",
+      "seat-3": "hold",
+      "seat-4": "cut",
+      "seat-5": "hold",
+      "seat-6": "cut",
+      "seat-7": "hold",
+    };
+    return {
+      meetingId: "US-m75",
+      openedAtTurn: 75,
+      motion: "hold",
+      proposedDelta: 0,
+      status: "voting",
+      ballots: Object.entries(votes).map(([seatId, vote]) => ({
+        seatId,
+        vote,
+        auto: seatId !== "seat-1",
+      })),
+      resolvesOnTurn: 99,
+      playerVoteDeadlineMs: NOW + DAY,
+    };
+  }
+
+  it("does not count a ballot left behind by a seat that is now vacant", () => {
+    const meeting = splitMeeting();
+    // Four holds including the stale seat-3 ballot would carry the motion (4 of 7).
+    meeting.ballots = meeting.ballots.map((b) =>
+      b.seatId === "seat-4" ? { ...b, vote: "hold" as const } : b
+    );
+    const board = usBoard().map((s) => (s.seatId === "seat-3" ? vacantSeat("seat-3") : s));
+    const state = baseState({ board, activeMeeting: meeting, lastMeetingTurn: 75 });
+    const decision = turnStart(state, 99);
+    expect(decision.allowed).toBe(true);
+    if (!decision.allowed) return;
+    const resolved = readResolvedMeeting(decision.transition.set.meetingHistoryAppend);
+    expect(resolved?.result).toBe("failed");
+  });
+
+  it("drops the ballot when a seat expires mid-meeting", () => {
+    const board = usBoard().map((s) =>
+      s.seatId === "seat-3" ? { ...s, termExpiresAtTurn: 80 } : s
+    );
+    // Chair has not voted yet, so the meeting stays open after seat-3 expires.
+    const meeting = splitMeeting();
+    meeting.ballots = meeting.ballots.filter((b) => b.seatId !== "seat-1");
+    const state = baseState({ board, activeMeeting: meeting, lastMeetingTurn: 75 });
+    const decision = turnStart(state, 80);
+    expect(decision.allowed).toBe(true);
+    if (!decision.allowed) return;
+    const ballots = decision.next.activeMeeting?.ballots ?? [];
+    expect(ballots.map((b) => b.seatId)).not.toContain("seat-3");
+    expect(ballots).toHaveLength(4);
+  });
+
+  it("seatedBallots ignores vacant seats and duplicate seat ballots", () => {
+    const board = [seat("a"), vacantSeat("b"), seat("c")];
+    const kept = seatedBallots(
+      [
+        { seatId: "a", vote: "hold" },
+        { seatId: "b", vote: "hold" },
+        { seatId: "a", vote: "cut" },
+        { seatId: "c", vote: "cut" },
+      ],
+      board
+    );
+    expect(kept.map((b) => `${b.seatId}:${b.vote}`)).toEqual(["a:hold", "c:cut"]);
   });
 });
 

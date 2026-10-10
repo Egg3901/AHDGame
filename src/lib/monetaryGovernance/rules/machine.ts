@@ -37,6 +37,7 @@ import {
   proposeChairMotion,
   seatPreferredVote,
   tallyMeeting,
+  seatedBallots,
 } from "@/lib/centralBank/fomc";
 import type { FomcBallot, FomcSeat } from "@/lib/db/types/centralBank";
 import type {
@@ -159,7 +160,7 @@ function resolveMeetingInto(
   if (meeting.openedAtTurn >= clock.turn) return noChange;
 
   const tally = tallyMeeting(
-    meeting.ballots as unknown as FomcBallot[],
+    seatedBallots(meeting.ballots, next.board) as unknown as FomcBallot[],
     meeting.motion,
     next.board.length
   );
@@ -367,6 +368,19 @@ function openMeetingInto(
   return meeting;
 }
 
+/**
+ * Strip ballots cast by seats that are now vacant, so a governor installed
+ * into the seat later does not inherit the previous occupant's vote.
+ */
+function dropVacantBallots(next: JurisdictionState, transition: GovernanceTransition): void {
+  const meeting = next.activeMeeting;
+  if (!meeting) return;
+  const kept = seatedBallots(meeting.ballots, next.board);
+  if (kept.length === meeting.ballots.length) return;
+  next.activeMeeting = { ...meeting, ballots: kept };
+  if (meeting.status === "voting") transition.set.activeFomcMeeting = next.activeMeeting;
+}
+
 /** Vacate every seat whose staggered term has expired. No auto-seating. */
 function expireSeats(
   next: JurisdictionState,
@@ -395,7 +409,10 @@ function expireSeats(
     }
     return seat;
   });
-  if (replaced > 0) transition.set.fomcBoard = next.board;
+  if (replaced > 0) {
+    transition.set.fomcBoard = next.board;
+    dropVacantBallots(next, transition);
+  }
   return { replaced, chairRefreshed };
 }
 
@@ -872,6 +889,7 @@ function handleVacateSeat(
       : s
   );
   transition.set.fomcBoard = next.board;
+  dropVacantBallots(next, transition);
   mirrorChair(next, transition, seat.isChair);
   return { allowed: true, next, transition };
 }
