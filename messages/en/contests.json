@@ -29,7 +29,7 @@
       },
       "approval_gain": {
         "title": "Government approval",
-        "rules": "Most approval points gained by a government led by a player. The same leader must hold office for the whole round, so a government formed after the round opens joins the next round."
+        "rules": "Most approval points gained by a government led by a player, measured from when its current leader took office."
       },
       "referrals_weekly": {
         "title": "Weekly referrals",

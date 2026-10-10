@@ -18,7 +18,10 @@ interface Agreement {
   counterparty?: { id: string; name: string; ticker?: string };
 }
 
-function stubFetch(agreements: Agreement[]) {
+function stubFetch(
+  agreements: Agreement[],
+  mediaSectorModelCounts = { withModel: 3, withoutModel: 0 }
+) {
   const calls: { url: string; method: string; body?: unknown }[] = [];
   vi.stubGlobal(
     "fetch",
@@ -49,7 +52,7 @@ function stubFetch(agreements: Agreement[]) {
         };
       }
       if (method === "GET") {
-        return { ok: true, json: async () => ({ agreements }) };
+        return { ok: true, json: async () => ({ agreements, mediaSectorModelCounts }) };
       }
       return { ok: true, json: async () => ({ success: true }) };
     })
@@ -86,6 +89,11 @@ describe("AdvertisingAgreementsPanel", () => {
     render(<AdvertisingAgreementsPanel corpId="corp1" />);
     const picker = (await screen.findByLabelText("Media corporation")) as HTMLSelectElement;
     await waitFor(() => expect(picker.value).toBe("supplier-id"));
+    expect(
+      screen.getByText(
+        "Only media corporations with a human CEO whose media sectors run an operating model (for example broadcast TV) are listed."
+      )
+    ).toBeTruthy();
     expect(screen.queryByPlaceholderText(/corporation id/i)).toBeNull();
     fireEvent.change(screen.getByLabelText("Share of your marketing budget (%)"), {
       target: { value: "25" },
@@ -123,6 +131,17 @@ describe("AdvertisingAgreementsPanel", () => {
     expect(await screen.findByText("Buyer Co")).toBeTruthy();
     expect(screen.queryByLabelText("Media corporation")).toBeNull();
     expect(screen.queryByRole("button", { name: "Propose agreement" })).toBeNull();
+  });
+
+  it("explains why buyers cannot find a media corporation with no operating models", async () => {
+    stubFetch([], { withModel: 0, withoutModel: 4 });
+    render(<AdvertisingAgreementsPanel corpId="corp1" ownsMediaSector />);
+
+    expect(
+      await screen.findByText(
+        "Your media sectors have no operating model yet, so buyers cannot find you. Choose an operating model on each media sector page."
+      )
+    ).toBeTruthy();
   });
 
   it("accepts a pending agreement as the supplier", async () => {
@@ -236,6 +255,11 @@ describe("AdvertisingAgreementsPanel", () => {
     render(<AdvertisingAgreementsPanel corpId="corp1" />);
     fireEvent.click(await screen.findByText("Buy coverage advertising from a media corporation"));
     await screen.findByText("No media corporation to buy from");
+    expect(
+      screen.getByText(
+        "Only media corporations with a human CEO whose media sectors run an operating model (for example broadcast TV) are listed. None are available right now."
+      )
+    ).toBeTruthy();
     expect(screen.getByText("Pick a media corporation first.")).toBeTruthy();
     expect(
       (screen.getByRole("button", { name: "Propose agreement" }) as HTMLButtonElement).disabled
