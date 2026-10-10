@@ -22,6 +22,7 @@ import { migration as foldAutomobileEntertainmentTypes } from "./entries/2026-10
 import { migration as productVentureIndexes } from "./entries/2026-10-08-product-venture-indexes";
 import { migration as campaignFieldOfficeIndexes } from "./entries/2026-10-09-campaign-field-office-indexes";
 import { migration as marketCapTickIndexes } from "./entries/2026-10-09-market-cap-tick-indexes";
+import { migration as supplyAgreementStatusIndex } from "./entries/2026-10-10-supply-agreement-status-index";
 import { migration as subhourWikiCadence } from "./entries/2026-10-09-subhour-wiki-cadence";
 import { runMigrations, type RunSummary } from "./runner";
 import type { Migration } from "./types";
@@ -74,6 +75,7 @@ export const REQUIRED_STARTUP_MIGRATIONS: readonly Migration[] = [
   productVentureIndexes,
   campaignFieldOfficeIndexes,
   marketCapTickIndexes,
+  supplyAgreementStatusIndex,
   corporateFundPositions,
   subhourWikiCadence,
 ];
@@ -92,6 +94,7 @@ export const REQUIRED_STARTUP_INDEX_MIGRATIONS: readonly Migration[] = [
   productVentureIndexes,
   campaignFieldOfficeIndexes,
   marketCapTickIndexes,
+  supplyAgreementStatusIndex,
   corporateFundPositions,
 ];
 
