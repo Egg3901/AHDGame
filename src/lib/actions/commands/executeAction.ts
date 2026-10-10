@@ -231,11 +231,12 @@ export async function executeCharacterAction(
         return { ok: false, error: "You must specify an amount to convert.", status: 400 };
       }
       if (convertAmount > cash) {
-        return {
-          ok: false,
-          error: `Amount exceeds liquid ${homeCcy} cash on hand. Available: ${cash.toLocaleString()}. Withdraw savings first if needed.`,
-          status: 400,
-        };
+        const error = `Amount exceeds liquid ${homeCcy} cash on hand. Available: ${cash.toLocaleString()}. Withdraw savings first if needed.`;
+        if (completed > 0) {
+          stoppedReason = error;
+          break;
+        }
+        return { ok: false, error, status: 400 };
       }
     }
 
@@ -249,6 +250,10 @@ export async function executeCharacterAction(
         { rpgStatsEnabled }
       );
       if (!quote.ok) {
+        if (completed > 0) {
+          stoppedReason = quote.error;
+          break;
+        }
         return { ok: false, error: quote.error, status: 400 };
       }
     }
@@ -276,6 +281,10 @@ export async function executeCharacterAction(
       // non-quotable amount rejects with the typed quote reason.
       const quote = quoteConvertCashAction({ amount: convertAmount });
       if (!quote.ok) {
+        if (completed > 0) {
+          stoppedReason = quote.error;
+          break;
+        }
         return { ok: false, error: quote.error, status: 400 };
       }
       const convertedLocal = quote.convertedLocal;
