@@ -112,4 +112,31 @@ describe("national approval route — canonical stored value", () => {
     const json = await call();
     expect(json.modifiers.some((m: { id: string }) => m.id === "war")).toBe(false);
   });
+
+  it("exposes the state average and national adjustments, reconciling to the stored rating", async () => {
+    db.collectionMocks.governmentApprovals!.findOne.mockResolvedValue({
+      _id: "US",
+      approvalRating: 41.2,
+      history: [],
+      activeNationalModifiers: [
+        { id: "public_expectations", label: "Higher public expectations", effect: -5 },
+        { id: "cabinet_none", label: "No cabinet seated", effect: -7.5 },
+        { id: "bank_failure_backstop", label: "Bank failure backstop", effect: -0.0000499 },
+      ],
+    });
+    db.collectionMocks.states!.find.mockReturnValue(cursorOf([]) as never);
+    db.collectionMocks.stateMetrics!.find.mockReturnValue(cursorOf([]) as never);
+
+    const json = await call();
+    expect(json.stateAverage).toBe(53.7);
+    expect(json.nationalAdjustments.map((m: { id: string }) => m.id)).toEqual([
+      "public_expectations",
+      "cabinet_none",
+    ]);
+    const sum = json.nationalAdjustments.reduce(
+      (s: number, m: { effect: number }) => s + m.effect,
+      0
+    );
+    expect(Math.round((json.stateAverage + sum) * 10) / 10).toBe(json.governmentApproval);
+  });
 });

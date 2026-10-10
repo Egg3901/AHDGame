@@ -55,3 +55,28 @@ export function canCharacterInteract(
     return true;
   });
 }
+
+const ROLE_REQUIREMENT_LABELS: Record<CrisisDecisionNode["requiredRoles"][number], string> = {
+  headOfState: "Head of state",
+  cabinet: "Cabinet minister",
+  stateGovernor: "State governor",
+  partyLeader: "Party leader",
+  centralBankChair: "Central bank chair",
+  financeMinister: "Finance minister",
+  any: "Anyone",
+};
+
+/** Player-facing "Requires:" copy for a decision node's role gate. */
+export function describeRoleRequirement(
+  node: Pick<CrisisDecisionNode, "requiredRoles" | "requiredPartyAbbreviations">
+): string {
+  return node.requiredRoles
+    .map((role) => {
+      const label = ROLE_REQUIREMENT_LABELS[role] ?? role;
+      if (role === "partyLeader" && node.requiredPartyAbbreviations?.length) {
+        return `${label} (${node.requiredPartyAbbreviations.join(", ")})`;
+      }
+      return label;
+    })
+    .join(" or ");
+}

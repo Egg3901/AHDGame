@@ -136,6 +136,17 @@ describe("CorporationMasthead", () => {
     expect(screen.getByRole("dialog")).toBeTruthy();
   });
 
+  it("lets the CEO open settings from the sector type label", () => {
+    renderMasthead({}, { isCeo: true });
+    fireEvent.click(screen.getByTitle("Change sector type in corporation settings"));
+    expect(screen.getByRole("dialog")).toBeTruthy();
+  });
+
+  it("shows the sector type as plain text to everyone else", () => {
+    renderMasthead();
+    expect(screen.queryByTitle("Change sector type in corporation settings")).toBeNull();
+  });
+
   it("states nationalization exposure as plain text", () => {
     renderMasthead({
       nationalizationRisk: { sinceTurn: 10, turnsUntilEligible: 3 },

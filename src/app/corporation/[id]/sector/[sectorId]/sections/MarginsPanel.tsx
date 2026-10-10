@@ -559,7 +559,7 @@ export default function MarginsPanel({
                     modifier={margins.sectorTypeMatchModifier}
                     rawValue={null}
                     rawUnit=""
-                    tooltip="Sectors matching your primary type get +5%. Secondary type match: +2.5%. Mismatched: -15% penalty."
+                    tooltip="Sectors matching your primary type get +5%. Secondary type match: +2.5%. Mismatched: -15% penalty. The CEO can change the primary and secondary type in Settings at the top of the corporation page."
                     icon={Layers}
                   />
                 )}

@@ -18,12 +18,17 @@ import {
   type PoliticalApprovalBases,
 } from "@/lib/politicalLegislation/politicalApprovalProvider";
 import type { CountryId } from "@/lib/constants/countries";
+import { buildApprovalBreakdown } from "@/lib/country/rules/approvalBreakdown";
 
 export interface NationalApprovalData {
   governmentApproval: number;
   governmentApprovalBase: number;
   history: GovernmentApproval["history"];
   modifiers: ReturnType<typeof evaluateModifiers>;
+  /** Population-weighted state average, before the national adjustments below. */
+  stateAverage: number;
+  /** National adjustments applied after the state average; they reconcile to governmentApproval. */
+  nationalAdjustments: ReturnType<typeof evaluateModifiers>;
 }
 
 /**
@@ -86,11 +91,14 @@ export async function loadNationalApproval(
     needsLive && isPoliticalApprovalCountry(countryId, true)
       ? await recomputePoliticalNationalApproval(db, countryId, inputs, bases)
       : null;
+  const nationalModifiers = approvalDoc
+    ? (approvalDoc.activeNationalModifiers ?? [])
+    : [PUBLIC_EXPECTATIONS_MODIFIER];
   const modifiers = [
     ...(approvalDoc?.activeRegionalModifiers ??
       live?.regionalModifiers ??
       evaluateModifiers(nationalAverages, { countryId, preset, year })),
-    ...(approvalDoc ? (approvalDoc.activeNationalModifiers ?? []) : [PUBLIC_EXPECTATIONS_MODIFIER]),
+    ...nationalModifiers,
   ];
   const governmentApproval =
     approvalDoc?.approvalRating ??
@@ -98,5 +106,17 @@ export async function loadNationalApproval(
     (await recomputeNationalApproval(db, countryId, inputs));
   const governmentApprovalBase = approvalDoc?.approvalBase ?? live?.base ?? 50;
 
-  return { governmentApproval, governmentApprovalBase, history, modifiers };
+  const { stateAverage, nationalAdjustments } = buildApprovalBreakdown(
+    governmentApproval,
+    nationalModifiers
+  );
+
+  return {
+    governmentApproval,
+    governmentApprovalBase,
+    history,
+    modifiers,
+    stateAverage,
+    nationalAdjustments,
+  };
 }
