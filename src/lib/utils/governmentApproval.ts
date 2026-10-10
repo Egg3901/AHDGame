@@ -29,7 +29,12 @@ import {
   advanceHeadTenure,
   emptyCabinetSeatsModifier,
   publicExpectationsModifier,
+  turnForDate,
 } from "@/lib/country/rules/approvalHoneymoon";
+import type { LeaderReference } from "@/lib/government/leaderReference";
+import type { ElectedOfficial } from "@/lib/db/types/officials";
+import { getGovernmentFormationsCollection } from "@/lib/db/collections/governmentFormation";
+import { MS_PER_TURN } from "@/lib/constants/turnTime";
 import {
   evaluateModifiers,
   applyModifiers,
@@ -653,6 +658,35 @@ export function buildStateApprovalBulkOps(
 }
 
 /**
+ * When the records say the sitting head of government took office: the
+ * president's election date for a presidential head, else the government
+ * formation turn (parliamentary PM, separate PM, NPP-led government). `null`
+ * when neither is recorded.
+ */
+async function recordedHeadSinceTurn(
+  db: Db,
+  countryId: CountryId,
+  head: LeaderReference,
+  turn: number
+): Promise<number | null> {
+  if (!("kind" in head)) {
+    const president = await db
+      .collection<ElectedOfficial>("electedOfficials")
+      .findOne(
+        { countryId, officeType: "president", characterId: head },
+        { projection: { electedAt: 1 } }
+      );
+    const fromElection = turnForDate(president?.electedAt, turn, new Date(), MS_PER_TURN);
+    if (fromElection !== null) return fromElection;
+  }
+  const formation = await getGovernmentFormationsCollection(db).findOne(
+    { _id: countryId },
+    { projection: { formedTurn: 1 } }
+  );
+  return typeof formation?.formedTurn === "number" ? formation.formedTurn : null;
+}
+
+/**
  * Snapshot the current approval rating to the governmentApprovals collection.
  * Called each turn. History is capped at the last 20 entries.
  *
@@ -858,7 +892,13 @@ export async function snapshotApprovalHistory(
   try {
     const head = await getHeadOfGovernmentReference(db, countryId);
     const headKey = head ? ("kind" in head ? `npp:${head.id.toString()}` : head.toString()) : null;
-    tenure = advanceHeadTenure(storedTenure, headKey, turn);
+    // First observation only (one extra read, once per country, ever): seed the
+    // start from the records so a sitting leader keeps the honeymoon they are owed.
+    const seed =
+      storedTenure === undefined && head
+        ? await recordedHeadSinceTurn(db, countryId, head, turn)
+        : null;
+    tenure = advanceHeadTenure(storedTenure, headKey, turn, seed);
   } catch {
     // keep the stored tenure
   }

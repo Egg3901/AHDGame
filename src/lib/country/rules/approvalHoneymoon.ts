@@ -66,18 +66,27 @@ export interface HeadTenure {
 /**
  * Advance the stored tenure by one observation of the current head.
  *
- * `prev` is `undefined` before the first observation: the head is recorded with
- * an unknown start rather than a guess, so the rollout does not hand every
- * sitting leader a fresh honeymoon. Any later change of head, including a new
- * head after a vacancy, starts the clock at `turn`.
+ * `prev` is `undefined` before the first observation. The head is then recorded
+ * with `seedSinceTurn`, the turn the records say they took office (formation turn
+ * or election date), so a leader already partway into a term gets the honeymoon
+ * they are owed rather than a fresh one or none. No usable seed means an unknown
+ * start (full drag). Any later change of head, including a new head after a
+ * vacancy, starts the clock at `turn`.
  */
 export function advanceHeadTenure(
   prev: HeadTenure | undefined,
   currentKey: string | null,
-  turn: number
+  turn: number,
+  seedSinceTurn: number | null = null
 ): HeadTenure {
   if (currentKey === null) return { key: null, sinceTurn: null };
-  if (prev === undefined) return { key: currentKey, sinceTurn: null };
+  if (prev === undefined) {
+    const seeded =
+      typeof seedSinceTurn === "number" && Number.isFinite(seedSinceTurn)
+        ? Math.min(Math.max(0, Math.floor(seedSinceTurn)), turn)
+        : null;
+    return { key: currentKey, sinceTurn: seeded };
+  }
   if (prev.key === currentKey) return { key: currentKey, sinceTurn: prev.sinceTurn };
   return { key: currentKey, sinceTurn: turn };
 }
@@ -125,4 +134,20 @@ export function emptyCabinetSeatsModifier(
     effect: -Math.round(NO_CABINET_PENALTY * (empty / totalSeats) * 10) / 10,
     marginEffect: 0,
   };
+}
+
+/**
+ * The turn a dated event happened on, counting back from `currentTurn` at
+ * `msPerTurn` wall-clock ms per turn. `null` for a missing or future date.
+ */
+export function turnForDate(
+  date: Date | null | undefined,
+  currentTurn: number,
+  now: Date,
+  msPerTurn: number
+): number | null {
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) return null;
+  const elapsed = now.getTime() - date.getTime();
+  if (elapsed < 0) return null;
+  return Math.max(0, currentTurn - Math.floor(elapsed / msPerTurn));
 }

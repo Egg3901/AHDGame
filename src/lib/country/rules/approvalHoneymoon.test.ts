@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   EXPECTATIONS_RAMP_TURNS,
   advanceHeadTenure,
+  turnForDate,
   emptyCabinetSeatsModifier,
   publicExpectationsModifier,
 } from "./approvalHoneymoon";
@@ -46,8 +47,16 @@ describe("publicExpectationsModifier", () => {
 });
 
 describe("advanceHeadTenure", () => {
-  it("records the first head with an unknown start", () => {
+  it("records the first head with an unknown start when there is no seed", () => {
     expect(advanceHeadTenure(undefined, "a", 50)).toEqual({ key: "a", sinceTurn: null });
+  });
+
+  it("seeds the first head's start from the records, clamped to the current turn", () => {
+    expect(advanceHeadTenure(undefined, "a", 50, 41)).toEqual({ key: "a", sinceTurn: 41 });
+    expect(advanceHeadTenure(undefined, "a", 50, 80).sinceTurn).toBe(50);
+    expect(advanceHeadTenure(undefined, "a", 50, -3).sinceTurn).toBe(0);
+    // A seed only applies to the first observation.
+    expect(advanceHeadTenure({ key: "a", sinceTurn: null }, "a", 50, 41).sinceTurn).toBeNull();
   });
 
   it("keeps the start turn while the same head stays", () => {
@@ -105,5 +114,20 @@ describe("emptyCabinetSeatsModifier", () => {
     expect(emptyCabinetSeatsModifier(3, undefined)).toBeNull();
     expect(emptyCabinetSeatsModifier(0, 0)?.effect).toBe(-7.5);
     expect(emptyCabinetSeatsModifier(2, 0)).toBeNull();
+  });
+});
+
+describe("turnForDate", () => {
+  const now = new Date("2026-10-10T14:00:00Z");
+  const hour = 60 * 60 * 1000;
+  it("counts whole turns back from the current turn", () => {
+    expect(turnForDate(new Date("2026-10-10T03:30:00Z"), 94, now, hour)).toBe(84);
+  });
+  it("returns null for a missing or future date", () => {
+    expect(turnForDate(undefined, 94, now, hour)).toBeNull();
+    expect(turnForDate(new Date("2026-10-11T00:00:00Z"), 94, now, hour)).toBeNull();
+  });
+  it("never goes below turn 0", () => {
+    expect(turnForDate(new Date("2020-01-01T00:00:00Z"), 94, now, hour)).toBe(0);
   });
 });
