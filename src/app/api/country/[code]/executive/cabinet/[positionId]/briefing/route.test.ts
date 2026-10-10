@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ObjectId, type Db } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
+import { RESET_V2_SEED_REVISION } from "@/lib/resetVersions/rules";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 vi.mock("@/lib/auth", () => ({ getAuthUserWithCharacter: vi.fn() }));
@@ -23,6 +24,46 @@ describe("GET /api/country/[code]/executive/cabinet/[positionId]/briefing", () =
     // may read them. Sign in as an admin so the visibility gate is satisfied and
     // each test keeps its own subject.
     vi.mocked(getAuthUserWithCharacter).mockResolvedValue({ isAdmin: true } as never);
+  });
+  it("withholds v2 action availability when the required budget is unavailable", async () => {
+    db.collection("gameState").findOne.mockResolvedValue({
+      _id: "current",
+      currentTurn: 10,
+      currentYear: 1991,
+      resetWorldId: "world",
+      metricsSystemVersion: "v2",
+      cabinetSystemVersion: "v2",
+      resetVersionSeeds: Object.fromEntries(
+        ["metrics", "cabinet"].map((system) => [
+          system,
+          {
+            worldId: "world",
+            revision: RESET_V2_SEED_REVISION[system as "metrics" | "cabinet"],
+            sourceTurn: 1,
+            completedAt: "verified",
+            verificationHash: "hash",
+          },
+        ])
+      ),
+    });
+    db.collection("resetCabinetActionStates").findOne.mockResolvedValue({
+      _id: "US",
+      worldId: "world",
+      sourceTurn: 1,
+      updatedTurn: 10,
+      actorStates: {},
+      active: [],
+      history: [],
+    });
+    const { GET } = await import("./route");
+    const response = await GET(new Request("http://localhost/api/briefing"), {
+      params: Promise.resolve({ code: "us", positionId: "secretary_of_labor" }),
+    });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      cabinetVersion: "v2",
+      resetCabinetActions: null,
+    });
   });
 
   it("prefers the national metrics document over regional averaging for national metrics", async () => {

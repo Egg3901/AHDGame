@@ -5,6 +5,7 @@ import { isMergerAuthoritySeat } from "@/lib/corporations/mergerReview/constants
 
 export type CabinetTabId =
   | "overview"
+  | "actions"
   | "treasury"
   | "foreign"
   | "flagship"
@@ -16,6 +17,7 @@ export type CabinetTabId =
 export interface CabinetTab {
   id: CabinetTabId;
   label: string;
+  labelKey?: "actionsTab";
 }
 
 /**
@@ -70,9 +72,14 @@ export function resolveCabinetTabs(args: {
    * there, so the tab never appears for a duty that does not exist.
    */
   competitionQueueApplies?: boolean;
+  cabinetVersion?: "v1" | "v2";
+  flagshipAvailable?: boolean;
 }): CabinetTab[] {
   const { countryId, positionId, conflictsEnabled = false, competitionQueueApplies = false } = args;
   const tabs: CabinetTab[] = [{ id: "overview", label: "Overview" }];
+  if (args.cabinetVersion === "v2") {
+    tabs.push({ id: "actions", label: "Actions", labelKey: "actionsTab" });
+  }
 
   if (isFinanceMinister(countryId, positionId)) {
     tabs.push({ id: "treasury", label: "Treasury" });
@@ -81,14 +88,15 @@ export function resolveCabinetTabs(args: {
     tabs.push({ id: "foreign", label: "Foreign Relations" });
   }
 
-  tabs.push({
-    id: "flagship",
-    label: isDefenseMinister(positionId)
-      ? "Military"
-      : isFinanceMinister(countryId, positionId)
-        ? "Monetary"
-        : "Programs",
-  });
+  if (args.cabinetVersion !== "v2" || args.flagshipAvailable)
+    tabs.push({
+      id: "flagship",
+      label: isDefenseMinister(positionId)
+        ? "Military"
+        : isFinanceMinister(countryId, positionId)
+          ? "Monetary"
+          : "Programs",
+    });
 
   // The competition seat gains Merger Review, but only once the server has
   // confirmed the queue applies to this viewer in this country and era.

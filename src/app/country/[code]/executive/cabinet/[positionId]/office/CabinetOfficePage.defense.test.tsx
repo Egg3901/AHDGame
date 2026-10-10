@@ -1,6 +1,7 @@
 /** @vitest-environment happy-dom */
 import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
-import { render, screen, cleanup, fireEvent } from "@testing-library/react";
+import { screen, cleanup, fireEvent } from "@testing-library/react";
+import { renderWithMessages as render } from "@/lib/test-utils/renderWithMessages";
 import type { ForceSummaryView } from "./useCabinetOffice";
 
 // vi.mock is hoisted above const declarations, so the fixture has to be too.

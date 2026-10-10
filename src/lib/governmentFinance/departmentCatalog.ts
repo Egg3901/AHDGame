@@ -3,7 +3,7 @@
  * resolves the institution and Cabinet office that administer them by country.
  */
 import { resolveDepartment } from "@/lib/cabinet/rosterEra";
-import { getCabinetMechanics } from "@/lib/constants/cabinetMechanics";
+import { getCabinetMechanics, getCabinetPositions } from "@/lib/constants/cabinetMechanics";
 import { COUNTRY_CONFIGS } from "@/lib/constants/countries";
 
 export type DepartmentCountryId = "US" | "UK" | "JP" | "IE" | "SCO" | "WAL";
@@ -102,7 +102,7 @@ function successorDepartments(countryId: "SCO" | "WAL"): DepartmentDefinition[] 
   }));
 }
 
-export const DEPARTMENT_DEFINITIONS: readonly DepartmentDefinition[] = [
+const PORTFOLIO_DEPARTMENTS: readonly DepartmentDefinition[] = [
   // United States
   {
     id: "us_treasury_department",
@@ -666,6 +666,39 @@ export const DEPARTMENT_DEFINITIONS: readonly DepartmentDefinition[] = [
   ...successorDepartments("SCO"),
   ...successorDepartments("WAL"),
 ] as const;
+
+// Offices without a law portfolio still own an account. They receive no
+// invented portfolio or appropriation, and start with zero legislative spending.
+const OFFICE_DEPARTMENTS: DepartmentDefinition[] = (
+  ["US", "UK", "JP", "IE", "SCO", "WAL"] as const
+).flatMap((countryId) =>
+  getCabinetPositions(countryId)
+    .filter(
+      (seat) =>
+        !PORTFOLIO_DEPARTMENTS.some(
+          (definition) =>
+            definition.countryId === countryId &&
+            definition.usesControllerDepartmentName !== false &&
+            definition.controllingPositionIds.includes(seat.id)
+        )
+    )
+    .map((seat) => ({
+      id: `${countryId.toLowerCase()}_${seat.id}_office`,
+      countryId,
+      kind: "coordinating_office" as const,
+      canonicalName: getCabinetMechanics(countryId, seat.id)?.department ?? seat.name,
+      portfolioIds: [],
+      controllingPositionIds: [seat.id],
+      activeFromYear: seat.yearEnabled ?? 1775,
+      ...(seat.yearRetired === undefined ? {} : { activeToYear: seat.yearRetired }),
+      accountPolicyId: civil,
+    }))
+);
+
+export const DEPARTMENT_DEFINITIONS: readonly DepartmentDefinition[] = [
+  ...PORTFOLIO_DEPARTMENTS,
+  ...OFFICE_DEPARTMENTS,
+];
 
 export function isDepartmentActive(
   definition: DepartmentDefinition,

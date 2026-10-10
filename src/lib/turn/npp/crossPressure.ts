@@ -15,6 +15,7 @@
  * | donors   | Donor base multiplied by the same policy alignment as ideology      |
  */
 import { europeanIntegrationSupport } from "@/lib/internationalOrganizations/europeanIntegration/rules/nationalDecisions";
+import { applyCabinetWhipPressure } from "@/lib/resetCabinet/rules/gameplay";
 import type {
   Bill,
   LegislationPolicyOption,
@@ -39,6 +40,7 @@ export type CrossPressureVerdict = "for" | "against" | "abstain";
 export interface CrossPressureWhipDirective {
   direction: "for" | "against";
   mode?: "soft" | "hard";
+  cabinetDiscipline?: number;
 }
 
 /**
@@ -266,7 +268,10 @@ export function computeWhipForce(npp: NPP, whips: CrossPressureWhipInputs): numb
   let raw = 0;
   if (whips.partyWhip) {
     const mode = whips.partyWhip.mode ?? "hard";
-    const magnitude = PARTY_WHIP_BASE_BY_MODE[mode];
+    const magnitude = applyCabinetWhipPressure(
+      PARTY_WHIP_BASE_BY_MODE[mode],
+      whips.partyWhip.cabinetDiscipline
+    );
     raw += whips.partyWhip.direction === "for" ? magnitude : -magnitude;
   }
   if (whips.caucusWhip) {

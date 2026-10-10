@@ -296,6 +296,13 @@ export function combineActiveActionEffects(
     }
   >();
   for (const action of active) {
+    if (
+      !Number.isSafeInteger(action.startsTurn) ||
+      action.startsTurn < 0 ||
+      !Number.isSafeInteger(action.expiresTurn) ||
+      action.expiresTurn <= action.startsTurn
+    )
+      throw new Error(`invalid active action interval: ${action.actionId}`);
     if (!Number.isFinite(action.strength) || action.strength < 0 || action.strength > 0.2) {
       throw new Error(`invalid active action strength: ${action.actionId}`);
     }

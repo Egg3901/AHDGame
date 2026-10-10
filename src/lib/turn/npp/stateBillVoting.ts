@@ -9,6 +9,7 @@ import {
   type CrossPressureVerdict,
 } from "./crossPressure";
 import { ADDRESS_AGENDA_FORCE_BIAS } from "@/lib/constants/governorOffice";
+import { cabinetDisciplineForParty } from "@/lib/resetCabinet/loadDiscipline";
 
 const LOCAL_BILL_FORCE_WEIGHTS = {
   ideology: 1,
@@ -41,6 +42,8 @@ export async function processStateBillVoting(ctx: NPPContext): Promise<number> {
     currentTurn,
     now,
   } = ctx;
+
+  const cabinetDiscipline = ctx.cabinetDiscipline ?? [];
 
   let votesCast = 0;
   const officialsByOfficeAndState = new Map<string, typeof nppOfficials>();
@@ -127,7 +130,19 @@ export async function processStateBillVoting(ctx: NPPContext): Promise<number> {
       const { forces, donorsLabel } = computeCrossPressureForces(npp, bill, {
         legislationType,
         homeStateDemographics,
-        whips: { partyWhip: applicableWhip, caucusWhip: null },
+        whips: {
+          partyWhip: applicableWhip
+            ? {
+                ...applicableWhip,
+                cabinetDiscipline: cabinetDisciplineForParty(
+                  cabinetDiscipline,
+                  npp.countryId ?? "US",
+                  npp.party
+                ),
+              }
+            : null,
+          caucusWhip: null,
+        },
         weights: LOCAL_BILL_FORCE_WEIGHTS,
       });
 

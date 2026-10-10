@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { ObjectId, type Db } from "mongodb";
-import type { ElectedOfficial, NPP, State, StateBill } from "@/lib/db/types";
+import type { BillWhip, ElectedOfficial, NPP, State, StateBill } from "@/lib/db/types";
 import { processStateBillVoting } from "./stateBillVoting";
 import type { NPPContext } from "./context";
 
@@ -112,6 +112,33 @@ function makeCtx(
 }
 
 describe("processStateBillVoting", () => {
+  it("persists stronger government whip pressure while preserving country and party isolation", async () => {
+    const run = async (parties: string[]) => {
+      const db = makeMockDb();
+      const npp = makeNpp();
+      const bill = makeStateBill();
+      const ctx = makeCtx(db, bill, npp, makeOfficial(npp._id), {
+        _id: "AZ",
+        countryId: "US",
+      } as State);
+      ctx.cabinetDiscipline = [{ countryId: "US", parties, bonus: 0.1 }];
+      ctx.stateBillWhips.set(bill._id.toString(), [
+        {
+          partyId: "1",
+          countryId: "US",
+          chamber: "stateSenate",
+          issuedBy: "nationalParty",
+          direction: "for",
+          mode: "soft",
+          attemptNumber: 1,
+        } as BillWhip,
+      ]);
+      await processStateBillVoting(ctx);
+      return db.collections.nppVotePredictions.bulkWrite.mock.calls[0][0][0].updateOne.update.$set
+        .forces.whip as number;
+    };
+    expect(await run(["1"])).toBeGreaterThan(await run(["opposition"]));
+  });
   it("casts local NPP votes and persists state-bill prediction snapshots", async () => {
     const db = makeMockDb();
     const npp = makeNpp();
