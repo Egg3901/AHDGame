@@ -1,3 +1,4 @@
+import { regionalModifierBreakdown } from "./regionalModifierBreakdown";
 import {
   applyModifiers,
   evaluateModifiers,
@@ -9,6 +10,7 @@ export interface ApprovalRegion {
   base: number;
   population: number;
   metrics: Record<string, Record<string, number>>;
+  modifiers?: ActiveModifier[];
 }
 
 /** The same population aggregation and two modifier scopes as the turn snapshot. */
@@ -28,11 +30,22 @@ export function nationalApprovalFromRegions(
       : 50;
   const base = mean(regions.map((region) => region.base));
   const regionalApproval = mean(
-    regions.map((region) => applyModifiers(region.base, evaluateModifiers(region.metrics, context)))
+    regions.map((region) =>
+      applyModifiers(region.base, region.modifiers ?? evaluateModifiers(region.metrics, context))
+    )
   );
   const effect = Math.round((regionalApproval - base) * 10) / 10;
-  const regionalModifiers: ActiveModifier[] =
-    effect === 0
+  const regionalModifiers: ActiveModifier[] = regions.every(
+    (region) => region.modifiers !== undefined
+  )
+    ? regionalModifierBreakdown(
+        regions.map((region) => ({
+          ...region,
+          modifiers: region.modifiers!,
+          approval: applyModifiers(region.base, region.modifiers!),
+        }))
+      )
+    : effect === 0
       ? []
       : [
           {

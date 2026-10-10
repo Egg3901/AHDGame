@@ -212,7 +212,10 @@ export function RegionalConditionsCard({
 }) {
   const [open, setOpen] = useState(false);
   const panelId = useId();
-  const netApproval = netModifierEffect(modifiers);
+  const netApproval =
+    approval != null && baseApproval != null
+      ? Math.round((approval - baseApproval) * 10) / 10
+      : netModifierEffect(modifiers);
   const netMargin = computeRegionalConditionMargin(modifiers);
   const href = regionApprovalUrl(countryId, stateId);
   const showScore = approval != null;

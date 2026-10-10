@@ -34,6 +34,17 @@ describe("toneFor", () => {
 });
 
 describe("buildModifierTitle", () => {
+  it("describes the aggregate adjustment as approval-only", () => {
+    const title = buildModifierTitle({
+      id: "regional_adjustment",
+      label: "Regional smoothing and rounding",
+      effect: -2,
+      marginEffect: 0,
+      source: "metric",
+    });
+    expect(title).toContain("approval only");
+    expect(title).not.toContain("sector profit margins");
+  });
   it("explains a metric condition", () => {
     expect(
       buildModifierTitle({ id: "strong_growth", label: "Strong Economic Growth", effect: 1 })

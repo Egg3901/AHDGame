@@ -99,7 +99,7 @@ export async function getAllStateApprovalsForElection(
   // named modifiers still evaluate on the surviving flat metrics.
   const politicalBasesByCountry = new Map<string, PoliticalApprovalBases | null>();
   for (const cid of metricsByCountry.keys()) {
-    if (isPoliticalApprovalCountry(cid)) {
+    if (isPoliticalApprovalCountry(cid, true)) {
       politicalBasesByCountry.set(cid, await loadPoliticalApprovalBases(db, cid));
     }
   }
@@ -120,9 +120,10 @@ export async function getAllStateApprovalsForElection(
           weightingFor(groupsByState, cid, String(m._id)),
           preset,
           year,
-          isPoliticalApprovalCountry(cid)
+          isPoliticalApprovalCountry(cid, true)
             ? (bases?.byRegion.get(String(m._id)) ?? BASE_APPROVAL)
-            : undefined
+            : undefined,
+          bases?.modifiersByRegion?.get(String(m._id))
         )
       );
     }
