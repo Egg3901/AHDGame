@@ -59,6 +59,48 @@ describe("buildCabinetApprovalModifiers", () => {
     expect(mods[0].effect).toBe(-7.5);
   });
 
+  describe("with a known seat roster", () => {
+    const seats = new Set(["a", "b", "c", "d"]);
+
+    it("scales the empty cabinet penalty with the empty seats", () => {
+      const mods = buildCabinetApprovalModifiers(
+        [{ positionId: "a" }, { positionId: "b" }, { positionId: "c" }],
+        "US",
+        seats
+      );
+      expect(mods).toHaveLength(1);
+      expect(mods[0].id).toBe("cabinet_none");
+      expect(mods[0].effect).toBe(-1.9);
+      expect(mods[0].label).toBe("Empty cabinet seats (1 of 4)");
+    });
+
+    it("charges the full 7.5 with nobody seated and nothing with a full cabinet", () => {
+      expect(buildCabinetApprovalModifiers([], "US", seats)[0].effect).toBe(-7.5);
+      const full = ["a", "b", "c", "d"].map((positionId) => ({ positionId }));
+      expect(buildCabinetApprovalModifiers(full, "US", seats)).toEqual([]);
+    });
+
+    it("counts an acting secretary as seated but still charges the acting penalty", () => {
+      const mods = buildCabinetApprovalModifiers(
+        [
+          { positionId: "a" },
+          { positionId: "b" },
+          { positionId: "c" },
+          { positionId: "d", acting: true },
+        ],
+        "US",
+        seats
+      );
+      expect(mods.map((m) => m.id)).toEqual(["cabinet_acting"]);
+      expect(mods[0].effect).toBe(-0.5);
+    });
+
+    it("ignores members seated in positions that are not in the roster", () => {
+      const mods = buildCabinetApprovalModifiers([{ positionId: "retired" }], "US", seats);
+      expect(mods[0].effect).toBe(-7.5);
+    });
+  });
+
   it("declares marginEffect 0 so no reader derives a profit-margin swing from it", () => {
     // Readers fall back to `marginEffectForModifier(effect, id)` when marginEffect
     // is absent. A cabinet vacancy is not a corporate-margin event, so the zero is
