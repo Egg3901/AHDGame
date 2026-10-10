@@ -148,26 +148,46 @@ describe("coverageOverlap and efficacy", () => {
 });
 
 describe("operatingModelsFromSectors", () => {
-  it("returns only catalogued models run by active sectors, once each", () => {
-    const sector = (strategyId: string, extra = {}) => ({
+  it("returns resolved models run by active media sectors, once each", () => {
+    const sector = (strategyId?: string, extra = {}) => ({
       stateId: "US-CA",
       revenue: 1,
+      sectorType: "media",
       strategyId,
       ...extra,
     });
     expect(
-      operatingModelsFromSectors([
-        sector("newspaper"),
-        sector("newspaper"),
-        sector("standard"),
-        sector("broadcast_tv", { mothballed: true }),
-        sector("radio_network"),
-      ])
-    ).toEqual(["newspaper", "radio_network"]);
+      operatingModelsFromSectors(
+        [
+          sector(),
+          sector(""),
+          sector("standard"),
+          sector("newspaper"),
+          sector("broadcast_tv", { mothballed: true }),
+          sector("legacy_broadcast"),
+        ],
+        1950
+      )
+    ).toEqual(["newspaper", "broadcast_tv"]);
   });
 
-  it("grants nothing to legacy sectors with no model", () => {
-    expect(operatingModelsFromSectors([{ stateId: "US-CA", revenue: 1 }])).toEqual([]);
+  it("uses radio before 1950 and ignores non-media or unavailable models", () => {
+    expect(
+      operatingModelsFromSectors(
+        [
+          { stateId: "US-CA", revenue: 1, sectorType: "media", strategyId: "legacy_broadcast" },
+          { stateId: "US-CA", revenue: 1, sectorType: "manufacturing", strategyId: "newspaper" },
+          { stateId: "US-CA", revenue: 1, sectorType: "media", strategyId: "streaming_platform" },
+        ],
+        1949
+      )
+    ).toEqual(["radio_network"]);
+  });
+
+  it("uses newspaper for a media sector with no stored strategy", () => {
+    expect(
+      operatingModelsFromSectors([{ stateId: "US-CA", revenue: 1, sectorType: "media" }], 1953)
+    ).toEqual(["newspaper"]);
   });
 });
 

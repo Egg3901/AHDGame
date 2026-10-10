@@ -91,7 +91,7 @@ describe("AdvertisingAgreementsPanel", () => {
     await waitFor(() => expect(picker.value).toBe("supplier-id"));
     expect(
       screen.getByText(
-        "Only media corporations with a human CEO whose media sectors run an operating model (for example broadcast TV) are listed."
+        "Only media corporations with a human CEO and an eligible advertising model are listed. Media sectors using the default count as newspapers."
       )
     ).toBeTruthy();
     expect(screen.queryByPlaceholderText(/corporation id/i)).toBeNull();
@@ -133,15 +133,23 @@ describe("AdvertisingAgreementsPanel", () => {
     expect(screen.queryByRole("button", { name: "Propose agreement" })).toBeNull();
   });
 
-  it("explains why buyers cannot find a media corporation with no operating models", async () => {
+  it("explains how default and unavailable media models affect advertising reach", async () => {
     stubFetch([], { withModel: 0, withoutModel: 4 });
     render(<AdvertisingAgreementsPanel corpId="corp1" ownsMediaSector />);
 
     expect(
       await screen.findByText(
-        "Your media sectors have no operating model yet, so buyers cannot find you. Choose an operating model on each media sector page."
+        "Media sectors using the default count as newspapers for advertising. Unsupported or unavailable selections add no model reach; choose an available model to change the reach."
       )
     ).toBeTruthy();
+  });
+
+  it("does not warn that buyers cannot find sectors using the default model", async () => {
+    stubFetch([], { withModel: 4, withoutModel: 0 });
+    render(<AdvertisingAgreementsPanel corpId="corp1" ownsMediaSector />);
+
+    await screen.findByText("No deals yet. Buyers propose them from their own Operations tab.");
+    expect(screen.queryByText(/buyers cannot find you/i)).toBeNull();
   });
 
   it("accepts a pending agreement as the supplier", async () => {
@@ -257,7 +265,7 @@ describe("AdvertisingAgreementsPanel", () => {
     await screen.findByText("No media corporation to buy from");
     expect(
       screen.getByText(
-        "Only media corporations with a human CEO whose media sectors run an operating model (for example broadcast TV) are listed. None are available right now."
+        "Only media corporations with a human CEO and an eligible advertising model are listed. Media sectors using the default count as newspapers. None are available right now."
       )
     ).toBeTruthy();
     expect(screen.getByText("Pick a media corporation first.")).toBeTruthy();

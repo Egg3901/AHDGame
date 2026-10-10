@@ -5,7 +5,10 @@
  */
 import type { Db, ObjectId } from "mongodb";
 import { TURNS_PER_DAY } from "@/lib/constants/corporations";
-import { getMediaOperatingModel } from "@/lib/mediaOperatingModels/catalog";
+import {
+  effectiveMediaOperatingModelId,
+  getMediaOperatingModel,
+} from "@/lib/mediaOperatingModels/catalog";
 import {
   loadFxRatesByCurrency,
   fxRateForCorpFromMap,
@@ -37,19 +40,20 @@ export interface AdvertisingMediaSectorModelCounts {
   withoutModel: number;
 }
 
-/** Count this corporation's media sectors by whether they run a catalogued model. */
+/** Count this corporation's media sectors by their resolved advertising model. */
 export async function countAdvertisingMediaSectorModels(
   db: Db,
-  corporationId: ObjectId
+  corporationId: ObjectId,
+  year: number | null | undefined
 ): Promise<AdvertisingMediaSectorModelCounts> {
   const sectors = await db
     .collection("corporateSectors")
     .find({ corporationId, sectorType: "media" } as never)
-    .project<{ strategyId?: string }>({ strategyId: 1 })
+    .project<{ strategyId?: string | null }>({ strategyId: 1 })
     .toArray();
   return sectors.reduce<AdvertisingMediaSectorModelCounts>(
     (counts, sector) => {
-      if (getMediaOperatingModel(sector.strategyId ?? "")) counts.withModel += 1;
+      if (effectiveMediaOperatingModelId(sector.strategyId, "media", year)) counts.withModel += 1;
       else counts.withoutModel += 1;
       return counts;
     },
@@ -59,7 +63,8 @@ export async function countAdvertisingMediaSectorModels(
 
 export async function listAdvertisingSuppliers(
   db: Db,
-  buyer: Corporation
+  buyer: Corporation,
+  year: number | null | undefined
 ): Promise<AdvertisingSupplierList> {
   const groups = await db
     .collection("corporateSectors")
@@ -67,7 +72,7 @@ export async function listAdvertisingSuppliers(
       _id: unknown;
       sectors: number;
       states: string[];
-      strategies: string[];
+      strategies: Array<string | null | undefined>;
     }>([
       { $match: { sectorType: "media", corporationId: { $ne: buyer._id } } },
       {
@@ -110,7 +115,8 @@ export async function listAdvertisingSuppliers(
     const models = [
       ...new Set(
         group.strategies.flatMap((strategyId) => {
-          const model = getMediaOperatingModel(strategyId ?? "");
+          const modelId = effectiveMediaOperatingModelId(strategyId, "media", year);
+          const model = modelId ? getMediaOperatingModel(modelId) : undefined;
           return model ? [model.name] : [];
         })
       ),
