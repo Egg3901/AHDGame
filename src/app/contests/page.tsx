@@ -205,6 +205,12 @@ function ContestCard({
         </span>
         <span className="text-muted">
           {t("entrants", { count: contest.entrants })} ·{" "}
+          {contest.refreshedAt ? (
+            <>
+              {t("updatedAt")} <LocalTime value={contest.refreshedAt} options={DATE_OPTIONS} />{" "}
+              ·{" "}
+            </>
+          ) : null}
           {t("endsAt", { round: contest.roundNumber })}{" "}
           <LocalTime value={contest.endsAt} options={DATE_OPTIONS} />
         </span>
