@@ -18,8 +18,15 @@ import type { PoliticalMetricId } from "@/lib/politicalMetrics/types";
 import { politicalValueForLegacyMetric } from "./marginAdapter";
 import { legacyUnitFromPoliticalScore } from "./legacyUnitBands";
 import { legacyValueFromPoliticalScore } from "@/lib/politicalMetrics/derive/legacyInversion";
+import { loadCabinetGameplayEffects } from "@/lib/resetCabinet/loadGameplayEffects";
+import type { ApplicableTemporaryTargetEffect } from "@/lib/resetCabinet/rules/actions";
+import {
+  applyCabinetPoliticalInputs,
+  cabinetEffectsForRegion,
+} from "@/lib/resetCabinet/rules/gameplay";
 
 export interface PoliticalMacroInputs {
+  cabinetEffects?(stateId: string, countryId?: string): readonly ApplicableTemporaryTargetEffect[];
   /** True when the region is on the political board. */
   has(stateId: string): boolean;
   /**
@@ -57,16 +64,35 @@ export interface PoliticalMacroInputs {
   values(stateId: string): Readonly<Partial<Record<PoliticalMetricId, number>>> | null;
 }
 
-export async function loadPoliticalMacroInputs(db: Db): Promise<PoliticalMacroInputs> {
-  const docs = await db
-    .collection<PoliticalMetricsDoc>("politicalMetrics")
-    .find({}, { projection: { _id: 1, values: 1 } })
-    .toArray();
+export async function loadPoliticalMacroInputs(
+  db: Db,
+  turn?: number
+): Promise<PoliticalMacroInputs> {
+  const [docs, cabinetEffects] = await Promise.all([
+    db
+      .collection<PoliticalMetricsDoc>("politicalMetrics")
+      .find({}, { projection: { _id: 1, countryId: 1, values: 1 } })
+      .toArray(),
+    loadCabinetGameplayEffects(db, undefined, turn),
+  ]);
   const valuesById = new Map<string, Record<PoliticalMetricId, number>>(
-    docs.map((d) => [String(d._id), (d.values ?? {}) as Record<PoliticalMetricId, number>])
+    docs.map((d) => [
+      String(d._id),
+      applyCabinetPoliticalInputs(
+        d.values ?? {},
+        cabinetEffectsForRegion(cabinetEffects, d.countryId, String(d._id))
+      ) as Record<PoliticalMetricId, number>,
+    ])
   );
 
+  const countriesById = new Map(docs.map((doc) => [String(doc._id), doc.countryId]));
   return {
+    cabinetEffects: (stateId, countryId) =>
+      cabinetEffectsForRegion(
+        cabinetEffects,
+        countryId ?? countriesById.get(stateId) ?? "",
+        stateId
+      ),
     has: (stateId) => valuesById.has(stateId),
     legacyUnit(stateId, path) {
       const values = valuesById.get(stateId);

@@ -36,7 +36,22 @@ export function ResetCabinetActionPanel({
         }
       );
       const payload = (await response.json()) as { error?: string };
-      if (!response.ok) throw new Error(payload.error ?? "Cabinet action failed");
+      if (!response.ok) {
+        const reason = model.actions.find((action) => action.id === actionId)?.blockReason;
+        const knownReasons = [
+          "inactive_seat",
+          "no_authority",
+          "no_capacity",
+          "no_charges",
+          "insufficient_funds",
+          "seat_busy",
+          "cooldown",
+        ] as const;
+        const blocked = knownReasons.find((entry) => entry === payload.error) ?? reason;
+        throw new Error(
+          blocked ? translate(`blocked.${blocked}`) : (payload.error ?? "Cabinet action failed")
+        );
+      }
       showToast("Cabinet action is now active", "success");
       onUpdate();
     } catch (error) {

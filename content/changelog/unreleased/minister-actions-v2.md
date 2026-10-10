@@ -19,3 +19,5 @@ areas: [fullstack]
 - Every v2 ministry has an institutional account and at least two distinct administrative actions that do not require a legislative appropriation.
 - The Actions tab and charge counter show the current v2 pool. Unimplemented Programs tabs are hidden, and unavailable action records show an explicit notice.
 - Paid actions still require available department cash. Existing balances, obligations and legislative funding are preserved.
+- Active actions now affect gameplay through temporary service approval, business conditions and the approved economic targets. Party coordination strengthens existing government-party whip pressure. Expiry removes the input pressure; economic outcomes follow the normal simulation response.
+- Switching offices no longer leaves stale actions or unavailable tabs on screen.

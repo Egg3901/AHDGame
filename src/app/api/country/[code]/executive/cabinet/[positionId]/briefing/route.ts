@@ -876,7 +876,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
         effects: o.effects,
       })),
       resetCabinetActions:
-        cabinetV2 && resetActionState
+        cabinetV2 && resetActionState && budget
           ? (() => {
               const actorId = member?.characterId?.toString();
               const actor = rechargeActionCharges(

@@ -1,3 +1,8 @@
+import { loadCabinetGameplayEffects } from "@/lib/resetCabinet/loadGameplayEffects";
+import {
+  applyCabinetPoliticalInputs,
+  cabinetEffectsForRegion,
+} from "@/lib/resetCabinet/rules/gameplay";
 import {
   loadResetApprovalModifiers,
   RESET_APPROVAL_BOARD_PROJECTION,
@@ -1277,6 +1282,7 @@ export async function buildCorporationLookups(
         resetWorldId: 1,
         resetVersionSeeds: 1,
         metricsSystemVersion: 1,
+        cabinetSystemVersion: 1,
         isProcessing: 1,
         processingKind: 1,
         processingTargetTurn: 1,
@@ -1289,10 +1295,16 @@ export async function buildCorporationLookups(
   // SP4 §4a: political margin overlays for playable regions — the sector-margin
   // engine resolves demolished political signals from these instead of the
   // (stripped) stateMetrics docs. One batch read, one map per region.
-  const politicalDocs = await db
-    .collection<PoliticalMetricsDoc>("politicalMetrics")
-    .find({})
-    .toArray();
+  const cabinetEffects = await loadCabinetGameplayEffects(db, gameState, options?.productionTurn);
+  const politicalDocs = (
+    await db.collection<PoliticalMetricsDoc>("politicalMetrics").find({}).toArray()
+  ).map((doc) => ({
+    ...doc,
+    values: applyCabinetPoliticalInputs(
+      doc.values,
+      cabinetEffectsForRegion(cabinetEffects, doc.countryId, String(doc._id))
+    ),
+  }));
   const politicalBaseModifiersByState = new Map(
     politicalDocs.map((doc) => [String(doc._id), buildPoliticalBaseModifiers(doc.values)])
   );
@@ -1329,7 +1341,8 @@ export async function buildCorporationLookups(
                 .map((metrics) => String(metrics._id)),
               gameState,
               undefined,
-              resetBoards
+              resetBoards,
+              cabinetEffects
             ),
           ] as const
       )

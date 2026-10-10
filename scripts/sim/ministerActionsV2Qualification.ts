@@ -20,6 +20,18 @@ import { openingNamedGrantClaims1991 } from "../../src/lib/resetFinance/openingO
 import { buildOpeningDepartmentFundingPartition } from "../../src/lib/resetFinance/rules/liveDepartmentAccount";
 import { settleLiveDepartmentTurn } from "../../src/lib/resetFinance/rules/liveDepartmentTurn";
 import { resetActionsForSeat } from "../../src/lib/resetCabinet/catalog";
+import { activateAction } from "../../src/lib/resetCabinet/rules/actions";
+import {
+  cabinetApprovalResponse,
+  cabinetMacroRegistry,
+  cabinetEffectsForRegion,
+  cabinetMacroTargetNudges,
+  cabinetProductionPressure,
+  cabinetWhipBonus,
+  applyCabinetWhipPressure,
+} from "../../src/lib/resetCabinet/rules/gameplay";
+import { tradeGrowthNode, costOfLivingNode } from "../../src/lib/metricEngine/registry/economic";
+import { evaluateRegistry } from "../../src/lib/metricEngine/evaluate";
 import {
   useCabinetAction as activateCabinetAction,
   combineActiveActionEffects,
@@ -147,6 +159,92 @@ const results = countries.map((country) => {
 });
 const bsonBytes = (rows: typeof baseline) =>
   rows.reduce((sum, row) => sum + BSON.serialize(row).length, 0);
+const gameplayChoices = countries.flatMap((country) =>
+  getCabinetPositions(country)
+    .filter((seat) => isSeatActive(seat, 1991))
+    .flatMap((seat) =>
+      resetActionsForSeat(country, seat.id)
+        .filter((action) => action.costClass === "Staff")
+        .map((action) => {
+          const effect = cabinetEffectsForRegion(
+            combineActiveActionEffects([activateAction(action, 1)], 1),
+            country,
+            action.scope === "NI"
+              ? "NIR"
+              : action.scope === "SCT"
+                ? "SCO"
+                : action.scope === "WAL"
+                  ? "WAL"
+                  : "region"
+          );
+          const approval = cabinetApprovalResponse(effect);
+          const whipForce = applyCabinetWhipPressure(30, cabinetWhipBonus(effect)) - 30;
+          assert(approval > 0 || whipForce > 0, `${action.id} must affect gameplay`);
+          assert.equal(
+            cabinetApprovalResponse(
+              cabinetEffectsForRegion(
+                combineActiveActionEffects([activateAction(action, 1)], 13),
+                country,
+                "region"
+              )
+            ),
+            0
+          );
+          return {
+            actionId: action.id,
+            approvalResponse: approval,
+            additionalWhipForce: whipForce,
+          };
+        })
+    )
+);
+function macroTrajectory(target: string, node: typeof tradeGrowthNode, initial: number) {
+  let control = { value: initial, simBaseline: initial };
+  let treatment = { ...control };
+  let maxAbsoluteDifference = 0;
+  const checkpoints: Record<string, number> = {};
+  for (let turn = 1; turn <= 120; turn++) {
+    const effects =
+      turn <= 24 ? [{ target, favorableNormalizedPoints: 0.14, contributingActions: [] }] : [];
+    const run = (previous: typeof control, nudges: Record<string, number>) =>
+      evaluateRegistry(cabinetMacroRegistry([node]), {
+        stateId: "test",
+        countryId: "UK",
+        prev: { [node.id]: previous.value },
+        prevSimBaseline: { [node.id]: previous.simBaseline },
+        providers: {},
+        spending: {},
+        policyValues: { [node.id]: previous.value },
+        seedCurrent: {
+          "economic.manufacturingCompetitiveness": 60,
+          "population.urbanizationRate": 55,
+        },
+        targetNudges: nudges,
+      })[node.id];
+    control = run(control, {});
+    treatment = run(treatment, cabinetMacroTargetNudges(effects));
+    const difference = treatment.value - control.value;
+    assert(Number.isFinite(difference));
+    assert(Math.abs(difference) <= 0.2 + 1e-9);
+    maxAbsoluteDifference = Math.max(maxAbsoluteDifference, Math.abs(difference));
+    if ([1, 12, 24, 25, 48, 120].includes(turn)) checkpoints[turn] = difference;
+  }
+  assert(maxAbsoluteDifference > 0, `${target} must reach the real macro evaluator`);
+  assert(Math.abs(checkpoints[120]) < 0.01, `${target} must decay after expiry`);
+  return { target, maxAbsoluteDifference, checkpoints };
+}
+const gameplay = {
+  staffChoices: gameplayChoices,
+  macro: [
+    macroTrajectory("S:tradeGrowth", tradeGrowthNode, 2.5),
+    macroTrajectory("S:costOfLiving", costOfLivingNode, 100),
+  ],
+  maximumAnnualProductionPressure: cabinetProductionPressure([
+    { target: "S:roboticsAdoption", favorableNormalizedPoints: 0.2, contributingActions: [] },
+    { target: "S:smallBusinessFormation", favorableNormalizedPoints: 0.2, contributingActions: [] },
+  ]),
+};
+assert.equal(gameplay.maximumAnnualProductionPressure, 0.2);
 const diff = execFileSync(
   "git",
   ["diff", "HEAD", "--", "src", "scripts/sim/ministerActionsV2Qualification.ts"],
@@ -159,7 +257,8 @@ const report = {
   sourceCommit: execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim(),
   trackedDiffSha256: createHash("sha256").update(diff).digest("hex"),
   scope:
-    "Administrative action lane and one-turn department settlement equivalence; not an integrated world simulation",
+    "Administrative action lane, gameplay consumer rules, actual macro node trajectories and one-turn department settlement equivalence; not an integrated world simulation",
+  gameplay,
   accountRead: {
     beforeDocuments: baseline.length,
     afterDocuments: partition.accounts.length,

@@ -100,6 +100,7 @@ export async function loadPoliticalApprovalBases(
           resetWorldId: 1,
           resetVersionSeeds: 1,
           metricsSystemVersion: 1,
+          cabinetSystemVersion: 1,
           isProcessing: 1,
           processingKind: 1,
           processingTargetTurn: 1,

@@ -110,6 +110,17 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("CabinetOfficePage tabs", () => {
+  it("falls back from an obsolete Actions selection when switching offices or versions", () => {
+    office.cabinetVersion = "v2";
+    office.resetCabinetActions = { charges: 2, nextRechargeTurn: 20, actions: [], active: [] };
+    const view = render(<CabinetOfficePage />);
+    fireEvent.click(screen.getByRole("button", { name: "Actions" }));
+    office.cabinetVersion = "v1";
+    office.positionId = "secretary_of_labor";
+    view.rerender(<CabinetOfficePage />);
+    expect(screen.getByText("ORDERS")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Actions" })).toBeNull();
+  });
   it("shows v2 actions and the shared charge pool without the legacy orders", () => {
     office.positionId = "secretary_of_labor";
     office.cabinetVersion = "v2";

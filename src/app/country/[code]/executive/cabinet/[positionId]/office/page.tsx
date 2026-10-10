@@ -91,7 +91,7 @@ export default function CabinetOfficePage() {
   );
 
   const [activeTab, setActiveTab] = useState<CabinetTabId>("overview");
-  const hashApplied = useRef(false);
+  const hashApplied = useRef<string | null>(null);
   const flagshipAvailable = Boolean(
     data?.forceSummary ||
     data?.estateSummary ||
@@ -111,10 +111,11 @@ export default function CabinetOfficePage() {
   // trusting the hash, or #treasury on a defence office would select a tab whose
   // body never renders and leave a blank panel.
   useEffect(() => {
-    if (!data || hashApplied.current) return;
-    hashApplied.current = true;
+    const officeKey = `${countryId}:${positionId}`;
+    if (!data || !mechanics) return;
+    const firstForOffice = hashApplied.current !== officeKey;
+    hashApplied.current = officeKey;
     const wanted = window.location.hash.slice(1);
-    if (!wanted || !mechanics) return;
     const available = resolveCabinetTabs({
       countryId,
       positionId,
@@ -124,10 +125,14 @@ export default function CabinetOfficePage() {
       cabinetVersion: data.cabinetVersion,
       flagshipAvailable,
     });
-    if (available.some((t) => t.id === wanted)) setActiveTab(wanted as CabinetTabId);
-    // Mount only: a later manual tab change must not be fought by the hash.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data]);
+    setActiveTab((tab) => {
+      if (firstForOffice)
+        return available.some((entry) => entry.id === wanted)
+          ? (wanted as CabinetTabId)
+          : "overview";
+      return available.some((entry) => entry.id === tab) ? tab : "overview";
+    });
+  }, [data, countryId, positionId, mechanics, conflictsEnabled, flagshipAvailable]);
 
   // A #competition hash can select the tab before the queue has answered. If the
   // answer is that the duty does not apply here, fall back rather than leave a

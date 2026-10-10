@@ -70,12 +70,22 @@ export const migration: Migration = {
             currentTurn: state.currentTurn,
           });
         });
+        const rosterRepairs = countries.flatMap((countryId) => {
+          const treasury = treasuries.find((row) => row._id === countryId)!;
+          const registered = new Set(treasury.departmentAccountIds ?? []);
+          const missingIds = [...accounts, ...additions]
+            .filter((row) => row.countryId === countryId && !registered.has(row._id))
+            .map((row) => row._id);
+          return missingIds.length ? [{ countryId, missingIds }] : [];
+        });
         if (!ctx.dryRun && additions.length > 0) {
           // _id is the reviewed primary key. Inserting rather than upserting
           // refuses a stale-world collision and cannot overwrite existing money.
           await accountsCollection.insertMany(additions, { session, ordered: true });
+        }
+        if (!ctx.dryRun && rosterRepairs.length > 0) {
           const written = await treasuryCollection.bulkWrite(
-            countries.map((countryId) => ({
+            rosterRepairs.map(({ countryId, missingIds }) => ({
               updateOne: {
                 filter: {
                   _id: countryId,
@@ -85,9 +95,7 @@ export const migration: Migration = {
                 update: {
                   $addToSet: {
                     departmentAccountIds: {
-                      $each: additions
-                        .filter((row) => row.countryId === countryId)
-                        .map((row) => row._id),
+                      $each: missingIds,
                     },
                   },
                 },
@@ -95,7 +103,7 @@ export const migration: Migration = {
             })),
             { session, ordered: true }
           );
-          if (written.matchedCount !== countries.length) {
+          if (written.matchedCount !== rosterRepairs.length) {
             throw new Error("Cabinet repair lost a current-world treasury");
           }
         }
@@ -111,12 +119,14 @@ export const migration: Migration = {
         return {
           documentsScanned: accounts.length + treasuries.length,
           documentsInserted: ctx.dryRun ? 0 : additions.length,
+          documentsUpdated: ctx.dryRun ? 0 : rosterRepairs.length,
           notes: [
             `${ctx.dryRun ? "Would add" : "Added"} ${additions.length} zero-value Cabinet accounts. Existing balances, claims, action state and seed receipts are preserved.`,
+            `${ctx.dryRun ? "Would repair" : "Repaired"} ${rosterRepairs.length} treasury account rosters.`,
           ],
         };
       },
-      { timeoutMS: 60_000 }
+      { client: db.client, timeoutMS: 60_000 }
     );
   },
 };
