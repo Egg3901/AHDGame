@@ -35,6 +35,11 @@ interface SupplierList {
   suppliers: SupplierOption[];
 }
 
+interface MediaSectorModelCounts {
+  withModel: number;
+  withoutModel: number;
+}
+
 const REASON_TEXT: Record<string, string> = {
   allocation_exceeds_budget:
     "Together the agreements would use more than 100% of the buyer's marketing budget.",
@@ -81,6 +86,8 @@ export default function AdvertisingAgreementsPanel({
 }) {
   const { formatAmount } = useCurrency();
   const [agreements, setAgreements] = useState<AgreementRow[]>([]);
+  const [mediaSectorModelCounts, setMediaSectorModelCounts] =
+    useState<MediaSectorModelCounts | null>(null);
   const [suppliers, setSuppliers] = useState<SupplierList | null>(null);
   const [supplierId, setSupplierId] = useState("");
   const [sharePct, setSharePct] = useState("10");
@@ -91,8 +98,12 @@ export default function AdvertisingAgreementsPanel({
   const refresh = useCallback(async () => {
     const response = await fetch(`/api/corporations/${corpId}/advertising-agreements`);
     if (!response.ok) return;
-    const data = (await response.json()) as { agreements?: AgreementRow[] };
+    const data = (await response.json()) as {
+      agreements?: AgreementRow[];
+      mediaSectorModelCounts?: MediaSectorModelCounts;
+    };
     setAgreements(data.agreements ?? []);
+    setMediaSectorModelCounts(data.mediaSectorModelCounts ?? null);
   }, [corpId]);
 
   useEffect(() => {
@@ -101,8 +112,12 @@ export default function AdvertisingAgreementsPanel({
     void fetch(`/api/corporations/${corpId}/advertising-agreements`, opts)
       .then(async (response) => {
         if (!response.ok) return;
-        const data = (await response.json()) as { agreements?: AgreementRow[] };
+        const data = (await response.json()) as {
+          agreements?: AgreementRow[];
+          mediaSectorModelCounts?: MediaSectorModelCounts;
+        };
         setAgreements(data.agreements ?? []);
+        setMediaSectorModelCounts(data.mediaSectorModelCounts ?? null);
       })
       .catch((error: unknown) => {
         if (!(error instanceof DOMException && error.name === "AbortError")) {
@@ -283,12 +298,22 @@ export default function AdvertisingAgreementsPanel({
   );
 
   if (supplierSide) {
+    const hasMediaSectorsWithoutModels =
+      mediaSectorModelCounts !== null &&
+      mediaSectorModelCounts.withModel === 0 &&
+      mediaSectorModelCounts.withoutModel > 0;
     return (
       <DenseSection title="Coverage advertising" meta="deals from buyers">
         <p className="py-1 text-sm text-muted">
           Other corporations can direct part of their marketing budget to your media sectors.
           Proposals appear here. Accept one and it pays you advertising revenue each turn.
         </p>
+        {hasMediaSectorsWithoutModels && (
+          <p className="py-1 text-sm text-muted">
+            Your media sectors have no operating model yet, so buyers cannot find you. Choose an
+            operating model on each media sector page.
+          </p>
+        )}
         {status}
         {agreements.length === 0 ? (
           <p className="py-1 text-sm text-muted">
@@ -331,12 +356,11 @@ export default function AdvertisingAgreementsPanel({
               </option>
             ))}
           </select>
-          {noSuppliers && (
-            <p className="mt-1 text-xs text-muted">
-              Only media corporations with an active CEO can sell advertising. None is available
-              right now.
-            </p>
-          )}
+          <p className="mt-1 text-xs text-muted">
+            Only media corporations with a human CEO whose media sectors run an operating model (for
+            example broadcast TV) are listed.
+            {noSuppliers ? " None are available right now." : ""}
+          </p>
           {selected && (
             <p className="mt-1 text-xs text-muted">
               Runs {selected.models.join(", ")}.

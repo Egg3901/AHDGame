@@ -3,7 +3,7 @@
  * advertising. Only corporations with a human CEO who can answer a proposal
  * are listed, so a buyer never sends an offer nobody can accept.
  */
-import type { Db } from "mongodb";
+import type { Db, ObjectId } from "mongodb";
 import { TURNS_PER_DAY } from "@/lib/constants/corporations";
 import { getMediaOperatingModel } from "@/lib/mediaOperatingModels/catalog";
 import {
@@ -30,6 +30,31 @@ export interface AdvertisingSupplierList {
   buyerMarketingPerTurnAnchor: number;
   liquidCurrencyCode: string | null;
   suppliers: AdvertisingSupplierOption[];
+}
+
+export interface AdvertisingMediaSectorModelCounts {
+  withModel: number;
+  withoutModel: number;
+}
+
+/** Count this corporation's media sectors by whether they run a catalogued model. */
+export async function countAdvertisingMediaSectorModels(
+  db: Db,
+  corporationId: ObjectId
+): Promise<AdvertisingMediaSectorModelCounts> {
+  const sectors = await db
+    .collection("corporateSectors")
+    .find({ corporationId, sectorType: "media" } as never)
+    .project<{ strategyId?: string }>({ strategyId: 1 })
+    .toArray();
+  return sectors.reduce<AdvertisingMediaSectorModelCounts>(
+    (counts, sector) => {
+      if (getMediaOperatingModel(sector.strategyId ?? "")) counts.withModel += 1;
+      else counts.withoutModel += 1;
+      return counts;
+    },
+    { withModel: 0, withoutModel: 0 }
+  );
 }
 
 export async function listAdvertisingSuppliers(
