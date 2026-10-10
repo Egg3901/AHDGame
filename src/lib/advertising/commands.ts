@@ -31,6 +31,7 @@ import {
   proposeAdvertisingAgreementPersistent,
   updateAdvertisingAgreementPersistent,
 } from "@/lib/advertising/persistence";
+import { countAdvertisingMediaSectorModels } from "@/lib/advertising/suppliers";
 
 export function serializeAdvertisingAgreement(agreement: AdvertisingAgreement) {
   return {
@@ -88,6 +89,7 @@ export async function listAdvertisingAgreements(corpId: string) {
 
     const corpHex = corp._id.toString();
     const agreements = await getAdvertisingAgreementsForCorp(db, corpHex);
+    const mediaSectorModelCounts = await countAdvertisingMediaSectorModels(db, corp._id);
     const counterpartyHex = [
       ...new Set(
         agreements.flatMap((agreement) => [agreement.supplierCorpId, agreement.buyerCorpId])
@@ -127,6 +129,7 @@ export async function listAdvertisingAgreements(corpId: string) {
               : {}),
           };
         }),
+        mediaSectorModelCounts,
       },
       { headers: { "Cache-Control": "private, no-store" } }
     );

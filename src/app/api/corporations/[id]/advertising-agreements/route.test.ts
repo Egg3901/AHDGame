@@ -158,13 +158,37 @@ describe("GET advertising agreements", () => {
     });
   });
 
+  it("returns operating model counts for the supplier's media sectors", async () => {
+    flagOn();
+    db.collection("corporateSectors");
+    db.collectionMocks.corporateSectors.find.mockReturnValue(
+      createAsyncIterableCursor([
+        { strategyId: "broadcast_tv" },
+        { strategyId: "newspaper" },
+        { strategyId: undefined },
+        {},
+      ])
+    );
+
+    const response = await GET(new Request("http://localhost/x"), {
+      params: Promise.resolve({ id: SUPPLIER_ID }),
+    });
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.mediaSectorModelCounts).toEqual({ withModel: 2, withoutModel: 2 });
+  });
+
   it("returns an empty list when the corporation has no agreements", async () => {
     flagOn();
     const response = await GET(new Request("http://localhost/x"), {
       params: Promise.resolve({ id: BUYER_ID }),
     });
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ agreements: [] });
+    expect(await response.json()).toEqual({
+      agreements: [],
+      mediaSectorModelCounts: { withModel: 0, withoutModel: 0 },
+    });
   });
 });
 
