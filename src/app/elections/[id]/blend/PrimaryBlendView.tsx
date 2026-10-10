@@ -218,17 +218,30 @@ function MobileCampaignLine({
   const figures = campaignFigures(campaign, loading);
   return (
     <div
+      data-field-part="campaign-details"
       style={{
         marginTop: 8,
         display: "flex",
         alignItems: "center",
+        justifyContent: "space-between",
+        flexWrap: "wrap",
         gap: 12,
         fontFamily: FONT.mono,
         fontSize: 11.5,
         color: BLEND.muted,
+        width: "100%",
+        minWidth: 0,
       }}
     >
-      <span style={{ flex: 1, display: "flex", gap: 12, flexWrap: "wrap" }}>
+      <span
+        style={{
+          flex: "1 1 12rem",
+          minWidth: 0,
+          display: "flex",
+          gap: 12,
+          flexWrap: "wrap",
+        }}
+      >
         <span>{figures.funds}</span>
         <span>{figures.actions} act.</span>
         <span>{figures.levels} lvl</span>
