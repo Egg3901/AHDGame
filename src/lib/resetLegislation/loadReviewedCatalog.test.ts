@@ -63,7 +63,8 @@ describe("loadReviewedLawCatalog", () => {
         .fn()
         .mockResolvedValue(partition.accounts.filter((candidate) => candidate.countryId === "US")),
     });
-    db.collectionMocks.federalBudget!.findOne.mockResolvedValue({ gdp: fiscal.US.gdp });
+    // The turn stores GDP as a float; the loader must round it, not reject it (ticket #1468).
+    db.collectionMocks.federalBudget!.findOne.mockResolvedValue({ gdp: fiscal.US.gdp + 0.4 });
     db.collectionMocks.resetLawPrograms!.find.mockReturnValue({
       toArray: vi.fn().mockResolvedValue([
         {
