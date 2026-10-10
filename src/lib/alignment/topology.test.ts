@@ -16,7 +16,7 @@ describe("loadAlignmentTopology", () => {
             creatorCountryId: "BR",
             category: "bloc",
             createdOnTurn: 12,
-            alignment: { poleId: "ORG:later", accentToken: "warning" },
+            alignment: { poleId: "ORG:later", accentToken: "#a855f7" },
           },
           {
             id: "first",
@@ -33,5 +33,6 @@ describe("loadAlignmentTopology", () => {
 
     const topology = await loadAlignmentTopology(db as unknown as Db, 1979);
     expect(topology.poles).toEqual(["WEST", "EAST", "ORG:first", "ORG:later"]);
+    expect(topology.poleDefinitions.get("ORG:later")?.accentToken).toBe("#a855f7");
   });
 });

@@ -30,22 +30,25 @@ export function isCustomAlignmentPoleId(id: string): id is CustomAlignmentPoleId
 }
 
 /**
- * Semantic design token a pole renders in. NOT a hex value — the app ships 11
- * themes and raw colours break every one of them (docs/DESIGN.md, hard rule 1).
- * The UI maps these to `text-*` / `bg-*` utilities.
+ * Built-in poles use semantic design tokens. Custom Blocs may instead carry a
+ * validated six-digit hex identity color chosen by their founder, shared by
+ * their organization dossier, alignment views and map.
  *
  * The blocs use maximally-distinct status hues so they stay separable in every
  * theme. `success` is reserved for the non-aligned remainder, which is not a
  * pole but is rendered alongside them.
  */
-export type AlignmentPoleToken = "info" | "error" | "warning" | "success";
+export type AlignmentPoleToken = CustomAlignmentPoleToken | "success";
 
-/** Semantic colors available to a player-founded pole. Green remains the remainder color. */
+/** Legacy quick-pick colors. New Blocs can also choose any six-digit hex color. */
 export const CUSTOM_ALIGNMENT_POLE_TOKENS = ["info", "error", "warning"] as const;
-export type CustomAlignmentPoleToken = (typeof CUSTOM_ALIGNMENT_POLE_TOKENS)[number];
+export type CustomAlignmentPoleToken = (typeof CUSTOM_ALIGNMENT_POLE_TOKENS)[number] | `#${string}`;
 
 export function isCustomAlignmentPoleToken(value: string): value is CustomAlignmentPoleToken {
-  return (CUSTOM_ALIGNMENT_POLE_TOKENS as readonly string[]).includes(value);
+  return (
+    (CUSTOM_ALIGNMENT_POLE_TOKENS as readonly string[]).includes(value) ||
+    (value.length === 7 && /^#[0-9a-fA-F]{6}$/.test(value))
+  );
 }
 
 export interface AlignmentPole {

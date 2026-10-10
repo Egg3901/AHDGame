@@ -4,7 +4,12 @@ import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 import type { StateMetrics } from "@/lib/db/types";
 import { POLITICAL_METRIC_FAMILIES } from "@/lib/politicalMetrics/families";
 import type { PoliticalMetricId } from "@/lib/politicalMetrics/types";
-import { BASE_APPROVAL, calculateStateApproval } from "@/lib/utils/governmentApproval";
+import {
+  BASE_APPROVAL,
+  calculateStateApproval,
+  computeNationalAveragesFromMetrics,
+  computeStateApprovalBase,
+} from "@/lib/utils/governmentApproval";
 import {
   APPROVAL_NEUTRAL_SCORE,
   APPROVAL_POINTS_PER_SCORE,
@@ -42,6 +47,12 @@ describe("seed splitter", () => {
 });
 
 describe("isPoliticalApprovalCountry", () => {
+  it("routes successor approval without enabling legacy political writes", () => {
+    for (const id of ["SCO", "WAL"]) {
+      expect(isPoliticalApprovalCountry(id)).toBe(false);
+      expect(isPoliticalApprovalCountry(id, true)).toBe(true);
+    }
+  });
   it("matches every country with a board, playable or not", () => {
     for (const id of ["US", "UK", "RU", "DD"]) expect(isPoliticalApprovalCountry(id)).toBe(true);
     for (const id of ["JP", "DE", "HU", "YU", "NG"]) {
@@ -69,6 +80,29 @@ describe("loadPoliticalApprovalBases", () => {
     db = createMockDb();
   });
 
+  it("preserves relative metric scoring for successor countries in v1 worlds", async () => {
+    const metrics = [
+      { _id: "R1", countryId: "SCO", economic: { unemploymentRate: { value: 3 } } },
+      { _id: "R2", countryId: "SCO", economic: { unemploymentRate: { value: 12 } } },
+    ] as unknown as StateMetrics[];
+    db.collection("gameState").findOne.mockResolvedValue({
+      currentTurn: 1,
+      preset: "1991-default",
+    });
+    db.collection("states")
+      .find()
+      .toArray.mockResolvedValue(
+        metrics.map((metric) => ({ _id: metric._id, countryId: "SCO", population: 100 }))
+      );
+    db.collection("macroMetrics").find().toArray.mockResolvedValue(metrics);
+    const result = await loadPoliticalApprovalBases(db as unknown as Db, "SCO");
+    const averages = computeNationalAveragesFromMetrics(metrics);
+    expect(result!.byRegion.get("R1")).toBe(
+      computeStateApprovalBase(metrics[0], averages, undefined, "1991-default")
+    );
+    expect(result!.byRegion.get("R1")).toBeGreaterThan(50);
+    expect(result!.modifiersByRegion).toBeUndefined();
+  });
   it("returns null when the country has no politicalMetrics docs", async () => {
     db.collection("politicalMetrics").find().toArray.mockResolvedValue([]);
     db.collection("states").find().toArray.mockResolvedValue([]);

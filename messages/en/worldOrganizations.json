@@ -1,5 +1,9 @@
 {
   "worldOrganizations": {
+    "creation": {
+      "colorDescription": "Your chosen Bloc color is used for the organization, world map, alignment ledgers, and influence views.",
+      "chooseColor": "Choose any color"
+    },
     "influence": {
       "effective": "Effective gain",
       "minimumSpend": "Below this form's minimum spend. Enter at least {spend}; a positive effective gain is not guaranteed.",

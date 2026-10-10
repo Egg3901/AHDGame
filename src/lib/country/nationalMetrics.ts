@@ -272,7 +272,7 @@ export async function loadNationalMetrics(
   // SP4: playable countries score from the hybrid political model — one
   // provider call, threaded as baseOverride so modifiers stay shared. Missing
   // region/unseeded world → BASE_APPROVAL, never the legacy scorer (spec §3).
-  const politicalBases = isPoliticalApprovalCountry(countryId)
+  const politicalBases = isPoliticalApprovalCountry(countryId, true)
     ? await loadPoliticalApprovalBases(db, countryId)
     : null;
   for (const metrics of allMetrics) {
@@ -281,7 +281,7 @@ export async function loadNationalMetrics(
     const flat = buildFlatMetrics(metrics);
     const groups = groupsByState.get(metrics._id);
     const weighting = groups && groups.length > 0 ? { groups } : undefined;
-    const baseOverride = isPoliticalApprovalCountry(countryId)
+    const baseOverride = isPoliticalApprovalCountry(countryId, true)
       ? (politicalBases?.byRegion.get(metrics._id) ?? BASE_APPROVAL)
       : undefined;
     stateApprovalsList.push({
@@ -297,9 +297,12 @@ export async function loadNationalMetrics(
         weighting,
         preset,
         year,
-        baseOverride
+        baseOverride,
+        politicalBases?.modifiersByRegion?.get(metrics._id)
       ),
-      modifiers: evaluateModifiers(flat, { preset, countryId, year }),
+      modifiers:
+        politicalBases?.modifiersByRegion?.get(metrics._id) ??
+        evaluateModifiers(flat, { preset, countryId, year }),
       population: state.population,
     });
   }

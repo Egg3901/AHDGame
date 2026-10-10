@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { formatShare } from "@/lib/alignment/normalize";
 import { POLE_TEXT, ShareBar } from "@/components/alignment/ShareBar";
+import { alignmentColor } from "@/lib/constants/alignmentColors";
 import type { OrgInfluenceView } from "@/lib/alignment/queries/orgInfluence";
 
 type Weighting = "economy" | "nations";
@@ -64,7 +65,11 @@ export function BalanceBar({ view }: { view: OrgInfluenceView }) {
 
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-body-xs">
         {view.poles.map((p) => (
-          <span key={p.id} className={`font-mono tabular-nums ${POLE_TEXT[p.accentToken]}`}>
+          <span
+            key={p.id}
+            className={`font-mono tabular-nums ${POLE_TEXT[p.accentToken] ?? ""}`}
+            style={{ color: alignmentColor(p.accentToken) }}
+          >
             {p.label} {formatShare(active.shares[p.id] ?? 0)}
           </span>
         ))}

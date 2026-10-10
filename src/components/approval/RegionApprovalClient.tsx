@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { netModifierEffect, type ActiveModifier } from "@/lib/utils/approvalModifiers";
+import { useTranslations } from "next-intl";
+import { type ActiveModifier } from "@/lib/utils/approvalModifiers";
 import { regionUrl, regionApiSubUrl, approvalUrl } from "@/lib/urls";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { ModifierList } from "@/components/approval/ModifierChip";
@@ -27,6 +28,7 @@ export function RegionApprovalClient({
   countryId: CountryId;
   stateId: string;
 }) {
+  const t = useTranslations("layout.approval");
   const config = COUNTRY_CONFIGS[countryId];
   const countryShortLabel = config?.code ?? countryId;
 
@@ -53,7 +55,9 @@ export function RegionApprovalClient({
   }, [countryId, stateId]);
 
   const modifiers = data?.governmentApprovalModifiers ?? [];
-  const netApproval = netModifierEffect(modifiers);
+  const netApproval = data
+    ? Math.round((data.governmentApproval - data.governmentApprovalBase) * 10) / 10
+    : 0;
   const netMargin = computeRegionalConditionMargin(modifiers);
 
   const backHref = regionUrl(countryId, stateId);
@@ -71,12 +75,9 @@ export function RegionApprovalClient({
         </div>
 
         <h1 className="text-2xl font-bold mb-1">
-          {data?.stateName ?? stateId} — Approval &amp; active effects
+          {data?.stateName ?? stateId} - Approval &amp; active effects
         </h1>
-        <p className="text-sm text-muted mb-8">
-          Approval relative to the national average, adjusted by named conditions, and their
-          knock-on effects on in-state sector profit margins.
-        </p>
+        <p className="text-sm text-muted mb-8">{t("regionalIntro")}</p>
 
         {loading && (
           <div className="rounded-xl border border-card-border bg-card p-12 text-center">
@@ -99,7 +100,7 @@ export function RegionApprovalClient({
                   <p className="text-4xl font-bold tabular-nums text-foreground">
                     {data.governmentApprovalBase.toFixed(1)}%
                   </p>
-                  <p className="text-xs text-muted mt-1">Metrics vs national average</p>
+                  <p className="text-xs text-muted mt-1">{t("beforeEffects")}</p>
                 </div>
                 <div className="text-2xl text-muted font-light">&rarr;</div>
                 <div>
@@ -110,11 +111,13 @@ export function RegionApprovalClient({
                     {netApproval >= 0 ? "+" : ""}
                     {netApproval}
                   </p>
-                  <p className="text-xs text-muted mt-1">{modifiers.length} active</p>
+                  <p className="text-xs text-muted mt-1">
+                    {t("activeAfterLimits", { count: modifiers.length })}
+                  </p>
                 </div>
                 <div className="text-2xl text-muted font-light">=</div>
                 <div>
-                  <p className="text-body-sm font-medium text-muted mb-1">Approval</p>
+                  <p className="text-body-sm font-medium text-muted mb-1">{t("target")}</p>
                   <p
                     className={`text-5xl font-bold tabular-nums ${approvalColor(data.governmentApproval)}`}
                   >

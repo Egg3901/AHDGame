@@ -52,6 +52,8 @@ export function toneFor(effect: number): ModifierTone {
 
 /** The chip's hover text: what this modifier measures. */
 export function buildModifierTitle(modifier: ActiveModifier): string {
+  if (modifier.id === "regional_adjustment")
+    return "Reconciles effect limits, stored approval smoothing and rounding. Affects approval only.";
   if (modifier.source === "address") return ADDRESS_TITLE;
   if (modifier.source === "banking")
     return "Taxpayer-funded bank failure backstop relative to GDP. Approval cost fades over one game year; confidence is measured separately.";
