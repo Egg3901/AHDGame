@@ -8,7 +8,7 @@
 
 import { describe, expect, it } from "vitest";
 import { RATE_CHANGES_PER_TERM } from "@/lib/db/types/centralBank";
-import { decideGovernance, normalizedRateChoices } from "./machine";
+import { decideGovernance, majorityNeeded, normalizedRateChoices } from "./machine";
 import { seatedBallots } from "@/lib/centralBank/fomc";
 import { allowedActionsFor } from "./allowedActions";
 import type {
@@ -143,6 +143,22 @@ function turnStart(state: JurisdictionState, turn: number, macro: MacroInputs | 
     clock(turn)
   );
 }
+
+describe("majorityNeeded", () => {
+  it("counts only seated governors on a board with vacancies", () => {
+    const board = [
+      playerChair(),
+      seat("seat-2"),
+      seat("seat-3"),
+      seat("seat-4"),
+      seat("seat-5"),
+      vacantSeat("seat-6"),
+      vacantSeat("seat-7"),
+    ];
+
+    expect(majorityNeeded(board)).toBe(3);
+  });
+});
 
 describe("cadence", () => {
   it("opens a meeting when due and the board can carry a motion", () => {
@@ -401,7 +417,8 @@ describe("ballots from vacated seats (ticket #1463)", () => {
 
   it("does not count a ballot left behind by a seat that is now vacant", () => {
     const meeting = splitMeeting();
-    // Four holds including the stale seat-3 ballot would carry the motion (4 of 7).
+    // Four holds including the stale seat-3 ballot reach the 4-vote threshold
+    // for the 6 seated governors; dropping it leaves only 3 supporting votes.
     meeting.ballots = meeting.ballots.map((b) =>
       b.seatId === "seat-4" ? { ...b, vote: "hold" as const } : b
     );
@@ -448,15 +465,7 @@ describe("ballots from vacated seats (ticket #1463)", () => {
 describe("dead board", () => {
   function deadBoardState(): JurisdictionState {
     return baseState({
-      board: [
-        playerChair(),
-        vacantSeat("seat-2"),
-        vacantSeat("seat-3"),
-        vacantSeat("seat-4"),
-        vacantSeat("seat-5"),
-        vacantSeat("seat-6"),
-        vacantSeat("seat-7"),
-      ],
+      board: Array.from({ length: 7 }, (_, index) => vacantSeat(`seat-${index + 1}`)),
     });
   }
 
@@ -466,6 +475,27 @@ describe("dead board", () => {
     if (!decision.allowed) return;
     expect(decision.next.activeMeeting).toBeNull();
     expect(decision.transition.set.lastFomcMeetingTurn).toBeUndefined();
+  });
+
+  it("lets the only seated chair carry a motion with their own vote", () => {
+    const board = [
+      playerChair(),
+      ...Array.from({ length: 6 }, (_, index) => vacantSeat(`seat-${index + 2}`)),
+    ];
+    const opened = turnStart(baseState({ board }), 108);
+    expect(opened.allowed).toBe(true);
+    if (!opened.allowed) return;
+    expect(opened.next.activeMeeting?.motion).toBe("hike");
+
+    const voted = decideGovernance(
+      opened.next,
+      { type: "cast_ballot", seatId: "seat-1", vote: "hike", countryId: "US" },
+      { kind: "governor", seatId: "seat-1", characterId: "char-chair", countryId: "US" },
+      clock(109)
+    );
+    expect(voted.allowed).toBe(true);
+    if (!voted.allowed) return;
+    expect(readResolvedMeeting(voted.transition.set.meetingHistoryAppend)?.result).toBe("passed");
   });
 
   it("gives the chair fallback authority on a dead board", () => {
@@ -899,6 +929,25 @@ describe("replay and grid", () => {
 });
 
 describe("allowedActionsFor", () => {
+  it("reports command economy before a live committee for direct rate actions", () => {
+    const state = baseState({ commandEconomy: true });
+    const decision = decideGovernance(
+      state,
+      { type: "set_rate", rate: 4.75, countryId: "US" },
+      CHAIR,
+      clock(108)
+    );
+    expect(decision.allowed).toBe(false);
+    if (decision.allowed) return;
+    expect(decision.reason).toBe("command-economy");
+
+    const view = allowedActionsFor(state, CHAIR, clock(108));
+    expect(view.actions.find((action) => action.action === "set_rate")).toMatchObject({
+      allowed: false,
+      reason: expect.stringMatching(/command economy/i),
+    });
+  });
+
   it.each([
     { lastRateChangeTurn: 107 },
     { rateChangesThisTerm: RATE_CHANGES_PER_TERM },

@@ -7,6 +7,7 @@ import {
   proposeChairMotion,
   ballotAgrees,
   majorityThreshold,
+  seatedCount,
   tallyMeeting,
   boardCanCarryMotions,
   FOMC_MOVE_THRESHOLD,
@@ -79,7 +80,7 @@ describe("proposeChairMotion", () => {
 });
 
 describe("majorityThreshold", () => {
-  it("is a strict majority of the full board", () => {
+  it("is a strict majority of the seated governor count", () => {
     expect(majorityThreshold(7)).toBe(4);
     expect(majorityThreshold(5)).toBe(3);
   });
@@ -99,34 +100,36 @@ describe("boardCanCarryMotions — the carry-a-motion threshold", () => {
     termExpiresAtTurn: null,
   });
 
-  it("is functional while seated members can reach a full-board majority", () => {
-    // 7 seats, 4 seated: 4 >= 4 needed, so the board can carry a motion.
-    const board = ["seat-1", "seat-2", "seat-3", "seat-4"].map((s) => seat(s));
+  it("can carry a motion with any seated governor", () => {
+    const board = [seat("seat-1", "player"), seat("seat-2", "vacant"), seat("seat-3", "vacant")];
     expect(boardCanCarryMotions(board)).toBe(true);
   });
 
-  it("is dead once seated members fall below the majority threshold", () => {
-    // The ticket #1238 prod shape: player chair + 6 vacant.
-    const board = [seat("seat-1", "player"), seat("seat-2", "vacant"), seat("seat-3", "vacant")];
+  it("is dead only when no governor is seated", () => {
+    const board = [seat("seat-1", "vacant"), seat("seat-2", "vacant"), seat("seat-3", "vacant")];
     expect(boardCanCarryMotions(board)).toBe(false);
   });
 
-  it("needs 3 of 5 seated to carry", () => {
-    const live3 = ["seat-1", "seat-2", "seat-3"].map((s) => seat(s));
-    expect(boardCanCarryMotions(live3)).toBe(true);
-    // A 5-seat board with only 2 seated: 2 < 3 needed, so it is dead.
-    const live2 = [
-      seat("seat-1"),
-      seat("seat-2"),
-      ...["seat-3", "seat-4", "seat-5"].map((s) => seat(s, "vacant")),
+  it("needs 3 of 5 seated governors on a 7-seat board with 2 vacancies", () => {
+    const board = [
+      ...["seat-1", "seat-2", "seat-3", "seat-4", "seat-5"].map((s) => seat(s)),
+      seat("seat-6", "vacant"),
+      seat("seat-7", "vacant"),
     ];
-    expect(boardCanCarryMotions(live2)).toBe(false);
+    const ballots = [ballot("seat-1", "hike"), ballot("seat-2", "hike"), ballot("seat-3", "hike")];
+
+    expect(seatedCount(board)).toBe(5);
+    expect(boardCanCarryMotions(board)).toBe(true);
+    const tally = tallyMeeting(ballots, "hike", seatedCount(board));
+    expect(tally.needed).toBe(3);
+    expect(tally.abstain).toBe(2);
+    expect(tally.passed).toBe(true);
   });
 });
 
-describe("tallyMeeting — majority of the FULL board", () => {
-  it("passes only with a full-board majority; abstains count against", () => {
-    // 7 seats, motion hike. 4 agree ⇒ pass.
+describe("tallyMeeting — majority of seated governors", () => {
+  it("passes only with a seated-governor majority; abstentions count against", () => {
+    // 7 seated governors, motion hike. 4 agree ⇒ pass.
     const ballots = [
       ballot("1", "hike"),
       ballot("2", "hike"),
@@ -141,7 +144,7 @@ describe("tallyMeeting — majority of the FULL board", () => {
   });
 
   it("fails when abstentions deny a majority even with no explicit opposition", () => {
-    // Only 3 of 7 voted hike; 4 seats never voted (no-show ⇒ abstain).
+    // Only 3 of 7 seated governors voted hike; 4 no-shows abstain.
     const ballots = [ballot("1", "hike"), ballot("2", "hike"), ballot("3", "hike")];
     const t = tallyMeeting(ballots, "hike", 7);
     expect(t.agree).toBe(3);
@@ -152,7 +155,7 @@ describe("tallyMeeting — majority of the FULL board", () => {
   });
 
   it("decides early once a majority is mathematically impossible", () => {
-    // 7 seats, motion hike. 4 have voted cut ⇒ at most 3 can agree ⇒ dead.
+    // 7 seated governors, motion hike. 4 voted cut ⇒ at most 3 can agree.
     const ballots = [
       ballot("1", "cut"),
       ballot("2", "cut"),

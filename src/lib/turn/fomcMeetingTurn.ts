@@ -87,11 +87,9 @@ async function findNominationExecutives(
  * Tell the world a committee board has gone understaffed (ticket #1238).
  *
  * Vacant seats are by design (#1195: the engine never seats a machine
- * candidate; the President nominates and the Senate confirms), but before this
- * notice the vacancy was silent: motions just started failing 1-0-6 with no
- * signal to the one player who can fix it, and the board stayed dead for good.
- * Notifies every nominating executive in-app and posts a system news item so
- * the chair and community can see why the board cannot move the rate.
+ * candidate; the President nominates and the Senate confirms). The notice
+ * encourages filling open seats. The chair fallback applies only when no
+ * governor is seated.
  */
 async function notifyFomcVacancy(
   db: Db,
@@ -105,12 +103,12 @@ async function notifyFomcVacancy(
   const execTitle =
     config?.officeTypes.find((o) => o.isExecutive)?.label.toLowerCase() ?? "the executive";
   const vacantCount = board.filter((s) => s.occupantType === "vacant").length;
-  // A board that still has enough seated members to carry a motion only needs a
-  // nudge to fill the gaps; a board below the threshold is dead and the chair
-  // holds the rate until it is filled.
+  // A board with at least one seated governor can carry a motion by unanimous
+  // vote. Only a board with no seated governors is dead and uses the chair
+  // fallback.
   const chairHoldsRate = !boardCanCarryMotions(board);
   const message = chairHoldsRate
-    ? `${vacantCount} of ${board.length} committee seats are vacant, so the board cannot carry a rate motion. The chair holds the rate directly until enough governors are confirmed. Nominate replacements from the central bank's committee page; the Senate confirms them.`
+    ? `${vacantCount} of ${board.length} committee seats are vacant and no governors are seated. The chair sets the rate directly until at least one governor is confirmed. Nominate replacements from the central bank's committee page; the Senate confirms them.`
     : `${vacantCount} of ${board.length} committee seats are vacant. Nominate governors from the central bank's committee page; the Senate confirms them.`;
 
   const notifications: NotificationInput[] = [];
@@ -128,7 +126,7 @@ async function notifyFomcVacancy(
 
   createSystemNewsPost(
     chairHoldsRate
-      ? `${vacantCount} of ${board.length} seats on the ${bankLabel}'s rate-setting board are vacant, so the board cannot carry a rate motion. The chair is setting the rate directly until the ${execTitle} nominates governors and the Senate confirms them.`
+      ? `${vacantCount} of ${board.length} seats on the ${bankLabel}'s rate-setting board are vacant and no governors are seated. The chair is setting the rate directly until the ${execTitle} nominates at least one governor and the Senate confirms them.`
       : `${vacantCount} of ${board.length} seats on the ${bankLabel}'s rate-setting board are vacant. The board can still carry motions; the ${execTitle} should nominate governors and the Senate confirm them.`,
     "executive"
   ).catch((err) => logger.error("FomcMeetingTurn", "vacancy news post failed", err));

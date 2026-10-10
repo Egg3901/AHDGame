@@ -656,13 +656,11 @@ export async function loadCountryCentralBankDetail(params: {
       chairControlsLocked: bank.chairControlsLocked === true,
       // A working committee owns the rate: the chair's direct control is gone and
       // the card must send players to the committee room instead of a dead POST.
-      // A board that has decayed below the carry-a-motion threshold (fewer seated
-      // members than a strict majority of the full board) is NOT seated for this
-      // purpose — the chair holds the rate directly until nominations restore it
-      // (ticket #1238 follow-up).
+      // Only a board with no seated governors is dead for this purpose; the
+      // chair holds the rate directly until at least one governor is confirmed.
       committeeSeated: hasFunctionalBoard,
-      // A committee exists on the bank but cannot carry a motion; the chair is
-      // setting the rate directly in the interim. Lets the page explain why.
+      // A committee exists on the bank but has no seated governors, so the
+      // chair sets the rate directly in the interim. Lets the page explain why.
       committeeDead: hasBoard && !boardCanCarryMotions(policyBank.fomcBoard ?? []),
       currentSavingsPressure: bank.currentSavingsPressure ?? 0,
       currentInflation: displayInflation,

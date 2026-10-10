@@ -8,10 +8,10 @@
  * The chair proposes a motion; every seat's ballot is a direction (hike/cut/hold)
  * and it "agrees" with the motion when the directions match.
  *
- * A motion passes only on a strict majority of the FULL board — unvoted (no-show)
- * and vacant seats abstain and count against it. So a divided or apathetic board
- * holds. NPP seats auto-vote their preference the moment a meeting opens; player
- * seats vote live or fall back to abstain at resolution.
+ * A motion passes on a strict majority of the seated governors. Vacant seats do
+ * not count; a seated governor without a ballot abstains. NPP seats auto-vote
+ * their preference the moment a meeting opens; player seats vote live or fall
+ * back to abstain at resolution.
  */
 
 import {
@@ -86,24 +86,25 @@ export function ballotAgrees(ballot: FomcVote, motion: FomcVote): boolean {
   return ballot === motion;
 }
 
-/** Strict majority of a full board of `boardSize` seats. */
-export function majorityThreshold(boardSize: number): number {
-  return Math.floor(boardSize / 2) + 1;
+/** Count the governors occupying seats; vacancies do not count toward motions. */
+export function seatedCount(board: readonly Pick<FomcSeat, "occupantType">[]): number {
+  return board.filter((seat) => seat.occupantType !== "vacant").length;
+}
+
+/** Strict majority of the seated governors. */
+export function majorityThreshold(seatedGovernorCount: number): number {
+  return Math.floor(seatedGovernorCount / 2) + 1;
 }
 
 /**
  * Whether the committee can actually carry a motion right now.
  *
- * A motion needs a strict majority of the FULL board; vacant seats abstain and
- * count against it. So the board is only functional while the number of seated
- * members (any non-vacant occupant) is at least that threshold: with fewer, no
- * motion can ever pass no matter how the seated members vote, and the
- * committee is structurally dead (ticket #1238 follow-up — in the absence of a
- * working board the chair holds the rate directly).
+ * A board with at least one seated governor can carry a motion with a unanimous
+ * vote. Only a board with no seated governors is dead; in that case the chair
+ * sets the rate directly.
  */
-export function boardCanCarryMotions(board: FomcSeat[]): boolean {
-  const seated = board.filter((s) => s.occupantType !== "vacant").length;
-  return seated >= majorityThreshold(board.length);
+export function boardCanCarryMotions(board: readonly FomcSeat[]): boolean {
+  return seatedCount(board) > 0;
 }
 
 /**
@@ -128,9 +129,9 @@ export function seatedBallots<B extends { seatId: string }>(
 export interface FomcTally {
   agree: number;
   disagree: number;
-  /** Seats with no ballot cast (no-show / vacant). */
+  /** Seated governors without a ballot (no-shows). */
   abstain: number;
-  /** Votes needed to pass (majority of the full board). */
+  /** Votes needed to pass (majority of seated governors). */
   needed: number;
   /** True once the outcome can no longer change: passed, or can't reach a majority. */
   decided: boolean;
@@ -138,33 +139,33 @@ export interface FomcTally {
 }
 
 /**
- * Tally a motion against the ballots cast. Every seat that has not cast a ballot
- * abstains and counts against the motion. `decided` reports early resolution:
- * the motion has passed, or enough abstentions/disagreements make a majority
- * impossible even if all remaining seats agreed. A decided meeting can resolve
- * despite pending player ballots, but consumers must preserve the opening turn
- * before resolving it (see `resolveMeetingInto`).
+ * Tally a motion against the ballots cast by seated governors. Seated members
+ * without a ballot abstain; vacant seats are excluded. `decided` reports early
+ * resolution: the motion has passed, or enough abstentions/disagreements make a
+ * majority impossible even if all remaining seated members agreed. A decided
+ * meeting can resolve despite pending player ballots, but consumers must
+ * preserve the opening turn before resolving it (see `resolveMeetingInto`).
  */
 export function tallyMeeting(
   ballots: FomcBallot[],
   motion: FomcVote,
-  boardSize: number
+  seatedGovernorCount: number
 ): FomcTally {
   const cast = ballots.length;
   let agree = 0;
   for (const b of ballots) if (ballotAgrees(b.vote, motion)) agree++;
   const disagree = cast - agree;
-  const abstain = Math.max(0, boardSize - cast);
-  const needed = majorityThreshold(boardSize);
+  const abstain = Math.max(0, seatedGovernorCount - cast);
+  const needed = majorityThreshold(seatedGovernorCount);
   const passed = agree >= needed;
   const maxPossibleAgree = agree + abstain; // if every remaining seat agreed
   const decided = passed || maxPossibleAgree < needed;
   return { agree, disagree, abstain, needed, decided, passed };
 }
 
-/** Seats that vote automatically (NPP or vacant); player seats vote live. */
+/** NPP governors vote automatically; player governors vote live. */
 export function isAutoSeat(seat: FomcSeat): boolean {
-  return seat.occupantType !== "player";
+  return seat.occupantType === "npp";
 }
 
 /** Seats a live player controls and must be prompted to vote. */

@@ -272,10 +272,10 @@ describe("processFomcMeetings — chair seat rollover", () => {
 // ── Vacancy signal (ticket #1238) ─────────────────────────────────────────────
 //
 // The #1195 rework leaves expired seats vacant for a presidential nomination +
-// Senate confirmation. That refill path only moves if the President knows the
-// board is dead, so the first vacancy (and a throttled reminder while it stands)
-// must notify the nominating executive and post news. Prod shape at the time of
-// the ticket: player chair + six governors whose terms all lapse on one turn.
+// Senate confirmation. The first vacancy (and a throttled reminder while it
+// stands) should notify the nominating executive and post news. Prod shape at
+// the time of the ticket: player chair + six governors whose terms all lapse on
+// one turn. The seated chair can still carry a motion on its own.
 
 describe("processFomcMeetings — vacancy signal (ticket #1238)", () => {
   beforeEach(() => vi.clearAllMocks());
@@ -311,8 +311,11 @@ describe("processFomcMeetings — vacancy signal (ticket #1238)", () => {
     expect(inputs).toHaveLength(1);
     expect(inputs[0].userId).toEqual(presidentUserId);
     expect(inputs[0].message).toContain("vacant");
-    expect(inputs[0].message).toContain("cannot carry");
+    expect(inputs[0].message).not.toContain("cannot carry");
     expect(createSystemNewsPost).toHaveBeenCalledTimes(1);
+    expect(String(vi.mocked(createSystemNewsPost).mock.calls[0][0])).toContain(
+      "The board can still carry motions"
+    );
     expect(String(vi.mocked(createSystemNewsPost).mock.calls[0][1])).toBe("executive");
   });
 
@@ -506,7 +509,8 @@ describe("processFomcMeetings — player vote window", () => {
     expect(meeting).toBeTruthy();
     expect(meeting.status).toBe("voting");
     // The 6 NPP seats have voted (and, sharing one macro context and one hawk
-    // alignment, all agree with the chair's motion) — enough to pass 4-of-7 —
+    // alignment, all agree with the chair's motion), enough for the 4-of-7
+    // seated-governor majority.
     // The opening turn stays open so players can see and ballot on the motion.
     expect(meeting.ballots).toHaveLength(6);
     expect(meeting.ballots.every((b) => b.vote === meeting.motion)).toBe(true);
@@ -640,19 +644,17 @@ describe("processFomcMeetings — dead board (ticket #1238 follow-up)", () => {
   beforeEach(() => vi.clearAllMocks());
 
   it("does not open a meeting when the board cannot carry a motion", async () => {
-    // Ticket #1238 prod shape: only the player chair of 7 seats is seated, so
-    // no motion can ever reach the 4-of-7 majority. Cadence must pause instead
-    // of re-running the 1-0-6 auto-fail loop.
+    // A board with no seated governors is dead. Cadence pauses until a
+    // governor is confirmed instead of opening a meeting with no voters.
     const db = makeDb({
       _id: "US",
       countryId: "US",
       primeRate: 5,
       lastFomcMeetingTurn: 100,
       fomcTermStartedAtTurn: 100,
-      fomcBoard: [
-        playerChairSeat(),
-        ...["seat-2", "seat-3", "seat-4", "seat-5", "seat-6", "seat-7"].map(vacantSeat),
-      ],
+      fomcBoard: ["seat-1", "seat-2", "seat-3", "seat-4", "seat-5", "seat-6", "seat-7"].map(
+        vacantSeat
+      ),
     });
 
     const result = await processFomcMeetings(db as unknown as Db, 108, 1956, new Date());
@@ -675,8 +677,7 @@ describe("processFomcMeetings — dead board (ticket #1238 follow-up)", () => {
       proposedDelta: -0.25,
       status: "voting",
       // The motion was carried by the NPP governors seated at open (seats
-      // 2-5); the four agreeing ballots clear the 4-of-7 majority even with
-      // the rest of the board having lapsed (a lapsed seat abstains).
+      // 2-5); the four agreeing ballots clear the majority of seated governors.
       ballots: ["seat-2", "seat-3", "seat-4", "seat-5"].map((seatId) => ({
         seatId,
         vote: "cut" as const,
@@ -735,7 +736,7 @@ describe("processFomcMeetings — dead board (ticket #1238 follow-up)", () => {
 
     const result = await processFomcMeetings(db as unknown as Db, 108, 1956, new Date());
 
-    // 4 of 7 seated is exactly the carry threshold, so the committee is live again.
+    // The seated governors can carry motions despite the vacant seats.
     const $set = setOf(db);
     const meeting = $set.activeFomcMeeting as FomcMeeting;
     expect(meeting).toBeTruthy();
