@@ -15,6 +15,11 @@ import {
   aiListingId,
   processNppSupplyAgreements,
   AI_LISTINGS_PER_SIDE,
+  NPP_CONTRACT_TERM_TURNS,
+  NPP_CONTRACT_BACKFILL_GRACE_TURNS,
+  NPP_CONTRACT_BACKFILL_SPREAD_TURNS,
+  aiContractBackfillExpiry,
+  openEndedAiContracts,
   NPP_CONTRACT_GLUT_PREMIUM,
   NPP_CONTRACT_SHORTAGE_PREMIUM,
   type NppAgreementParty,
@@ -901,6 +906,39 @@ describe("processNppSupplyAgreements shell", () => {
     expect(f.calls.listingBulk.length).toBeGreaterThan(0);
   });
 
+  it("leaves an open-ended contract with a player buyer without an expiry", async () => {
+    const buyer = { _id: new ObjectId(), countryId: "US" };
+    const f = fakeDb({
+      buyer,
+      agreements: (sellerId) => [
+        {
+          _id: new ObjectId(),
+          supplierCorpId: sellerId,
+          buyerCorpId: buyer._id,
+          proposedByCorpId: sellerId,
+          commodity: "iron",
+          volumeCap: 1,
+          pricePremium: 0,
+          status: "active",
+        },
+      ],
+    });
+    await processNppSupplyAgreements(f.db, 100, new Date(), true);
+    const stamped = (
+      f.calls.agreementBulk as { updateOne: { update: { $set: Record<string, unknown> } } }[]
+    ).filter((op) => op.updateOne.update.$set.expiresAtTurn != null);
+    expect(stamped).toEqual([]);
+  });
+
+  it("advertises AI listings with the AI contract term", async () => {
+    const f = fakeDb({ agreements: () => [] });
+    await processNppSupplyAgreements(f.db, 100, new Date(), true);
+    const op = f.calls.listingBulk[0] as {
+      replaceOne: { replacement: { durationTurns?: number; expiresAtTurn: number } };
+    };
+    expect(op.replaceOne.replacement.durationTurns).toBe(NPP_CONTRACT_TERM_TURNS);
+  });
+
   it("upserts listings by stable id and deletes stale AI listings", async () => {
     const f = fakeDb({
       agreements: () => [],
@@ -919,5 +957,55 @@ describe("processNppSupplyAgreements shell", () => {
     expect(op.replaceOne.replacement.aiListed).toBe(true);
     expect(op.replaceOne.replacement.publishedByUserId).toBeUndefined();
     expect(f.calls.listingDelete[0]).toMatchObject({ _id: { $in: ["gone:ai:sell:coal"] } });
+  });
+});
+
+describe("open-ended AI contract backfill", () => {
+  const a = new ObjectId();
+  const b = new ObjectId();
+  const player = new ObjectId();
+  const npps = new Set([a.toString(), b.toString()]);
+  const row = (over: Partial<SupplyAgreement>) =>
+    ({
+      _id: new ObjectId(),
+      status: "active",
+      supplierCorpId: a,
+      buyerCorpId: b,
+      ...over,
+    }) as SupplyAgreement;
+
+  it("selects only live AI-to-AI contracts that have no expiry", () => {
+    const keep = row({});
+    const picked = openEndedAiContracts(
+      [
+        keep,
+        row({ expiresAtTurn: 150 }),
+        row({ status: "pending" }),
+        row({ status: "cancelling" }),
+        row({ buyerCorpId: player }),
+        row({ supplierCorpId: player }),
+      ],
+      npps
+    );
+    expect(picked.map(String)).toEqual([String(keep._id)]);
+  });
+
+  it("spreads expiries over the window after the grace period, deterministically", () => {
+    const turn = 100;
+    const expiries = Array.from({ length: 2000 }, () =>
+      aiContractBackfillExpiry(new ObjectId().toString(), turn)
+    );
+    const lo = turn + NPP_CONTRACT_BACKFILL_GRACE_TURNS;
+    const hi = lo + NPP_CONTRACT_BACKFILL_SPREAD_TURNS - 1;
+    expect(Math.min(...expiries)).toBeGreaterThanOrEqual(lo);
+    expect(Math.max(...expiries)).toBeLessThanOrEqual(hi);
+    // No single turn retires more than a small slice of the backlog.
+    const perTurn = new Map<number, number>();
+    for (const e of expiries) perTurn.set(e, (perTurn.get(e) ?? 0) + 1);
+    expect(Math.max(...perTurn.values())).toBeLessThan(
+      (2000 / NPP_CONTRACT_BACKFILL_SPREAD_TURNS) * 2
+    );
+    const id = new ObjectId().toString();
+    expect(aiContractBackfillExpiry(id, turn)).toBe(aiContractBackfillExpiry(id, turn));
   });
 });
