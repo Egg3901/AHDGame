@@ -88,7 +88,7 @@ export async function recomputeNationalApproval(
   countryId: CountryId,
   prefetched?: RecomputeInputs
 ): Promise<number> {
-  if (isPoliticalApprovalCountry(countryId)) {
+  if (isPoliticalApprovalCountry(countryId, true)) {
     return (await recomputePoliticalNationalApproval(db, countryId, prefetched)).approval;
   }
 
@@ -133,6 +133,7 @@ export async function recomputePoliticalNationalApproval(
       base: bases?.byRegion.get(String(metrics._id)) ?? BASE_APPROVAL,
       population: populations.get(String(metrics._id)) ?? 0,
       metrics: buildFlatMetrics(metrics),
+      modifiers: bases?.modifiersByRegion?.get(String(metrics._id)),
     })),
     { countryId, preset: inputs.preset, year: inputs.year },
     [PUBLIC_EXPECTATIONS_MODIFIER]

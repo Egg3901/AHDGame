@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
+import { useTranslations } from "next-intl";
 import { useParams } from "next/navigation";
 import { netModifierEffect, type ActiveModifier } from "@/lib/utils/approvalModifiers";
 import { metricsApiUrl, approvalApiUrl, politicalMetricsUrl, regionApprovalUrl } from "@/lib/urls";
@@ -28,6 +29,7 @@ interface MetricsApiResponse {
 }
 
 interface ApprovalApiResponse {
+  governmentApprovalBase?: number;
   governmentApproval?: number;
   history?: { turn: number; approval: number }[];
   modifiers?: ActiveModifier[];
@@ -44,6 +46,7 @@ interface ApprovalClientProps {
 }
 
 export default function ApprovalClient({ initialMetrics, initialApproval }: ApprovalClientProps) {
+  const t = useTranslations("layout.approval");
   const { code } = useParams<{ code: string }>();
   const rawCode = code?.toUpperCase() ?? "US";
   const config =
@@ -122,7 +125,11 @@ export default function ApprovalClient({ initialMetrics, initialApproval }: Appr
 
   const history = approvalData?.history ?? [];
 
-  const netApproval = netModifierEffect(modifiers);
+  const base = approvalData?.governmentApprovalBase ?? metricsData?.governmentApprovalBase;
+  const netApproval =
+    governmentApproval != null && base != null
+      ? Math.round((governmentApproval - base) * 10) / 10
+      : netModifierEffect(modifiers);
   const netMargin = computeRegionalConditionMargin(modifiers);
 
   return (
@@ -259,6 +266,7 @@ export default function ApprovalClient({ initialMetrics, initialApproval }: Appr
                 <h2 className="text-sm font-semibold text-muted mb-4">
                   {config.regionLabel} rankings
                 </h2>
+                <p className="text-xs text-muted mb-4">{t("rankingTargets")}</p>
                 <div className="space-y-1">
                   {sortedStates.map((s, i) => {
                     const stateHref = regionApprovalUrl(country, s.stateId);

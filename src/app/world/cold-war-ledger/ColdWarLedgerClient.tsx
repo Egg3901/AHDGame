@@ -6,6 +6,7 @@ import { ALIGNMENT_GATES } from "@/lib/constants/alignmentEras";
 import type { AlignmentStatus } from "@/lib/alignment/project";
 import type { LedgerRow, WorldAlignmentView } from "@/lib/alignment/queries/worldAlignment";
 import { ShareBar, POLE_TEXT } from "@/components/alignment/ShareBar";
+import { alignmentColor } from "@/lib/constants/alignmentColors";
 import { CrisisDesk } from "./components/CrisisDesk";
 
 /** Band label + the semantic token it renders in. */
@@ -87,7 +88,10 @@ export function ColdWarLedgerClient({ view }: { view: WorldAlignmentView }) {
             className="rounded-lg border border-card-border bg-card p-3 shadow-card"
           >
             <div className="text-body-sm font-medium text-muted">{pole.label}</div>
-            <div className={`font-mono text-heading tabular-nums ${POLE_TEXT[pole.accentToken]}`}>
+            <div
+              className={`font-mono text-heading tabular-nums ${POLE_TEXT[pole.accentToken] ?? ""}`}
+              style={{ color: alignmentColor(pole.accentToken) }}
+            >
               {tallies.byPole.get(pole.id) ?? 0}
             </div>
             <div className="text-body-xs text-muted">nations leading</div>

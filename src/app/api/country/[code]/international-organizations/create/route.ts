@@ -17,7 +17,10 @@ import { parseJsonBody } from "@/lib/api/validate";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { createInternationalOrganization } from "@/lib/internationalOrganizations/commands/createOrganization";
-import { CUSTOM_ALIGNMENT_POLE_TOKENS } from "@/lib/constants/alignmentEras";
+import {
+  isCustomAlignmentPoleToken,
+  type CustomAlignmentPoleToken,
+} from "@/lib/constants/alignmentEras";
 
 const createSchema = z
   .object({
@@ -30,7 +33,12 @@ const createSchema = z
     category: z.enum(
       CREATABLE_ORGANIZATION_CATEGORIES as [OrganizationCategory, ...OrganizationCategory[]]
     ),
-    alignmentAccentToken: z.enum(CUSTOM_ALIGNMENT_POLE_TOKENS).optional(),
+    alignmentAccentToken: z
+      .custom<CustomAlignmentPoleToken>(
+        (value) => typeof value === "string" && isCustomAlignmentPoleToken(value),
+        "Choose a valid Bloc color."
+      )
+      .optional(),
     logoPath: z.string().max(500).optional(),
   })
   .superRefine((value, ctx) => {

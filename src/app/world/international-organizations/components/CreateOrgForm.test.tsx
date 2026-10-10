@@ -1,8 +1,17 @@
 /** @vitest-environment happy-dom */
 import { afterEach, beforeEach, describe, it, expect, vi } from "vitest";
-import { render, screen, cleanup, fireEvent } from "@testing-library/react";
+import { render as renderUi, screen, cleanup, fireEvent, waitFor } from "@testing-library/react";
+import { NextIntlClientProvider } from "next-intl";
 import { CreateOrgForm } from "./CreateOrgForm";
 import type { OrgViewerInfo } from "../orgTypes";
+import messages from "../../../../../messages/en/worldOrganizations.json";
+
+const render = (ui: React.ReactNode) =>
+  renderUi(
+    <NextIntlClientProvider locale="en" messages={messages}>
+      {ui}
+    </NextIntlClientProvider>
+  );
 
 beforeEach(() =>
   vi.stubGlobal(
@@ -18,6 +27,18 @@ afterEach(() => {
 const viewer = { foreignMinisterOf: "DE", headOfGovernmentOf: null } as unknown as OrgViewerInfo;
 
 describe("CreateOrgForm", () => {
+  it("submits the actual user-selected color for a Bloc", async () => {
+    render(<CreateOrgForm viewer={viewer} onCreated={() => {}} />);
+    fireEvent.click(screen.getByText("Found new organization"));
+    fireEvent.change(screen.getByLabelText(/Full name/), { target: { value: "Chosen Bloc" } });
+    fireEvent.change(screen.getByLabelText(/Short name/), { target: { value: "CB" } });
+    fireEvent.change(screen.getByLabelText("Category"), { target: { value: "bloc" } });
+    fireEvent.change(screen.getByLabelText("Choose any color"), { target: { value: "#008080" } });
+    fireEvent.click(screen.getByText("Found organization"));
+    await waitFor(() => expect(fetch).toHaveBeenCalled());
+    const request = vi.mocked(fetch).mock.calls[0][1]!;
+    expect(JSON.parse(request.body as string).alignmentAccentToken).toBe("#008080");
+  });
   it("opens and shows the name + short-name fields", () => {
     render(<CreateOrgForm viewer={viewer} onCreated={() => {}} />);
     fireEvent.click(screen.getByText("Found new organization"));

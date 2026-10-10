@@ -9,6 +9,7 @@
  * National approval: population-weighted average of all state approvals
  */
 
+import { regionalModifierBreakdown } from "@/lib/country/rules/regionalModifierBreakdown";
 import type { AnyBulkWriteOperation, Db } from "mongodb";
 import { findMergedRegionMetricsMany } from "@/lib/macroMetrics/merge";
 import type { StateMetrics, MetricCategoryId, State } from "@/lib/db/types";
@@ -345,7 +346,8 @@ export function computeStateApprovalBase(
   // eslint-disable-next-line no-restricted-syntax
   preset: string = "2019-default",
   /** Live year (null while the era flag is off) — gates inactive-metric terms. */
-  year: number | null = null
+  year: number | null = null,
+  directions: Readonly<Record<string, boolean>> = IS_HIGHER_BETTER
 ): number {
   // P6d: when demographic groups are supplied, each metric's contribution is
   // scaled by how much the state's electorate (its ideological mix) cares about
@@ -366,7 +368,7 @@ export function computeStateApprovalBase(
       const avg = avgCat[metricId];
       if (value == null || avg == null || !Number.isFinite(value) || !Number.isFinite(avg))
         continue;
-      const higherBetter = IS_HIGHER_BETTER[metricId] ?? true;
+      const higherBetter = directions[metricId] ?? true;
       // Normalize by |avg| so the deviation's SIGN tracks (value − avg) even when
       // the national average is negative (e.g. budgetBalance deficits) — a signed
       // denom would invert a worse deficit into a positive approval term.
@@ -464,7 +466,8 @@ export function calculateStateApproval(
   // SP4: for LAW_COUNTRY_IDS the metric base comes from the hybrid political
   // approval provider (loadPoliticalApprovalBases) instead of the legacy
   // stateMetrics comparison. Named modifiers still apply on top either way.
-  baseOverride?: number
+  baseOverride?: number,
+  metricModifiersOverride?: ActiveModifier[]
 ): number {
   const base = Number.isFinite(baseOverride)
     ? (baseOverride as number)
@@ -475,11 +478,13 @@ export function calculateStateApproval(
         preset ?? undefined,
         year
       );
-  const metricModifiers = evaluateModifiers(buildFlatMetrics(stateMetrics), {
-    preset,
-    countryId: stateMetrics.countryId,
-    year,
-  });
+  const metricModifiers =
+    metricModifiersOverride ??
+    evaluateModifiers(buildFlatMetrics(stateMetrics), {
+      preset,
+      countryId: stateMetrics.countryId,
+      year,
+    });
   return applyModifiers(base, [...metricModifiers, ...extraModifiers]);
 }
 
@@ -708,8 +713,8 @@ export async function snapshotApprovalHistory(
   // model — one provider call per snapshot, applied as baseOverride so
   // modifiers/damping below stay identical. A playable region missing from the
   // map (or an unseeded world) falls to BASE_APPROVAL, never the legacy scorer.
-  const politicalBases = isPoliticalApprovalCountry(countryId)
-    ? await loadPoliticalApprovalBases(db, countryId)
+  const politicalBases = isPoliticalApprovalCountry(countryId, true)
+    ? await loadPoliticalApprovalBases(db, countryId, turn)
     : null;
   // Pull active governor-address approval modifiers per state in one query
   // so each state's snapshot includes any in-flight State of the State bump.
@@ -732,9 +737,10 @@ export async function snapshotApprovalHistory(
         groups && groups.length > 0 ? { groups } : undefined,
         preset,
         year,
-        isPoliticalApprovalCountry(countryId)
+        isPoliticalApprovalCountry(countryId, true)
           ? (politicalBases?.byRegion.get(m._id) ?? BASE_APPROVAL)
-          : undefined
+          : undefined,
+        politicalBases?.modifiersByRegion?.get(m._id)
       ),
       population: statePopMap.get(m._id) ?? 0,
     };
@@ -817,20 +823,33 @@ export async function snapshotApprovalHistory(
         countryId,
         approvalRating: approval,
         approvalBase: politicalBases?.national ?? BASE_APPROVAL,
-        activeRegionalModifiers: [
-          {
-            id: "regional_conditions",
-            label: "Regional conditions (population weighted)",
-            effect:
-              Math.round(
-                (calculateNationalApproval(dampedStateApprovals) -
-                  (politicalBases?.national ?? BASE_APPROVAL)) *
-                  10
-              ) / 10,
-            source: "metric" as const,
-            marginEffect: 0,
-          },
-        ],
+        activeRegionalModifiers: politicalBases?.modifiersByRegion
+          ? regionalModifierBreakdown(
+              dampedStateApprovals.map((state) => ({
+                base: politicalBases.byRegion.get(state.stateId) ?? BASE_APPROVAL,
+                approval: state.approval,
+                population: state.population,
+                modifiers: [
+                  ...(politicalBases.modifiersByRegion?.get(state.stateId) ?? []),
+                  ...(addressModifiersByState.get(state.stateId) ?? []),
+                  ...(fairnessModifiersByState.get(state.stateId) ?? []),
+                ],
+              }))
+            )
+          : [
+              {
+                id: "regional_conditions",
+                label: "Regional conditions (population weighted)",
+                effect:
+                  Math.round(
+                    (calculateNationalApproval(dampedStateApprovals) -
+                      (politicalBases?.national ?? BASE_APPROVAL)) *
+                      10
+                  ) / 10,
+                source: "metric" as const,
+                marginEffect: 0,
+              },
+            ],
         disapprovalRating: 100 - approval,
         netApproval: approval - (100 - approval),
         source: "aggregate" as const,

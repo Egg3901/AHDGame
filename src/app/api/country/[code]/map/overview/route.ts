@@ -155,7 +155,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ cod
       allDemographics.map((d) => [`${d.countryId}:${d._id}`, Object.values(d.groups ?? {})])
     );
     // SP4: playable countries score from the hybrid political base.
-    const politicalBases = isPoliticalApprovalCountry(countryId)
+    const politicalBases = isPoliticalApprovalCountry(countryId, true)
       ? await loadPoliticalApprovalBases(db, countryId)
       : null;
     const approvalResult: Record<string, { approval: number }> = {};
@@ -168,9 +168,10 @@ export async function GET(_request: Request, { params }: { params: Promise<{ cod
         weightingFor(groupsByState, countryId, String(regionId)),
         preset,
         year,
-        isPoliticalApprovalCountry(countryId)
+        isPoliticalApprovalCountry(countryId, true)
           ? (politicalBases?.byRegion.get(String(regionId)) ?? BASE_APPROVAL)
-          : undefined
+          : undefined,
+        politicalBases?.modifiersByRegion?.get(String(regionId))
       );
       approvalResult[regionId] = { approval };
     }

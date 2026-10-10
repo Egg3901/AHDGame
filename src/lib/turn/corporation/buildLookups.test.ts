@@ -1,3 +1,7 @@
+import { buildOpeningMetricSnapshots1991 } from "@/lib/resetMetrics/seedOpening1991";
+import { RESET_V2_SEED_REVISION } from "@/lib/resetVersions/rules";
+import { evaluateResetApprovalModifiers } from "@/lib/resetMetrics/rules/approval";
+import { computeRegionalConditionMargin } from "@/lib/states/conditions/marginEffects";
 /**
  * Unit tests for buildCorporationLookups — focuses on bond holdings classification.
  * Sovereign bonds held by a corp must contribute to bondsHeldByCorpId so they
@@ -122,6 +126,55 @@ describe("buildCorporationLookups — bond holdings", () => {
 
     const { getDb } = await import("@/lib/mongodb");
     vi.mocked(getDb).mockResolvedValue(db as unknown as Db);
+  });
+
+  it("batches v2 condition boards and tolerates the active refresh window on retry", async () => {
+    const boards = buildOpeningMetricSnapshots1991("lookup-test", 1).map((board) => ({
+      ...board,
+      asOfTurn: 2,
+      lastRefreshFromTurn: 1,
+    }));
+    db.collection("gameState").findOne.mockResolvedValue({
+      _id: "current",
+      preset: "1991-default",
+      currentTurn: 1,
+      currentYear: 1991,
+      startingYear: 1991,
+      isProcessing: true,
+      processingKind: "turn",
+      processingTargetTurn: 2,
+      metricsSystemVersion: "v2",
+      resetWorldId: "lookup-test",
+      resetVersionSeeds: {
+        metrics: {
+          worldId: "lookup-test",
+          revision: RESET_V2_SEED_REVISION.metrics,
+          sourceTurn: 1,
+          completedAt: "verified",
+          verificationHash: "verified",
+          countries: ["IE"],
+        },
+      },
+    });
+    db.collection("macroMetrics").find.mockReturnValue(
+      makeCursor([{ _id: "SCO", countryId: "UK", economic: {} }])
+    );
+    db.collection("resetMetricSnapshots").find.mockReturnValue(makeCursor(boards));
+    const result = await buildCorporationLookups(db as unknown as Db);
+    const observations = {
+      ...boards.find((board) => board._id === "UK:SCO")!.observations,
+      ...boards.find((board) => board._id === "UK:national")!.observations,
+    };
+    expect(result.regionalConditionMarginByState!.get("SCO")).toBe(
+      computeRegionalConditionMargin(
+        evaluateResetApprovalModifiers(observations, {
+          countryId: "UK",
+          preset: "1991-default",
+          year: null,
+        })
+      )
+    );
+    expect(db.collectionMocks.resetMetricSnapshots!.find).toHaveBeenCalledOnce();
   });
 
   it("includes sovereign bond holdings in bondsHeldByCorpId", async () => {

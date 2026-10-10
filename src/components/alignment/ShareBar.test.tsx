@@ -15,6 +15,18 @@ const THREE: LedgerPole[] = [
 ];
 
 describe("ShareBar", () => {
+  it("renders any selected custom Bloc color without losing its segment", () => {
+    const { container } = render(
+      <ShareBar
+        poles={[{ id: "ORG:chosen", label: "Chosen", shortLabel: "C", accentToken: "#a855f7" }]}
+        shares={{ "ORG:chosen": 60 }}
+        nonAligned={40}
+      />
+    );
+    const segment = container.querySelector("span")!;
+    expect(segment.style.backgroundColor).toBe("#a855f7");
+    expect(segment.style.width).toBe("60%");
+  });
   it("renders one segment per non-zero share, widths as percentages", () => {
     const { container } = render(
       <ShareBar poles={TWO} shares={{ WEST: 22, EAST: 50 }} nonAligned={28} />

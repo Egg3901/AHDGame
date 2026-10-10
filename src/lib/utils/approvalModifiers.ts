@@ -16,6 +16,10 @@
  * - High immigration (migrationRate) is modelled as a net negative.
  */
 
+import {
+  resetApprovalConditions,
+  hasResetApprovalConditions,
+} from "@/lib/resetMetrics/rules/approvalConditions";
 import { getEraConditionShift, isMetricActive } from "@/lib/era/metricCatalog";
 import { marginEffectForModifier } from "@/lib/states/conditions/marginEffects";
 import { resolveModifierDef } from "@/lib/states/conditions/resolveModifierDef";
@@ -53,6 +57,7 @@ export interface ActiveModifier {
 }
 
 export interface EvaluateModifiersOptions {
+  metricVersion?: "v1" | "v2";
   /** Game seed preset (`2019-default`, `1991-default`, …). */
   preset?: string | null;
   /** Region country for per-country threshold patches (US, UK, …). */
@@ -795,9 +800,16 @@ export function evaluateModifiers(
 ): ActiveModifier[] {
   const active: ActiveModifier[] = [];
   for (const def of MODIFIER_DEFS) {
-    const resolved = resolveDefForEvaluation(def, options);
+    const resolved =
+      options?.metricVersion === "v2" && hasResetApprovalConditions(def.id)
+        ? def
+        : resolveDefForEvaluation(def, options);
     if (!resolved) continue;
-    if (resolved.conditions.every((c) => check(metrics, c, options?.year, options?.countryId))) {
+    const conditions =
+      options?.metricVersion === "v2"
+        ? resetApprovalConditions(resolved.id, resolved.conditions)
+        : resolved.conditions;
+    if (conditions.every((c) => check(metrics, c, options?.year, options?.countryId))) {
       active.push({
         id: resolved.id,
         label: resolved.label,

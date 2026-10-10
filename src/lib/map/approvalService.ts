@@ -84,7 +84,7 @@ export async function computeApprovalMap(
   }
 
   // SP4: playable countries color the heatmap from the hybrid political base.
-  const politicalBases = isPoliticalApprovalCountry(countryId)
+  const politicalBases = isPoliticalApprovalCountry(countryId, true)
     ? await loadPoliticalApprovalBases(db, countryId)
     : null;
 
@@ -100,9 +100,10 @@ export async function computeApprovalMap(
       weightingFor(groupsByState, countryId, String(stateId)),
       preset,
       year,
-      isPoliticalApprovalCountry(countryId)
+      isPoliticalApprovalCountry(countryId, true)
         ? (politicalBases?.byRegion.get(String(stateId)) ?? BASE_APPROVAL)
-        : undefined
+        : undefined,
+      politicalBases?.modifiersByRegion?.get(String(stateId))
     );
     result[stateId] = {
       approval,

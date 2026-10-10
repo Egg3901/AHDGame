@@ -124,7 +124,8 @@ export async function computeIndependenceDesireDriftForRegion(
     weightingFor(groupsByState, "UK", id),
     preset,
     year,
-    ukBases?.byRegion.get(id) ?? BASE_APPROVAL
+    ukBases?.byRegion.get(id) ?? BASE_APPROVAL,
+    ukBases?.modifiersByRegion?.get(id)
   );
   const previous = metric.governance?.independenceDesire?.value ?? DEFAULT_INDEPENDENCE_DESIRE;
 
@@ -224,7 +225,8 @@ export async function processIndependenceDesireDrift(
       weightingFor(groupsByState, "UK", stateId),
       preset,
       year,
-      ukBases?.byRegion.get(stateId) ?? BASE_APPROVAL
+      ukBases?.byRegion.get(stateId) ?? BASE_APPROVAL,
+      ukBases?.modifiersByRegion?.get(stateId)
     );
 
     const { drivers, delta, next } = computeIndependenceDesireDriftSnapshot({
