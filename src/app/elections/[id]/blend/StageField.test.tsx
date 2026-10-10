@@ -36,9 +36,9 @@ describe("StageField", () => {
     const fieldRow = name.closest('[data-field-row="candidate-1"]');
     if (!fieldRow) throw new Error("Expected the candidate field row");
     const nameColumn = name.closest('[data-field-part="name-column"]');
-    const identity = fieldRow.querySelector('[data-field-part="identity"]');
-    const subline = fieldRow.querySelector('[data-field-part="subline"]');
-    const action = fieldRow.querySelector('[data-field-part="action"]');
+    const identity = fieldRow.querySelector<HTMLElement>('[data-field-part="identity"]');
+    const subline = fieldRow.querySelector<HTMLElement>('[data-field-part="subline"]');
+    const action = fieldRow.querySelector<HTMLElement>('[data-field-part="action"]');
     const nameParts = [name, ...Array.from(name.querySelectorAll<HTMLElement>("*"))];
 
     expect(viewport.style.width).toBe("390px");
