@@ -886,6 +886,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await partitionedBulkWrite(db.collection("corporateSectors"), sectorOps as any[]);
   }
+  mark("sectorBulkWrite");
   if (corpOps.length > 0 || manufacturingDevelopmentCashOps.length > 0) {
     // Product development is capitalized separately, after operating P&L. The
     // explicit sequence keeps its live cash guard from racing unordered corpOps.
@@ -910,6 +911,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
           foundingCashWitnesses,
           reinvestmentCashWitnesses
         );
+        mark("corpCashWrites");
         if (treasuryCashLedgerEnabled) {
           const { settleCorporateOperatingCash } = await import("./operatingCashSettlement");
           await settleCorporateOperatingCash(
@@ -918,9 +920,11 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
             turn ?? gameState?.currentTurn ?? 1,
             now
           );
+          mark("operatingCashSettlement");
         }
       },
     });
+    mark("developmentCash");
   }
   if (productVentureDomainsEnabled.media || productVentureDomainsEnabled.manufacturing) {
     try {
@@ -944,6 +948,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
     } catch (error) {
       console.error("[corporationTurn] NPP product venture start failed", error);
     }
+    mark("nppVentureStarts");
     try {
       await processProductVentures({
         db,
