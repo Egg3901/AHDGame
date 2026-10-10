@@ -6,6 +6,7 @@ import {
   projectPrimaryDelegateTotals,
   summarizePrimaryProjection,
 } from "./presidentialPrimaryDisplay";
+import { getAllStaggerStates, getTotalDelegatesForFamily } from "@/lib/constants/primaryCalendar";
 
 describe("summarizePrimaryProjection — real-world default allocation", () => {
   it("uses GOP_DEFAULT_ALLOCATION (PR) for known PR states even without an override", () => {
@@ -173,6 +174,27 @@ describe("summarizePrimaryProjection — overview / per-state consistency", () =
     // Delta (delegate share − vote share) flags the amplification.
     const drakeDelta = summary.nationalDelegateSharePct.drake - summary.nationalVoteSharePct.drake;
     expect(drakeDelta).toBeGreaterThan(40);
+  });
+
+  it("uses the active apportionment preset for national delegate totals", () => {
+    const stateIds = getAllStaggerStates();
+    const preset = "1991-default";
+    const totalDelegates = getTotalDelegatesForFamily("gop", preset);
+    const projectedVotesByState = Object.fromEntries(
+      stateIds.map((stateId) => [stateId, { soleCandidate: 1 }])
+    );
+
+    const summary = summarizePrimaryProjection({
+      stateIds,
+      family: "gop",
+      candidateIds: ["soleCandidate"],
+      totalDelegates,
+      projectedVotesByState,
+      preset,
+    });
+
+    expect(summary.nationalDelegateSharePct.soleCandidate).toBe(100);
+    expect(summary.delegatesByCandidate.soleCandidate).toBe(totalDelegates);
   });
 
   it("locks awarded delegates without re-projecting states that already voted", () => {
