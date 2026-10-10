@@ -97,8 +97,12 @@ export async function loadReviewedLawCatalog(input: {
       .toArray(),
   ]);
   if (!board) throw new Error("The v2 current-law board is unavailable");
+  // GDP is stored as a float (the turn writes fractional values); the catalog only
+  // needs whole currency units, so round rather than reject (ticket #1468).
   const resolvedJurisdictionGdp =
-    scope === "national" ? federalBudget?.gdp : Math.round((region?.gdp ?? 0) * 1_000_000);
+    scope === "national"
+      ? Math.round(federalBudget?.gdp ?? 0)
+      : Math.round((region?.gdp ?? 0) * 1_000_000);
   if (!Number.isSafeInteger(resolvedJurisdictionGdp) || (resolvedJurisdictionGdp ?? 0) <= 0) {
     throw new Error("The v2 jurisdiction GDP is unavailable");
   }

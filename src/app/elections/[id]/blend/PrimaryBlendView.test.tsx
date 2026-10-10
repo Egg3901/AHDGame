@@ -452,11 +452,45 @@ describe("what the page rebuild dropped", () => {
     expect(screen.getByText(/You are not filed in the Democratic Party primary/)).toBeTruthy();
   });
 
-  it("lists the field once on a phone: the rail list carries the campaign line", () => {
-    stubFetch(() => detailFor("1", "First Filer"));
-    render(<PrimaryBlendView election={election()} wire={[]} />);
-    // One rail row plus the desktop table's row; the old phone-only list is gone.
-    expect(screen.getAllByText("First Filer")).toHaveLength(2);
+  it("keeps one stage field row in the narrow phone layout", async () => {
+    stubFetch((url) =>
+      url.endsWith("/campaigns")
+        ? {
+            campaigns: [
+              {
+                id: "campaign-1",
+                candidateId: "ch-1-a",
+                candidateName: "First Filer",
+                party: "1",
+                currencyCode: "USD",
+                funds: 1_803_010.26,
+                actions: 8,
+                levels: { fundraising: 1, oppositionResearch: 1, groundGame: 2, mediaSpending: 1 },
+                managerName: null,
+                isExact: true,
+              },
+            ],
+          }
+        : detailFor("1", "First Filer")
+    );
+    const { container } = render(
+      <div style={{ width: 390 }}>
+        <PrimaryBlendView election={election()} wire={[]} />
+      </div>
+    );
+
+    await waitFor(() => expect(container.querySelectorAll("[data-field-row]")).toHaveLength(1));
+    expect(container.querySelector("[data-field-row]")?.textContent).toContain("First Filer");
+    await waitFor(() =>
+      expect(container.querySelector('[data-field-part="campaign-details"]')).not.toBeNull()
+    );
+    const campaignDetails = container.querySelector('[data-field-part="campaign-details"]');
+    expect(campaignDetails?.closest('[data-field-part="action"]')).not.toBeNull();
+    expect(campaignDetails?.getAttribute("style")).toContain("flex-wrap: wrap");
+    expect(campaignDetails?.getAttribute("style")).toContain("width: 100%");
+    expect(campaignDetails?.textContent).toContain("8 act.");
+    expect(campaignDetails?.textContent).toContain("5 lvl");
+    expect(campaignDetails?.textContent).toContain("View campaign");
   });
 
   it("shows the stage actions strip above the map when given", () => {
