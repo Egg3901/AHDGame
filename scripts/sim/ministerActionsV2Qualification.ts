@@ -20,7 +20,6 @@ import { openingNamedGrantClaims1991 } from "../../src/lib/resetFinance/openingO
 import { buildOpeningDepartmentFundingPartition } from "../../src/lib/resetFinance/rules/liveDepartmentAccount";
 import { settleLiveDepartmentTurn } from "../../src/lib/resetFinance/rules/liveDepartmentTurn";
 import { resetActionsForSeat } from "../../src/lib/resetCabinet/catalog";
-import { cabinetActionFunding } from "../../src/lib/resetCabinet/rules/actionFunding";
 import {
   useCabinetAction as activateCabinetAction,
   combineActiveActionEffects,
@@ -84,6 +83,7 @@ const results = countries.map((country) => {
   let history: ActionUseHistory[] = [];
   const actors: Record<string, CabinetActorActionState> = {};
   const uses: Record<string, number> = {};
+  const actionUses: Record<string, number> = {};
   let maxCombinedStrength = 0;
   for (let turn = 1; turn <= 120; turn++) {
     for (const seat of seats) {
@@ -91,30 +91,38 @@ const results = countries.map((country) => {
         (account) => account.countryId === country && account.controllingSeatId === seat.id
       );
       assert(own.length > 0, `${country}:${seat.id} account missing`);
-      const staff = resetActionsForSeat(country, seat.id).find(
+      const staff = resetActionsForSeat(country, seat.id).filter(
         (action) => action.costClass === "Staff"
       );
-      assert(staff, `${country}:${seat.id} Staff action missing`);
-      const funding = cabinetActionFunding({ accounts: own, defenseSeat: false });
-      const used = activateCabinetAction({
-        action: staff,
-        turn,
-        actor: actors[seat.id] ?? { charges: 4, lastRechargeTurn: 1 },
-        seatActive: true,
-        legalAuthority: true,
-        capacityAvailable: true,
-        annualNationalGdp: 1_000_000_000,
-        flexibleOperatingFunds: funding.flexibleFunds,
-        active,
-        history,
-      });
-      actors[seat.id] = used.actor;
-      assert(used.actor.charges >= 0 && used.actor.charges <= 4);
-      assert.equal(used.operatingDebit, 0);
-      if (used.allowed) {
-        active = [...used.active];
-        history = [...used.history];
-        uses[seat.id] = (uses[seat.id] ?? 0) + 1;
+      assert(staff.length >= 2, `${country}:${seat.id} needs two Staff choices`);
+      assert(new Set(staff.map((action) => action.target)).size >= 2);
+      // Rotate the preferred choice, trying alternatives when a target is on
+      // cooldown. Office concurrency and the shared pool still apply.
+      const preferred = (uses[seat.id] ?? 0) % staff.length;
+      for (let offset = 0; offset < staff.length; offset++) {
+        const action = staff[(preferred + offset) % staff.length]!;
+        const used = activateCabinetAction({
+          action,
+          turn,
+          actor: actors[seat.id] ?? { charges: 4, lastRechargeTurn: 1 },
+          seatActive: true,
+          legalAuthority: true,
+          capacityAvailable: true,
+          annualNationalGdp: 1_000_000_000,
+          flexibleOperatingFunds: 0,
+          active,
+          history,
+        });
+        actors[seat.id] = used.actor;
+        assert(used.actor.charges >= 0 && used.actor.charges <= 4);
+        assert.equal(used.operatingDebit, 0);
+        if (used.allowed) {
+          active = [...used.active];
+          history = [...used.history];
+          uses[seat.id] = (uses[seat.id] ?? 0) + 1;
+          actionUses[action.id] = (actionUses[action.id] ?? 0) + 1;
+          break;
+        }
       }
     }
     for (const effect of combineActiveActionEffects(active, turn)) {
@@ -126,7 +134,16 @@ const results = countries.map((country) => {
     seats.every((seat) => (uses[seat.id] ?? 0) >= 2),
     "Every minister must complete multiple action/cooldown cycles"
   );
-  return { country, offices: seats.length, actionUses: uses, maxCombinedStrength };
+  for (const seat of seats) {
+    const staff = resetActionsForSeat(country, seat.id).filter(
+      (action) => action.costClass === "Staff"
+    );
+    assert(
+      staff.every((action) => (actionUses[action.id] ?? 0) >= 2),
+      `${country}:${seat.id} must exercise both choices repeatedly`
+    );
+  }
+  return { country, offices: seats.length, officeUses: uses, actionUses, maxCombinedStrength };
 });
 const bsonBytes = (rows: typeof baseline) =>
   rows.reduce((sum, row) => sum + BSON.serialize(row).length, 0);

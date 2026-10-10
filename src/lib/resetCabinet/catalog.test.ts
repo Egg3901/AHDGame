@@ -18,7 +18,7 @@ describe("reset Cabinet action catalog", () => {
       expect(action.strength).toBeGreaterThan(0);
       expect(action.strength).toBeLessThanOrEqual(0.2);
       expect(action.slot).toBeGreaterThanOrEqual(1);
-      expect(action.slot).toBeLessThanOrEqual(3);
+      expect(action.slot).toBeLessThanOrEqual(4);
     }
   });
 
@@ -54,10 +54,12 @@ describe("reset Cabinet action catalog", () => {
       for (const seat of roster.filter((position) => isSeatActive(position, 1991))) {
         const rows = resetActionsForSeat(country, seat.id);
         expect(rows.length, `${country}:${seat.id}`).toBeGreaterThanOrEqual(2);
+        const staff = rows.filter((action) => action.costClass === "Staff");
+        expect(staff.length, `${country}:${seat.id}`).toBeGreaterThanOrEqual(2);
         expect(
-          rows.some((action) => action.costClass === "Staff"),
+          new Set(staff.map((action) => action.target)).size,
           `${country}:${seat.id}`
-        ).toBe(true);
+        ).toBeGreaterThanOrEqual(2);
       }
     }
   });

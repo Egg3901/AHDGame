@@ -122,30 +122,30 @@ const intelligenceActions: ResetCabinetAction[] = (["US", "UK"] as const).flatMa
 
 const completePortfolioActions = [...portfolioActions, ...intelligenceActions];
 
-// Every office has administrative work even when its legislative account is
+// Every office has two administrative choices even when its legislative account is
 // unfunded. Existing paid actions retain their effects and costs.
 const administrativeActions: ResetCabinetAction[] = completePortfolioActions
-  .filter(
-    (action) =>
-      action.slot === 1 &&
-      !completePortfolioActions.some(
-        (other) =>
-          other.country === action.country &&
-          other.seatId === action.seatId &&
-          other.costClass === "Staff"
-      )
-  )
-  .map((action) => ({
-    ...action,
-    id: `${action.country}:${action.seatId}:staff-review`,
-    slot: 3,
-    title: "Department Delivery Review",
-    strength: Math.min(0.08, action.strength),
-    costClass: "Staff" as const,
-    brief: `Review existing departmental work on ${action.targetNames.join(" and ")}.`,
-    description:
-      "Review existing departmental work within the office's portfolio. Uses one shared ministerial charge for 12 turns, with no incremental cash debit. Strength is capped at 0.08 on the first target and half on a second target. Existing office concurrency and target cooldown limits apply. This does not replace legislation, create money, or bypass legal authority.",
-  }));
+  .filter((action) => action.slot === 1)
+  .flatMap((first) => {
+    const office = completePortfolioActions.filter(
+      (action) => action.country === first.country && action.seatId === first.seatId
+    );
+    const staff = office.filter((action) => action.costClass === "Staff");
+    return office
+      .filter((action) => !staff.some((existing) => existing.target === action.target))
+      .slice(0, Math.max(0, 2 - staff.length))
+      .map((action, index) => ({
+        ...action,
+        id: `${action.country}:${action.seatId}:${index === 0 ? "staff-review" : "staff-casework"}`,
+        slot: 3 + index,
+        title: index === 0 ? "Department Delivery Review" : "Department Casework Review",
+        strength: Math.min(0.08, action.strength),
+        costClass: "Staff" as const,
+        brief: `Review existing departmental work on ${action.targetNames.join(" and ")}.`,
+        description:
+          "Review existing departmental work within the office's portfolio. Uses one shared ministerial charge for 12 turns, with no incremental cash debit. Strength is capped at 0.08 on the first target and half on a second target. Existing office concurrency and target cooldown limits apply. This does not replace legislation, create money, or bypass legal authority.",
+      }));
+  });
 
 export const resetCabinetActions: readonly ResetCabinetAction[] = [
   ...completePortfolioActions,

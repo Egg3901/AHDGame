@@ -20,25 +20,31 @@ describe("Cabinet account and administrative coverage", () => {
       for (const seat of getCabinetPositions(countryId)) {
         const own = accounts.filter((account) => account.controllingSeatId === seat.id);
         expect(own.length, seat.id).toBeGreaterThan(0);
-        const action = resetActionsForSeat(countryId, seat.id).find(
+        const actions = resetActionsForSeat(countryId, seat.id).filter(
           (row) => row.costClass === "Staff"
         );
-        expect(action, seat.id).toBeDefined();
+        expect(actions.length, seat.id).toBeGreaterThanOrEqual(2);
+        expect(
+          new Set(actions.map((action) => action.target)).size,
+          seat.id
+        ).toBeGreaterThanOrEqual(2);
         const funding = cabinetActionFunding({ accounts: own, defenseSeat: false });
-        const used = activateCabinetAction({
-          action: action!,
-          turn: 100,
-          actor: { charges: 4, lastRechargeTurn: 100 },
-          seatActive: true,
-          legalAuthority: true,
-          capacityAvailable: true,
-          annualNationalGdp: 1_000_000_000,
-          flexibleOperatingFunds: funding.flexibleFunds,
-          active: [],
-          history: [],
-        });
-        expect(used.allowed, seat.id).toBe(true);
-        expect(used.operatingDebit, seat.id).toBe(0);
+        for (const action of actions) {
+          const used = activateCabinetAction({
+            action,
+            turn: 100,
+            actor: { charges: 4, lastRechargeTurn: 100 },
+            seatActive: true,
+            legalAuthority: true,
+            capacityAvailable: true,
+            annualNationalGdp: 1_000_000_000,
+            flexibleOperatingFunds: funding.flexibleFunds,
+            active: [],
+            history: [],
+          });
+          expect(used.allowed, seat.id).toBe(true);
+          expect(used.operatingDebit, seat.id).toBe(0);
+        }
       }
       expect(
         accounts.every(

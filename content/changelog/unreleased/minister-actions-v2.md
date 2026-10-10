@@ -16,6 +16,6 @@ areas: [fullstack]
 
 ## What changed
 
-- Every v2 ministry has an institutional account and administrative actions that do not require a legislative appropriation.
+- Every v2 ministry has an institutional account and at least two distinct administrative actions that do not require a legislative appropriation.
 - The Actions tab and charge counter show the current v2 pool. Unimplemented Programs tabs are hidden, and unavailable action records show an explicit notice.
 - Paid actions still require available department cash. Existing balances, obligations and legislative funding are preserved.
