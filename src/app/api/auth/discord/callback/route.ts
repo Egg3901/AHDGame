@@ -39,6 +39,7 @@ import {
 import { assertRegistrationAllowed } from "@/lib/auth/registrationGate";
 import { normalizeIp } from "@/lib/utils/ipNormalize";
 import { classifyDevice } from "@/lib/utils/userAgent";
+import { appHandbackPage, shouldHandBackToApp } from "@/lib/discordAppHandback";
 import { checkIpFireAndForget } from "@/lib/ip/ipteoh";
 import { AUTH_LIMITS, checkRateLimit } from "@/lib/api/rateLimit";
 import type { User, GameConfig } from "@/lib/db/types";
@@ -95,6 +96,11 @@ export async function GET(request: Request) {
   }
 
   if (!mode) {
+    // The Android app sent Discord's consent page out to the system and the
+    // phone's browser followed the redirect here. Send it back to the app.
+    if (shouldHandBackToApp(state, code, request.headers.get("user-agent"))) {
+      return appHandbackPage(new URL(`${url.pathname}${url.search}`, baseUrl));
+    }
     return linkRedirect(resultUrl("error", "session_expired"));
   }
 

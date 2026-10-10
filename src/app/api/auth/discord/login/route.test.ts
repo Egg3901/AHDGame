@@ -71,3 +71,30 @@ describe("GET /api/auth/discord/login — Lakeside returnTo", () => {
     expect(safeLakesideLoginReturn("https://evil.example/auth/ahd?return=x")).toBeNull();
   });
 });
+
+describe("GET /api/auth/discord/login: Android app state marker", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    process.env.DISCORD_CLIENT_ID = "client";
+    process.env.DISCORD_REDIRECT_URI = "https://ahousedividedgame.com/api/auth/discord/callback";
+  });
+
+  it("prefixes the state for the Android app and not for browsers", async () => {
+    const { GET } = await import("./route");
+    const stateFor = async (ua: string) => {
+      cookieSet.mockClear();
+      await GET(
+        new Request("https://ahousedividedgame.com/api/auth/discord/login", {
+          headers: { "user-agent": ua },
+        })
+      );
+      return cookieSet.mock.calls.find(([name]) => name === "discord_oauth_state")?.[1] as string;
+    };
+    expect(await stateFor("Mozilla/5.0 (Linux; Android 16; wv) AHDClient-Mobile/2.5.0")).toMatch(
+      /^app-[0-9a-f]{64}$/
+    );
+    expect(await stateFor("Mozilla/5.0 (Linux; Android 16) SamsungBrowser/28.0")).toMatch(
+      /^[0-9a-f]{64}$/
+    );
+  });
+});

@@ -15,6 +15,9 @@ import { PresidentialStage, presidentialTitle } from "./PresidentialStage";
 import { presidentialResultsLive } from "./liveState";
 import { StageField, candidateLinks } from "./StageField";
 import { EndorseControl } from "./EndorseControl";
+import { ElectionDatesLine } from "./ElectionDatesLine";
+import { tierPrimaryRoute } from "@/lib/urls";
+import { useSignedIn } from "@/contexts/AuthDataContext";
 import { PartyLogo } from "@/components/PartyLogo";
 import type { CountryId } from "@/lib/constants/countries";
 import { PresidentialMap } from "./presMap/PresidentialMap";
@@ -40,6 +43,8 @@ export interface PrimaryBlendViewProps {
   stageTitle?: string;
   /** Previous / next cycle links for the top of the stage's left rail. */
   stageNav?: React.ReactNode;
+  /** The reader's enter / withdraw buttons, shown above the map. */
+  stageActions?: React.ReactNode;
   /** A state to open on arrival (`?state=OH`). */
   initialFocus?: string | null;
   /** Re-reads the election after an action lands, such as an endorsement. */
@@ -344,9 +349,11 @@ export function PrimaryBlendView({
   wire,
   stageTitle = presidentialTitle(election.electionYear),
   stageNav,
+  stageActions,
   initialFocus,
   onRefresh,
 }: PrimaryBlendViewProps) {
+  const signedIn = useSignedIn();
   // The reader's endorsement, kept locally so the button flips at once; the
   // election payload catches up on the next refresh.
   const [endorsedOverride, setEndorsedOverride] = useState<{
@@ -677,6 +684,7 @@ export function PrimaryBlendView({
             ) : null
           }
           nav={stageNav}
+          actions={stageActions}
           strip={
             vm.parties.length > 1 ? (
               <div
@@ -727,6 +735,23 @@ export function PrimaryBlendView({
                   />
                 ))}
               </div>
+              {election.countryId === "US" && vm.parties.length > 0 ? (
+                <nav
+                  aria-label="Full primary pages"
+                  style={{ marginTop: 10, display: "flex", flexWrap: "wrap", gap: "4px 12px" }}
+                >
+                  {vm.parties.map((p) => (
+                    <Link
+                      key={p.id}
+                      href={tierPrimaryRoute("president", p.id)}
+                      className="hover:underline"
+                      style={{ fontSize: 12, color: BLEND.accentInk }}
+                    >
+                      {p.shortName} primary page
+                    </Link>
+                  ))}
+                </nav>
+              ) : null}
               {vm.delegateRace ? (
                 <div
                   style={{
@@ -762,32 +787,45 @@ export function PrimaryBlendView({
                       partyName: c?.partyName ?? "",
                       color: f.color,
                       figure: `${f.pct}%`,
-                      sub: f.delegates ? `${f.delegates} del.` : f.statusText,
+                      sub: f.delegates
+                        ? `${f.delegates} proj.${f.delegatesAwarded ? ` · ${f.delegatesAwarded} won` : ""}`
+                        : f.statusText,
                       isYou: f.isYou,
                       action: (
-                        <EndorseControl
-                          electionId={electionId}
-                          candidateId={f.id}
-                          myCharId={election.myCharId}
-                          isYou={f.isYou}
-                          endorsed={endorsedId === f.id}
-                          // The route only takes own-party endorsements in a
-                          // primary; an unknown viewer party (stale payload)
-                          // keeps the button and lets the route answer.
-                          eligible={
-                            !c?.party ||
-                            election.myPartyId === undefined ||
-                            c.party === election.myPartyId
-                          }
-                          onChanged={(id) => {
-                            setEndorsedOverride({ base: election.myEndorsedCandidateId, id });
-                            onRefresh?.();
-                          }}
-                        />
+                        <>
+                          <div className="lg:hidden">
+                            <MobileCampaignLine
+                              campaign={campaignForRow(f.id)}
+                              loading={campaignsLoading}
+                            />
+                          </div>
+                          <EndorseControl
+                            electionId={electionId}
+                            candidateId={f.id}
+                            myCharId={election.myCharId}
+                            isYou={f.isYou}
+                            endorsed={endorsedId === f.id}
+                            // The route only takes own-party endorsements in a
+                            // primary; an unknown viewer party (stale payload)
+                            // keeps the button and lets the route answer.
+                            eligible={
+                              !c?.party ||
+                              election.myPartyId === undefined ||
+                              c.party === election.myPartyId
+                            }
+                            onChanged={(id) => {
+                              setEndorsedOverride({ base: election.myEndorsedCandidateId, id });
+                              onRefresh?.();
+                            }}
+                          />
+                        </>
                       ),
                     };
                   })}
                 />
+                <div className="lg:hidden">
+                  <FogNote campaigns={campaigns} />
+                </div>
               </div>
               {vm.standfirst ? (
                 <p
@@ -879,7 +917,7 @@ export function PrimaryBlendView({
                       color: BLEND.muted,
                     }}
                   >
-                    {vm.standingNote}
+                    {signedIn ? vm.standingNote : "Sign in to see where you stand."}
                   </p>
                 )}
 
@@ -892,6 +930,11 @@ export function PrimaryBlendView({
                   <CalendarWaves vm={vm} onSelect={selectState} />
                 </div>
               ) : null}
+
+              <div style={{ paddingTop: 20, borderTop: `1px solid ${BLEND.hairline}` }}>
+                <div style={{ ...BLEND_LABEL, paddingBottom: 8 }}>Key dates</div>
+                <ElectionDatesLine election={election} />
+              </div>
 
               {vm.campaign ? (
                 <div style={{ paddingTop: 20, borderTop: `1px solid ${BLEND.hairline}` }}>
@@ -988,7 +1031,7 @@ export function PrimaryBlendView({
                     <>
                       <span>Shaded by when each state votes</span>
                       <span style={{ color: BLEND.caution }}>Yellow = next wave</span>
-                      <span>Sign in to see who leads each state</span>
+                      <span>Who leads each state shows once the board loads</span>
                     </>
                   )}
                 </div>
@@ -998,60 +1041,13 @@ export function PrimaryBlendView({
         />
 
         <div className={BLEND_CONTAINER} style={{ background: BLEND.page }}>
-          <BlendSection title="The field" ruled={false}>
-            <div className="hidden lg:block">{fieldRows}</div>
-            <div className="lg:hidden">
-              {vm.field.map((c) => (
-                <div
-                  key={c.id}
-                  style={{ padding: "12px 0", borderBottom: "1px solid rgba(42,42,61,.6)" }}
-                >
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "baseline",
-                      justifyContent: "space-between",
-                      gap: 8,
-                    }}
-                  >
-                    <span style={{ fontFamily: FONT.sans, fontSize: 16, fontWeight: 600 }}>
-                      {c.name}
-                    </span>
-                    <span style={{ fontFamily: FONT.mono, fontSize: 14 }}>{c.pct}%</span>
-                  </div>
-                  <div style={{ marginTop: 7, height: 4, background: BLEND.hairline }}>
-                    <i
-                      style={{
-                        display: "block",
-                        height: "100%",
-                        width: `${c.barPct}%`,
-                        background: c.color,
-                        opacity: c.advancing ? 1 : 0.5,
-                      }}
-                    />
-                  </div>
-                  <div
-                    style={{
-                      marginTop: 5,
-                      display: "flex",
-                      justifyContent: "space-between",
-                      fontSize: 11,
-                      color: BLEND.mutedDim,
-                    }}
-                  >
-                    <span style={{ fontFamily: FONT.sans }}>{c.statusText}</span>
-                    <span style={{ fontFamily: FONT.mono }}>
-                      {c.delegates
-                        ? `${c.delegates} proj.${c.delegatesAwarded ? ` · ${c.delegatesAwarded} won` : ""}`
-                        : ""}
-                    </span>
-                  </div>
-                  <MobileCampaignLine campaign={campaignForRow(c.id)} loading={campaignsLoading} />
-                </div>
-              ))}
-              <FogNote campaigns={campaigns} />
-            </div>
-          </BlendSection>
+          {/* Phones read the field from the stage's list above, which carries
+              the campaign line too, so this table is the wide layout's. */}
+          <div className="hidden lg:block">
+            <BlendSection title="The field" ruled={false}>
+              {fieldRows}
+            </BlendSection>
+          </div>
         </div>
       </div>
     </>

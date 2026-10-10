@@ -6,6 +6,7 @@ import Link from "next/link";
 import React, { useState, useEffect, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useToast } from "@/contexts/ToastContext";
+import { useSignedIn } from "@/contexts/AuthDataContext";
 import { resolveElectionYear } from "@/lib/utils/formatters";
 import { useGameTurnStatus } from "@/hooks/useGameEvents";
 import { DEFAULT_CYCLE_ANCHOR_CONTEXT } from "@/lib/elections/cycleAnchorContext";
@@ -144,8 +145,19 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
   // Fetching once would freeze the strip at page load: the delegate race and
   // the board would move on a turn boundary while the returns beside them still
   // showed whatever had happened before the reader opened the page.
+  //
+  // Only fetched where the ticker will draw it: a presidential race with
+  // results coming in, for a signed-in reader. The feed is sign-in only, so a
+  // signed-out visitor's request could only 401.
+  const signedIn = useSignedIn();
+  const wireWanted =
+    signedIn &&
+    election?.electionType === "president" &&
+    election.countryId !== "RU" &&
+    presidentialResultsLive(election);
   const fetchWire = React.useCallback(
     async (signal?: AbortSignal) => {
+      if (!wireWanted) return;
       try {
         const res = await fetch(`/api/elections/${id}/wire?limit=8`, { signal });
         if (!res.ok) return;
@@ -159,7 +171,7 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
         // non-critical: the ticker keeps whatever it last had
       }
     },
-    [id]
+    [id, wireWanted]
   );
 
   useEffect(() => {
@@ -503,28 +515,6 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
           onChange={setHuDistrictId}
         />
       )}
-      {election.myCharId && !localIsEnded && (canEnter || canWithdraw) ? (
-        <div className="mb-3 flex gap-2">
-          {canEnter && (
-            <button
-              onClick={handleEnter}
-              disabled={actionLoading}
-              className="flex-1 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-primary/90 disabled:opacity-50"
-            >
-              {actionLoading ? "…" : "Enter race"}
-            </button>
-          )}
-          {canWithdraw && (
-            <button
-              onClick={handleWithdraw}
-              disabled={actionLoading}
-              className="flex-1 rounded-lg border border-error/50 bg-error/10 px-4 py-2 text-sm font-semibold text-error transition-colors hover:bg-error/20 disabled:opacity-50"
-            >
-              {actionLoading ? "…" : "Withdraw"}
-            </button>
-          )}
-        </div>
-      ) : null}
       <p className="mb-1 text-xs text-muted">
         <Link href="/wiki/reference-offices" className="text-primary hover:underline">
           What the presidency can do
@@ -536,6 +526,32 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
       </p>
     </div>
   );
+
+  // The reader's own action on the race sits in a strip under the masthead,
+  // above the map, so it is not buried under the map on a phone.
+  const stageActions =
+    election.myCharId && !localIsEnded && (canEnter || canWithdraw) ? (
+      <div className="flex gap-2">
+        {canEnter && (
+          <button
+            onClick={handleEnter}
+            disabled={actionLoading}
+            className="flex-1 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-primary/90 disabled:opacity-50"
+          >
+            {actionLoading ? "…" : "Enter race"}
+          </button>
+        )}
+        {canWithdraw && (
+          <button
+            onClick={handleWithdraw}
+            disabled={actionLoading}
+            className="flex-1 rounded-lg border border-error/50 bg-error/10 px-4 py-2 text-sm font-semibold text-error transition-colors hover:bg-error/20 disabled:opacity-50"
+          >
+            {actionLoading ? "…" : "Withdraw"}
+          </button>
+        )}
+      </div>
+    ) : null;
 
   // Below the stage only what the stage does not already show: the race
   // detail tabs (campaign presence, trends, state drivers, turnout and the
@@ -642,6 +658,7 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
           onRefresh={fetchElection}
           stageTitle={presidentialTitle(electionYear)}
           stageNav={stageRailTop}
+          stageActions={stageActions}
           initialFocus={focusStateParam}
         />
 
@@ -672,6 +689,7 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
           onRefresh={fetchElection}
           stageTitle={presidentialTitle(electionYear)}
           stageNav={stageRailTop}
+          stageActions={stageActions}
           initialFocus={focusStateParam}
         />
 

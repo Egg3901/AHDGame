@@ -12,6 +12,8 @@ export interface GeneralBlendViewProps {
   stageTitle?: string;
   /** Previous / next cycle links for the top of the stage's left rail. */
   stageNav?: ReactNode;
+  /** The reader's enter / withdraw buttons, shown above the map. */
+  stageActions?: ReactNode;
   /** A state to open on arrival (`?state=OH`). */
   initialFocus?: string | null;
 }

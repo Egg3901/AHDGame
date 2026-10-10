@@ -12,6 +12,9 @@ vi.mock("next-intl", () => ({
     values?.state ? `${key}:${String(values.state)}` : key,
 }));
 
+const auth = vi.hoisted(() => ({ signedIn: true }));
+vi.mock("@/contexts/AuthDataContext", () => ({ useSignedIn: () => auth.signedIn }));
+
 function detailFor(partyId: string, leader: string): PrimaryPartyDetail {
   return {
     partyId,
@@ -102,6 +105,7 @@ function stubFetch(handler: (url: string) => unknown) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  auth.signedIn = true;
 });
 
 describe("PrimaryBlendView", () => {
@@ -404,5 +408,67 @@ describe("the party switcher and endorse buttons", () => {
     stubFetch(() => detailFor("1", "First Filer"));
     render(<PrimaryBlendView election={withViewer(null)} wire={[]} />);
     expect(screen.queryByRole("button", { name: "Endorse" })).toBeNull();
+  });
+});
+
+describe("what the page rebuild dropped", () => {
+  it("links every party's full primary page", () => {
+    stubFetch(() => detailFor("1", "First Filer"));
+    render(<PrimaryBlendView election={election()} wire={[]} />);
+    const nav = screen.getByRole("navigation", { name: "Full primary pages" });
+    const hrefs = Array.from(nav.querySelectorAll("a")).map((a) => a.getAttribute("href"));
+    expect(hrefs).toEqual(["/president/primary/1", "/president/primary/2"]);
+  });
+
+  it("shows no party page links outside the US", () => {
+    stubFetch(() => detailFor("1", "First Filer"));
+    const e = { ...election(), countryId: "GB" } as unknown as ElectionDetail;
+    render(<PrimaryBlendView election={e} wire={[]} />);
+    expect(screen.queryByRole("navigation", { name: "Full primary pages" })).toBeNull();
+  });
+
+  it("states when the primary ends and when the general election is held", () => {
+    stubFetch(() => detailFor("1", "First Filer"));
+    const e = { ...election(), electionYear: 1992 } as unknown as ElectionDetail;
+    render(<PrimaryBlendView election={e} wire={[]} />);
+    const dates = screen.getByLabelText("Key dates");
+    expect(dates.textContent).toContain("Primary ends");
+    expect(dates.textContent).toContain("5 turns");
+    expect(dates.textContent).toContain("General election · 1992");
+    expect(dates.textContent).toContain("17 turns");
+  });
+
+  it("tells a signed-out visitor to sign in rather than that they are not filed", () => {
+    auth.signedIn = false;
+    stubFetch(() => detailFor("1", "First Filer"));
+    render(<PrimaryBlendView election={election()} wire={[]} />);
+    expect(screen.queryByText(/You are not filed/)).toBeNull();
+    expect(screen.getByText("Sign in to see where you stand.")).toBeTruthy();
+  });
+
+  it("keeps the not-filed note for a signed-in player in another party", () => {
+    stubFetch(() => detailFor("1", "First Filer"));
+    render(<PrimaryBlendView election={election()} wire={[]} />);
+    expect(screen.getByText(/You are not filed in the Democratic Party primary/)).toBeTruthy();
+  });
+
+  it("lists the field once on a phone: the rail list carries the campaign line", () => {
+    stubFetch(() => detailFor("1", "First Filer"));
+    render(<PrimaryBlendView election={election()} wire={[]} />);
+    // One rail row plus the desktop table's row; the old phone-only list is gone.
+    expect(screen.getAllByText("First Filer")).toHaveLength(2);
+  });
+
+  it("shows the stage actions strip above the map when given", () => {
+    stubFetch(() => detailFor("1", "First Filer"));
+    render(
+      <PrimaryBlendView
+        election={election()}
+        wire={[]}
+        stageActions={<button type="button">Enter race</button>}
+      />
+    );
+    const strip = screen.getByTestId("stage-actions");
+    expect(strip.textContent).toBe("Enter race");
   });
 });
