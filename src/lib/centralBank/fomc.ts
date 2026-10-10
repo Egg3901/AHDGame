@@ -106,6 +106,25 @@ export function boardCanCarryMotions(board: FomcSeat[]): boolean {
   return seated >= majorityThreshold(board.length);
 }
 
+/**
+ * Ballots that still belong to a seated governor. A seat that went vacant
+ * mid-meeting (term expiry, removal) can leave its auto ballot behind; that
+ * ballot must not count, or the tally shows more votes than there are members
+ * (ticket #1463).
+ */
+export function seatedBallots<B extends { seatId: string }>(
+  ballots: readonly B[],
+  board: readonly { seatId: string; occupantType: string }[]
+): B[] {
+  const seated = new Set(board.filter((s) => s.occupantType !== "vacant").map((s) => s.seatId));
+  const seen = new Set<string>();
+  return ballots.filter((b) => {
+    if (!seated.has(b.seatId) || seen.has(b.seatId)) return false;
+    seen.add(b.seatId);
+    return true;
+  });
+}
+
 export interface FomcTally {
   agree: number;
   disagree: number;
