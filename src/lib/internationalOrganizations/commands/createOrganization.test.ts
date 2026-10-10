@@ -102,7 +102,7 @@ describe("createInternationalOrganization", () => {
         charter: "Members coordinate foreign policy and collective security.",
         leadershipTitle: "Secretary-General",
         category: "bloc",
-        alignmentAccentToken: "warning",
+        alignmentAccentToken: "#a855f7",
       },
     });
 
@@ -112,7 +112,7 @@ describe("createInternationalOrganization", () => {
       expect.objectContaining({
         id: "andes-pact",
         category: "bloc",
-        alignment: { poleId, accentToken: "warning" },
+        alignment: { poleId, accentToken: "#a855f7" },
       })
     );
     expect(insertedMembership).toHaveBeenCalledWith(

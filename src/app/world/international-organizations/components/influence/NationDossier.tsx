@@ -5,6 +5,7 @@ import { useState } from "react";
 import { useTranslations } from "next-intl";
 import { previewEffectivePlay } from "@/lib/alignment/rules/previewEffectivePlay";
 import { POLE_TEXT, ShareBar } from "@/components/alignment/ShareBar";
+import { alignmentColor } from "@/lib/constants/alignmentColors";
 import type { InfluenceTarget, OrgInfluenceView } from "@/lib/alignment/queries/orgInfluence";
 import { formatShare, roundToShareGrid } from "@/lib/alignment/normalize";
 import { MIN_PLAY_POINTS } from "@/lib/alignment/influence";
@@ -82,7 +83,11 @@ export function NationDossier({ view, target, orgId, viewerCountryId, onCommitte
         />
         <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-body-xs">
           {view.poles.map((p) => (
-            <span key={p.id} className={`font-mono tabular-nums ${POLE_TEXT[p.accentToken]}`}>
+            <span
+              key={p.id}
+              className={`font-mono tabular-nums ${POLE_TEXT[p.accentToken] ?? ""}`}
+              style={{ color: alignmentColor(p.accentToken) }}
+            >
               {p.label} {formatShare(target.shares[p.id] ?? 0)}
             </span>
           ))}
@@ -146,7 +151,10 @@ export function NationDossier({ view, target, orgId, viewerCountryId, onCommitte
         ) : (
           intel.map((e, i) => (
             <p key={`${e.poleLabel}-${i}`} className="text-body-sm text-foreground">
-              <span className={POLE_TEXT[e.accentToken]}>
+              <span
+                className={POLE_TEXT[e.accentToken]}
+                style={{ color: alignmentColor(e.accentToken) }}
+              >
                 {t(e.pointsLanded == null ? "rivalUnknown" : "rivalGain", {
                   pole: e.poleLabel,
                   points: formatShare(e.pointsLanded ?? 0),

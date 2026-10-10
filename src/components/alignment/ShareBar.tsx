@@ -1,6 +1,7 @@
 import type { AlignmentPoleId, AlignmentPoleToken } from "@/lib/constants/alignmentEras";
 import { formatShare } from "@/lib/alignment/normalize";
 import type { LedgerPole } from "@/lib/alignment/queries/worldAlignment";
+import { alignmentColor } from "@/lib/constants/alignmentColors";
 
 /**
  * Static token → class maps. Tailwind scans source text, so an interpolated
@@ -66,7 +67,12 @@ export function ShareBar({
         <span
           key={s.pole.id}
           className={POLE_BG[s.pole.accentToken]}
-          style={{ width: `${s.value}%` }}
+          style={{
+            width: `${s.value}%`,
+            backgroundColor: s.pole.accentToken.startsWith("#")
+              ? alignmentColor(s.pole.accentToken)
+              : undefined,
+          }}
         />
       ))}
       {/* The remainder is not empty space — it is the share no bloc persuaded,

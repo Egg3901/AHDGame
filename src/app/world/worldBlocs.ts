@@ -1,4 +1,5 @@
 import { BLOC_DESIGNATION_PRESETS } from "@/lib/constants/orgCategory";
+import { customBlocPalette } from "@/lib/constants/alignmentColors";
 import { ROSTER_BY_KEY, statusAt, type AlignmentCountryKey } from "@/lib/constants/alignmentRoster";
 import { PRESET_YEAR } from "@/lib/constants/alignmentSeeds";
 import type { CustomMapBloc, MapBlocId } from "@/lib/world/blocMembership";
@@ -68,7 +69,7 @@ export interface MapBlocStyle {
   stroke: string;
 }
 
-const CUSTOM_COLORS: Record<CustomMapBloc["accentToken"], Pick<MapBlocStyle, "fill" | "stroke">> = {
+const CUSTOM_COLORS: Record<string, Pick<MapBlocStyle, "fill" | "stroke">> = {
   info: { fill: "rgba(79, 134, 217, 0.78)", stroke: "rgba(169, 199, 242, 0.55)" },
   error: { fill: "rgba(195, 77, 88, 0.78)", stroke: "rgba(231, 165, 171, 0.55)" },
   warning: { fill: "rgba(197, 139, 32, 0.78)", stroke: "rgba(239, 208, 138, 0.55)" },
@@ -88,7 +89,14 @@ export function buildBlocPalette(
     )
   );
   for (const bloc of customBlocs) {
-    palette[bloc.poleId] = { label: bloc.label, ...CUSTOM_COLORS[bloc.accentToken] };
+    const selected = customBlocPalette(bloc.accentToken);
+    palette[bloc.poleId] = {
+      label: bloc.label,
+      ...(CUSTOM_COLORS[bloc.accentToken] ?? {
+        fill: selected.accent,
+        stroke: selected.accentSoft,
+      }),
+    };
   }
   return palette;
 }
