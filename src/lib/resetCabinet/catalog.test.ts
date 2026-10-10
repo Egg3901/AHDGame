@@ -7,8 +7,10 @@ import { actionSecondaryTarget, actionSecondaryTargets } from "./secondaryTarget
 
 describe("reset Cabinet action catalog", () => {
   it("has distinct, described order slots with no national concurrency gate", () => {
-    expect(resetCabinetActions).toHaveLength(172);
-    expect(new Set(resetCabinetActions.map((action) => action.id)).size).toBe(172);
+    expect(resetCabinetActions.length).toBeGreaterThan(172);
+    expect(new Set(resetCabinetActions.map((action) => action.id)).size).toBe(
+      resetCabinetActions.length
+    );
     for (const action of resetCabinetActions) {
       expect(action.brief.trim()).not.toBe("");
       expect(action.description.trim()).not.toBe("");
@@ -16,7 +18,7 @@ describe("reset Cabinet action catalog", () => {
       expect(action.strength).toBeGreaterThan(0);
       expect(action.strength).toBeLessThanOrEqual(0.2);
       expect(action.slot).toBeGreaterThanOrEqual(1);
-      expect(action.slot).toBeLessThanOrEqual(2);
+      expect(action.slot).toBeLessThanOrEqual(3);
     }
   });
 
@@ -51,7 +53,11 @@ describe("reset Cabinet action catalog", () => {
       }
       for (const seat of roster.filter((position) => isSeatActive(position, 1991))) {
         const rows = resetActionsForSeat(country, seat.id);
-        if (rows.length > 0) expect(rows).toHaveLength(2);
+        expect(rows.length, `${country}:${seat.id}`).toBeGreaterThanOrEqual(2);
+        expect(
+          rows.some((action) => action.costClass === "Staff"),
+          `${country}:${seat.id}`
+        ).toBe(true);
       }
     }
   });

@@ -11,7 +11,7 @@ import { getDb } from "@/lib/mongodb";
 import { getAuthUserWithCharacter } from "@/lib/auth";
 import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { getCabinetMechanics, getCabinetPositions } from "@/lib/constants/cabinetMechanics";
-import { resolveDepartment, resolveSeatName } from "@/lib/cabinet/rosterEra";
+import { resolveDepartment, resolveSeatName, isSeatActive } from "@/lib/cabinet/rosterEra";
 import { barredScopesFor, isActingMember } from "@/lib/cabinet/actingScope";
 import {
   resolveCabinetOfficeVisibility,
@@ -141,7 +141,8 @@ import type { ResetCountry } from "@/lib/resetLegislation/fundingOwner";
 import type { ResetDepartmentAccountSnapshot } from "@/lib/resetFinance/rules/liveDepartmentAccount";
 import { buildResetDepartmentFinanceReadModel } from "@/lib/resetCabinet/readModel";
 import { resetActionsForSeat } from "@/lib/resetCabinet/catalog";
-import { actionOperatingCost, rechargeActionCharges } from "@/lib/resetCabinet/rules/actions";
+import { actionEligibility, rechargeActionCharges } from "@/lib/resetCabinet/rules/actions";
+import { cabinetActionFunding } from "@/lib/resetCabinet/rules/actionFunding";
 import type { ResetCabinetActionState } from "@/lib/resetCabinet/rules/actionState";
 import type { ResetLawProgramDocument } from "@/lib/resetLegislation/program";
 
@@ -886,14 +887,42 @@ export async function GET(_request: Request, { params }: RouteParams) {
                   : resetActionState.sourceTurn,
                 currentTurn
               );
+              const funding = cabinetActionFunding({
+                accounts: resetAccounts,
+                defenseSeat: DEFENSE_POSITION_BY_COUNTRY[countryId] === positionId,
+                defenseAppropriation: budget?.defenseAppropriation,
+              });
               return {
                 charges: actor.charges,
                 nextRechargeTurn: actor.nextRechargeTurn,
                 actions: resetActionsForSeat(countryId as ResetCountry, positionId).map(
-                  (action) => ({
-                    ...action,
-                    operatingCost: actionOperatingCost(action, budget?.gdp ?? 0),
-                  })
+                  (action) => {
+                    const eligibility = actionEligibility({
+                      action,
+                      turn: currentTurn,
+                      charges: actor.charges,
+                      seatActive: Boolean(
+                        positionDef &&
+                        isSeatActive(
+                          positionDef,
+                          liveYear,
+                          new Set(gameState?.manuallyEnabledSeats ?? [])
+                        )
+                      ),
+                      legalAuthority: Boolean(member?.characterId),
+                      capacityAvailable: true,
+                      annualNationalGdp: budget?.gdp ?? 0,
+                      flexibleOperatingFunds: funding.flexibleFunds,
+                      active: resetActionState.active,
+                      history: resetActionState.history,
+                    });
+                    return {
+                      ...action,
+                      operatingCost: eligibility.operatingCost,
+                      allowed: eligibility.allowed,
+                      blockReason: eligibility.reason ?? null,
+                    };
+                  }
                 ),
                 active: resetActionState.active.filter(
                   (entry) => entry.seatId === positionId && entry.expiresTurn > currentTurn

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useToast } from "@/contexts/ToastContext";
 import type { CabinetOfficeData } from "../useCabinetOffice";
+import { useTranslations } from "next-intl";
 
 export function ResetCabinetActionPanel({
   model,
@@ -20,6 +21,7 @@ export function ResetCabinetActionPanel({
   onUpdate: () => void;
 }) {
   const { showToast } = useToast();
+  const translate = useTranslations("worldOrganizations.cabinetActions");
   const [submitting, setSubmitting] = useState<string | null>(null);
   const activeIds = new Set(model.active.map((entry) => entry.actionId));
   const issue = async (actionId: string) => {
@@ -114,12 +116,23 @@ export function ResetCabinetActionPanel({
               </dl>
               <button
                 type="button"
-                disabled={!canAct || active || model.charges < 1 || submitting !== null}
+                disabled={
+                  !canAct ||
+                  action.allowed === false ||
+                  active ||
+                  model.charges < 1 ||
+                  submitting !== null
+                }
                 onClick={() => void issue(action.id)}
                 className="mt-4 rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {active ? "Active" : submitting === action.id ? "Issuing..." : "Use action"}
               </button>
+              {action.blockReason && (
+                <p className="mt-2 text-xs text-muted">
+                  {translate(`blocked.${action.blockReason}`)}
+                </p>
+              )}
             </article>
           );
         })}

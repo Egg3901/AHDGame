@@ -1,3 +1,4 @@
+import { migration as completeCabinetV2Accounts } from "./entries/2026-10-10-complete-cabinet-v2-accounts";
 import { migration as corporateFundPositions } from "./entries/2026-10-09-corporate-fund-positions";
 import { migration as governmentAccountability } from "./entries/2026-10-04-government-accountability";
 import { migration as bankFailurePoliticsIndex } from "./entries/2026-10-04-bank-failure-politics-index";
@@ -363,6 +364,7 @@ export const MIGRATIONS: Migration[] = [
   subhourWikiCadence,
   // Suggestion #363: spin-offs were created with no tech. Additive heal.
   backfillSpinOffTechBaselines,
+  completeCabinetV2Accounts,
 ];
 
 // D13 rollback drill — registered but deliberately OUTSIDE the normal chain.

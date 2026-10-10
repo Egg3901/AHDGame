@@ -5,6 +5,7 @@
  */
 import type { DepartmentDefinition } from "@/lib/governmentFinance/departmentCatalog";
 import type { ResetDepartmentOpeningBoard } from "./departmentBoard";
+import { missingCabinetAccounts } from "@/lib/resetCabinet/rules/accountRoster";
 
 export interface ResetDepartmentAccountSnapshot {
   _id: string;
@@ -202,6 +203,18 @@ export function buildOpeningDepartmentFundingPartition(
     for (const account of countryAccounts) {
       account.balance = account.externallySettled ? 0 : account.annualAuthority;
     }
+  }
+  for (const board of boards) {
+    result.push(
+      ...missingCabinetAccounts({
+        definitions,
+        accounts: result,
+        worldId: board.worldId,
+        countryId: board.countryId,
+        sourceTurn: board.sourceTurn,
+        currentTurn: board.sourceTurn,
+      })
+    );
   }
   return { accounts: result, continuity };
 }

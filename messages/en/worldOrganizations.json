@@ -1,5 +1,18 @@
 {
   "worldOrganizations": {
+    "cabinetActions": {
+      "actionsTab": "Actions",
+      "unavailable": "Cabinet action records are unavailable. Refresh the office or contact an administrator.",
+      "blocked": {
+        "inactive_seat": "This office is not active in the current era.",
+        "no_authority": "This office needs a seated minister.",
+        "no_capacity": "Administrative capacity is unavailable.",
+        "no_charges": "Wait for the next ministerial charge.",
+        "insufficient_funds": "This paid action needs available department funds. Staff work has no cash cost.",
+        "seat_busy": "Wait for the current office action to finish.",
+        "cooldown": "This target is still on cooldown."
+      }
+    },
     "creation": {
       "colorDescription": "Your chosen Bloc color is used for the organization, world map, alignment ledgers, and influence views.",
       "chooseColor": "Choose any color"

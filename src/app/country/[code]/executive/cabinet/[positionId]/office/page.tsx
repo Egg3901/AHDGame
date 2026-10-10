@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
+import { useTranslations } from "next-intl";
 import { useParams } from "next/navigation";
 import { useCabinetOffice } from "./useCabinetOffice";
 import { useMergerReviewQueue } from "./useMergerReviewQueue";
@@ -67,6 +68,7 @@ import { DepartmentFinancePanel } from "./components/DepartmentFinancePanel";
 import { ResetCabinetActionPanel } from "./components/ResetCabinetActionPanel";
 
 export default function CabinetOfficePage() {
+  const translateActions = useTranslations("worldOrganizations.cabinetActions");
   const resolveCountryName = useCountryDisplayName();
   const params = useParams();
   const positionId = params.positionId as string;
@@ -89,6 +91,14 @@ export default function CabinetOfficePage() {
   );
 
   const [activeTab, setActiveTab] = useState<CabinetTabId>("overview");
+  const hashApplied = useRef(false);
+  const flagshipAvailable = Boolean(
+    data?.forceSummary ||
+    data?.estateSummary ||
+    data?.energySummary ||
+    data?.infraSummary ||
+    data?.monetary
+  );
 
   // Deep-link to a tab via the URL hash, e.g. .../office#commands — how the
   // Commanding General's page links back to their command's structure.
@@ -101,6 +111,8 @@ export default function CabinetOfficePage() {
   // trusting the hash, or #treasury on a defence office would select a tab whose
   // body never renders and leave a blank panel.
   useEffect(() => {
+    if (!data || hashApplied.current) return;
+    hashApplied.current = true;
     const wanted = window.location.hash.slice(1);
     if (!wanted || !mechanics) return;
     const available = resolveCabinetTabs({
@@ -109,11 +121,13 @@ export default function CabinetOfficePage() {
       mechanics,
       conflictsEnabled,
       competitionQueueApplies: true,
+      cabinetVersion: data.cabinetVersion,
+      flagshipAvailable,
     });
     if (available.some((t) => t.id === wanted)) setActiveTab(wanted as CabinetTabId);
     // Mount only: a later manual tab change must not be fought by the hash.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [data]);
 
   // A #competition hash can select the tab before the queue has answered. If the
   // answer is that the duty does not apply here, fall back rather than leave a
@@ -200,6 +214,8 @@ export default function CabinetOfficePage() {
     mechanics,
     conflictsEnabled,
     competitionQueueApplies: mergerQueue?.applies === true,
+    cabinetVersion: data.cabinetVersion,
+    flagshipAvailable,
   });
   const isFinance = isFinanceMinister(countryId, positionId);
   const isForeign = isForeignMinister(positionId);
@@ -248,6 +264,12 @@ export default function CabinetOfficePage() {
             group={getCabinetPositionGroup(countryId, positionId)}
             registry={resolveCountryName(countryId as CountryId)}
             tabs={tabs}
+            actionPool={
+              data.cabinetVersion === "v2" && data.resetCabinetActions
+                ? { remaining: data.resetCabinetActions.charges, capacity: 4 }
+                : undefined
+            }
+            showActions={data.cabinetVersion !== "v2" || Boolean(data.resetCabinetActions)}
             activeTab={activeTab}
             onSelectTab={setActiveTab}
             statStrip={
@@ -424,16 +446,7 @@ export default function CabinetOfficePage() {
                     />
                   )}
 
-                  {data.cabinetVersion === "v2" && data.resetCabinetActions ? (
-                    <ResetCabinetActionPanel
-                      model={data.resetCabinetActions}
-                      canAct={canAct}
-                      countryCode={countryCode}
-                      positionId={positionId}
-                      currencySymbol={currencySymbol}
-                      onUpdate={refetch}
-                    />
-                  ) : (
+                  {data.cabinetVersion !== "v2" && (
                     <MinisterialOrderPanel
                       orders={data.orders}
                       activeOrders={data.activeOrders}
@@ -456,6 +469,26 @@ export default function CabinetOfficePage() {
                   )}
                 </>
               )}
+
+              {(activeTab === "overview" || activeTab === "actions") &&
+                data.cabinetVersion === "v2" &&
+                (data.resetCabinetActions ? (
+                  <ResetCabinetActionPanel
+                    model={data.resetCabinetActions}
+                    canAct={canAct}
+                    countryCode={countryCode}
+                    positionId={positionId}
+                    currencySymbol={currencySymbol}
+                    onUpdate={refetch}
+                  />
+                ) : (
+                  <p
+                    role="status"
+                    className="rounded-xl border border-border bg-card p-5 text-muted"
+                  >
+                    {translateActions("unavailable")}
+                  </p>
+                ))}
 
               {activeTab === "treasury" && isFinance && (
                 <>

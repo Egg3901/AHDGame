@@ -6,6 +6,7 @@ import type { MilitaryCommand, CommanderRef, ThreatLevel } from "@/lib/military/
 import type { ConflictAssignment } from "@/lib/military/assignments";
 import type { CorpsMember } from "@/lib/db/collections/characterGenerals";
 import type { CabinetLeverScope } from "@/lib/cabinet/actingScope";
+import type { ActionBlockReason } from "@/lib/resetCabinet/rules/actions";
 import type {
   DepartmentFinanceReadModel,
   DepartmentProgramReadModel,
@@ -90,6 +91,8 @@ export interface CabinetOfficeData {
       brief: string;
       description: string;
       operatingCost: number;
+      allowed?: boolean;
+      blockReason?: ActionBlockReason | null;
     }>;
     active: Array<{
       actionId: string;

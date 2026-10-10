@@ -17,6 +17,10 @@ import type { ResetDepartmentAccountSnapshot } from "@/lib/resetFinance/rules/li
 import type { ResetCountry } from "@/lib/resetLegislation/fundingOwner";
 import type { CountryId } from "@/lib/constants/countries";
 import { DEFENSE_POSITION_BY_COUNTRY } from "@/lib/constants/military";
+import { getCabinetPositions } from "@/lib/constants/cabinetMechanics";
+import { isSeatActive } from "@/lib/cabinet/rosterEra";
+import { resolveGameYear } from "@/lib/era/era";
+import { cabinetActionFunding } from "@/lib/resetCabinet/rules/actionFunding";
 
 const bodySchema = z.object({ actionId: z.string().min(1).max(120) }).strict();
 interface RouteParams {
@@ -43,25 +47,35 @@ export async function POST(request: Request, { params }: RouteParams) {
     if (!action) return errorResponse(400, "Unknown Cabinet action");
 
     const db = await getDb();
-    const member = await getCabinetMembersCollection(db).findOne({
-      countryId: countryId as CountryId,
-      positionId,
-    });
-    const isHolder =
-      member?.characterId &&
-      auth.user.character &&
-      member.characterId.toString() === auth.user.character._id.toString();
-    if ((!isHolder && !auth.user.isAdmin) || !member?.characterId) {
-      return errorResponse(403, "Only the seated Cabinet member or an admin can use this action");
-    }
-    const actorId = member.characterId.toString();
     const result = await runRequiredTransaction(async (session) => {
+      const member = await getCabinetMembersCollection(db).findOne(
+        {
+          countryId: countryId as CountryId,
+          positionId,
+        },
+        { session }
+      );
+      const isHolder =
+        member?.characterId &&
+        auth.user.character &&
+        member.characterId.toString() === auth.user.character._id.toString();
+      if ((!isHolder && !auth.user.isAdmin) || !member?.characterId) {
+        return {
+          status: 403,
+          body: { error: "Only the seated Cabinet member or an admin can use this action" },
+        };
+      }
+      const actorId = member.characterId.toString();
       const gameState = await db.collection<GameState>("gameState").findOne(
         { _id: "current" },
         {
           session,
           projection: {
             currentTurn: 1,
+            currentYear: 1,
+            startingYear: 1,
+            manuallyEnabledSeats: 1,
+            isProcessing: 1,
             resetWorldId: 1,
             metricsSystemVersion: 1,
             cabinetSystemVersion: 1,
@@ -76,60 +90,56 @@ export async function POST(request: Request, { params }: RouteParams) {
         return { status: 409, body: { error: "Cabinet v2 is not enabled in this world" } };
       }
       const country = countryId as ResetCountry;
-      const [state, budget, accounts] = await Promise.all([
-        db
-          .collection<ResetCabinetActionState>("resetCabinetActionStates")
-          .findOne({ _id: country, worldId: gameState.resetWorldId }, { session }),
-        db
-          .collection<FederalBudget>("federalBudget")
-          .findOne({ countryId }, { session, projection: { gdp: 1, defenseAppropriation: 1 } }),
-        db
-          .collection<ResetDepartmentAccountSnapshot>("resetDepartmentAccounts")
-          .find(
-            {
-              worldId: gameState.resetWorldId,
-              countryId: country,
-              controllingSeatId: positionId,
+      if (gameState.isProcessing) {
+        return { status: 409, body: { error: "Wait for the current turn to finish" } };
+      }
+      const seat = getCabinetPositions(countryId).find((position) => position.id === positionId);
+      const seatActive = Boolean(
+        seat &&
+        isSeatActive(
+          seat,
+          resolveGameYear(gameState),
+          new Set(gameState.manuallyEnabledSeats ?? [])
+        )
+      );
+      const state = await db
+        .collection<ResetCabinetActionState>("resetCabinetActionStates")
+        .findOne({ _id: country, worldId: gameState.resetWorldId }, { session });
+      const budget = await db
+        .collection<FederalBudget>("federalBudget")
+        .findOne({ countryId }, { session, projection: { gdp: 1, defenseAppropriation: 1 } });
+      const accounts = await db
+        .collection<ResetDepartmentAccountSnapshot>("resetDepartmentAccounts")
+        .find(
+          {
+            worldId: gameState.resetWorldId,
+            countryId: country,
+            controllingSeatId: positionId,
+          },
+          {
+            session,
+            projection: {
+              _id: 1,
+              worldId: 1,
+              countryId: 1,
+              controllingSeatId: 1,
+              balance: 1,
+              encumbered: 1,
+              annualAuthority: 1,
+              externallySettled: 1,
             },
-            {
-              session,
-              projection: {
-                _id: 1,
-                worldId: 1,
-                countryId: 1,
-                controllingSeatId: 1,
-                balance: 1,
-                encumbered: 1,
-                annualAuthority: 1,
-                externallySettled: 1,
-              },
-            }
-          )
-          .sort({ _id: 1 })
-          .toArray(),
-      ]);
-      if (!state || !budget || accounts.length === 0) {
-        return { status: 503, body: { error: "Cabinet v2 accounts are unavailable" } };
+          }
+        )
+        .sort({ _id: 1 })
+        .toArray();
+      if (!state || !budget) {
+        return { status: 503, body: { error: "Cabinet v2 action state is unavailable" } };
       }
-      const usesExternalAccount = accounts.every((account) => account.externallySettled);
-      const usesDefenseAppropriation =
-        usesExternalAccount && DEFENSE_POSITION_BY_COUNTRY[countryId as CountryId] === positionId;
-      if (usesExternalAccount && !usesDefenseAppropriation) {
-        return {
-          status: 503,
-          body: { error: "This specialized Cabinet account is not connected to v2 actions" },
-        };
-      }
-      const flexibleFunds = usesDefenseAppropriation
-        ? Math.max(
-            0,
-            (budget.defenseAppropriation?.balance ?? 0) -
-              (budget.defenseAppropriation?.encumbered ?? 0)
-          )
-        : accounts.reduce(
-            (sum, account) => sum + Math.max(0, account.balance - account.encumbered),
-            0
-          );
+      const funding = cabinetActionFunding({
+        accounts,
+        defenseSeat: DEFENSE_POSITION_BY_COUNTRY[countryId as CountryId] === positionId,
+        defenseAppropriation: budget.defenseAppropriation,
+      });
       const used = activateCabinetAction({
         action,
         turn: gameState.currentTurn,
@@ -137,11 +147,13 @@ export async function POST(request: Request, { params }: RouteParams) {
           charges: 4,
           lastRechargeTurn: state.sourceTurn,
         },
-        seatActive: true,
+        seatActive,
         legalAuthority: true,
-        capacityAvailable: accounts.some((account) => account.annualAuthority > 0),
+        // A seated minister supplies administrative throughput. Legislative
+        // spending authority is not a measure of the office's capacity.
+        capacityAvailable: true,
         annualNationalGdp: budget.gdp,
-        flexibleOperatingFunds: flexibleFunds,
+        flexibleOperatingFunds: funding.flexibleFunds,
         active: state.active,
         history: state.history,
       });
@@ -149,7 +161,7 @@ export async function POST(request: Request, { params }: RouteParams) {
         return { status: 409, body: { error: used.reason } };
       }
       let remainingDebit = used.operatingDebit;
-      if (usesDefenseAppropriation && remainingDebit > 0) {
+      if (funding.source === "defense" && remainingDebit > 0) {
         const debit = Math.round(remainingDebit);
         const written = await db.collection<FederalBudget>("federalBudget").updateOne(
           {
@@ -174,6 +186,7 @@ export async function POST(request: Request, { params }: RouteParams) {
         remainingDebit -= debit;
       } else {
         for (const account of accounts) {
+          if (account.externallySettled) continue;
           if (remainingDebit <= 0) break;
           const available = Math.max(0, account.balance - account.encumbered);
           const debit = Math.min(available, remainingDebit);

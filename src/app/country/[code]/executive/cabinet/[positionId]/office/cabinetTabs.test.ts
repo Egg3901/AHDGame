@@ -36,6 +36,33 @@ describe("resolveCabinetTabs — RU defense seat gains Commands + Doctrine when 
 });
 
 describe("resolveCabinetTabs", () => {
+  it("gives v2 ministers Actions without advertising an unimplemented Programs tab", () => {
+    const tabs = resolveCabinetTabs({
+      countryId: "JP",
+      positionId: "chief_cabinet_secretary",
+      mechanics: base,
+      cabinetVersion: "v2",
+      flagshipAvailable: false,
+    });
+    expect(tabs.map((tab) => tab.id)).toEqual(["overview", "actions"]);
+  });
+  it("keeps implemented v2 management surfaces beside Actions", () => {
+    const tabs = resolveCabinetTabs({
+      countryId: "US",
+      positionId: "secretary_of_defense",
+      mechanics: base,
+      cabinetVersion: "v2",
+      flagshipAvailable: true,
+      conflictsEnabled: true,
+    });
+    expect(tabs.map((tab) => tab.id)).toEqual([
+      "overview",
+      "actions",
+      "flagship",
+      "commands",
+      "doctrine",
+    ]);
+  });
   it("always includes Overview first and a flagship tab last", () => {
     const tabs = resolveCabinetTabs({
       countryId: "US",

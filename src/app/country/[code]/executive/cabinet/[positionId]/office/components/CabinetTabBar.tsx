@@ -1,6 +1,7 @@
 "use client";
 
 import type { CabinetTab, CabinetTabId } from "../cabinetTabs";
+import { useTranslations } from "next-intl";
 
 export function CabinetTabBar({
   tabs,
@@ -11,6 +12,7 @@ export function CabinetTabBar({
   activeTab: CabinetTabId;
   onSelect: (id: CabinetTabId) => void;
 }) {
+  const translate = useTranslations("worldOrganizations.cabinetActions");
   return (
     <div className="relative -mb-px flex gap-5 overflow-x-auto">
       {tabs.map((t) => {
@@ -26,7 +28,7 @@ export function CabinetTabBar({
                 : "border-transparent text-white/50 hover:text-white/80"
             }`}
           >
-            {t.label}
+            {t.labelKey ? translate(t.labelKey) : t.label}
           </button>
         );
       })}

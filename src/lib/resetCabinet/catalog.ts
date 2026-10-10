@@ -24,6 +24,7 @@ const authored = actions as ResetCabinetAction[];
 const ukActions = authored.filter((action) => action.country === "UK");
 
 const ieSeatSources: Readonly<Record<string, string>> = {
+  taoiseach: "deputy_prime_minister",
   tanaiste: "deputy_prime_minister",
   minister_for_public_expenditure: "first_secretary_of_state",
   minister_for_finance: "chancellor",
@@ -31,6 +32,7 @@ const ieSeatSources: Readonly<Record<string, string>> = {
   minister_for_enterprise: "business_secretary",
   minister_for_health: "health_secretary",
   minister_for_education: "education_secretary",
+  minister_for_further_higher_education: "education_secretary",
   minister_for_housing: "levelling_secretary",
   minister_for_social_protection: "work_secretary",
   minister_for_justice: "home_secretary",
@@ -92,11 +94,62 @@ function localizedActions(
   );
 }
 
-export const resetCabinetActions: readonly ResetCabinetAction[] = [
+const portfolioActions: readonly ResetCabinetAction[] = [
   ...authored,
   ...localizedActions("IE", ieSeatSources),
   ...localizedActions("SCO", successorSeatSources),
   ...localizedActions("WAL", successorSeatSources),
+];
+
+// Intelligence keeps its specialized console; these tasks do not debit its
+// budget or duplicate covert operations.
+const intelligenceActions: ResetCabinetAction[] = (["US", "UK"] as const).flatMap((country) =>
+  authored
+    .filter((action) => action.seatId === "chief_cabinet_secretary")
+    .map((action) => ({
+      ...action,
+      id: `${country}:director_of_intelligence:${action.slot}`,
+      country,
+      seatId: "director_of_intelligence",
+      title: action.slot === 1 ? "Publish Oversight Record" : "Review Disaster Liaison",
+      brief:
+        action.slot === 1
+          ? "Publish accountable oversight findings without revealing operational intelligence."
+          : "Review the service's documented disaster response assignments.",
+      description: action.description.replace("Cabinet decisions", "oversight findings"),
+    }))
+);
+
+const completePortfolioActions = [...portfolioActions, ...intelligenceActions];
+
+// Every office has administrative work even when its legislative account is
+// unfunded. Existing paid actions retain their effects and costs.
+const administrativeActions: ResetCabinetAction[] = completePortfolioActions
+  .filter(
+    (action) =>
+      action.slot === 1 &&
+      !completePortfolioActions.some(
+        (other) =>
+          other.country === action.country &&
+          other.seatId === action.seatId &&
+          other.costClass === "Staff"
+      )
+  )
+  .map((action) => ({
+    ...action,
+    id: `${action.country}:${action.seatId}:staff-review`,
+    slot: 3,
+    title: "Department Delivery Review",
+    strength: Math.min(0.08, action.strength),
+    costClass: "Staff" as const,
+    brief: `Review existing departmental work on ${action.targetNames.join(" and ")}.`,
+    description:
+      "Review existing departmental work within the office's portfolio. Uses one shared ministerial charge for 12 turns, with no incremental cash debit. Strength is capped at 0.08 on the first target and half on a second target. Existing office concurrency and target cooldown limits apply. This does not replace legislation, create money, or bypass legal authority.",
+  }));
+
+export const resetCabinetActions: readonly ResetCabinetAction[] = [
+  ...completePortfolioActions,
+  ...administrativeActions,
 ];
 
 export function resetActionsForSeat(
