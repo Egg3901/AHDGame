@@ -6,7 +6,7 @@ summary: >-
   kept counting, so a motion could show more votes than there were members.
 tags: [central-banks, bugfix]
 badges: [minor]
-areas: [economy]
+areas: [engine]
 ---
 
 ## What changed
