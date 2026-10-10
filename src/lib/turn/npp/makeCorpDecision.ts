@@ -1234,7 +1234,10 @@ export function makeNppCorpDecision(
         levers.allowGrowthCapex &&
         !(ctx.retailExpansionPaused && sector.sectorType === "retail") &&
         stateShortage > NPP_GROWTH_MIN_SHORTAGE &&
-        utilization >= NPP_GROWTH_MIN_UTILIZATION &&
+        // Utilization is measured on throttled output. In a critical shortage
+        // the throttle, not demand, is what holds the run rate down, so the
+        // gate would lock out exactly the capacity the market is missing.
+        (utilization >= NPP_GROWTH_MIN_UTILIZATION || criticalShortage) &&
         (sector.sectorType !== "extraction" || extractionHeadroom > 0);
       // Existing plants pay the same dominance-tolled list price as players.
       const growthShare =

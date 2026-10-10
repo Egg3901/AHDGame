@@ -399,6 +399,16 @@ export const STATE_SECONDARY_SECTOR_MARGIN_BONUS = 2.5;
 export const DEFAULT_PROFIT_MARGIN = 35;
 
 /**
+ * Flat margin charge (percentage points) on every sector's modifier stack.
+ * Sector costs are calibrated to the 35% seed margin and the stack is mostly
+ * positive credits, so the live 1991 world ran a 21.8% median net margin with
+ * 3.6% of corporations losing money against a 4-15% / 10-30% target. A level
+ * shift keeps every corporation's relative position and moves on the next turn
+ * (it rides the plants policy credit), unlike re-seeding the base margin.
+ */
+export const SECTOR_MARGIN_LEVEL_TRIM_PP = 8;
+
+/**
  * Effective margin was previously clamped with a hard `Math.min(100, ...)`. That
  * made 100% a flat target a player could deliberately pin against by stacking
  * additive modifiers (home-state +10, state-primary spec +10, subsidy, tech

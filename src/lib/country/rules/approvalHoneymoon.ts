@@ -1,4 +1,5 @@
 import type { ActiveModifier } from "@/lib/utils/approvalModifiers";
+import { TURNS_PER_YEAR } from "@/lib/constants/turnTime";
 
 /**
  * Rules for two national approval drags that scale with the government's
@@ -10,26 +11,38 @@ import type { ActiveModifier } from "@/lib/utils/approvalModifiers";
 /** Full-strength public expectations drag, in approval points. */
 export const PUBLIC_EXPECTATIONS_FULL_EFFECT = -5;
 
+/** Ramp length when a country's head-of-government term is unknown: a four year term. */
+export const DEFAULT_EXPECTATIONS_RAMP_TURNS = 4 * TURNS_PER_YEAR;
+
 /**
- * Turns in office for the expectations drag to reach full strength. Turns are
- * hourly, so 48 is two real days: long enough that a new leader feels a
- * honeymoon, short enough that nobody coasts on one.
+ * Turns for the expectations drag to reach full strength: the whole term of the
+ * head of government. The office's own term, else the lower house term (a
+ * parliamentary PM serves until the next general election), else four years.
  */
-export const EXPECTATIONS_RAMP_TURNS = 48;
+export function expectationsRampTurns(
+  office: { termYears?: number } | undefined,
+  lowerHouse: { termYears?: number } | undefined
+): number {
+  const years = office?.termYears ?? lowerHouse?.termYears;
+  return typeof years === "number" && years > 0
+    ? Math.round(years * TURNS_PER_YEAR)
+    : DEFAULT_EXPECTATIONS_RAMP_TURNS;
+}
 
 /** Approval penalty for a country with no cabinet seat filled. */
 export const NO_CABINET_PENALTY = 7.5;
 
 /**
  * The public expectations modifier for a head of government who took office on
- * `sinceTurn`. Zero on that turn, linear to the full drag over
- * {@link EXPECTATIONS_RAMP_TURNS}, flat after. An unknown start (`null` or
+ * `sinceTurn`. Zero on that turn, linear to the full drag over `rampTurns`
+ * (the whole term, see {@link expectationsRampTurns}), flat after. An unknown start (`null` or
  * `undefined`, or a start in the future) keeps the full drag, the behaviour
  * before the ramp existed.
  */
 export function publicExpectationsModifier(
   sinceTurn: number | null | undefined,
-  currentTurn: number
+  currentTurn: number,
+  rampTurns: number = DEFAULT_EXPECTATIONS_RAMP_TURNS
 ): ActiveModifier {
   const base = { id: "public_expectations", marginEffect: 0, source: "metric" as const };
   const full: ActiveModifier = {
@@ -41,10 +54,9 @@ export function publicExpectationsModifier(
     return full;
   }
   const turnsInOffice = Math.floor(currentTurn - sinceTurn);
-  if (turnsInOffice >= EXPECTATIONS_RAMP_TURNS) return full;
-  const effect =
-    -Math.round(-PUBLIC_EXPECTATIONS_FULL_EFFECT * (turnsInOffice / EXPECTATIONS_RAMP_TURNS) * 10) /
-    10;
+  const ramp = rampTurns > 0 ? rampTurns : DEFAULT_EXPECTATIONS_RAMP_TURNS;
+  if (turnsInOffice >= ramp) return full;
+  const effect = -Math.round(-PUBLIC_EXPECTATIONS_FULL_EFFECT * (turnsInOffice / ramp) * 10) / 10;
   return {
     ...base,
     label: `Higher public expectations (building up, ${turnsInOffice} ${

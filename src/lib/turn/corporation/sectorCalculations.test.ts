@@ -1050,6 +1050,19 @@ describe("sector revenue and income calculation", () => {
     expect(result.totalIncomeGenerated).toBeCloseTo(500, 2);
   });
 
+  it("charges the world margin trim as a flat cut to the margin stack", () => {
+    const corp = makeCorp();
+    const sector = makeSector(corp._id, { revenue: 24_000, profitMargin: 50 });
+    const lookups = baseLookups([corp], [sector]);
+    lookups.marginLevelTrimPp = 8;
+
+    const result = processSectors(lookups, 1, new Date());
+
+    // Effective margin 50 - 8 = 42: income = 1000 * 0.42.
+    expect(result.totalRevenueGenerated).toBeCloseTo(1_000, 2);
+    expect(result.totalIncomeGenerated).toBeCloseTo(420, 2);
+  });
+
   it("applies state sector specialization as an additive margin bonus", () => {
     const corp = makeCorp();
     const sector = makeSector(corp._id, {

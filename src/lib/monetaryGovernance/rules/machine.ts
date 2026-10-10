@@ -485,6 +485,26 @@ function deadlineHit(meeting: MeetingState, clock: GovernanceClock): boolean {
   return clock.turn >= meeting.resolvesOnTurn || clock.now >= meeting.playerVoteDeadlineMs;
 }
 
+/**
+ * Every ballot that can still arrive has arrived: no seated player is yet to
+ * vote. NPP seats ballot when the meeting opens and vacant seats never do, so
+ * the vote window exists only for players. Without this an all-NPP board sat
+ * on an undecided motion for the full 24-turn window while the economy moved
+ * (1991 live world: a turn-75 "hold" held the US rate through deflation).
+ */
+function allBallotsIn(meeting: MeetingState, board: readonly SeatState[]): boolean {
+  const voted = new Set(meeting.ballots.map((b) => b.seatId));
+  return !board.some((seat) => seat.occupantType === "player" && !voted.has(seat.seatId));
+}
+
+function meetingCloses(
+  meeting: MeetingState,
+  board: readonly SeatState[],
+  clock: GovernanceClock
+): boolean {
+  return deadlineHit(meeting, clock) || allBallotsIn(meeting, board);
+}
+
 function handleTurnStart(
   state: JurisdictionState,
   event: DeadlineEvent,
@@ -518,7 +538,14 @@ function handleTurnStart(
   const hadActiveMeeting = next.activeMeeting != null;
   const meeting = next.activeMeeting;
   if (meeting && meeting.status === "voting") {
-    resolveMeetingInto(state, next, transition, meeting, clock, deadlineHit(meeting, clock));
+    resolveMeetingInto(
+      state,
+      next,
+      transition,
+      meeting,
+      clock,
+      meetingCloses(meeting, next.board, clock)
+    );
   }
 
   if (!hadActiveMeeting && !next.activeMeeting && event.macro && boardCanCarry(next.board)) {
@@ -545,7 +572,14 @@ function handleMeetingDeadline(
   if (!meeting || meeting.status !== "voting") {
     return refuse("already-resolved", "No meeting is taking votes. It already resolved.");
   }
-  resolveMeetingInto(state, next, transition, meeting, clock, deadlineHit(meeting, clock));
+  resolveMeetingInto(
+    state,
+    next,
+    transition,
+    meeting,
+    clock,
+    meetingCloses(meeting, next.board, clock)
+  );
   return { allowed: true, next, transition };
 }
 

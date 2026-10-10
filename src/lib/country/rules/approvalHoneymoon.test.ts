@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
-  EXPECTATIONS_RAMP_TURNS,
+  DEFAULT_EXPECTATIONS_RAMP_TURNS,
+  expectationsRampTurns,
   advanceHeadTenure,
   turnForDate,
   emptyCabinetSeatsModifier,
@@ -16,16 +17,19 @@ describe("publicExpectationsModifier", () => {
   });
 
   it("grows linearly while in the ramp", () => {
-    const mid = publicExpectationsModifier(100, 100 + EXPECTATIONS_RAMP_TURNS / 2);
+    const mid = publicExpectationsModifier(100, 100 + DEFAULT_EXPECTATIONS_RAMP_TURNS / 2);
     expect(mid.effect).toBe(-2.5);
-    expect(mid.label).toBe("Higher public expectations (building up, 24 turns in office)");
+    expect(mid.label).toBe("Higher public expectations (building up, 96 turns in office)");
     expect(publicExpectationsModifier(100, 112).label).toContain("12 turns in office");
     expect(publicExpectationsModifier(100, 101).label).toContain("1 turn in office");
-    expect(publicExpectationsModifier(100, 112).effect).toBe(-1.3);
+    expect(publicExpectationsModifier(100, 112).effect).toBe(-0.3);
   });
 
   it("reaches the full drag at the end of the ramp and stays there", () => {
-    for (const now of [100 + EXPECTATIONS_RAMP_TURNS, 100 + EXPECTATIONS_RAMP_TURNS + 500]) {
+    for (const now of [
+      100 + DEFAULT_EXPECTATIONS_RAMP_TURNS,
+      100 + DEFAULT_EXPECTATIONS_RAMP_TURNS + 500,
+    ]) {
       const mod = publicExpectationsModifier(100, now);
       expect(mod.effect).toBe(-5);
       expect(mod.label).toBe("Higher public expectations");
@@ -129,5 +133,20 @@ describe("turnForDate", () => {
   });
   it("never goes below turn 0", () => {
     expect(turnForDate(new Date("2020-01-01T00:00:00Z"), 94, now, hour)).toBe(0);
+  });
+});
+
+describe("expectationsRampTurns", () => {
+  it("lasts the head of government's whole term", () => {
+    expect(expectationsRampTurns({ termYears: 4 }, { termYears: 2 })).toBe(192);
+    // A parliamentary PM has no fixed term; the next general election bounds it.
+    expect(expectationsRampTurns({}, { termYears: 5 })).toBe(240);
+    expect(expectationsRampTurns(undefined, undefined)).toBe(DEFAULT_EXPECTATIONS_RAMP_TURNS);
+  });
+
+  it("scales the drag across that term", () => {
+    // A US president 45 turns into a 192 turn term: about a quarter of the drag.
+    expect(publicExpectationsModifier(50, 95, 192).effect).toBe(-1.2);
+    expect(publicExpectationsModifier(0, 192, 192).effect).toBe(-5);
   });
 });

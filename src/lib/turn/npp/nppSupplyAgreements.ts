@@ -63,6 +63,16 @@ export const NPP_CONTRACT_GLUT_PREMIUM = -0.1;
 export const NPP_CONTRACT_SHORTAGE_PREMIUM = 0.1;
 /** Share of uncommitted capacity one new contract may take. */
 export const NPP_CONTRACT_CAPACITY_SHARE = 0.25;
+/**
+ * Term of a contract an AI corporation signs or advertises. Two game days, so
+ * AI supply links renew against current capacity and prices instead of
+ * accumulating forever (every live agreement is settled and rewritten each turn).
+ */
+export const NPP_CONTRACT_TERM_TURNS = 48;
+/** Open-ended AI contracts signed before terms existed retire after this grace... */
+export const NPP_CONTRACT_BACKFILL_GRACE_TURNS = 12;
+/** ...spread over this many turns, so supply chains do not all lapse in one turn. */
+export const NPP_CONTRACT_BACKFILL_SPREAD_TURNS = 48;
 
 export type NppAgreementParty = {
   corpId: string;
@@ -724,7 +734,39 @@ export const NPP_SUPPLY_AGREEMENT_PROJECTION = {
   status: 1,
   proposedByCorpId: 1,
   durationTurns: 1,
+  expiresAtTurn: 1,
 } as const;
+
+/**
+ * Expiry for an open-ended AI-to-AI contract signed before AI contracts had a
+ * term. The ObjectId's trailing bytes spread the retirements evenly across
+ * NPP_CONTRACT_BACKFILL_SPREAD_TURNS, deterministically, so a crash-resumed
+ * turn stamps the same value.
+ */
+export function aiContractBackfillExpiry(agreementId: string, turn: number): number {
+  const spread = parseInt(agreementId.slice(-6), 16) % NPP_CONTRACT_BACKFILL_SPREAD_TURNS;
+  return turn + NPP_CONTRACT_BACKFILL_GRACE_TURNS + (Number.isFinite(spread) ? spread : 0);
+}
+
+/** Live AI-to-AI contracts with no expiry: the pre-term backlog to retire. */
+export function openEndedAiContracts(
+  agreements: readonly Pick<
+    SupplyAgreement,
+    "_id" | "status" | "expiresAtTurn" | "supplierCorpId" | "buyerCorpId"
+  >[],
+  nppIds: ReadonlySet<string>
+): ObjectId[] {
+  return agreements
+    .filter(
+      (a) =>
+        a._id != null &&
+        a.status === "active" &&
+        a.expiresAtTurn == null &&
+        nppIds.has(a.supplierCorpId.toString()) &&
+        nppIds.has(a.buyerCorpId.toString())
+    )
+    .map((a) => a._id as ObjectId);
+}
 
 export function toExistingNppAgreement(a: SupplyAgreement): ExistingNppAgreement {
   return {
@@ -785,7 +827,7 @@ export async function syncAiSupplyListings(
   const existing = await collection
     .find(
       { aiListed: true, corporationId: { $in: corpObjectIds } },
-      { projection: { volumeCap: 1, pricePremium: 1, expiresAtTurn: 1 } }
+      { projection: { volumeCap: 1, pricePremium: 1, expiresAtTurn: 1, durationTurns: 1 } }
     )
     .toArray();
   const existingById = new Map(existing.map((e) => [e._id, e]));
@@ -802,6 +844,7 @@ export async function syncAiSupplyListings(
     if (
       prior &&
       prior.pricePremium === spec.pricePremium &&
+      prior.durationTurns === NPP_CONTRACT_TERM_TURNS &&
       Math.abs(prior.volumeCap - volumeCap) <= prior.volumeCap * 0.05 &&
       prior.expiresAtTurn > turn + AI_LISTING_TTL_TURNS / 2
     ) {
@@ -817,6 +860,7 @@ export async function syncAiSupplyListings(
       ...(spec.stateId ? { stateId: spec.stateId } : {}),
       volumeCap,
       pricePremium: spec.pricePremium,
+      durationTurns: NPP_CONTRACT_TERM_TURNS,
       expiresAtTurn: turn + AI_LISTING_TTL_TURNS,
       updatedAt: now,
     };
@@ -1023,6 +1067,9 @@ export async function processNppSupplyAgreements(
         pricePremium: d.pricePremium,
         exclusive: false,
         status: "active",
+        startsAtTurn: turn,
+        durationTurns: NPP_CONTRACT_TERM_TURNS,
+        expiresAtTurn: turn + NPP_CONTRACT_TERM_TURNS,
         proposedByCorpId: new ObjectId(d.supplierCorpId),
         createdAt: now,
         updatedAt: now,
@@ -1033,7 +1080,28 @@ export async function processNppSupplyAgreements(
 
   const agreementsCollection = db.collection<SupplyAgreement>("supplyAgreements");
   const durationById = new Map(agreements.map((a) => [a.id, a.durationTurns]));
-  const [activationResult, cancellationResult] = await Promise.all([
+  // Contracts AI corporations signed with each other before AI contracts had a
+  // term never expire, and every live contract is settled and rewritten each
+  // turn. Give each a staggered expiry; after the first pass this finds none.
+  const openEnded = openEndedAiContracts(rawAgreements, nppIds);
+  const [, activationResult, cancellationResult] = await Promise.all([
+    openEnded.length > 0
+      ? agreementsCollection.bulkWrite(
+          openEnded.map((id) => ({
+            updateOne: {
+              filter: { _id: id, status: "active", expiresAtTurn: { $exists: false } },
+              update: {
+                $set: {
+                  durationTurns: NPP_CONTRACT_TERM_TURNS,
+                  expiresAtTurn: aiContractBackfillExpiry(id.toString(), turn),
+                  updatedAt: now,
+                },
+              },
+            },
+          })),
+          { ordered: false }
+        )
+      : null,
     activations.length > 0
       ? agreementsCollection.bulkWrite(
           activations.map((decision) => {

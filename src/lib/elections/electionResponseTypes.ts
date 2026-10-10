@@ -203,6 +203,8 @@ export interface ElectionResponse {
   generalVotes: GeneralVotesData | null;
   myCharId: string | null;
   myEndorsedCandidateId: string | null;
+  /** The reader's party, set for presidential primaries only. */
+  myPartyId?: string | null;
   isAdmin: boolean;
   gameState: GameStateData | null;
 

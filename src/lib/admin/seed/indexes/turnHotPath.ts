@@ -18,6 +18,12 @@ export const TURN_HOT_PATH_INDEXES: ReadonlyArray<{
     name: "bondHistory_bondId_totalInterestPaid",
   },
   { collection: "shareOrders", key: { status: 1 }, name: "shareOrders_status" },
+  // Serves the corporation turn's live-contract load and its expiry sweep.
+  {
+    collection: "supplyAgreements",
+    key: { status: 1, expiresAtTurn: 1 },
+    name: "supplyAgreements_status_expiresAtTurn",
+  },
   {
     collection: "currencyOrders",
     key: { status: 1, expiryRefundState: 1 },

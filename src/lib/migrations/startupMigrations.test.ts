@@ -52,6 +52,7 @@ describe("runRequiredStartupMigrations", () => {
       "2026-10-08-product-venture-indexes",
       "2026-10-09-campaign-field-office-indexes",
       "2026-10-09-market-cap-tick-indexes",
+      "2026-10-10-supply-agreement-status-index",
       "2026-10-09-corporate-fund-positions",
       "2026-10-09-subhour-wiki-cadence",
     ]);

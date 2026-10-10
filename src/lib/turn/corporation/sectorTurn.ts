@@ -64,6 +64,7 @@ import {
   sectorRevenueBoostMultiplier,
 } from "@/lib/corporations/rules/marketBoost";
 import { isStateScopedCommodity } from "@/lib/market/commodityMarketScope";
+import { withLatentDemand } from "./demandThrottle";
 import {
   inputBasketCostIndex,
   recordCostPlusBasis,
@@ -501,11 +502,16 @@ export function processSector(
       isStateScopedCommodity(commodity)
         ? lookups.statePriceRatioByState?.get(sector.stateId)?.get(commodity)
         : lookups.reachablePriceRatioByCountry?.get(sectorCountryId)?.get(commodity),
+    // The lagged books hold demand capped at 1.5x supply; restore the truncated
+    // share so a plant in a deep shortage ramps toward real unmet demand.
     throttleLegBalance: (commodity) =>
-      isStateScopedCommodity(commodity)
-        ? lookups.rawStateBalances?.get(sector.stateId)?.get(commodity)
-        : (lookups.countryClearingBooks?.get(sectorCountryId)?.get(commodity) ??
-          lookups.globalCommodityBalances?.get(commodity)),
+      withLatentDemand(
+        isStateScopedCommodity(commodity)
+          ? lookups.rawStateBalances?.get(sector.stateId)?.get(commodity)
+          : (lookups.countryClearingBooks?.get(sectorCountryId)?.get(commodity) ??
+              lookups.globalCommodityBalances?.get(commodity)),
+        lookups.latentDemandFactorByCommodity?.get(commodity)
+      ),
     throttleLegMixWeight: (commodity) =>
       commodityMixWeight(
         strategyRates.supply,

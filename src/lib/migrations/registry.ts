@@ -112,6 +112,7 @@ import { migration as manufacturingProductProjectsV2Index } from "./entries/2026
 import { migration as productVentureIndexes } from "./entries/2026-10-08-product-venture-indexes";
 import { migration as campaignFieldOfficeIndexes } from "./entries/2026-10-09-campaign-field-office-indexes";
 import { migration as marketCapTickIndexes } from "./entries/2026-10-09-market-cap-tick-indexes";
+import { migration as supplyAgreementStatusIndex } from "./entries/2026-10-10-supply-agreement-status-index";
 import { migration as subhourWikiCadence } from "./entries/2026-10-09-subhour-wiki-cadence";
 import { migration as backfillSpinOffTechBaselines } from "./entries/2026-10-08-backfill-spinoff-tech-baselines";
 import { migration as mediaProductProjectsV1Index } from "./entries/2026-10-04-media-product-projects-v1-index";
@@ -360,6 +361,7 @@ export const MIGRATIONS: Migration[] = [
   campaignFieldOfficeIndexes,
   // 15-minute market cap chart rows; also in the startup allowlist.
   marketCapTickIndexes,
+  supplyAgreementStatusIndex,
   corporateFundPositions,
   subhourWikiCadence,
   // Suggestion #363: spin-offs were created with no tech. Additive heal.

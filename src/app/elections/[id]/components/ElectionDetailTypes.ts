@@ -262,6 +262,8 @@ export interface ElectionDetail {
   generalVotes: GeneralVotes | null;
   myCharId: string | null;
   myEndorsedCandidateId: string | null;
+  /** The reader's party, set for presidential primaries only. */
+  myPartyId?: string | null;
   isAdmin?: boolean;
   gameState: {
     isActive: boolean;
