@@ -299,9 +299,7 @@ export default function AdvertisingAgreementsPanel({
 
   if (supplierSide) {
     const hasMediaSectorsWithoutModels =
-      mediaSectorModelCounts !== null &&
-      mediaSectorModelCounts.withModel === 0 &&
-      mediaSectorModelCounts.withoutModel > 0;
+      mediaSectorModelCounts !== null && mediaSectorModelCounts.withoutModel > 0;
     return (
       <DenseSection title="Coverage advertising" meta="deals from buyers">
         <p className="py-1 text-sm text-muted">
@@ -310,8 +308,9 @@ export default function AdvertisingAgreementsPanel({
         </p>
         {hasMediaSectorsWithoutModels && (
           <p className="py-1 text-sm text-muted">
-            Your media sectors have no operating model yet, so buyers cannot find you. Choose an
-            operating model on each media sector page.
+            Media sectors using the default count as newspapers for advertising. Unsupported or
+            unavailable selections add no model reach; choose an available model to change the
+            reach.
           </p>
         )}
         {status}
@@ -357,8 +356,8 @@ export default function AdvertisingAgreementsPanel({
             ))}
           </select>
           <p className="mt-1 text-xs text-muted">
-            Only media corporations with a human CEO whose media sectors run an operating model (for
-            example broadcast TV) are listed.
+            Only media corporations with a human CEO and an eligible advertising model are listed.
+            Media sectors using the default count as newspapers.
             {noSuppliers ? " None are available right now." : ""}
           </p>
           {selected && (

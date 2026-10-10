@@ -10,12 +10,14 @@ import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { getCurrentTurn } from "@/lib/currentTurn";
+import { getGameState } from "@/lib/gameState";
+import { resolveGameYear } from "@/lib/era/era";
 import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
 import { resolveCorporation, requireCeo } from "@/lib/api/corporations/resolveQuery";
 import type { CorporateSector } from "@/lib/db/types";
-import { getMediaOperatingModel } from "@/lib/mediaOperatingModels/catalog";
+import { effectiveMediaOperatingModelId } from "@/lib/mediaOperatingModels/catalog";
 import { isAdvertisingAgreementsEnabled } from "@/lib/advertising/featureFlag";
 import {
   advertisingAgreementProposalSchema,
@@ -89,7 +91,13 @@ export async function listAdvertisingAgreements(corpId: string) {
 
     const corpHex = corp._id.toString();
     const agreements = await getAdvertisingAgreementsForCorp(db, corpHex);
-    const mediaSectorModelCounts = await countAdvertisingMediaSectorModels(db, corp._id);
+    const gameState = await getGameState(db);
+    const currentYear = resolveGameYear(gameState ?? {});
+    const mediaSectorModelCounts = await countAdvertisingMediaSectorModels(
+      db,
+      corp._id,
+      currentYear
+    );
     const counterpartyHex = [
       ...new Set(
         agreements.flatMap((agreement) => [agreement.supplierCorpId, agreement.buyerCorpId])
@@ -157,6 +165,8 @@ export async function proposeAdvertisingAgreement(request: Request, initiatingCo
       return errorResponse(403, "Advertising agreements are not enabled in this world");
     }
 
+    const currentYear = resolveGameYear((await getGameState(db)) ?? {});
+
     const body = parsed.data;
     const isSupplierInitiated = !!body.buyerCorpId;
     const counterpartyResolved = await resolveCorporation(
@@ -174,12 +184,16 @@ export async function proposeAdvertisingAgreement(request: Request, initiatingCo
     const supplierSectors = await db
       .collection<CorporateSector>("corporateSectors")
       .find({ corporationId: supplier._id, sectorType: "media" })
-      .project<{ strategyId?: string }>({ strategyId: 1 })
+      .project<{ strategyId?: string | null }>({ strategyId: 1 })
       .toArray();
     if (supplierSectors.length === 0) {
       return errorResponse(400, "Advertising suppliers must be Media & Entertainment corporations");
     }
-    if (!supplierSectors.some((sector) => getMediaOperatingModel(sector.strategyId ?? ""))) {
+    if (
+      !supplierSectors.some((sector) =>
+        effectiveMediaOperatingModelId(sector.strategyId, "media", currentYear)
+      )
+    ) {
       return errorResponse(400, "Advertising suppliers need an operating model");
     }
     const turn = await getCurrentTurn(db);

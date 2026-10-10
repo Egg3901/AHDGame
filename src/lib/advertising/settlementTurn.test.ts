@@ -150,6 +150,7 @@ describe("processAdvertisingTurn", () => {
     const result = await processAdvertisingTurn(exploding, {
       enabled: false,
       turn: 100,
+      year: 1953,
       corpsById: new Map(),
       sectorsByCorp: new Map(),
       fxByCurrency: FX,
@@ -166,6 +167,7 @@ describe("processAdvertisingTurn", () => {
     const result = await processAdvertisingTurn(modelsDb(store), {
       enabled: true,
       turn: 100,
+      year: 1953,
       corpsById: new Map([["buyer", corp("buyer")]]),
       sectorsByCorp: new Map(),
       fxByCurrency: FX,
@@ -185,6 +187,7 @@ describe("processAdvertisingTurn", () => {
     const result = await processAdvertisingTurn(modelsDb(store), {
       enabled: true,
       turn: 100,
+      year: 1953,
       corpsById: new Map([
         ["buyer", corp("buyer")],
         ["supplier", corp("supplier", { marketingBudget: 0 })],
@@ -204,17 +207,21 @@ describe("processAdvertisingTurn", () => {
     store.agreements.set("ad1", activeAgreement() as unknown as Record<string, unknown>);
     const sectorsByCorp = new Map<
       string,
-      { stateId: string; revenue: number; countryId: string; strategyId?: string }[]
+      {
+        stateId: string;
+        revenue: number;
+        countryId: string;
+        sectorType?: string;
+        strategyId?: string;
+      }[]
     >([
       ["buyer", [{ stateId: "US-CA", revenue: 1000, countryId: "US" }]],
-      [
-        "supplier",
-        [{ stateId: "US-CA", revenue: 1000, countryId: "US", strategyId: "broadcast_tv" }],
-      ],
+      ["supplier", [{ stateId: "US-CA", revenue: 1000, countryId: "US", sectorType: "media" }]],
     ]);
     const result = await processAdvertisingTurn(modelsDb(store), {
       enabled: true,
       turn: 100,
+      year: 1953,
       corpsById: new Map([
         ["buyer", corp("buyer")],
         ["supplier", corp("supplier", { marketingBudget: 0 })],
@@ -245,6 +252,7 @@ describe("processAdvertisingTurn", () => {
     const result = await processAdvertisingTurn(modelsDb(store), {
       enabled: true,
       turn: 100,
+      year: 1953,
       corpsById: new Map([
         ["buyer", corp("buyer")],
         ["supplier", corp("supplier", { marketingBudget: 0 })],
@@ -266,12 +274,26 @@ describe("processAdvertisingTurn", () => {
     const supplier = corp("supplier", { liquidCapital: 500_000, marketingBudget: 0 });
     const sectorsByCorp = new Map<
       string,
-      { stateId: string; revenue: number; countryId: string; strategyId?: string }[]
+      {
+        stateId: string;
+        revenue: number;
+        countryId: string;
+        sectorType?: string;
+        strategyId?: string;
+      }[]
     >([
       ["buyer", [{ stateId: "US-CA", revenue: 1000, countryId: "US" }]],
       [
         "supplier",
-        [{ stateId: "US-CA", revenue: 1000, countryId: "US", strategyId: "broadcast_tv" }],
+        [
+          {
+            stateId: "US-CA",
+            revenue: 1000,
+            countryId: "US",
+            sectorType: "media",
+            strategyId: "broadcast_tv",
+          },
+        ],
       ],
     ]);
     const before = JSON.stringify({
@@ -282,6 +304,7 @@ describe("processAdvertisingTurn", () => {
     await processAdvertisingTurn(modelsDb(store), {
       enabled: true,
       turn: 100,
+      year: 1953,
       corpsById: new Map([
         ["buyer", buyer],
         ["supplier", supplier],
@@ -314,6 +337,7 @@ describe("processAdvertisingTurn", () => {
     const args = {
       enabled: true,
       turn: 100,
+      year: 1953,
       corpsById: new Map([["buyer", corp("buyer", { marketingBudget: 0 })]]),
       sectorsByCorp: new Map(),
       fxByCurrency: FX,
