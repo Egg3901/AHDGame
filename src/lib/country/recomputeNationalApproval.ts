@@ -12,7 +12,7 @@ import {
   buildFlatMetrics,
   PUBLIC_EXPECTATIONS_MODIFIER,
 } from "@/lib/utils/governmentApproval";
-import { applyModifiers } from "@/lib/utils/approvalModifiers";
+import { applyModifiers, type ActiveModifier } from "@/lib/utils/approvalModifiers";
 import {
   isPoliticalApprovalCountry,
   loadPoliticalApprovalBases,
@@ -60,6 +60,10 @@ async function gatherInputs(db: Db, countryId: CountryId): Promise<RecomputeInpu
 }
 
 /**
+ * `expectations` is the public expectations modifier to apply. It defaults to the
+ * full-strength drag, which is the rule for a head of government whose start turn
+ * is unknown. Callers holding a stored tenure pass `publicExpectationsModifier(...)`.
+ *
  * Score a country's national approval live, with no `governmentApprovals`
  * document involved.
  *
@@ -86,10 +90,13 @@ async function gatherInputs(db: Db, countryId: CountryId): Promise<RecomputeInpu
 export async function recomputeNationalApproval(
   db: Db,
   countryId: CountryId,
-  prefetched?: RecomputeInputs
+  prefetched?: RecomputeInputs,
+  expectations: ActiveModifier = PUBLIC_EXPECTATIONS_MODIFIER
 ): Promise<number> {
   if (isPoliticalApprovalCountry(countryId, true)) {
-    return (await recomputePoliticalNationalApproval(db, countryId, prefetched)).approval;
+    return (
+      await recomputePoliticalNationalApproval(db, countryId, prefetched, undefined, expectations)
+    ).approval;
   }
 
   const { allStates, allMetrics, nationalAverages, preset, year } =
@@ -111,7 +118,7 @@ export async function recomputeNationalApproval(
     ),
     population: statePopMap.get(m._id) ?? 0,
   }));
-  return applyModifiers(calculateNationalApproval(stateApprovals), [PUBLIC_EXPECTATIONS_MODIFIER]);
+  return applyModifiers(calculateNationalApproval(stateApprovals), [expectations]);
 }
 
 /** Shared fresh-world result for cards and metrics. No averaged-threshold approximation. */
@@ -119,7 +126,8 @@ export async function recomputePoliticalNationalApproval(
   db: Db,
   countryId: CountryId,
   prefetched?: RecomputeInputs,
-  prefetchedBases?: PoliticalApprovalBases | null
+  prefetchedBases?: PoliticalApprovalBases | null,
+  expectations: ActiveModifier = PUBLIC_EXPECTATIONS_MODIFIER
 ): Promise<ReturnType<typeof nationalApprovalFromRegions>> {
   const [inputs, bases] = await Promise.all([
     prefetched ?? gatherInputs(db, countryId),
@@ -136,6 +144,6 @@ export async function recomputePoliticalNationalApproval(
       modifiers: bases?.modifiersByRegion?.get(String(metrics._id)),
     })),
     { countryId, preset: inputs.preset, year: inputs.year },
-    [PUBLIC_EXPECTATIONS_MODIFIER]
+    [expectations]
   );
 }
