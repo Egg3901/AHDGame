@@ -580,6 +580,7 @@ export async function _enrichElection(
   let snapshotHistory: SnapshotEntry[] | null = null;
   let generalVotes: GeneralVotesData | null = null;
   let myEndorsedCandidateId: string | null = null;
+  let myPartyId: string | null = null;
   /** Read-through of the tally's economic-referendum snapshot (president only). */
   let economicReferendum: ElectionResponse["economicReferendum"];
   /** Read-through of the tally's factor ledger, fog-of-war applied (president only). */
@@ -637,6 +638,16 @@ export async function _enrichElection(
         playerEndorsements
           .find((e) => e.characterId.toString() === myCharId)
           ?.candidateId.toString() ?? null;
+    }
+
+    // The reader's party, so a primary screen offers endorsement only where the
+    // endorse route would accept it (own-party candidates). Presidential
+    // primaries only: nothing else on the page needs it.
+    if (myCharId && isPresident && inPrimary && ObjectId.isValid(myCharId)) {
+      const me = await db
+        .collection<Character>("characters")
+        .findOne({ _id: new ObjectId(myCharId) }, { projection: { party: 1 } });
+      myPartyId = me?.party ?? null;
     }
 
     // Vote tally
@@ -1234,6 +1245,7 @@ export async function _enrichElection(
     generalVotes: isFull ? generalVotes : null,
     myCharId: isFull ? myCharId : null,
     myEndorsedCandidateId: isFull ? myEndorsedCandidateId : null,
+    myPartyId: isFull ? myPartyId : null,
     isAdmin: isFull ? isAdmin : false,
     gameState:
       isFull && gameState
