@@ -7,6 +7,7 @@ import type { CrisisDecisionNode, CrisisEffect } from "@/lib/db/types/crisis";
 import type { RefugeeReceptionResult } from "@/lib/livingConflict/rules/refugeeReception";
 import type { ConflictCivilianLossResult } from "@/lib/livingConflict/rules/civilianLoss";
 import { formatCrisisEffectTarget, formatCrisisEffectValue } from "@/lib/crises/effectLabels";
+import { describeRoleRequirement } from "@/lib/crises/rules/authorization";
 import { buildDecisionHistory } from "@/lib/crises/decisionHistory";
 import { computeFiscalImpact } from "@/lib/budget/fiscalImpact";
 import { computeAidOutcome } from "@/lib/crises/aidScaling";
@@ -628,7 +629,7 @@ export default function CrisisInteractionPanel({ crisisId }: { crisisId: string 
             ) : (
               !canInteract && (
                 <p className="text-xs text-muted mt-2">
-                  Requires: {currentNode.requiredRoles.join(", ")}
+                  Requires: {describeRoleRequirement(currentNode)}
                 </p>
               )
             )}
