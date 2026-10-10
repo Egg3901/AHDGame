@@ -120,15 +120,12 @@ export function gainScore(baseline: number, current: number): number | null {
   return current - baseline;
 }
 
-/**
- * An approval entry counts only while the opening head of government is still
- * in office; a party entry only while the opening chair still leads it.
- */
+/** An entry counts only while its recorded head or chair still leads it. */
 export function approvalEntryEligible(
-  openingCharacterId: string,
+  entryCharacterId: string,
   currentHeadCharacterId: string | null
 ): boolean {
-  return currentHeadCharacterId !== null && currentHeadCharacterId === openingCharacterId;
+  return currentHeadCharacterId !== null && currentHeadCharacterId === entryCharacterId;
 }
 
 /** Highest score first; equal scores order by subject id so the ranking is stable. */
