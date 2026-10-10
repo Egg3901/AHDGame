@@ -184,6 +184,7 @@ export function summarizePrimaryProjection({
     actualVotesByState,
     awardedDelegatesByState,
     allocationByState,
+    preset,
   });
   const nationalDelegateSharePct: Record<string, number> = {};
   for (const cid of candidateIds) {

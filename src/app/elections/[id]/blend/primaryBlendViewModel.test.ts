@@ -216,6 +216,20 @@ describe("your standing", () => {
     expect(vm.you?.delegates).toBe("1,946");
   });
 
+  it("caps malformed over-100 shares at the display boundary", () => {
+    const over100 = election({
+      byParty: [
+        party({
+          candidates: [candidate({ id: "c1", sharePct: 100.1, isYou: true })],
+        }),
+      ],
+    });
+    const vm = buildPrimaryBlendViewModel(input({ election: over100 }));
+
+    expect(vm.you?.share).toBe("100.0%");
+    expect(vm.field[0]?.pct).toBe("100.0");
+  });
+
   it("counts what is still needed to clinch", () => {
     const vm = buildPrimaryBlendViewModel(input());
     // 2417 - 1946 = 471.
