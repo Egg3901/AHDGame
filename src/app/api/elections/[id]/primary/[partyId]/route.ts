@@ -80,12 +80,9 @@ export async function GET(request: Request, { params }: RouteParams) {
       return errorResponse(404, "Party not in this race");
     }
 
-    // A signed-in body carries the viewer's own campaign, so it must never be
-    // shared; the spectator body is the same for everyone.
-    return NextResponse.json(
-      detail,
-      user ? { headers: { "Cache-Control": "private, no-store" } } : {}
-    );
+    // Never cache: a signed-in body carries the viewer's own campaign, and a
+    // cached spectator body would be served to signed-in players without it.
+    return NextResponse.json(detail, { headers: { "Cache-Control": "private, no-store" } });
   } catch (error) {
     return handleRouteError(error, {
       request,
