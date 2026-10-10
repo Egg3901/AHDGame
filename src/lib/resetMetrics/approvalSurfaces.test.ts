@@ -75,6 +75,8 @@ describe("Metrics v2 approval surface parity", () => {
       governmentApprovalBase: 50,
       history: [],
       modifiers: [{ id: "stored", label: "Stored", effect: -7 }],
+      stateAverage: 50,
+      nationalAdjustments: [{ id: "stored", label: "Stored", effect: -7 }],
     });
     expect(db.collectionMocks.resetMetricSnapshots!.find).not.toHaveBeenCalled();
   });
