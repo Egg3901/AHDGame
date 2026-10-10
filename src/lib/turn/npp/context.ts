@@ -34,10 +34,12 @@ import { resolveNppBillCountryId, resolveNppBillVoterOffices } from "./rules/bil
 import { resolveBillVoteField } from "@/lib/congress/billVoteField";
 import { isVotingDeadlinePassed } from "@/lib/legislature/billVotingWindow";
 import { isBillWhipInCurrentPhase } from "@/lib/congress/billWhipPhase";
+import { loadCabinetDiscipline, type CabinetDiscipline } from "@/lib/resetCabinet/loadDiscipline";
 
 // ─── Context Types ─────────────────────────────────────────────────────────────
 
 export interface NPPContext {
+  cabinetDiscipline?: readonly CabinetDiscipline[];
   now: Date;
   db: Db;
 
@@ -445,10 +447,24 @@ export async function loadNPPContext(now: Date, options?: NPPContextOptions): Pr
 
   // Read the current turn for vote-prediction snapshots. Tests that don't seed
   // gameState fall through to 0 — the field is purely informational.
-  const gameStateDoc = await db
-    .collection<GameState>("gameState")
-    .findOne({ _id: "current" }, { projection: { currentTurn: 1, preset: 1 } });
+  const gameStateDoc = await db.collection<GameState>("gameState").findOne(
+    { _id: "current" },
+    {
+      projection: {
+        currentTurn: 1,
+        preset: 1,
+        resetWorldId: 1,
+        resetVersionSeeds: 1,
+        metricsSystemVersion: 1,
+        cabinetSystemVersion: 1,
+        isProcessing: 1,
+        processingKind: 1,
+        processingTargetTurn: 1,
+      },
+    }
+  );
   const currentTurn = gameStateDoc?.currentTurn ?? 0;
+  const cabinetDiscipline = await loadCabinetDiscipline(db, gameStateDoc, optionsCurrentTurn);
   const preset = typeof gameStateDoc?.preset === "string" ? gameStateDoc.preset : undefined;
 
   const runtimeCountryOffices = new Map<CountryId, RuntimeCountryOffices>();
@@ -605,6 +621,7 @@ export async function loadNPPContext(now: Date, options?: NPPContextOptions): Pr
     nppCandidacies,
     candidatesByElection,
     batchCandidateInserts: true,
+    cabinetDiscipline,
     nppOfficials,
     officialsByNPP,
     activeBills,

@@ -76,7 +76,7 @@ export const RUNTIME: CollectionEntry[] = [
     name: "resetDepartmentAccounts",
     category: "runtime",
     notes:
-      "World-bound v2 Cabinet accounts derived once from reconciled 1991 claims after reserving regional grants. Ordinary departments receive no opening cash; Defense and intelligence retain their specialized settlement shell. Wiped on every reset.",
+      "World-bound v2 Cabinet accounts derived once from reconciled 1991 claims after reserving regional grants. Ordinary law-funded departments open with working capital; offices without law claims have zero-value accounts. Defense and intelligence retain their specialized settlement shell. Wiped on every reset.",
   },
   {
     name: "resetDepartmentContinuity",

@@ -1,13 +1,16 @@
 /** @vitest-environment happy-dom */
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { render, screen, cleanup, fireEvent } from "@testing-library/react";
-import type { EstateSummaryView } from "./useCabinetOffice";
+import { screen, cleanup, fireEvent } from "@testing-library/react";
+import { renderWithMessages as render } from "@/lib/test-utils/renderWithMessages";
+import type { CabinetOfficeData, EstateSummaryView } from "./useCabinetOffice";
 
 const office: {
   positionId: string;
   canView: boolean;
   nationalMetrics: Record<string, number>;
   estateSummary?: EstateSummaryView;
+  cabinetVersion?: "v1" | "v2";
+  resetCabinetActions?: CabinetOfficeData["resetCabinetActions"];
 } = vi.hoisted(() => ({
   positionId: "secretary_of_treasury",
   canView: true,
@@ -31,6 +34,9 @@ vi.mock("@/app/congress/components/CongressShared", () => ({ PartyChip: () => <s
 // Stub the panel components so the test exercises tab routing, not panel internals/fetches.
 vi.mock("./components/MinisterialOrderPanel", () => ({
   MinisterialOrderPanel: () => <div>ORDERS</div>,
+}));
+vi.mock("./components/ResetCabinetActionPanel", () => ({
+  ResetCabinetActionPanel: () => <div>V2 ACTIONS</div>,
 }));
 vi.mock("./components/FxReserveTransferPanel", () => ({
   FxReserveTransferPanel: () => <div>FX</div>,
@@ -66,6 +72,8 @@ vi.mock("./useCabinetOffice", () => ({
     refetch: vi.fn(),
     data: {
       canView: office.canView,
+      cabinetVersion: office.cabinetVersion,
+      resetCabinetActions: office.resetCabinetActions,
       canAct: false,
       member: {
         characterId: "c1",
@@ -96,10 +104,44 @@ beforeEach(() => {
   office.canView = true;
   office.nationalMetrics = {};
   office.estateSummary = undefined;
+  office.cabinetVersion = undefined;
+  office.resetCabinetActions = undefined;
 });
 afterEach(cleanup);
 
 describe("CabinetOfficePage tabs", () => {
+  it("falls back from an obsolete Actions selection when switching offices or versions", () => {
+    office.cabinetVersion = "v2";
+    office.resetCabinetActions = { charges: 2, nextRechargeTurn: 20, actions: [], active: [] };
+    const view = render(<CabinetOfficePage />);
+    fireEvent.click(screen.getByRole("button", { name: "Actions" }));
+    office.cabinetVersion = "v1";
+    office.positionId = "secretary_of_labor";
+    view.rerender(<CabinetOfficePage />);
+    expect(screen.getByText("ORDERS")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Actions" })).toBeNull();
+  });
+  it("shows v2 actions and the shared charge pool without the legacy orders", () => {
+    office.positionId = "secretary_of_labor";
+    office.cabinetVersion = "v2";
+    office.resetCabinetActions = { charges: 2, nextRechargeTurn: 20, actions: [], active: [] };
+    render(<CabinetOfficePage />);
+    expect(screen.getByText("V2 ACTIONS")).toBeTruthy();
+    expect(screen.queryByText("ORDERS")).toBeNull();
+    expect(screen.getByText(/^2\/4 /)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Actions" }));
+    expect(screen.getByText("V2 ACTIONS")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Programs" })).toBeNull();
+  });
+
+  it("explains unavailable v2 state without displaying legacy orders or charges", () => {
+    office.cabinetVersion = "v2";
+    render(<CabinetOfficePage />);
+    expect(screen.getByRole("status").textContent).toContain("unavailable");
+    expect(screen.queryByText("ORDERS")).toBeNull();
+    expect(screen.queryByText(/^3\/\d /)).toBeNull();
+  });
+
   it("defaults to Overview (ministerial orders) and switches to Treasury (fiscal panels)", () => {
     render(<CabinetOfficePage />);
     expect(screen.getByRole("heading", { name: "Secretary of the Treasury" })).toBeTruthy();

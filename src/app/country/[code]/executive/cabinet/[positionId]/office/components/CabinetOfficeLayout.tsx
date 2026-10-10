@@ -51,6 +51,7 @@ interface Props {
    * would otherwise render an authoritative-looking "0/2 Actions".
    */
   showActions?: boolean;
+  actionPool?: { remaining: number; capacity: number };
 }
 
 export function CabinetOfficeLayout({
@@ -70,9 +71,10 @@ export function CabinetOfficeLayout({
   onSelectTab,
   statStrip,
   showActions = true,
+  actionPool,
 }: Props) {
   const hasBanner = Boolean(bannerImageUrl);
-  const actionsRemaining = member?.ministerialActions ?? 0;
+  const actionsRemaining = actionPool?.remaining ?? member?.ministerialActions ?? 0;
   const actionCopy = countryId ? getCabinetActionCopy(countryId) : null;
 
   return (
@@ -150,7 +152,8 @@ export function CabinetOfficeLayout({
                   >
                     <path d="M12 1L3 5v6c0 5.25 3.75 10.2 9 11.25C17.25 21.2 21 16.25 21 11V5l-9-4z" />
                   </svg>
-                  {actionsRemaining}/{MINISTERIAL_ACTION_CAP} {actionCopy?.title ?? "Actions"}
+                  {actionsRemaining}/{actionPool?.capacity ?? MINISTERIAL_ACTION_CAP}{" "}
+                  {actionCopy?.title ?? "Actions"}
                 </span>
               )}
             </div>

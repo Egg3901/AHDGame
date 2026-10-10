@@ -4,6 +4,7 @@
  * mismatched or stale inputs instead of substituting retired metric stores.
  */
 import { primaryMetrics } from "./catalog";
+import type { TemporaryTargetEffect } from "@/lib/resetCabinet/rules/actions";
 import type { Db } from "mongodb";
 import type { GameState } from "@/lib/db/types/gameState";
 import type { ActiveModifier } from "@/lib/utils/approvalModifiers";
@@ -13,6 +14,11 @@ import { resolveGameYear } from "@/lib/era/era";
 import { buildResetMetricSnapshot, type ResetMetricSnapshot } from "./rules/snapshot";
 import type { StateMetrics } from "@/lib/db/types/stateMetrics";
 import { evaluateResetApprovalModifiers, resetApprovalBaseMetrics } from "./rules/approval";
+import { loadCabinetGameplayEffects } from "@/lib/resetCabinet/loadGameplayEffects";
+import {
+  cabinetApprovalResponse,
+  cabinetEffectsForRegion,
+} from "@/lib/resetCabinet/rules/gameplay";
 
 /** Approval needs current observations, never their notes or retained history. */
 export const RESET_APPROVAL_BOARD_PROJECTION = {
@@ -40,7 +46,8 @@ export async function loadResetApprovalModifiers(
   stateIds: readonly string[],
   gameState: GameState | null,
   turn?: number,
-  prefetchedBoards?: readonly ResetMetricSnapshot[]
+  prefetchedBoards?: readonly ResetMetricSnapshot[],
+  prefetchedCabinetEffects?: readonly TemporaryTargetEffect[]
 ): Promise<{ modifiersByRegion: Map<string, ActiveModifier[]>; metrics: StateMetrics[] } | null> {
   if (
     !isResetV2Country(countryId) ||
@@ -101,9 +108,23 @@ export async function loadResetApprovalModifiers(
     year: gameState?.eraSystemEnabled ? resolveGameYear(gameState) : null,
   };
   const modifiersByRegion = new Map<string, ActiveModifier[]>();
+  const cabinetEffects =
+    prefetchedCabinetEffects ?? (await loadCabinetGameplayEffects(db, gameState, turn));
   const metrics = stateIds.map((id) => {
     const observations = { ...read(id), ...national };
-    modifiersByRegion.set(id, evaluateResetApprovalModifiers(observations, context));
+    const modifiers = evaluateResetApprovalModifiers(observations, context);
+    const response = cabinetApprovalResponse(
+      cabinetEffectsForRegion(cabinetEffects, countryId, id)
+    );
+    if (response > 0)
+      modifiers.push({
+        id: "cabinet_service_response",
+        label: "Cabinet service delivery",
+        effect: response,
+        marginEffect: 0,
+        source: "cabinet",
+      });
+    modifiersByRegion.set(id, modifiers);
     return {
       ...resetApprovalBaseMetrics(observations),
       _id: id,
