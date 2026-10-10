@@ -65,6 +65,8 @@ export async function GET(_request: Request, context: RouteContext) {
     const viewerSeat = board.find(
       (s) => s.occupantType === "player" && s.characterId?.equals(viewerId)
     );
+    const viewerIsChair =
+      viewerSeat?.isChair === true || bank.chairCharacterId?.toString() === viewerId.toString();
 
     // NPP seats store nppId with characterName null at seed/refill; resolve names
     // in one batch so the Board of Governors doesn't render every technocrat as Vacant.
@@ -187,7 +189,7 @@ export async function GET(_request: Request, context: RouteContext) {
     const isAdmin = (auth as { isAdmin?: boolean }).isAdmin === true;
     const viewerRole = isAdmin
       ? "admin"
-      : viewerSeat?.isChair
+      : viewerIsChair
         ? "chair"
         : viewerSeat
           ? "member"
@@ -197,7 +199,7 @@ export async function GET(_request: Request, context: RouteContext) {
     const governanceView = allowedActionsFor(
       governanceState,
       {
-        kind: isAdmin ? "admin" : viewerSeat?.isChair ? "chair" : "governor",
+        kind: isAdmin ? "admin" : viewerIsChair ? "chair" : "governor",
         ...(viewerSeat ? { seatId: viewerSeat.seatId } : {}),
         characterId: viewerId.toString(),
         countryId: callerCountryId,

@@ -736,6 +736,13 @@ function setRateAuthority(
       message: "This bank has no operational independence: the government sets the rate.",
     };
   }
+  if (state.commandEconomy) {
+    return {
+      ok: false,
+      reason: "command-economy",
+      message: "A command economy does not set an independent policy rate.",
+    };
+  }
   if (state.board.length > 0 && boardCanCarry(state.board)) {
     return {
       ok: false,

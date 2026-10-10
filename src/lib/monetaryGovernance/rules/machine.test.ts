@@ -929,6 +929,25 @@ describe("replay and grid", () => {
 });
 
 describe("allowedActionsFor", () => {
+  it("reports command economy before a live committee for direct rate actions", () => {
+    const state = baseState({ commandEconomy: true });
+    const decision = decideGovernance(
+      state,
+      { type: "set_rate", rate: 4.75, countryId: "US" },
+      CHAIR,
+      clock(108)
+    );
+    expect(decision.allowed).toBe(false);
+    if (decision.allowed) return;
+    expect(decision.reason).toBe("command-economy");
+
+    const view = allowedActionsFor(state, CHAIR, clock(108));
+    expect(view.actions.find((action) => action.action === "set_rate")).toMatchObject({
+      allowed: false,
+      reason: expect.stringMatching(/command economy/i),
+    });
+  });
+
   it.each([
     { lastRateChangeTurn: 107 },
     { rateChangesThisTerm: RATE_CHANGES_PER_TERM },

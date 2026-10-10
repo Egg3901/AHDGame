@@ -33,7 +33,15 @@ function rateAction(
     if (actor.kind !== "government") {
       return { ...base, allowed: false, reason: "The government sets the rate here." };
     }
-  } else {
+  }
+  if (state.commandEconomy) {
+    return {
+      ...base,
+      allowed: false,
+      reason: "A command economy sets no independent policy rate.",
+    };
+  }
+  if (!state.governmentControlled) {
     if (state.board.length > 0 && boardCanCarry(state.board)) {
       return {
         ...base,
@@ -51,13 +59,6 @@ function rateAction(
     if (state.controlsLocked) {
       return { ...base, allowed: false, reason: "Chair controls are locked by an administrator." };
     }
-  }
-  if (state.commandEconomy) {
-    return {
-      ...base,
-      allowed: false,
-      reason: "A command economy sets no independent policy rate.",
-    };
   }
   if (
     state.fxCommitment &&
