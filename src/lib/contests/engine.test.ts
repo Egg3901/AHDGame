@@ -320,6 +320,82 @@ describe("runContests: opening rounds", () => {
   });
 });
 
+describe("runContests: approval entries during a round", () => {
+  it("adds a late player-led government from the leader's office-start approval", async () => {
+    const { db, data } = fakeDb(
+      world(58, { small: 400_000, mid: 2_000_000, big: 30_000_000 }, { alice: 5, bob: 9, carol: 1 })
+    );
+    await runContests(db, 58, now);
+
+    const ukApproval = data.governmentApprovals.find((approval) => approval._id === "UK")!;
+    ukApproval.approvalRating = 61;
+    ukApproval.headOfGovernmentSinceTurn = 72;
+    ukApproval.history = [{ turn: 72, approval: 57, net: 14 }];
+    vi.mocked(getHeadOfGovernmentCharacterIds).mockResolvedValue(
+      new Map([
+        ["US", alice],
+        ["UK", bob],
+      ]) as never
+    );
+
+    await runContests(db, 72, new Date(now.getTime() + 1_000));
+
+    const approvalRound = rounds(data).find((round) => round.kind === "approval_gain")!;
+    expect(approvalRound.baselines).toContainEqual({
+      subjectId: "UK",
+      characterId: bob.toString(),
+      value: 57,
+      enteredTurn: 72,
+    });
+  });
+
+  it("uses the current approval when an office-start rating is unavailable", async () => {
+    const { db, data } = fakeDb(
+      world(58, { small: 400_000, mid: 2_000_000, big: 30_000_000 }, { alice: 5, bob: 9, carol: 1 })
+    );
+    await runContests(db, 58, now);
+
+    const ukApproval = data.governmentApprovals.find((approval) => approval._id === "UK")!;
+    ukApproval.approvalRating = 61;
+    delete ukApproval.history;
+    delete ukApproval.headOfGovernmentSinceTurn;
+    vi.mocked(getHeadOfGovernmentCharacterIds).mockResolvedValue(
+      new Map([
+        ["US", alice],
+        ["UK", bob],
+      ]) as never
+    );
+
+    await runContests(db, 72, new Date(now.getTime() + 1_000));
+
+    const approvalRound = rounds(data).find((round) => round.kind === "approval_gain")!;
+    expect(approvalRound.baselines).toContainEqual({
+      subjectId: "UK",
+      characterId: bob.toString(),
+      value: 61,
+      enteredTurn: 72,
+    });
+  });
+
+  it("does not enter a country whose current head is not a player", async () => {
+    const { db, data } = fakeDb(
+      world(58, { small: 400_000, mid: 2_000_000, big: 30_000_000 }, { alice: 5, bob: 9, carol: 1 })
+    );
+    await runContests(db, 58, now);
+    vi.mocked(getHeadOfGovernmentCharacterIds).mockResolvedValue(
+      new Map([
+        ["US", alice],
+        ["UK", new ObjectId()],
+      ]) as never
+    );
+
+    await runContests(db, 59, new Date(now.getTime() + 1_000));
+
+    const approvalRound = rounds(data).find((round) => round.kind === "approval_gain")!;
+    expect(approvalRound.baselines.map((baseline) => baseline.subjectId)).toEqual(["US"]);
+  });
+});
+
 describe("opening without waiting for a turn", () => {
   it("fills standings the moment a round opens", async () => {
     const { db, data } = fakeDb(
@@ -444,14 +520,33 @@ describe("runContests: standings and settlement", () => {
     expect(payContestPrize).not.toHaveBeenCalled();
   });
 
-  it("drops an approval entry once its leader leaves office", async () => {
+  it("resets an approval entry when leadership changes and keeps only the current leader", async () => {
     const { db, data } = await openedWorld();
     data.governmentApprovals[0].approvalRating = 48;
+    data.governmentApprovals[0].headOfGovernmentSinceTurn = 11;
+    data.governmentApprovals[0].history = [{ turn: 11, approval: 45, net: -10 }];
     vi.mocked(getHeadOfGovernmentCharacterIds).mockResolvedValue(new Map([["US", carol]]) as never);
 
     await runContests(db, 11, new Date(now.getTime() + 3_600_000));
 
-    expect(rounds(data).find((r) => r.kind === "approval_gain")!.standings).toEqual([]);
+    const approvalRound = rounds(data).find((r) => r.kind === "approval_gain")!;
+    expect(approvalRound.baselines).toEqual([
+      { subjectId: "US", characterId: carol.toString(), value: 45, enteredTurn: 11 },
+    ]);
+
+    data.governmentApprovals[0].approvalRating = 50;
+    data.governmentApprovals[0].headOfGovernmentSinceTurn = 12;
+    data.governmentApprovals[0].history = [
+      { turn: 11, approval: 45, net: -10 },
+      { turn: 12, approval: 46, net: -8 },
+    ];
+    vi.mocked(getHeadOfGovernmentCharacterIds).mockResolvedValue(new Map([["US", alice]]) as never);
+
+    await runContests(db, 12, new Date(now.getTime() + 3_601_000));
+
+    expect(approvalRound.baselines).toEqual([
+      { subjectId: "US", characterId: alice.toString(), value: 46, enteredTurn: 12 },
+    ]);
   });
 
   it("voids a round left over from a previous world instead of paying it", async () => {

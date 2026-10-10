@@ -87,7 +87,7 @@ describe("gainScore", () => {
 });
 
 describe("approvalEntryEligible", () => {
-  it("needs the same head of government as at the opening", () => {
+  it("needs the same head of government as when the entry began", () => {
     expect(approvalEntryEligible("x", "x")).toBe(true);
     expect(approvalEntryEligible("x", "y")).toBe(false);
     expect(approvalEntryEligible("x", null)).toBe(false);

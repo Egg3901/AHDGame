@@ -9,8 +9,8 @@ import type { CurrencyCode } from "@/lib/constants/currencies";
  *   player-run private corporation, net of capital injected during the round.
  *   The two tiers split the field at the median opening value.
  * - influence_gain: National Influence gained by a player character.
- * - approval_gain: approval points gained by a country whose head of
- *   government is a player and held office for the whole round.
+ * - approval_gain: approval points gained by countries while a player leads
+ *   the government, measured from when that leader took office.
  * - referrals_weekly: new players a referrer brought in during the round.
  * - legislator_bills: bills a player sponsored that were enacted during the round.
  * - wealth_growth: percent growth in a player's net worth, net of wires and loans.
@@ -35,10 +35,12 @@ export type ContestRecordKind = ContestKind | "referrals_iteration";
 export interface ContestBaseline {
   /** Corporation id, character id, or country id, depending on kind. */
   subjectId: string;
-  /** Opening value: local market cap, National Influence, or approval rating. */
+  /** Starting value for this entry: market cap, National Influence, or approval rating. */
   value: number;
-  /** Player character the entry belongs to at the opening snapshot. */
+  /** Player character this entry belongs to. */
   characterId: string;
+  /** Approval entry turn, when it began after the round opened. */
+  enteredTurn?: number;
   /** Capital injected into the corporation since the round opened (corp kinds only). */
   injected?: number;
 }
