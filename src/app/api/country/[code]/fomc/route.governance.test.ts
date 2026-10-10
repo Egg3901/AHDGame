@@ -237,9 +237,24 @@ describe("GET /api/country/[code]/fomc governance contract", () => {
 
   // Ticket #1270: the global commandEconomyEnabled flag blocked EVERY bank,
   // including the US Fed. The gate is per-country (marketization level).
-  // Chair viewer + vacant board so set_rate reaches the command gate
-  // (a carrying board refuses with the committee reason first).
-  function chairOnlyBoard() {
+  // A vacant board lets a chair set the rate directly. One seated chair makes
+  // a live 1-of-1 committee under the seated-majority rule.
+  function vacantBoard() {
+    return Array.from({ length: 7 }, (_, i) => ({
+      seatId: `seat-${i + 1}`,
+      isChair: i === 0,
+      occupantType: "vacant",
+      characterId: null,
+      characterName: null,
+      nppId: null,
+      alignment: "hawk",
+      appointedByPresidentId: null,
+      appointedAtTurn: 100,
+      termExpiresAtTurn: 900,
+    }));
+  }
+
+  function singleSeatedChairBoard() {
     return Array.from({ length: 7 }, (_, i) => ({
       seatId: `seat-${i + 1}`,
       isChair: i === 0,
@@ -269,7 +284,11 @@ describe("GET /api/country/[code]/fomc governance contract", () => {
   }
 
   it("command flag on: US chair is not command-blocked", async () => {
-    const bank = bankFixture({ fomcBoard: chairOnlyBoard(), rateChangesThisTerm: 0 });
+    const bank = bankFixture({
+      chairCharacterId: VIEWER_ID,
+      fomcBoard: vacantBoard(),
+      rateChangesThisTerm: 0,
+    });
     mockGetDb.mockResolvedValue(dbWithCommandFlag(bank));
     const res = await GET(new Request("http://localhost/api/country/US/fomc"), {
       params: Promise.resolve({ code: "US" }),
@@ -280,6 +299,8 @@ describe("GET /api/country/[code]/fomc governance contract", () => {
   });
 
   it("command flag on: RU chair is still command-blocked", async () => {
+    // A single seated chair is a live 1-of-1 committee; the command-economy
+    // reason should take precedence over the committee-direct-set message.
     mockGetCentralBankScope.mockResolvedValue({ bankId: "RU", memberCountries: ["RU"] });
     mockRequireAuth.mockResolvedValue({
       ok: true,
@@ -290,7 +311,7 @@ describe("GET /api/country/[code]/fomc governance contract", () => {
     });
     const bank = bankFixture({
       countryId: "RU",
-      fomcBoard: chairOnlyBoard(),
+      fomcBoard: singleSeatedChairBoard(),
       rateChangesThisTerm: 0,
     });
     mockGetDb.mockResolvedValue(dbWithCommandFlag(bank));

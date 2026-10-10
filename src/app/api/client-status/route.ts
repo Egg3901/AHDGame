@@ -56,6 +56,10 @@ import type {
 import type { ImperialCharacter } from "@/lib/db/types/imperialCharacter";
 import { buildTurnBriefing } from "@/lib/client/turnBriefing";
 import { loadWidgetExtras } from "@/lib/client/widgetExtras";
+import { buildWidgetPerTurn, type WidgetPerTurn } from "@/lib/client/widgetFigures";
+import { getRoundedPublicMarketCap } from "@/lib/corporations/marketQuote";
+import { resolvePositionNiBonus } from "@/lib/actions/positionNiBonus";
+import type { CongressLeader } from "@/lib/db/types/leadership";
 
 // GET /api/client-status — Returns status bar enrichment data (funds, corp, election stats, income).
 // Auth: requireBasicAuth
@@ -135,6 +139,7 @@ export async function GET(request: Request) {
                   marketingStrength: 1,
                   ceoSalary: 1,
                   countryId: 1,
+                  totalShares: 1,
                 },
               }
             )
@@ -278,11 +283,13 @@ export async function GET(request: Request) {
         liquidCurrencyCode?: string;
         marketingStrength: number;
         ceoSalary: number;
+        marketCap?: number | null;
         history: {
           turn: number;
           sharePrice: number;
           marketingStrength: number;
           liquidCapital: number;
+          marketCap?: number;
         }[];
       } | null = null;
 
@@ -304,7 +311,15 @@ export async function GET(request: Request) {
                   sharePrice: number;
                   marketingStrength: number;
                   liquidCapital: number;
-                }>({ turn: 1, sharePrice: 1, marketingStrength: 1, liquidCapital: 1 })
+                  marketCap?: number;
+                }>({
+                  turn: 1,
+                  sharePrice: 1,
+                  marketingStrength: 1,
+                  liquidCapital: 1,
+                  // The widgets show the market cap change over the latest turn.
+                  ...(includeWidgetExtras ? { marketCap: 1 } : {}),
+                })
                 .toArray(),
               db
                 .collection<StockExchangeSnapshot>("stockExchangeSnapshots")
@@ -329,6 +344,7 @@ export async function GET(request: Request) {
           liquidCurrencyCode: ceoCorp.liquidCurrencyCode,
           marketingStrength: roundMarketingStrength(ceoCorp.marketingStrength ?? 0),
           ceoSalary: ceoCorp.ceoSalary ?? 0,
+          ...(includeWidgetExtras ? { marketCap: corpMarketCap(ceoCorp) } : {}),
           history: historyDocs,
         };
       }
@@ -361,6 +377,9 @@ export async function GET(request: Request) {
           turnBriefing: buildTurnBriefing(corpNav, null),
           marketWatch,
           isImperial: true,
+          ...(includeWidgetExtras
+            ? { perTurn: buildWidgetPerTurn({ corporationHistory: corpNav?.history }) }
+            : {}),
           ...(await widgetExtras),
         },
         { headers: { "Cache-Control": "private, no-store, no-transform" } }
@@ -423,6 +442,21 @@ export async function GET(request: Request) {
       );
     }
 
+    // Position tier behind the national influence gain the profile shows. Only
+    // the widgets read it; started here so it overlaps the main batch, and a
+    // failure leaves that one change unknown instead of failing the poll.
+    const widgetPositionRows = includeWidgetExtras
+      ? Promise.all([
+          db
+            .collection<CongressLeader>("congressLeaders")
+            .find({ characterId: character._id }, { projection: { role: 1 } })
+            .toArray(),
+          db
+            .collection("supremeCourtSeats")
+            .findOne({ justiceCharacterId: character._id }, { projection: { _id: 1 } }),
+        ]).catch(() => null)
+      : Promise.resolve(null);
+
     const hasParty = Boolean(character.party && character.party !== "independent");
     const statePartyKey = `${character.homeState}_${character.party}`;
     const partySeqId =
@@ -480,6 +514,7 @@ export async function GET(request: Request) {
                 marketingStrength: 1,
                 ceoSalary: 1,
                 countryId: 1,
+                totalShares: 1,
               },
             }
           )
@@ -686,11 +721,13 @@ export async function GET(request: Request) {
       liquidCurrencyCode?: string;
       marketingStrength: number;
       ceoSalary: number;
+      marketCap?: number | null;
       history: {
         turn: number;
         sharePrice: number;
         marketingStrength: number;
         liquidCapital: number;
+        marketCap?: number;
       }[];
     } | null = null;
 
@@ -712,7 +749,15 @@ export async function GET(request: Request) {
                 sharePrice: number;
                 marketingStrength: number;
                 liquidCapital: number;
-              }>({ turn: 1, sharePrice: 1, marketingStrength: 1, liquidCapital: 1 })
+                marketCap?: number;
+              }>({
+                turn: 1,
+                sharePrice: 1,
+                marketingStrength: 1,
+                liquidCapital: 1,
+                // The widgets show the market cap change over the latest turn.
+                ...(includeWidgetExtras ? { marketCap: 1 } : {}),
+              })
               .toArray(),
             db
               .collection<StockExchangeSnapshot>("stockExchangeSnapshots")
@@ -737,6 +782,7 @@ export async function GET(request: Request) {
         liquidCurrencyCode: ceoCorp.liquidCurrencyCode,
         marketingStrength: roundMarketingStrength(ceoCorp.marketingStrength ?? 0),
         ceoSalary: ceoCorp.ceoSalary ?? 0,
+        ...(includeWidgetExtras ? { marketCap: corpMarketCap(ceoCorp) } : {}),
         history: historyDocs,
       };
     }
@@ -896,6 +942,39 @@ export async function GET(request: Request) {
       character.stats?.energy ?? STAT_MIN
     );
 
+    let widgetFigures: { nationalInfluence?: number; perTurn?: WidgetPerTurn } = {};
+    if (includeWidgetExtras) {
+      const positionRows = await widgetPositionRows;
+      const characterId = character._id.toString();
+      const positionNiBonus = positionRows
+        ? resolvePositionNiBonus({
+            currentOfficeType: character.currentOffice?.type,
+            countryId: (character.countryId ?? "US") as CountryId,
+            congressLeadershipRoles: positionRows[0].map((row) => row.role),
+            isPartyChair: partyDoc?.chairId?.toString() === characterId,
+            isPartySubChair:
+              partyDoc?.viceChairId?.toString() === characterId ||
+              partyDoc?.treasurerId?.toString() === characterId,
+            isSeatedJustice: positionRows[1] != null,
+            cabinetCountryId: cabinetSeat
+              ? ((cabinetSeat.countryId ?? character.countryId ?? "US") as CountryId)
+              : undefined,
+          })
+        : null;
+      const perTurn = buildWidgetPerTurn({
+        character: {
+          politicalInfluence: character.politicalInfluence ?? 0,
+          favorability: character.favorability ?? 50,
+          positionNiBonus: positionNiBonus ?? 0,
+          fundsPerTurn: campaignIncomeBreakdown.netPerTurn,
+        },
+        corporationHistory: corpNav?.history,
+        electionHistory: electionStats?.history,
+      });
+      if (positionNiBonus == null) perTurn.nationalInfluence = null;
+      widgetFigures = { nationalInfluence: character.nationalInfluence ?? 0, perTurn };
+    }
+
     const statusPayload = {
       name: character.name,
       avatarUrl: character.avatarUrl,
@@ -928,6 +1007,7 @@ export async function GET(request: Request) {
       electionStats,
       turnBriefing: buildTurnBriefing(corpNav, electionStats),
       marketWatch,
+      ...widgetFigures,
       ...(await widgetExtras),
     };
     // Large per-user status payload. Switch from no-store to a private ETag:
@@ -937,4 +1017,12 @@ export async function GET(request: Request) {
   } catch (error) {
     return handleRouteError(error);
   }
+}
+
+/** Live market cap in the corporation's currency, or null without a share count. */
+function corpMarketCap(corp: { sharePrice?: number; totalShares?: number }): number | null {
+  const totalShares = corp.totalShares;
+  if (totalShares == null || !Number.isFinite(totalShares) || totalShares <= 0) return null;
+  const marketCap = getRoundedPublicMarketCap(corp, totalShares);
+  return Number.isFinite(marketCap) ? marketCap : null;
 }

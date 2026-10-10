@@ -204,7 +204,7 @@ export interface BankData {
   chairControlsLocked?: boolean;
   /** True when a committee is seated, so the rate moves by vote and not by decree. */
   committeeSeated?: boolean;
-  /** True when a committee exists but cannot carry a motion; the chairman holds the rate directly. */
+  /** True when no committee governors are seated and the chair sets the rate directly. */
   committeeDead?: boolean;
   /** True when the government, not the bank, sets the policy rate (pre-1997 BoE). */
   governmentControlled?: boolean;

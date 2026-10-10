@@ -162,7 +162,7 @@ export const WIKI_GLOSSARY = {
   },
   FOMC: {
     definition:
-      "The US Federal Reserve's 7-seat rate-setting committee. The chair proposes; a majority of the full board must agree, and abstains and vacant seats count against. Other central banks keep a single governor.",
+      "The US Federal Reserve's 7-seat rate-setting committee. The chair proposes; a strict majority of seated governors must agree. Vacant seats do not count, while seated governors without a ballot abstain. Other central banks keep a single governor.",
     aliases: ["federal open market committee"],
   },
   "world events": {

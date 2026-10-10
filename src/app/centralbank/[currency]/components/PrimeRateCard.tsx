@@ -45,7 +45,7 @@ export function PrimeRateCard({
   viewerSetsRate?: boolean;
   /** A committee is seated, so the rate moves by vote and this card cannot set it. */
   committeeSeated?: boolean;
-  /** A committee exists but cannot carry a motion; the chair holds the rate directly. */
+  /** A committee exists but has no seated governors, so the chair sets the rate directly. */
   committeeDead?: boolean;
   /** Jump to the committee tab; rendered as the call to action when seated. */
   onOpenCommittee?: () => void;
@@ -206,8 +206,8 @@ export function PrimeRateCard({
 
       {committeeDead && !governmentControlled && (
         <p className="mt-4 text-body-sm text-warning">
-          The committee board is understaffed: with too few seated members it cannot carry a rate
-          motion, so the chair is setting the rate directly.
+          No governors are seated, so the chair is setting the rate directly until at least one
+          governor is confirmed.
           {onOpenCommittee && (
             <>
               {" "}
