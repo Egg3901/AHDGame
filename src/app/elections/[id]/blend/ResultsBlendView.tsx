@@ -23,6 +23,14 @@ import {
   type StateSortKey,
 } from "./resultsBlendViewModel";
 import { ContingentHouseVotePanel } from "../components/ContingentHouseVotePanel";
+import { ContingentResolutionPendingBanner } from "../components/ContingentResolutionPendingBanner";
+import { PresidentialWinnerBanner } from "../components/PresidentialWinnerBanner";
+import {
+  collegeSizeFromEvByState,
+  electoralMajorityFor,
+  PRESIDENTIAL_EV_NEEDED,
+  resolvePresidentialWinnerCandidateId,
+} from "@/lib/elections/presidentialResolutionDisplay";
 
 export interface ResultsBlendViewProps {
   data: ElectionResultsResponse;
@@ -35,6 +43,64 @@ export interface ResultsBlendViewProps {
   stageNav?: React.ReactNode;
   /** A state to open on arrival (`?state=OH`). */
   initialFocus?: string | null;
+}
+
+/**
+ * What the concluded page says about how the race was settled: the notice that
+ * a contingent ballot or the swearing-in is still to finish, and the winner's
+ * banner once a President is named. Both read the race payload, so they appear
+ * only where the page was given one.
+ */
+export function ResolutionBanners({
+  election,
+  colorMap,
+}: {
+  election: ElectionDetail;
+  colorMap: Map<string, string>;
+}) {
+  const tally = election.generalVotes;
+  if (!election.isEnded || !tally) return null;
+  const college = collegeSizeFromEvByState(tally.evByState);
+  const winnerId = resolvePresidentialWinnerCandidateId(
+    tally.electoralVotesByCandidate,
+    tally.resolutionMode,
+    tally.contingentResult,
+    college > 0 ? electoralMajorityFor(college) : PRESIDENTIAL_EV_NEEDED
+  );
+  const winner = winnerId ? (election.allCandidates.find((c) => c.id === winnerId) ?? null) : null;
+  const pending = Boolean(tally.contingentResolutionPending || tally.executiveSeatingPending);
+  if (!winner && !pending) return null;
+
+  const grandTotal = Object.values(tally.totalVotes ?? {}).reduce((a, b) => a + b, 0);
+  return (
+    <div style={{ background: BLEND.page }}>
+      <div className={BLEND_CONTAINER}>
+        <div className="space-y-4 py-4">
+          {pending && !winner ? (
+            <ContingentResolutionPendingBanner
+              phase={
+                tally.executiveSeatingPending && !tally.contingentResolutionPending
+                  ? "seating"
+                  : "ballot"
+              }
+            />
+          ) : null}
+          {winner && tally.electoralVotesByCandidate ? (
+            <PresidentialWinnerBanner
+              winner={winner}
+              winnerColor={colorMap.get(winner.id) ?? winner.partyColor}
+              electoralVotes={tally.electoralVotesByCandidate}
+              popularVotePct={
+                grandTotal > 0 ? ((tally.totalVotes?.[winner.id] ?? 0) / grandTotal) * 100 : 0
+              }
+              resolutionMode={tally.resolutionMode}
+              contingentResult={tally.contingentResult}
+            />
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function EvBar({ vm, height }: { vm: ResultsBlendVM; height: number }) {
@@ -386,6 +452,12 @@ export function ResultsBlendView({
 
   return (
     <>
+      {route === "concluded" && election ? (
+        <ResolutionBanners
+          election={election}
+          colorMap={new Map(data.candidates.map((c) => [c.id, c.partyColor]))}
+        />
+      ) : null}
       {/* One instance above both layouts; the panel renders only for a deadlocked House. */}
       {data.summary.contingentHouseVote ? (
         <div style={{ background: BLEND.page }}>

@@ -26,6 +26,7 @@ import { CollegeSnake } from "./presMap/CollegeSnake";
 import { MyCampaignStateBlock, useMyCampaign } from "./useMyCampaign";
 import { PresidentialStage, presidentialTitle } from "./PresidentialStage";
 import { presidentialResultsLive } from "./liveState";
+import { ElectionDatesLine } from "./ElectionDatesLine";
 import { buildPresMapModel } from "./presMap/presMapModel";
 import {
   buildGeneralBlendViewModel,
@@ -49,6 +50,7 @@ export function GeneralBlendView({
   onRefresh,
   stageTitle = presidentialTitle(election.electionYear),
   stageNav,
+  stageActions,
   initialFocus,
 }: GeneralBlendViewProps) {
   // The stage shows every section at once; the rail selection only survives
@@ -567,9 +569,13 @@ export function GeneralBlendView({
             />
           }
           nav={stageNav}
+          actions={stageActions}
           left={
             <>
               {closeLine ? <div style={{ marginBottom: 16 }}>{closeLine}</div> : null}
+              <div style={{ marginBottom: 16 }}>
+                <ElectionDatesLine election={election} />
+              </div>
               {heroPairTickets.length > 0 ? (
                 <>
                   {heroPager}

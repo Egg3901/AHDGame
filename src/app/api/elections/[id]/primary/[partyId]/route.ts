@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
-import { requireBasicAuth } from "@/lib/api/requireAuth";
+import { getAuthUser } from "@/lib/auth";
+import { clientIpFromRequest } from "@/lib/utils/network";
 import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { resolveElectionRouteParam } from "@/lib/elections/electionParamResolution";
@@ -19,18 +20,24 @@ const partyIdSchema = z.string().min(1).max(32);
 // campaign state. Fetched lazily by the Blend primary screen when a party is
 // selected, rather than folded into the 60s election-detail poll, since most
 // viewers never open it and the payload is per-party.
-// Auth: requireBasicAuth
-// Errors: 400, 401, 404, 429
+// Auth: optional. Everything in the payload except `viewerCampaign` is public
+// (the deep-dive page serves the same board to anyone), and `viewerCampaign`
+// is null without a viewer, so a signed-out spectator gets the read-only board.
+// Errors: 400, 404, 429
 export async function GET(request: Request, { params }: RouteParams) {
   try {
-    const auth = await requireBasicAuth();
-    if (!auth.ok) return auth.response;
+    const user = await getAuthUser();
 
     // Its own read budget, matching the wire feed this screen also polls.
     // The shared `election:` bucket is 20/minute and every other member of it
     // is an action the player takes (enter, vote, surge, travel); browsing
     // parties here must not spend the budget they need to act.
-    const rateLimit = checkRateLimit(auth.user.userId, 60, 60000);
+    // Spectators are budgeted per address, since the board is not cheap to build.
+    const rateLimit = checkRateLimit(
+      user ? user.userId : `anon:${clientIpFromRequest(request)}`,
+      60,
+      60000
+    );
     if (!rateLimit.ok) return rateLimitResponse(rateLimit.retryAfter);
 
     const { id, partyId } = await params;
@@ -65,16 +72,17 @@ export async function GET(request: Request, { params }: RouteParams) {
       partyId: parsedPartyId.data,
       // The active profile, so this resolves the same character the deep-dive
       // page does and the two never disagree about whose campaign is shown.
-      viewer: {
-        userId: auth.user.userId,
-        activeCharacterId: auth.user.activeCharacterId ?? null,
-      },
+      viewer: user
+        ? { userId: user.userId, activeCharacterId: user.activeCharacterId ?? null }
+        : null,
     });
     if (!detail) {
       return errorResponse(404, "Party not in this race");
     }
 
-    return NextResponse.json(detail);
+    // Never cache: a signed-in body carries the viewer's own campaign, and a
+    // cached spectator body would be served to signed-in players without it.
+    return NextResponse.json(detail, { headers: { "Cache-Control": "private, no-store" } });
   } catch (error) {
     return handleRouteError(error, {
       request,

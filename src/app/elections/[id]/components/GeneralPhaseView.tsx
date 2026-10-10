@@ -313,7 +313,9 @@ export function GeneralPhaseView({
               {
                 id: "presence",
                 label: "Campaign presence",
-                content: <StateOrganizationTab showHubLink showHeading={false} />,
+                content: (
+                  <StateOrganizationTab showHubLink showHeading={false} needsCampaign={!amInRace} />
+                ),
                 hash: "#state-org",
               },
             ]
