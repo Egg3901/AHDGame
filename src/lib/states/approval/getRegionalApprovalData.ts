@@ -42,7 +42,10 @@ export async function getRegionalApprovalData(
 
   if (countryStateIds.length === 0) return null;
 
-  const allMetrics = await findMergedRegionMetricsMany(db, { _id: { $in: countryStateIds } });
+  const allMetrics = await findMergedRegionMetricsMany(db, {
+    _id: { $in: countryStateIds },
+    countryId,
+  });
 
   if (allMetrics.length === 0) return null;
 
@@ -70,16 +73,18 @@ export async function getRegionalApprovalData(
     stateId,
     currentTurn
   );
-  const modifiers: ActiveModifier[] = [
-    ...evaluateModifiers(buildFlatMetrics(metrics), { preset, countryId, year }),
-    ...addressModifiers,
-  ];
+  const bases = isPoliticalApprovalCountry(countryId, true)
+    ? await loadPoliticalApprovalBases(db, countryId)
+    : null;
+  const metricModifiers =
+    bases?.modifiersByRegion?.get(stateId) ??
+    evaluateModifiers(buildFlatMetrics(metrics), { preset, countryId, year });
+  const modifiers: ActiveModifier[] = [...metricModifiers, ...addressModifiers];
 
   // SP4: playable countries score from the hybrid political base; modifiers
   // (metric-named + address) still apply on top via the shared seam.
   let baseOverride: number | undefined;
-  if (isPoliticalApprovalCountry(countryId)) {
-    const bases = await loadPoliticalApprovalBases(db, countryId);
+  if (isPoliticalApprovalCountry(countryId, true)) {
     baseOverride = bases?.byRegion.get(stateId) ?? BASE_APPROVAL;
   }
 
@@ -91,7 +96,8 @@ export async function getRegionalApprovalData(
       undefined,
       preset,
       year,
-      baseOverride
+      baseOverride,
+      metricModifiers
     ),
     baseApproval:
       baseOverride ??

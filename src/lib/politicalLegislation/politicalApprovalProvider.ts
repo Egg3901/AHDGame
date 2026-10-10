@@ -1,18 +1,25 @@
+import { resetApprovalDirections } from "@/lib/resetMetrics/rules/approval";
 /**
- * SP4 async provider for the hybrid political approval model (spec §3).
- *
- * The ONE loader every approval surface uses for LAW_COUNTRY_IDS — surfaces
- * fetch the bases once per country and pass them as `baseOverride` into the
- * existing scorers, so named modifiers / address bumps / damping stay shared.
- * A surface must NEVER fall back to the legacy metric scorer for a playable
- * country (one-surface divergence was a real bug: fix/region-approval).
+ * Government approval bases and named conditions share one version-aware loader.
+ * Metrics v2 compares current owner outcomes with the country's regional mean;
+ * v1 retains its hybrid political board. Surfaces apply conditions and damping
+ * through the shared scorer after loading these inputs once per country.
  */
 
+import { isResetV2Country } from "@/lib/resetVersions/rules";
+import type { GameState } from "@/lib/db/types/gameState";
+import type { ActiveModifier } from "@/lib/utils/approvalModifiers";
+import { loadResetApprovalModifiers } from "@/lib/resetMetrics/loadApprovalModifiers";
 import type { Db } from "mongodb";
 import type { PoliticalMetricsDoc } from "@/lib/db/types/politicalMetrics";
 import type { State } from "@/lib/db/types/state";
 import type { CountryId } from "@/lib/constants/countries";
-import { BASE_APPROVAL } from "@/lib/utils/governmentApproval";
+import { resolveGameYear } from "@/lib/era/era";
+import {
+  BASE_APPROVAL,
+  computeStateApprovalBase,
+  computeNationalAveragesFromMetrics,
+} from "@/lib/utils/governmentApproval";
 import { POLITICAL_METRIC_COUNTRY_IDS } from "@/lib/politicalMetrics/types";
 import { NON_PLAYABLE_BOARDS } from "@/lib/politicalMetrics/seeds/nonPlayableBoards";
 import { approvalComponent, electorateLean } from "./politicalApproval";
@@ -35,6 +42,7 @@ const BOARD_COUNTRIES = new Set<string>([
 
 /**
  * True when the country's political consumers read the new-generation pipeline.
+ * Approval consumers opt in to v2 successors; legacy political writes do not.
  *
  * Narrows to `CountryId`, not `PoliticalMetricsCountryId`: every member of the
  * set is a real country, but the narrow union means "has authored baseline
@@ -42,14 +50,20 @@ const BOARD_COUNTRIES = new Set<string>([
  * anchor-only lookups compile against countries that have none.
  */
 export function isPoliticalApprovalCountry(
-  countryId: string | null | undefined
+  countryId: string | null | undefined,
+  includeMetricsV2Successors = false
 ): countryId is CountryId {
-  return countryId != null && BOARD_COUNTRIES.has(countryId);
+  return (
+    countryId != null &&
+    (BOARD_COUNTRIES.has(countryId) || (includeMetricsV2Successors && isResetV2Country(countryId)))
+  );
 }
 
 export interface PoliticalApprovalBases {
   /** stateId → base approval (BASE_APPROVAL + component, clamped 0–100, rounded 0.1). */
   byRegion: Map<string, number>;
+  /** Owner-derived named conditions when Metrics v2 is active. */
+  modifiersByRegion?: Map<string, ActiveModifier[]>;
   /** Population-weighted national base (same rounding). */
   national: number;
 }
@@ -64,16 +78,28 @@ const clamp100 = (v: number) => Math.max(0, Math.min(100, v));
  */
 export async function loadPoliticalApprovalBases(
   db: Db,
-  countryId: CountryId
+  countryId: CountryId,
+  turn?: number
 ): Promise<PoliticalApprovalBases | null> {
   // The world's preset picks which era's intercept to score against — a
   // non-playable's board sits at a different level per era, so the wrong
   // intercept would lurch its approval.
-  const [gameState, docs, states] = await Promise.all([
-    db
-      .collection<{ _id: string; preset?: string }>("gameState")
-      .findOne({ _id: "current" }, { projection: { preset: 1 } }),
-    db.collection<PoliticalMetricsDoc>("politicalMetrics").find({ countryId }).toArray(),
+  const [gameState, states] = await Promise.all([
+    db.collection<GameState>("gameState").findOne(
+      { _id: "current" },
+      {
+        projection: {
+          preset: 1,
+          currentTurn: 1,
+          currentYear: 1,
+          startingYear: 1,
+          eraSystemEnabled: 1,
+          resetWorldId: 1,
+          resetVersionSeeds: 1,
+          metricsSystemVersion: 1,
+        },
+      }
+    ),
     db
       .collection<State>("states")
       .find(
@@ -82,6 +108,48 @@ export async function loadPoliticalApprovalBases(
       )
       .toArray(),
   ]);
+  const resetInputs = await loadResetApprovalModifiers(
+    db,
+    countryId,
+    states.map((state) => String(state._id)),
+    gameState,
+    turn
+  );
+  if (resetInputs) {
+    const averages = computeNationalAveragesFromMetrics(resetInputs.metrics);
+    const year = gameState?.eraSystemEnabled ? resolveGameYear(gameState) : null;
+    const byRegion = new Map(
+      resetInputs.metrics.map((metrics) => [
+        String(metrics._id),
+        computeStateApprovalBase(
+          metrics,
+          averages,
+          undefined,
+          gameState?.preset,
+          year,
+          resetApprovalDirections
+        ),
+      ])
+    );
+    const totalPop = states.reduce((sum, state) => sum + Math.max(0, state.population ?? 0), 0);
+    const national =
+      totalPop > 0
+        ? round1(
+            states.reduce(
+              (sum, state) =>
+                sum +
+                (byRegion.get(String(state._id)) ?? BASE_APPROVAL) *
+                  Math.max(0, state.population ?? 0),
+              0
+            ) / totalPop
+          )
+        : BASE_APPROVAL;
+    return { byRegion, national, modifiersByRegion: resetInputs.modifiersByRegion };
+  }
+  const docs = await db
+    .collection<PoliticalMetricsDoc>("politicalMetrics")
+    .find({ countryId })
+    .toArray();
   if (docs.length === 0) return null;
 
   const stateById = new Map(states.map((s) => [s._id, s]));

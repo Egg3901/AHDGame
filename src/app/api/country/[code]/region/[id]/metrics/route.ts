@@ -123,10 +123,12 @@ export async function GET(
     const regionGroups = Object.values(demographicsDoc?.groups ?? {});
     const weighting = regionGroups.length > 0 ? { groups: regionGroups } : undefined;
     // SP4: playable countries score from the hybrid political base.
+    let metricModifiers;
     let baseOverride: number | undefined;
-    if (isPoliticalApprovalCountry(resolvedCountryId)) {
+    if (isPoliticalApprovalCountry(resolvedCountryId, true)) {
       const bases = await loadPoliticalApprovalBases(db, resolvedCountryId);
       baseOverride = bases?.byRegion.get(stateId) ?? BASE_APPROVAL;
+      metricModifiers = bases?.modifiersByRegion?.get(stateId);
     }
     const governmentApprovalBase =
       baseOverride ??
@@ -138,10 +140,13 @@ export async function GET(
       weighting,
       preset,
       year,
-      baseOverride
+      baseOverride,
+      metricModifiers
     );
     const governmentApprovalModifiers = [
-      ...evaluateModifiers(flat, { preset, countryId: resolvedCountryId, year }).map((m) => ({
+      ...(
+        metricModifiers ?? evaluateModifiers(flat, { preset, countryId: resolvedCountryId, year })
+      ).map((m) => ({
         ...m,
         marginEffect:
           m.marginEffect ?? (m.source === "address" ? 0 : marginEffectForModifier(m.effect, m.id)),

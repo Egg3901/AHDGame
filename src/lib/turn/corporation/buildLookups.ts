@@ -1,3 +1,10 @@
+import {
+  loadResetApprovalModifiers,
+  RESET_APPROVAL_BOARD_PROJECTION,
+} from "@/lib/resetMetrics/loadApprovalModifiers";
+import type { ResetMetricSnapshot } from "@/lib/resetMetrics/rules/snapshot";
+import { RESET_V2_READY } from "@/lib/resetVersions/availability";
+import { RESET_V2_COUNTRIES, resetSystemVersionsForCountry } from "@/lib/resetVersions/rules";
 import type { Db } from "mongodb";
 import { findMergedRegionMetricsMany } from "@/lib/macroMetrics/merge";
 import type {
@@ -1267,6 +1274,9 @@ export async function buildCorporationLookups(
         currentTurn: 1,
         startingYear: 1,
         eraSystemEnabled: 1,
+        resetWorldId: 1,
+        resetVersionSeeds: 1,
+        metricsSystemVersion: 1,
       },
     }
   );
@@ -1284,15 +1294,57 @@ export async function buildCorporationLookups(
     politicalDocs.map((doc) => [String(doc._id), buildPoliticalBaseModifiers(doc.values)])
   );
   const politicalBoardByState = new Map(politicalDocs.map((doc) => [String(doc._id), doc.values]));
+  const resetCountries = RESET_V2_COUNTRIES.filter(
+    (country) => resetSystemVersionsForCountry(gameState, RESET_V2_READY, country).metrics === "v2"
+  );
+  const resetBoards =
+    resetCountries.length > 0
+      ? await db
+          .collection<ResetMetricSnapshot>("resetMetricSnapshots")
+          .find(
+            { worldId: gameState!.resetWorldId, countryId: { $in: resetCountries } },
+            {
+              projection: RESET_APPROVAL_BOARD_PROJECTION,
+            }
+          )
+          .toArray()
+      : [];
+  const resetConditions = new Map(
+    await Promise.all(
+      resetCountries.map(
+        async (country) =>
+          [
+            country,
+            await loadResetApprovalModifiers(
+              db,
+              country,
+              allStateMetrics
+                .filter(
+                  (metrics) =>
+                    metrics.countryId === country && !NATIONAL_SCOPE_IDS.has(String(metrics._id))
+                )
+                .map((metrics) => String(metrics._id)),
+              gameState,
+              gameState?.currentTurn,
+              resetBoards
+            ),
+          ] as const
+      )
+    )
+  );
   const regionalConditionMarginByState = new Map<string, number>();
   for (const metrics of allStateMetrics) {
     const stateId = String(metrics._id);
     if (NATIONAL_SCOPE_IDS.has(stateId)) continue;
-    const modifiers = evaluateModifiers(buildFlatMetrics(metrics), {
-      preset: gameState?.preset,
-      countryId: metrics.countryId,
-      year: eraYear,
-    });
+    const modifiers =
+      resetConditions
+        .get(metrics.countryId as (typeof RESET_V2_COUNTRIES)[number])
+        ?.modifiersByRegion.get(stateId) ??
+      evaluateModifiers(buildFlatMetrics(metrics), {
+        preset: gameState?.preset,
+        countryId: metrics.countryId,
+        year: eraYear,
+      });
     regionalConditionMarginByState.set(stateId, computeRegionalConditionMargin(modifiers));
   }
 

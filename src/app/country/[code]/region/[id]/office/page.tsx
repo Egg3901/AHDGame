@@ -471,7 +471,8 @@ export default async function GovernorOfficePage({ params }: Props) {
         weightingFor(groupsByState, "UK", stateId),
         preset,
         year,
-        ukBases?.byRegion.get(stateId) ?? BASE_APPROVAL
+        ukBases?.byRegion.get(stateId) ?? BASE_APPROVAL,
+        ukBases?.modifiersByRegion?.get(stateId)
       );
       const previous = thisMetric.governance?.independenceDesire?.value ?? 50;
       const trend = thisMetric.governance?.independenceDesire?.trend ?? 0;

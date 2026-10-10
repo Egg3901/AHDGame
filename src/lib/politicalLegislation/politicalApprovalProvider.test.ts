@@ -42,6 +42,12 @@ describe("seed splitter", () => {
 });
 
 describe("isPoliticalApprovalCountry", () => {
+  it("routes successor approval without enabling legacy political writes", () => {
+    for (const id of ["SCO", "WAL"]) {
+      expect(isPoliticalApprovalCountry(id)).toBe(false);
+      expect(isPoliticalApprovalCountry(id, true)).toBe(true);
+    }
+  });
   it("matches every country with a board, playable or not", () => {
     for (const id of ["US", "UK", "RU", "DD"]) expect(isPoliticalApprovalCountry(id)).toBe(true);
     for (const id of ["JP", "DE", "HU", "YU", "NG"]) {

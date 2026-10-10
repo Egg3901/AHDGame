@@ -139,10 +139,12 @@ export async function resolveGovExecutiveApproval(
   // Live year for era-aware scoring; null while the flag is off (legacy path).
   const year = gameStateDoc?.eraSystemEnabled ? resolveGameYear(gameStateDoc) : null;
   // SP4: playable-country live fallback reads the hybrid political base.
+  let metricModifiers;
   let baseOverride: number | undefined;
-  if (isPoliticalApprovalCountry(countryId)) {
+  if (isPoliticalApprovalCountry(countryId, true)) {
     const bases = await loadPoliticalApprovalBases(db, countryId);
     baseOverride = bases?.byRegion.get(stateId.toUpperCase()) ?? BASE_APPROVAL;
+    metricModifiers = bases?.modifiersByRegion?.get(stateId.toUpperCase());
   }
   // P6d: electorate-weighted, matching the stored/displayed approval.
   const approval = calculateStateApproval(
@@ -152,7 +154,8 @@ export async function resolveGovExecutiveApproval(
     weightingFor(groupsByState, countryId, stateId.toUpperCase()),
     preset,
     year,
-    baseOverride
+    baseOverride,
+    metricModifiers
   );
 
   return { partyId: exec.partyId, approval };
