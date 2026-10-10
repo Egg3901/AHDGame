@@ -17,7 +17,11 @@ import type { GovernmentApproval } from "@/lib/db/types/governmentApproval";
 import type { FederalBudget } from "@/lib/db/types/budget";
 import { enforcementApprovalModifier } from "@/lib/unions/enforcementCosts";
 import type { StateApprovalHistory } from "@/lib/db/types/stateApproval";
-import { type CountryId } from "@/lib/constants/countries";
+import {
+  type CountryId,
+  getCountryConfig,
+  getHeadOfGovernmentOfficeKey,
+} from "@/lib/constants/countries";
 import { actingAppointmentsEnabled } from "@/lib/cabinet/actingEligibility";
 import { getCabinetPositions } from "@/lib/constants/cabinetMechanics";
 import { resolveCabinetRoster } from "@/lib/cabinet/rosterEra";
@@ -30,6 +34,7 @@ import {
   emptyCabinetSeatsModifier,
   publicExpectationsModifier,
   turnForDate,
+  expectationsRampTurns,
 } from "@/lib/country/rules/approvalHoneymoon";
 import type { LeaderReference } from "@/lib/government/leaderReference";
 import type { ElectedOfficial } from "@/lib/db/types/officials";
@@ -857,12 +862,18 @@ export async function snapshotApprovalHistory(
   // One gameState read per country per turn: the live year and the seats created
   // by legislation decide how many cabinet seats exist right now. No seats
   // registered for the country leaves the set undefined (binary penalty).
-  const gameStateDoc = await db
-    .collection<GameState>("gameState")
-    .findOne(
-      { _id: "current" },
-      { projection: { currentYear: 1, currentTurn: 1, startingYear: 1, manuallyEnabledSeats: 1 } }
-    );
+  const gameStateDoc = await db.collection<GameState>("gameState").findOne(
+    { _id: "current" },
+    {
+      projection: {
+        currentYear: 1,
+        currentTurn: 1,
+        startingYear: 1,
+        manuallyEnabledSeats: 1,
+        preset: 1,
+      },
+    }
+  );
   const rosterSeatIds = resolveCabinetRoster(
     getCabinetPositions(countryId),
     gameStateDoc ? resolveGameYear(gameStateDoc) : null,
@@ -902,7 +913,16 @@ export async function snapshotApprovalHistory(
   } catch {
     // keep the stored tenure
   }
-  const expectationsMod = publicExpectationsModifier(tenure.sinceTurn, turn);
+  // The honeymoon lasts the head of government's whole term (owner, ticket 1455).
+  const countryConfig = getCountryConfig(countryId, gameStateDoc?.preset);
+  const headOffice = countryConfig.officeTypes.find(
+    (office) => office.key === getHeadOfGovernmentOfficeKey(countryId, gameStateDoc?.preset)
+  );
+  const expectationsMod = publicExpectationsModifier(
+    tenure.sinceTurn,
+    turn,
+    expectationsRampTurns(headOffice, countryConfig.lowerElectionSystem)
+  );
   const unionBudget = await db
     .collection<FederalBudget>("federalBudget")
     .findOne({ countryId }, { projection: { unionsBanned: 1, unionEnforcementPosture: 1 } });
