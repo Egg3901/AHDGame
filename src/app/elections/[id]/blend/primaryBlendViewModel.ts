@@ -185,6 +185,10 @@ function grouped(n: number): string {
   return Math.round(n).toLocaleString("en-US");
 }
 
+function safeSharePct(pct: number): number {
+  return Math.max(0, Math.min(100, pct));
+}
+
 /** The office and region a candidate holds, for the field row's blurb. */
 function blurbFor(c: CandidateDetail): string {
   if (c.isNPP) return "Non-player politician";
@@ -264,7 +268,7 @@ export function buildPrimaryBlendViewModel(inp: PrimaryBlendInput): PrimaryBlend
       rank: i + 1,
       name: c.characterName,
       blurb: blurbFor(c),
-      pct: (c.sharePct ?? 0).toFixed(1),
+      pct: safeSharePct(c.sharePct ?? 0).toFixed(1),
       delegates:
         party?.projectedDelegates && party.projectedDelegates[c.id] != null
           ? grouped(party.projectedDelegates[c.id])
@@ -331,7 +335,7 @@ export function buildPrimaryBlendViewModel(inp: PrimaryBlendInput): PrimaryBlend
     const majority = party?.delegateMajority;
 
     you = {
-      share: `${(me.sharePct ?? 0).toFixed(1)}%`,
+      share: `${safeSharePct(me.sharePct ?? 0).toFixed(1)}%`,
       rankText: `${meIndex + 1} of ${candidates.length}`,
       rankNum: meIndex + 1,
       lead: diff == null ? "—" : `${diff >= 0 ? "+" : ""}${diff.toFixed(1)} pts`,

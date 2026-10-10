@@ -97,6 +97,7 @@ function generalBonusPct(level: number): number {
 export function StateOrganizationTab({
   showHubLink = false,
   showHeading = true,
+  needsCampaign = false,
 }: {
   /** When true, link out to the dedicated Political Operations hub. */
   showHubLink?: boolean;
@@ -105,6 +106,12 @@ export function StateOrganizationTab({
    * already names this pane, so the section is not titled twice.
    */
   showHeading?: boolean;
+  /**
+   * The viewer has no campaign in the race. Building is paid from the
+   * campaign's own pools, so the copy says how to get one rather than
+   * inviting a build the server will refuse.
+   */
+  needsCampaign?: boolean;
 } = {}) {
   const t = useTranslations("elections.campaignPresence");
   const { currentTurn } = useGameClock();
@@ -282,7 +289,10 @@ export function StateOrganizationTab({
           )}
         </div>
         {!canBuild && <p className="mt-1 text-sm text-muted">{t("readOnly")}</p>}
-        {canBuild && (
+        {canBuild && needsCampaign && (
+          <p className="mt-1 text-sm text-muted">{t("needsCampaign")}</p>
+        )}
+        {canBuild && !needsCampaign && (
           <p className="mt-1 text-sm text-muted">
             Build per-state infrastructure for the presidential race. It counts in the primary{" "}
             <strong>and</strong> in the general election. Each level costs {STATE_ORG_COST_ACTIONS}{" "}

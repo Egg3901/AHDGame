@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useCurrency } from "@/contexts/CurrencyContext";
+import { projectBondMaturityAffordability } from "@/lib/bonds/bondMaturityAffordability";
 import { bondMaturitySchedule } from "@/lib/bonds/bondMaturitySchedule";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import type { BondInfo } from "./CorporationPageTypes";
@@ -12,14 +13,17 @@ interface BondMaturityNoticeProps {
   liquidCurrencyCode?: string;
   /** Corp-local cash, compared against the repayment for the shortfall line. */
   liquidCapital: number;
+  /** Last-turn realized retained earnings, converted to a per-turn local rate. */
+  recentRetainedEarningsPerTurn?: number | null;
   corporationName: string;
   /** Scopes the dismissal so one corp's notice never hides another's. */
   corporationId: string;
 }
 
-/** Dismissal hides the notice only while it is informational. Anything urgent
- * (due soon, due now, or short of cash) ignores the dismissal and shows
- * anyway, so dismissing now still reminds later when action is actually due. */
+/** Dismissal hides informational notices. A cash shortfall overrides it once
+ * it enters the 48-turn action window. */
+const PERSISTENT_ACTION_WINDOW_TURNS = 48;
+
 function dismissKey(corporationId: string, maturityTurn: number): string {
   return `ahd-bond-maturity-dismissed-v1:${corporationId}:${maturityTurn}`;
 }
@@ -46,6 +50,7 @@ export default function BondMaturityNotice({
   bondInfo,
   liquidCurrencyCode,
   liquidCapital,
+  recentRetainedEarningsPerTurn,
   corporationName,
   corporationId,
 }: BondMaturityNoticeProps) {
@@ -85,13 +90,27 @@ export default function BondMaturityNotice({
 
   const code = (liquidCurrencyCode as CurrencyCode | undefined) ?? undefined;
   const cashAnchor = code ? toInternalFrom(liquidCapital, code) : liquidCapital;
+  const retainedEarningsAnchor =
+    recentRetainedEarningsPerTurn == null
+      ? null
+      : code
+        ? toInternalFrom(recentRetainedEarningsPerTurn, code)
+        : recentRetainedEarningsPerTurn;
   const dueNow = next.turnsRemaining === 0;
-  const shortOfCash = cashAnchor < next.amount;
-  const urgent = dueNow || approaching || shortOfCash;
+  const affordability = projectBondMaturityAffordability({
+    currentLiquidCapital: cashAnchor,
+    repaymentAmount: next.amount,
+    turnsRemaining: next.turnsRemaining,
+    retainedEarningsPerTurn: retainedEarningsAnchor,
+  });
+  const shortOfCash = !affordability.isCovered;
+  const onTrack = affordability.usedProjection && affordability.isCovered;
+  const persistentActionNeeded =
+    shortOfCash && next.turnsRemaining <= PERSISTENT_ACTION_WINDOW_TURNS;
 
-  // A dismissal is a snooze, not a waiver: once the repayment is due soon, due
-  // now, or unaffordable, it shows again no matter what was dismissed before.
-  if (dismissed && !urgent) return null;
+  // A dismissal is a snooze, not a waiver: shortfalls return as persistent
+  // alerts once they enter the action window.
+  if (dismissed && !persistentActionNeeded) return null;
 
   const dismiss = () => {
     setDismissed(true);
@@ -102,18 +121,28 @@ export default function BondMaturityNotice({
     }
   };
 
-  const tone = urgent ? "border-warning/40 bg-warning/10" : "border-info/30 bg-info/10";
-  const status = dueNow
-    ? "Action needed."
-    : shortOfCash
-      ? "Action needed: unaffordable at current cash."
-      : approaching
-        ? "Due soon."
-        : "No action needed.";
+  const tone = persistentActionNeeded
+    ? "border-warning/40 bg-warning/10"
+    : "border-info/30 bg-info/10";
+  const dueTurn = next.maturityTurn.toLocaleString("en-US");
+  const shortfallDescription = affordability.usedProjection
+    ? `projected cash at turn ${dueTurn} is short by ${formatAmount(affordability.shortfall)}`
+    : `current cash is short by ${formatAmount(affordability.shortfall)}`;
+  const status = shortOfCash
+    ? persistentActionNeeded
+      ? `Action needed: ${shortfallDescription}.`
+      : `${shortfallDescription.charAt(0).toUpperCase()}${shortfallDescription.slice(1)}.`
+    : onTrack
+      ? `On track: projected cash at turn ${dueTurn} covers this.`
+      : dueNow
+        ? "Due now."
+        : approaching
+          ? "Due soon."
+          : "No action needed.";
 
   return (
     <div
-      className={`relative rounded-xl border px-4 py-3 text-sm ${tone} ${!urgent ? "pr-10" : ""}`}
+      className={`relative rounded-xl border px-4 py-3 text-sm ${tone} ${!persistentActionNeeded ? "pr-10" : ""}`}
     >
       <p className="font-semibold text-foreground">
         {dueNow
@@ -121,23 +150,38 @@ export default function BondMaturityNotice({
           : `Bond repayment of ${formatAmount(next.amount)} due on turn ${next.maturityTurn.toLocaleString("en-US")} (${next.turnsRemaining} ${next.turnsRemaining === 1 ? "turn" : "turns"})`}{" "}
         <span className="font-normal text-muted">{status}</span>
       </p>
-      {urgent && (
+      {onTrack && (
         <p className="mt-0.5 text-muted">
-          {shortOfCash ? (
+          Using the most recent turn&apos;s retained earnings, projected liquid capital at turn{" "}
+          {dueTurn} is {formatAmount(affordability.cashAtMaturity)}. Figures on Finance &gt; Credit.
+        </p>
+      )}
+      {shortOfCash && (
+        <p className="mt-0.5 text-muted">
+          Liquid capital is {formatAmount(cashAnchor)} today.
+          {affordability.usedProjection && (
             <>
-              Liquid capital is {formatAmount(cashAnchor)} today, short of this repayment. Build
-              cash, refinance, or plan asset sales before turn{" "}
-              {next.maturityTurn.toLocaleString("en-US")}; a repayment that drives liquid capital
-              below zero can default. Figures on Finance &gt; Credit.
-            </>
-          ) : (
-            <>
-              Covered by current liquid capital of {formatAmount(cashAnchor)}. Paid out of liquid
-              capital in one payment
-              {next.bondCount > 1 ? `, across ${next.bondCount} bonds maturing together` : ""}.
-              Figures on Finance &gt; Credit.
+              {" "}
+              Projected cash at turn {dueTurn} is {formatAmount(affordability.cashAtMaturity)}.
             </>
           )}
+          {persistentActionNeeded ? (
+            <>
+              {" "}
+              Build cash, refinance, or plan asset sales before turn {dueTurn}; a repayment that
+              drives liquid capital below zero can default. Figures on Finance &gt; Credit.
+            </>
+          ) : (
+            <> Figures on Finance &gt; Credit.</>
+          )}
+        </p>
+      )}
+      {!shortOfCash && (dueNow || approaching) && (
+        <p className="mt-0.5 text-muted">
+          Covered by current liquid capital of {formatAmount(cashAnchor)}. Paid out of liquid
+          capital in one payment
+          {next.bondCount > 1 ? `, across ${next.bondCount} bonds maturing together` : ""}. Figures
+          on Finance &gt; Credit.
         </p>
       )}
       <details className="mt-1 text-xs text-muted">
@@ -152,7 +196,7 @@ export default function BondMaturityNotice({
           )}
         </p>
       </details>
-      {!urgent && (
+      {!persistentActionNeeded && (
         <button
           type="button"
           onClick={dismiss}

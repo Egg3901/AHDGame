@@ -215,3 +215,23 @@ it("falls back to the first remaining candidate when the selected candidate leav
     "true"
   );
 });
+
+it("tells a player with no campaign in the race how to get one, not how to build", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => ({ ok: true, json: async () => data }))
+  );
+  render(<StateOrganizationTab needsCampaign />);
+  expect(await screen.findByText(translate("needsCampaign"))).toBeTruthy();
+  expect(screen.queryByText(/Build per-state infrastructure/)).toBeNull();
+});
+
+it("keeps the build explanation for a candidate", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => ({ ok: true, json: async () => data }))
+  );
+  render(<StateOrganizationTab />);
+  expect(await screen.findByText(/Build per-state infrastructure/)).toBeTruthy();
+  expect(screen.queryByText(translate("needsCampaign"))).toBeNull();
+});

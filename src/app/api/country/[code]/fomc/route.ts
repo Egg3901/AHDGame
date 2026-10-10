@@ -28,7 +28,7 @@ import {
 } from "@/lib/db/types/centralBank";
 import type { NPP } from "@/lib/db/types/npp";
 import type { ElectedOfficial } from "@/lib/db/types";
-import { majorityThreshold, tallyMeeting } from "@/lib/centralBank/fomc";
+import { majorityThreshold, seatedBallots, tallyMeeting } from "@/lib/centralBank/fomc";
 import { getCurrentTurn } from "@/lib/turn/currentTurn";
 
 /** Resolved sessions returned to the panel (newest last in storage). */
@@ -115,8 +115,9 @@ export async function GET(_request: Request, context: RouteContext) {
     }));
 
     const meeting = bank.activeFomcMeeting ?? null;
-    const votedSeatIds = new Set((meeting?.ballots ?? []).map((b) => b.seatId));
-    const tally = meeting ? tallyMeeting(meeting.ballots, meeting.motion, board.length) : null;
+    const liveBallots = meeting ? seatedBallots(meeting.ballots, board) : [];
+    const votedSeatIds = new Set(liveBallots.map((b) => b.seatId));
+    const tally = meeting ? tallyMeeting(liveBallots, meeting.motion, board.length) : null;
 
     // Scheduling + budget context so players can see when sessions happen and
     // where their per-term rate-change budget went (ticket #1184).

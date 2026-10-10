@@ -83,17 +83,72 @@ describe("BondMaturityNotice", () => {
     expect(window.localStorage.getItem("ahd-bond-maturity-dismissed-v1:corp-1:871")).toBe("1");
   });
 
-  it("reminds again once the repayment is due soon despite an earlier dismissal", async () => {
-    window.localStorage.setItem("ahd-bond-maturity-dismissed-v1:corp-1:871", "1");
-    // 871 - 860 = 11 turns: inside the 24-turn warning window.
+  it("shows a covered due soon notice as informational and dismissible", async () => {
     render(<BondMaturityNotice {...baseProps} bondInfo={bondInfo({ currentTurn: 860 })} />);
     await screen.findByText(/Due soon\./);
+    expect(screen.getByText(/Covered by current liquid capital of money:100000000/)).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Dismiss bond repayment notice" })).toBeTruthy();
   });
 
-  it("reminds again when cash falls short despite an earlier dismissal", async () => {
+  it("overrides an earlier dismissal for a shortfall inside the action window", async () => {
     window.localStorage.setItem("ahd-bond-maturity-dismissed-v1:corp-1:871", "1");
-    render(<BondMaturityNotice {...baseProps} liquidCapital={1_000_000} bondInfo={bondInfo()} />);
-    await screen.findByText(/Action needed: unaffordable at current cash\./);
+    render(
+      <BondMaturityNotice
+        {...baseProps}
+        liquidCapital={1_000_000}
+        bondInfo={bondInfo({ currentTurn: 860 })}
+      />
+    );
+    await screen.findByText(/Action needed: current cash is short by money:22100000\./);
+    expect(screen.queryByRole("button", { name: "Dismiss bond repayment notice" })).toBeNull();
+  });
+
+  it("shows a covered projection as informational and lets the CEO dismiss it", async () => {
+    render(
+      <BondMaturityNotice
+        {...baseProps}
+        liquidCapital={1_000_000}
+        recentRetainedEarningsPerTurn={250_000}
+        bondInfo={bondInfo()}
+      />
+    );
+
+    await screen.findByText("On track: projected cash at turn 871 covers this.");
+    expect(screen.getByText(/projected liquid capital at turn 871 is money:24500000/)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Dismiss bond repayment notice" }));
+    expect(screen.queryByText(/Bond repayment of/)).toBeNull();
+    expect(window.localStorage.getItem("ahd-bond-maturity-dismissed-v1:corp-1:871")).toBe("1");
+  });
+
+  it("keeps a far off projected shortfall quiet and dismissible", async () => {
+    render(
+      <BondMaturityNotice
+        {...baseProps}
+        liquidCapital={1_000_000}
+        recentRetainedEarningsPerTurn={100_000}
+        bondInfo={bondInfo()}
+      />
+    );
+
+    await screen.findByText(/Projected cash at turn 871 is short by money:12700000\./);
+    expect(screen.getByRole("button", { name: "Dismiss bond repayment notice" })).toBeTruthy();
+  });
+
+  it("makes a projected shortfall persistent at 48 turns before maturity", async () => {
+    render(
+      <BondMaturityNotice
+        {...baseProps}
+        liquidCapital={1_000_000}
+        recentRetainedEarningsPerTurn={100_000}
+        bondInfo={bondInfo({ currentTurn: 823 })}
+      />
+    );
+
+    await screen.findByText(
+      /Action needed: projected cash at turn 871 is short by money:17300000\./
+    );
+    expect(screen.queryByRole("button", { name: "Dismiss bond repayment notice" })).toBeNull();
   });
 
   it("demands action when the repayment is due now", async () => {
@@ -105,7 +160,7 @@ describe("BondMaturityNotice", () => {
       />
     );
     await screen.findByText(/Bond repayment due now: money:23100000/);
-    // Urgent notices offer no dismiss button: hiding them would waive the reminder.
+    await screen.findByText(/Action needed: current cash is short by money:22100000\./);
     expect(screen.queryByRole("button", { name: "Dismiss bond repayment notice" })).toBeNull();
   });
 });

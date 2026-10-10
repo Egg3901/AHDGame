@@ -45,7 +45,10 @@ import {
   corpTabIdFor,
 } from "@/components/corporation/CorporationTabGroups";
 import FinancialsTab from "@/components/corporation/FinancialsTab";
-import { corpIncomeBasis } from "@/components/corporation/financials/financialsModel";
+import {
+  corpIncomeBasis,
+  scaleToPeriod,
+} from "@/components/corporation/financials/financialsModel";
 import { NationalCorporationView } from "@/components/national/NationalCorporationView";
 import {
   TabFallback,
@@ -903,6 +906,14 @@ export default function CorporationDetailPage() {
           bondInfo={bondInfo}
           liquidCurrencyCode={corporation.liquidCurrencyCode}
           liquidCapital={corporation.liquidCapital}
+          // The detail payload has the latest realized turn, not a retained earnings average.
+          recentRetainedEarningsPerTurn={
+            financials &&
+            typeof financials.realizedIncome === "number" &&
+            Number.isFinite(financials.realizedIncome)
+              ? scaleToPeriod(corpIncomeBasis(financials).retained, "turn")
+              : null
+          }
           corporationName={corporation.name}
           corporationId={corporation._id ?? id}
         />

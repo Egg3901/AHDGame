@@ -15,6 +15,7 @@ import { getBaseUrl, getClientIp } from "@/lib/utils/network";
 import { AUTH_LIMITS, checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { withNoStore } from "@/lib/api/withNoStore";
 import { randomBytes } from "crypto";
+import { consentStateFor } from "@/lib/discordAppHandback";
 
 // GET /api/auth/discord — Initiates the Discord OAuth flow for account linking by redirecting to Discord's authorization page.
 // Auth: public (redirects to /login if not authenticated)
@@ -59,7 +60,11 @@ export const GET = withNoStore(async function GET(request: Request) {
     }
 
     // Generate state token for CSRF protection
-    const state = randomBytes(32).toString("hex");
+    // App-started sign-ins are marked so a browser-side callback can hand back (ticket 1461).
+    const state = consentStateFor(
+      request.headers.get("user-agent"),
+      randomBytes(32).toString("hex")
+    );
 
     // Store state, mode, and returnUrl in cookies (shared domain so they survive www ↔ apex hops)
     const cookieStore = await cookies();
