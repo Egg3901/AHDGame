@@ -19,6 +19,7 @@ import {
   availableForExchangeInternal,
   sumObligationInternal,
   toInternalUnits,
+  fromInternalUnits,
   computeAutoPaymentInternal,
   computePerPlayerDtiLimitInternal,
   computePerPlayerNetWorthLimitInternal,
@@ -49,6 +50,10 @@ export type LocSnapshot = {
    * = 70% × (national savings deposits + bank reserves).
    */
   maxDebtInternal: number;
+  /** Currency whose bank sized the lending pool figures (defaults to home). */
+  poolCurrency: CurrencyCode;
+  /** Remaining pool capacity in `poolCurrency` face units. */
+  availableBorrowFace: number;
   /** This character's principal + arrears across all currencies (internal units). */
   outstandingInternal: number;
   /**
@@ -111,7 +116,16 @@ export type LocSnapshot = {
   currentTurn: number;
 };
 
-export async function buildLocSnapshot(db: Db, character: Character): Promise<LocSnapshot | null> {
+/**
+ * `poolCurrency` selects whose lending pool sizes `availableBorrowInternal`
+ * (and therefore `perPlayerAvailableInternal`). It defaults to the borrower's
+ * home currency. The personal credit limit stays shared across all banks.
+ */
+export async function buildLocSnapshot(
+  db: Db,
+  character: Character,
+  poolCurrency?: CurrencyCode
+): Promise<LocSnapshot | null> {
   if (!(await isLineOfCreditEnabled())) return null;
   const forexEnabled = await isForexEnabled();
   if (!forexEnabled) return null;
@@ -129,33 +143,39 @@ export async function buildLocSnapshot(db: Db, character: Character): Promise<Lo
 
   const gameState = await getGameState(db);
   const home = getHomeCurrency(character, gameState?.preset);
-  const homeCountryId = getCountryIdForCurrency(home);
+  const homeRate = rates[home] ?? 1;
+  const pool = poolCurrency ?? home;
+  const poolCountryId = getCountryIdForCurrency(pool);
   // Resolve the actual bank document ID — Eurozone countries share `_id: "ECB"`
   // via `sharedBankId`. Without this, `findOne({ _id: "DE" })` returns null and
   // the pool calc reads 0 deposits / 0 reserves, allowing draws regardless of
   // actual ECB capacity.
-  const homeBankId = getBankId(homeCountryId);
-  const homeRate = rates[home] ?? 1;
+  const poolBankId = getBankId(poolCountryId);
+  const poolRate = rates[pool] ?? 1;
+  const homeBankId = getBankId(getCountryIdForCurrency(home));
 
-  const [homeBank, locAgg] = await Promise.all([
+  const [homeBank, poolBank, locAgg] = await Promise.all([
     db.collection<CentralBank>("centralBanks").findOne({ _id: homeBankId }),
-    // Aggregate total outstanding LOC in the home currency across all borrowers
+    poolBankId === homeBankId
+      ? Promise.resolve(null)
+      : db.collection<CentralBank>("centralBanks").findOne({ _id: poolBankId }),
+    // Aggregate total outstanding LOC in the pool currency across all borrowers
     db
       .collection<Character>("characters")
       .aggregate<{ totalBalance: number; totalArrears: number }>([
         {
           $match: {
             $or: [
-              { [`lineOfCredit.balances.${home}`]: { $gt: 0 } },
-              { [`lineOfCredit.arrears.${home}`]: { $gt: 0 } },
+              { [`lineOfCredit.balances.${pool}`]: { $gt: 0 } },
+              { [`lineOfCredit.arrears.${pool}`]: { $gt: 0 } },
             ],
           },
         },
         {
           $group: {
             _id: null,
-            totalBalance: { $sum: { $ifNull: [`$lineOfCredit.balances.${home}`, 0] } },
-            totalArrears: { $sum: { $ifNull: [`$lineOfCredit.arrears.${home}`, 0] } },
+            totalBalance: { $sum: { $ifNull: [`$lineOfCredit.balances.${pool}`, 0] } },
+            totalArrears: { $sum: { $ifNull: [`$lineOfCredit.arrears.${pool}`, 0] } },
           },
         },
       ])
@@ -165,12 +185,13 @@ export async function buildLocSnapshot(db: Db, character: Character): Promise<Lo
   const homePrimePercent = homeBank?.primeRate ?? DEFAULT_PRIME;
 
   // System cap in internal units: 70% of (national savings deposits + bank reserves)
-  const depositsInternal = toInternalUnits(homeBank?.nationalSavingsBalance ?? 0, homeRate);
-  const reservesInternal = toInternalUnits(homeBank?.reserveBalance ?? 0, homeRate);
+  const sizingBank = poolBankId === homeBankId ? homeBank : poolBank;
+  const depositsInternal = toInternalUnits(sizingBank?.nationalSavingsBalance ?? 0, poolRate);
+  const reservesInternal = toInternalUnits(sizingBank?.reserveBalance ?? 0, poolRate);
   const systemCapInternal = maxLocForExchangeInternal(depositsInternal, reservesInternal);
 
   const totalOutstandingFace = (locAgg[0]?.totalBalance ?? 0) + (locAgg[0]?.totalArrears ?? 0);
-  const totalOutstandingInternal = toInternalUnits(totalOutstandingFace, homeRate);
+  const totalOutstandingInternal = toInternalUnits(totalOutstandingFace, poolRate);
   const availableInternal = availableForExchangeInternal(
     depositsInternal,
     reservesInternal,
@@ -264,6 +285,8 @@ export async function buildLocSnapshot(db: Db, character: Character): Promise<Lo
     locDebtInternal,
     netWorthInternal: netInternal,
     maxDebtInternal: systemCapInternal,
+    poolCurrency: pool,
+    availableBorrowFace: fromInternalUnits(availableInternal, poolRate),
     outstandingInternal: outstanding,
     availableBorrowInternal: availableInternal,
     balances,
