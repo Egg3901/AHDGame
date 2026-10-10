@@ -94,6 +94,12 @@ interface GeneralPhaseViewProps {
    */
   tabbedDetail?: boolean;
   /**
+   * With `tabbedDetail`, render only the tabbed detail section and nothing
+   * else: the presidential stage already carries the map, the tickets and the
+   * tally, and needs just the views it has no room for.
+   */
+  detailOnly?: boolean;
+  /**
    * Whether to draw the National Mood gauge. False where a caller states the
    * same figure and the same components above it.
    */
@@ -110,6 +116,7 @@ export function GeneralPhaseView({
   amInRace,
   showCollegeSummary = true,
   tabbedDetail = false,
+  detailOnly = false,
   showNationalMood = true,
   showDemocraticHealth = true,
   onSuccess,
@@ -315,6 +322,12 @@ export function GeneralPhaseView({
         { id: "ledger", label: "Factor ledger", content: factorLedger },
       ]
     : [];
+
+  if (tabbedDetail && detailOnly) {
+    return isPresidentialGeneral ? (
+      <RaceDetailTabs panes={detailPanes} title="Race detail" />
+    ) : null;
+  }
 
   return (
     <div className="space-y-4">

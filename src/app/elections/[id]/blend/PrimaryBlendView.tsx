@@ -14,6 +14,7 @@ import { PrimaryTileBoard } from "./PrimaryTileBoard";
 import { PresidentialStage, presidentialTitle } from "./PresidentialStage";
 import { presidentialResultsLive } from "./liveState";
 import { StageField, candidateLinks } from "./StageField";
+import { EndorseControl } from "./EndorseControl";
 import { PartyLogo } from "@/components/PartyLogo";
 import type { CountryId } from "@/lib/constants/countries";
 import { PresidentialMap } from "./presMap/PresidentialMap";
@@ -41,6 +42,8 @@ export interface PrimaryBlendViewProps {
   stageNav?: React.ReactNode;
   /** A state to open on arrival (`?state=OH`). */
   initialFocus?: string | null;
+  /** Re-reads the election after an action lands, such as an endorsement. */
+  onRefresh?: () => void;
 }
 
 function PartyButton({
@@ -342,7 +345,18 @@ export function PrimaryBlendView({
   stageTitle = presidentialTitle(election.electionYear),
   stageNav,
   initialFocus,
+  onRefresh,
 }: PrimaryBlendViewProps) {
+  // The reader's endorsement, kept locally so the button flips at once; the
+  // election payload catches up on the next refresh.
+  const [endorsedOverride, setEndorsedOverride] = useState<{
+    base: string | null;
+    id: string | null;
+  } | null>(null);
+  const endorsedId =
+    endorsedOverride && endorsedOverride.base === election.myEndorsedCandidateId
+      ? endorsedOverride.id
+      : election.myEndorsedCandidateId;
   const [partyId, setPartyId] = useState<string | null>(
     // Open on the reader's own party where they have a candidate.
     election.byParty.find((p) => p.candidates.some((c) => c.isYou))?.partyId ??
@@ -713,6 +727,19 @@ export function PrimaryBlendView({
                       figure: `${f.pct}%`,
                       sub: f.delegates ? `${f.delegates} del.` : f.statusText,
                       isYou: f.isYou,
+                      action: (
+                        <EndorseControl
+                          electionId={electionId}
+                          candidateId={f.id}
+                          myCharId={election.myCharId}
+                          isYou={f.isYou}
+                          endorsed={endorsedId === f.id}
+                          onChanged={(id) => {
+                            setEndorsedOverride({ base: election.myEndorsedCandidateId, id });
+                            onRefresh?.();
+                          }}
+                        />
+                      ),
                     };
                   })}
                 />

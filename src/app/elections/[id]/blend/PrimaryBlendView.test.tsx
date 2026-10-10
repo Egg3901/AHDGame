@@ -307,4 +307,62 @@ describe("campaign operations live in the field table", () => {
     expect(screen.getAllByText(/Manager: Pat Manager/).length).toBeGreaterThan(0);
     expect(screen.getAllByText("6").length).toBeGreaterThan(0);
   });
+
+  describe("endorsement", () => {
+    it("offers Endorse on each filed candidate to a reader with a character", async () => {
+      stubFetch(() => detailFor("1", "First Filer"));
+      render(<PrimaryBlendView election={{ ...election(), myCharId: "me" }} wire={[]} />);
+      expect(screen.getAllByRole("button", { name: "Endorse" }).length).toBeGreaterThan(0);
+    });
+
+    it("shows nothing to a reader with no character", async () => {
+      stubFetch(() => detailFor("1", "First Filer"));
+      render(<PrimaryBlendView election={election()} wire={[]} />);
+      expect(screen.queryByRole("button", { name: /Endorse/ })).toBeNull();
+    });
+
+    it("posts the endorsement and flips to Endorsed", async () => {
+      const calls: { url: string; method?: string; body?: string }[] = [];
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async (url: string, init?: { method?: string; body?: string }) => {
+          calls.push({ url, method: init?.method, body: init?.body });
+          if (url.includes("/endorse")) return { ok: true, json: async () => ({}) };
+          return { ok: true, json: async () => detailFor("1", "First Filer") };
+        })
+      );
+      const onRefresh = vi.fn();
+      render(
+        <PrimaryBlendView
+          election={{ ...election(), myCharId: "me" }}
+          wire={[]}
+          onRefresh={onRefresh}
+        />
+      );
+      fireEvent.click(screen.getAllByRole("button", { name: "Endorse" })[0]);
+      await waitFor(() => expect(screen.getByRole("button", { name: "Endorsed" })).toBeTruthy());
+      const post = calls.find((c) => c.url === "/api/elections/e1/endorse");
+      expect(post?.method).toBe("POST");
+      expect(JSON.parse(post?.body ?? "{}")).toEqual({ candidateId: "1-a" });
+      expect(onRefresh).toHaveBeenCalled();
+    });
+
+    it("says why when the route refuses", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async (url: string) => {
+          if (url.includes("/endorse"))
+            return {
+              ok: false,
+              status: 403,
+              json: async () => ({ error: "You can only endorse candidates in your own party" }),
+            };
+          return { ok: true, json: async () => detailFor("1", "First Filer") };
+        })
+      );
+      render(<PrimaryBlendView election={{ ...election(), myCharId: "me" }} wire={[]} />);
+      fireEvent.click(screen.getAllByRole("button", { name: "Endorse" })[0]);
+      await waitFor(() => expect(screen.getByRole("alert")).toBeTruthy());
+    });
+  });
 });

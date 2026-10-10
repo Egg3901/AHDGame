@@ -138,6 +138,25 @@ describe("folding the detail views into tabs", () => {
     ]);
   });
 
+  it("renders just the tab strip when asked for the detail alone", () => {
+    const { container } = render(
+      <GeneralPhaseView
+        election={election()}
+        electionId="e1"
+        localInPrimary={false}
+        localIsEnded={false}
+        amInRace={false}
+        onSuccess={() => {}}
+        tabbedDetail
+        detailOnly
+      />
+    );
+    expect(screen.getAllByRole("tab").map((t) => t.textContent)).toContain("Factor ledger");
+    expect(screen.getAllByRole("tab").map((t) => t.textContent)).toContain("Campaign presence");
+    // Nothing of the tally panel or banners rides along.
+    expect(container.querySelector(".space-y-4")).toBeNull();
+  });
+
   it("adds a turnout tab only when a Method 4 receipt exists", () => {
     const data = election();
     data.generalVotes!.turnSnapshots = [

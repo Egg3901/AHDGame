@@ -92,14 +92,18 @@ beforeEach(() => {
 });
 
 describe("the Blend general page does not print the same standing twice", () => {
-  it("renders the stage and none of the old page below it", () => {
+  it("renders the stage and, below it, only the race detail tabs", () => {
     // The old "Also on this race" block repeated the stage: a second map, the
-    // trends, the schedule. The stage carries the race now.
+    // trends, the schedule. What the stage cannot hold (campaign presence,
+    // trends, state drivers, turnout, the factor ledger) comes back as the
+    // detail-only tab section, and nothing else of the old page does.
     const { getByTestId, queryByTestId } = renderPage();
     expect(getByTestId("hero")).toBeTruthy();
-    expect(queryByTestId("general-phase")).toBeNull();
+    expect(getByTestId("general-phase")).toBeTruthy();
     expect(queryByTestId("schedule")).toBeNull();
-    expect(generalPhaseProps).toHaveLength(0);
+    expect(generalPhaseProps).toHaveLength(1);
+    expect(generalPhaseProps[0].tabbedDetail).toBe(true);
+    expect(generalPhaseProps[0].detailOnly).toBe(true);
   });
 
   it("puts nothing under the primary stage but the stage", () => {
@@ -110,6 +114,7 @@ describe("the Blend general page does not print the same standing twice", () => 
     const { getByTestId, queryByTestId } = renderPage({ inPrimary: true });
     expect(getByTestId("primary-stage")).toBeTruthy();
     expect(queryByTestId("presence-map")).toBeNull();
+    expect(queryByTestId("general-phase")).toBeNull();
   });
 
   it("keeps the presence builder on an upcoming race, where nothing else carries it", () => {
