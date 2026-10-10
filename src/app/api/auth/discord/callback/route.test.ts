@@ -175,3 +175,32 @@ describe("GET /api/auth/discord/callback — existing-user reauth", () => {
     expect(cookieState.map.has(AUTH_COOKIE_NAME)).toBe(false);
   });
 });
+
+describe("GET /api/auth/discord/callback: Android app hand-back (ticket 1461)", () => {
+  const callback = (state: string, ua: string) =>
+    new Request(`https://ahousedividedgame.com/api/auth/discord/callback?code=c1&state=${state}`, {
+      headers: { "user-agent": ua },
+    });
+  const browser = "Mozilla/5.0 (Linux; Android 16) SamsungBrowser/28.0 Mobile Safari/537.36";
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    cookieState.reset({});
+  });
+
+  it("returns the browser to the app instead of failing an app-started sign-in", async () => {
+    const { GET } = await import("./route");
+    const res = await GET(callback("app-s1", browser));
+    expect(res.status).toBe(200);
+    expect(await res.text()).toContain(
+      "intent://ahousedividedgame.com/api/auth/discord/callback?code=c1&amp;state=app-s1#Intent;scheme=https;package=net.lakesidegames.ahdclient;end"
+    );
+    expect(exchangeCodeForToken).not.toHaveBeenCalled();
+  });
+
+  it("keeps the session_expired result for browser-started sign-ins", async () => {
+    const { GET } = await import("./route");
+    const res = await GET(callback("s1", browser));
+    expect(res.headers.get("location")).toContain("reason=session_expired");
+  });
+});
