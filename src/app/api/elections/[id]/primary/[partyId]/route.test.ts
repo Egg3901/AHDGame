@@ -4,7 +4,7 @@ import type { Db } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
-vi.mock("@/lib/api/requireAuth", () => ({ requireBasicAuth: vi.fn() }));
+vi.mock("@/lib/auth", () => ({ getAuthUser: vi.fn() }));
 vi.mock("@/lib/api/rateLimit", () => ({
   checkRateLimit: vi.fn().mockReturnValue({ ok: true }),
   rateLimitResponse: vi.fn(),
@@ -39,10 +39,10 @@ beforeEach(async () => {
   const { getDb } = await import("@/lib/mongodb");
   vi.mocked(getDb).mockResolvedValue(db as unknown as Db);
 
-  const { requireBasicAuth } = await import("@/lib/api/requireAuth");
-  vi.mocked(requireBasicAuth).mockResolvedValue({
-    ok: true,
-    user: { userId: USER_ID, activeCharacterId: ACTIVE_CHARACTER_ID },
+  const { getAuthUser } = await import("@/lib/auth");
+  vi.mocked(getAuthUser).mockResolvedValue({
+    userId: USER_ID,
+    activeCharacterId: ACTIVE_CHARACTER_ID,
   } as never);
 
   const { checkRateLimit } = await import("@/lib/api/rateLimit");
@@ -145,15 +145,22 @@ describe("GET /api/elections/[id]/primary/[partyId]", () => {
     expect(res.status).toBe(400);
   });
 
-  it("requires authentication", async () => {
-    const { requireBasicAuth } = await import("@/lib/api/requireAuth");
-    vi.mocked(requireBasicAuth).mockResolvedValue({
-      ok: false,
-      response: new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401 }),
-    } as never);
+  it("serves the board to a signed-out spectator with no viewer, rate limited by address", async () => {
+    const { getAuthUser } = await import("@/lib/auth");
+    vi.mocked(getAuthUser).mockResolvedValue(null);
+    const { buildPrimaryPartyDetail } = await import("@/lib/elections/primaryPartyDetail");
+    const { checkRateLimit } = await import("@/lib/api/rateLimit");
 
     const res = await callRoute(ELECTION_OID.toString(), "1");
-    expect(res.status).toBe(401);
+    expect(res.status).toBe(200);
+    expect(vi.mocked(buildPrimaryPartyDetail).mock.calls[0][1].viewer).toBeNull();
+    expect(String(vi.mocked(checkRateLimit).mock.calls[0][0])).toMatch(/^anon:/);
+    expect(res.headers.get("Cache-Control")).toBeNull();
+  });
+
+  it("keeps a signed-in body out of shared caches", async () => {
+    const res = await callRoute(ELECTION_OID.toString(), "1");
+    expect(res.headers.get("Cache-Control")).toBe("private, no-store");
   });
 
   it("spends a read budget of its own, not the player's action budget", async () => {

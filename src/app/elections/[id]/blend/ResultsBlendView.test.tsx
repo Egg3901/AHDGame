@@ -2,7 +2,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import type { ElectionResultsResponse } from "@/lib/elections/liveResults/types";
-import { ResultsBlendView } from "./ResultsBlendView";
+import type { ElectionDetail } from "../components/ElectionDetailTypes";
+import { ResultsBlendView, ResolutionBanners } from "./ResultsBlendView";
 
 function unit(id: string, name: string, weight: number, leaderId: string, marginPct: number) {
   return {
@@ -152,5 +153,56 @@ describe("ResultsBlendView", () => {
       expect(screen.queryByLabelText("House vote")).toBeNull();
       expect(fetchFn).not.toHaveBeenCalled();
     });
+  });
+});
+
+describe("ResolutionBanners", () => {
+  const colors = new Map([["c1", "#2563eb"]]);
+  function ended(over: Record<string, unknown> = {}) {
+    return {
+      isEnded: true,
+      allCandidates: [
+        {
+          id: "c1",
+          characterName: "First Ticket",
+          partyName: "Democratic Party",
+          partyColor: "#2563eb",
+        },
+        {
+          id: "c2",
+          characterName: "Second Ticket",
+          partyName: "Republican Party",
+          partyColor: "#dc2626",
+        },
+      ],
+      generalVotes: {
+        totalVotes: { c1: 600, c2: 400 },
+        electoralVotesByCandidate: { c1: 300, c2: 238 },
+        evByState: { OH: 538 },
+        ...over,
+      },
+    } as unknown as ElectionDetail;
+  }
+
+  it("announces the winner of a concluded race", () => {
+    render(<ResolutionBanners election={ended()} colorMap={colors} />);
+    expect(screen.getByText("First Ticket Wins the Presidency")).toBeTruthy();
+    expect(screen.getByText(/300 Electoral Votes · 60\.0% Popular Vote/)).toBeTruthy();
+  });
+
+  it("says the contingent ballot is pending when nobody is seated yet", () => {
+    const e = ended({
+      electoralVotesByCandidate: { c1: 260, c2: 240 },
+      contingentResolutionPending: true,
+    });
+    render(<ResolutionBanners election={e} colorMap={colors} />);
+    expect(screen.getByText("Contingent resolution pending")).toBeTruthy();
+    expect(screen.queryByText(/Wins the Presidency/)).toBeNull();
+  });
+
+  it("renders nothing for a race still running", () => {
+    const e = { ...ended(), isEnded: false } as unknown as ElectionDetail;
+    const { container } = render(<ResolutionBanners election={e} colorMap={colors} />);
+    expect(container.textContent).toBe("");
   });
 });

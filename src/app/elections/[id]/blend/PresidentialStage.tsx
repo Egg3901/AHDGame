@@ -28,6 +28,12 @@ export interface PresidentialStageProps {
   strip?: ReactNode;
   /** Previous / next cycle navigation, top of the left rail. */
   nav?: ReactNode;
+  /**
+   * The reader's own action on the race (enter, withdraw). A strip under the
+   * masthead rather than part of the rail, because below `lg` the rail stacks
+   * under a map half a screen tall and the button would be easy to miss.
+   */
+  actions?: ReactNode;
   /** The scoreboard: head-to-head, college or delegate bar, the field. */
   left: ReactNode;
   /** Context blocks. Omitted on screens that have none. */
@@ -202,6 +208,7 @@ export function PresidentialStage({
   ticker,
   strip,
   nav,
+  actions,
   left,
   right,
   map,
@@ -337,6 +344,14 @@ export function PresidentialStage({
           </div>
           {toggle}
         </header>
+        {actions ? (
+          <div
+            style={{ padding: "10px 20px", borderBottom: `1px solid ${BLEND.hairline}` }}
+            data-testid="stage-actions"
+          >
+            {actions}
+          </div>
+        ) : null}
         {ticker}
         {strip}
         {showSquares ? (
