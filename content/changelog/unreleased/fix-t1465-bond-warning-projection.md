@@ -1,1 +1,0 @@
-Bond maturity notices now use recent realized retained earnings to estimate whether cash will cover repayment at maturity. Covered projections are informational and dismissible. Shortfalls stay quiet and dismissible until the final 48 turns, then become persistent Action needed alerts that show the remaining amount.
