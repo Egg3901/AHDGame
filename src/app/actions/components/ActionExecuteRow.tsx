@@ -6,7 +6,7 @@ import { formatCurrencyFaceAmount } from "@/lib/currency/formatCurrencyFaceAmoun
 import { useState, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { useCurrency } from "@/contexts/CurrencyContext";
-import { BATCHABLE_ACTION_TYPES, simulateActionBatch } from "@/lib/actions";
+import { BATCHABLE_ACTION_TYPES, getBatchAffordability, simulateActionBatch } from "@/lib/actions";
 import type { ActionType, Character, State } from "@/lib/db/types";
 
 type BatchCount = 5 | 10;
@@ -93,6 +93,64 @@ export default function ActionExecuteRow({
   const can5 = batchable && sim5?.ok;
   const can10 = batchable && sim10?.ok;
 
+  // Only computed when a batch is refused, to tell the player how far they can go.
+  const afford5 = useMemo(
+    () =>
+      batchable && !can5
+        ? getBatchAffordability(
+            character,
+            state,
+            actionType as ActionType,
+            5,
+            forexEnabled,
+            campaignRate,
+            {
+              preset,
+              priceLevel: campaignPriceLevel,
+            }
+          )
+        : null,
+    [
+      batchable,
+      can5,
+      character,
+      state,
+      actionType,
+      forexEnabled,
+      campaignRate,
+      preset,
+      campaignPriceLevel,
+    ]
+  );
+  const afford10 = useMemo(
+    () =>
+      batchable && !can10
+        ? getBatchAffordability(
+            character,
+            state,
+            actionType as ActionType,
+            10,
+            forexEnabled,
+            campaignRate,
+            {
+              preset,
+              priceLevel: campaignPriceLevel,
+            }
+          )
+        : null,
+    [
+      batchable,
+      can10,
+      character,
+      state,
+      actionType,
+      forexEnabled,
+      campaignRate,
+      preset,
+      campaignPriceLevel,
+    ]
+  );
+
   const execKey = actionType;
   const execKey5 = `${actionType}:5`;
   const execKey10 = `${actionType}:10`;
@@ -140,7 +198,7 @@ export default function ActionExecuteRow({
               type="button"
               onClick={() => setConfirmCount(5)}
               disabled={blocked || isBusy || !can5}
-              title={!can5 && sim5 && !sim5.ok ? sim5.reason : undefined}
+              title={afford5?.title}
               className={`${btnBase} ${batchIdle} ${!can5 ? "opacity-40" : ""} ${compact ? "min-w-[36px]" : ""}`}
             >
               ×5
@@ -149,7 +207,7 @@ export default function ActionExecuteRow({
               type="button"
               onClick={() => setConfirmCount(10)}
               disabled={blocked || isBusy || !can10}
-              title={!can10 && sim10 && !sim10.ok ? sim10.reason : undefined}
+              title={afford10?.title}
               className={`${btnBase} ${batchIdle} ${!can10 ? "opacity-40" : ""} ${compact ? "min-w-[36px]" : ""}`}
             >
               ×10

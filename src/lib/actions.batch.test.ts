@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { simulateActionBatch } from "./actions";
+import { getActionPointCost, getBatchAffordability, simulateActionBatch } from "./actions";
 import { makeCharacter } from "@/lib/test-utils/factories";
 import type { State } from "@/lib/db/types";
 import type { CharacterStats } from "@/lib/stats/statsConstants";
@@ -85,3 +85,28 @@ it.each([0.03673, 0.35808, 1.28579])(
     }
   }
 );
+
+describe("getBatchAffordability", () => {
+  it("reports all runs affordable when the batch fits", () => {
+    const c = makeCharacter({ donorBaseLevel: 5, actions: 100, funds: 1_000_000 });
+    const r = getBatchAffordability(c, undefined, "fundraise", 5);
+    expect(r).toEqual({ affordableRuns: 5, canRunAll: true });
+  });
+
+  it("counts how many runs action points allow and explains the limit", () => {
+    const base = makeCharacter({ donorBaseLevel: 5, actions: 100, funds: 1_000_000 });
+    const cost = getActionPointCost(base, "fundraise");
+    const c = { ...base, actions: cost * 3 + 1 };
+    const r = getBatchAffordability(c, undefined, "fundraise", 5);
+    expect(r.canRunAll).toBe(false);
+    expect(r.affordableRuns).toBe(3);
+    expect(r.title).toContain("you can afford 3");
+  });
+
+  it("reports zero when not even one run is possible", () => {
+    const c = makeCharacter({ donorBaseLevel: 0, actions: 100, funds: 1_000_000 });
+    const r = getBatchAffordability(c, undefined, "fundraise", 10);
+    expect(r.affordableRuns).toBe(0);
+    expect(r.title).toMatch(/^Cannot run this action/);
+  });
+});
