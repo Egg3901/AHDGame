@@ -54,11 +54,20 @@ describe("Bloc creation color validation", () => {
       );
     }
   );
-  it.each(["#abc", "#12345678", "red", "#gggggg", "url(evil)", "", null, 123, undefined])(
-    "rejects invalid or absent color %s before writes",
-    async (color) => {
-      expect((await post(color)).status).toBe(400);
-      expect(createInternationalOrganization).not.toHaveBeenCalled();
-    }
-  );
+  it.each([
+    "#abc",
+    "#12345678",
+    "red",
+    "#gggggg",
+    "url(evil)",
+    "#123456\n",
+    "#123456\r\n",
+    "",
+    null,
+    123,
+    undefined,
+  ])("rejects invalid or absent color %s before writes", async (color) => {
+    expect((await post(color)).status).toBe(400);
+    expect(createInternationalOrganization).not.toHaveBeenCalled();
+  });
 });

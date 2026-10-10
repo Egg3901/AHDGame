@@ -47,7 +47,7 @@ export type CustomAlignmentPoleToken = (typeof CUSTOM_ALIGNMENT_POLE_TOKENS)[num
 export function isCustomAlignmentPoleToken(value: string): value is CustomAlignmentPoleToken {
   return (
     (CUSTOM_ALIGNMENT_POLE_TOKENS as readonly string[]).includes(value) ||
-    /^#[0-9a-fA-F]{6}$/.test(value)
+    (value.length === 7 && /^#[0-9a-fA-F]{6}$/.test(value))
   );
 }
 

@@ -24,12 +24,20 @@ describe("chosen Bloc colors", () => {
     }
   );
 
-  it.each(["#abc", "#abcdef00", "red", "#gggggg", "url(evil)", "#123456;", "", "success"])(
-    "rejects invalid custom color %s",
-    (color) => {
-      expect(isCustomAlignmentPoleToken(color)).toBe(false);
-    }
-  );
+  it.each([
+    "#abc",
+    "#abcdef00",
+    "red",
+    "#gggggg",
+    "url(evil)",
+    "#123456;",
+    "#123456\n",
+    "#123456\r\n",
+    "",
+    "success",
+  ])("rejects invalid custom color %s", (color) => {
+    expect(isCustomAlignmentPoleToken(color)).toBe(false);
+  });
 
   it("preserves legacy token appearance", () => {
     expect(isCustomAlignmentPoleToken("info")).toBe(true);

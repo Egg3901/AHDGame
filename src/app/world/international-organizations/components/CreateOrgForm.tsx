@@ -19,6 +19,7 @@ import type { OrgViewerInfo } from "../orgTypes";
 import { useEntityName } from "../useEntityName";
 import {
   CUSTOM_ALIGNMENT_POLE_TOKENS,
+  isCustomAlignmentPoleToken,
   type CustomAlignmentPoleToken,
 } from "@/lib/constants/alignmentEras";
 import { apiErrorText } from "@/lib/errors/catalog";
@@ -307,8 +308,7 @@ export function CreateOrgForm({
                     value={customBlocPalette(form.alignmentAccentToken).accent}
                     onChange={(event) => {
                       const value = event.target.value;
-                      if (/^#[0-9a-fA-F]{6}$/.test(value))
-                        update("alignmentAccentToken", value as CustomAlignmentPoleToken);
+                      if (isCustomAlignmentPoleToken(value)) update("alignmentAccentToken", value);
                     }}
                   />
                 </div>
