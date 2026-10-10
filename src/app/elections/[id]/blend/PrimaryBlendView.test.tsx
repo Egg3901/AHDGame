@@ -307,4 +307,102 @@ describe("campaign operations live in the field table", () => {
     expect(screen.getAllByText(/Manager: Pat Manager/).length).toBeGreaterThan(0);
     expect(screen.getAllByText("6").length).toBeGreaterThan(0);
   });
+
+  describe("endorsement", () => {
+    it("offers Endorse on each filed candidate to a reader with a character", async () => {
+      stubFetch(() => detailFor("1", "First Filer"));
+      render(<PrimaryBlendView election={{ ...election(), myCharId: "me" }} wire={[]} />);
+      expect(screen.getAllByRole("button", { name: "Endorse" }).length).toBeGreaterThan(0);
+    });
+
+    it("shows nothing to a reader with no character", async () => {
+      stubFetch(() => detailFor("1", "First Filer"));
+      render(<PrimaryBlendView election={election()} wire={[]} />);
+      expect(screen.queryByRole("button", { name: /Endorse/ })).toBeNull();
+    });
+
+    it("posts the endorsement and flips to Endorsed", async () => {
+      const calls: { url: string; method?: string; body?: string }[] = [];
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async (url: string, init?: { method?: string; body?: string }) => {
+          calls.push({ url, method: init?.method, body: init?.body });
+          if (url.includes("/endorse")) return { ok: true, json: async () => ({}) };
+          return { ok: true, json: async () => detailFor("1", "First Filer") };
+        })
+      );
+      const onRefresh = vi.fn();
+      render(
+        <PrimaryBlendView
+          election={{ ...election(), myCharId: "me" }}
+          wire={[]}
+          onRefresh={onRefresh}
+        />
+      );
+      fireEvent.click(screen.getAllByRole("button", { name: "Endorse" })[0]);
+      await waitFor(() => expect(screen.getByRole("button", { name: "Endorsed" })).toBeTruthy());
+      const post = calls.find((c) => c.url === "/api/elections/e1/endorse");
+      expect(post?.method).toBe("POST");
+      expect(JSON.parse(post?.body ?? "{}")).toEqual({ candidateId: "1-a" });
+      expect(onRefresh).toHaveBeenCalled();
+    });
+
+    it("says why when the route refuses", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async (url: string) => {
+          if (url.includes("/endorse"))
+            return {
+              ok: false,
+              status: 403,
+              json: async () => ({ error: "You can only endorse candidates in your own party" }),
+            };
+          return { ok: true, json: async () => detailFor("1", "First Filer") };
+        })
+      );
+      render(<PrimaryBlendView election={{ ...election(), myCharId: "me" }} wire={[]} />);
+      fireEvent.click(screen.getAllByRole("button", { name: "Endorse" })[0]);
+      await waitFor(() => expect(screen.getByRole("alert")).toBeTruthy());
+    });
+  });
+});
+
+describe("the party switcher and endorse buttons", () => {
+  function withViewer(myPartyId: string | null) {
+    const base = election();
+    return {
+      ...base,
+      myCharId: "me",
+      myPartyId,
+      allCandidates: base.byParty.flatMap((g) => g.candidates),
+    } as unknown as ElectionDetail;
+  }
+
+  it("switches the primary map to another party from above the map", async () => {
+    const urls = stubFetch((url) =>
+      url.includes("/primary/2") ? detailFor("2", "Other Filer") : detailFor("1", "First Filer")
+    );
+    render(<PrimaryBlendView election={election()} wire={[]} />);
+    const tabs = screen.getAllByRole("tab", { name: /Republican Party/ });
+    fireEvent.click(tabs[0]);
+
+    await waitFor(() => expect(urls.some((u) => u.includes("/primary/2"))).toBe(true));
+    expect(tabs[0].getAttribute("aria-selected")).toBe("true");
+  });
+
+  it("offers endorse only on candidates of the viewer's own party", () => {
+    stubFetch(() => detailFor("1", "First Filer"));
+    // The default party is the first; show both fields by selecting each.
+    render(<PrimaryBlendView election={withViewer("1")} wire={[]} />);
+    expect(screen.getAllByRole("button", { name: "Endorse" })).toHaveLength(1);
+
+    fireEvent.click(screen.getAllByRole("tab", { name: /Republican Party/ })[0]);
+    expect(screen.queryByRole("button", { name: "Endorse" })).toBeNull();
+  });
+
+  it("hides endorse everywhere for a viewer with no party", () => {
+    stubFetch(() => detailFor("1", "First Filer"));
+    render(<PrimaryBlendView election={withViewer(null)} wire={[]} />);
+    expect(screen.queryByRole("button", { name: "Endorse" })).toBeNull();
+  });
 });

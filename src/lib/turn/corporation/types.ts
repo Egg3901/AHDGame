@@ -195,6 +195,18 @@ export interface CorporationLookups {
    */
   reachablePriceRatioByCountry?: Map<string, Map<CommodityType, number>>;
   /**
+   * Per commodity, (capped demand + truncated demand) / capped demand from the
+   * lagged ledger. Absent when nothing was truncated. Scales the balance the
+   * production throttle reads for sold-out headroom.
+   */
+  latentDemandFactorByCommodity?: Map<CommodityType, number>;
+  /**
+   * Flat margin charge (pp) applied to every sector's modifier stack. Set from
+   * SECTOR_MARGIN_LEVEL_TRIM_PP by buildCorporationLookups; absent (0) in
+   * fixtures that build their own lookups.
+   */
+  marginLevelTrimPp?: number;
+  /**
    * World price ratios overlaid with each country's reachable ratios, then
    * capped at the world ratio per commodity (`min(world, reachable)` via
    * `capInputPriceRatioAtWorld`). Cheap local inputs still win; expensive

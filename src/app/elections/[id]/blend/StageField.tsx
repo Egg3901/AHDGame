@@ -25,6 +25,8 @@ export interface StageFieldRow {
   campaignHref: string | null;
   isYou?: boolean;
   isWinner?: boolean;
+  /** A control under the figure, such as the endorse button. */
+  action?: ReactNode;
 }
 
 /** Profile, party and campaign links for a candidate, from the race payload. */
@@ -181,6 +183,7 @@ export function StageField({
                 Campaign
               </Link>
             ) : null}
+            {r.action}
           </div>
         </div>
       ))}

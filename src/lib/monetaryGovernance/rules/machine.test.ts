@@ -226,6 +226,67 @@ describe("vote window and deadlines", () => {
     expect(deadline.transition.set.primeRate).toBeUndefined();
   });
 
+  it("resolves an undecided motion on the next turn when no seated player is left to vote", () => {
+    // 1991 live world: a vacant chair, three vacant seats and four NPPs split
+    // 3-2 on "hold". Nobody else can vote, so waiting out the window only froze
+    // the rate.
+    const board = [
+      vacantSeat("seat-1"),
+      vacantSeat("seat-2"),
+      vacantSeat("seat-3"),
+      seat("seat-4"),
+      seat("seat-5"),
+      seat("seat-6"),
+      seat("seat-7"),
+    ];
+    const meeting: MeetingState = {
+      ...nppMajorityMeeting(108),
+      motion: "hold",
+      proposedDelta: 0,
+      ballots: [
+        { seatId: "seat-4", vote: "hold", auto: true },
+        { seatId: "seat-5", vote: "cut", auto: true },
+        { seatId: "seat-6", vote: "hold", auto: true },
+        { seatId: "seat-7", vote: "cut", auto: true },
+      ],
+    };
+    const decision = turnStart(
+      baseState({ board, chairCharacterId: null, activeMeeting: meeting, lastMeetingTurn: 108 }),
+      109
+    );
+    expect(decision.allowed).toBe(true);
+    if (!decision.allowed) return;
+    expect(decision.next.activeMeeting).toBeNull();
+    const resolved = readResolvedMeeting(decision.transition.set.meetingHistoryAppend);
+    expect(resolved?.result).toBe("failed");
+    expect(resolved?.resolvedAtTurn).toBe(109);
+  });
+
+  it("opens the next meeting on the regular interval once an all-NPP meeting resolves", () => {
+    const board = [
+      vacantSeat("seat-1"),
+      seat("seat-2"),
+      seat("seat-3"),
+      seat("seat-4"),
+      seat("seat-5"),
+    ];
+    const opened = turnStart(
+      baseState({ board, chairCharacterId: null, lastMeetingTurn: 100 }),
+      108
+    );
+    expect(opened.allowed).toBe(true);
+    if (!opened.allowed) return;
+    expect(opened.next.activeMeeting?.openedAtTurn).toBe(108);
+    const resolved = turnStart(opened.next, 109);
+    expect(resolved.allowed).toBe(true);
+    if (!resolved.allowed) return;
+    expect(resolved.next.activeMeeting).toBeNull();
+    const reopened = turnStart(resolved.next, 116);
+    expect(reopened.allowed).toBe(true);
+    if (!reopened.allowed) return;
+    expect(reopened.next.activeMeeting?.openedAtTurn).toBe(116);
+  });
+
   it("force-resolves at the deadline with the no-show abstaining", () => {
     const state = baseState({ activeMeeting: nppMajorityMeeting(108), lastMeetingTurn: 108 });
     const decision = turnStart(state, 132);

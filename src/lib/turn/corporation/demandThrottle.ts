@@ -242,3 +242,18 @@ export function demandThrottleFactor(
   if (target >= plannedUnits) return 1;
   return Math.max(DEMAND_THROTTLE_FLOOR, target / plannedUnits);
 }
+
+/**
+ * A lagged book balance with the ledger's truncated demand restored pro rata.
+ * `factor` is (capped + truncated) / capped for the commodity worldwide; a
+ * missing or non-lifting factor returns the balance unchanged.
+ */
+export function withLatentDemand(
+  balance: { supply: number; demand: number } | null | undefined,
+  factor: number | null | undefined
+): { supply: number; demand: number } | null | undefined {
+  if (!balance || !(typeof factor === "number" && Number.isFinite(factor) && factor > 1)) {
+    return balance;
+  }
+  return { supply: balance.supply, demand: balance.demand * factor };
+}
