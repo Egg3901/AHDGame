@@ -70,6 +70,7 @@ import {
   getInflationMarginModifier,
   getDebtToGdpMarginModifier,
   getDeficitToGdpMarginModifier,
+  SECTOR_MARGIN_LEVEL_TRIM_PP,
 } from "@/lib/constants/corporations";
 import { INVESTOR_CONFIDENCE_BASELINE } from "@/lib/nationalization/constants";
 import { NATIONAL_SCOPE, NATIONAL_SCOPE_IDS } from "@/lib/constants/nationalScope";
@@ -1499,6 +1500,7 @@ export async function buildCorporationLookups(
     stateDeliveryLimitedRatioByState,
     priceRatioByCommodity,
     latentDemandFactorByCommodity,
+    marginLevelTrimPp: SECTOR_MARGIN_LEVEL_TRIM_PP,
     reachablePriceRatioByCountry,
     reachableInputPriceRatiosByCountry,
     landedPremiumByState,

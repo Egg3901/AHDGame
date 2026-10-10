@@ -23,6 +23,12 @@ vi.mock("@/lib/wireEvent", () => ({
   logWireEvent: vi.fn().mockResolvedValue(undefined),
   wireHeadlineCorpCreditRating: vi.fn().mockReturnValue("Test headline"),
 }));
+// These cases pin tax and FX arithmetic on fixed fixture margins; the
+// world-level margin trim is covered in marginStack tests.
+vi.mock("@/lib/constants/corporations", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/constants/corporations")>()),
+  SECTOR_MARGIN_LEVEL_TRIM_PP: 0,
+}));
 vi.mock("@/lib/bonds/corporateCredit", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/bonds/corporateCredit")>();
   return {

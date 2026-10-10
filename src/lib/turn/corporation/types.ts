@@ -201,6 +201,12 @@ export interface CorporationLookups {
    */
   latentDemandFactorByCommodity?: Map<CommodityType, number>;
   /**
+   * Flat margin charge (pp) applied to every sector's modifier stack. Set from
+   * SECTOR_MARGIN_LEVEL_TRIM_PP by buildCorporationLookups; absent (0) in
+   * fixtures that build their own lookups.
+   */
+  marginLevelTrimPp?: number;
+  /**
    * World price ratios overlaid with each country's reachable ratios, then
    * capped at the world ratio per commodity (`min(world, reachable)` via
    * `capInputPriceRatioAtWorld`). Cheap local inputs still win; expensive

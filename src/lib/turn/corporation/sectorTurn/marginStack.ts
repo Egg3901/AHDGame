@@ -457,7 +457,8 @@ export function accumulateMarginModifiers(input: MarginStackInput): MarginStackR
     disasterMarginMod +
     regionalConditionMarginMod +
     techEffects.marginBonusPp +
-    strikeMarginMod;
+    strikeMarginMod -
+    (lookups.marginLevelTrimPp ?? 0);
   // Dynamic SOE efficiency (spec §11.3) replaces the old flat −15%. Driven
   // by state governance quality + the sector's price-control posture; private
   // corps get 0. Same shared function feeds the budget estimate + display.
