@@ -220,7 +220,20 @@ export function CorporationMasthead({
                 {exchangeLabel}: {ticker}
               </span>
               <Sep />
-              <span>{typeLabel}</span>
+              {isCeo ? (
+                // The CEO changes the sector type in Settings; the label is the
+                // place players look for it (ticket 1456).
+                <button
+                  type="button"
+                  onClick={() => setSettingsOpen(true)}
+                  title="Change sector type in corporation settings"
+                  className="underline decoration-dotted underline-offset-2 hover:text-foreground"
+                >
+                  {typeLabel}
+                </button>
+              ) : (
+                <span>{typeLabel}</span>
+              )}
               {corporation.legalStructureLabel && (
                 <>
                   <Sep />
