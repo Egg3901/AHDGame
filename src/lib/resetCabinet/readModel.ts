@@ -71,7 +71,13 @@ export function buildResetDepartmentFinanceReadModel(input: {
     accountPolicyId: definition.accountPolicyId,
     explanation: account.externallySettled
       ? "This institution keeps its established specialized treasury controls. Its opening claim is shown here for reconciliation, not paid twice."
-      : "This is the department's share of existing national spending, net of regional grants. A Cabinet member may request more or less for each service; actual delivery cannot exceed paid funds and capacity.",
+      : programs.length === 0 &&
+          account.annualAuthority === 0 &&
+          account.balance === 0 &&
+          account.encumbered === 0 &&
+          account.arrears === 0
+        ? "This office has no associated laws, so its legislative budget is intentionally zero. Staff actions do not require legislative funding."
+        : "This is the department's share of existing national spending, net of regional grants. A Cabinet member may request more or less for each service; actual delivery cannot exceed paid funds and capacity.",
     annualAuthority: account.annualAuthority,
     balance: account.balance,
     availableBalance: Math.max(0, account.balance - account.encumbered),
