@@ -436,6 +436,34 @@ describe("the hero's two sides stay level", () => {
       }
     }
   });
+
+  it("puts the desktop campaign link below the party name in the right column", () => {
+    const rightTicket = candidate({
+      id: "c2",
+      characterId: "ch2",
+      characterName: "Second Ticket",
+      party: "2",
+      partyName: "Liberal Socialist Party",
+      partyColor: "#dc2626",
+      campaignId: "camp2",
+    });
+    const detail = { ...election(), allCandidates: [CANDIDATES[0], rightTicket] };
+    const { container } = render(
+      <GeneralBlendView election={detail} electionId="e1" wire={[]} onRefresh={() => {}} />
+    );
+    const rightPartyCell = heroGrids(container)[0]?.children[3] as HTMLElement;
+    const partyLink = rightPartyCell.querySelector<HTMLAnchorElement>('a[href$="/parties/2"]');
+    const campaignLink = rightPartyCell.querySelector<HTMLAnchorElement>(
+      'a[href="/campaign/camp2"]'
+    );
+
+    expect(partyLink).not.toBeNull();
+    expect(campaignLink).not.toBeNull();
+    expect(campaignLink?.parentElement).not.toBe(partyLink?.parentElement);
+    expect(campaignLink?.parentElement?.className).toContain("lg:flex-col");
+    expect(partyLink?.className).toContain("lg:flex-1");
+    expect(partyLink?.className).toContain("lg:min-w-0");
+  });
 });
 
 describe("the hero separates what is counted from what is forecast", () => {

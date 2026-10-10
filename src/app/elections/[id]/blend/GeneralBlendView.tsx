@@ -415,24 +415,31 @@ export function GeneralBlendView({
             textTransform: "uppercase",
             color: BLEND.mutedDim,
           },
-          <span style={{ display: "inline-flex", alignItems: "center", gap: 6, minWidth: 0 }}>
-            <PartyLogo
-              partyId={c.partyId}
-              partyColor={c.color}
-              size="h-4 w-4"
-              countryId={election.countryId as CountryId}
-            />
-            <Link
-              href={c.partyHref}
-              style={{
-                color: "inherit",
-                textDecoration: "underline",
-                textDecorationColor: "rgba(128,128,128,.4)",
-                textUnderlineOffset: 3,
-              }}
-            >
-              {c.party}
-            </Link>
+          <span
+            className={`inline-flex min-w-0 items-center gap-1.5 lg:w-full lg:flex-col lg:gap-0.5 ${
+              i === 0 ? "lg:items-start" : "lg:items-end"
+            }`}
+          >
+            <span className="inline-flex min-w-0 items-center gap-1.5 lg:w-full">
+              <PartyLogo
+                partyId={c.partyId}
+                partyColor={c.color}
+                size="h-4 w-4"
+                countryId={election.countryId as CountryId}
+              />
+              <Link
+                href={c.partyHref}
+                className="lg:min-w-0 lg:flex-1"
+                style={{
+                  color: "inherit",
+                  textDecoration: "underline",
+                  textDecorationColor: "rgba(128,128,128,.4)",
+                  textUnderlineOffset: 3,
+                }}
+              >
+                {c.party}
+              </Link>
+            </span>
             {c.campaignHref ? (
               <Link
                 href={c.campaignHref}
