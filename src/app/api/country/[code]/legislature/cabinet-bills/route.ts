@@ -524,7 +524,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
       return errorResponse(409, "Legislation v2 is not enabled.");
     }
     if (reviewedCountryLegislation) {
-      if (rawReviewedProvisionCount !== parsed.data.provisions?.length) {
+      const submittedProvisionCount = parsed.data.provisions?.length ?? 0;
+      if (rawReviewedProvisionCount !== submittedProvisionCount) {
         return NextResponse.json(
           badRequest(
             "A v2 cabinet bill can contain only reviewed law and tax provisions."
@@ -543,7 +544,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
       }
       const reviewedProvisionCount =
         validated.resetLawProvisions.length + validated.policyProvisions.length;
-      if (reviewedProvisionCount === 0) {
+      // Custom (flavor) bills carry no provisions by design; only substantive
+      // categories must select at least one reviewed law or tax provision.
+      const isCustomFlavorBill = category === "custom" && submittedProvisionCount === 0;
+      if (reviewedProvisionCount === 0 && !isCustomFlavorBill) {
         return NextResponse.json(
           badRequest("No reviewed law or tax provision was selected.").toJson(),
           { status: 400 }

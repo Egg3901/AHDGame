@@ -219,4 +219,84 @@ describe("POST /api/country/[code]/legislature/cabinet-bills", () => {
     expect(json.error).toMatch(/only reviewed law and tax provisions/i);
     expect(db.collectionMocks.bills.insertOne).not.toHaveBeenCalled();
   });
+  async function enableLegislationV2() {
+    const { getGameState } = await import("@/lib/gameState");
+    vi.mocked(getGameState).mockResolvedValue({
+      _id: "current",
+      resetWorldId: "world-1",
+      metricsSystemVersion: "v2",
+      legislationSystemVersion: "v2",
+      resetVersionSeeds: {
+        metrics: {
+          worldId: "world-1",
+          revision: 3,
+          sourceTurn: 1,
+          completedAt: "2026-10-04T00:00:00.000Z",
+          verificationHash: "metrics",
+        },
+        legislation: {
+          worldId: "world-1",
+          revision: 6,
+          sourceTurn: 1,
+          completedAt: "2026-10-04T00:00:00.000Z",
+          verificationHash: "legislation",
+        },
+      },
+    } as never);
+  }
+
+  it("accepts a custom flavor bill with no provisions when legislation v2 is active", async () => {
+    await authenticatePrimeMinister();
+    await enableLegislationV2();
+    const { POST } = await import("./route");
+
+    const response = await POST(request({ category: "custom", provisions: [] }), {
+      params: Promise.resolve({ code: "jp" }),
+    });
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.success).toBe(true);
+    expect(db.collectionMocks.bills.insertOne).toHaveBeenCalledTimes(1);
+    const inserted = db.collectionMocks.bills.insertOne.mock.calls[0][0];
+    expect(inserted).toMatchObject({
+      category: "custom",
+      provisions: [],
+      status: "cabinet_review",
+      originChamber: "cabinet",
+    });
+    expect(inserted.legislationTypeId).toBeUndefined();
+  });
+
+  it("still rejects a non-custom v2 cabinet bill with no provisions", async () => {
+    await authenticatePrimeMinister();
+    await enableLegislationV2();
+    const { POST } = await import("./route");
+
+    const response = await POST(request({ category: "tax", provisions: [] }), {
+      params: Promise.resolve({ code: "jp" }),
+    });
+    const json = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(json.error).toMatch(/no reviewed law or tax provision/i);
+    expect(db.collectionMocks.bills.insertOne).not.toHaveBeenCalled();
+  });
+
+  it("still rejects a custom v2 cabinet bill that carries a legacy provision", async () => {
+    await authenticatePrimeMinister();
+    await enableLegislationV2();
+    const { POST } = await import("./route");
+
+    const response = await POST(
+      request({
+        category: "custom",
+        provisions: [{ legislationTypeId: "jp_legacy_education_policy", policyOptionId: "x" }],
+      }),
+      { params: Promise.resolve({ code: "jp" }) }
+    );
+
+    expect(response.status).toBe(400);
+    expect(db.collectionMocks.bills.insertOne).not.toHaveBeenCalled();
+  });
 });
