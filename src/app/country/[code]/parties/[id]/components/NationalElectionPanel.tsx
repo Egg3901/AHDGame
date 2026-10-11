@@ -7,6 +7,7 @@ import { partyApiUrl } from "@/lib/urls";
 import type { NationalElectionEntry, NationalPosition } from "./types";
 import { getPositionLabels, POSITION_DESC } from "./helpers";
 import { apiErrorText } from "@/lib/errors/catalog";
+import type { PartyLeadershipTitles } from "@/lib/db/types/party";
 
 // Renders "Available in 5h 23m" / "Available in 47m" from a positive
 // remaining-ms value. Used in the Run button's disabled state when the
@@ -24,6 +25,7 @@ export function NationalElectionPanel({
   position,
   partyId,
   country,
+  leadershipTitles,
   canVote,
   canRun,
   runCooldownUntil,
@@ -40,6 +42,7 @@ export function NationalElectionPanel({
   partyColor?: string;
   partyId: string;
   country: string;
+  leadershipTitles?: PartyLeadershipTitles | null;
   canVote: boolean;
   canRun: boolean;
   runCooldownUntil: string | null;
@@ -73,7 +76,7 @@ export function NationalElectionPanel({
     }
   };
 
-  const label = getPositionLabels(country)[position];
+  const label = getPositionLabels(country, leadershipTitles)[position];
 
   const useInfluence = electionMethod === "influence";
 

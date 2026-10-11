@@ -327,7 +327,7 @@ export async function getNationalPartyElectionState(
     elections[position] = {
       id: electionId,
       position,
-      positionLabel: getPartyRoleLabel(partyCountryId, position),
+      positionLabel: getPartyRoleLabel(partyCountryId, position, party.leadershipTitles),
       status: election.status,
       startTime: election.startTime.toISOString(),
       endTime: election.endTime.toISOString(),

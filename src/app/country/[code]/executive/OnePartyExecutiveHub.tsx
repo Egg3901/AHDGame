@@ -549,7 +549,11 @@ export async function OnePartyExecutiveHub({ countryId }: { countryId: CountryId
 
   // Head-of-state copy carries the resolved ruling-party chair role label
   // (CN: "General Secretary") via the {roleLabel} placeholder.
-  const chairRoleLabel = getPartyRoleLabel(countryId, "chair");
+  const chairRoleLabel = getPartyRoleLabel(
+    countryId,
+    "chair",
+    governingPartyDoc?.leadershipTitles ?? presidentPartyDoc?.leadershipTitles
+  );
   const fillRoleLabel = (text: string) => text.replace("{roleLabel}", chairRoleLabel);
 
   const overview = (
