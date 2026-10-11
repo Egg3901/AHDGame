@@ -1183,6 +1183,31 @@ export function StateEconomy({ stateId, countryId }: { stateId: string; countryI
           </div>
         )}
 
+        {/* The build planner permits a new plant with zero headroom and warns
+            that it will compete with current producers. Keep the entry point
+            available when there is no untapped-market card to carry it. */}
+        {data.plantsMode &&
+          data.userCorporationId &&
+          sector.headroomUnits != null &&
+          sector.headroomUnits <= 0 && (
+            <div className="rounded-xl border border-card-border bg-card px-4 py-3">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <h4 className="text-sm font-semibold text-foreground">No untapped demand</h4>
+                  <p className="mt-1 text-xs text-muted">
+                    A new plant here would compete with current producers for sales.
+                  </p>
+                </div>
+                <Link
+                  href={`/corporation/${data.userCorporationId}?tab=sectors&expand=1&state=${encodeURIComponent(stateId)}&sectorType=${encodeURIComponent(selectedType)}`}
+                  className="rounded-lg border border-primary/30 bg-primary/10 px-3 py-1 text-sm font-semibold text-primary transition-colors hover:bg-primary/20"
+                >
+                  Build here
+                </Link>
+              </div>
+            </div>
+          )}
+
         {/* All visible (player) owners hidden because the sector is entirely
             NPP-run — note it rather than showing a blank table (t834). */}
         {playerOwners.length === 0 && sector.owners.length > 0 && (
