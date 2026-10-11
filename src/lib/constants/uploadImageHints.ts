@@ -12,8 +12,8 @@ export const UPLOAD_IMAGE_HINTS = {
     short: "Square · min 256 × 256 px",
   },
   corporationBanner: {
-    long: "Wide banner image. About 6:1 works well (for example 1920 by 330 pixels). Height varies by screen size; image is cropped to fit—keep focal content centered.",
-    short: "~6:1 · e.g. 1920 × 330 px · center focal content",
+    long: "Wide banner image, shown at 6:1 (for example 1920 by 320 pixels). Other shapes are cropped to fit, so keep focal content centered.",
+    short: "6:1 · e.g. 1920 × 320 px · center focal content",
   },
   corporationLogo: {
     long: "Square image. At least 256 by 256 pixels recommended; shown up to 64 pixels with rounded corners.",
