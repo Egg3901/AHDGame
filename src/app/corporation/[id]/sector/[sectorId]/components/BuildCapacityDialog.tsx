@@ -389,24 +389,20 @@ export default function BuildCapacityDialog({
               ) : preview.overHeadroom ? (
                 buyersRoomUnits >= 1 ? (
                   <>
-                    Buyers here have room for about{" "}
-                    {headroomFacilities >= 1
-                      ? `${fmtUnits(headroomFacilities)} more ${headroomFacilities === 1 ? site : sites}`
-                      : `less than one ${site}`}{" "}
-                    ({fmtUnits(buyersRoomUnits)} units a day). You are ordering{" "}
-                    {fmtUnits(preview.safeCount)}. Expect the extra output to go unsold, or to be
-                    taken from a rival.
+                    {t("buildRoomOver", {
+                      count: headroomFacilities,
+                      facility: site,
+                      facilities: sites,
+                      units: fmtUnits(buyersRoomUnits),
+                      ordered: fmtUnits(preview.safeCount),
+                    })}
                   </>
                 ) : (plants.demandGapUnits ?? 0) > 0 && !plants.roomHeldByOwnIdle ? (
                   <>{t("mixedOrQueuedDemand")}</>
                 ) : plants.roomHeldByOwnIdle ? (
                   // The plant is held below capacity by its own sales, so the
                   // market gap is not room for new capacity yet (ticket 1370).
-                  <>
-                    Your {sites} here already run below capacity because sales set the pace. Output
-                    climbs about 15% a turn while buyers keep taking it, so new capacity would sit
-                    idle until that catches up. Fill what you have before building more.
-                  </>
+                  <>{t("ownIdleCapacity")}</>
                 ) : noShareLeft ? (
                   // Two very different reasons the room is zero, and saying
                   // "oversupplied" for both is what made a fully-claimed market
@@ -426,13 +422,22 @@ export default function BuildCapacityDialog({
                 )
               ) : (
                 <>
-                  Buyers here have room for about {fmtUnits(headroomFacilities)} more{" "}
-                  {headroomFacilities === 1 ? site : sites} ({fmtUnits(buyersRoomUnits)} units a
-                  day). This order fits inside that.
+                  {t("buildRoomFits", {
+                    count: headroomFacilities,
+                    facility: site,
+                    facilities: sites,
+                    units: fmtUnits(buyersRoomUnits),
+                  })}
                 </>
               )}
             </p>
           </div>
+        </div>
+
+        <div className="rounded-lg border border-warning/30 bg-warning/10 p-4 text-body-sm">
+          <p className="font-semibold text-warning">{t("buildRiskTitle")}</p>
+          <p className="mt-2 text-muted">{t("buildRisk")}</p>
+          <p className="mt-2 text-body-xs text-muted">{t("demandEstimate")}</p>
         </div>
 
         {/* The charge remains visible; price modifiers are available on demand. */}

@@ -1,13 +1,30 @@
 /**
  * @vitest-environment happy-dom
  */
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import type { ComponentProps } from "react";
+import {
+  cleanup,
+  fireEvent,
+  render as renderView,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
+import type { ComponentProps, ReactElement } from "react";
+import { NextIntlClientProvider } from "next-intl";
+import messages from "../../../messages/en/corporations.json";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import ExpandMarketModal from "./ExpandMarketModal";
 import { OPERATING_SECTOR_TYPES } from "@/lib/constants/corporations";
 
 const router = vi.hoisted(() => ({ push: vi.fn(), refresh: vi.fn() }));
+
+function render(view: ReactElement) {
+  return renderView(
+    <NextIntlClientProvider locale="en" messages={messages}>
+      {view}
+    </NextIntlClientProvider>
+  );
+}
 
 vi.mock("next/navigation", () => ({ useRouter: () => router }));
 vi.mock("next/link", () => ({

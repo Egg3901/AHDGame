@@ -233,6 +233,72 @@ describe("resolvePlantsRevenue — governor bounds + P3b legs (#588)", () => {
 });
 
 describe("absolute cost-plus quotes", () => {
+  it("uses fresh blended sales rather than stale per-leg fills when clearing has no leg detail", () => {
+    const original = input();
+    const result = resolvePlantsRevenue(
+      input({
+        sector: {
+          ...original.sector,
+          producedUnits: 1000,
+          soldUnits: 1000,
+          soldByCommodity: { steel: 1, electronics: 1 },
+        },
+        strategySupply: { steel: 0.5, electronics: 0.5 },
+        clearingEnabled: true,
+        clearing: { factor: 0.2, soldFraction: 0.2, effectivePosture: 0 },
+      })
+    );
+    expect(result.producedUnits).toBeCloseTo(230);
+  });
+  it("responds to the fresh clearing of prior output, not an older persisted fill", () => {
+    const original = input();
+    const result = resolvePlantsRevenue(
+      input({
+        sector: {
+          ...original.sector,
+          producedUnits: 1000,
+          soldUnits: 1000,
+          soldByCommodity: { steel: 1 },
+        },
+        strategySupply: { steel: 1 },
+        clearingEnabled: true,
+        clearing: {
+          factor: 0.2,
+          soldFraction: 0.2,
+          soldByCommodity: { steel: 0.2 },
+          effectivePosture: 0,
+        },
+      })
+    );
+    expect(result.producedUnits).toBeCloseTo(230);
+    expect(result.demandThrottleFactor).toBeCloseTo(0.23);
+  });
+
+  it("uses a scoped share when recovering from a shortage and still caps physical output", () => {
+    const original = input();
+    const result = resolvePlantsRevenue(
+      input({
+        sector: {
+          ...original.sector,
+          producedUnits: 100,
+          soldUnits: 20,
+          soldByCommodity: { steel: 0.2 },
+        },
+        strategySupply: { steel: 1 },
+        clearingEnabled: true,
+        clearing: {
+          factor: 1,
+          soldFraction: 1,
+          soldByCommodity: { steel: 1 },
+          marketSupplyShareByCommodity: { steel: 0.1 },
+          effectivePosture: 0,
+        },
+        throttleLegBalance: () => ({ supply: 1000, demand: 2000 }),
+        throttleLegMixWeight: () => 1,
+      })
+    );
+    expect(result.producedUnits).toBeCloseTo(200);
+  });
   it("settles the offered price during the ramp without tech price multiplication", () => {
     const result = resolvePlantsRevenue(
       input({

@@ -183,6 +183,38 @@ describe("StateEconomy", () => {
     );
   });
 
+  it("keeps a build path available when a plants market has no headroom", async () => {
+    const noHeadroomPayload = {
+      ...payload,
+      plantsMode: true,
+      userCorporationId: "corp-me",
+      sectors: payload.sectors.map((sector) => ({
+        ...sector,
+        unownedRevenue: 0,
+        headroomUnits: 0,
+      })),
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => noHeadroomPayload,
+      })
+    );
+
+    render(<StateEconomy stateId="TX" countryId="US" />);
+
+    await waitFor(() => expect(screen.getByText("$1.82T")).toBeTruthy());
+    expect(screen.getByText("No untapped demand")).toBeTruthy();
+    expect(
+      screen.getByText("A new plant here would compete with current producers for sales.")
+    ).toBeTruthy();
+    const buildHere = screen.getByRole("link", { name: /Build here/i });
+    expect(buildHere.getAttribute("href")).toBe(
+      "/corporation/corp-me?tab=sectors&expand=1&state=TX&sectorType=energy"
+    );
+  });
+
   it("previews a plant split and requires confirmation before posting", async () => {
     const plantsAttackPayload = {
       ...payload,

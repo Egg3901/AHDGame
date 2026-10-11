@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { InlineError } from "@/components/ui/InlineError";
 import { apiErrorText } from "@/lib/errors/catalog";
 import { useState, useEffect, useRef } from "react";
@@ -97,6 +98,7 @@ export default function ExpandMarketModal({
   initialSectorType,
   initialStateId,
 }: ExpandMarketModalProps) {
+  const t = useTranslations("corporations.sectorInvestment");
   const { dialogProps, titleId } = useDialogA11y(onClose);
   const resolveCountryName = useCountryDisplayName();
   const { formatAmount } = useCurrency();
@@ -1071,11 +1073,22 @@ export default function ExpandMarketModal({
                                     }`}
                                   >
                                     {enough
-                                      ? `${activeSuggestion.stateName} has ${formatUnits(headroom)} ${CAPACITY_UNIT_LABEL} of in-state unmet demand. Your first ${facilitySingular(selectedType)} makes ${formatUnits(foundingQuote.starterUnits)}, so there is room to sell all of it here.`
-                                      : `${activeSuggestion.stateName} only has ${formatUnits(headroom)} ${CAPACITY_UNIT_LABEL} of in-state unmet demand and your first ${facilitySingular(selectedType)} makes ${formatUnits(foundingQuote.starterUnits)}. You can still build, but you will have to take sales off corps already in this state, and until you do the plant will run below full.`}
+                                      ? t("foundingShareRoom", {
+                                          state: activeSuggestion.stateName,
+                                          units: formatUnits(headroom),
+                                        })
+                                      : t("foundingShareLimited", {
+                                          state: activeSuggestion.stateName,
+                                          units: formatUnits(headroom),
+                                        })}
                                   </p>
                                 );
                               })()}
+
+                              <div className="rounded-md border border-warning/30 bg-warning/10 p-3 text-body-xs">
+                                <p className="font-semibold text-warning">{t("buildRiskTitle")}</p>
+                                <p className="mt-1 text-muted">{t("buildRisk")}</p>
+                              </div>
 
                               {!activeSuggestion.canAfford && (
                                 <p className="rounded-md border border-error/30 bg-error/10 px-2 py-1.5 text-[11px] text-error">

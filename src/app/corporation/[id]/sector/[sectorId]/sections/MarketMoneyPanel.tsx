@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { InfoTooltip } from "@/components/InfoTooltip";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import { Coins } from "lucide-react";
@@ -52,6 +53,7 @@ export default function MarketMoneyPanel({
   financials,
   corporation,
 }: MarketMoneyPanelProps) {
+  const t = useTranslations("corporations.sectorInvestment");
   const sites = facilityPlural(sectorType);
   const { formatAmount, formatPrice, toInternalFrom } = useCurrency();
   const money = (anchor: number) => formatAmount(anchor);
@@ -282,10 +284,7 @@ export default function MarketMoneyPanel({
               {deliveryAction}
             </>
           ) : (plants.demandGapUnits ?? 0) >= 1 ? (
-            <>
-              Buyers here have room for about {fmtUnits(plants.demandGapUnits)} more units a day.
-              Lower your price, or hold off building.
-            </>
+            <>{t("mixedOutputAppetite")}</>
           ) : (
             <>
               The market for what you make is oversupplied right now, so buyers took all they needed
