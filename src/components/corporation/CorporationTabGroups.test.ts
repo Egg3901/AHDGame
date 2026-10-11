@@ -10,6 +10,7 @@ import {
 } from "./CorporationTabGroups";
 import { CORP_TABS, CEO_TAB, DEALS_TAB, STRUCTURE_TAB } from "./CorporationPageConstants";
 import type { CorpTabId } from "./CorporationPageTypes";
+import { filterPrivateCorpBaseTabs, getPrivateCorpTabAccess } from "./privateCorpTabAccess";
 
 const allNav = buildCorpNavTabs(ALL_CORP_TABS);
 
@@ -127,6 +128,40 @@ describe("corporation tab grouping", () => {
       const nonCeoNav = buildCorpNavTabs(CORP_TABS);
       const r = resolveSuperTabs(nonCeoNav, "ceo", null, CORP_LEGACY_TAB_MAP, "overview");
       expect(corpTabIdFor(CORP_TABS, r.superTab, r.subTab)).toBe("overview");
+    });
+  });
+
+  describe("private subsidiary tab access", () => {
+    it.each([false, true])(
+      "lets the controlling parent CEO see book tabs with mod view %s while keeping shares hidden",
+      (modViewEnabled) => {
+        const access = getPrivateCorpTabAccess({
+          isPrivate: true,
+          isCeo: false,
+          viewerIsControllingParentCeo: true,
+          modViewEnabled,
+        });
+        const visibleIds = filterPrivateCorpBaseTabs(CORP_TABS, access).map((tab) => tab.id);
+
+        expect(visibleIds).toContain("financials");
+        expect(visibleIds).toContain("credit");
+        expect(visibleIds).toContain("snapshot");
+        expect(visibleIds).not.toContain("shares");
+      }
+    );
+
+    it("keeps private corporation tabs restricted for an outsider", () => {
+      const access = getPrivateCorpTabAccess({
+        isPrivate: true,
+        isCeo: false,
+        viewerIsControllingParentCeo: false,
+        modViewEnabled: false,
+      });
+
+      expect(filterPrivateCorpBaseTabs(CORP_TABS, access).map((tab) => tab.id)).toEqual([
+        "overview",
+        "sectors",
+      ]);
     });
   });
 });

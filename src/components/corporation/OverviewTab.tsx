@@ -428,6 +428,10 @@ export default function OverviewTab({
 
   const basis = financials ? corpIncomeBasis(financials) : null;
   const netMargin = financials ? netMarginPct(financials) : null;
+  const currentGrowthRate =
+    financials && Number.isFinite(financials.currentGrowthRate)
+      ? financials.currentGrowthRate
+      : null;
   const stateCount = new Set(sectors.map((s) => s.stateId)).size;
   const floatPct =
     corporation.totalShares > 0 ? (corporation.publicFloat / corporation.totalShares) * 100 : null;
@@ -435,6 +439,14 @@ export default function OverviewTab({
   const priceToBook =
     bookValue != null && bookValue > 0 ? corporation.marketCapitalization / bookValue : null;
   const activeBonds = bondInfo?.bonds.filter((b) => !b.defaulted && !b.matured).length ?? 0;
+  const snapshotComposite = corporation.creditCompositeSnapshot;
+  const liveComposite = bondInfo?.creditRating.compositeScore;
+  const creditComposite =
+    typeof snapshotComposite === "number" && Number.isFinite(snapshotComposite)
+      ? snapshotComposite
+      : typeof liveComposite === "number" && Number.isFinite(liveComposite)
+        ? liveComposite
+        : null;
 
   const myHolding = myCharacterId
     ? corporation.shareholders.find((sh) => sh.characterId === myCharacterId)
@@ -498,11 +510,19 @@ export default function OverviewTab({
               )}
               <StatTile
                 label={financials.growthRateIsRealized ? "Revenue growth" : "Growth rate"}
-                value={`${financials.currentGrowthRate >= 0 ? "▲" : "▼"} ${Math.abs(
-                  financials.currentGrowthRate
-                ).toFixed(1)}%`}
-                sub={financials.growthRateIsRealized ? "past year" : "per turn"}
-                tone={signTone(financials.currentGrowthRate)}
+                value={
+                  currentGrowthRate == null
+                    ? "n/a"
+                    : `${currentGrowthRate >= 0 ? "▲" : "▼"} ${Math.abs(currentGrowthRate).toFixed(1)}%`
+                }
+                sub={
+                  currentGrowthRate == null
+                    ? undefined
+                    : financials.growthRateIsRealized
+                      ? "past year"
+                      : "per turn"
+                }
+                tone={currentGrowthRate == null ? undefined : signTone(currentGrowthRate)}
               />
             </div>
             <div className="grid gap-x-8 sm:grid-cols-2 xl:grid-cols-3">
@@ -611,9 +631,11 @@ export default function OverviewTab({
                 )}
                 <KVRow
                   label={financials.growthRateIsRealized ? "Revenue growth" : "Growth rate"}
-                  value={`${financials.currentGrowthRate.toFixed(2)}%${
-                    financials.growthRateIsRealized ? "/yr" : "/turn"
-                  }`}
+                  value={
+                    currentGrowthRate == null
+                      ? "n/a"
+                      : `${currentGrowthRate.toFixed(2)}%${financials.growthRateIsRealized ? "/yr" : "/turn"}`
+                  }
                 />
               </KVList>
 
@@ -653,7 +675,7 @@ export default function OverviewTab({
                       label="Leverage rating"
                       title="Measures debt load and the ability to service it, not profitability: a company with no debt rates AAA."
                       value={corporation.creditRatingSnapshot ?? bondInfo.creditRating.rating}
-                      hint={`${corporation.creditCompositeSnapshot ?? bondInfo.creditRating.compositeScore}/100`}
+                      hint={creditComposite == null ? undefined : `${creditComposite}/100`}
                       action={<RowLink onClick={() => onTabChange("credit")}>Details</RowLink>}
                     />
                     <KVRow

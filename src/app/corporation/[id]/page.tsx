@@ -44,6 +44,10 @@ import {
   corpNavLocation,
   corpTabIdFor,
 } from "@/components/corporation/CorporationTabGroups";
+import {
+  filterPrivateCorpBaseTabs,
+  getPrivateCorpTabAccess,
+} from "@/components/corporation/privateCorpTabAccess";
 import FinancialsTab from "@/components/corporation/FinancialsTab";
 import {
   corpIncomeBasis,
@@ -470,7 +474,11 @@ export default function CorporationDetailPage() {
   }, [activeTab, fetchBondInfo]);
 
   useEffect(() => {
-    if (isCeo && corporation && !corporation.countryOwnerId) {
+    if (
+      corporation &&
+      (isCeo || corporation.viewerIsControllingParentCeo) &&
+      !corporation.countryOwnerId
+    ) {
       void fetchBondInfo();
     }
   }, [isCeo, corporation, fetchBondInfo]);
@@ -755,15 +763,15 @@ export default function CorporationDetailPage() {
   }
 
   const isNationalCorp = !!corporation.countryOwnerId;
-  const isPrivateCorp = !!corporation.isPrivate && !isCeo && !modViewEnabled;
-  const isPrivateCorpModView = !!corporation.isPrivate && !isCeo && modViewEnabled;
+  const privateCorpTabAccess = getPrivateCorpTabAccess({
+    isPrivate: !!corporation.isPrivate,
+    isCeo,
+    viewerIsControllingParentCeo: !!corporation.viewerIsControllingParentCeo,
+    modViewEnabled,
+  });
   const baseTabs = isNationalCorp
     ? CORP_TABS.filter((t) => t.id === "overview" || t.id === "financials" || t.id === "sectors")
-    : isPrivateCorpModView
-      ? CORP_TABS.filter((t) => t.id !== "shares")
-      : isPrivateCorp
-        ? CORP_TABS.filter((t) => t.id === "overview" || t.id === "sectors")
-        : CORP_TABS;
+    : filterPrivateCorpBaseTabs(CORP_TABS, privateCorpTabAccess);
   // The Tech tab only appears when the sector-tech-trees feature gate is on.
   const gatedBaseTabs0 = corporation.techTreesEnabled
     ? baseTabs

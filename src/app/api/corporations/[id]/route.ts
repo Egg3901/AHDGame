@@ -199,26 +199,27 @@ export async function GET(request: Request, { params }: RouteParams) {
       modViewEnabled
     );
 
-    if (redact && authUser?.userId) {
-      // Controlling parent CEO is an insider of a private subsidiary.
-      const parentInfo = (detail.corporation as Record<string, unknown>).parentCorporation as
-        { _id: string } | null | undefined;
-      if (parentInfo?._id && ObjectId.isValid(parentInfo._id)) {
-        const parentCorp = await db
-          .collection<Corporation>("corporations")
-          .findOne(
-            { _id: new ObjectId(parentInfo._id) },
-            { projection: { userId: 1, ceoVacant: 1 } }
-          );
-        if (
-          parentCorp &&
-          parentCorp.ceoVacant !== true &&
-          parentCorp.userId?.toString() === authUser.userId
-        ) {
-          redact = false;
-        }
-      }
+    let viewerIsControllingParentCeo = false;
+    const parentInfo = (detail.corporation as Record<string, unknown>).parentCorporation as
+      { _id: string } | null | undefined;
+    if (authUser?.userId && parentInfo?._id && ObjectId.isValid(parentInfo._id)) {
+      const parentCorp = await db
+        .collection<Corporation>("corporations")
+        .findOne(
+          { _id: new ObjectId(parentInfo._id) },
+          { projection: { userId: 1, ceoVacant: 1 } }
+        );
+      viewerIsControllingParentCeo =
+        parentCorp != null &&
+        !parentCorp.ceoVacant &&
+        parentCorp.userId?.toString() === authUser.userId;
     }
+
+    if (redact && viewerIsControllingParentCeo) {
+      redact = false;
+    }
+    (detail.corporation as Record<string, unknown>).viewerIsControllingParentCeo =
+      viewerIsControllingParentCeo;
 
     if (redact) {
       // Sensitive financial fields live nested under `corporation`, `financials`,
@@ -231,6 +232,7 @@ export async function GET(request: Request, { params }: RouteParams) {
       return NextResponse.json({
         corporation: {
           ...redactPrivateCorporation(innerCorp),
+          viewerIsControllingParentCeo,
           openPrivatizationVoteId,
           nationalizationRisk,
           nationalizationThreat,
@@ -266,30 +268,10 @@ export async function GET(request: Request, { params }: RouteParams) {
     let booksExposed = false;
 
     if (isPublicCorp) {
-      let isInsider = authUser?.isAdmin === true;
-
-      if (!isInsider && authUser) {
-        // Viewer is the CEO of this corp if the corp's userId matches.
-        isInsider = corporation.userId?.toString() === authUser.userId;
-
-        // Check if viewer is CEO of the controlling parent (sees through fog).
-        if (!isInsider) {
-          const corpDetail = detail.corporation as Record<string, unknown>;
-          const parentInfo = corpDetail?.parentCorporation as { _id: string } | null | undefined;
-          if (parentInfo?._id && ObjectId.isValid(parentInfo._id)) {
-            const parentCorp = await db
-              .collection<Corporation>("corporations")
-              .findOne(
-                { _id: new ObjectId(parentInfo._id) },
-                { projection: { userId: 1, ceoVacant: 1 } }
-              );
-            isInsider =
-              !!parentCorp &&
-              !parentCorp.ceoVacant &&
-              parentCorp.userId?.toString() === authUser.userId;
-          }
-        }
-      }
+      const isInsider =
+        authUser?.isAdmin === true ||
+        (authUser?.userId != null && corporation.userId?.toString() === authUser.userId) ||
+        viewerIsControllingParentCeo;
 
       // A leaked corporation's books are OUT: the fog is skipped for everyone
       // until the exposure lapses. Expressed as a turn so it expires on its own
