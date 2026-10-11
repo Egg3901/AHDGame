@@ -46,14 +46,25 @@ export function sellableExpansionUnits(legs: readonly { weight: number; gap: num
  * Existing plants can meet a shortage before a new build arrives. Reserve
  * their unused nameplate and undelivered queues, including parked plants.
  * This is conservative advice, not a reservation or a promise of sales.
+ *
+ * A sector founded or bought since the last turn has no recorded output yet
+ * (`produced` null/undefined). It has produced nothing, so its whole capacity
+ * counts as unused and is reserved. Treating it as unknown instead blanked
+ * measured demand for every producer of the same output until the next turn.
  */
 export function expansionGapAfterExistingCapacity(
   gap: number,
-  producers: readonly { capacity: number; produced: number; queued: number; weight: number }[]
+  producers: readonly {
+    capacity: number;
+    produced: number | null | undefined;
+    queued: number;
+    weight: number;
+  }[]
 ): number | null {
   if (!Number.isFinite(gap)) return null;
   let reserved = 0;
-  for (const producer of producers) {
+  for (const raw of producers) {
+    const producer = { ...raw, produced: raw.produced ?? 0 };
     if (
       !Object.values(producer).every(Number.isFinite) ||
       Object.values(producer).some((value) => value < 0)

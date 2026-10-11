@@ -1056,7 +1056,8 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
                 )
                 .map((candidate) => ({
                   capacity: candidate.capacity ?? NaN,
-                  produced: candidate.produced ?? NaN,
+                  // Unrecorded output (no turn run yet) is zero, not unknown.
+                  produced: candidate.produced,
                   queued: candidate.queued,
                   weight: commodityMixWeight(candidate.supply ?? {}, COMMODITY_BASE_PRICES, key),
                 }))

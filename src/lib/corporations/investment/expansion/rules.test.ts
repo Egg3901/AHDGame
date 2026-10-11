@@ -65,6 +65,28 @@ describe("automatic expansion sizing", () => {
       ])
     ).toBe(200);
   });
+  it("treats a producer with no recorded output yet as idle, not unknown", () => {
+    // A newly founded sector: no plants yet, a starter order queued, and no
+    // producedUnits until its first turn.
+    expect(
+      expansionGapAfterExistingCapacity(500, [
+        { capacity: 0, produced: undefined, queued: 100, weight: 1 },
+        { capacity: 1000, produced: 1000, queued: 0, weight: 1 },
+      ])
+    ).toBe(400);
+    // Legacy capacity without recorded output is reserved in full.
+    expect(
+      expansionGapAfterExistingCapacity(500, [
+        { capacity: 300, produced: null, queued: 0, weight: 1 },
+      ])
+    ).toBe(200);
+    // A genuinely invalid figure still blocks the estimate.
+    expect(
+      expansionGapAfterExistingCapacity(500, [
+        { capacity: 300, produced: NaN, queued: 0, weight: 1 },
+      ])
+    ).toBeNull();
+  });
   it("uses the weakest measured output instead of averaging a shortage with a glut", () => {
     expect(
       sellableExpansionUnits([
