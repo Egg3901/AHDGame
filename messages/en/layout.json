@@ -13,6 +13,17 @@
       "activeAfterLimits": "{count, plural, one {# active effect} other {# active effects}}, after limits",
       "target": "Approval target",
       "rankingTargets": "Metric-based approval targets. Stored ratings also include temporary effects and move gradually each turn."
+    },
+    "guidedLegislation": {
+      "customBill": "Custom Bill",
+      "startingHelp": "Start from a policy domain, a metric you want to affect, or a flavour-only custom bill.",
+      "noEffects": "Custom bills contain flavour text only. They have no provisions and make no budget or metric changes.",
+      "messageBody": "Message body",
+      "characterCount": "{count, number} / {limit, number} characters",
+      "changeStartingPoint": "Change starting point",
+      "required": "Add a title and message body.",
+      "byDomain": "By Domain",
+      "byMetric": "By Metric"
     }
   }
 }

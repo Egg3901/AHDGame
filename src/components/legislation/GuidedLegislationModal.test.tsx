@@ -1,6 +1,8 @@
 /** @vitest-environment happy-dom */
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { NextIntlClientProvider } from "next-intl";
+import messages from "../../../messages/en/layout.json";
 import { GuidedLegislationModal } from "./GuidedLegislationModal";
 
 const mocks = vi.hoisted(() => ({
@@ -131,17 +133,19 @@ function stubCatalog(response: unknown = catalog, legislationTypes: unknown[] = 
 
 function renderModal(onSuccess = vi.fn(), countryId: "US" | "JP" = "US", onClose = vi.fn()) {
   render(
-    <GuidedLegislationModal
-      countryId={countryId}
-      endpoint="/api/congress/bills"
-      chambers={[
-        { value: "house", label: "House" },
-        { value: "senate", label: "Senate" },
-      ]}
-      initialChamber="house"
-      onClose={onClose}
-      onSuccess={onSuccess}
-    />
+    <NextIntlClientProvider locale="en" messages={messages}>
+      <GuidedLegislationModal
+        countryId={countryId}
+        endpoint="/api/congress/bills"
+        chambers={[
+          { value: "house", label: "House" },
+          { value: "senate", label: "Senate" },
+        ]}
+        initialChamber="house"
+        onClose={onClose}
+        onSuccess={onSuccess}
+      />
+    </NextIntlClientProvider>
   );
   return { onClose, onSuccess };
 }
@@ -163,12 +167,58 @@ afterEach(() => {
 });
 
 describe("GuidedLegislationModal", () => {
+  it("proposes a flavour-only custom bill with a long message and no provisions", async () => {
+    stubCatalog();
+    mocks.postBill.mockResolvedValue({ response: { ok: true }, data: {}, cancelled: false });
+    const { onSuccess } = renderModal();
+    fireEvent.click(await screen.findByRole("button", { name: "Custom Bill" }));
+    expect(screen.getByRole("heading", { name: "Custom Bill" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Add another provision" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Propose bill" }).hasAttribute("disabled")).toBe(
+      true
+    );
+    const body = screen.getByLabelText("Message body");
+    expect(body.getAttribute("maxlength")).toBe("10000");
+    fireEvent.change(screen.getByLabelText("Bill title"), {
+      target: { value: "Declaration of Friendship" },
+    });
+    const message = "We celebrate our friendship. ".repeat(200);
+    fireEvent.change(body, { target: { value: message } });
+    fireEvent.click(screen.getByRole("button", { name: "Propose bill" }));
+    await waitFor(() => expect(mocks.postBill).toHaveBeenCalledOnce());
+    expect(mocks.postBill).toHaveBeenCalledWith({
+      url: "/api/congress/bills",
+      body: {
+        title: "Declaration of Friendship",
+        summary: message.trim(),
+        chamber: "house",
+        category: "custom",
+        provisions: [],
+      },
+    });
+    expect(onSuccess).toHaveBeenCalledOnce();
+  });
+
+  it("clears policy provisions when switching a draft to a custom bill", async () => {
+    stubCatalog();
+    renderModal();
+    await addProvision("Health and care", "Primary care access", "Community clinic expansion");
+    fireEvent.click(screen.getByRole("button", { name: "Add another provision" }));
+    fireEvent.click(screen.getByRole("button", { name: "Custom Bill" }));
+    expect(screen.queryByRole("button", { name: "Remove" })).toBeNull();
+    expect(screen.queryByText("Community clinic expansion")).toBeNull();
+    expect(screen.getByText(/0 national influence/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Change starting point" }));
+    expect(screen.getByLabelText("Policy domain")).toBeTruthy();
+    expect(screen.queryByLabelText("Message body")).toBeNull();
+  });
+
   it("populates metric names when the server response omits its metric definitions", async () => {
     const { metrics: _metrics, ...olderCatalogResponse } = catalog;
     stubCatalog(olderCatalogResponse);
     renderModal();
 
-    fireEvent.click(await screen.findByRole("button", { name: "By metric" }));
+    fireEvent.click(await screen.findByRole("button", { name: "By Metric" }));
 
     expect(screen.getByRole("option", { name: "Secondary completion" })).toBeTruthy();
     const coverageOption = screen.getByRole("option", { name: "Effective health coverage" });
@@ -194,7 +244,7 @@ describe("GuidedLegislationModal", () => {
     stubCatalog();
     renderModal();
 
-    fireEvent.click(await screen.findByRole("button", { name: "By metric" }));
+    fireEvent.click(await screen.findByRole("button", { name: "By Metric" }));
     const metricSelect = screen.getByLabelText("Metric to affect");
     expect(screen.getByRole("option", { name: "Effective health coverage" })).toBeTruthy();
     fireEvent.change(metricSelect, { target: { value: "16" } });

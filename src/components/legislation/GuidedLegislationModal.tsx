@@ -1,12 +1,14 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useTranslations } from "next-intl";
 import type { CountryId } from "@/lib/constants/countries";
 import type { LawChoice } from "@/lib/resetLegislation/rules/eligibility";
 import { useToast } from "@/contexts/ToastContext";
 import { postBillProposalWithElectionConfirmation } from "@/components/bills/BillAutoFailWarning";
 import {
   BILL_PROPOSE_ACTION_COST,
+  CUSTOM_BILL_BODY_MAX_LENGTH,
   getProvisionCostTotal,
   MAX_PROVISIONS,
 } from "@shared/constants/legislation";
@@ -178,12 +180,13 @@ export function GuidedLegislationModal({
   onSuccess,
 }: GuidedLegislationModalProps) {
   const { showToast } = useToast();
+  const t = useTranslations("layout.guidedLegislation");
   const [catalog, setCatalog] = useState<CatalogResponse | null>(null);
   const [legacyTaxes, setLegacyTaxes] = useState<LegacyTaxType[]>([]);
   const [metricValues, setMetricValues] = useState<Record<string, number | null>>({});
   const [loadError, setLoadError] = useState("");
   const [step, setStep] = useState<Step>("starting");
-  const [path, setPath] = useState<"domain" | "metric">("domain");
+  const [path, setPath] = useState<"domain" | "metric" | "custom">("domain");
   const [domain, setDomain] = useState("");
   const [metric, setMetric] = useState("");
   const [selectedFamilyId, setSelectedFamilyId] = useState("");
@@ -195,6 +198,7 @@ export function GuidedLegislationModal({
   const [summary, setSummary] = useState("");
   const [chamber, setChamber] = useState(initialChamber);
   const [submitting, setSubmitting] = useState(false);
+  const isCustomBill = path === "custom";
   const hasStartedBill = draft.length > 0 || Boolean(title.trim()) || Boolean(summary.trim());
   const canReturnToBill = hasStartedBill && step !== "overview";
 
@@ -368,6 +372,7 @@ export function GuidedLegislationModal({
 
   function beginAnother() {
     setStep("starting");
+    setPath("domain");
     setDomain("");
     setMetric("");
     setSelectedFamilyId("");
@@ -424,13 +429,16 @@ export function GuidedLegislationModal({
   }
 
   async function submit() {
-    if (!title.trim() || !summary.trim() || draft.length === 0) {
-      showToast("Add a title, summary, and at least one provision.", "error");
+    if (!title.trim() || !summary.trim() || (!isCustomBill && draft.length === 0)) {
+      showToast(
+        isCustomBill ? t("required") : "Add a title, summary, and at least one provision.",
+        "error"
+      );
       return;
     }
     setSubmitting(true);
     try {
-      const provisions = draft.map((provision) =>
+      const provisions = (isCustomBill ? [] : draft).map((provision) =>
         provision.kind === "law"
           ? {
               type: "reset_law",
@@ -451,7 +459,7 @@ export function GuidedLegislationModal({
           title: title.trim(),
           summary: summary.trim(),
           chamber,
-          category: categoryForDraft(draft),
+          category: isCustomBill ? "custom" : categoryForDraft(draft),
           provisions,
           ...(adminOverride ? { adminOverride: true } : {}),
         },
@@ -470,13 +478,18 @@ export function GuidedLegislationModal({
     }
   }
 
-  const steps: { id: Step; label: string }[] = [
-    { id: "starting", label: "Starting point" },
-    { id: "family", label: "Law family" },
-    { id: "level", label: "Policy level" },
-    { id: "review", label: "Review provision" },
-    { id: "overview", label: "Bill overview" },
-  ];
+  const steps: { id: Step; label: string }[] = isCustomBill
+    ? [
+        { id: "starting", label: "Starting point" },
+        { id: "overview", label: t("customBill") },
+      ]
+    : [
+        { id: "starting", label: "Starting point" },
+        { id: "family", label: "Law family" },
+        { id: "level", label: "Policy level" },
+        { id: "review", label: "Review provision" },
+        { id: "overview", label: "Bill overview" },
+      ];
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/70 p-4 py-8">
@@ -485,8 +498,9 @@ export function GuidedLegislationModal({
           <div>
             <h2 className="text-lg font-semibold">Guided legislative proposal</h2>
             <p className="mt-1 text-xs text-muted">
-              Build up to {MAX_PROVISIONS} reviewed provisions. Costs {BILL_PROPOSE_ACTION_COST}{" "}
-              action points and {getProvisionCostTotal(draft.length)} national influence at the
+              {isCustomBill ? t("noEffects") : `Build up to ${MAX_PROVISIONS} reviewed provisions.`}{" "}
+              Costs {BILL_PROPOSE_ACTION_COST} action points and{" "}
+              {getProvisionCostTotal(isCustomBill ? 0 : draft.length)} national influence at the
               current draft size.
             </p>
           </div>
@@ -551,12 +565,10 @@ export function GuidedLegislationModal({
                 <section className="space-y-5">
                   <div>
                     <h3 className="font-semibold">How do you want to find a law?</h3>
-                    <p className="mt-1 text-sm text-muted">
-                      Start from a policy domain or from the metric you want to affect.
-                    </p>
+                    <p className="mt-1 text-sm text-muted">{t("startingHelp")}</p>
                   </div>
-                  <div className="flex gap-2">
-                    {(["domain", "metric"] as const).map((value) => (
+                  <div className="flex flex-wrap gap-2">
+                    {(["domain", "metric", "custom"] as const).map((value) => (
                       <button
                         key={value}
                         type="button"
@@ -564,10 +576,23 @@ export function GuidedLegislationModal({
                           setPath(value);
                           setDomain("");
                           setMetric("");
+                          if (value === "custom") {
+                            setDraft([]);
+                            setSelectedFamilyId("");
+                            setSelectedChoice("");
+                            setSelectedTaxId("");
+                            setStep("overview");
+                          }
                         }}
                         className={`rounded-lg border px-4 py-2 text-sm ${path === value ? "border-primary bg-primary/15 text-primary" : "border-card-border"}`}
                       >
-                        By {value}
+                        {t(
+                          value === "custom"
+                            ? "customBill"
+                            : value === "domain"
+                              ? "byDomain"
+                              : "byMetric"
+                        )}
                       </button>
                     ))}
                   </div>
@@ -932,20 +957,33 @@ export function GuidedLegislationModal({
                 <section className="space-y-5">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
-                      <h3 className="font-semibold">Bill overview</h3>
+                      <h3 className="font-semibold">
+                        {isCustomBill ? t("customBill") : "Bill overview"}
+                      </h3>
                       <p className="text-sm text-muted">
-                        Review the draft or add another provision without retracing the previous
-                        steps.
+                        {isCustomBill
+                          ? t("noEffects")
+                          : "Review the draft or add another provision without retracing the previous steps."}
                       </p>
                     </div>
-                    <button
-                      type="button"
-                      disabled={draft.length >= MAX_PROVISIONS}
-                      onClick={beginAnother}
-                      className="rounded-lg border border-card-border px-4 py-2 text-sm disabled:opacity-50"
-                    >
-                      Add another provision
-                    </button>
+                    {isCustomBill ? (
+                      <button
+                        type="button"
+                        onClick={beginAnother}
+                        className="rounded-lg border border-card-border px-4 py-2 text-sm"
+                      >
+                        {t("changeStartingPoint")}
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        disabled={draft.length >= MAX_PROVISIONS}
+                        onClick={beginAnother}
+                        className="rounded-lg border border-card-border px-4 py-2 text-sm disabled:opacity-50"
+                      >
+                        Add another provision
+                      </button>
+                    )}
                   </div>
                   <div className="space-y-2">
                     {draft.map((provision) => {
@@ -1013,23 +1051,35 @@ export function GuidedLegislationModal({
                     ) : null}
                   </div>
                   <label className="block text-xs text-muted">
-                    Summary
+                    {isCustomBill ? t("messageBody") : "Summary"}
                     <textarea
                       value={summary}
                       onChange={(event) => setSummary(event.target.value)}
-                      maxLength={2000}
-                      rows={3}
+                      maxLength={isCustomBill ? CUSTOM_BILL_BODY_MAX_LENGTH : 2000}
+                      rows={isCustomBill ? 10 : 3}
                       className="mt-1 w-full rounded-lg border border-card-border bg-background px-3 py-2 text-sm text-foreground"
                     />
                   </label>
-                  <p className="text-xs text-muted" title={catalog.balanceNotice}>
-                    {catalog.balanceNotice}
-                  </p>
+                  {isCustomBill ? (
+                    <p className="text-xs text-muted" aria-live="polite">
+                      {t("characterCount", {
+                        count: summary.length,
+                        limit: CUSTOM_BILL_BODY_MAX_LENGTH,
+                      })}
+                    </p>
+                  ) : (
+                    <p className="text-xs text-muted" title={catalog.balanceNotice}>
+                      {catalog.balanceNotice}
+                    </p>
+                  )}
                   <div className="flex justify-end">
                     <button
                       type="button"
                       disabled={
-                        submitting || draft.length === 0 || !title.trim() || !summary.trim()
+                        submitting ||
+                        (!isCustomBill && draft.length === 0) ||
+                        !title.trim() ||
+                        !summary.trim()
                       }
                       onClick={submit}
                       className="rounded-lg bg-primary px-5 py-2 text-sm font-semibold text-white disabled:opacity-50"

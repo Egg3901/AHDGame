@@ -130,6 +130,9 @@ export const PROVISION_COSTS = [5, 10, 15] as const;
 /** Max number of provisions per bill. */
 export const MAX_PROVISIONS = 3;
 
+/** Maximum flavour text length offered by the custom bill composer. */
+export const CUSTOM_BILL_BODY_MAX_LENGTH = 10_000;
+
 /** Flat action point cost to propose any bill (national or state). */
 export const BILL_PROPOSE_ACTION_COST = 10;
 
