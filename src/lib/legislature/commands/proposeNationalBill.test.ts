@@ -3,6 +3,7 @@ import { ObjectId } from "mongodb";
 import type { Db } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 import type { AuthUser } from "@/lib/auth";
+import { RESET_V2_SEED_REVISION } from "@/lib/resetVersions/rules";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 const checkBillSponsoredAchievements = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
@@ -252,12 +253,14 @@ describe("proposeNationalBill — origin/current chamber storage", () => {
 describe("proposeNationalBill — custom (flavor) bills", () => {
   let db: MockDb;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
+    const { getGameState } = await import("@/lib/gameState");
+    vi.mocked(getGameState).mockResolvedValue({ currentTurn: 5 } as never);
     db = createMockDb();
   });
 
-  function seat(): AuthUser {
+  function seat(countryId = "US", officeType = "house"): AuthUser {
     const charId = new ObjectId();
     const userId = new ObjectId();
     db.collection("characters").findOne.mockResolvedValue({
@@ -270,8 +273,8 @@ describe("proposeNationalBill — custom (flavor) bills", () => {
     db.collection("electedOfficials").findOne.mockResolvedValue({
       _id: new ObjectId(),
       characterId: charId,
-      officeType: "house",
-      countryId: "US",
+      officeType,
+      countryId,
     });
     db.collection("bills").findOne.mockResolvedValue(null);
     return { userId: userId.toString(), isAdmin: false } as AuthUser;
@@ -283,21 +286,57 @@ describe("proposeNationalBill — custom (flavor) bills", () => {
     return call![0] as Record<string, unknown>;
   }
 
-  it("stores a custom bill with empty provisions and no NPI cost", async () => {
-    const authUser = seat();
-    const result = await proposeNationalBill(db as unknown as Db, "US", authUser, {
-      title: "Declaration of Friendship",
-      summary: "We hereby declare eternal friendship.",
-      chamber: "house",
-      category: "custom",
-      provisions: [],
-    });
-    expect(result.status).toBe(201);
-    const bill = inserted();
-    expect(bill.category).toBe("custom");
-    expect(bill.provisions).toEqual([]);
-    expect(bill.proposalNpiCost).toBeUndefined();
-  });
+  it.each([
+    ["legacy", "US", "house"],
+    ["v2", "US", "house"],
+    ["v2", "UK", "commons"],
+    ["v2", "JP", "shugiin"],
+  ] as const)(
+    "stores a %s %s custom bill with empty provisions and no NPI cost",
+    async (version, countryId, chamber) => {
+      const { getGameState } = await import("@/lib/gameState");
+      const state = {
+        currentTurn: 5,
+        ...(version === "v2"
+          ? {
+              resetWorldId: "test-world",
+              startingYear: 1991,
+              metricsSystemVersion: "v2",
+              legislationSystemVersion: "v2",
+              resetVersionSeeds: Object.fromEntries(
+                (["metrics", "legislation"] as const).map((system) => [
+                  system,
+                  {
+                    worldId: "test-world",
+                    revision: RESET_V2_SEED_REVISION[system],
+                    sourceTurn: 1,
+                    completedAt: "2026-10-11T00:00:00.000Z",
+                    verificationHash: system,
+                  },
+                ])
+              ),
+            }
+          : {}),
+      };
+      vi.mocked(getGameState).mockResolvedValue(state as never);
+      db.collection("gameState").findOne.mockResolvedValue(state);
+      const authUser = seat(countryId, chamber);
+      const result = await proposeNationalBill(db as unknown as Db, countryId, authUser, {
+        title: "Declaration of Friendship",
+        summary: "We hereby declare eternal friendship.",
+        chamber,
+        category: "custom",
+        provisions: [],
+      });
+      expect(result.status).toBe(201);
+      const bill = inserted();
+      expect(bill.category).toBe("custom");
+      expect(bill.provisions).toEqual([]);
+      expect(bill.proposalNpiCost).toBeUndefined();
+      expect(bill.legislationTypeId).toBeUndefined();
+      expect(bill.effectDirection).toBeUndefined();
+    }
+  );
 
   it("strips any provisions a client smuggles into a custom bill", async () => {
     const authUser = seat();

@@ -3,6 +3,7 @@ import type { Db } from "mongodb";
 import { ObjectId } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 import type { AuthUserWithCharacter } from "@/lib/auth";
+import { RESET_V2_SEED_REVISION } from "@/lib/resetVersions/rules";
 import { BILL_PROPOSE_ACTION_COST, getProvisionCostTotal } from "@shared/constants/legislation";
 
 vi.mock("@/lib/countryState", () => ({
@@ -144,6 +145,67 @@ describe("proposeStateBill — custom (flavor) bills", () => {
     expect(res.status).toBe(409);
     expect(db.collection("stateBills").insertOne).not.toHaveBeenCalled();
     expect(db.collection("characters").updateOne).not.toHaveBeenCalled();
+  });
+
+  it("stores a long flavour-only UK regional bill in a reviewed v2 world", async () => {
+    const { getGameState } = await import("@/lib/gameState");
+    vi.mocked(getGameState).mockResolvedValueOnce({
+      currentTurn: 100,
+      resetWorldId: "world-1",
+      metricsSystemVersion: "v2",
+      legislationSystemVersion: "v2",
+      resetVersionSeeds: Object.fromEntries(
+        (["metrics", "legislation"] as const).map((system) => [
+          system,
+          {
+            worldId: "world-1",
+            revision: RESET_V2_SEED_REVISION[system],
+            sourceTurn: 1,
+            completedAt: "2026-10-11T00:00:00.000Z",
+            verificationHash: system,
+          },
+        ])
+      ),
+    } as never);
+    db.collection("politicalParties").findOne.mockResolvedValue({
+      sequentialId: 1,
+      countryId: "UK",
+      _id: "test-party",
+    });
+    db.collection("electedOfficials").findOne.mockResolvedValue({
+      countryId: "UK",
+      state: "SCO",
+      officeType: "regionalCouncil",
+      characterId,
+    });
+    const { proposeStateBill } = await import("./proposeStateBill");
+    const summary = "Friendship and cooperation.\n\n".repeat(200);
+    const result = await proposeStateBill(db as unknown as Db, "UK", "SCO", authUser(), {
+      title: "Friendship Resolution",
+      summary,
+      category: "custom",
+      provisions: [],
+    });
+    expect(result.status).toBe(200);
+    expect(db.collection("stateBills").insertOne).toHaveBeenCalledWith(
+      expect.objectContaining({
+        countryId: "UK",
+        stateId: "SCO",
+        summary: summary.trim(),
+        provisions: [],
+        legislationTypeId: undefined,
+        effectDirection: undefined,
+      })
+    );
+    const bill = db.collection("stateBills").insertOne.mock.calls[0][0];
+    expect(bill.proposalNpiCost).toBeUndefined();
+    expect(db.collection("characters").updateOne).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        $inc: { actions: -BILL_PROPOSE_ACTION_COST },
+      })
+    );
+    expect(db.collection("regionalBudgets").updateOne).not.toHaveBeenCalled();
   });
 
   it("stores a custom state bill with empty provisions, stripping client input", async () => {
