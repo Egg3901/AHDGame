@@ -42,6 +42,31 @@ export function sellableExpansionUnits(legs: readonly { weight: number; gap: num
   return limit;
 }
 
+/**
+ * Existing plants can meet a shortage before a new build arrives. Reserve
+ * their unused nameplate and undelivered queues, including parked plants.
+ * This is conservative advice, not a reservation or a promise of sales.
+ */
+export function expansionGapAfterExistingCapacity(
+  gap: number,
+  producers: readonly { capacity: number; produced: number; queued: number; weight: number }[]
+): number | null {
+  if (!Number.isFinite(gap)) return null;
+  let reserved = 0;
+  for (const producer of producers) {
+    if (
+      !Object.values(producer).every(Number.isFinite) ||
+      Object.values(producer).some((value) => value < 0)
+    )
+      return null;
+    reserved +=
+      (Math.max(0, producer.capacity - Math.max(0, producer.produced)) +
+        Math.max(0, producer.queued)) *
+      producer.weight;
+  }
+  return Math.max(0, gap - reserved);
+}
+
 /** Gross expenses are reserved without relying on next turn's sales receipts. */
 export function expansionOperatingReserve(input: {
   overheadPerTurnAnchor: number;

@@ -1,5 +1,6 @@
 import {
   expansionOperatingReserve,
+  expansionGapAfterExistingCapacity,
   sellableExpansionUnits,
 } from "@/lib/corporations/investment/expansion/rules";
 import { deliveredFraction } from "@/lib/corporations/buildDelivery";
@@ -490,6 +491,13 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
                 industryModel: 1,
                 mediaDiscriminator: 1,
                 revenue: 1,
+                strategyId: 1,
+                transitionFromStrategyId: 1,
+                transitionStartTurn: 1,
+                operatingCapacityUnits: 1,
+                capitalStock: 1,
+                producedUnits: 1,
+                buildQueue: 1,
               },
             }
           )
@@ -937,16 +945,31 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
 
       // The sizing shortcut uses actual buyers for every output, not the
       // weighted expansion appetite or latent price-cap demand above.
-      const queuedMarketUnits = siblingsSectors.reduce(
-        (sum, candidate) =>
-          sum +
-          (candidate.buildQueue ?? []).reduce(
-            (queued, order) =>
-              queued + order.unitsOrdered * (1 - deliveredFraction(order, currentTurn)),
-            0
-          ),
-        0
+      // Include all output competitors, not just this state/type cell. Reachable
+      // goods clear nationally and several sector types can make the same commodity.
+      const stateCountry = new Map(
+        allStates.map((candidate) => [candidate._id, candidate.countryId])
       );
+      const existingProducers = allSectorsRaw.map((candidate) => ({
+        stateId: candidate.stateId,
+        countryId: stateCountry.get(candidate.stateId) ?? candidate.countryId,
+        capacity: candidate.operatingCapacityUnits ?? candidate.capitalStock,
+        produced: candidate.producedUnits,
+        queued: (candidate.buildQueue ?? []).reduce(
+          (sum, order) => sum + order.unitsOrdered * (1 - deliveredFraction(order, currentTurn)),
+          0
+        ),
+        supply: getEffectiveStrategyRatesForOperatingModel(
+          candidate.sectorType,
+          candidate.strategyId ?? "standard",
+          candidate.transitionFromStrategyId,
+          candidate.transitionStartTurn,
+          currentTurn,
+          candidate.industryModel,
+          candidate.mediaDiscriminator,
+          sectorDetailPreset
+        ).supply,
+      }));
       const currentDemand = Object.entries(effectiveSupply)
         .filter(([, rate]) => (rate ?? 0) > 0)
         .every(([commodity]) => {
@@ -955,34 +978,45 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
             ? priceDocByCommodity.get(key)?.turn === currentTurn
             : !!bookFor(reachableBooks, sectorCountryId, key);
         });
-      const measuredDemandGapUnits = currentDemand
-        ? Math.max(
-            0,
-            sellableExpansionUnits(
-              Object.entries(effectiveSupply)
-                .filter(([, rate]) => (rate ?? 0) > 0)
-                .map(([commodity]) => {
-                  const key = commodity as CommodityType;
-                  return {
-                    weight: commodityMixWeight(effectiveSupply, COMMODITY_BASE_PRICES, key),
-                    gap: (
-                      isStateScopedCommodity(key)
-                        ? stateBalances.has(key)
-                        : !!bookFor(reachableBooks, sectorCountryId, key)
-                    )
-                      ? commodityDemandGap({
-                          commodity: key,
-                          stateBalance: stateBalances.get(key),
-                          reachableBook: bookFor(reachableBooks, sectorCountryId, key),
-                          globalBalance: globalBalances.get(key),
-                          latentDemandTopUp: 0,
-                        })
-                      : 0,
-                  };
-                })
-            ) - queuedMarketUnits
-          )
-        : null;
+      const expansionLegs = Object.entries(effectiveSupply)
+        .filter(([, rate]) => (rate ?? 0) > 0)
+        .map(([commodity]) => {
+          const key = commodity as CommodityType;
+          const gap = commodityDemandGap({
+            commodity: key,
+            stateBalance: stateBalances.get(key),
+            reachableBook: bookFor(reachableBooks, sectorCountryId, key),
+            globalBalance: globalBalances.get(key),
+            latentDemandTopUp: 0,
+          });
+          return {
+            weight: commodityMixWeight(effectiveSupply, COMMODITY_BASE_PRICES, key),
+            gap: expansionGapAfterExistingCapacity(
+              gap,
+              existingProducers
+                .filter(
+                  (candidate) =>
+                    (candidate.supply?.[key] ?? 0) > 0 &&
+                    (isStateScopedCommodity(key)
+                      ? candidate.stateId === sector.stateId
+                      : candidate.countryId === sectorCountryId)
+                )
+                .map((candidate) => ({
+                  capacity: candidate.capacity ?? NaN,
+                  produced: candidate.produced ?? NaN,
+                  queued: candidate.queued,
+                  weight: commodityMixWeight(candidate.supply ?? {}, COMMODITY_BASE_PRICES, key),
+                }))
+            ),
+          };
+        });
+      const measuredDemandGapUnits =
+        currentDemand && expansionLegs.every((leg) => leg.gap != null)
+          ? Math.max(
+              0,
+              sellableExpansionUnits(expansionLegs.map((leg) => ({ ...leg, gap: leg.gap! })))
+            )
+          : null;
       // Existing debt needs a repayment budget, which this operating scenario
       // does not model. Do not offer automatic sizing for an indebted company.
       const [activeLoan, activeBond] = await Promise.all([

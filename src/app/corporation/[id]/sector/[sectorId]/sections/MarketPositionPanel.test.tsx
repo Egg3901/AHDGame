@@ -1,10 +1,21 @@
 /**
  * @vitest-environment happy-dom
  */
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render as renderView, screen } from "@testing-library/react";
+import type { ReactElement } from "react";
+import { NextIntlClientProvider } from "next-intl";
+import messages from "../../../../../../../messages/en/corporations.json";
 import { describe, expect, it, vi } from "vitest";
 import MarketPositionPanel from "./MarketPositionPanel";
 import type { Market, SectorData, CorporationRef } from "../types";
+
+function render(view: ReactElement) {
+  return renderView(
+    <NextIntlClientProvider locale="en" messages={messages}>
+      {view}
+    </NextIntlClientProvider>
+  );
+}
 
 vi.mock("@/contexts/CurrencyContext", () => ({
   useCurrency: () => ({
@@ -69,6 +80,35 @@ function renderPanel(competitors: Market["competitors"]) {
 }
 
 describe("MarketPositionPanel NPP grouping", () => {
+  it("shows conservative measured build room rather than weighted output appetite", () => {
+    render(
+      <MarketPositionPanel
+        market={makeMarket([])}
+        sector={sector}
+        corporation={corporation}
+        financials={null}
+        room={{ headroomUnits: 9000, demandGapUnits: 8000, measuredDemandGapUnits: 123 }}
+      />
+    );
+    expect(screen.getByText("Estimated room to build")).toBeTruthy();
+    expect(screen.getByText("123 units")).toBeTruthy();
+    expect(screen.queryByText("8,000 units")).toBeNull();
+  });
+
+  it("does not present missing measured capacity as zero or as weighted demand", () => {
+    render(
+      <MarketPositionPanel
+        market={makeMarket([])}
+        sector={sector}
+        corporation={corporation}
+        financials={null}
+        room={{ headroomUnits: 9000, demandGapUnits: 8000, measuredDemandGapUnits: null }}
+      />
+    );
+    expect(screen.getByText("Estimate unavailable")).toBeTruthy();
+    expect(screen.queryByText("8,000 units")).toBeNull();
+  });
+
   it("collapses the NPP field into one row and keeps its corps off screen", () => {
     renderPanel([
       npp("Atlas Mining", 5.56),

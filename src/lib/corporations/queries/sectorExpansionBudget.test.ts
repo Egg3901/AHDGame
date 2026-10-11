@@ -107,6 +107,38 @@ async function loadPlants() {
 }
 
 describe("sector expansion budget payload", () => {
+  it("reserves idle competitors in other regions of the same reachable market", async () => {
+    db.collectionMocks.corporateSectors.find().toArray.mockResolvedValue([
+      sector,
+      {
+        ...sector,
+        _id: new ObjectId(),
+        stateId: "NY",
+        corporationId: new ObjectId(),
+        producedUnits: 100,
+        buildQueue: [],
+      },
+      {
+        ...sector,
+        _id: new ObjectId(),
+        stateId: "KAN",
+        countryId: "JP",
+        corporationId: new ObjectId(),
+        producedUnits: 0,
+        buildQueue: [],
+      },
+    ]);
+    expect((await loadPlants()).measuredDemandGapUnits).toBe(2600);
+  });
+  it("withholds automatic sizing when a competitor's unused capacity is unknown", async () => {
+    db.collectionMocks.corporateSectors
+      .find()
+      .toArray.mockResolvedValue([
+        sector,
+        { ...sector, _id: new ObjectId(), producedUnits: undefined, buildQueue: [] },
+      ]);
+    expect((await loadPlants()).measuredDemandGapUnits).toBeNull();
+  });
   it("deducts queued builds and reserves expenses before policy credits", async () => {
     const plants = await loadPlants();
     expect(plants.measuredDemandGapUnits).toBe(3500);

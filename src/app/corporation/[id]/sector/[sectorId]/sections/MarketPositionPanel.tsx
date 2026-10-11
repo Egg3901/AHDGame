@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { useState } from "react";
 import { useCurrency } from "@/contexts/CurrencyContext";
@@ -23,13 +24,13 @@ interface MarketPositionPanelProps {
   /** Capital market mode is on — output (and revenue) is gated by owned capacity. */
   capitalEnabled?: boolean;
   /**
-   * Claimable market share and true buyers' room, in sector output units.
+   * Unclaimed market share and estimated build room, in sector output units.
    *
    * These are DIFFERENT QUANTITIES and the panel has to say so. The pie's
    * unclaimed slice is `headroomUnits` — share nobody has built into. What a
-   * build is actually allowed to add is `min(headroomUnits, demandGapUnits)`,
-   * because unmet demand is the binding constraint: extra units in a glut
-   * simply go unsold. Showing only the first is what produced "60.6% of this
+   * build estimate is `min(headroomUnits, measuredDemandGapUnits)`, after
+   * reserving existing unused capacity and queued builds. It is advisory,
+   * not a guarantee of sales. Showing only the first produced "60.6% of this
    * market is unowned but the game will not let me expand into it"
    * (ticket #1145, #1162). Absent under non-plants tiers, where there is no
    * unit-denominated capacity model to report.
@@ -37,6 +38,7 @@ interface MarketPositionPanelProps {
   room?: {
     headroomUnits: number;
     demandGapUnits?: number;
+    measuredDemandGapUnits?: number | null;
     /** This sector's own demand throttle bound last turn; its idle capacity fills buyers first. */
     roomHeldByOwnIdle?: boolean;
     /** Unowned pool over owned capacity plus that pool, percent. */
@@ -103,6 +105,7 @@ export default function MarketPositionPanel({
   capitalEnabled,
   room = null,
 }: MarketPositionPanelProps) {
+  const t = useTranslations("corporations.sectorInvestment");
   const { formatAmount, formatAmountChip, toInternalFrom } = useCurrency();
   const pieSize = compact ? 160 : 120;
 
@@ -139,9 +142,9 @@ export default function MarketPositionPanel({
   // expression BuildCapacityDialog gates on. Kept in one place so the two
   // cannot drift.
   const buyersRoomUnits =
-    room != null ? Math.max(0, Math.min(room.headroomUnits, room.demandGapUnits ?? 0)) : null;
-  const roomIsShareBound =
-    room != null && buyersRoomUnits != null && room.headroomUnits <= (room.demandGapUnits ?? 0);
+    room?.measuredDemandGapUnits != null
+      ? Math.max(0, Math.min(room.headroomUnits, room.measuredDemandGapUnits))
+      : null;
   const fmtUnits = (v: number) => Math.round(v).toLocaleString();
 
   return (
@@ -246,7 +249,7 @@ export default function MarketPositionPanel({
           )}
           {/* Unclaimed share vs room to build — the two numbers players kept
               reading as one. Named apart, with the gap explained. */}
-          {room != null && buyersRoomUnits != null && (
+          {room != null && (
             <>
               <div className="flex items-center gap-2 border-t border-card-border/60 pt-1.5">
                 <span className="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-muted/30" />
@@ -260,25 +263,17 @@ export default function MarketPositionPanel({
                 </span>
               </div>
               <div className="flex items-center gap-2">
-                <Tooltip
-                  content={
-                    room.roomHeldByOwnIdle
-                      ? "Your plants here are already running below capacity because sales set the pace. Output climbs about 15% a turn while buyers keep taking it, so new capacity would sit idle. Fill what you have first."
-                      : buyersRoomUnits > 0
-                        ? roomIsShareBound
-                          ? "Capacity you may still add here, limited by unclaimed share. Buyers exist for more than the market has left to claim."
-                          : "Capacity you may still add here, limited by unmet demand. Building past it produces units that go unsold."
-                        : "No unmet demand for this output right now, so a build would produce units nobody buys. Unclaimed share stays above zero because it counts market nobody has built into, not buyers waiting."
-                  }
-                >
+                <Tooltip content={t("demandEstimate")}>
                   <span className="cursor-help border-b border-dashed border-card-border/70 text-muted">
-                    Room to build
+                    {t("estimatedBuildRoom")}
                   </span>
                 </Tooltip>
                 <span
-                  className={`ml-auto tabular-nums font-medium ${buyersRoomUnits > 0 ? "text-foreground" : "text-muted"}`}
+                  className={`ml-auto tabular-nums font-medium ${(buyersRoomUnits ?? 0) > 0 ? "text-foreground" : "text-muted"}`}
                 >
-                  {fmtUnits(buyersRoomUnits)} units
+                  {buyersRoomUnits == null
+                    ? t("estimateUnavailable")
+                    : t("estimatedBuildUnits", { units: fmtUnits(buyersRoomUnits) })}
                 </span>
               </div>
             </>

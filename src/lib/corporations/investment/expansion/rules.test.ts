@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { forecastSectorInvestment, type InvestmentForecastInput } from "../rules";
 import {
   expansionOperatingReserve,
+  expansionGapAfterExistingCapacity,
   recommendSectorExpansion,
   sellableExpansionUnits,
   stressExpansionForecast,
@@ -36,6 +37,34 @@ const input = {
   forecast,
 };
 describe("automatic expansion sizing", () => {
+  it("reserves unused plants and undelivered builds before quoting room", () => {
+    expect(
+      expansionGapAfterExistingCapacity(500, [
+        { capacity: 1000, produced: 600, queued: 100, weight: 0.5 },
+        { capacity: 200, produced: 200, queued: 100, weight: 1 },
+      ])
+    ).toBe(150);
+    expect(
+      expansionGapAfterExistingCapacity(200, [
+        { capacity: 1000, produced: 600, queued: 0, weight: 1 },
+      ])
+    ).toBe(0);
+    expect(
+      expansionGapAfterExistingCapacity(200, [
+        { capacity: NaN, produced: 600, queued: 0, weight: 1 },
+      ])
+    ).toBeNull();
+    expect(
+      expansionGapAfterExistingCapacity(200, [
+        { capacity: -100, produced: 0, queued: 0, weight: 1 },
+      ])
+    ).toBeNull();
+    expect(
+      expansionGapAfterExistingCapacity(200, [
+        { capacity: 100, produced: 200, queued: 0, weight: 1 },
+      ])
+    ).toBe(200);
+  });
   it("uses the weakest measured output instead of averaging a shortage with a glut", () => {
     expect(
       sellableExpansionUnits([

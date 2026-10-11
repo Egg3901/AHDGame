@@ -105,7 +105,7 @@ export interface SectorPlantsSection {
     /** Max fractional deviation the governor still allows. */
     cap: number;
   };
-  /** Untapped demand in this (state, sectorType) market, units/day. */
+  /** Unclaimed market share, in sector units. This is not measured buyer demand. */
   headroomUnits: number;
   /**
    * Weighted expansion appetite across the output mix, including latent demand.
@@ -117,7 +117,7 @@ export interface SectorPlantsSection {
    * market before any new build would.
    */
   demandGapUnits: number;
-  /** Measured room for every output after known queues; excludes latent demand. */
+  /** Conservative room after unused existing capacity and known queues; excludes latent demand. */
   measuredDemandGapUnits?: number | null;
   /**
    * True when this sector's own demand throttle bound last turn. Its idle

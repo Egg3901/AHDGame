@@ -363,6 +363,15 @@ export function resolvePlantsRevenue(input: PlantsRevenueInput): PlantsRevenueRe
       ? 0
       : plantsCapacity * bankingCommodityScale * activeFraction
     : nameplateUnits * bankingCommodityScale;
+  // The pre-pass just cleared the persisted prior output. Use that fill with
+  // that quantity, not the saved fill from an older clearing book. Prices and
+  // revenue retain their existing lagged-market convention.
+  const feedbackFill =
+    clearingEnabled && clearing ? clearing.soldByCommodity : sector.soldByCommodity;
+  const feedbackSold =
+    clearingEnabled && clearing && sector.producedUnits != null
+      ? sector.producedUnits * clearing.soldFraction
+      : sector.soldUnits;
   const production = computeContractProduction({
     plantsEnabled,
     actualNameplateUnits: productionNameplateUnits,
@@ -381,8 +390,8 @@ export function resolvePlantsRevenue(input: PlantsRevenueInput): PlantsRevenueRe
     priorSoldUnits: (() => {
       const sold = throttleSoldUnits({
         producedUnits: sector.producedUnits,
-        soldUnits: sector.soldUnits,
-        soldByCommodity: sector.soldByCommodity,
+        soldUnits: feedbackSold,
+        soldByCommodity: feedbackFill,
         supplyRates: strategySupply,
         priceRatioFor: (commodity) =>
           throttleLegPriceRatio?.(commodity as CommodityType) ??
@@ -402,8 +411,10 @@ export function resolvePlantsRevenue(input: PlantsRevenueInput): PlantsRevenueRe
     marketHeadroomUnits:
       throttleLegBalance && throttleLegMixWeight
         ? soldOutMarketHeadroomUnits({
-            soldByCommodity: sector.soldByCommodity,
+            soldByCommodity: feedbackFill,
             supplyRates: strategySupply,
+            marketShareFor: (commodity) =>
+              clearing?.marketSupplyShareByCommodity?.[commodity as CommodityType],
             mixWeightFor: (commodity) => throttleLegMixWeight(commodity as CommodityType),
             balanceFor: (commodity) => throttleLegBalance(commodity as CommodityType),
             priceRatioFor: (commodity) =>
