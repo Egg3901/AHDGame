@@ -279,7 +279,7 @@ export function CeoCorporationSettingsModal({
           <section>
             <p className="text-body-sm font-medium text-muted mb-3">Page banner</p>
             {corporation.headerImageUrl && (
-              <div className="relative mb-3 h-14 w-full overflow-hidden rounded-sm border border-card-border">
+              <div className="relative mb-3 aspect-[6/1] w-full overflow-hidden rounded-sm border border-card-border">
                 <Image
                   src={corporation.headerImageUrl}
                   alt=""

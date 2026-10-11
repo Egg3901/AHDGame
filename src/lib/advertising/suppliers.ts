@@ -80,7 +80,9 @@ export async function listAdvertisingSuppliers(
           _id: "$corporationId",
           sectors: { $sum: 1 },
           states: { $addToSet: "$stateId" },
-          strategies: { $addToSet: "$strategyId" },
+          // $addToSet skips a missing field, so map it to null: a sector with no
+          // strategy is the implicit newspaper model and must still count.
+          strategies: { $addToSet: { $ifNull: ["$strategyId", null] } },
         },
       },
     ])
