@@ -187,7 +187,7 @@ export function CorporationMasthead({
       {/* A CEO-uploaded banner is the corp's own identity, so it stays on the
           Overview, as a plain strip with nothing printed over it. */}
       {showBanner && corporation.headerImageUrl && (
-        <div className="relative h-14 overflow-hidden rounded-md border border-card-border sm:h-20">
+        <div className="relative aspect-[6/1] w-full overflow-hidden rounded-md border border-card-border">
           <HeroImage
             src={corporation.headerImageUrl}
             alt=""
