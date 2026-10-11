@@ -125,7 +125,17 @@ export async function restoreCharacterOfficeAfterCabinet(
   if (lowerOfficial) {
     const restoreOffice: OfficeType =
       lowerOfficial.officeType === "commons"
-        ? { type: "commons", state: lowerOfficial.state! }
+        ? {
+            type: "commons",
+            state: lowerOfficial.state!,
+            // Keep the seat's constituency so leaving cabinet does not blank it.
+            ...(lowerOfficial.constituencyId
+              ? {
+                  constituency: lowerOfficial.constituency ?? lowerOfficial.constituencyId,
+                  constituencyId: lowerOfficial.constituencyId,
+                }
+              : {}),
+          }
         : { type: lowerOfficial.officeType, state: lowerOfficial.state! };
     await db
       .collection<Character>("characters")

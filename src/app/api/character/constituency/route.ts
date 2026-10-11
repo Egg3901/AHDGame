@@ -30,6 +30,27 @@ type PrimeMinisterOffice = {
 
 type UkConstituencyOffice = CommonsOffice | PrimeMinisterOffice;
 
+type UkCabinetOffice = { type: "ukCabinet"; positionId: string };
+
+/**
+ * UK cabinet ministers keep their Commons seat while in cabinet: appointment
+ * requires one and the seat is restored to currentOffice when they leave
+ * (restoreCharacterOfficeAfterCabinet). Their constituency therefore lives on
+ * the retained `electedOfficials` commons record, not on currentOffice.
+ */
+function isUkCabinetOffice(office: Character["currentOffice"]): office is UkCabinetOffice {
+  return !!office && office.type === "ukCabinet";
+}
+
+async function findRetainedCommonsSeat(characterId: ObjectId) {
+  const db = await getDb();
+  return db.collection<ElectedOfficial>("electedOfficials").findOne({
+    officeType: "commons",
+    countryId: "UK",
+    characterId,
+  });
+}
+
 const selectConstituencySchema = z.object({
   constituencyId: z.string().trim().min(1, "Choose a constituency"),
 });
@@ -69,6 +90,21 @@ async function handleGET() {
     if (!auth.ok) return auth.response;
 
     const office = auth.user.character.currentOffice;
+    if (isUkCabinetOffice(office)) {
+      const seat = await findRetainedCommonsSeat(new ObjectId(auth.user.character._id));
+      if (!seat?.state) {
+        return NextResponse.json({ eligible: false, constituencies: [], selected: null });
+      }
+      return NextResponse.json({
+        eligible: true,
+        officeType: "commons",
+        regionId: seat.state,
+        selected: seat.constituencyId
+          ? { id: seat.constituencyId, name: seat.constituency ?? seat.constituencyId }
+          : null,
+        constituencies: getConstituenciesForUkRegion(seat.state),
+      });
+    }
     if (!isUkConstituencyOffice(office)) {
       return NextResponse.json({
         eligible: false,
@@ -118,6 +154,9 @@ export async function POST(request: Request) {
 
     const character = auth.user.character;
     const office = character.currentOffice;
+    if (isUkCabinetOffice(office)) {
+      return selectCabinetMinisterConstituency(new ObjectId(character._id), constituencyId);
+    }
     if (!isUkConstituencyOffice(office)) {
       return NextResponse.json(
         badRequest("Only sitting UK MPs and Prime Ministers can choose a constituency").toJson(),
@@ -273,4 +312,83 @@ export async function POST(request: Request) {
   } catch (error) {
     return handleRouteError(error);
   }
+}
+
+/**
+ * A cabinet minister's constituency change: update the retained Commons seat
+ * and its career entry, leaving the cabinet office on the character untouched.
+ */
+async function selectCabinetMinisterConstituency(characterId: ObjectId, constituencyId: string) {
+  const seat = await findRetainedCommonsSeat(characterId);
+  if (!seat?.state) {
+    return NextResponse.json(
+      badRequest("Only sitting UK MPs and Prime Ministers can choose a constituency").toJson(),
+      { status: 400 }
+    );
+  }
+  const regionId = seat.state;
+  const constituency = findUkConstituency(regionId, constituencyId);
+  if (!constituency) {
+    return NextResponse.json(
+      badRequest("That constituency is not in your current UK region").toJson(),
+      { status: 400 }
+    );
+  }
+
+  const db = await getDb();
+  const existing = await db.collection<ElectedOfficial>("electedOfficials").findOne({
+    countryId: "UK",
+    constituencyId,
+    characterId: { $ne: characterId },
+  });
+  if (existing) {
+    return NextResponse.json(
+      badRequest(`${constituency.name} is already represented by another player`).toJson(),
+      { status: 400 }
+    );
+  }
+
+  const now = new Date();
+  const officialUpdate = await db.collection<ElectedOfficial>("electedOfficials").updateOne(
+    { officeType: "commons", countryId: "UK", state: regionId, characterId },
+    { $set: { constituency: constituency.name, constituencyId: constituency.id, updatedAt: now } }
+  );
+  if (officialUpdate.matchedCount === 0) {
+    return NextResponse.json(notFound("Commons seat not found").toJson(), { status: 404 });
+  }
+
+  const seatOffice: CommonsOffice = {
+    type: "commons",
+    state: regionId,
+    constituency: constituency.name,
+    constituencyId: constituency.id,
+  };
+  const officeLabel = getOfficeLabel(seatOffice, "UK");
+  await db.collection<Character>("characters").updateOne(
+    {
+      _id: characterId,
+      careerHistory: {
+        $elemMatch: { type: "elected", "office.type": "commons", "office.state": regionId },
+      },
+    },
+    {
+      $set: {
+        "careerHistory.$[event].office.constituency": constituency.name,
+        "careerHistory.$[event].office.constituencyId": constituency.id,
+        "careerHistory.$[event].officeLabel": officeLabel,
+        updatedAt: now,
+      },
+    },
+    {
+      arrayFilters: [
+        { "event.type": "elected", "event.office.type": "commons", "event.office.state": regionId },
+      ],
+    }
+  );
+
+  return NextResponse.json({
+    success: true,
+    selected: { id: constituency.id, name: constituency.name },
+    officeLabel,
+  });
 }

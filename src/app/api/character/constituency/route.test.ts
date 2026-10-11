@@ -101,3 +101,83 @@ describe("POST /api/character/constituency (issue #2115)", () => {
     );
   });
 });
+
+describe("constituency picker for UK cabinet ministers", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  function post(body: object) {
+    return new Request("http://localhost/api/character/constituency", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  }
+
+  it("shows the picker for the minister's retained Commons seat", async () => {
+    const characterId = new ObjectId();
+    authAs({
+      _id: characterId,
+      countryId: "UK",
+      currentOffice: { type: "ukCabinet", positionId: "defence" },
+    });
+    const findOne = vi.fn().mockResolvedValue({
+      officeType: "commons",
+      countryId: "UK",
+      state: "LON",
+      characterId,
+      constituency: "Barking",
+      constituencyId: "E14001073",
+    });
+    dbWith({ electedOfficials: { findOne } });
+    const data = await (await GET()).json();
+    expect(data.eligible).toBe(true);
+    expect(data.officeType).toBe("commons");
+    expect(data.regionId).toBe("LON");
+    expect(data.selected).toEqual({ id: "E14001073", name: "Barking" });
+    expect(data.constituencies.length).toBe(75);
+    expect(findOne.mock.calls[0][0]).toMatchObject({ officeType: "commons", characterId });
+  });
+
+  it("stays hidden for a cabinet minister without a Commons seat", async () => {
+    authAs({
+      _id: new ObjectId(),
+      countryId: "UK",
+      currentOffice: { type: "ukCabinet", positionId: "defence" },
+    });
+    dbWith({ electedOfficials: { findOne: vi.fn().mockResolvedValue(null) } });
+    const data = await (await GET()).json();
+    expect(data.eligible).toBe(false);
+  });
+
+  it("updates the Commons seat and keeps the cabinet office", async () => {
+    const characterId = new ObjectId();
+    authAs({
+      _id: characterId,
+      countryId: "UK",
+      currentOffice: { type: "ukCabinet", positionId: "defence" },
+    });
+    const findOne = vi
+      .fn()
+      .mockResolvedValueOnce({ officeType: "commons", countryId: "UK", state: "LON", characterId })
+      .mockResolvedValueOnce(null);
+    const officialUpdate = vi.fn().mockResolvedValue({ matchedCount: 1, modifiedCount: 1 });
+    const characterUpdate = vi.fn().mockResolvedValue({ matchedCount: 1, modifiedCount: 1 });
+    dbWith({
+      electedOfficials: { findOne, updateOne: officialUpdate },
+      characters: { updateOne: characterUpdate },
+    });
+    const response = await POST(post({ constituencyId: "E14001073" }));
+    expect(response.status).toBe(200);
+    const data = await response.json();
+    expect(data.selected).toMatchObject({ id: "E14001073", name: "Barking" });
+    expect(officialUpdate.mock.calls[0][1].$set).toMatchObject({
+      constituency: "Barking",
+      constituencyId: "E14001073",
+    });
+    for (const call of characterUpdate.mock.calls) {
+      expect(call[1].$set.currentOffice).toBeUndefined();
+    }
+  });
+});
