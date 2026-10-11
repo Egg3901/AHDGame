@@ -211,7 +211,7 @@ export async function GET(request: Request, { params }: RouteParams) {
         );
       viewerIsControllingParentCeo =
         parentCorp != null &&
-        parentCorp.ceoVacant !== true &&
+        !parentCorp.ceoVacant &&
         parentCorp.userId?.toString() === authUser.userId;
     }
 
@@ -270,7 +270,7 @@ export async function GET(request: Request, { params }: RouteParams) {
     if (isPublicCorp) {
       const isInsider =
         authUser?.isAdmin === true ||
-        corporation.userId?.toString() === authUser?.userId ||
+        (authUser?.userId != null && corporation.userId?.toString() === authUser.userId) ||
         viewerIsControllingParentCeo;
 
       // A leaked corporation's books are OUT: the fog is skipped for everyone
