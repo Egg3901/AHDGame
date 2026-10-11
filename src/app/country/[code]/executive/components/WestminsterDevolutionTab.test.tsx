@@ -133,4 +133,26 @@ describe("Westminster regional dashboard", () => {
         .disabled
     ).toBe(false);
   });
+  it("invalidates uncertain policy data after a failed write and a failed refresh", async () => {
+    vi.mocked(fetch)
+      .mockImplementationOnce(() => response(makeData()))
+      .mockRejectedValueOnce(new Error("Lost write response"))
+      .mockRejectedValueOnce(new Error("Offline"))
+      .mockImplementationOnce(() => response(makeData(false)));
+    show();
+    await screen.findByText("10.00");
+    fireEvent.change(screen.getByRole("combobox"), { target: { value: "pro" } });
+    fireEvent.click(screen.getByRole("button", { name: "Change Westminster stance" }));
+    await screen.findByRole("alert");
+    expect(screen.queryByRole("combobox")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    await screen.findByText("Could not load devolution data.");
+    expect(screen.queryByRole("combobox")).toBeNull();
+    fireEvent.click(screen.getByRole("tab", { name: "Scotland" }));
+    expect(screen.getByRole("button", { name: "Try again" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    await screen.findByText("35.00");
+    expect(screen.queryByRole("combobox")).toBeNull();
+    expect(screen.getByText(/Only the sitting Prime Minister/)).toBeTruthy();
+  });
 });

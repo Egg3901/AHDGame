@@ -31,14 +31,17 @@ export async function GET(_request: Request, { params }: Context) {
       auth.user.character ? isSittingLeader(db, "UK", auth.user.character._id) : false,
       loadWestminsterGovernment(db),
     ]);
-    return NextResponse.json({
-      regions,
-      currentTurn,
-      canManage,
-      actions: office?.gubernatorialActions ?? 0,
-      stances: office?.westminsterStances ?? {},
-      government,
-    });
+    return NextResponse.json(
+      {
+        regions,
+        currentTurn,
+        canManage,
+        actions: office?.gubernatorialActions ?? 0,
+        stances: office?.westminsterStances ?? {},
+        government,
+      },
+      { headers: { "Cache-Control": "private, no-store" } }
+    );
   } catch (error) {
     return handleRouteError(error);
   }

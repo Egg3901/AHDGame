@@ -4,6 +4,7 @@
  */
 import { loadWestminsterGovernment } from "./westminsterGovernment";
 import type { Db, Filter } from "mongodb";
+import type { State } from "@/lib/db/types";
 import type { DevolutionPolicy, GovernorOfficeState } from "@/lib/db/types/governorOfficeState";
 import { getNationalStateId } from "@/lib/policy/nationalStateId";
 import { getCurrentTurn } from "@/lib/turn/currentTurn";
@@ -22,11 +23,16 @@ export async function changeWestminsterStance(
 ) {
   const collection = db.collection<GovernorOfficeState>("governorOfficeState");
   const key = { countryId: "UK" as const, stateId: getNationalStateId("UK") };
-  const [office, currentTurn, government] = await Promise.all([
+  const [office, currentTurn, government, region] = await Promise.all([
     collection.findOne(key),
     getCurrentTurn(db),
     loadWestminsterGovernment(db),
+    db
+      .collection<State>("states")
+      .findOne({ _id: input.stateId, countryId: "UK" }, { projection: { _id: 1 } }),
   ]);
+  if (!region)
+    return { status: 404, body: { error: "Region is no longer part of the United Kingdom." } };
   if (!office) return { status: 409, body: { error: "National office state is missing." } };
   const stance = office.westminsterStances?.[input.stateId];
   const error = westminsterStanceChangeError({

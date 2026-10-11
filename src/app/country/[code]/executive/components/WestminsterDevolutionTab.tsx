@@ -33,7 +33,7 @@ export function WestminsterDevolutionTab() {
   const [saved, setSaved] = useState(false);
   useEffect(() => {
     const controller = new AbortController();
-    fetch("/api/country/uk/executive/devolution", { signal: controller.signal })
+    fetch("/api/country/uk/executive/devolution", { signal: controller.signal, cache: "no-store" })
       .then(async (response) => {
         if (!response.ok) throw new Error(t("loadError"));
         const result: Dashboard = await response.json();
@@ -43,7 +43,10 @@ export function WestminsterDevolutionTab() {
         }
       })
       .catch(() => {
-        if (!controller.signal.aborted) setError(t("loadError"));
+        if (!controller.signal.aborted) {
+          setData(null);
+          setError(t("loadError"));
+        }
       })
       .finally(() => {
         if (!controller.signal.aborted) setLoading(false);
@@ -70,7 +73,7 @@ export function WestminsterDevolutionTab() {
   function selectRegion(id: Region) {
     setRegion(id);
     setDraftPolicy(null);
-    setError(null);
+    if (data) setError(null);
     setSaved(false);
   }
   function navigateRegion(event: KeyboardEvent<HTMLButtonElement>) {
@@ -122,6 +125,8 @@ export function WestminsterDevolutionTab() {
       setLoading(true);
       setReload((value) => value + 1);
     } catch (error) {
+      // A failed or lost write response leaves balances and policy uncertain.
+      setData(null);
       setError(error instanceof Error ? error.message : t("saveError"));
     } finally {
       setSaving(false);

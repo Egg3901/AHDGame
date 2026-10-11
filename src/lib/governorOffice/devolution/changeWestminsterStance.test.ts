@@ -7,6 +7,7 @@ vi.mock("@/lib/turn/currentTurn", () => ({ getCurrentTurn: vi.fn().mockResolvedV
 describe("atomic Westminster stance changes", () => {
   const setup = () => {
     const db = createMockDb();
+    db.collection("states").findOne.mockResolvedValue({ _id: "SCO" });
     const collection = db.collection("governorOfficeState");
     collection.findOne.mockResolvedValue({
       gubernatorialActions: 2,
@@ -75,5 +76,13 @@ describe("atomic Westminster stance changes", () => {
     });
     expect((await changeWestminsterStance(db, { stateId: "WAL", policy: "pro" })).status).toBe(400);
     expect(collection.updateOne).toHaveBeenCalledTimes(1);
+  });
+  it("rejects a departed or missing region without changing policy or spending AP", async () => {
+    const { db, collection } = setup();
+    (db as unknown as ReturnType<typeof createMockDb>)
+      .collection("states")
+      .findOne.mockResolvedValue(null);
+    expect((await changeWestminsterStance(db, { stateId: "SCO", policy: "pro" })).status).toBe(404);
+    expect(collection.updateOne).not.toHaveBeenCalled();
   });
 });

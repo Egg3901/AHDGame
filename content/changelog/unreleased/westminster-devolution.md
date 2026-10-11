@@ -21,3 +21,4 @@ areas: [fullstack]
 - Both offices project annual Desire movement and time to the referendum Desire requirement, assuming current conditions continue.
 - Incoming Westminster governments can make one initial stance change per nation despite inherited cooldowns, for the usual AP cost.
 - Referendum campaign displays explain that starting support is captured when consent is granted; later live Desire drift does not directly move the campaign poll.
+- Stance changes validate current UK regional ownership, and failed dashboard requests require a fresh load before further changes.

@@ -31,6 +31,7 @@ describe("UK executive devolution API", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     db = createMockDb();
+    db.collection("states").findOne.mockResolvedValue({ _id: "SCO" });
     vi.mocked(getDb).mockResolvedValue(db as unknown as Db);
     const auth = {
       ok: true,
@@ -118,5 +119,14 @@ describe("UK executive devolution API", () => {
       westminsterStances: { SCO: stance },
     });
     expect((await POST(request({ stateId: "SCO", policy: "pro" }), context())).status).toBe(400);
+  });
+  it("rejects an otherwise valid PM request for a region that has left the UK", async () => {
+    db.collection("states").findOne.mockResolvedValue(null);
+    expect((await POST(request(), context())).status).toBe(404);
+    expect(db.collection("governorOfficeState").updateOne).not.toHaveBeenCalled();
+    expect(db.collection("states").findOne).toHaveBeenCalledWith(
+      { _id: "SCO", countryId: "UK" },
+      { projection: { _id: 1 } }
+    );
   });
 });
