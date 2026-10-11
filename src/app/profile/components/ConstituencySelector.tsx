@@ -14,7 +14,7 @@ interface ConstituencyOption {
 
 interface ConstituencyResponse {
   eligible: boolean;
-  officeType?: "commons" | "primeMinister";
+  officeType?: "commons" | "primeMinister" | "ukCabinet";
   regionId?: string;
   selected: { id: string; name: string } | null;
   constituencies: ConstituencyOption[];

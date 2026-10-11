@@ -123,10 +123,15 @@ export async function restoreCharacterOfficeAfterCabinet(
     countryId,
   });
   if (lowerOfficial) {
+    // Keep the seat's constituency so the restored MP keeps their label.
+    const constituencyFields = {
+      ...(lowerOfficial.constituency ? { constituency: lowerOfficial.constituency } : {}),
+      ...(lowerOfficial.constituencyId ? { constituencyId: lowerOfficial.constituencyId } : {}),
+    };
     const restoreOffice: OfficeType =
       lowerOfficial.officeType === "commons"
-        ? { type: "commons", state: lowerOfficial.state! }
-        : { type: lowerOfficial.officeType, state: lowerOfficial.state! };
+        ? { type: "commons", state: lowerOfficial.state!, ...constituencyFields }
+        : { type: lowerOfficial.officeType, state: lowerOfficial.state!, ...constituencyFields };
     await db
       .collection<Character>("characters")
       .updateOne(
