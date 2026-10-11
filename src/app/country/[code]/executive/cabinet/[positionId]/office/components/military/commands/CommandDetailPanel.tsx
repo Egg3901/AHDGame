@@ -55,6 +55,7 @@ export function CommandDetailPanel({
   regionThreats,
   assignments,
   conflicts = [],
+  conflictsEnabled,
   countryCode,
   onSetPosting,
   onSetInCharge,
@@ -72,6 +73,7 @@ export function CommandDetailPanel({
   assignments: ConflictAssignment[];
   /** The live conflicts a general can be posted to. Empty until one breaks out. */
   conflicts?: { id: string; name: string }[];
+  conflictsEnabled: boolean;
   countryCode: string;
   onSetPosting: (generalCharacterId: string, theaterId: string | null) => void;
   onSetInCharge: (generalCharacterId: string) => void;
@@ -246,7 +248,7 @@ export function CommandDetailPanel({
                     </Badge>
                   )}
                 </div>
-                {canWrite && (
+                {canWrite && conflictsEnabled && (
                   <div className="mt-2 flex flex-wrap items-center gap-2">
                     <select
                       aria-label={`Post ${cm.name} to a conflict`}

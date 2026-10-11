@@ -627,8 +627,10 @@ export default function CabinetOfficePage() {
                 </div>
               )}
 
-              {activeTab === "commands" && isDefense && conflictsEnabled && (
+              {activeTab === "commands" && isDefense && (
                 <CommandsTab
+                  canAct={canAct}
+                  conflictsEnabled={conflictsEnabled}
                   commands={data.commands ?? []}
                   units={(data.units ?? []) as unknown as MilitaryUnit[]}
                   commanders={data.commanders ?? []}

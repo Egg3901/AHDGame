@@ -47,12 +47,14 @@ function standingLine(m: CorpsMember): string {
 export function GeneralCorps({
   corps,
   candidates,
+  canAct,
   countryCode,
   positionId,
   lockReason,
 }: {
   corps: CorpsMember[];
   candidates: { characterId: string; name: string }[];
+  canAct: boolean;
   countryCode: string;
   positionId: string;
   /**
@@ -65,7 +67,7 @@ export function GeneralCorps({
   const router = useRouter();
   const contextLock = useActingLock("personnel");
   const lock = lockReason ?? contextLock;
-  const canWrite = !!positionId && !lock;
+  const canWrite = canAct && !!positionId && !lock;
   const [pick, setPick] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);

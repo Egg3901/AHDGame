@@ -1,7 +1,7 @@
 // POST /api/country/[code]/executive/cabinet/[positionId]/military/assign-branch
 // Assign every unit of a branch to a general (or to General Staff when null).
 // Same write as the per-unit assign route, batched. Auth: defense holder or
-// admin. Free (no action cost). Gated by conflictsEnabled + defense seat.
+// admin. Free (no action cost). Available while Conflicts is off.
 // Errors: 400, 401, 403, 404.
 import { NextResponse } from "next/server";
 import { z } from "zod";
@@ -11,7 +11,6 @@ import { parseJsonBody } from "@/lib/api/validate";
 import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { getCabinetMembersCollection } from "@/lib/db/collections/cabinetMembers";
-import { getGameStateCollection } from "@/lib/db/collections/gameState";
 import { getMilitaryUnitsCollection } from "@/lib/db/collections/militaryUnits";
 import {
   getCharacterCommission,
@@ -60,13 +59,6 @@ export async function POST(request: Request, { params }: RouteParams) {
     }
 
     const db = await getDb();
-    const gs = await (
-      await getGameStateCollection(db)
-    ).findOne({ _id: "current" }, { projection: { conflictsEnabled: 1 } });
-    if (!gs?.conflictsEnabled) {
-      return errorResponse(404, "Conflicts subsystem disabled");
-    }
-
     const member = await getCabinetMembersCollection(db).findOne({ countryId, positionId });
     const isHolder =
       member?.characterId &&

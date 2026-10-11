@@ -55,10 +55,8 @@ export default async function NavairCommandPage({ params }: { params: Promise<{ 
   const countryId = code.toUpperCase() as CountryId;
   if (!COUNTRY_CONFIGS[countryId]) notFound();
 
-  // Same gate the rest of the military subsystem uses. With conflicts off there is no
-  // war to command anything in.
   const gameState = await getGameState();
-  if (!gameState?.conflictsEnabled) notFound();
+  const conflictsEnabled = gameState?.conflictsEnabled === true;
 
   const positionId = DEFENSE_POSITION_BY_COUNTRY[countryId];
   if (!positionId) notFound();
@@ -210,6 +208,7 @@ export default async function NavairCommandPage({ params }: { params: Promise<{ 
 
       <div className="mt-6">
         <NavairCommandClient
+          conflictsEnabled={conflictsEnabled}
           summary={summary}
           countryCode={code}
           positionId={positionId}
