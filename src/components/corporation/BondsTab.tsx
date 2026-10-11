@@ -202,9 +202,12 @@ export default function BondsTab({
       ? `CEO holds ${(ceoStake * 100).toFixed(1)}% of the shares. Holding more than 65% costs the company one credit rating grade.`
       : undefined;
 
-  const couponFor = (turns: number) =>
-    bondInfo.creditRating.couponRatesByDuration?.[turns as 96 | 240 | 336] ??
-    bondInfo.creditRating.effectiveCouponRate;
+  const couponFor = (turns: number): number | null => {
+    const rate =
+      bondInfo.creditRating.couponRatesByDuration?.[turns as 96 | 240 | 336] ??
+      bondInfo.creditRating.effectiveCouponRate;
+    return typeof rate === "number" && Number.isFinite(rate) ? rate : null;
+  };
 
   return (
     <div className="space-y-6">
@@ -252,6 +255,7 @@ export default function BondsTab({
           const isValidInput =
             !isNaN(parsedFaceValue) && parsedFaceValue >= (bondInfo.minIssuance ?? 100_000);
           const couponRate = couponFor(bondIssueMaturity);
+          if (couponRate == null) return null;
           // Debt headroom and the issuance ceiling both come from the
           // server, which is the only place all three rules live
           // (per-issuance cap, 2x going-concern equity, 1x exit equity).
@@ -396,11 +400,15 @@ export default function BondsTab({
                         onChange={(e) => setBondIssueMaturity(Number(e.target.value))}
                         className="h-7 rounded-md border border-card-border bg-background px-2 text-xs text-foreground focus:border-foreground focus:outline-none"
                       >
-                        {MATURITIES.map((m) => (
-                          <option key={m.turns} value={m.turns}>
-                            {m.label}, {couponFor(m.turns).toFixed(2)}%
-                          </option>
-                        ))}
+                        {MATURITIES.map((m) => {
+                          const coupon = couponFor(m.turns);
+                          return (
+                            <option key={m.turns} value={m.turns}>
+                              {m.label}
+                              {coupon == null ? "" : `, ${coupon.toFixed(2)}%`}
+                            </option>
+                          );
+                        })}
                       </select>
                     </label>
                     <SmallButton

@@ -290,6 +290,8 @@ export interface CorporationDetail {
   isNationalized?: boolean;
   /** Whether the corporation is private (financials hidden from non-CEO viewers) */
   isPrivate?: boolean;
+  /** The viewer is CEO of the corporation that controls this subsidiary. */
+  viewerIsControllingParentCeo?: boolean;
   /** Global feature gate — when true, the decade-gated Tech tab is shown. */
   techTreesEnabled?: boolean;
   /** Global feature gate — when true, the private supply-agreements panel is shown to the CEO. */
@@ -842,16 +844,16 @@ export interface BalanceSheet {
 
 export interface CreditRatingData {
   rating: string;
-  compositeScore: number;
-  components: {
+  compositeScore?: number;
+  components?: {
     debtToEquity: number;
     interestCoverage: number;
     profitability: number;
     liquidity: number;
   };
-  effectiveCouponRate: number;
-  couponRatesByDuration: { 96: number; 240: number; 336: number };
-  primeRate: number;
+  effectiveCouponRate?: number;
+  couponRatesByDuration?: Partial<Record<96 | 240 | 336, number>>;
+  primeRate?: number;
 }
 
 export interface BondData {

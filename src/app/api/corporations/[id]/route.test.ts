@@ -100,7 +100,11 @@ describe("GET /api/corporations/[id]", () => {
     // data.corporation directly.
     await expect(res.json()).resolves.toEqual({
       ...detailPayload,
-      corporation: { ...detailPayload.corporation, openPrivatizationVoteId: null },
+      corporation: {
+        ...detailPayload.corporation,
+        viewerIsControllingParentCeo: false,
+        openPrivatizationVoteId: null,
+      },
       isPrivate: false,
       financialFogOfWar: null,
       // Procurement position. Present on every corporation, empty for one the state has
@@ -116,5 +120,110 @@ describe("GET /api/corporations/[id]", () => {
         totalEncumbered: 0,
       },
     });
+  });
+
+  it("exposes a private subsidiary's books only to its controlling parent CEO", async () => {
+    await wireDb();
+    const subsidiary = makeCorporation({
+      _id: new ObjectId(),
+      countryId: "US",
+      headquartersState: "CA",
+      liquidCurrencyCode: "USD",
+      isPrivate: true,
+      liquidCapital: 125_000,
+    });
+    const parent = makeCorporation({ _id: new ObjectId(), userId: new ObjectId() });
+    const detailPayload = {
+      corporation: {
+        _id: subsidiary._id.toString(),
+        name: subsidiary.name,
+        liquidCapital: 125_000,
+        parentCorporation: { _id: parent._id.toString(), ownershipPct: 100 },
+      },
+      ceo: null,
+      financials: { totalRevenue: 80_000 },
+      sectors: [],
+      balanceSheet: { assets: { cashOnHand: 125_000 }, liabilities: {}, equity: {} },
+    };
+    db.collectionMocks["corporations"]!.findOne.mockResolvedValueOnce(
+      subsidiary
+    ).mockResolvedValueOnce(parent);
+    const { getAuthUser } = await import("@/lib/auth");
+    vi.mocked(getAuthUser).mockResolvedValue({ userId: parent.userId.toString() } as never);
+    const { loadCorporationDetailView } =
+      await import("@/lib/corporations/queries/corporationDetail");
+    vi.mocked(loadCorporationDetailView).mockResolvedValue(detailPayload as never);
+
+    const { GET } = await import("./route");
+    const parentRes = await GET(
+      new Request(`http://localhost/api/corporations/${subsidiary._id}`),
+      { params: Promise.resolve({ id: subsidiary._id.toString() }) }
+    );
+    const parentJson = await parentRes.json();
+
+    expect(parentRes.status).toBe(200);
+    expect(parentJson.corporation.viewerIsControllingParentCeo).toBe(true);
+    expect(parentJson.corporation.liquidCapital).toBe(125_000);
+    expect(parentJson.financials).toEqual(detailPayload.financials);
+    expect(parentJson.balanceSheet).toEqual(detailPayload.balanceSheet);
+
+    const outsiderUserId = new ObjectId().toString();
+    db.collectionMocks["corporations"]!.findOne.mockResolvedValueOnce(
+      subsidiary
+    ).mockResolvedValueOnce(parent);
+    vi.mocked(getAuthUser).mockResolvedValue({ userId: outsiderUserId } as never);
+    const outsiderRes = await GET(
+      new Request(`http://localhost/api/corporations/${subsidiary._id}`),
+      { params: Promise.resolve({ id: subsidiary._id.toString() }) }
+    );
+    const outsiderJson = await outsiderRes.json();
+
+    expect(outsiderRes.status).toBe(200);
+    expect(outsiderJson.corporation.viewerIsControllingParentCeo).toBe(false);
+    expect(outsiderJson.corporation.liquidCapital).toBeUndefined();
+    expect(outsiderJson.financials).toBeNull();
+    expect(outsiderJson.balanceSheet).toBeNull();
+  });
+
+  it("marks the controlling parent CEO as an insider of a public subsidiary", async () => {
+    await wireDb();
+    const subsidiary = makeCorporation({
+      _id: new ObjectId(),
+      countryId: "US",
+      headquartersState: "CA",
+      liquidCurrencyCode: "USD",
+      isPrivate: false,
+    });
+    const parent = makeCorporation({ _id: new ObjectId(), userId: new ObjectId() });
+    const detailPayload = {
+      corporation: {
+        _id: subsidiary._id.toString(),
+        name: subsidiary.name,
+        parentCorporation: { _id: parent._id.toString(), ownershipPct: 100 },
+      },
+      ceo: null,
+      financials: { totalRevenue: 80_000 },
+      sectors: [],
+      balanceSheet: { assets: { cashOnHand: 100 }, liabilities: {}, equity: {} },
+    };
+    db.collectionMocks["corporations"]!.findOne.mockResolvedValueOnce(
+      subsidiary
+    ).mockResolvedValueOnce(parent);
+    const { getAuthUser } = await import("@/lib/auth");
+    vi.mocked(getAuthUser).mockResolvedValue({ userId: parent.userId.toString() } as never);
+    const { loadCorporationDetailView } =
+      await import("@/lib/corporations/queries/corporationDetail");
+    vi.mocked(loadCorporationDetailView).mockResolvedValue(detailPayload as never);
+
+    const { GET } = await import("./route");
+    const res = await GET(new Request(`http://localhost/api/corporations/${subsidiary._id}`), {
+      params: Promise.resolve({ id: subsidiary._id.toString() }),
+    });
+    const json = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(json.corporation.viewerIsControllingParentCeo).toBe(true);
+    expect(json.financialFogOfWar).toBeNull();
+    expect(json.financials).toEqual(detailPayload.financials);
   });
 });
