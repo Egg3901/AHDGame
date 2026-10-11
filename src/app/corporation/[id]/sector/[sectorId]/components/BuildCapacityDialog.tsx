@@ -389,13 +389,13 @@ export default function BuildCapacityDialog({
               ) : preview.overHeadroom ? (
                 buyersRoomUnits >= 1 ? (
                   <>
-                    The current estimate leaves room for about{" "}
-                    {headroomFacilities >= 1
-                      ? `${fmtUnits(headroomFacilities)} more ${headroomFacilities === 1 ? site : sites}`
-                      : `less than one ${site}`}{" "}
-                    ({fmtUnits(buyersRoomUnits)} units a day). You are ordering{" "}
-                    {fmtUnits(preview.safeCount)}. Expect the extra output to go unsold, or to be
-                    taken from a rival.
+                    {t("buildRoomOver", {
+                      count: headroomFacilities,
+                      facility: site,
+                      facilities: sites,
+                      units: fmtUnits(buyersRoomUnits),
+                      ordered: fmtUnits(preview.safeCount),
+                    })}
                   </>
                 ) : (plants.demandGapUnits ?? 0) > 0 && !plants.roomHeldByOwnIdle ? (
                   <>{t("mixedOrQueuedDemand")}</>
@@ -422,9 +422,12 @@ export default function BuildCapacityDialog({
                 )
               ) : (
                 <>
-                  The current estimate leaves room for about {fmtUnits(headroomFacilities)} more{" "}
-                  {headroomFacilities === 1 ? site : sites} ({fmtUnits(buyersRoomUnits)} units a
-                  day). This order fits inside that estimate.
+                  {t("buildRoomFits", {
+                    count: headroomFacilities,
+                    facility: site,
+                    facilities: sites,
+                    units: fmtUnits(buyersRoomUnits),
+                  })}
                 </>
               )}
             </p>

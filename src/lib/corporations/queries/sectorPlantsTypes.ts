@@ -117,7 +117,7 @@ export interface SectorPlantsSection {
    * market before any new build would.
    */
   demandGapUnits: number;
-  /** Conservative room after unused existing capacity and known queues; excludes latent demand. */
+  /** Conservative construction-capacity room after idle capacity and queues; excludes latent demand. */
   measuredDemandGapUnits?: number | null;
   /**
    * True when this sector's own demand throttle bound last turn. Its idle

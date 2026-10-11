@@ -19,5 +19,6 @@ areas: [fullstack, engine]
 - Share shortage headroom within each clearing market instead of promising the full shortage to every seller.
 - Use the latest clearing result when responding to demand, while retaining physical limits, contract targets and the existing recovery probe.
 - Reserve existing unused capacity and queued construction across output competitors before sizing an expansion.
+- Account for technology and Energy productivity when comparing construction capacity with buyer demand.
 - Explain changing demand, competing builds, unsold output, idle plants and operating-cost risk in both construction dialogs.
 - Correct new-sector guidance that confused unclaimed market share with measured buyer demand.

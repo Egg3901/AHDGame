@@ -80,6 +80,7 @@ import {
 import { computeRetoolHint } from "@/lib/corporations/retoolHint";
 import { applyExtractionResourceCapacityToSupply } from "@/lib/corporations/extractionResourceSupply";
 import { capacityRescaleRatio } from "@/lib/constants/capacityEconomy";
+import { productionProductivityMultiplier } from "@/lib/corporations/rules/productionProductivity";
 import { STARTING_YEAR, TURNS_PER_YEAR } from "@/lib/constants/turnTime";
 import {
   getCorpFxRate,
@@ -527,7 +528,21 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
             .collection<Corporation>("corporations")
             .find(
               { _id: { $in: corpIds.map((cid) => new ObjectId(cid)) } },
-              { projection: { _id: 1, countryId: 1 } }
+              {
+                projection: {
+                  _id: 1,
+                  countryId: 1,
+                  ...(gameState?.sectorTechTreesEnabled === true
+                    ? {
+                        type: 1,
+                        industryModel: 1,
+                        mediaDiscriminator: 1,
+                        unlockedTechNodeIds: 1,
+                        techDecadeLane: 1,
+                      }
+                    : {}),
+                },
+              }
             )
             .toArray()
         : Promise.resolve([] as Corporation[]),
@@ -950,16 +965,39 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
       const stateCountry = new Map(
         allStates.map((candidate) => [candidate._id, candidate.countryId])
       );
-      const existingProducers = allSectorsRaw.map((candidate) => ({
-        stateId: candidate.stateId,
-        countryId: stateCountry.get(candidate.stateId) ?? candidate.countryId,
-        capacity: candidate.operatingCapacityUnits ?? candidate.capitalStock,
-        produced: candidate.producedUnits,
-        queued: (candidate.buildQueue ?? []).reduce(
-          (sum, order) => sum + order.unitsOrdered * (1 - deliveredFraction(order, currentTurn)),
-          0
-        ),
-        supply: getEffectiveStrategyRatesForOperatingModel(
+      const producerOutputMultiplier = (
+        candidate: CorporateSector,
+        supply: Partial<Record<CommodityType, number>>
+      ) => {
+        const owner =
+          candidate.corporationId.toString() === corporation._id.toString()
+            ? corporation
+            : corpByIdForLookup.get(candidate.corporationId.toString());
+        if (techTreesEnabled && !owner) return NaN;
+        const tech =
+          techTreesEnabled && owner
+            ? getSectorTechEffects(
+                owner,
+                getOperatingSectorType(
+                  candidate.sectorType,
+                  candidate.industryModel,
+                  candidate.mediaDiscriminator
+                ),
+                candidate.industryModel,
+                candidate.mediaDiscriminator
+              ).outputRateMult
+            : undefined;
+        return productionProductivityMultiplier({
+          sectorType: candidate.sectorType,
+          supply,
+          outputRateMult: tech,
+          currentTurn,
+          preset: sectorDetailPreset,
+        });
+      };
+      const focalOutputMultiplier = producerOutputMultiplier(sector, effectiveRates.supply);
+      const existingProducers = allSectorsRaw.map((candidate) => {
+        const supply = getEffectiveStrategyRatesForOperatingModel(
           candidate.sectorType,
           candidate.strategyId ?? "standard",
           candidate.transitionFromStrategyId,
@@ -968,8 +1006,23 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
           candidate.industryModel,
           candidate.mediaDiscriminator,
           sectorDetailPreset
-        ).supply,
-      }));
+        ).supply;
+        const multiplier = producerOutputMultiplier(candidate, supply);
+        return {
+          stateId: candidate.stateId,
+          countryId: stateCountry.get(candidate.stateId) ?? candidate.countryId,
+          capacity:
+            (candidate.operatingCapacityUnits ?? candidate.capitalStock ?? NaN) * multiplier,
+          produced: candidate.producedUnits,
+          queued:
+            (candidate.buildQueue ?? []).reduce(
+              (sum, order) =>
+                sum + order.unitsOrdered * (1 - deliveredFraction(order, currentTurn)),
+              0
+            ) * multiplier,
+          supply,
+        };
+      });
       const currentDemand = Object.entries(effectiveSupply)
         .filter(([, rate]) => (rate ?? 0) > 0)
         .every(([commodity]) => {
@@ -1011,10 +1064,14 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
           };
         });
       const measuredDemandGapUnits =
-        currentDemand && expansionLegs.every((leg) => leg.gap != null)
+        currentDemand &&
+        Number.isFinite(focalOutputMultiplier) &&
+        focalOutputMultiplier > 0 &&
+        expansionLegs.every((leg) => leg.gap != null)
           ? Math.max(
               0,
-              sellableExpansionUnits(expansionLegs.map((leg) => ({ ...leg, gap: leg.gap! })))
+              sellableExpansionUnits(expansionLegs.map((leg) => ({ ...leg, gap: leg.gap! }))) /
+                focalOutputMultiplier
             )
           : null;
       // Existing debt needs a repayment budget, which this operating scenario

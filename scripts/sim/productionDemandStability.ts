@@ -17,7 +17,12 @@ import {
   throttleSoldUnits,
 } from "../../src/lib/turn/corporation/rules/demandThrottle";
 
-export function productionTrajectory(candidate: boolean, mixed: boolean, shock: boolean) {
+export function productionTrajectory(
+  candidate: boolean,
+  mixed: boolean,
+  shock: boolean,
+  coProductDemandScale = 1
+) {
   const supply: Partial<Record<CommodityType, number>> = mixed
     ? { freight: 0.75, consulting_services: 0.25 }
     : { freight: 1 };
@@ -35,7 +40,13 @@ export function productionTrajectory(candidate: boolean, mixed: boolean, shock: 
       Object.keys(supply).map((rawKey) => {
         const key = rawKey as CommodityType;
         const weight = commodityMixWeight(supply, COMMODITY_BASE_PRICES, key);
-        return [key, { supply: total * weight, demand: demand * weight }] as const;
+        return [
+          key,
+          {
+            supply: total * weight,
+            demand: demand * weight * (key === "consulting_services" ? coProductDemandScale : 1),
+          },
+        ] as const;
       })
     );
     const results = computeClearingFactors({

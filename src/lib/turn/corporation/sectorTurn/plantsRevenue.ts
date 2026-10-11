@@ -11,8 +11,7 @@
  * data; the caller pushes it. No reads or writes here, only the turn inputs.
  */
 import { activeCapacityConstraintFactor } from "@/lib/corporations/investment/rules";
-import { techOutputUnitsMultiplier } from "@/lib/constants/capacityEconomy";
-import { energyProductivityMultiplier } from "@/lib/corporations/rules/energyProductivityRamp";
+import { productionProductivityMultiplier } from "@/lib/corporations/rules/productionProductivity";
 import { TURNS_PER_DAY } from "@/lib/constants/turnTime";
 import { getOutputMultiplier } from "@/lib/utils/productionPolicy";
 import { CAPACITY_BINDING_THRESHOLD } from "@/lib/extraction/capacityHaircut";
@@ -308,8 +307,13 @@ export function resolvePlantsRevenue(input: PlantsRevenueInput): PlantsRevenueRe
   // other sector, preset, or before the ramp starts). It is folded into this
   // multiplier, not a new leg, so produced == offered == ledger stays intact.
   const plantsTechOutputMultiplier = plantsEnabled
-    ? techOutputUnitsMultiplier(strategySupply, techEffects.outputRateMult) *
-      energyProductivityMultiplier(sector.sectorType, currentTurn, preset)
+    ? productionProductivityMultiplier({
+        sectorType: sector.sectorType,
+        supply: strategySupply,
+        outputRateMult: techEffects.outputRateMult,
+        currentTurn,
+        preset,
+      })
     : 1;
   // Ticket #1072: which production-policy curve throttles TONNAGE.
   //

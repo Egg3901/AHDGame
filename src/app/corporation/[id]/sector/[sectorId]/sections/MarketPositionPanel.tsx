@@ -24,7 +24,7 @@ interface MarketPositionPanelProps {
   /** Capital market mode is on — output (and revenue) is gated by owned capacity. */
   capitalEnabled?: boolean;
   /**
-   * Unclaimed market share and estimated build room, in sector output units.
+   * Unclaimed market share and estimated build room, in construction-capacity units.
    *
    * These are DIFFERENT QUANTITIES and the panel has to say so. The pie's
    * unclaimed slice is `headroomUnits` — share nobody has built into. What a

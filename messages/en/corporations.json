@@ -139,6 +139,8 @@
       "priceBreakdown": "How the price is calculated",
       "cashBalance": "Company cash: {amount}",
       "withinDemand": "This expansion fits the current demand estimate",
+      "buildRoomOver": "The current estimate leaves room for about {count, plural, =0 {less than one {facility}} one {# more {facility}} other {# more {facilities}}} ({units} capacity units a day). You are ordering {ordered}. Extra output may go unsold unless you win sales from a rival.",
+      "buildRoomFits": "The current estimate leaves room for about {count, plural, one {# more {facility}} other {# more {facilities}}} ({units} capacity units a day). This order fits inside that estimate.",
       "buildRiskTitle": "Demand today is not guaranteed sales tomorrow",
       "estimatedBuildRoom": "Estimated room to build",
       "estimateUnavailable": "Estimate unavailable",

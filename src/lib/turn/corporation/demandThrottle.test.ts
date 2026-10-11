@@ -244,11 +244,13 @@ describe("sold-out plants in a short market (ticket 1393)", () => {
   it("shares shortage headroom instead of promising all of it to every seller", () => {
     const args = { ...base, soldByCommodity: { electronics: 1, building_materials: 1, steel: 1 } };
     const full = soldOutMarketHeadroomUnits(args);
-    const shares = [0.1, 0.2, 0.3, 0.4];
+    const shares = [0.6, 0.3, 0.1];
     const allocated = shares.map((share) =>
       soldOutMarketHeadroomUnits({ ...args, marketShareFor: () => share })
     );
     expect(allocated.reduce((sum, value) => sum + value, 0)).toBeCloseTo(full);
+    expect(allocated[0]).toBeCloseTo(full * 0.6);
+    expect(allocated[1]).toBeCloseTo(full * 0.3);
     expect(soldOutMarketHeadroomUnits({ ...args, marketShareFor: undefined })).toBe(0);
     expect(soldOutMarketHeadroomUnits({ ...args, marketShareFor: () => NaN })).toBe(0);
   });

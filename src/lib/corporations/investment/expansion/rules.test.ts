@@ -132,20 +132,29 @@ describe("automatic expansion sizing", () => {
       forecastSectorInvestment({ ...stressed, units }, [1])![0].availableCashAnchor
     ).toBeGreaterThan(0);
   });
-  it("accounts for output above nominal capacity when matching the buyer limit", () => {
+  it("does not convert productivity-adjusted build room a second time", () => {
     const result = recommendSectorExpansion({
       ...input,
       cashAnchor: 100000,
       measuredDemandUnits: 1000,
       forecast: { ...forecast, producedUnits: 2000, soldUnits: 2000 },
     });
-    expect(result.demandFacilities).toBe(5);
+    expect(result.demandFacilities).toBe(10);
   });
   it("deducts queued capacity and rounds down to whole facilities", () => {
     expect(
       recommendSectorExpansion({ ...input, measuredDemandUnits: 599, queuedUnits: 300 })
         .demandFacilities
     ).toBe(2);
+  });
+  it("reserves running costs per capacity unit even when productivity doubles output", () => {
+    const result = recommendSectorExpansion({
+      ...input,
+      cashAnchor: 970,
+      forecast: { ...forecast, producedUnits: 2000, soldUnits: 2000 },
+    });
+    // 770 available, 110 construction plus 20 running per facility, not 10.
+    expect(result.demandFacilities).toBe(5);
   });
   it.each([{ forecast: null }, { operatingReserveAnchor: null }, { measuredDemandUnits: null }])(
     "does not invent a recommendation from missing economic context: %j",
