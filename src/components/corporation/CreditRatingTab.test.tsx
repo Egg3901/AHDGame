@@ -29,7 +29,7 @@ const baseBondInfo = {
   isCeo: false,
   cooldownTurnsRemaining: 0,
   currentTurn: 10,
-} as BondInfo;
+} as unknown as BondInfo;
 
 beforeEach(() => {
   vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, json: () => Promise.resolve({}) }));
