@@ -222,7 +222,9 @@ function StateBillDetailContent() {
             </div>
           </div>
 
-          <p className="text-sm text-muted leading-relaxed">{bill.summary}</p>
+          <p className="whitespace-pre-wrap break-words text-sm text-muted leading-relaxed">
+            {bill.summary}
+          </p>
 
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted pt-1 border-t border-card-border/40">
             <span>

@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { apiErrorText } from "@/lib/errors/catalog";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
@@ -72,6 +73,7 @@ function statusLine(ref: ReferendumSummary, currentTurn: number): string {
 }
 
 export function ReferendumPanel({ countryId, stateId, currentTurn, viewerCanManage, data }: Props) {
+  const t = useTranslations("nav.devolution");
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -145,6 +147,9 @@ export function ReferendumPanel({ countryId, stateId, currentTurn, viewerCanMana
                 <div className="h-full bg-primary" style={{ width: `${ref.yesShare}%` }} />
               </div>
             </div>
+          )}
+          {showCampaignBar && ref.kind !== "peace_agreement" && (
+            <p className="text-xs text-muted">{t("campaignBaselineHelp")}</p>
           )}
           {cooldownTurnsLeft > 0 && (
             <p className="text-xs text-muted">

@@ -268,7 +268,9 @@ function BillDetailContent() {
             </div>
           </div>
 
-          <p className="text-sm text-muted leading-relaxed">{bill.summary}</p>
+          <p className="whitespace-pre-wrap break-words text-sm text-muted leading-relaxed">
+            {bill.summary}
+          </p>
 
           {bill.vetoMessage && (
             <div className="rounded-lg border border-error/40 bg-error/5 px-4 py-3">

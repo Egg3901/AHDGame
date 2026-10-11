@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import type { CountryId } from "@/lib/constants/countries";
@@ -9,7 +10,7 @@ import { referendumDetailUrl } from "@/lib/urls";
 interface CampaignReferendum {
   id: string;
   regionId: string;
-  kind: "independence" | "reunification";
+  kind: "independence" | "reunification" | "peace_agreement";
   status: "requested" | "granted" | "campaigning" | "actuating";
   campaignCloseTurn: number | null;
   yesShare: number;
@@ -32,6 +33,7 @@ export function RegionReferendumCampaign({
   countryId: CountryId;
   regionId: string;
 }) {
+  const t = useTranslations("nav.devolution");
   const [data, setData] = useState<ReferendumResponse | null>(null);
 
   const load = useCallback(async () => {
@@ -85,6 +87,9 @@ export function RegionReferendumCampaign({
                 : ""
             }.`}
         </p>
+        {ref.kind !== "peace_agreement" && (
+          <p className="text-xs text-muted">{t("campaignBaselineHelp")}</p>
+        )}
         <Link
           href={referendumDetailUrl(countryId, regionId)}
           className="inline-flex items-center gap-1 rounded-md bg-amber-600 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-amber-600/90"

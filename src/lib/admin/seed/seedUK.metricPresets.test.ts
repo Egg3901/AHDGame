@@ -37,6 +37,21 @@ describe("seedUKStateMetrics — metric-preset overlay", () => {
     expect(Object.keys(set.governance ?? {}).sort()).toEqual(["budgetBalance", "debtToGdp"]);
   });
 
+  it.each([
+    ["1991-default", { SCO: 35, NIR: 23, WAL: 10 }],
+    ["2019-default", { SCO: 45, NIR: 40, WAL: 25 }],
+  ] as const)("seeds the %s constitutional support baselines", async (preset, expected) => {
+    const { seedUKStateMetrics } = await import("@/lib/admin/seed/seedUK");
+    await seedUKStateMetrics(db as unknown as Db, true, () => {}, preset);
+    for (const [regionId, value] of Object.entries(expected)) {
+      const set = regionMacroSet(db, regionId) as MetricSet & {
+        independenceDesire: { value: number; trend?: number };
+      };
+      expect(set.independenceDesire.value).toBe(value);
+      if (preset === "1991-default") expect(set.independenceDesire.trend).toBe(0);
+    }
+  });
+
   it("overlays UK-2019 economic values; SCO's independenceDesire hoists to the top level", async () => {
     const { seedUKStateMetrics } = await import("@/lib/admin/seed/seedUK");
     await seedUKStateMetrics(db as unknown as Db, true, () => {}, "2019-default");

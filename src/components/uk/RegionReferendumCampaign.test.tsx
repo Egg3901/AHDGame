@@ -2,8 +2,18 @@
  * @vitest-environment happy-dom
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render as rtlRender, screen, waitFor } from "@testing-library/react";
 import { RegionReferendumCampaign } from "./RegionReferendumCampaign";
+
+import { NextIntlClientProvider } from "next-intl";
+import messages from "../../../messages/en/nav.json";
+function render(element: React.ReactNode) {
+  return rtlRender(
+    <NextIntlClientProvider locale="en" messages={messages}>
+      {element}
+    </NextIntlClientProvider>
+  );
+}
 
 function campaignRef(over: Record<string, unknown> = {}) {
   return {
