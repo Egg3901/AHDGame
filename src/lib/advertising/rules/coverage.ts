@@ -12,6 +12,7 @@
  * revenue-weighted operating states. Everything is bounded: coverage and
  * overlap live in [0, 1], efficacy in [1, 1 + AD_MAX_COVERAGE_BONUS].
  */
+import { effectiveMediaOperatingModelId } from "@/lib/mediaOperatingModels/catalog";
 
 /** National reach per operating model. Provisional: worldsim re-tunes. */
 export const MODEL_NATIONAL_REACH: Record<string, number> = {
@@ -53,24 +54,24 @@ function toCount(value: unknown): number {
 export interface CoverageSectorInput {
   stateId: string;
   revenue: number;
+  sectorType?: string;
   countryId?: string | null;
   mothballed?: boolean;
   embargoSuspended?: boolean;
   activeCapacityPercent?: number;
   /** Strategy id; a media operating model id when the sector runs one. */
-  strategyId?: string;
+  strategyId?: string | null;
 }
 
-/**
- * Operating models a supplier actually runs: the strategy ids of its active
- * sectors that name a catalogued model. Legacy strategies add no national
- * reach, so a supplier never gains coverage it has not paid a model for.
- */
-export function operatingModelsFromSectors(sectors: readonly CoverageSectorInput[]): string[] {
+/** Operating models a supplier runs for advertising, including implicit defaults. */
+export function operatingModelsFromSectors(
+  sectors: readonly CoverageSectorInput[],
+  year: number | null | undefined
+): string[] {
   const models: string[] = [];
   for (const sector of sectors) {
-    const id = sector.strategyId;
-    if (typeof id !== "string" || !Object.hasOwn(MODEL_NATIONAL_REACH, id)) continue;
+    const id = effectiveMediaOperatingModelId(sector.strategyId, sector.sectorType ?? "", year);
+    if (!id || !Object.hasOwn(MODEL_NATIONAL_REACH, id)) continue;
     if (!isSectorActiveForCoverage(sector) || models.includes(id)) continue;
     models.push(id);
   }

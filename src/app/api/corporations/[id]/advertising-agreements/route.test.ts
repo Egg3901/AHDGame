@@ -57,12 +57,16 @@ function flagOff() {
   db.collectionMocks.gameConfig.findOne.mockResolvedValue({});
 }
 
-function turnAt(turn: number) {
+function turnAt(turn: number, currentYear = 1953) {
   db.collection("gameState");
-  db.collectionMocks.gameState.findOne.mockResolvedValue({ _id: "current", currentTurn: turn });
+  db.collectionMocks.gameState.findOne.mockResolvedValue({
+    _id: "current",
+    currentTurn: turn,
+    currentYear,
+  });
 }
 
-function supplierSectors(strategyIds: string[]) {
+function supplierSectors(strategyIds: Array<string | undefined>) {
   db.collection("corporateSectors");
   db.collectionMocks.corporateSectors.find.mockReturnValue(
     createAsyncIterableCursor(strategyIds.map((strategyId) => ({ strategyId })))
@@ -160,6 +164,7 @@ describe("GET advertising agreements", () => {
 
   it("returns operating model counts for the supplier's media sectors", async () => {
     flagOn();
+    turnAt(1);
     db.collection("corporateSectors");
     db.collectionMocks.corporateSectors.find.mockReturnValue(
       createAsyncIterableCursor([
@@ -176,7 +181,7 @@ describe("GET advertising agreements", () => {
     const body = await response.json();
 
     expect(response.status).toBe(200);
-    expect(body.mediaSectorModelCounts).toEqual({ withModel: 2, withoutModel: 2 });
+    expect(body.mediaSectorModelCounts).toEqual({ withModel: 4, withoutModel: 0 });
   });
 
   it("returns an empty list when the corporation has no agreements", async () => {
@@ -290,7 +295,8 @@ describe("POST advertising agreements", () => {
 
   it("requires the supplier to own an operating model", async () => {
     flagOn();
-    supplierSectors(["standard"]);
+    turnAt(120);
+    supplierSectors(["unknown_strategy"]);
     const response = await POST(
       postRequest({ supplierCorpId: SUPPLIER_ID, allocationShareBps: 2500 }),
       { params: Promise.resolve({ id: BUYER_ID }) }
@@ -305,7 +311,7 @@ describe("POST advertising agreements", () => {
   it("proposes an agreement against a qualifying supplier", async () => {
     flagOn();
     turnAt(120);
-    supplierSectors(["newspaper"]);
+    supplierSectors(["standard"]);
     db.collection("advertisingAgreements");
 
     const response = await POST(

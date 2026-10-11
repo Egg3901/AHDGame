@@ -131,6 +131,40 @@ export function getMediaOperatingModel(modelId: string): MediaOperatingModelDefi
 }
 
 /**
+ * Resolve the model advertising treats a media sector as running. Stored
+ * strategies remain untouched; this alias only applies to advertising reads.
+ */
+export function effectiveMediaOperatingModelId(
+  strategyId: string | null | undefined,
+  sectorType: string,
+  year: number | null | undefined
+): MediaOperatingModelId | undefined {
+  if (typeof year !== "number" || !Number.isFinite(year)) return undefined;
+
+  let modelId: string | null | undefined = strategyId;
+  if (strategyId == null) {
+    modelId = "newspaper";
+  } else if (typeof strategyId !== "string") {
+    return undefined;
+  } else if (strategyId.trim() === "" || strategyId === "standard") {
+    modelId = "newspaper";
+  } else if (strategyId === "legacy_broadcast") {
+    modelId = year >= 1950 ? "broadcast_tv" : "radio_network";
+  }
+
+  if (typeof modelId !== "string") return undefined;
+  const model = getMediaOperatingModel(modelId);
+  if (
+    !model ||
+    !model.sectorTypes.includes(sectorType as MediaOperatingModelSector) ||
+    year < model.availableFromYear
+  ) {
+    return undefined;
+  }
+  return model.id;
+}
+
+/**
  * Convert model output value shares into legacy commodity rates. The sum of
  * rates is the base-price value budget, so units can change with product prices
  * without changing nominal output value.

@@ -1034,6 +1034,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
         sectors.map((sector) => ({
           stateId: sector.stateId,
           revenue: sector.revenue,
+          sectorType: sector.sectorType,
           countryId: sector.countryId,
           mothballed: sector.mothballed,
           embargoSuspended: sector.embargoSuspended,
@@ -1045,6 +1046,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
     await processAdvertisingTurn(db, {
       enabled: true,
       turn: turn ?? gameState?.currentTurn,
+      year: currentYear,
       corpsById: lookups.corpById,
       sectorsByCorp: advertisingSectorsByCorp,
       fxByCurrency: lookups.exchangeRatesByCurrency,

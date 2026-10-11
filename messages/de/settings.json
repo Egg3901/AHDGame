@@ -443,7 +443,7 @@
       "copyLink": "Link kopieren",
       "copy": "Kopieren",
       "copied": "Kopiert",
-      "joined": "{count, plural, one {Spieler ist} other {Spieler sind}} mit deinem Code beigetreten"
+      "joined": "{count, plural, one {Spieler ist} other {Spieler sind}} insgesamt mit deinem Code beigetreten"
     },
     "supporterPerks": {
       "loading": "Unterstützer-Extras werden geladen...",
