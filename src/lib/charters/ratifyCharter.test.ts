@@ -91,6 +91,7 @@ function makeDb(opts: StubOpts) {
   const insertedOrgRecords: unknown[] = [];
   const insertedNpps: unknown[] = [];
   const updatedCharacters: unknown[] = [];
+  const updatedOfficials: unknown[] = [];
   const updatedParties: unknown[] = [];
   const updatedManyParties: unknown[] = [];
   const deletedNationalElections: Record<string, unknown>[] = [];
@@ -150,6 +151,14 @@ function makeDb(opts: StubOpts) {
         }),
         updateMany: vi.fn().mockImplementation((filter: unknown, update: unknown) => {
           updatedManyParties.push({ filter, update });
+          return Promise.resolve({ matchedCount: 1, modifiedCount: 1 });
+        }),
+      };
+    }
+    if (name === "electedOfficials") {
+      return {
+        updateMany: vi.fn().mockImplementation((filter: unknown, update: unknown) => {
+          updatedOfficials.push({ filter, update });
           return Promise.resolve({ matchedCount: 1, modifiedCount: 1 });
         }),
       };
@@ -230,6 +239,7 @@ function makeDb(opts: StubOpts) {
     insertedOrgRecords,
     insertedNpps,
     updatedCharacters,
+    updatedOfficials,
     updatedParties,
     updatedManyParties,
     deletedNationalElections,
@@ -335,6 +345,35 @@ describe("ratifyCharter", () => {
 
     expect(transferIndependentCandidaciesToParty).toHaveBeenCalledTimes(2);
     expect(withdrawFromMismatchedPrimaries).toHaveBeenCalledWith(founderChars[1]!._id, "77");
+  });
+
+  it("updates seated founders' party affiliation without changing their seat records", async () => {
+    const charter = makeCharter();
+    const founderChars = charter.foundersCharacterIds.map((cid) => ({
+      _id: cid,
+      userId: new ObjectId(),
+      party: "47",
+      homeState: "US-CA",
+    }));
+    const { db, updatedOfficials } = makeDb({
+      charter,
+      states: [{ _id: "US-CA" }],
+      founderCharacters: founderChars,
+    });
+
+    await ratifyCharter(charter._id, db, new Date("2026-10-11T17:50:00.000Z"));
+
+    expect(updatedOfficials).toEqual(
+      founderChars.map((founder) => ({
+        filter: { characterId: founder._id },
+        update: {
+          $set: {
+            party: "77",
+            updatedAt: new Date("2026-10-11T17:50:00.000Z"),
+          },
+        },
+      }))
+    );
   });
 
   it("marks all three founders as founders of the new party (leadership tenure exemption)", async () => {
