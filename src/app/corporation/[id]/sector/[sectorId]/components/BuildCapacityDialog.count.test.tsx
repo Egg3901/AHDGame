@@ -86,6 +86,13 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+it("shows fluctuation and idle-capacity warnings even when an order fits today's estimate", () => {
+  renderDialog();
+  expect(screen.getByText("Demand today is not guaranteed sales tomorrow")).toBeTruthy();
+  expect(screen.getByText(/Existing idle or parked plants may restart first/)).toBeTruthy();
+  expect(screen.getByText(/not demand reserved for your company/)).toBeTruthy();
+});
+
 describe("BuildCapacityDialog count control", () => {
   it("does not mount finance controls or query lenders without the gated payload", () => {
     const fetch = vi.fn();
@@ -104,9 +111,9 @@ describe("BuildCapacityDialog count control", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Match demand: 3" }));
     expect(input.value).toBe("3");
-    expect(screen.getByText("This expansion fits current demand")).toBeTruthy();
+    expect(screen.getByText("This expansion fits the current demand estimate")).toBeTruthy();
     fireEvent.click(screen.getByLabelText(/build one more/i));
-    expect(screen.getByText("This expansion exceeds current demand")).toBeTruthy();
+    expect(screen.getByText("This expansion exceeds the current demand estimate")).toBeTruthy();
   });
 
   it("disables shortcuts when cash or buyer room cannot fund one whole facility", () => {

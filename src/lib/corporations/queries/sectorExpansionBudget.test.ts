@@ -51,6 +51,7 @@ const sector = {
 };
 
 beforeEach(async () => {
+  vi.restoreAllMocks();
   vi.clearAllMocks();
   db = createMockDb();
   const { getDb } = await import("@/lib/mongodb");
@@ -107,6 +108,72 @@ async function loadPlants() {
 }
 
 describe("sector expansion budget payload", () => {
+  it("includes the 1991 Energy productivity ramp in idle capacity and build sizing", async () => {
+    const energy = { ...sector, sectorType: "energy", buildQueue: [] };
+    db.collection("corporateSectors").findOne.mockResolvedValue(energy);
+    db.collectionMocks.corporateSectors.find().toArray.mockResolvedValue([energy]);
+    db.collection("gameState").findOne.mockResolvedValue({
+      currentTurn: 100,
+      preset: "1991-default",
+    });
+    db.collection("tradeFlowSnapshots").findOne.mockResolvedValue({
+      turn: 100,
+      books: {
+        US: {
+          energy: { supply: 1000, domesticDemand: 5000, demand: 5000, imports: 0, exports: 0 },
+        },
+      },
+    });
+    // Existing capacity can make 1300 output units, not just the 1000 produced.
+    expect((await loadPlants()).measuredDemandGapUnits).toBeCloseTo(3700 / 1.3);
+  });
+  it("reserves technology-amplified idle capacity and quotes new builds in plant units", async () => {
+    const tech = await import("@/lib/constants/techTree");
+    const effects = tech.getSectorTechEffects({ type: "media" }, "media");
+    vi.spyOn(tech, "getSectorTechEffects").mockReturnValue({
+      ...effects,
+      outputRateMult: { advertising: 2 },
+    });
+    db.collection("gameState").findOne.mockResolvedValue({
+      currentTurn: 100,
+      sectorTechTreesEnabled: true,
+    });
+    // Demand gap 4000, less 1000 unused output and 1000 queued output.
+    // Each new plant-capacity unit also produces two output units.
+    expect((await loadPlants()).measuredDemandGapUnits).toBe(1000);
+  });
+  it("reserves idle competitors in other regions of the same reachable market", async () => {
+    db.collectionMocks.corporateSectors.find().toArray.mockResolvedValue([
+      sector,
+      {
+        ...sector,
+        _id: new ObjectId(),
+        stateId: "NY",
+        corporationId: new ObjectId(),
+        producedUnits: 100,
+        buildQueue: [],
+      },
+      {
+        ...sector,
+        _id: new ObjectId(),
+        stateId: "KAN",
+        countryId: "JP",
+        corporationId: new ObjectId(),
+        producedUnits: 0,
+        buildQueue: [],
+      },
+    ]);
+    expect((await loadPlants()).measuredDemandGapUnits).toBe(2600);
+  });
+  it("withholds automatic sizing when a competitor's unused capacity is unknown", async () => {
+    db.collectionMocks.corporateSectors
+      .find()
+      .toArray.mockResolvedValue([
+        sector,
+        { ...sector, _id: new ObjectId(), producedUnits: undefined, buildQueue: [] },
+      ]);
+    expect((await loadPlants()).measuredDemandGapUnits).toBeNull();
+  });
   it("deducts queued builds and reserves expenses before policy credits", async () => {
     const plants = await loadPlants();
     expect(plants.measuredDemandGapUnits).toBe(3500);

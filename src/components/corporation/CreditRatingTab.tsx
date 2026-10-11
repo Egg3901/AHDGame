@@ -23,7 +23,12 @@ import {
   CREDIT_RATINGS,
   type CreditRating,
 } from "@/lib/db/types/centralBank";
-import type { BondInfo, CorporationDetail, CorpHistoryPoint } from "./CorporationPageTypes";
+import type {
+  BondInfo,
+  CorporationDetail,
+  CorpHistoryPoint,
+  CreditRatingData,
+} from "./CorporationPageTypes";
 
 interface CreditPeerStatsResponse {
   countryId: string;
@@ -95,6 +100,24 @@ function improvementHint(
   const need = threshold - compositeScore;
   if (need <= 0) return null;
   return `Roughly ${need} more composite point${need === 1 ? "" : "s"} to reach ${better} (threshold ${threshold}).`;
+}
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
+function hasCreditRatingDetails(
+  creditRating: CreditRatingData
+): creditRating is CreditRatingData & {
+  compositeScore: number;
+  components: NonNullable<CreditRatingData["components"]>;
+} {
+  return (
+    isFiniteNumber(creditRating.compositeScore) &&
+    creditRating.components != null &&
+    Object.values(creditRating.components).length === 4 &&
+    Object.values(creditRating.components).every(isFiniteNumber)
+  );
 }
 
 function CreditCompositeChart({ points }: { points: CorpHistoryPoint[] }) {
@@ -183,6 +206,7 @@ function WhatIfDebtPanel({
     const totalDebt = bondInfo.totalDebt;
     const annualCoupon = cd.annualCouponObligations;
     const eff = bondInfo.creditRating.effectiveCouponRate;
+    if (!isFiniteNumber(eff) || !isFiniteNumber(bondInfo.creditRating.primeRate)) return null;
     const d = clampedDebtDelta;
     const newDebt = Math.max(0, totalDebt + d);
     const newLiquid = liq + d;
@@ -273,7 +297,11 @@ function WhatIfDebtPanel({
           <KVRow label="Simulated composite" value={`${whatIf.compositeScore}/100`} />
           <KVRow
             label="New-issue coupon"
-            value={`${getBondCouponRate(bondInfo.creditRating.primeRate, whatIf.rating).toFixed(2)}%`}
+            value={
+              isFiniteNumber(bondInfo.creditRating.primeRate)
+                ? `${getBondCouponRate(bondInfo.creditRating.primeRate, whatIf.rating).toFixed(2)}%`
+                : "n/a"
+            }
           />
         </KVList>
       </div>
@@ -339,7 +367,7 @@ export default function CreditRatingTab({
     );
   }
 
-  if (!bondInfo?.creditRating) {
+  if (!bondInfo?.creditRating || !hasCreditRatingDetails(bondInfo.creditRating)) {
     return (
       <p className="border-y border-card-border py-2 text-xs text-muted">
         Credit rating data not available.{" "}
@@ -352,6 +380,11 @@ export default function CreditRatingTab({
 
   const cr = bondInfo.creditRating;
   const cd = bondInfo.creditDiagnostics;
+  const currentSpread = CREDIT_RATING_SPREADS[cr.rating as CreditRating];
+  const couponHint =
+    isFiniteNumber(cr.primeRate) && isFiniteNumber(currentSpread)
+      ? `prime ${cr.primeRate.toFixed(2)} + ${currentSpread.toFixed(2)} + ${CORPORATE_BOND_SPREAD_PREMIUM.toFixed(2)}`
+      : undefined;
   const hint =
     improvementHint(
       cr.compositeScore,
@@ -413,8 +446,12 @@ export default function CreditRatingTab({
             <KVList>
               <KVRow
                 label="Coupon on new issues"
-                value={`${cr.effectiveCouponRate.toFixed(2)}%`}
-                hint={`prime ${cr.primeRate.toFixed(2)} + ${CREDIT_RATING_SPREADS[cr.rating as CreditRating].toFixed(2)} + ${CORPORATE_BOND_SPREAD_PREMIUM.toFixed(2)}`}
+                value={
+                  isFiniteNumber(cr.effectiveCouponRate)
+                    ? `${cr.effectiveCouponRate.toFixed(2)}%`
+                    : "n/a"
+                }
+                hint={couponHint}
                 title="Prime, plus your tier's spread, plus the corporate premium."
               />
               {corporation.indexOwnershipPercent != null &&
@@ -511,7 +548,10 @@ export default function CreditRatingTab({
                       {turns}
                     </Td>
                     <Td align="right">
-                      {(cr.couponRatesByDuration[turns] ?? cr.effectiveCouponRate).toFixed(2)}%
+                      {(() => {
+                        const rate = cr.couponRatesByDuration?.[turns] ?? cr.effectiveCouponRate;
+                        return isFiniteNumber(rate) ? `${rate.toFixed(2)}%` : "n/a";
+                      })()}
                     </Td>
                   </tr>
                 ))}
@@ -602,27 +642,28 @@ export default function CreditRatingTab({
                 <tr>
                   <Td className="text-muted">Avg new-issue coupon</Td>
                   <Td align="right">
-                    {peerStats.countryPeers
+                    {isFiniteNumber(peerStats.countryPeers?.avgNewIssueCouponPct)
                       ? `${peerStats.countryPeers.avgNewIssueCouponPct.toFixed(2)}%`
                       : "n/a"}
                   </Td>
                   <Td align="right">
-                    {peerStats.sectorPeers
+                    {isFiniteNumber(peerStats.sectorPeers?.avgNewIssueCouponPct)
                       ? `${peerStats.sectorPeers.avgNewIssueCouponPct.toFixed(2)}%`
                       : "n/a"}
                   </Td>
                 </tr>
               </tbody>
             </table>
-            {typeof peerStats.you.composite === "number" && peerStats.countryPeers && (
-              <p className="pt-1.5 text-xs text-muted">
-                You are{" "}
-                <span className="font-mono text-foreground">
-                  {(peerStats.you.composite - peerStats.countryPeers.avgComposite).toFixed(1)}
-                </span>{" "}
-                points from the country average.
-              </p>
-            )}
+            {isFiniteNumber(peerStats.you.composite) &&
+              isFiniteNumber(peerStats.countryPeers?.avgComposite) && (
+                <p className="pt-1.5 text-xs text-muted">
+                  You are{" "}
+                  <span className="font-mono text-foreground">
+                    {(peerStats.you.composite - peerStats.countryPeers.avgComposite).toFixed(1)}
+                  </span>{" "}
+                  points from the country average.
+                </p>
+              )}
           </DenseSection>
         )}
 

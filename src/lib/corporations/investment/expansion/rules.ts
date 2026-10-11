@@ -42,6 +42,31 @@ export function sellableExpansionUnits(legs: readonly { weight: number; gap: num
   return limit;
 }
 
+/**
+ * Existing plants can meet a shortage before a new build arrives. Reserve
+ * their unused nameplate and undelivered queues, including parked plants.
+ * This is conservative advice, not a reservation or a promise of sales.
+ */
+export function expansionGapAfterExistingCapacity(
+  gap: number,
+  producers: readonly { capacity: number; produced: number; queued: number; weight: number }[]
+): number | null {
+  if (!Number.isFinite(gap)) return null;
+  let reserved = 0;
+  for (const producer of producers) {
+    if (
+      !Object.values(producer).every(Number.isFinite) ||
+      Object.values(producer).some((value) => value < 0)
+    )
+      return null;
+    reserved +=
+      (Math.max(0, producer.capacity - Math.max(0, producer.produced)) +
+        Math.max(0, producer.queued)) *
+      producer.weight;
+  }
+  return Math.max(0, gap - reserved);
+}
+
 /** Gross expenses are reserved without relying on next turn's sales receipts. */
 export function expansionOperatingReserve(input: {
   overheadPerTurnAnchor: number;
@@ -75,6 +100,7 @@ export type ExpansionSizingReason =
   "history" | "constraints" | "unprofitable" | "cash" | "demand" | null;
 export function recommendSectorExpansion(input: {
   unitsPerFacility: number;
+  /** Buildable capacity units, already adjusted for output productivity. */
   measuredDemandUnits: number | null;
   shareHeadroomUnits: number;
   queuedUnits: number;
@@ -119,7 +145,7 @@ export function recommendSectorExpansion(input: {
   );
   // Full running costs for the proposed capacity stay in cash alongside the existing company reserve.
   const perUnitRunning =
-    (Math.max(0, f.operatingCostDailyAnchor + f.overheadDailyAnchor) / f.producedUnits +
+    (Math.max(0, f.operatingCostDailyAnchor + f.overheadDailyAnchor) / f.capacityUnits +
       Math.max(0, f.upkeepDailyAnchor) / f.capacityUnits) /
     f.turnsPerDay;
   const priceAndReserve = input.unitsPerFacility * (f.chargedPerUnitAnchor + perUnitRunning);
@@ -130,18 +156,19 @@ export function recommendSectorExpansion(input: {
   );
   const demandFacilities = Math.min(
     cashFacilities,
-    Math.max(
-      0,
-      Math.floor(room / Math.max(1, f.producedUnits / f.capacityUnits) / input.unitsPerFacility)
-    )
+    Math.max(0, Math.floor(room / input.unitsPerFacility))
   );
   if (demandFacilities < 1) return empty(cashFacilities < 1 ? "cash" : "demand");
+  // The sizing inputs are construction capacity, while forecasts cap sales in
+  // produced-output units. Convert only at that boundary, not a second time
+  // when counting facilities.
+  const forecastDemandUnits = room * (f.producedUnits / f.capacityUnits);
   const horizons = [1, Math.min(192, f.buildTurns), 48, 96, 192];
   const one = forecastSectorInvestment(
     {
       ...f,
       units: input.unitsPerFacility,
-      demandGapUnits: room,
+      demandGapUnits: forecastDemandUnits,
     },
     horizons
   );
@@ -151,7 +178,7 @@ export function recommendSectorExpansion(input: {
     {
       ...f,
       units: demandFacilities * input.unitsPerFacility,
-      demandGapUnits: room,
+      demandGapUnits: forecastDemandUnits,
     },
     horizons
   );

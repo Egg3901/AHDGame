@@ -813,6 +813,7 @@ export default function SectorDetailPage() {
                     ? {
                         headroomUnits: plants.headroomUnits,
                         demandGapUnits: plants.demandGapUnits,
+                        measuredDemandGapUnits: plants.measuredDemandGapUnits,
                         roomHeldByOwnIdle: plants.roomHeldByOwnIdle,
                         unclaimedSharePct: plants.unclaimedSharePct,
                       }
@@ -977,6 +978,7 @@ export default function SectorDetailPage() {
                   ? {
                       headroomUnits: plants.headroomUnits,
                       demandGapUnits: plants.demandGapUnits,
+                      measuredDemandGapUnits: plants.measuredDemandGapUnits,
                       roomHeldByOwnIdle: plants.roomHeldByOwnIdle,
                       unclaimedSharePct: plants.unclaimedSharePct,
                     }
