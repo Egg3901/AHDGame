@@ -4,7 +4,7 @@
 // cleared. The dismissal cascades: they leave every command roster, any command they
 // led loses its lead, their conflict postings are dropped, and units assigned to them
 // fall to General Staff / reserve.
-// Auth: defense holder or admin. Gated by conflictsEnabled + defense seat.
+// Auth: defense holder or admin. Personnel remains manageable while Conflicts is off.
 // Errors: 400, 401, 403, 404.
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
@@ -42,10 +42,7 @@ export async function DELETE(request: Request, { params }: RouteParams) {
     const db = await getDb();
     const gs = await (
       await getGameStateCollection(db)
-    ).findOne({ _id: "current" }, { projection: { conflictsEnabled: 1, currentTurn: 1 } });
-    if (!gs?.conflictsEnabled) {
-      return errorResponse(404, "Conflicts subsystem disabled");
-    }
+    ).findOne({ _id: "current" }, { projection: { currentTurn: 1 } });
 
     const member = await getCabinetMembersCollection(db).findOne({ countryId, positionId });
     const isHolder =
@@ -82,7 +79,7 @@ export async function DELETE(request: Request, { params }: RouteParams) {
     // career, so re-appointing a veteran restores their record.
     await getCharacterGeneralsCollection(db).updateOne(
       { characterId },
-      { $set: { commissioned: false, dismissedTurn: gs.currentTurn ?? 0 } }
+      { $set: { commissioned: false, dismissedTurn: gs?.currentTurn ?? 0 } }
     );
 
     return NextResponse.json({ ok: true });

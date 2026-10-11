@@ -82,6 +82,7 @@ export interface StationOption {
  * is not blockading, and close air support flown into a contested sky loses the wing.
  */
 export function NavairCommandClient({
+  conflictsEnabled,
   countryCode,
   positionId,
   formations,
@@ -90,6 +91,7 @@ export function NavairCommandClient({
   stations,
   summary,
 }: {
+  conflictsEnabled: boolean;
   countryCode: string;
   positionId: string;
   summary: ForceSummary;
@@ -154,9 +156,20 @@ export function NavairCommandClient({
 
   if (!rows.length) {
     return (
-      <p className="text-sm text-neutral-400">
-        This country has no naval or air formations to command.
-      </p>
+      <div className="space-y-3">
+        {!conflictsEnabled && (
+          <p
+            role="status"
+            className="rounded border border-amber-900 bg-amber-950/30 p-3 text-sm text-amber-200"
+          >
+            Conflicts is disabled. Current naval and air state is visible, but mission and station
+            orders are unavailable.
+          </p>
+        )}
+        <p className="text-sm text-neutral-400">
+          This country has no naval or air formations to command.
+        </p>
+      </div>
     );
   }
 
@@ -168,6 +181,15 @@ export function NavairCommandClient({
 
   return (
     <div className="space-y-6">
+      {!conflictsEnabled && (
+        <p
+          role="status"
+          className="rounded border border-amber-900 bg-amber-950/30 p-3 text-sm text-amber-200"
+        >
+          Conflicts is disabled. Current naval and air state is visible, but mission and station
+          orders are unavailable.
+        </p>
+      )}
       {error && (
         <p role="alert" className="rounded border border-red-800 bg-red-950/40 p-3 text-sm">
           {error}
@@ -287,7 +309,7 @@ export function NavairCommandClient({
                       <select
                         className="ml-2 rounded border border-neutral-700 bg-neutral-900 p-1 text-neutral-100"
                         value={selectedMission ?? ""}
-                        disabled={busy === f.id}
+                        disabled={!conflictsEnabled || busy === f.id}
                         onChange={(e) => {
                           const mission = e.target.value;
                           if (missionNeedsTarget(mission)) {
@@ -319,7 +341,7 @@ export function NavairCommandClient({
                         <select
                           className="ml-2 rounded border border-neutral-700 bg-neutral-900 p-1 text-neutral-100"
                           value={strikeDrafts[f.id] ? "" : (f.missionTarget ?? "")}
-                          disabled={busy === f.id}
+                          disabled={!conflictsEnabled || busy === f.id}
                           onChange={async (e) => {
                             const missionTarget = e.target.value;
                             if (!missionTarget) return;
@@ -351,7 +373,7 @@ export function NavairCommandClient({
                       <select
                         className="ml-2 rounded border border-neutral-700 bg-neutral-900 p-1 text-neutral-100"
                         value={f.station ?? ""}
-                        disabled={busy === f.id}
+                        disabled={!conflictsEnabled || busy === f.id}
                         onChange={(e) => send(f.id, { station: e.target.value })}
                       >
                         {stations.map((s) => (

@@ -130,6 +130,7 @@ describe("POST assign-branch", () => {
   });
 
   it("403s a non-holder non-admin", async () => {
+    db.collectionMocks.gameState.findOne.mockResolvedValue({ conflictsEnabled: false });
     vi.mocked(requireAuth).mockResolvedValue({
       ok: true,
       user: { isAdmin: false, character: { _id: "other" } },
@@ -139,10 +140,11 @@ describe("POST assign-branch", () => {
     expect(res.status).toBe(403);
   });
 
-  it("404s when conflicts is disabled", async () => {
+  it("assigns a branch when conflicts is disabled", async () => {
     db.collectionMocks.gameState.findOne.mockResolvedValue({ conflictsEnabled: false });
     const { POST } = await import(ROUTE);
     const res = await POST(req({ branchId: "navy", assignedGeneralId: "gen1" }), call);
-    expect(res.status).toBe(404);
+    expect(res.status).toBe(200);
+    expect(db.collectionMocks.militaryUnits.bulkWrite).toHaveBeenCalled();
   });
 });

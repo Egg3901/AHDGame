@@ -64,7 +64,7 @@ export function resolveCabinetTabs(args: {
   countryId: string;
   positionId: string;
   mechanics: CabinetPositionMechanics;
-  /** Gates the defense-only Commands + Doctrine tabs behind the Conflicts subsystem. */
+  /** Gates conflict-only tabs and controls such as Doctrine and intelligence. */
   conflictsEnabled?: boolean;
   /**
    * The merger-review queue answered `applies: true` for THIS viewer. Server
@@ -111,10 +111,11 @@ export function resolveCabinetTabs(args: {
     tabs.push({ id: "intelligence", label: "Intelligence" });
   }
 
-  // Defense seats gain Commands + Doctrine when the Conflicts subsystem is enabled.
-  if (isDefenseMinister(positionId) && conflictsEnabled) {
+  // Command administration remains available while Conflicts is disabled.
+  // Doctrine belongs to the conflict subsystem and stays behind its feature gate.
+  if (isDefenseMinister(positionId)) {
     tabs.push({ id: "commands", label: "Commands" });
-    tabs.push({ id: "doctrine", label: "Doctrine" });
+    if (conflictsEnabled) tabs.push({ id: "doctrine", label: "Doctrine" });
   }
 
   return tabs;
