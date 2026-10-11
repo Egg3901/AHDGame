@@ -174,6 +174,22 @@ describe("sector expansion budget payload", () => {
       ]);
     expect((await loadPlants()).measuredDemandGapUnits).toBeNull();
   });
+  it("treats a newly founded same-output sector with no plants as producing nothing", async () => {
+    db.collectionMocks.corporateSectors.find().toArray.mockResolvedValue([
+      sector,
+      {
+        ...sector,
+        _id: new ObjectId(),
+        corporationId: new ObjectId(),
+        capitalStock: 0,
+        operatingCapacityUnits: undefined,
+        producedUnits: undefined,
+        soldUnits: undefined,
+        buildQueue: [],
+      },
+    ]);
+    expect((await loadPlants()).measuredDemandGapUnits).toBe(3500);
+  });
   it("deducts queued builds and reserves expenses before policy credits", async () => {
     const plants = await loadPlants();
     expect(plants.measuredDemandGapUnits).toBe(3500);
