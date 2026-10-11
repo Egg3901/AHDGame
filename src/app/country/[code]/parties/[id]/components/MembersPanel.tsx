@@ -7,6 +7,7 @@ import type { PartyData } from "./types";
 import { getOfficeLabel } from "@/lib/utils/politics";
 import { PARTY_SECTION_HEADING_CLASS } from "@/components/party/partyPageStyles";
 import { NppAbbr } from "@/components/elections/NppAbbr";
+import type { PartyLeadershipTitleKey } from "@/lib/db/types/party";
 
 type RosterFilter = "all" | "player" | "npp";
 
@@ -99,16 +100,24 @@ export function MembersPanel({ party }: { party: PartyData }) {
             <tbody className="divide-y divide-card-border border-b border-card-border">
               {filteredMembers.map((m) => {
                 const isCampaigner = !m.isNPP && party.campaigners.some((c) => c.id === m.id);
-                const role =
+                const roleKey: PartyLeadershipTitleKey | null =
                   !m.isNPP && m.id === party.chair?.id
-                    ? "Chair"
+                    ? "chair"
                     : !m.isNPP && m.id === party.viceChair?.id
-                      ? "Vice Chair"
+                      ? "viceChair"
                       : !m.isNPP && m.id === party.treasurer?.id
+                        ? "treasurer"
+                        : null;
+                const role = roleKey
+                  ? party.leadershipTitles?.[roleKey]?.trim() ||
+                    (roleKey === "viceChair"
+                      ? "Vice Chair"
+                      : roleKey === "treasurer"
                         ? "Treasurer"
-                        : isCampaigner
-                          ? "Campaigner"
-                          : null;
+                        : "Chair")
+                  : isCampaigner
+                    ? "Campaigner"
+                    : null;
                 return (
                   <tr
                     key={m.isNPP ? `npp-${m.id}` : m.id}

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { partyApiUrl } from "@/lib/urls";
 import { getPartyRoleLabel } from "@/lib/parties/partyRoleLabels";
+import type { PartyLeadershipTitles } from "@/lib/db/types/party";
 import { MergerNppWarning } from "./MergerNppWarning";
 import { apiErrorText } from "@/lib/errors/catalog";
 
@@ -123,6 +124,7 @@ export function CreateProposalForm({
           treasurer?: LeaderInfo;
           members?: Member[];
           campaigners?: { id: string; name: string }[];
+          leadershipTitles?: PartyLeadershipTitles;
         };
         const opts: OfficerOption[] = [];
         if (data.chair?.id) {
@@ -130,7 +132,7 @@ export function CreateProposalForm({
             id: data.chair.id,
             name: data.chair.name,
             role: "chair",
-            label: `${getPartyRoleLabel(countryCode, "chair")} — ${data.chair.name}`,
+            label: `${getPartyRoleLabel(countryCode, "chair", data.leadershipTitles)}: ${data.chair.name}`,
           });
         }
         if (data.viceChair?.id) {
@@ -138,7 +140,7 @@ export function CreateProposalForm({
             id: data.viceChair.id,
             name: data.viceChair.name,
             role: "viceChair",
-            label: `${getPartyRoleLabel(countryCode, "viceChair")} — ${data.viceChair.name}`,
+            label: `${getPartyRoleLabel(countryCode, "viceChair", data.leadershipTitles)}: ${data.viceChair.name}`,
           });
         }
         if (data.treasurer?.id) {
@@ -146,7 +148,7 @@ export function CreateProposalForm({
             id: data.treasurer.id,
             name: data.treasurer.name,
             role: "treasurer",
-            label: `${getPartyRoleLabel(countryCode, "treasurer")} — ${data.treasurer.name}`,
+            label: `${getPartyRoleLabel(countryCode, "treasurer", data.leadershipTitles)}: ${data.treasurer.name}`,
           });
         }
         for (const m of data.members ?? []) {

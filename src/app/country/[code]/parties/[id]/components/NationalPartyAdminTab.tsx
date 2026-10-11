@@ -19,6 +19,7 @@ function AdminAppointmentPanel({
   chair,
   viceChair,
   treasurer,
+  leadershipTitles,
   onUpdate,
 }: {
   partyId: string;
@@ -27,9 +28,10 @@ function AdminAppointmentPanel({
   chair: { id: string; name: string } | null;
   viceChair: { id: string; name: string } | null;
   treasurer: { id: string; name: string } | null;
+  leadershipTitles?: PartyData["leadershipTitles"];
   onUpdate: () => void;
 }) {
-  const positionLabels = getPositionLabels(countryId);
+  const positionLabels = getPositionLabels(countryId, leadershipTitles);
   const [selections, setSelections] = useState<Record<Position, string>>({
     chair: chair?.id ?? "",
     viceChair: viceChair?.id ?? "",
@@ -200,6 +202,7 @@ export function NationalPartyAdminTab({ party, onUpdate }: NationalPartyAdminTab
         chair={party.chair}
         viceChair={party.viceChair}
         treasurer={party.treasurer}
+        leadershipTitles={party.leadershipTitles}
         onUpdate={onUpdate}
       />
 
