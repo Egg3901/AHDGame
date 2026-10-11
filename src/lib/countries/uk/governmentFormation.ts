@@ -25,6 +25,9 @@ import {
   tickConfidenceForGov,
 } from "@/lib/uk/confidence/confidenceGaugeStore";
 import type { GovernmentApproval } from "@/lib/db/types/governmentApproval";
+import { getCountryConfig, getHeadOfGovernmentOfficeKey } from "@/lib/constants/countries";
+import { expectationsRampTurns } from "@/lib/country/rules/approvalHoneymoon";
+import { confidenceErosionScale } from "@/lib/countries/uk/confidence/confidenceGauge";
 import { tickNhsFromBudget } from "@/lib/uk/nhs/nhsStore";
 import { triggerSnapElection } from "@/lib/turn/snapElection";
 import { getGameState } from "@/lib/gameState";
@@ -95,11 +98,25 @@ export async function updateGovernmentSeats(): Promise<void> {
  * observable.
  */
 export async function tickUkGovernmentGauges(db: Db, now: Date): Promise<void> {
+  const nhsGameState = await getGameState(db);
   const approvalDoc = await db
     .collection<GovernmentApproval>("governmentApprovals")
     .findOne({ _id: "UK" });
   if (approvalDoc) {
-    const gauge = await tickConfidenceForGov(db, { approval: approvalDoc.approvalRating, now });
+    const countryConfig = getCountryConfig("UK", nhsGameState?.preset);
+    const headOffice = countryConfig.officeTypes.find(
+      (office) => office.key === getHeadOfGovernmentOfficeKey("UK", nhsGameState?.preset)
+    );
+    const erosionScale = confidenceErosionScale(
+      approvalDoc.headOfGovernmentSinceTurn,
+      nhsGameState?.currentTurn,
+      expectationsRampTurns(headOffice, countryConfig.lowerElectionSystem)
+    );
+    const gauge = await tickConfidenceForGov(db, {
+      approval: approvalDoc.approvalRating,
+      erosionScale,
+      now,
+    });
     if (gauge.dissolutionEnabled) {
       try {
         await triggerSnapElection(db, "UK", now, {
@@ -116,7 +133,6 @@ export async function tickUkGovernmentGauges(db: Db, now: Date): Promise<void> {
     }
   }
 
-  const nhsGameState = await getGameState(db);
   const nhsCurrentTurn = nhsGameState?.currentTurn ?? 1;
   const nhsStartingYear = nhsGameState?.startingYear ?? STARTING_YEAR;
   const nhsCurrentYear =

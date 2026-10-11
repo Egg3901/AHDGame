@@ -68,7 +68,7 @@ export async function applyConfidenceEventToGov(
 /** Per-turn drift from approval + broken-promise meter; persist. */
 export async function tickConfidenceForGov(
   db: Db,
-  opts: { approval: number; brokenPromiseMeter?: number; now: Date }
+  opts: { approval: number; brokenPromiseMeter?: number; erosionScale?: number; now: Date }
 ): Promise<GaugeUpdate> {
   const current = await getConfidenceGauge(db);
   const value = tickConfidence(current, opts);

@@ -42,6 +42,7 @@ import {
 } from "@/lib/db/collections/governmentFormation";
 import {
   type CountryId,
+  COUNTRY_CONFIGS,
   getCountryConfig,
   COUNTRY_ORDER,
   getExecutiveOfficeKey,
@@ -73,6 +74,7 @@ import {
   type RuntimeCountryOffices,
 } from "@/lib/countries/runtimeOffices";
 import { captureOfficeTransition } from "@/lib/analytics/officeTransitionAnalytics";
+import { resetConfidenceGauge } from "@/lib/uk/confidence/confidenceGaugeStore";
 
 export { resolveGoverningPartyIdsFromDocuments };
 
@@ -1147,6 +1149,10 @@ export async function resolveParliamentaryAppointmentVote(
         },
       }
     );
+
+    if (countryId === COUNTRY_CONFIGS.UK.id && !vote.isConfidenceMotion) {
+      await resetConfidenceGauge(db, now);
+    }
 
     // Cancel all other active appointment votes — this country now has a government
     await votesColl.updateMany(

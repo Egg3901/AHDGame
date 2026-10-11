@@ -92,6 +92,31 @@ export const CONFIDENCE_MAX_EROSION_PER_TURN = 2;
 export const CONFIDENCE_BROKEN_PROMISE_BLEED = 3;
 
 /**
+ * Approval-based erosion ramps from zero when the head takes office to full
+ * strength over the public expectations ramp. Unknown or future starts keep
+ * the existing full-erosion behavior.
+ */
+export function confidenceErosionScale(
+  sinceTurn: number | null | undefined,
+  currentTurn: number | null | undefined,
+  rampTurns: number
+): number {
+  if (
+    typeof sinceTurn !== "number" ||
+    !Number.isFinite(sinceTurn) ||
+    typeof currentTurn !== "number" ||
+    !Number.isFinite(currentTurn) ||
+    sinceTurn > currentTurn
+  ) {
+    return 1;
+  }
+
+  const turnsInOffice = Math.floor(currentTurn - sinceTurn);
+  const ramp = rampTurns > 0 ? rampTurns : 1;
+  return Math.max(0, Math.min(1, turnsInOffice / ramp));
+}
+
+/**
  * Per-turn drift from standing conditions (no discrete event):
  *  - approval above the pivot recovers the gauge (a popular govt heals; this is
  *    what lets a fired-minister hit fade when the PM is popular), below it erodes.
@@ -100,9 +125,13 @@ export const CONFIDENCE_BROKEN_PROMISE_BLEED = 3;
  */
 export function tickConfidence(
   gauge: number,
-  opts: { approval: number; brokenPromiseMeter?: number }
+  opts: { approval: number; brokenPromiseMeter?: number; erosionScale?: number }
 ): number {
   const a = Math.max(0, Math.min(100, opts.approval));
+  const erosionScale =
+    typeof opts.erosionScale === "number" && Number.isFinite(opts.erosionScale)
+      ? Math.max(0, Math.min(1, opts.erosionScale))
+      : 1;
   let drift: number;
   if (a >= CONFIDENCE_APPROVAL_PIVOT) {
     drift =
@@ -111,7 +140,8 @@ export function tickConfidence(
   } else {
     drift =
       -((CONFIDENCE_APPROVAL_PIVOT - a) / CONFIDENCE_APPROVAL_PIVOT) *
-      CONFIDENCE_MAX_EROSION_PER_TURN;
+      CONFIDENCE_MAX_EROSION_PER_TURN *
+      erosionScale;
   }
   const meter = opts.brokenPromiseMeter;
   if (typeof meter === "number") {
