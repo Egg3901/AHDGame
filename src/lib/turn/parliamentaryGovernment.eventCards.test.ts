@@ -13,7 +13,7 @@ vi.mock("@/lib/discordWebhooks", () => ({
 vi.mock("@/lib/notifications", () => ({
   createNotifications: vi.fn().mockResolvedValue(undefined),
 }));
-vi.mock("@/lib/uk/confidence/confidenceGaugeStore", () => ({
+vi.mock("@/lib/uk/confidence/resetConfidenceGauge", () => ({
   resetConfidenceGauge: vi.fn().mockResolvedValue(undefined),
 }));
 vi.mock("@/lib/congress/governmentVoteBreakdown", async (importOriginal) => {

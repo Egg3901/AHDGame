@@ -1,8 +1,12 @@
 import type { Db } from "mongodb";
 import { getUKGovernmentCollection } from "@/lib/db/collections/ukGovernment";
+export { resetConfidenceGauge } from "@/lib/uk/confidence/resetConfidenceGauge";
+import { getCountryConfig, getHeadOfGovernmentOfficeKey } from "@/lib/constants/countries";
+import { expectationsRampTurns } from "@/lib/country/rules/approvalHoneymoon";
 import {
   CONFIDENCE_START,
   applyConfidenceEvent,
+  confidenceErosionScale,
   tickConfidence,
   isDissolutionTriggered,
   type ConfidenceEvent,
@@ -48,6 +52,23 @@ export interface GaugeUpdate {
   dissolutionEnabled: boolean;
 }
 
+/** Match the public expectations ramp when scaling UK confidence erosion. */
+export function getUkConfidenceErosionScale(
+  sinceTurn: number | null | undefined,
+  currentTurn: number | null | undefined,
+  preset?: string
+): number {
+  const countryConfig = getCountryConfig("UK", preset);
+  const headOffice = countryConfig.officeTypes.find(
+    (office) => office.key === getHeadOfGovernmentOfficeKey("UK", preset)
+  );
+  return confidenceErosionScale(
+    sinceTurn,
+    currentTurn,
+    expectationsRampTurns(headOffice, countryConfig.lowerElectionSystem)
+  );
+}
+
 /** Apply a one-off confidence event and persist. */
 export async function applyConfidenceEventToGov(
   db: Db,
@@ -79,9 +100,4 @@ export async function tickConfidenceForGov(
     dissolutionDue,
     dissolutionEnabled: dissolutionDue && isConfidenceDissolutionEnabled(),
   };
-}
-
-/** Reset the gauge to full — call when a new government forms. */
-export async function resetConfidenceGauge(db: Db, now: Date): Promise<void> {
-  await writeGauge(db, CONFIDENCE_START, now);
 }

@@ -22,12 +22,10 @@ import { getGameStatePreset } from "@/lib/db/collections/gameState";
 import { lowerChamberMajorityThreshold } from "@/lib/legislature/lowerChamberSeats";
 import {
   resetConfidenceGauge,
+  getUkConfidenceErosionScale,
   tickConfidenceForGov,
 } from "@/lib/uk/confidence/confidenceGaugeStore";
 import type { GovernmentApproval } from "@/lib/db/types/governmentApproval";
-import { getCountryConfig, getHeadOfGovernmentOfficeKey } from "@/lib/constants/countries";
-import { expectationsRampTurns } from "@/lib/country/rules/approvalHoneymoon";
-import { confidenceErosionScale } from "@/lib/countries/uk/confidence/confidenceGauge";
 import { tickNhsFromBudget } from "@/lib/uk/nhs/nhsStore";
 import { triggerSnapElection } from "@/lib/turn/snapElection";
 import { getGameState } from "@/lib/gameState";
@@ -103,14 +101,10 @@ export async function tickUkGovernmentGauges(db: Db, now: Date): Promise<void> {
     .collection<GovernmentApproval>("governmentApprovals")
     .findOne({ _id: "UK" });
   if (approvalDoc) {
-    const countryConfig = getCountryConfig("UK", nhsGameState?.preset);
-    const headOffice = countryConfig.officeTypes.find(
-      (office) => office.key === getHeadOfGovernmentOfficeKey("UK", nhsGameState?.preset)
-    );
-    const erosionScale = confidenceErosionScale(
+    const erosionScale = getUkConfidenceErosionScale(
       approvalDoc.headOfGovernmentSinceTurn,
       nhsGameState?.currentTurn,
-      expectationsRampTurns(headOffice, countryConfig.lowerElectionSystem)
+      nhsGameState?.preset
     );
     const gauge = await tickConfidenceForGov(db, {
       approval: approvalDoc.approvalRating,

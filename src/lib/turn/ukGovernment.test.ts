@@ -22,6 +22,9 @@ vi.mock("@/lib/discordWebhooks", () => ({
 vi.mock("@/lib/cabinetTransition", () => ({
   clearCabinetOnTransition: vi.fn().mockResolvedValue(undefined),
 }));
+vi.mock("@/lib/uk/confidence/resetConfidenceGauge", () => ({
+  resetConfidenceGauge: vi.fn().mockResolvedValue(undefined),
+}));
 
 vi.mock("@/lib/utils/politics", () => ({
   getOfficeLabel: vi.fn().mockReturnValue("Prime Minister"),
