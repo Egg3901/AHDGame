@@ -68,6 +68,17 @@ describe("tickConfidenceForGov", () => {
     expect(r.value).toBeGreaterThan(50);
     expect(doc.confidenceGauge).toBe(r.value);
   });
+
+  it("passes the approval erosion scale through to the pure gauge", async () => {
+    const { db, doc } = fakeDb(50);
+    const r = await tickConfidenceForGov(db, {
+      approval: 0,
+      erosionScale: 0,
+      now: new Date(),
+    });
+    expect(r.value).toBe(50);
+    expect(doc.confidenceGauge).toBe(50);
+  });
 });
 
 describe("resetConfidenceGauge", () => {

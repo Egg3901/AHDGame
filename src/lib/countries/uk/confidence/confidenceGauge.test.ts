@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   applyConfidenceEvent,
+  confidenceErosionScale,
   tickConfidence,
   isDissolutionTriggered,
   CONFIDENCE_START,
@@ -55,6 +56,26 @@ describe("tickConfidence", () => {
   });
   it("low approval erodes it", () => {
     expect(tickConfidence(50, { approval: 0 })).toBeLessThan(50);
+  });
+  it("scales approval erosion through the head of government's honeymoon", () => {
+    const takeOfficeScale = confidenceErosionScale(40, 40, 10);
+    const midRampScale = confidenceErosionScale(40, 45, 10);
+    const fullRampScale = confidenceErosionScale(40, 50, 10);
+
+    expect(takeOfficeScale).toBe(0);
+    expect(midRampScale).toBe(0.5);
+    expect(fullRampScale).toBe(1);
+    expect(tickConfidence(50, { approval: 0, erosionScale: takeOfficeScale })).toBe(50);
+    expect(tickConfidence(50, { approval: 0, erosionScale: midRampScale })).toBe(49);
+    expect(tickConfidence(50, { approval: 0, erosionScale: fullRampScale })).toBe(48);
+  });
+  it("keeps full erosion when the head's start turn is unknown", () => {
+    expect(confidenceErosionScale(null, 45, 10)).toBe(1);
+    expect(tickConfidence(50, { approval: 0 })).toBe(48);
+  });
+  it("scales only approval erosion, not recovery or broken-promise bleed", () => {
+    expect(tickConfidence(50, { approval: 100, erosionScale: 0 })).toBe(55);
+    expect(tickConfidence(50, { approval: 0, erosionScale: 0, brokenPromiseMeter: 0 })).toBe(47);
   });
   it("pivot approval is neutral (no drift)", () => {
     expect(tickConfidence(50, { approval: 50 })).toBe(50);

@@ -13,6 +13,9 @@ vi.mock("@/lib/discordWebhooks", () => ({
 vi.mock("@/lib/notifications", () => ({
   createNotifications: vi.fn().mockResolvedValue(undefined),
 }));
+vi.mock("@/lib/countries/uk/confidence/resetConfidenceGauge", () => ({
+  resetConfidenceGauge: vi.fn().mockResolvedValue(undefined),
+}));
 vi.mock("@/lib/congress/governmentVoteBreakdown", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/congress/governmentVoteBreakdown")>();
   return {
@@ -122,11 +125,14 @@ function appointmentVote(isConfidenceMotion: boolean) {
 describe("parliamentary public event card contract", () => {
   it("publishes the appointment notice and exact government-formation tally card", async () => {
     const { sendCountryGameEvent, DISCORD_COLORS } = await import("@/lib/discordWebhooks");
+    const { resetConfidenceGauge } = await import("@/lib/uk/confidence/confidenceGaugeStore");
     setVote(appointmentVote(false), true);
     await setTally(200, 100);
 
     await resolveParliamentaryAppointmentVote(db as unknown as Db, "UK", voteId, now, offices);
 
+    expect(resetConfidenceGauge).toHaveBeenCalledOnce();
+    expect(resetConfidenceGauge).toHaveBeenCalledWith(db, now);
     expect(sendCountryGameEvent).toHaveBeenCalledTimes(2);
     expect(sendCountryGameEvent).toHaveBeenNthCalledWith(1, "UK", {
       title: "New Prime Minister Appointed",
@@ -153,6 +159,16 @@ describe("parliamentary public event card contract", () => {
       ],
       thumbnail: { url: "https://cdn.invalid/nominee.png" },
     });
+  });
+
+  it("does not reset confidence when the incumbent survives a confidence motion", async () => {
+    const { resetConfidenceGauge } = await import("@/lib/uk/confidence/confidenceGaugeStore");
+    setVote(appointmentVote(true), true);
+    await setTally(200, 100);
+
+    await resolveParliamentaryAppointmentVote(db as unknown as Db, "UK", voteId, now, offices);
+
+    expect(resetConfidenceGauge).not.toHaveBeenCalled();
   });
 
   it("publishes exact confidence-collapse result and tally only when its claim wins", async () => {
@@ -224,6 +240,7 @@ describe("parliamentary public event card contract", () => {
     { confidence: true, votesAgainst: 300, status: "failed" },
   ])("does no publication or government write after losing the $status claim", async (scenario) => {
     const { sendCountryGameEvent } = await import("@/lib/discordWebhooks");
+    const { resetConfidenceGauge } = await import("@/lib/uk/confidence/confidenceGaugeStore");
     setVote(
       {
         ...appointmentVote(scenario.confidence),
@@ -244,5 +261,6 @@ describe("parliamentary public event card contract", () => {
     );
     expect(sendCountryGameEvent).not.toHaveBeenCalled();
     expect(db.collectionMocks.governmentFormations.updateOne).not.toHaveBeenCalled();
+    expect(resetConfidenceGauge).not.toHaveBeenCalled();
   });
 });
