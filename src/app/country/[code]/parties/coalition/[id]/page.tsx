@@ -14,6 +14,7 @@ import { useGameClock } from "@/contexts/useGameClock";
 import { CoalitionPrioritiesPanel } from "@/app/country/[code]/parties/components/CoalitionPrioritiesPanel";
 import { parseCountryParam } from "@/lib/db/partyLookup";
 import { getPartyRoleLabel } from "@/lib/parties/partyRoleLabels";
+import type { PartyLeadershipTitles } from "@/lib/db/types/party";
 import { coalitionApiUrl, partiesApiUrl } from "@/lib/urls";
 import { PlainPositionLabel } from "@/components/party/PlainPositionLabel";
 import {
@@ -58,6 +59,7 @@ interface PartyListItem {
   coalitionId?: string | null;
   countryId: "US" | "UK" | "DE" | "CN";
   chair?: { id: string; name: string } | null;
+  leadershipTitles?: PartyLeadershipTitles;
   regimeStatus?: "ruling" | "approved" | "banned" | null;
 }
 
@@ -582,7 +584,7 @@ function CoalitionDetailContent({ params }: { params: Promise<{ code: string; id
               Your party has been invited to join {coalition.name}
             </div>
             <p className="text-xs text-muted mb-3">
-              {`As the ${getPartyRoleLabel(code, "chair")}, you can accept or decline this invitation on behalf of your party.`}
+              {`As the ${getPartyRoleLabel(code, "chair", userPartyInCountry?.leadershipTitles)}, you can accept or decline this invitation on behalf of your party.`}
             </p>
             <div className="flex gap-3">
               <button

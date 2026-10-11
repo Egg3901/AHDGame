@@ -167,6 +167,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ code
         chair: party.chairId ? leaderMap.get(party.chairId.toString()) || null : null,
         viceChair: party.viceChairId ? leaderMap.get(party.viceChairId.toString()) || null : null,
         treasurer: party.treasurerId ? leaderMap.get(party.treasurerId.toString()) || null : null,
+        leadershipTitles: party.leadershipTitles,
         treasury: party.treasury ?? 0,
         memberCount: playerCount + nppCount,
         playerCount,

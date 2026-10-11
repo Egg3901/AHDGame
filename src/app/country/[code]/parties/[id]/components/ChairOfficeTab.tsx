@@ -15,6 +15,7 @@ import { PartyCampaignersCard } from "./PartyCampaignersCard";
 import { MembershipModeCard } from "./MembershipModeCard";
 import { BulkStateOrgControl } from "./BulkStateOrgControl";
 import { HuListVacanciesCard } from "./HuListVacanciesCard";
+import { PartyLeadershipTitlesControl } from "./PartyLeadershipTitlesControl";
 import { apiErrorText } from "@/lib/errors/catalog";
 
 interface ChairOfficeTabProps {
@@ -233,12 +234,20 @@ export function ChairOfficeTab({ party, countryId, characterId, onUpdate }: Chai
         <div className="rounded-xl border border-card-border bg-card p-6">
           <h2 className="text-lg font-semibold mb-4">Chair office</h2>
           <p className="text-sm text-muted mb-6">
-            {`As ${getPartyRoleLabel(countryId, "chair")}, you can customize your party's appearance. Changes will be reflected across the site.`}
+            {`As ${getPartyRoleLabel(countryId, "chair", party.leadershipTitles)}, you can customize your party's titles and appearance. Changes appear across party views.`}
           </p>
 
           {msg && (
             <div className={`mb-4 rounded-lg p-3 text-sm ${getMessageStyle(msg)}`}>{msg}</div>
           )}
+
+          <PartyLeadershipTitlesControl
+            key={JSON.stringify(party.leadershipTitles ?? {})}
+            partyId={party.id}
+            countryId={countryId}
+            leadershipTitles={party.leadershipTitles}
+            onUpdate={onUpdate}
+          />
 
           {/* Party Logo */}
           <div className="space-y-4 mb-8">

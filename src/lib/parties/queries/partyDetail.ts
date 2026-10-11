@@ -376,6 +376,7 @@ export async function getPartyDetail(db: Db, party: PoliticalParty): Promise<Par
     chair,
     viceChair,
     treasurer,
+    leadershipTitles: party.leadershipTitles,
     campaigners,
     committeeIds: (party.committeeIds || []).map((id) => id.toString()),
     treasury: party.treasury ?? 0,

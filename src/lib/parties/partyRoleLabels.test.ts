@@ -28,4 +28,18 @@ describe("getPartyRoleLabel", () => {
     expect(getPartyRoleLabel("ZZ", "chair")).toBe("National Chair");
     expect(getPartyRoleLabel("", "committee")).toBe("National Committee");
   });
+
+  it("uses a party title override and trims it", () => {
+    expect(getPartyRoleLabel("US", "chair", { chair: "  General Secretary  " })).toBe(
+      "General Secretary"
+    );
+    expect(getPartyRoleLabel("CN", "chair", { chair: "Party Chair" })).toBe("Party Chair");
+  });
+
+  it("falls back to the country title when a party override is empty or cleared", () => {
+    expect(getPartyRoleLabel("CN", "chair", { chair: "  " })).toBe("General Secretary");
+    expect(getPartyRoleLabel("CN", "viceChair", { viceChair: null })).toBe(
+      "Deputy General Secretary"
+    );
+  });
 });

@@ -446,11 +446,11 @@ export default async function CharacterPage({ params }: PageProps) {
   const nationalPartyRole =
     party && character.party !== "independent"
       ? party.chairId?.equals(character._id)
-        ? getPartyRoleLabel(party.countryId, "chair")
+        ? getPartyRoleLabel(party.countryId, "chair", party.leadershipTitles)
         : party.viceChairId?.equals(character._id)
-          ? getPartyRoleLabel(party.countryId, "viceChair")
+          ? getPartyRoleLabel(party.countryId, "viceChair", party.leadershipTitles)
           : party.treasurerId?.equals(character._id)
-            ? getPartyRoleLabel(party.countryId, "treasurer")
+            ? getPartyRoleLabel(party.countryId, "treasurer", party.leadershipTitles)
             : null
       : null;
   const statePartyRole =

@@ -1,6 +1,9 @@
 import type { ObjectId } from "mongodb";
 import type { CountryId } from "../../constants/countries";
 
+export type PartyLeadershipTitleKey = "chair" | "viceChair" | "treasurer";
+export type PartyLeadershipTitles = Partial<Record<PartyLeadershipTitleKey, string | null>>;
+
 /**
  * A single Shadow Cabinet appointment (player suggestion #52) — the character
  * the Leader of the Opposition has named to shadow one cabinet post. Display /
@@ -29,6 +32,8 @@ export interface PoliticalParty {
   chairId: ObjectId | null;
   viceChairId: ObjectId | null;
   treasurerId: ObjectId | null;
+  /** Optional display-only titles; absent or null values use the country default. */
+  leadershipTitles?: PartyLeadershipTitles;
   /**
    * Up to 3 chair-assigned campaigner characters. Campaigners gain auth to
    * spend party PS to Build Org on any state-party row owned by this party.
