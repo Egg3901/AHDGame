@@ -17,6 +17,7 @@ import {
   appointCabinetMemberHandler,
   duplicateAppointmentMessage,
   fireCabinetMemberHandler,
+  restoreCharacterOfficeAfterCabinet,
 } from "@/lib/countries/uk/cabinetApi";
 
 const PM_USER_ID = new ObjectId().toString();
@@ -784,5 +785,57 @@ describe("duplicateAppointmentMessage (ticket 1368)", () => {
   it("keeps the race message for a seat clash", () => {
     const error = { code: 11000, keyPattern: { countryId: 1, positionId: 1 } };
     expect(duplicateAppointmentMessage(error)).toMatch(/conflicting appointment was just made/);
+  });
+});
+
+describe("restoreCharacterOfficeAfterCabinet (ticket 1490)", () => {
+  it("keeps the chosen constituency when a minister returns to the Commons", async () => {
+    const db = createMockDb();
+    const characterId = new ObjectId();
+    const now = new Date(0);
+    db.collection("electedOfficials");
+    db.collectionMocks.electedOfficials.findOne.mockResolvedValue({
+      characterId,
+      officeType: "commons",
+      countryId: "UK",
+      state: "LON",
+      constituency: "Barking",
+      constituencyId: "E14001073",
+    });
+    db.collection("characters");
+    await restoreCharacterOfficeAfterCabinet(db as unknown as Db, "UK", characterId, now);
+    expect(db.collectionMocks.characters.updateOne).toHaveBeenCalledWith(
+      { _id: characterId },
+      {
+        $set: {
+          currentOffice: {
+            type: "commons",
+            state: "LON",
+            constituency: "Barking",
+            constituencyId: "E14001073",
+          },
+          updatedAt: now,
+        },
+      }
+    );
+  });
+
+  it("restores a Commons seat with no constituency unchanged", async () => {
+    const db = createMockDb();
+    const characterId = new ObjectId();
+    const now = new Date(0);
+    db.collection("electedOfficials");
+    db.collectionMocks.electedOfficials.findOne.mockResolvedValue({
+      characterId,
+      officeType: "commons",
+      countryId: "UK",
+      state: "LON",
+    });
+    db.collection("characters");
+    await restoreCharacterOfficeAfterCabinet(db as unknown as Db, "UK", characterId, now);
+    expect(db.collectionMocks.characters.updateOne).toHaveBeenCalledWith(
+      { _id: characterId },
+      { $set: { currentOffice: { type: "commons", state: "LON" }, updatedAt: now } }
+    );
   });
 });

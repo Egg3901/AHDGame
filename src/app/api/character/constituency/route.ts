@@ -30,6 +30,8 @@ type PrimeMinisterOffice = {
 
 type UkConstituencyOffice = CommonsOffice | PrimeMinisterOffice;
 
+type UkCabinetOffice = { type: "ukCabinet"; positionId: string };
+
 const selectConstituencySchema = z.object({
   constituencyId: z.string().trim().min(1, "Choose a constituency"),
 });
@@ -54,13 +56,31 @@ function resolveClaimRegion(office: UkConstituencyOffice, homeState: unknown): s
   return typeof homeState === "string" && homeState ? homeState : undefined;
 }
 
+function isUkCabinetOffice(office: Character["currentOffice"]): office is UkCabinetOffice {
+  return !!office && office.type === "ukCabinet";
+}
+
+// Cabinet ministers keep their Commons seat: the electedOfficials record is
+// retained while currentOffice points at the cabinet post, and it is restored
+// when they leave cabinet. The constituency lives on that retained record.
+async function findRetainedCommonsSeat(characterId: ObjectId) {
+  const db = await getDb();
+  const official = await db.collection<ElectedOfficial>("electedOfficials").findOne({
+    officeType: "commons",
+    countryId: "UK",
+    characterId,
+  });
+  if (!official || typeof official.state !== "string" || !official.state) return null;
+  return official;
+}
+
 function isUkConstituencyOffice(
   office: Character["currentOffice"]
 ): office is UkConstituencyOffice {
   return isCommonsOffice(office) || isPrimeMinisterOffice(office);
 }
 
-// GET /api/character/constituency — Returns the current constituency choices for a UK Commons MP or Prime Minister.
+// GET /api/character/constituency — Returns the current constituency choices for a UK Commons MP, cabinet minister or Prime Minister.
 // Auth: requireAuthWithCharacter
 // Errors: 401
 async function handleGET() {
@@ -69,6 +89,25 @@ async function handleGET() {
     if (!auth.ok) return auth.response;
 
     const office = auth.user.character.currentOffice;
+    if (isUkCabinetOffice(office)) {
+      const seat = await findRetainedCommonsSeat(new ObjectId(auth.user.character._id));
+      if (!seat) {
+        return NextResponse.json({
+          eligible: false,
+          constituencies: [],
+          selected: null,
+        });
+      }
+      return NextResponse.json({
+        eligible: true,
+        officeType: "commons",
+        regionId: seat.state,
+        selected: seat.constituencyId
+          ? { id: seat.constituencyId, name: seat.constituency ?? seat.constituencyId }
+          : null,
+        constituencies: getConstituenciesForUkRegion(seat.state!),
+      });
+    }
     if (!isUkConstituencyOffice(office)) {
       return NextResponse.json({
         eligible: false,
@@ -102,7 +141,7 @@ async function handleGET() {
 
 export const GET = withNoStore(handleGET);
 
-// POST /api/character/constituency — Updates a UK Commons MP's or Prime Minister's constituency within their current region.
+// POST /api/character/constituency — Updates a UK Commons MP's, cabinet minister's or Prime Minister's constituency within their current region.
 // Auth: requireAuthWithCharacter
 // Errors: 400, 401, 404
 export async function POST(request: Request) {
@@ -118,6 +157,9 @@ export async function POST(request: Request) {
 
     const character = auth.user.character;
     const office = character.currentOffice;
+    if (isUkCabinetOffice(office)) {
+      return selectCabinetMinisterConstituency(new ObjectId(character._id), constituencyId);
+    }
     if (!isUkConstituencyOffice(office)) {
       return NextResponse.json(
         badRequest("Only sitting UK MPs and Prime Ministers can choose a constituency").toJson(),
@@ -273,4 +315,93 @@ export async function POST(request: Request) {
   } catch (error) {
     return handleRouteError(error);
   }
+}
+
+// Cabinet minister: write the constituency to the retained Commons seat and the
+// elected career entry only. currentOffice (the cabinet post) is left untouched;
+// restoreCharacterOfficeAfterCabinet carries the constituency back on exit.
+async function selectCabinetMinisterConstituency(characterId: ObjectId, constituencyId: string) {
+  const seat = await findRetainedCommonsSeat(characterId);
+  if (!seat) {
+    return NextResponse.json(
+      badRequest("Only sitting UK MPs and Prime Ministers can choose a constituency").toJson(),
+      { status: 400 }
+    );
+  }
+  const regionId = seat.state!;
+  const constituency = findUkConstituency(regionId, constituencyId);
+  if (!constituency) {
+    return NextResponse.json(
+      badRequest("That constituency is not in your current UK region").toJson(),
+      { status: 400 }
+    );
+  }
+
+  const db = await getDb();
+  const existing = await db.collection<ElectedOfficial>("electedOfficials").findOne({
+    countryId: "UK",
+    constituencyId,
+    characterId: { $ne: characterId },
+  });
+  if (existing) {
+    return NextResponse.json(
+      badRequest(`${constituency.name} is already represented by another player`).toJson(),
+      { status: 400 }
+    );
+  }
+
+  const seatOffice: CommonsOffice = {
+    type: "commons",
+    state: regionId,
+    constituency: constituency.name,
+    constituencyId: constituency.id,
+  };
+  const officeLabel = getOfficeLabel(seatOffice, "UK");
+  const now = new Date();
+
+  const officialUpdate = await db.collection<ElectedOfficial>("electedOfficials").updateOne(
+    { officeType: "commons", countryId: "UK", state: regionId, characterId },
+    {
+      $set: {
+        constituency: constituency.name,
+        constituencyId: constituency.id,
+        updatedAt: now,
+      },
+    }
+  );
+  if (officialUpdate.matchedCount === 0) {
+    return NextResponse.json(notFound("Commons seat not found").toJson(), { status: 404 });
+  }
+
+  await db.collection<Character>("characters").updateOne(
+    {
+      _id: characterId,
+      careerHistory: {
+        $elemMatch: { type: "elected", "office.type": "commons", "office.state": regionId },
+      },
+    },
+    {
+      $set: {
+        "careerHistory.$[event].office.constituency": constituency.name,
+        "careerHistory.$[event].office.constituencyId": constituency.id,
+        "careerHistory.$[event].officeLabel": officeLabel,
+        updatedAt: now,
+      },
+    },
+    {
+      arrayFilters: [
+        {
+          "event.type": "elected",
+          "event.office.type": "commons",
+          "event.office.state": regionId,
+        },
+      ],
+    }
+  );
+
+  return NextResponse.json({
+    success: true,
+    selected: { id: constituency.id, name: constituency.name },
+    officeLabel,
+  });
 }
