@@ -1,4 +1,5 @@
 import type { CountryId } from "@/lib/constants/countries";
+import type { PartyLeadershipTitles } from "@/lib/db/types/party";
 import type { NationalPartyElectionPosition } from "@/lib/db/types";
 import type { PositionShiftAxis, RetiredPositionShiftAxis } from "@/lib/db/types/committeeProposal";
 import type { TreasuryPresetId } from "@/lib/treasury/partyTreasuryPresets";
@@ -49,6 +50,7 @@ export interface PartyData {
   chair: PartyLeader | null;
   viceChair: PartyLeader | null;
   treasurer: PartyLeader | null;
+  leadershipTitles?: PartyLeadershipTitles;
   /** Up to 3 committee-confirmed campaigners. May be empty. */
   campaigners: PartyLeader[];
   committeeIds: string[];

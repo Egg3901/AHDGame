@@ -1,10 +1,10 @@
-// PATCH /api/country/[code]/parties/[id]/settings - Update chair-managed party settings such as color and Discord invite link
+// PATCH /api/country/[code]/parties/[id]/settings - Update chair-managed party settings.
 // Auth: requireAuth
 // Errors: 400, 401, 403, 404, 429
 /**
  * PATCH /api/parties/[id]/settings
  *
- * Allows the party Chair to update party settings like color and Discord invite link.
+ * Allows the party Chair to update party appearance, leadership titles and other settings.
  */
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
@@ -18,6 +18,7 @@ import type { PoliticalParty } from "@/lib/db/types";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { normalizeDiscordInviteUrl } from "@/lib/discord/invite";
 import { canActAsChair } from "@/lib/parties/actingChair";
+import { MAX_PARTY_LEADERSHIP_TITLE_LENGTH } from "@/lib/parties/partyRoleLabels";
 
 const updateSchema = z.object({
   color: z
@@ -28,6 +29,14 @@ const updateSchema = z.object({
   // Membership gate (suggestion #72): "open" = immediate joins, "approval" =
   // joins file a pending request for a leader to accept/decline.
   membershipMode: z.enum(["open", "approval"]).optional(),
+  leadershipTitles: z
+    .object({
+      chair: z.string().trim().max(MAX_PARTY_LEADERSHIP_TITLE_LENGTH).nullable(),
+      viceChair: z.string().trim().max(MAX_PARTY_LEADERSHIP_TITLE_LENGTH).nullable(),
+      treasurer: z.string().trim().max(MAX_PARTY_LEADERSHIP_TITLE_LENGTH).nullable(),
+    })
+    .strict()
+    .optional(),
 });
 
 export async function PATCH(
@@ -93,6 +102,14 @@ export async function PATCH(
 
     if (parsed.data.membershipMode !== undefined) {
       updates.membershipMode = parsed.data.membershipMode;
+    }
+
+    if (parsed.data.leadershipTitles !== undefined) {
+      updates.leadershipTitles = {
+        chair: parsed.data.leadershipTitles.chair?.trim() || null,
+        viceChair: parsed.data.leadershipTitles.viceChair?.trim() || null,
+        treasurer: parsed.data.leadershipTitles.treasurer?.trim() || null,
+      };
     }
 
     if (Object.keys(updates).length <= 1) {
