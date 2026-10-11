@@ -3,6 +3,7 @@
 import { US_STATE_ID_NAME_PAIRS } from "@/lib/constants/usStateNames";
 import { formatPartyCountryMoney } from "@/lib/utils/formatters";
 import { getPartyRoleLabel } from "@/lib/parties/partyRoleLabels";
+import type { PartyLeadershipTitles } from "@/lib/db/types/party";
 import type { NationalPosition } from "./types";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -24,11 +25,14 @@ export const POSITION_LABELS: Record<NationalPosition, string> = {
 };
 
 /** Country-aware label map for the three national positions. */
-export function getPositionLabels(countryId: string): Record<NationalPosition, string> {
+export function getPositionLabels(
+  countryId: string,
+  leadershipTitles?: PartyLeadershipTitles | null
+): Record<NationalPosition, string> {
   return {
-    chair: getPartyRoleLabel(countryId, "chair"),
-    viceChair: getPartyRoleLabel(countryId, "viceChair"),
-    treasurer: getPartyRoleLabel(countryId, "treasurer"),
+    chair: getPartyRoleLabel(countryId, "chair", leadershipTitles),
+    viceChair: getPartyRoleLabel(countryId, "viceChair", leadershipTitles),
+    treasurer: getPartyRoleLabel(countryId, "treasurer", leadershipTitles),
   };
 }
 export const POSITION_DESC: Record<NationalPosition, string> = {

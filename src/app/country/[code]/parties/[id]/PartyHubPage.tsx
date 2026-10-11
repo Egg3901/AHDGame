@@ -1225,6 +1225,7 @@ function NationalPartyHub({ scope }: { scope: Extract<PartyHubScope, { kind: "na
                       partyColor={party.color}
                       partyId={id}
                       country={backCountry}
+                      leadershipTitles={party.leadershipTitles}
                       canVote={electionData.canVote}
                       canRun={electionData.canRun}
                       runCooldownUntil={electionData.runCooldownUntil}
