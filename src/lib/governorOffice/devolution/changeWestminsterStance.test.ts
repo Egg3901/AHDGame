@@ -53,4 +53,27 @@ describe("atomic Westminster stance changes", () => {
     expect((await changeWestminsterStance(db, { stateId: "NIR", policy: "pro" })).status).toBe(409);
     expect(collection.updateOne).not.toHaveBeenCalled();
   });
+  it("lets a new ministry change each inherited region, then starts a fresh cooldown", async () => {
+    const { db, collection } = setup();
+    const mock = db as unknown as ReturnType<typeof createMockDb>;
+    mock.collection("governmentFormations").findOne.mockResolvedValue({
+      status: "formed",
+      cycle: 2,
+      pmCharacterId: "new-pm",
+      formedTurn: 100,
+    });
+    expect(
+      (await changeWestminsterStance(db, { stateId: "WAL", policy: "independence" })).status
+    ).toBe(200);
+    const [filter, update] = collection.updateOne.mock.calls[0];
+    expect(filter["westminsterStances.WAL.changedUnderGovernment"]).toEqual({ $exists: false });
+    const stance = update.$set["westminsterStances.WAL"];
+    expect(stance.changedUnderGovernment).toBeTruthy();
+    collection.findOne.mockResolvedValue({
+      gubernatorialActions: 2,
+      westminsterStances: { WAL: stance },
+    });
+    expect((await changeWestminsterStance(db, { stateId: "WAL", policy: "pro" })).status).toBe(400);
+    expect(collection.updateOne).toHaveBeenCalledTimes(1);
+  });
 });

@@ -3,6 +3,8 @@
  * stance, regional and Westminster approval, inflation and baseline recovery.
  * computeIndependenceDesireDriftSnapshot returns the next value and its drivers.
  */
+import { TURNS_PER_YEAR } from "@/lib/constants/turnTime";
+import { REQUEST_THRESHOLD } from "@/lib/constants/referendum";
 import type { DevolutionPolicy } from "@/lib/db/types/governorOfficeState";
 
 /**
@@ -180,10 +182,63 @@ export function westminsterStanceChangeError(args: {
   changedAtTurn?: number;
   currentTurn: number;
   actions: number;
+  changedUnderGovernment?: string;
+  government?: WestminsterGovernment | null;
 }): string | null {
   if (args.currentPolicy === args.policy) return "Policy is already set to this value.";
   if (args.actions < DEVOLUTION_POLICY_CHANGE_AP_COST) return "Insufficient office action points.";
-  const readyAt = (args.changedAtTurn ?? -Infinity) + DEVOLUTION_POLICY_CHANGE_COOLDOWN_TURNS;
-  if (args.currentTurn < readyAt) return `Policy change on cooldown until turn ${readyAt}.`;
+  const remaining = westminsterStanceCooldownRemaining(args);
+  const readyAt = args.currentTurn + remaining;
+  if (remaining > 0) return `Policy change on cooldown until turn ${readyAt}.`;
   return null;
+}
+
+/** A seated ministry, including a new election or same-turn PM succession. */
+export interface WestminsterGovernment {
+  key: string;
+  formedTurn: number | null;
+}
+
+/** Old saves infer inheritance conservatively from the government's formation turn. */
+export function hasInitialWestminsterChange(args: {
+  changedAtTurn?: number;
+  changedUnderGovernment?: string;
+  government?: WestminsterGovernment | null;
+}): boolean {
+  if (!args.government || args.changedAtTurn == null) return false;
+  if (args.changedUnderGovernment != null)
+    return args.changedUnderGovernment !== args.government.key;
+  return args.government.formedTurn != null && args.changedAtTurn < args.government.formedTurn;
+}
+
+export function westminsterStanceCooldownRemaining(args: {
+  changedAtTurn?: number;
+  changedUnderGovernment?: string;
+  government?: WestminsterGovernment | null;
+  currentTurn: number;
+}): number {
+  if (hasInitialWestminsterChange(args)) return 0;
+  return Math.max(
+    0,
+    (args.changedAtTurn ?? -Infinity) + DEVOLUTION_POLICY_CHANGE_COOLDOWN_TURNS - args.currentTurn
+  );
+}
+
+/** Replays the actual drift rules with fixed stances, approval and inflation.
+ * One-year movement respects bounds and recovery; the threshold is only a Desire
+ * requirement, not a prediction of consent, cooldown eligibility or the vote. */
+export function forecastIndependenceDesire(
+  args: Parameters<typeof computeIndependenceDesireDriftSnapshot>[0]
+) {
+  const horizonTurns = TURNS_PER_YEAR * 100;
+  let previous = args.previous;
+  let annualChange = 0;
+  let turnsToThreshold: number | null = previous >= REQUEST_THRESHOLD ? 0 : null;
+  for (let turn = 1; turn <= horizonTurns; turn++) {
+    previous = computeIndependenceDesireDriftSnapshot({ ...args, previous }).next;
+    if (turn === TURNS_PER_YEAR) annualChange = round6(previous - args.previous);
+    if (turnsToThreshold == null && previous >= REQUEST_THRESHOLD) turnsToThreshold = turn;
+    if (turn >= TURNS_PER_YEAR && turnsToThreshold != null) break;
+  }
+  return { annualChange, turnsToThreshold, horizonTurns, threshold: REQUEST_THRESHOLD };
 }

@@ -2,6 +2,7 @@
  * Westminster chooses a separate constitutional stance for each devolved region.
  * changeWestminsterStance spends national office AP and enforces a regional cooldown atomically.
  */
+import { loadWestminsterGovernment } from "./westminsterGovernment";
 import type { Db, Filter } from "mongodb";
 import type { DevolutionPolicy, GovernorOfficeState } from "@/lib/db/types/governorOfficeState";
 import { getNationalStateId } from "@/lib/policy/nationalStateId";
@@ -21,7 +22,11 @@ export async function changeWestminsterStance(
 ) {
   const collection = db.collection<GovernorOfficeState>("governorOfficeState");
   const key = { countryId: "UK" as const, stateId: getNationalStateId("UK") };
-  const [office, currentTurn] = await Promise.all([collection.findOne(key), getCurrentTurn(db)]);
+  const [office, currentTurn, government] = await Promise.all([
+    collection.findOne(key),
+    getCurrentTurn(db),
+    loadWestminsterGovernment(db),
+  ]);
   if (!office) return { status: 409, body: { error: "National office state is missing." } };
   const stance = office.westminsterStances?.[input.stateId];
   const error = westminsterStanceChangeError({
@@ -30,6 +35,8 @@ export async function changeWestminsterStance(
     changedAtTurn: stance?.changedAtTurn,
     currentTurn,
     actions: office.gubernatorialActions,
+    changedUnderGovernment: stance?.changedUnderGovernment,
+    government,
   });
   if (error) return { status: 400, body: { error } };
   const path = `westminsterStances.${input.stateId}`;
@@ -40,9 +47,17 @@ export async function changeWestminsterStance(
     gubernatorialActions: { $gte: DEVOLUTION_POLICY_CHANGE_AP_COST },
     [`${path}.policy`]: stance?.policy ?? { $exists: false },
     [`${path}.changedAtTurn`]: stance?.changedAtTurn ?? { $exists: false },
+    [`${path}.changedUnderGovernment`]: stance?.changedUnderGovernment ?? { $exists: false },
   };
   const result = await collection.updateOne(filter, {
-    $set: { [path]: { policy: input.policy, changedAtTurn: currentTurn }, updatedAt: new Date() },
+    $set: {
+      [path]: {
+        policy: input.policy,
+        changedAtTurn: currentTurn,
+        ...(government ? { changedUnderGovernment: government.key } : {}),
+      },
+      updatedAt: new Date(),
+    },
     $inc: { gubernatorialActions: -DEVOLUTION_POLICY_CHANGE_AP_COST },
   });
   if (result.modifiedCount !== 1)

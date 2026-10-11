@@ -48,6 +48,8 @@ export interface GovernorOfficeState {
       {
         policy: DevolutionPolicy;
         changedAtTurn?: number;
+        /** Ministry that last changed this stance. Optional on pre-feature saves. */
+        changedUnderGovernment?: string;
       }
     >
   >;

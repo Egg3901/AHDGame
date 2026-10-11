@@ -11,6 +11,8 @@ import { getNationalStateId } from "@/lib/policy/nationalStateId";
 import { getCurrentTurn } from "@/lib/turn/currentTurn";
 import type { GovernorOfficeState } from "@/lib/db/types/governorOfficeState";
 
+import { loadWestminsterGovernment } from "@/lib/governorOffice/devolution/westminsterGovernment";
+
 type Context = { params: Promise<{ code: string }> };
 
 // Authenticated viewers can track public constitutional stances; only the PM can change them.
@@ -20,13 +22,14 @@ export async function GET(_request: Request, { params }: Context) {
     const auth = await requireAuth();
     if (!auth.ok) return auth.response;
     const db = await getDb();
-    const [regions, office, currentTurn, canManage] = await Promise.all([
+    const [regions, office, currentTurn, canManage, government] = await Promise.all([
       loadIndependenceDesireSnapshots(db),
       db
         .collection<GovernorOfficeState>("governorOfficeState")
         .findOne({ countryId: "UK", stateId: getNationalStateId("UK") }),
       getCurrentTurn(db),
       auth.user.character ? isSittingLeader(db, "UK", auth.user.character._id) : false,
+      loadWestminsterGovernment(db),
     ]);
     return NextResponse.json({
       regions,
@@ -34,6 +37,7 @@ export async function GET(_request: Request, { params }: Context) {
       canManage,
       actions: office?.gubernatorialActions ?? 0,
       stances: office?.westminsterStances ?? {},
+      government,
     });
   } catch (error) {
     return handleRouteError(error);

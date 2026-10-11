@@ -17,3 +17,7 @@ areas: [fullstack]
 - Westminster's policy and approval effects are half as strong as the First Minister's. Popular governments advance their chosen stance; unpopular governments weaken it.
 - Both offices show the same Desire breakdown, including Westminster's stance and its direct effect.
 - Existing worlds default to anti-devolution until the Prime Minister changes the stance.
+
+- Both offices project annual Desire movement and time to the referendum Desire requirement, assuming current conditions continue.
+- Incoming Westminster governments can make one initial stance change per nation despite inherited cooldowns, for the usual AP cost.
+- Referendum campaign displays explain that starting support is captured when consent is granted; later live Desire drift does not directly move the campaign poll.

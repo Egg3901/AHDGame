@@ -94,4 +94,29 @@ describe("UK executive devolution API", () => {
     db.collection("governorOfficeState").updateOne.mockResolvedValue({ modifiedCount: 0 });
     expect((await POST(request(), context())).status).toBe(409);
   });
+  it("exposes and consumes the incoming ministry's inherited cooldown allowance", async () => {
+    db.collection("governmentFormations").findOne.mockResolvedValue({
+      status: "formed",
+      cycle: 2,
+      pmCharacterId: "new-pm",
+      formedTurn: 100,
+    });
+    db.collection("governorOfficeState").findOne.mockResolvedValue({
+      gubernatorialActions: 2,
+      westminsterStances: { SCO: { policy: "anti", changedAtTurn: 99 } },
+    });
+    const dashboard = await (await GET(request(), context())).json();
+    expect(dashboard.government.formedTurn).toBe(100);
+    expect((await POST(request(), context())).status).toBe(200);
+    const stance =
+      db.collection("governorOfficeState").updateOne.mock.calls[0][1].$set[
+        "westminsterStances.SCO"
+      ];
+    expect(stance.changedUnderGovernment).toBe(dashboard.government.key);
+    db.collection("governorOfficeState").findOne.mockResolvedValue({
+      gubernatorialActions: 2,
+      westminsterStances: { SCO: stance },
+    });
+    expect((await POST(request({ stateId: "SCO", policy: "pro" }), context())).status).toBe(400);
+  });
 });

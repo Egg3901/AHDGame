@@ -118,4 +118,19 @@ describe("Westminster regional dashboard", () => {
       "Office policy or action points changed."
     );
   });
+  it("shows the incoming government's allowance and permits an inherited cooldown change", async () => {
+    vi.mocked(fetch).mockImplementation(() =>
+      response({ ...makeData(), government: { key: "incoming", formedTurn: 100 } })
+    );
+    show();
+    await screen.findByText("10.00");
+    expect(screen.getByText(/Projected movement over one game year/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("tab", { name: "Scotland" }));
+    fireEvent.change(screen.getByRole("combobox"), { target: { value: "pro" } });
+    expect(screen.getByText(/Incoming government: your first change/)).toBeTruthy();
+    expect(
+      (screen.getByRole("button", { name: "Change Westminster stance" }) as HTMLButtonElement)
+        .disabled
+    ).toBe(false);
+  });
 });

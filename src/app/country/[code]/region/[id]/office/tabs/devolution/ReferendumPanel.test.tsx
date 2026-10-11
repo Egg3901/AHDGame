@@ -2,12 +2,22 @@
  * @vitest-environment happy-dom
  */
 import { describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render as rtlRender, screen } from "@testing-library/react";
 import { ReferendumPanel, type ReferendumPanelData } from "./ReferendumPanel";
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }),
 }));
+
+import { NextIntlClientProvider } from "next-intl";
+import messages from "../../../../../../../../../messages/en/nav.json";
+function render(element: React.ReactNode) {
+  return rtlRender(
+    <NextIntlClientProvider locale="en" messages={messages}>
+      {element}
+    </NextIntlClientProvider>
+  );
+}
 
 function renderPanel(data: ReferendumPanelData, viewerCanManage = true) {
   return render(
@@ -61,6 +71,7 @@ describe("ReferendumPanel", () => {
     });
     expect(screen.getByRole("progressbar").getAttribute("aria-valuenow")).toBe("57");
     expect(screen.getByText(/Yes 57%/)).toBeTruthy();
+    expect(screen.getByText(/Later live Desire drift/)).toBeTruthy();
     expect(screen.getByText(/vote is held on turn 158/)).toBeTruthy();
   });
 

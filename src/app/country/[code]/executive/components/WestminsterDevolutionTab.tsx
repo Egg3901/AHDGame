@@ -7,6 +7,9 @@ import type { IndependenceDesireDriftPerRegion } from "@/lib/governorOffice/devo
 import {
   DEVOLUTION_POLICY_CHANGE_AP_COST,
   DEVOLUTION_POLICY_CHANGE_COOLDOWN_TURNS,
+  westminsterStanceCooldownRemaining,
+  hasInitialWestminsterChange,
+  type WestminsterGovernment,
 } from "@/lib/governorOffice/devolution/rules";
 import type { DevolutionPolicy, GovernorOfficeState } from "@/lib/db/types/governorOfficeState";
 type Region = "WAL" | "SCO" | "NIR";
@@ -15,6 +18,7 @@ interface Dashboard {
   currentTurn: number;
   actions: number;
   canManage: boolean;
+  government?: WestminsterGovernment | null;
   stances: NonNullable<GovernorOfficeState["westminsterStances"]>;
 }
 export function WestminsterDevolutionTab() {
@@ -48,11 +52,13 @@ export function WestminsterDevolutionTab() {
   }, [reload, t]);
   const row = data?.regions.find((item) => item.stateId === region);
   const policy = draftPolicy ?? row?.westminsterPolicy ?? "anti";
-  const changedAt = data?.stances[region]?.changedAtTurn;
-  const remaining =
-    changedAt == null
-      ? 0
-      : Math.max(0, changedAt + DEVOLUTION_POLICY_CHANGE_COOLDOWN_TURNS - (data?.currentTurn ?? 0));
+  const changeContext = {
+    ...data?.stances[region],
+    government: data?.government,
+    currentTurn: data?.currentTurn ?? 0,
+  };
+  const remaining = westminsterStanceCooldownRemaining(changeContext);
+  const initialChange = hasInitialWestminsterChange(changeContext);
   const canSave =
     !!data?.canManage &&
     !!row &&
@@ -203,6 +209,7 @@ export function WestminsterDevolutionTab() {
                         </option>
                       ))}
                     </select>
+                    {initialChange && <p className="text-xs text-muted">{t("initialChange")}</p>}
                     {remaining > 0 && (
                       <p className="text-xs text-muted">{t("cooldown", { turns: remaining })}</p>
                     )}

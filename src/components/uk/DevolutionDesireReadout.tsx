@@ -1,8 +1,12 @@
 "use client";
+import { TURNS_PER_YEAR } from "@/lib/constants/turnTime";
 import { useTranslations } from "next-intl";
 import type { DevolutionPolicy } from "@/lib/db/types/governorOfficeState";
 import type { IndependenceDesireDriftPerRegion } from "@/lib/governorOffice/devolution/rules";
-import { MEAN_REVERSION_TARGET } from "@/lib/governorOffice/devolution/rules";
+import {
+  forecastIndependenceDesire,
+  MEAN_REVERSION_TARGET,
+} from "@/lib/governorOffice/devolution/rules";
 export type DesireReadoutData = Pick<
   IndependenceDesireDriftPerRegion,
   "stateId" | "previous" | "trend" | "policy" | "westminsterPolicy" | "drivers" | "delta" | "inputs"
@@ -16,6 +20,12 @@ export function stanceMessageKey(stateId: string, policy: DevolutionPolicy) {
 /** Shared by the UK Executive and each First Minister's office. */
 export function DevolutionDesireReadout({ data }: { data: DesireReadoutData }) {
   const t = useTranslations("nav.devolution");
+  const forecast = forecastIndependenceDesire({
+    previous: data.previous,
+    policy: data.policy,
+    westminsterPolicy: data.westminsterPolicy,
+    ...data.inputs,
+  });
   const rows = [
     [t("regionalPolicy"), data.drivers.policy],
     [t("nationalPolicy"), data.drivers.westminsterPolicy],
@@ -41,6 +51,21 @@ export function DevolutionDesireReadout({ data }: { data: DesireReadoutData }) {
           {t("lastTurn", { value: formatDesireDrift(data.trend) })}
         </p>
         <p className="mt-1 text-xs text-muted">{t("scale")}</p>
+        <p className="mt-3 text-sm tabular-nums">
+          {t("annualForecast", { value: formatDesireDrift(forecast.annualChange) })}
+        </p>
+        <p className="mt-1 text-sm tabular-nums">
+          {forecast.turnsToThreshold === 0
+            ? t("thresholdMet", { threshold: forecast.threshold })
+            : forecast.turnsToThreshold != null
+              ? t("thresholdForecast", {
+                  threshold: forecast.threshold,
+                  turns: forecast.turnsToThreshold,
+                  years: (forecast.turnsToThreshold / TURNS_PER_YEAR).toFixed(1),
+                })
+              : t("thresholdNotReached", { threshold: forecast.threshold })}
+        </p>
+        <p className="mt-1 text-xs text-muted">{t("forecastHelp")}</p>
         <div className="mt-4 h-3 overflow-hidden rounded-full bg-card-border" aria-hidden>
           <div
             className="h-full bg-primary"
