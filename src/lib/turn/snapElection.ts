@@ -24,6 +24,8 @@
  * bypass; PM-triggered snaps do not. PM-triggered snaps additionally fail if
  * an active `noConfidenceVotes` doc exists for the country — a PM cannot
  * preempt a pending VONC by calling snap.
+ * UK PM-triggered snaps also wait for any active post-Commons confidence
+ * motion to resolve, even if the limit/cooldown bypass is supplied.
  */
 
 import { captureOfficeTransition } from "@/lib/analytics/officeTransitionAnalytics";
@@ -42,6 +44,7 @@ import { getJpShugiinSeats } from "@/lib/constants/states";
 import {
   getGovernmentFormationsCollection,
   getNoConfidenceVotesCollection,
+  getPMAppointmentVotesCollection,
 } from "@/lib/db/collections/governmentFormation";
 import { getSeatIdFromElection } from "@/lib/seats";
 import {
@@ -196,6 +199,22 @@ export async function triggerSnapElection(
   const currentTurn = gameState?.currentTurn ?? 0;
   const ctx = cycleAnchorContextFromGameState(gameState);
   const snapUsed = gov.snapElectionsUsed ?? 0;
+
+  // Confidence motions live in pmAppointmentVotes, not noConfidenceVotes.
+  // Keep this before every dissolution write and independent of limit bypass:
+  // the incumbent cannot preempt the new Commons' verdict on their government.
+  if (countryId === COUNTRY_CONFIGS.UK.id && opts.reason === "pm-trigger") {
+    const activeConfidenceMotion = await getPMAppointmentVotesCollection(db).findOne({
+      countryId,
+      status: "active",
+      isConfidenceMotion: true,
+    });
+    if (activeConfidenceMotion) {
+      throw new SnapElectionError(
+        "Cannot call a snap election while the post-Commons election confidence vote is active. Wait for it to resolve."
+      );
+    }
+  }
 
   if (!opts.bypassLimits) {
     if (snapUsed >= SNAP_ELECTION_LIMIT) {
