@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { TECH_TREE } from "@/lib/constants/techTree/nodes";
 import {
+  effectiveMediaOperatingModelId,
   getMediaOperatingModel,
   MEDIA_OPERATING_MODELS,
   mediaOperatingModelOutputRates,
@@ -21,6 +22,36 @@ describe("media operating model catalog", () => {
       media: { decade: "2009", nodeName: "Streaming Platforms" },
       media_entertainment: { decade: "2009", nodeName: "Streaming Distribution" },
     });
+  });
+
+  it("resolves unset and standard media strategies to newspaper for advertising", () => {
+    for (const strategyId of [undefined, null, "", "   ", "standard"]) {
+      expect(effectiveMediaOperatingModelId(strategyId, "media", 1953)).toBe("newspaper");
+    }
+  });
+
+  it("resolves legacy broadcast to radio before 1950 and television from 1950", () => {
+    expect(effectiveMediaOperatingModelId("legacy_broadcast", "media", 1949)).toBe("radio_network");
+    expect(effectiveMediaOperatingModelId("legacy_broadcast", "media", 1950)).toBe("broadcast_tv");
+  });
+
+  it("uses explicit catalogued models when they are available for the sector and year", () => {
+    expect(effectiveMediaOperatingModelId("broadcast_tv", "media", 1950)).toBe("broadcast_tv");
+    expect(effectiveMediaOperatingModelId("film_studio", "media_entertainment", 1910)).toBe(
+      "film_studio"
+    );
+    expect(effectiveMediaOperatingModelId("streaming_platform", "media", 2005)).toBe(
+      "streaming_platform"
+    );
+  });
+
+  it("returns undefined for non-media, unmapped, mismatched, unavailable, or unknown-year inputs", () => {
+    expect(effectiveMediaOperatingModelId("newspaper", "manufacturing", 1953)).toBeUndefined();
+    expect(effectiveMediaOperatingModelId("film_studio", "media", 1953)).toBeUndefined();
+    expect(effectiveMediaOperatingModelId("streaming_platform", "media", 2004)).toBeUndefined();
+    expect(effectiveMediaOperatingModelId("legacy_broadcast", "media", 1919)).toBeUndefined();
+    expect(effectiveMediaOperatingModelId("retired_strategy", "media", 2000)).toBeUndefined();
+    expect(effectiveMediaOperatingModelId("newspaper", "media", undefined)).toBeUndefined();
   });
 
   it("points every paid technology prerequisite at a node in its existing sector lane", () => {

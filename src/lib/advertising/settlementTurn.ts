@@ -57,6 +57,8 @@ export interface ProcessAdvertisingTurnArgs {
   /** Resolved `mediaOperatingModelsEnabled`; false performs zero DB access. */
   enabled: boolean;
   turn: number | undefined;
+  /** Current world year used to resolve advertising model availability. */
+  year: number | null | undefined;
   /** Turn's in-memory corp map (no per-corp queries). */
   corpsById: ReadonlyMap<string, Corporation>;
   /** Turn's in-memory sectors by corp (no sector queries). */
@@ -224,7 +226,7 @@ export async function processAdvertisingTurn(
         const supplierCorp = args.corpsById.get(agreement.supplierCorpId);
         const supplierSectors = args.sectorsByCorp.get(agreement.supplierCorpId) ?? [];
         const coverage = supplierCoverageByState({
-          operatingModels: operatingModelsFromSectors(supplierSectors),
+          operatingModels: operatingModelsFromSectors(supplierSectors, args.year),
           supplierSectors,
           relevantTechCount: supplierCorp ? techCount(supplierCorp) : 0,
           states: buyerStates,
