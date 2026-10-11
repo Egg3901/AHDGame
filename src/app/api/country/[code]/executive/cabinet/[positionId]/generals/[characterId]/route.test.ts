@@ -134,6 +134,10 @@ describe("DELETE dismiss a general", () => {
   });
 
   it("403s a non-holder non-admin", async () => {
+    db.collectionMocks.gameState.findOne.mockResolvedValue({
+      conflictsEnabled: false,
+      currentTurn: 40,
+    });
     vi.mocked(requireAuth).mockResolvedValue({
       ok: true,
       user: { isAdmin: false, character: { _id: "nobody" } },
@@ -144,10 +148,14 @@ describe("DELETE dismiss a general", () => {
     expect(db.collectionMocks.characterGenerals.updateOne).not.toHaveBeenCalled();
   });
 
-  it("404s when conflicts is disabled", async () => {
-    db.collectionMocks.gameState.findOne.mockResolvedValue({ conflictsEnabled: false });
+  it("dismisses a general when conflicts is disabled", async () => {
+    db.collectionMocks.gameState.findOne.mockResolvedValue({
+      conflictsEnabled: false,
+      currentTurn: 40,
+    });
     const { DELETE } = await import(ROUTE);
     const res = await DELETE(req(), call("g1"));
-    expect(res.status).toBe(404);
+    expect(res.status).toBe(200);
+    expect(db.collectionMocks.characterGenerals.updateOne).toHaveBeenCalled();
   });
 });

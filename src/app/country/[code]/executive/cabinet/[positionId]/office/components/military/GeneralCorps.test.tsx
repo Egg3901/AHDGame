@@ -30,7 +30,13 @@ const corps: CorpsMember[] = [
 ];
 const candidates = [{ characterId: "c9", name: "Dana Reed" }];
 
-const base = { corps, candidates, countryCode: "us", positionId: "secretary_of_defense" };
+const base = {
+  canAct: true,
+  corps,
+  candidates,
+  countryCode: "us",
+  positionId: "secretary_of_defense",
+};
 
 describe("GeneralCorps", () => {
   it("shows each member's standing, including the former", () => {
@@ -50,6 +56,15 @@ describe("GeneralCorps", () => {
     expect(url).toBe("/api/country/us/executive/cabinet/secretary_of_defense/generals");
     expect(init.method).toBe("POST");
     expect(JSON.parse(init.body)).toEqual({ characterId: "c9" });
+  });
+
+  it("shows personnel read-only to a defense-office viewer without action rights", () => {
+    render(<GeneralCorps {...base} canAct={false} />);
+
+    expect(screen.queryByRole("button", { name: "Commission" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /dismiss/i })).toBeNull();
+    expect(screen.getByText("Read-only")).toBeTruthy();
+    expect(screen.getByText("Gen. Alpha")).toBeTruthy();
   });
 
   it("dismisses a serving general", async () => {

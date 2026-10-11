@@ -2,7 +2,7 @@
 // The Secretary of Defense commissions a character into the general corps. A fresh
 // commission gets a level-1 profile; the appointee's specialisation then derives from
 // the trait tree they train. Re-appointing a dismissed veteran restores their retained
-// record. Auth: defense holder or admin. Gated by conflictsEnabled + defense seat.
+// record. Auth: defense holder or admin. Personnel remains manageable while Conflicts is off.
 // Errors: 400, 401, 403, 404.
 import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
@@ -49,10 +49,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     const db = await getDb();
     const gs = await (
       await getGameStateCollection(db)
-    ).findOne({ _id: "current" }, { projection: { conflictsEnabled: 1, currentTurn: 1 } });
-    if (!gs?.conflictsEnabled) {
-      return errorResponse(404, "Conflicts subsystem disabled");
-    }
+    ).findOne({ _id: "current" }, { projection: { currentTurn: 1 } });
 
     const member = await getCabinetMembersCollection(db).findOne({ countryId, positionId });
     const isHolder =

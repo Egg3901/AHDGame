@@ -33,6 +33,7 @@ const formation = (over: Partial<CommandFormation> = {}): CommandFormation => ({
 });
 
 const props = {
+  conflictsEnabled: true,
   countryCode: "uk",
   positionId: "defence_secretary",
   summary: {
@@ -103,5 +104,15 @@ describe("NavairCommandClient repair", () => {
   it("says plainly when there is no materiel for paid repair", () => {
     render(<NavairCommandClient {...props} formations={[formation()]} />);
     expect(screen.getByText(/no naval or air materiel in store/i)).toBeDefined();
+  });
+
+  it("shows formations as read-only while conflicts is disabled", () => {
+    render(<NavairCommandClient {...props} conflictsEnabled={false} formations={[formation()]} />);
+
+    expect(screen.getByRole("status").textContent).toMatch(/Conflicts is disabled/);
+    expect(screen.getByText("1st Test Squadron")).toBeDefined();
+    const controls = screen.getAllByRole("combobox") as HTMLSelectElement[];
+    expect(controls.length).toBeGreaterThan(0);
+    expect(controls.every((control) => control.disabled)).toBe(true);
   });
 });

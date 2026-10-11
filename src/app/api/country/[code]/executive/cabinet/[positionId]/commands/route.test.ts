@@ -61,7 +61,7 @@ describe("PUT commands", () => {
     db.collection("cabinetMembers");
     db.collection("militaryUnits");
     db.collection("militaryCommands");
-    db.collectionMocks.gameState.findOne.mockResolvedValue({ conflictsEnabled: true });
+    db.collectionMocks.gameState.findOne.mockResolvedValue({ conflictsEnabled: false });
     db.collectionMocks.cabinetMembers.findOne.mockResolvedValue({
       _id: "m1",
       characterId: "char_1",
@@ -96,6 +96,7 @@ describe("PUT commands", () => {
   });
 
   it("403s a non-holder non-admin", async () => {
+    db.collectionMocks.gameState.findOne.mockResolvedValue({ conflictsEnabled: false });
     vi.mocked(requireAuth).mockResolvedValue({
       ok: true,
       user: { isAdmin: false, character: { _id: "other" } },
@@ -105,11 +106,12 @@ describe("PUT commands", () => {
     expect(res.status).toBe(403);
   });
 
-  it("404s when conflicts is disabled", async () => {
+  it("saves the command structure when conflicts is disabled", async () => {
     db.collectionMocks.gameState.findOne.mockResolvedValue({ conflictsEnabled: false });
     const { PUT } = await import(ROUTE);
     const res = await PUT(req({ commands: [command()] }), call);
-    expect(res.status).toBe(404);
+    expect(res.status).toBe(200);
+    expect(db.collectionMocks.militaryCommands.updateOne).toHaveBeenCalled();
   });
 
   // Commanders must be the country's real commissioned generals (character ids).
