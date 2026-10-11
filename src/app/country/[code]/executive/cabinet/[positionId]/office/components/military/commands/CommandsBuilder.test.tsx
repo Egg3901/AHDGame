@@ -181,6 +181,8 @@ describe("CommandsBuilder", () => {
     render(
       <CommandsBuilder
         commands={[command({ commanderIds: ["char_9"], commandingGeneralId: null })]}
+        canAct={true}
+        conflictsEnabled={true}
         units={base.units}
         commanders={base.commanders}
         conflictAssignments={[]}
@@ -235,6 +237,8 @@ describe("CommandsBuilder", () => {
     render(
       <CommandsBuilder
         commands={[command({ commanderIds: ["char_9"] })]}
+        canAct={true}
+        conflictsEnabled={true}
         units={base.units}
         commanders={base.commanders}
         conflictAssignments={[]}
@@ -349,6 +353,8 @@ describe("posture trade-offs", () => {
     render(
       <CommandsBuilder
         commands={[command({ posture: "Rapid Response" })]}
+        canAct={false}
+        conflictsEnabled={true}
         units={base.units}
         commanders={[]}
         conflictAssignments={[]}

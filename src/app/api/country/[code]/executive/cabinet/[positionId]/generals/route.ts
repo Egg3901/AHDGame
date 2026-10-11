@@ -98,7 +98,7 @@ export async function POST(request: Request, { params }: RouteParams) {
         $set: {
           commissioned: true,
           commissionedByCharacterId: auth.user.character?._id?.toString(),
-          commissionedTurn: gs.currentTurn ?? 0,
+          commissionedTurn: gs?.currentTurn ?? 0,
         },
         $unset: { dismissedTurn: "" },
         $setOnInsert: {

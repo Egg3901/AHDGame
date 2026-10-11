@@ -79,7 +79,7 @@ export async function DELETE(request: Request, { params }: RouteParams) {
     // career, so re-appointing a veteran restores their record.
     await getCharacterGeneralsCollection(db).updateOne(
       { characterId },
-      { $set: { commissioned: false, dismissedTurn: gs.currentTurn ?? 0 } }
+      { $set: { commissioned: false, dismissedTurn: gs?.currentTurn ?? 0 } }
     );
 
     return NextResponse.json({ ok: true });
