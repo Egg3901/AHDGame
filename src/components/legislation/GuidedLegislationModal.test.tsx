@@ -167,6 +167,83 @@ afterEach(() => {
 });
 
 describe("GuidedLegislationModal", () => {
+  it.each(["pending", "failure"])("allows custom bills while catalogs are %s", async (state) => {
+    vi.stubGlobal(
+      "fetch",
+      state === "pending"
+        ? vi.fn(() => new Promise(() => {}))
+        : vi.fn(async () => ({ ok: false, json: async () => ({ error: "Catalog unavailable" }) }))
+    );
+    mocks.postBill.mockResolvedValue({ response: { ok: true }, data: {}, cancelled: false });
+    renderModal();
+    expect(screen.getByRole("button", { name: "By Domain" }).hasAttribute("disabled")).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "Custom Bill" }));
+    fireEvent.change(screen.getByLabelText("Bill title"), {
+      target: { value: "Friendship Resolution" },
+    });
+    fireEvent.change(screen.getByLabelText("Message body"), {
+      target: { value: "We celebrate our friendship." },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Propose bill" }));
+    await waitFor(() => expect(mocks.postBill).toHaveBeenCalledOnce());
+    expect(mocks.postBill.mock.calls[0][0].body.provisions).toEqual([]);
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.queryByText("Loading the reviewed catalog...")).toBeNull();
+  });
+
+  it("keeps long custom messages separate from policy summaries across path changes", async () => {
+    stubCatalog();
+    renderModal();
+    await addProvision("Health and care", "Primary care access", "Community clinic expansion");
+    fireEvent.change(screen.getByLabelText("Summary"), {
+      target: { value: "Expand access to care." },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Add another provision" }));
+    fireEvent.click(screen.getByRole("button", { name: "Custom Bill" }));
+    expect((screen.getByLabelText("Message body") as HTMLTextAreaElement).value).toBe("");
+    const message = "A long message. ".repeat(300);
+    fireEvent.change(screen.getByLabelText("Message body"), { target: { value: message } });
+    fireEvent.click(screen.getByRole("button", { name: "Change starting point" }));
+    await addProvision("Health and care", "Primary care access", "Community clinic expansion");
+    expect((screen.getByLabelText("Summary") as HTMLTextAreaElement).value).toBe(
+      "Expand access to care."
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Add another provision" }));
+    fireEvent.click(screen.getByRole("button", { name: "Custom Bill" }));
+    expect((screen.getByLabelText("Message body") as HTMLTextAreaElement).value).toBe(message);
+  });
+
+  it("blocks blank and overlong messages and allows retrying after a failed proposal", async () => {
+    stubCatalog();
+    mocks.postBill
+      .mockResolvedValueOnce({
+        response: { ok: false },
+        data: { error: "Try again" },
+        cancelled: false,
+      })
+      .mockResolvedValueOnce({ response: { ok: true }, data: {}, cancelled: false });
+    const { onSuccess } = renderModal();
+    fireEvent.click(screen.getByRole("button", { name: "Custom Bill" }));
+    fireEvent.change(screen.getByLabelText("Bill title"), {
+      target: { value: "Friendship Resolution" },
+    });
+    const body = screen.getByLabelText("Message body");
+    const submit = screen.getByRole("button", { name: "Propose bill" });
+    fireEvent.change(body, { target: { value: "   " } });
+    expect(submit.hasAttribute("disabled")).toBe(true);
+    fireEvent.change(body, { target: { value: "a".repeat(10001) } });
+    expect(submit.hasAttribute("disabled")).toBe(true);
+    expect(mocks.postBill).not.toHaveBeenCalled();
+    fireEvent.change(body, { target: { value: "a".repeat(10000) } });
+    expect(submit.hasAttribute("disabled")).toBe(false);
+    fireEvent.click(submit);
+    await waitFor(() => expect(mocks.showToast).toHaveBeenCalledWith("Try again", "error"));
+    expect(onSuccess).not.toHaveBeenCalled();
+    expect((body as HTMLTextAreaElement).value).toHaveLength(10000);
+    fireEvent.click(submit);
+    await waitFor(() => expect(onSuccess).toHaveBeenCalledOnce());
+  });
+
   it("proposes a flavour-only custom bill with a long message and no provisions", async () => {
     stubCatalog();
     mocks.postBill.mockResolvedValue({ response: { ok: true }, data: {}, cancelled: false });

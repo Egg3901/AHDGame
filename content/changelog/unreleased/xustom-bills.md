@@ -14,3 +14,5 @@ areas: [frontend]
 - Added Custom Bill beside By Domain and By Metric in the guided proposal starting step.
 - Custom bills go straight to a title and message editor with a character counter and no policy provisions.
 - Normal proposal costs and voting rules still apply.
+
+- Custom bills remain available while policy catalogs load or fail. Their message drafts stay separate from policy summaries, and bill detail pages preserve paragraphs.

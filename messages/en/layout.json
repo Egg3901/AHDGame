@@ -23,7 +23,8 @@
       "changeStartingPoint": "Change starting point",
       "required": "Add a title and message body.",
       "byDomain": "By Domain",
-      "byMetric": "By Metric"
+      "byMetric": "By Metric",
+      "tooLong": "Use no more than {limit, number} characters."
     }
   }
 }

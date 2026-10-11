@@ -195,10 +195,16 @@ export function GuidedLegislationModal({
   const [taxRate, setTaxRate] = useState<number | "">("");
   const [draft, setDraft] = useState<DraftProvision[]>([]);
   const [title, setTitle] = useState("");
-  const [summary, setSummary] = useState("");
+  const [messageBodies, setMessageBodies] = useState({ policy: "", custom: "" });
   const [chamber, setChamber] = useState(initialChamber);
   const [submitting, setSubmitting] = useState(false);
   const isCustomBill = path === "custom";
+  const summary = isCustomBill ? messageBodies.custom : messageBodies.policy;
+  const bodyLimit = isCustomBill ? CUSTOM_BILL_BODY_MAX_LENGTH : 2000;
+  const bodyTooLong = summary.length > bodyLimit;
+  function setSummary(value: string) {
+    setMessageBodies((current) => ({ ...current, [isCustomBill ? "custom" : "policy"]: value }));
+  }
   const hasStartedBill = draft.length > 0 || Boolean(title.trim()) || Boolean(summary.trim());
   const canReturnToBill = hasStartedBill && step !== "overview";
 
@@ -436,6 +442,10 @@ export function GuidedLegislationModal({
       );
       return;
     }
+    if (bodyTooLong) {
+      showToast(t("tooLong", { limit: bodyLimit }), "error");
+      return;
+    }
     setSubmitting(true);
     try {
       const provisions = (isCustomBill ? [] : draft).map((provision) =>
@@ -548,7 +558,7 @@ export function GuidedLegislationModal({
         </div>
 
         <main className="max-h-[72vh] overflow-y-auto p-5">
-          {loadError ? (
+          {loadError && !isCustomBill ? (
             <div
               role="alert"
               className="rounded-lg border border-error/40 bg-error/10 p-4 text-sm text-error"
@@ -556,10 +566,10 @@ export function GuidedLegislationModal({
               {loadError}
             </div>
           ) : null}
-          {!catalog && !loadError ? (
+          {!catalog && !loadError && !isCustomBill ? (
             <p className="text-sm text-muted">Loading the reviewed catalog...</p>
           ) : null}
-          {catalog ? (
+          {catalog || step === "starting" || step === "overview" ? (
             <>
               {step === "starting" ? (
                 <section className="space-y-5">
@@ -572,6 +582,7 @@ export function GuidedLegislationModal({
                       <button
                         key={value}
                         type="button"
+                        disabled={value !== "custom" && !catalog}
                         onClick={() => {
                           setPath(value);
                           setDomain("");
@@ -601,6 +612,7 @@ export function GuidedLegislationModal({
                       Policy domain
                       <select
                         value={domain}
+                        disabled={!catalog}
                         onChange={(event) => {
                           const value = event.target.value;
                           setDomain(value);
@@ -625,6 +637,7 @@ export function GuidedLegislationModal({
                       Metric to affect
                       <select
                         value={metric}
+                        disabled={!catalog}
                         onChange={(event) => {
                           const value = event.target.value;
                           setMetric(value);
@@ -1055,7 +1068,7 @@ export function GuidedLegislationModal({
                     <textarea
                       value={summary}
                       onChange={(event) => setSummary(event.target.value)}
-                      maxLength={isCustomBill ? CUSTOM_BILL_BODY_MAX_LENGTH : 2000}
+                      maxLength={bodyLimit}
                       rows={isCustomBill ? 10 : 3}
                       className="mt-1 w-full rounded-lg border border-card-border bg-background px-3 py-2 text-sm text-foreground"
                     />
@@ -1068,8 +1081,8 @@ export function GuidedLegislationModal({
                       })}
                     </p>
                   ) : (
-                    <p className="text-xs text-muted" title={catalog.balanceNotice}>
-                      {catalog.balanceNotice}
+                    <p className="text-xs text-muted" title={catalog?.balanceNotice}>
+                      {catalog?.balanceNotice}
                     </p>
                   )}
                   <div className="flex justify-end">
@@ -1077,6 +1090,7 @@ export function GuidedLegislationModal({
                       type="button"
                       disabled={
                         submitting ||
+                        bodyTooLong ||
                         (!isCustomBill && draft.length === 0) ||
                         !title.trim() ||
                         !summary.trim()

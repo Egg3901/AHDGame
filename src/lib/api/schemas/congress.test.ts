@@ -9,6 +9,18 @@ describe("proposeBillSchema — custom category", () => {
     expect(r.success).toBe(true);
   });
 
+  it("preserves a long Unicode custom message with paragraphs as plain text", () => {
+    const summary = "友好と協力\n\n".repeat(1000);
+    const result = proposeBillSchema.parse({
+      ...base,
+      summary,
+      category: "custom",
+      provisions: [],
+    });
+    expect(result.summary).toBe(summary);
+    expect(result.provisions).toEqual([]);
+  });
+
   it("rejects a non-custom bill with no provisions", () => {
     const r = proposeBillSchema.safeParse({ ...base, category: "economy", provisions: [] });
     expect(r.success).toBe(false);
