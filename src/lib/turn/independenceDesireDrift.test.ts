@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { computeIndependenceDesireDriftSnapshot } from "@/lib/turn/independenceDesireDrift";
+import { computeIndependenceDesireDriftSnapshot } from "@/lib/governorOffice/devolution/rules";
 
 describe("computeIndependenceDesireDriftSnapshot", () => {
   // The shared `neutral` fixture sits at every driver's zero-contribution
@@ -8,6 +8,7 @@ describe("computeIndependenceDesireDriftSnapshot", () => {
   const neutral = {
     previous: 25,
     policy: "pro" as const,
+    westminsterPolicy: "pro" as const,
     regionalApproval: 50, // distance 0 → 0
     nationalApproval: 50, // distance 0 → 0
     inflationPercent: 2.5, // mid-band → 0
@@ -42,7 +43,7 @@ describe("computeIndependenceDesireDriftSnapshot", () => {
       policy: "independence",
       regionalApproval: 60,
     });
-    expect(r.drivers.regionalApproval).toBeCloseTo(0.01, 5); // +10pts mandate × +1
+    expect(r.drivers.regionalApproval).toBeCloseTo(0.02, 5); // +10pts mandate × +1
   });
 
   it("regional approval is directional: a popular unionist FM lowers desire", () => {
@@ -51,7 +52,7 @@ describe("computeIndependenceDesireDriftSnapshot", () => {
       policy: "anti",
       regionalApproval: 60,
     });
-    expect(r.drivers.regionalApproval).toBeCloseTo(-0.01, 5); // +10pts mandate × −1
+    expect(r.drivers.regionalApproval).toBeCloseTo(-0.02, 5); // +10pts mandate × −1
   });
 
   it("regional approval inverts when the govt is rejected (unpopular separatist FM)", () => {
@@ -60,7 +61,7 @@ describe("computeIndependenceDesireDriftSnapshot", () => {
       policy: "independence",
       regionalApproval: 40,
     });
-    expect(r.drivers.regionalApproval).toBeCloseTo(-0.01, 5); // −10pts rejection × +1
+    expect(r.drivers.regionalApproval).toBeCloseTo(-0.02, 5); // −10pts rejection × +1
   });
 
   it("regional approval inverts: an unpopular unionist FM stokes backlash", () => {
@@ -69,7 +70,7 @@ describe("computeIndependenceDesireDriftSnapshot", () => {
       policy: "anti",
       regionalApproval: 40,
     });
-    expect(r.drivers.regionalApproval).toBeCloseTo(0.01, 5); // −10pts rejection × −1
+    expect(r.drivers.regionalApproval).toBeCloseTo(0.02, 5); // −10pts rejection × −1
   });
 
   it("Pro-Devolution is neutral: regional approval never moves desire", () => {
@@ -83,23 +84,31 @@ describe("computeIndependenceDesireDriftSnapshot", () => {
     }
   });
 
-  it("regional approval truncates fractional points (51.9 acts as 51)", () => {
+  it("regional approval responds to fractional points", () => {
     const r = computeIndependenceDesireDriftSnapshot({
       ...neutral,
       policy: "independence",
       regionalApproval: 51.9,
     });
-    expect(r.drivers.regionalApproval).toBeCloseTo(0.001, 5);
+    expect(r.drivers.regionalApproval).toBeCloseTo(0.0038, 6);
   });
 
   it("Westminster approval above 50 suppresses drift", () => {
-    const r = computeIndependenceDesireDriftSnapshot({ ...neutral, nationalApproval: 70 });
+    const r = computeIndependenceDesireDriftSnapshot({
+      ...neutral,
+      westminsterPolicy: "anti",
+      nationalApproval: 70,
+    });
     expect(r.drivers.nationalApproval).toBeCloseTo(-0.02, 5);
   });
 
-  it("Westminster approval at 100% gives -0.050/turn", () => {
-    const r = computeIndependenceDesireDriftSnapshot({ ...neutral, nationalApproval: 100 });
-    expect(r.drivers.nationalApproval).toBeCloseTo(-0.05, 5);
+  it("Westminster approval at 100% gives -0.025/turn", () => {
+    const r = computeIndependenceDesireDriftSnapshot({
+      ...neutral,
+      westminsterPolicy: "anti",
+      nationalApproval: 100,
+    });
+    expect(r.drivers.nationalApproval).toBeCloseTo(-0.025, 5);
   });
 
   it("approval exactly at 50 contributes zero", () => {
@@ -135,6 +144,7 @@ describe("computeIndependenceDesireDriftSnapshot", () => {
   it("clamps next value to [0, 100]", () => {
     const r = computeIndependenceDesireDriftSnapshot({
       previous: 99.9,
+      westminsterPolicy: "independence",
       policy: "independence",
       regionalApproval: 100, // popular separatist FM → +0.05 mandate
       nationalApproval: 0, // grievance against Westminster → +0.05
@@ -145,20 +155,21 @@ describe("computeIndependenceDesireDriftSnapshot", () => {
 
   it("max-positive run saturates near +0.17/turn", () => {
     // Anchored at the baseline (25) so mean reversion contributes zero. Max
-    // positive = a hugely popular separatist FM (regional mandate) + grievance
-    // against Westminster + high inflation.
+    // positive = a hugely popular separatist FM (regional mandate) + support
+    // from Westminster + high inflation.
     const r = computeIndependenceDesireDriftSnapshot({
       previous: 25,
+      westminsterPolicy: "independence",
       policy: "independence",
       regionalApproval: 100, // mandate × +1 → +0.05
-      nationalApproval: 0, // Westminster grievance → +0.05
+      nationalApproval: 100, // popular supportive Westminster → +0.025
       inflationPercent: 6,
     });
-    // 0.05 (policy) + 0.05 (regional) + 0.05 (national) + 0.02 (inflation) + 0 (mean) = 0.17
+    // 0.05 (FM policy) + 0.05 (regional) + 0.025 (Westminster policy) + 0.025 (national) + 0.02 (inflation) + 0 (mean) = 0.17
     expect(r.delta).toBeCloseTo(0.17, 5);
   });
 
-  it("max-negative run (both approvals at 100%) floors near -0.15/turn", () => {
+  it("max-negative run (both approvals at 100%) floors near -0.145/turn", () => {
     // Anchored at the baseline so mean reversion is zero and the four
     // negative drivers stack cleanly.
     const r = computeIndependenceDesireDriftSnapshot({
@@ -168,7 +179,7 @@ describe("computeIndependenceDesireDriftSnapshot", () => {
       nationalApproval: 100,
       inflationPercent: 1,
     });
-    // -0.04 (policy) + -0.05 (regional) + -0.05 (national) + -0.01 (inflation) + 0 (mean) = -0.15
-    expect(r.delta).toBeCloseTo(-0.15, 5);
+    // -0.04 (FM policy) + -0.05 (regional) + -0.02 (Westminster policy) + -0.025 (national) + -0.01 (inflation) + 0 (mean) = -0.15
+    expect(r.delta).toBeCloseTo(-0.145, 5);
   });
 });

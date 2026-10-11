@@ -1,12 +1,12 @@
 "use client";
 
+import { DevolutionDesireReadout } from "@/components/uk/DevolutionDesireReadout";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import type { CountryId } from "@/lib/constants/countries";
 import {
   DEVOLUTION_POLICY_CHANGE_AP_COST,
   DEVOLUTION_POLICY_CHANGE_COOLDOWN_TURNS,
-  MEAN_REVERSION_TARGET,
   HIGH_DESIRE_BONUS_BAND_SIZE,
   HIGH_DESIRE_BONUS_PER_BAND,
   HIGH_DESIRE_BONUS_THRESHOLD,
@@ -21,6 +21,7 @@ import { ReferendumPanel, type ReferendumPanelData } from "./devolution/Referend
 export interface DevolutionDriverSnapshot {
   drivers: {
     policy: number;
+    westminsterPolicy: number;
     regionalApproval: number;
     nationalApproval: number;
     inflation: number;
@@ -42,6 +43,7 @@ interface Props {
   currentValue: number;
   currentTrend: number;
   currentPolicy: DevolutionPolicy;
+  westminsterPolicy: DevolutionPolicy;
   policyChangedAtTurn: number | null;
   currentTurn: number;
   gubernatorialActions: number;
@@ -81,23 +83,11 @@ const POLICY_BLURBS: Record<DevolutionPolicy, string> = {
 const POLICY_NIR_REUNIFICATION_BLURB =
   "The future of this island is its reunification. Working with partners north and south to make it inevitable.";
 
-function fmt(n: number): string {
-  const r = Math.round(n * 1000) / 1000;
-  return r >= 0 ? `+${r.toFixed(3)}` : r.toFixed(3);
-}
-
-function trendArrow(trend: number): string {
-  if (trend > 0.005) return "▲";
-  if (trend < -0.005) return "▼";
-  return "─";
-}
-
 export function DevolutionTab(props: Props) {
   const router = useRouter();
   const [modalMode, setModalMode] = useState<"normal" | "admin" | null>(null);
   const modalOpen = modalMode !== null;
 
-  const metricLabel = getIndependenceMetricLabel(props.stateId);
   const cooldownReadyAt =
     props.policyChangedAtTurn != null
       ? props.policyChangedAtTurn + DEVOLUTION_POLICY_CHANGE_COOLDOWN_TURNS
@@ -108,73 +98,18 @@ export function DevolutionTab(props: Props) {
   const apShort = props.gubernatorialActions < DEVOLUTION_POLICY_CHANGE_AP_COST;
   const canChange = props.viewerCanManage && !onCooldown && !apShort;
 
-  const arrow = trendArrow(props.currentTrend);
-  const arrowColor =
-    props.currentTrend > 0.005
-      ? "text-emerald-500"
-      : props.currentTrend < -0.005
-        ? "text-rose-500"
-        : "text-muted";
-
   return (
     <div className="space-y-6">
-      {/* Metric card */}
-      <div className="rounded-xl border border-card-border bg-card p-6">
-        <h2 className="text-sm text-muted">{metricLabel}</h2>
-        <div className="mt-2 flex items-end gap-3">
-          {/* Show 2 decimals so the deliberately-slow drift (~0.05/turn) is visible —
-              a floored integer only ticks once every ~20 turns and reads as "stuck".
-              Bonus-threshold alignment still holds: the election-bonus logic floors
-              internally, so e.g. 59.70 is unambiguously below the 60 unlock. */}
-          <div className="text-5xl font-bold tabular-nums">{props.currentValue.toFixed(2)}</div>
-          <div className={`pb-2 text-3xl ${arrowColor}`}>{arrow}</div>
-          <div className={`pb-2 text-base font-semibold tabular-nums ${arrowColor}`}>
-            {fmt(props.currentTrend)}/turn
-          </div>
-        </div>
-        <div className="mt-1 text-xs text-muted">
-          0 = staunchly against · 50 = neutral · 100 = full separation/reunification
-        </div>
-        {/* Bar */}
-        <div className="mt-4 h-3 w-full overflow-hidden rounded-full bg-card-border">
-          <div
-            className="h-full bg-primary transition-all"
-            style={{ width: `${Math.max(0, Math.min(100, props.currentValue))}%` }}
-            aria-hidden
-          />
-        </div>
-      </div>
-
-      {/* Driver breakdown */}
-      <div className="rounded-xl border border-card-border bg-card p-6">
-        <h2 className="text-sm text-muted">Drift drivers (per turn)</h2>
-        <ul className="mt-3 space-y-2 text-sm">
-          <DriverRow
-            label={`Your "${getDevolutionPolicyLabel(props.stateId, props.currentPolicy)}" policy`}
-            value={props.driverPreview.drivers.policy}
-          />
-          <DriverRow
-            label={`Regional approval ${props.driverPreview.inputs.regionalApproval.toFixed(0)}%`}
-            value={props.driverPreview.drivers.regionalApproval}
-          />
-          <DriverRow
-            label={`Westminster approval ${props.driverPreview.inputs.nationalApproval.toFixed(0)}%`}
-            value={props.driverPreview.drivers.nationalApproval}
-          />
-          <DriverRow
-            label={`UK inflation ${props.driverPreview.inputs.inflationPercent.toFixed(1)}%`}
-            value={props.driverPreview.drivers.inflation}
-          />
-          <DriverRow
-            label={`Mean reversion toward ${MEAN_REVERSION_TARGET}`}
-            value={props.driverPreview.drivers.meanReversion}
-          />
-        </ul>
-        <div className="mt-4 flex justify-between border-t border-card-border pt-3 text-sm font-medium">
-          <span>Net drift next turn</span>
-          <span className={`tabular-nums ${arrowColor}`}>{fmt(props.driverPreview.delta)}</span>
-        </div>
-      </div>
+      <DevolutionDesireReadout
+        data={{
+          stateId: props.stateId,
+          previous: props.currentValue,
+          trend: props.currentTrend,
+          policy: props.currentPolicy,
+          westminsterPolicy: props.westminsterPolicy,
+          ...props.driverPreview,
+        }}
+      />
 
       {/* First Minister party election bonus */}
       <div className="rounded-xl border border-card-border bg-card p-6">
@@ -340,16 +275,5 @@ export function DevolutionTab(props: Props) {
         }}
       />
     </div>
-  );
-}
-
-function DriverRow({ label, value }: { label: string; value: number }) {
-  const color =
-    value > 0.0005 ? "text-emerald-500" : value < -0.0005 ? "text-rose-500" : "text-muted";
-  return (
-    <li className="flex justify-between">
-      <span className="text-foreground/90">{label}</span>
-      <span className={`tabular-nums ${color}`}>{fmt(value)}</span>
-    </li>
   );
 }

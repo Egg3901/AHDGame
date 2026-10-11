@@ -1,3 +1,4 @@
+import { getTranslations } from "next-intl/server";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getDb } from "@/lib/mongodb";
@@ -105,6 +106,7 @@ export default async function ReferendumDetailPage({
   const countryId = code.toUpperCase() as CountryId;
   if (!COUNTRY_CONFIGS[countryId]) notFound();
 
+  const t = await getTranslations("nav.devolution");
   const db = await getDb();
   const cycle = cycleParam != null ? Number(cycleParam) : undefined;
   const resolved = await resolveRegionReferendumByCycle(
@@ -420,6 +422,9 @@ export default async function ReferendumDetailPage({
           <div className="rounded-2xl border border-card-border bg-card p-6 shadow-card">
             {ref.status === "campaigning" ? (
               <>
+                {ref.kind !== "peace_agreement" && (
+                  <p className="text-xs text-muted">{t("campaignBaselineHelp")}</p>
+                )}
                 <TugOfWar
                   yesShare={ref.yesShare}
                   size="hero"

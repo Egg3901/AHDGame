@@ -353,10 +353,13 @@ const UK_REGION_IDS = [
 /** 1991-default overrides for `independenceDesire`. The static seed file
  *  carries 2019-era values; for the 1991 preset we substitute pre-devolution
  *  baselines (see docs/design/uk-devolution-policy.md). */
+// Sources: https://www.ipsos.com/en-uk/scottish-support-independencedevolution-1978-95
+// https://cain.ulster.ac.uk/othelem/research/nisas/rep5c2.htm
+// WAL remains a provisional calibration, not a measured 1991 poll.
 const INDEPENDENCE_DESIRE_1991_OVERRIDES: Record<string, number> = {
-  SCO: 25, // Pre-1997 referendum mood
-  WAL: 10, // 1979 referendum failed badly
-  NIR: 30, // Reunification desire at height of Troubles
+  SCO: 35, // MORI January 1991: 7% outside EC + 28% within EC
+  WAL: 10, // Provisional low independence support; distinct from devolution
+  NIR: 23, // NISA 1991: 22% overall, about 24% among UK/unity preferences
 };
 
 export async function seedUKStateMetrics(
