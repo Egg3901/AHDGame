@@ -22,6 +22,7 @@ import { getGameStatePreset } from "@/lib/db/collections/gameState";
 import { lowerChamberMajorityThreshold } from "@/lib/legislature/lowerChamberSeats";
 import {
   resetConfidenceGauge,
+  getUkConfidenceErosionScale,
   tickConfidenceForGov,
 } from "@/lib/uk/confidence/confidenceGaugeStore";
 import type { GovernmentApproval } from "@/lib/db/types/governmentApproval";
@@ -95,11 +96,21 @@ export async function updateGovernmentSeats(): Promise<void> {
  * observable.
  */
 export async function tickUkGovernmentGauges(db: Db, now: Date): Promise<void> {
+  const nhsGameState = await getGameState(db);
   const approvalDoc = await db
     .collection<GovernmentApproval>("governmentApprovals")
     .findOne({ _id: "UK" });
   if (approvalDoc) {
-    const gauge = await tickConfidenceForGov(db, { approval: approvalDoc.approvalRating, now });
+    const erosionScale = getUkConfidenceErosionScale(
+      approvalDoc.headOfGovernmentSinceTurn,
+      nhsGameState?.currentTurn,
+      nhsGameState?.preset
+    );
+    const gauge = await tickConfidenceForGov(db, {
+      approval: approvalDoc.approvalRating,
+      erosionScale,
+      now,
+    });
     if (gauge.dissolutionEnabled) {
       try {
         await triggerSnapElection(db, "UK", now, {
@@ -116,7 +127,6 @@ export async function tickUkGovernmentGauges(db: Db, now: Date): Promise<void> {
     }
   }
 
-  const nhsGameState = await getGameState(db);
   const nhsCurrentTurn = nhsGameState?.currentTurn ?? 1;
   const nhsStartingYear = nhsGameState?.startingYear ?? STARTING_YEAR;
   const nhsCurrentYear =
