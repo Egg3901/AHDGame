@@ -1,6 +1,6 @@
 import type { Db } from "mongodb";
 import { getUKGovernmentCollection } from "@/lib/db/collections/ukGovernment";
-export { resetConfidenceGauge } from "@/lib/uk/confidence/resetConfidenceGauge";
+export { resetConfidenceGauge } from "@/lib/countries/uk/confidence/resetConfidenceGauge";
 import { getCountryConfig, getHeadOfGovernmentOfficeKey } from "@/lib/constants/countries";
 import { expectationsRampTurns } from "@/lib/country/rules/approvalHoneymoon";
 import {

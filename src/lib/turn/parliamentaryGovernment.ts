@@ -74,7 +74,7 @@ import {
   type RuntimeCountryOffices,
 } from "@/lib/countries/runtimeOffices";
 import { captureOfficeTransition } from "@/lib/analytics/officeTransitionAnalytics";
-import { resetConfidenceGauge } from "@/lib/uk/confidence/resetConfidenceGauge";
+import { resetConfidenceGauge } from "@/lib/countries/uk/confidence/resetConfidenceGauge";
 
 export { resolveGoverningPartyIdsFromDocuments };
 

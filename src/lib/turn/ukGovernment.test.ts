@@ -22,7 +22,7 @@ vi.mock("@/lib/discordWebhooks", () => ({
 vi.mock("@/lib/cabinetTransition", () => ({
   clearCabinetOnTransition: vi.fn().mockResolvedValue(undefined),
 }));
-vi.mock("@/lib/uk/confidence/resetConfidenceGauge", () => ({
+vi.mock("@/lib/countries/uk/confidence/resetConfidenceGauge", () => ({
   resetConfidenceGauge: vi.fn().mockResolvedValue(undefined),
 }));
 
