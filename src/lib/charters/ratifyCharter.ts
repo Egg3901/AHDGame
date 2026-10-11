@@ -263,6 +263,11 @@ export async function ratifyCharter(
         },
       }
     );
+    // Match the ordinary party-join path: a party switch updates the current
+    // affiliation shown for existing seats without vacating those seats.
+    await db
+      .collection("electedOfficials")
+      .updateMany({ characterId: ch._id }, { $set: { party: partyIdStr, updatedAt: now } });
     if (!Number.isNaN(oldPartySeqId)) {
       const departing = departuresByOldParty.get(oldPartySeqId) ?? [];
       departing.push(ch._id);
