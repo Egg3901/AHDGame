@@ -7,6 +7,8 @@ import { listAdvertisingSuppliers } from "./suppliers";
 const buyerId = new ObjectId();
 const supplierId = new ObjectId();
 
+let capturedPipeline: unknown[] = [];
+
 function supplierDb(): Db {
   const group = {
     _id: supplierId,
@@ -27,7 +29,12 @@ function supplierDb(): Db {
   return {
     collection: (name: string) => {
       if (name === "corporateSectors") {
-        return { aggregate: () => ({ toArray: async () => [group] }) };
+        return {
+          aggregate: (pipeline: unknown[]) => {
+            capturedPipeline = pipeline;
+            return { toArray: async () => [group] };
+          },
+        };
       }
       if (name === "corporations") {
         return {
@@ -47,6 +54,15 @@ const buyer = { _id: buyerId } as unknown as Corporation;
 beforeEach(() => resetCorpFxRateCacheForTests());
 
 describe("listAdvertisingSuppliers", () => {
+  it("keeps sectors with no strategy field in the grouped strategies", async () => {
+    await listAdvertisingSuppliers(supplierDb(), buyer, 1991);
+    const group = capturedPipeline.find(
+      (stage): stage is { $group: Record<string, unknown> } =>
+        typeof stage === "object" && stage !== null && "$group" in stage
+    );
+    expect(group?.$group.strategies).toEqual({ $addToSet: { $ifNull: ["$strategyId", null] } });
+  });
+
   it("lists implicit newspaper suppliers and resolves legacy broadcast at the world year", async () => {
     const beforeTelevision = await listAdvertisingSuppliers(supplierDb(), buyer, 1949);
     expect(beforeTelevision.suppliers).toMatchObject([
