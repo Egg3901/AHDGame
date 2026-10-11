@@ -197,6 +197,7 @@ describe("sold-out plants in a short market (ticket 1393)", () => {
   };
   const base = {
     supplyRates,
+    marketShareFor: () => 1,
     mixWeightFor: (c: string) => mixWeights[c] ?? 0,
     balanceFor: (c: string) => balances[c],
     priceRatioFor: () => 1,
@@ -240,6 +241,20 @@ describe("sold-out plants in a short market (ticket 1393)", () => {
     expect(soldOutMarketHeadroomUnits({ ...base, soldByCommodity: null })).toBe(0);
   });
 
+  it("shares shortage headroom instead of promising all of it to every seller", () => {
+    const args = { ...base, soldByCommodity: { electronics: 1, building_materials: 1, steel: 1 } };
+    const full = soldOutMarketHeadroomUnits(args);
+    const shares = [0.6, 0.3, 0.1];
+    const allocated = shares.map((share) =>
+      soldOutMarketHeadroomUnits({ ...args, marketShareFor: () => share })
+    );
+    expect(allocated.reduce((sum, value) => sum + value, 0)).toBeCloseTo(full);
+    expect(allocated[0]).toBeCloseTo(full * 0.6);
+    expect(allocated[1]).toBeCloseTo(full * 0.3);
+    expect(soldOutMarketHeadroomUnits({ ...args, marketShareFor: undefined })).toBe(0);
+    expect(soldOutMarketHeadroomUnits({ ...args, marketShareFor: () => NaN })).toBe(0);
+  });
+
   it("keeps the glut throttle unchanged when headroom is absent", () => {
     expect(demandThrottleFactor(1_000, 200, 1_000, null, 0)).toBe(
       demandThrottleFactor(1_000, 200, 1_000)
@@ -255,6 +270,7 @@ describe("withLatentDemand", () => {
     const headroom = soldOutMarketHeadroomUnits({
       soldByCommodity: { food: 1 },
       supplyRates: { food: 1 },
+      marketShareFor: () => 1,
       mixWeightFor: () => 1,
       balanceFor: () => withLatentDemand(capped, 1.5),
       priceRatioFor: () => 2,

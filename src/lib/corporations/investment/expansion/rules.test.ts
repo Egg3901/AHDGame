@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { forecastSectorInvestment, type InvestmentForecastInput } from "../rules";
 import {
   expansionOperatingReserve,
+  expansionGapAfterExistingCapacity,
   recommendSectorExpansion,
   sellableExpansionUnits,
   stressExpansionForecast,
@@ -36,6 +37,34 @@ const input = {
   forecast,
 };
 describe("automatic expansion sizing", () => {
+  it("reserves unused plants and undelivered builds before quoting room", () => {
+    expect(
+      expansionGapAfterExistingCapacity(500, [
+        { capacity: 1000, produced: 600, queued: 100, weight: 0.5 },
+        { capacity: 200, produced: 200, queued: 100, weight: 1 },
+      ])
+    ).toBe(150);
+    expect(
+      expansionGapAfterExistingCapacity(200, [
+        { capacity: 1000, produced: 600, queued: 0, weight: 1 },
+      ])
+    ).toBe(0);
+    expect(
+      expansionGapAfterExistingCapacity(200, [
+        { capacity: NaN, produced: 600, queued: 0, weight: 1 },
+      ])
+    ).toBeNull();
+    expect(
+      expansionGapAfterExistingCapacity(200, [
+        { capacity: -100, produced: 0, queued: 0, weight: 1 },
+      ])
+    ).toBeNull();
+    expect(
+      expansionGapAfterExistingCapacity(200, [
+        { capacity: 100, produced: 200, queued: 0, weight: 1 },
+      ])
+    ).toBe(200);
+  });
   it("uses the weakest measured output instead of averaging a shortage with a glut", () => {
     expect(
       sellableExpansionUnits([
@@ -103,20 +132,29 @@ describe("automatic expansion sizing", () => {
       forecastSectorInvestment({ ...stressed, units }, [1])![0].availableCashAnchor
     ).toBeGreaterThan(0);
   });
-  it("accounts for output above nominal capacity when matching the buyer limit", () => {
+  it("does not convert productivity-adjusted build room a second time", () => {
     const result = recommendSectorExpansion({
       ...input,
       cashAnchor: 100000,
       measuredDemandUnits: 1000,
       forecast: { ...forecast, producedUnits: 2000, soldUnits: 2000 },
     });
-    expect(result.demandFacilities).toBe(5);
+    expect(result.demandFacilities).toBe(10);
   });
   it("deducts queued capacity and rounds down to whole facilities", () => {
     expect(
       recommendSectorExpansion({ ...input, measuredDemandUnits: 599, queuedUnits: 300 })
         .demandFacilities
     ).toBe(2);
+  });
+  it("reserves running costs per capacity unit even when productivity doubles output", () => {
+    const result = recommendSectorExpansion({
+      ...input,
+      cashAnchor: 970,
+      forecast: { ...forecast, producedUnits: 2000, soldUnits: 2000 },
+    });
+    // 770 available, 110 construction plus 20 running per facility, not 10.
+    expect(result.demandFacilities).toBe(5);
   });
   it.each([{ forecast: null }, { operatingReserveAnchor: null }, { measuredDemandUnits: null }])(
     "does not invent a recommendation from missing economic context: %j",

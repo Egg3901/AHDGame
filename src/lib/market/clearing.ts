@@ -1,3 +1,4 @@
+import { normalizedOfferShare } from "./rules/demandAllocation";
 import { capDeliveredMediaUnits, type MediaOwnershipMarket } from "@/lib/mediaRegulation/rules";
 import type { CommodityType } from "@/lib/constants/commodities";
 import { commodityMixWeight as mixWeight } from "@/lib/constants/commodities";
@@ -429,6 +430,8 @@ export function describeClearingBookBreach(d: ClearingBookDiagnostic): string {
 }
 
 export interface SectorClearingResult {
+  /** Normalized share of each scoped offer book, for allocating shortage headroom once. */
+  marketSupplyShareByCommodity?: Partial<Record<CommodityType, number>>;
   /** Weighted legFactor across outputs (unramped). */
   factor: number;
   /** Weighted sold fraction across outputs. */
@@ -705,6 +708,7 @@ export function computeClearingFactors(args: {
   //    these sellers is scaled by their share of total supply so the pass
   //    doesn't hand corporate sectors the whole market.
   const soldByCommodityBySector = new Map<CommodityType, Map<string, number>>();
+  const supplyShareByCommodity = new Map<CommodityType, Map<string, number>>();
   const deliveredByCommodityBySector = new Map<CommodityType, Map<string, number>>();
   for (const [commodity, sellers] of sellersByCommodity) {
     // Market partition: split the commodity's sellers into per-group books
@@ -750,6 +754,14 @@ export function computeClearingFactors(args: {
         }
       }
       const normalizedOfferedUnits = groupSellers.reduce((sum, s) => sum + s.units, 0);
+      const shares = supplyShareByCommodity.get(commodity) ?? new Map<string, number>();
+      for (const seller of groupSellers) {
+        shares.set(
+          seller.id,
+          normalizedOfferShare(seller.units, normalizedOfferedUnits, laggedSupply)
+        );
+      }
+      supplyShareByCommodity.set(commodity, shares);
       onBookDiagnostic?.({
         commodity,
         group: g || null,
@@ -943,6 +955,7 @@ export function computeClearingFactors(args: {
     // and any undercut are untouched, so quality can lift or shave the premium
     // but never let a seller charge below market.
     const soldByCommodity: Partial<Record<CommodityType, number>> = {};
+    const marketSupplyShareByCommodity: Partial<Record<CommodityType, number>> = {};
     const deliveredUnitsByCommodity: Partial<Record<CommodityType, number>> = {};
     const offerFactorByCommodity: Partial<Record<CommodityType, number>> = {};
     const sectorGroup = args.groupBySector?.get(s.sectorId);
@@ -1000,6 +1013,8 @@ export function computeClearingFactors(args: {
       quotedPostureSum += weight * (offerFactor / priceLeg - 1);
       soldSum += weight * sold;
       soldByCommodity[commodity] = sold;
+      marketSupplyShareByCommodity[commodity] =
+        supplyShareByCommodity.get(commodity)?.get(s.sectorId) ?? 0;
       if (args.recordDelivery)
         deliveredUnitsByCommodity[commodity] =
           deliveredByCommodityBySector.get(commodity)?.get(s.sectorId) ?? 0;
@@ -1015,6 +1030,7 @@ export function computeClearingFactors(args: {
       factor: factorSum / rateSum,
       soldFraction: soldSum / rateSum,
       soldByCommodity,
+      marketSupplyShareByCommodity,
       ...(args.recordDelivery ? { deliveredUnitsByCommodity } : {}),
       effectivePosture: s.inputCostIndex !== undefined ? quotedPostureSum / rateSum : posture,
       offerFactorByCommodity,

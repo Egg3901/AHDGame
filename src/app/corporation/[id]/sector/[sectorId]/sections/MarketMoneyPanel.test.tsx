@@ -1,9 +1,20 @@
 /**
  * @vitest-environment happy-dom
  */
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render as renderView, screen } from "@testing-library/react";
+import type { ReactElement } from "react";
+import { NextIntlClientProvider } from "next-intl";
+import messages from "../../../../../../../messages/en/corporations.json";
 import { describe, expect, it, vi } from "vitest";
 import MarketMoneyPanel from "./MarketMoneyPanel";
+
+function render(view: ReactElement) {
+  return renderView(
+    <NextIntlClientProvider locale="en" messages={messages}>
+      {view}
+    </NextIntlClientProvider>
+  );
+}
 
 vi.mock("@/contexts/CurrencyContext", () => ({
   useCurrency: () => ({
