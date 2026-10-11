@@ -1,6 +1,8 @@
 /** @vitest-environment happy-dom */
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { NextIntlClientProvider } from "next-intl";
+import messages from "../../../messages/en/layout.json";
 import { GuidedLegislationModal } from "./GuidedLegislationModal";
 
 const mocks = vi.hoisted(() => ({
@@ -131,17 +133,19 @@ function stubCatalog(response: unknown = catalog, legislationTypes: unknown[] = 
 
 function renderModal(onSuccess = vi.fn(), countryId: "US" | "JP" = "US", onClose = vi.fn()) {
   render(
-    <GuidedLegislationModal
-      countryId={countryId}
-      endpoint="/api/congress/bills"
-      chambers={[
-        { value: "house", label: "House" },
-        { value: "senate", label: "Senate" },
-      ]}
-      initialChamber="house"
-      onClose={onClose}
-      onSuccess={onSuccess}
-    />
+    <NextIntlClientProvider locale="en" messages={messages}>
+      <GuidedLegislationModal
+        countryId={countryId}
+        endpoint="/api/congress/bills"
+        chambers={[
+          { value: "house", label: "House" },
+          { value: "senate", label: "Senate" },
+        ]}
+        initialChamber="house"
+        onClose={onClose}
+        onSuccess={onSuccess}
+      />
+    </NextIntlClientProvider>
   );
   return { onClose, onSuccess };
 }
@@ -163,12 +167,135 @@ afterEach(() => {
 });
 
 describe("GuidedLegislationModal", () => {
+  it.each(["pending", "failure"])("allows custom bills while catalogs are %s", async (state) => {
+    vi.stubGlobal(
+      "fetch",
+      state === "pending"
+        ? vi.fn(() => new Promise(() => {}))
+        : vi.fn(async () => ({ ok: false, json: async () => ({ error: "Catalog unavailable" }) }))
+    );
+    mocks.postBill.mockResolvedValue({ response: { ok: true }, data: {}, cancelled: false });
+    renderModal();
+    expect(screen.getByRole("button", { name: "By Domain" }).hasAttribute("disabled")).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "Custom Bill" }));
+    fireEvent.change(screen.getByLabelText("Bill title"), {
+      target: { value: "Friendship Resolution" },
+    });
+    fireEvent.change(screen.getByLabelText("Message body"), {
+      target: { value: "We celebrate our friendship." },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Propose bill" }));
+    await waitFor(() => expect(mocks.postBill).toHaveBeenCalledOnce());
+    expect(mocks.postBill.mock.calls[0][0].body.provisions).toEqual([]);
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.queryByText("Loading the reviewed catalog...")).toBeNull();
+  });
+
+  it("keeps long custom messages separate from policy summaries across path changes", async () => {
+    stubCatalog();
+    renderModal();
+    await addProvision("Health and care", "Primary care access", "Community clinic expansion");
+    fireEvent.change(screen.getByLabelText("Summary"), {
+      target: { value: "Expand access to care." },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Add another provision" }));
+    fireEvent.click(screen.getByRole("button", { name: "Custom Bill" }));
+    expect((screen.getByLabelText("Message body") as HTMLTextAreaElement).value).toBe("");
+    const message = "A long message. ".repeat(300);
+    fireEvent.change(screen.getByLabelText("Message body"), { target: { value: message } });
+    fireEvent.click(screen.getByRole("button", { name: "Change starting point" }));
+    await addProvision("Health and care", "Primary care access", "Community clinic expansion");
+    expect((screen.getByLabelText("Summary") as HTMLTextAreaElement).value).toBe(
+      "Expand access to care."
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Add another provision" }));
+    fireEvent.click(screen.getByRole("button", { name: "Custom Bill" }));
+    expect((screen.getByLabelText("Message body") as HTMLTextAreaElement).value).toBe(message);
+  });
+
+  it("blocks blank and overlong messages and allows retrying after a failed proposal", async () => {
+    stubCatalog();
+    mocks.postBill
+      .mockResolvedValueOnce({
+        response: { ok: false },
+        data: { error: "Try again" },
+        cancelled: false,
+      })
+      .mockResolvedValueOnce({ response: { ok: true }, data: {}, cancelled: false });
+    const { onSuccess } = renderModal();
+    fireEvent.click(screen.getByRole("button", { name: "Custom Bill" }));
+    fireEvent.change(screen.getByLabelText("Bill title"), {
+      target: { value: "Friendship Resolution" },
+    });
+    const body = screen.getByLabelText("Message body");
+    const submit = screen.getByRole("button", { name: "Propose bill" });
+    fireEvent.change(body, { target: { value: "   " } });
+    expect(submit.hasAttribute("disabled")).toBe(true);
+    fireEvent.change(body, { target: { value: "a".repeat(10001) } });
+    expect(submit.hasAttribute("disabled")).toBe(true);
+    expect(mocks.postBill).not.toHaveBeenCalled();
+    fireEvent.change(body, { target: { value: "a".repeat(10000) } });
+    expect(submit.hasAttribute("disabled")).toBe(false);
+    fireEvent.click(submit);
+    await waitFor(() => expect(mocks.showToast).toHaveBeenCalledWith("Try again", "error"));
+    expect(onSuccess).not.toHaveBeenCalled();
+    expect((body as HTMLTextAreaElement).value).toHaveLength(10000);
+    fireEvent.click(submit);
+    await waitFor(() => expect(onSuccess).toHaveBeenCalledOnce());
+  });
+
+  it("proposes a flavour-only custom bill with a long message and no provisions", async () => {
+    stubCatalog();
+    mocks.postBill.mockResolvedValue({ response: { ok: true }, data: {}, cancelled: false });
+    const { onSuccess } = renderModal();
+    fireEvent.click(await screen.findByRole("button", { name: "Custom Bill" }));
+    expect(screen.getByRole("heading", { name: "Custom Bill" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Add another provision" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Propose bill" }).hasAttribute("disabled")).toBe(
+      true
+    );
+    const body = screen.getByLabelText("Message body");
+    expect(body.getAttribute("maxlength")).toBe("10000");
+    fireEvent.change(screen.getByLabelText("Bill title"), {
+      target: { value: "Declaration of Friendship" },
+    });
+    const message = "We celebrate our friendship. ".repeat(200);
+    fireEvent.change(body, { target: { value: message } });
+    fireEvent.click(screen.getByRole("button", { name: "Propose bill" }));
+    await waitFor(() => expect(mocks.postBill).toHaveBeenCalledOnce());
+    expect(mocks.postBill).toHaveBeenCalledWith({
+      url: "/api/congress/bills",
+      body: {
+        title: "Declaration of Friendship",
+        summary: message.trim(),
+        chamber: "house",
+        category: "custom",
+        provisions: [],
+      },
+    });
+    expect(onSuccess).toHaveBeenCalledOnce();
+  });
+
+  it("clears policy provisions when switching a draft to a custom bill", async () => {
+    stubCatalog();
+    renderModal();
+    await addProvision("Health and care", "Primary care access", "Community clinic expansion");
+    fireEvent.click(screen.getByRole("button", { name: "Add another provision" }));
+    fireEvent.click(screen.getByRole("button", { name: "Custom Bill" }));
+    expect(screen.queryByRole("button", { name: "Remove" })).toBeNull();
+    expect(screen.queryByText("Community clinic expansion")).toBeNull();
+    expect(screen.getByText(/0 national influence/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Change starting point" }));
+    expect(screen.getByLabelText("Policy domain")).toBeTruthy();
+    expect(screen.queryByLabelText("Message body")).toBeNull();
+  });
+
   it("populates metric names when the server response omits its metric definitions", async () => {
     const { metrics: _metrics, ...olderCatalogResponse } = catalog;
     stubCatalog(olderCatalogResponse);
     renderModal();
 
-    fireEvent.click(await screen.findByRole("button", { name: "By metric" }));
+    fireEvent.click(await screen.findByRole("button", { name: "By Metric" }));
 
     expect(screen.getByRole("option", { name: "Secondary completion" })).toBeTruthy();
     const coverageOption = screen.getByRole("option", { name: "Effective health coverage" });
@@ -194,7 +321,7 @@ describe("GuidedLegislationModal", () => {
     stubCatalog();
     renderModal();
 
-    fireEvent.click(await screen.findByRole("button", { name: "By metric" }));
+    fireEvent.click(await screen.findByRole("button", { name: "By Metric" }));
     const metricSelect = screen.getByLabelText("Metric to affect");
     expect(screen.getByRole("option", { name: "Effective health coverage" })).toBeTruthy();
     fireEvent.change(metricSelect, { target: { value: "16" } });

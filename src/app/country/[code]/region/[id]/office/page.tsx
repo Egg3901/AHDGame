@@ -1,6 +1,4 @@
 import { Suspense } from "react";
-import { mergeRegionMetrics } from "@/lib/macroMetrics/merge";
-import type { MacroMetricsDoc } from "@/lib/db/types/macroMetrics";
 import { notFound } from "next/navigation";
 import { type Metadata } from "next";
 import { getDb } from "@/lib/mongodb";
@@ -14,8 +12,6 @@ import {
 import type {
   State,
   StateBill,
-  StateMetrics,
-  FederalBudget,
   GovernorExecutiveOrder,
   GovernorAddress,
   GovernorEndorsement,
@@ -29,23 +25,12 @@ import type {
   Character,
   PoliticalParty,
 } from "@/lib/db/types";
-import { resolveGameYear } from "@/lib/era/era";
-import type { GovernmentApproval } from "@/lib/db/types/governmentApproval";
 import type { DevolutionPolicy } from "@/lib/db/types/governorOfficeState";
 import { highDesireElectionBonus, isUKDevolutionRegion } from "@/lib/constants/devolution";
 import { referendumRequestEligibility } from "@/lib/constants/referendum";
 import { getReferendumCollection } from "@/lib/db/collections/referendum";
 import type { ReferendumPanelData } from "./tabs/devolution/ReferendumPanel";
-import {
-  BASE_APPROVAL,
-  calculateStateApproval,
-  computeNationalAveragesFromMetrics,
-  loadElectorateGroups,
-  weightingFor,
-} from "@/lib/utils/governmentApproval";
-import { loadPoliticalApprovalBases } from "@/lib/politicalLegislation/politicalApprovalProvider";
-import { computeIndependenceDesireDriftSnapshot } from "@/lib/governorOffice/devolution/independenceDesireDrift";
-import { getNationalBudgetId } from "@/lib/bonds/sovereign";
+import { loadIndependenceDesireSnapshots } from "@/lib/governorOffice/devolution/queries";
 import { STATE_TERMINAL_STATUSES } from "@/lib/congress/billProposalLimits";
 import { getGameTime } from "@/lib/time/gameTime";
 import { isPrimaryEnded } from "@/lib/elections/phases";
@@ -409,11 +394,13 @@ export default async function GovernorOfficePage({ params }: Props) {
     currentValue: number;
     currentTrend: number;
     currentPolicy: DevolutionPolicy;
+    westminsterPolicy: DevolutionPolicy;
     policyChangedAtTurn: number | null;
     highDesireElectionBonus: number;
     driverPreview: {
       drivers: {
         policy: number;
+        westminsterPolicy: number;
         regionalApproval: number;
         nationalApproval: number;
         inflation: number;
@@ -430,61 +417,11 @@ export default async function GovernorOfficePage({ params }: Props) {
     referendum: ReferendumPanelData;
   } | null = null;
   if (countryId === COUNTRY_CONFIGS.UK.id && isUKDevolutionRegion(stateId)) {
-    const ukStateIds = await db.collection<State>("states").distinct("_id", { countryId: "UK" });
-    // SP5: UK regions live on macroMetrics (independenceDesire hoisted); merge
-    // back to the legacy doc shape so downstream reads are unchanged.
-    const ukMacroDocs = ukStateIds.length
-      ? await db
-          .collection<MacroMetricsDoc>("macroMetrics")
-          .find({ _id: { $in: ukStateIds } })
-          .toArray()
-      : [];
-    const ukMetrics = ukMacroDocs
-      .map((doc) => mergeRegionMetrics(doc))
-      .filter((m): m is StateMetrics => m !== null);
-    const thisMetric = ukMetrics.find((m) => m._id === stateId);
-    if (thisMetric) {
-      const ukApprovalDoc = await db
-        .collection<GovernmentApproval>("governmentApprovals")
-        .findOne({ _id: "UK" });
-      const nationalApproval = ukApprovalDoc?.approvalRating ?? 50;
-      const ukBudget = await db
-        .collection<FederalBudget>("federalBudget")
-        .findOne({ _id: getNationalBudgetId("UK") });
-      const inflationPercent = ukBudget?.economicFactors?.inflationRate ?? 2;
-      const nationalAverages = computeNationalAveragesFromMetrics(ukMetrics);
-      // Electorate-weighted, era-correct approval — the same value the drift
-      // ENGINE applies each turn (independenceDesireDrift). Previously this
-      // preview omitted both weighting and preset, so the displayed driver
-      // disagreed with the region hero and with the actual drift input.
-      const groupsByState = await loadElectorateGroups(db, { countryId: "UK", _id: stateId });
-      const preset = gameStateDoc?.preset ?? null;
-      // Live year for era-aware scoring; null while the flag is off (legacy path).
-      const year = gameStateDoc?.eraSystemEnabled ? resolveGameYear(gameStateDoc) : null;
-      // SP4: the UK is a playable-pipeline country — the drift driver preview
-      // reads the hybrid political base, matching the converted drift engine.
-      const ukBases = await loadPoliticalApprovalBases(db, "UK");
-      const regionalApproval = calculateStateApproval(
-        thisMetric,
-        nationalAverages,
-        [],
-        weightingFor(groupsByState, "UK", stateId),
-        preset,
-        year,
-        ukBases?.byRegion.get(stateId) ?? BASE_APPROVAL,
-        ukBases?.modifiersByRegion?.get(stateId)
-      );
-      const previous = thisMetric.governance?.independenceDesire?.value ?? 50;
-      const trend = thisMetric.governance?.independenceDesire?.trend ?? 0;
-      const policy: DevolutionPolicy =
-        (officeState?.devolutionPolicy as DevolutionPolicy | undefined) ?? "pro";
-      const snapshot = computeIndependenceDesireDriftSnapshot({
-        previous,
-        policy,
-        regionalApproval,
-        nationalApproval,
-        inflationPercent,
-      });
+    const snapshot = (await loadIndependenceDesireSnapshots(db)).find(
+      (row) => row.stateId === stateId
+    );
+    if (snapshot) {
+      const { previous, trend, policy, westminsterPolicy, inputs } = snapshot;
       // Current/most-recent referendum for this region + request eligibility.
       const activeRef = await getReferendumCollection(db).findOne({
         regionId: stateId,
@@ -526,6 +463,7 @@ export default async function GovernorOfficePage({ params }: Props) {
         currentValue: previous,
         currentTrend: trend,
         currentPolicy: policy,
+        westminsterPolicy,
         policyChangedAtTurn: officeState?.devolutionPolicyChangedAtTurn ?? null,
         highDesireElectionBonus:
           policy === "independence" && hasHolderParty ? highDesireElectionBonus(previous) : 0,
@@ -533,7 +471,7 @@ export default async function GovernorOfficePage({ params }: Props) {
           drivers: snapshot.drivers,
           delta: snapshot.delta,
           next: snapshot.next,
-          inputs: { regionalApproval, nationalApproval, inflationPercent },
+          inputs,
         },
         referendum,
       };

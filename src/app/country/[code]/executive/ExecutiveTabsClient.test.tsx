@@ -3,8 +3,14 @@
  */
 import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
+import { NextIntlClientProvider } from "next-intl";
+import navMessages from "../../../../../messages/en/nav.json";
 import { ToastProvider } from "@/contexts/ToastContext";
 import { ExecutiveTabsClient } from "./ExecutiveTabsClient";
+
+vi.mock("./components/WestminsterDevolutionTab", () => ({
+  WestminsterDevolutionTab: () => <div data-testid="westminster-devolution" />,
+}));
 
 let tabParam = "";
 vi.mock("next/navigation", () => ({
@@ -31,15 +37,17 @@ function renderTabs(props: {
   viewerIsLeader?: boolean;
 }) {
   return render(
-    <ToastProvider>
-      <ExecutiveTabsClient
-        countryId="UK"
-        overview={<div data-testid="ov">overview</div>}
-        viewerIsLeader={props.viewerIsLeader ?? false}
-        viewerIsAdmin={props.viewerIsAdmin ?? false}
-        isOnePartyState={props.isOnePartyState}
-      />
-    </ToastProvider>
+    <NextIntlClientProvider locale="en" messages={navMessages}>
+      <ToastProvider>
+        <ExecutiveTabsClient
+          countryId="UK"
+          overview={<div data-testid="ov">overview</div>}
+          viewerIsLeader={props.viewerIsLeader ?? false}
+          viewerIsAdmin={props.viewerIsAdmin ?? false}
+          isOnePartyState={props.isOnePartyState}
+        />
+      </ToastProvider>
+    </NextIntlClientProvider>
   );
 }
 
@@ -175,5 +183,33 @@ describe("ExecutiveTabsClient deep link cannot route around the nav", () => {
     tabParam = "tab=address";
     renderTabs({ viewerIsLeader: true });
     expect(screen.queryByTestId("ov")).toBeNull();
+  });
+});
+
+describe("UK executive devolution navigation", () => {
+  afterEach(() => {
+    tabParam = "";
+  });
+  it("lets an ordinary viewer track the public stances", () => {
+    tabParam = "tab=devolution";
+    renderTabs({});
+    expect(screen.getByTestId("westminster-devolution")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Devolution" })).toBeTruthy();
+  });
+  it("does not expose the UK panel on another country's executive page", () => {
+    tabParam = "tab=devolution";
+    render(
+      <NextIntlClientProvider locale="en" messages={navMessages}>
+        <ExecutiveTabsClient
+          countryId="DE"
+          overview={<div>German overview</div>}
+          viewerIsLeader
+          viewerIsAdmin={false}
+        />
+      </NextIntlClientProvider>
+    );
+    expect(screen.queryByTestId("westminster-devolution")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Devolution" })).toBeNull();
+    expect(screen.getByText("German overview")).toBeTruthy();
   });
 });

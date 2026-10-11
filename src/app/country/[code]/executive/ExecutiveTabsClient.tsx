@@ -1,5 +1,7 @@
 "use client";
 
+import { useTranslations } from "next-intl";
+import { WestminsterDevolutionTab } from "./components/WestminsterDevolutionTab";
 import { useState, type ReactNode } from "react";
 import { useSearchParams } from "next/navigation";
 import { WhiteHouseAddressTab } from "@/app/whitehouse/WhiteHouseAddressTab";
@@ -17,9 +19,18 @@ import { ExecutiveActivitySection } from "./components/ExecutiveActivitySection"
 import { ForeignAffairsTab } from "./components/ForeignAffairsTab";
 import { useConflictsEnabled } from "@/contexts/AuthDataContext";
 
-type TabKey = "overview" | "address" | "orders" | "endorsements" | "regime" | "foreign" | "admin";
+type TabKey =
+  | "devolution"
+  | "overview"
+  | "address"
+  | "orders"
+  | "endorsements"
+  | "regime"
+  | "foreign"
+  | "admin";
 
 const TAB_KEYS = [
+  "devolution",
   "overview",
   "address",
   "orders",
@@ -64,6 +75,7 @@ export function ExecutiveTabsClient({
   viewerIsAdmin,
   isOnePartyState,
 }: Props) {
+  const t = useTranslations("nav.devolution");
   const canSeePrivateTabs = viewerIsLeader || viewerIsAdmin;
   // Seeded from `?tab=`, so a link can open a specific tab. Follows the pattern
   // `CentralBankClient` and `CongressClient` already use. Initial state only: once
@@ -81,8 +93,11 @@ export function ExecutiveTabsClient({
     const openable =
       requested === "overview" ||
       requested === "endorsements" ||
+      (requested === "devolution" && countryId === COUNTRY_CONFIGS.UK.id) ||
       (requested === "admin" ? viewerIsAdmin : canSeePrivateTabs);
-    return openable ? requested : "overview";
+    return openable && (requested !== "devolution" || countryId === COUNTRY_CONFIGS.UK.id)
+      ? requested
+      : "overview";
   });
   const conflictsEnabled = useConflictsEnabled();
   const ordersLabel = getExecutiveOrderNamePlural(countryId);
@@ -113,6 +128,11 @@ export function ExecutiveTabsClient({
         {canSeePrivateTabs && (
           <TabButton active={active === "endorsements"} onClick={() => setActive("endorsements")}>
             Endorsements
+          </TabButton>
+        )}
+        {countryId === COUNTRY_CONFIGS.UK.id && (
+          <TabButton active={active === "devolution"} onClick={() => setActive("devolution")}>
+            {t("tab")}
           </TabButton>
         )}
         {canSeePrivateTabs && conflictsEnabled && (
@@ -147,6 +167,9 @@ export function ExecutiveTabsClient({
             }}
           />
         </div>
+      )}
+      {active === "devolution" && countryId === COUNTRY_CONFIGS.UK.id && (
+        <WestminsterDevolutionTab />
       )}
       {active === "address" && <WhiteHouseAddressTab countryId={countryId} />}
       {active === "orders" && <WhiteHouseOrdersTab countryId={countryId} />}
