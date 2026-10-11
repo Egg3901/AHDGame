@@ -162,7 +162,7 @@ export async function processIndependenceDesireDrift(
   const nationalAverages = computeNationalAveragesFromMetrics(ukMetrics);
 
   // National (Westminster) approval from the last snapshot. One-turn lag is
-  // acceptable for a metric that moves at ≤0.12/turn.
+  // acceptable for a slowly changing constitutional preference.
   const ukApprovalDoc = await db
     .collection<GovernmentApproval>("governmentApprovals")
     .findOne({ _id: "UK" });

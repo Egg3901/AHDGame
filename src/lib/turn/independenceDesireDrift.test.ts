@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { computeIndependenceDesireDriftSnapshot } from "@/lib/turn/independenceDesireDrift";
+import { computeIndependenceDesireDriftSnapshot } from "@/lib/governorOffice/devolution/rules";
 
 describe("computeIndependenceDesireDriftSnapshot", () => {
   // The shared `neutral` fixture sits at every driver's zero-contribution
@@ -42,7 +42,7 @@ describe("computeIndependenceDesireDriftSnapshot", () => {
       policy: "independence",
       regionalApproval: 60,
     });
-    expect(r.drivers.regionalApproval).toBeCloseTo(0.01, 5); // +10pts mandate × +1
+    expect(r.drivers.regionalApproval).toBeCloseTo(0.02, 5); // +10pts mandate × +1
   });
 
   it("regional approval is directional: a popular unionist FM lowers desire", () => {
@@ -51,7 +51,7 @@ describe("computeIndependenceDesireDriftSnapshot", () => {
       policy: "anti",
       regionalApproval: 60,
     });
-    expect(r.drivers.regionalApproval).toBeCloseTo(-0.01, 5); // +10pts mandate × −1
+    expect(r.drivers.regionalApproval).toBeCloseTo(-0.02, 5); // +10pts mandate × −1
   });
 
   it("regional approval inverts when the govt is rejected (unpopular separatist FM)", () => {
@@ -60,7 +60,7 @@ describe("computeIndependenceDesireDriftSnapshot", () => {
       policy: "independence",
       regionalApproval: 40,
     });
-    expect(r.drivers.regionalApproval).toBeCloseTo(-0.01, 5); // −10pts rejection × +1
+    expect(r.drivers.regionalApproval).toBeCloseTo(-0.02, 5); // −10pts rejection × +1
   });
 
   it("regional approval inverts: an unpopular unionist FM stokes backlash", () => {
@@ -69,7 +69,7 @@ describe("computeIndependenceDesireDriftSnapshot", () => {
       policy: "anti",
       regionalApproval: 40,
     });
-    expect(r.drivers.regionalApproval).toBeCloseTo(0.01, 5); // −10pts rejection × −1
+    expect(r.drivers.regionalApproval).toBeCloseTo(0.02, 5); // −10pts rejection × −1
   });
 
   it("Pro-Devolution is neutral: regional approval never moves desire", () => {
@@ -83,18 +83,18 @@ describe("computeIndependenceDesireDriftSnapshot", () => {
     }
   });
 
-  it("regional approval truncates fractional points (51.9 acts as 51)", () => {
+  it("regional approval responds to fractional points", () => {
     const r = computeIndependenceDesireDriftSnapshot({
       ...neutral,
       policy: "independence",
       regionalApproval: 51.9,
     });
-    expect(r.drivers.regionalApproval).toBeCloseTo(0.001, 5);
+    expect(r.drivers.regionalApproval).toBeCloseTo(0.0038, 6);
   });
 
   it("Westminster approval above 50 suppresses drift", () => {
     const r = computeIndependenceDesireDriftSnapshot({ ...neutral, nationalApproval: 70 });
-    expect(r.drivers.nationalApproval).toBeCloseTo(-0.02, 5);
+    expect(r.drivers.nationalApproval).toBeCloseTo(-0.04, 5);
   });
 
   it("Westminster approval at 100% gives -0.050/turn", () => {

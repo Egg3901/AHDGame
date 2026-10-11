@@ -46,95 +46,19 @@ export const DEVOLUTION_POLICY_CHANGE_COOLDOWN_TURNS = 72;
 
 // ─── Per-turn drift drivers ──────────────────────────────────────────────────
 
-/**
- * Drift contribution per turn from the FM's Devolution Policy choice.
- * Calibrated so a max-positive run (Pro-Indy FM + low regional approval +
- * low PM approval + high inflation) saturates from neutral ~50 to ~95 in
- * roughly two full FM terms (~8 game-years / 384 turns). Independence
- * is meant to be the work of years, not months.
- */
-export const DEVOLUTION_POLICY_DRIFT: Record<DevolutionPolicy, number> = {
-  anti: -0.04,
-  pro: 0,
-  independence: 0.05,
-};
-
-/**
- * Direction the seated FM's devolved-government approval pulls separation
- * desire, by their devolution policy. Approval is a *mandate* for the FM's
- * stance: a popular unionist FM pulls toward the union (−1), a popular
- * pro-independence FM toward separation (+1); Pro-Devolution is neutral on the
- * national question (0). Used by {@link regionalApprovalDrift}.
- */
-export const DEVOLUTION_POLICY_APPROVAL_DIRECTION: Record<DevolutionPolicy, number> = {
-  anti: -1,
-  pro: 0,
-  independence: 1,
-};
-
-/** Drift contribution per full percentage point of approval distance from 50.
- *  Below 50 → positive (grievance); above 50 → negative (suppression). */
-export const APPROVAL_DRIFT_PER_POINT = 0.001;
-
-/**
- * Linear drift from an approval rating. At 50 the contribution is zero;
- * below 50 it climbs at `APPROVAL_DRIFT_PER_POINT` per full percentage point;
- * above 50 it falls at the same rate. Fractional points are truncated toward
- * zero (48.1 acts as 49), so the driver only ticks up at integer crossings.
- * Unbounded — at 0%/100% the driver hits ±0.050/turn.
- */
-function linearApprovalDrift(approval: number): number {
-  const distance = Math.floor(Math.abs(approval - 50));
-  if (distance === 0) return 0; // avoid signed-zero (−0) when approval ≥ 50 but < 51
-  const sign = approval < 50 ? 1 : -1;
-  return sign * distance * APPROVAL_DRIFT_PER_POINT;
-}
-
-/**
- * Drift from the FM's devolved-government approval, DIRECTIONAL by their
- * devolution policy. The magnitude is the same distance-from-50 ramp as the
- * grievance model, but the SIGN comes from a mandate read × the policy's stance:
- *   - approval ≥ 50 → a mandate (+); below 50 → a rejection (−)
- *   - policy stance: anti −1, pro 0, independence +1
- * So a popular pro-independence FM raises desire, a popular unionist FM lowers
- * it, an unpopular separatist FM lowers it (failing the cause), and an unpopular
- * unionist FM raises it (backlash). Pro-Devolution never moves it.
- */
-export function regionalApprovalDrift(approval: number, policy: DevolutionPolicy): number {
-  const direction = DEVOLUTION_POLICY_APPROVAL_DIRECTION[policy];
-  if (direction === 0) return 0; // Pro-Devolution: neutral on the national question
-  const distance = Math.floor(Math.abs(approval - 50));
-  if (distance === 0) return 0; // avoid signed-zero at exactly 50
-  const mandateSign = approval >= 50 ? 1 : -1;
-  return mandateSign * distance * APPROVAL_DRIFT_PER_POINT * direction;
-}
-
-/** Drift from national (Westminster) approval — same shape as regional;
- *  an unpopular UK PM fuels regional discontent regardless of who's FM. */
-export function nationalApprovalDrift(approval: number): number {
-  return linearApprovalDrift(approval);
-}
-
-/** Drift from national inflation rate (annualised percent). High inflation
- *  read as Westminster economic mismanagement → push toward independence. */
-export function inflationDrift(inflationPercent: number): number {
-  if (inflationPercent > 5) return 0.02;
-  if (inflationPercent >= 2) return 0;
-  return -0.01;
-}
-
-/** Slow mean-reversion toward the long-run baseline. Pulls toward 25 (status-
- *  quo unionism / partition acceptance) rather than the mathematical midpoint
- *  of 50 — without sustained pro-indy drivers, sentiment defaults to the
- *  established settlement. Rate is intentionally small so the drift is only
- *  the floor pull, not a fast unwind. */
-export const MEAN_REVERSION_TARGET = 25;
-export const MEAN_REVERSION_RATE = 0.003;
-export function meanReversionDrift(current: number): number {
-  if (current > MEAN_REVERSION_TARGET) return -MEAN_REVERSION_RATE;
-  if (current < MEAN_REVERSION_TARGET) return MEAN_REVERSION_RATE;
-  return 0;
-}
+// Compatibility exports keep UI and existing callers on the portable rules.
+export {
+  DEVOLUTION_POLICY_DRIFT,
+  DEVOLUTION_POLICY_APPROVAL_DIRECTION,
+  APPROVAL_DRIFT_PER_POINT,
+  APPROVAL_DRIFT_CAP,
+  regionalApprovalDrift,
+  nationalApprovalDrift,
+  inflationDrift,
+  MEAN_REVERSION_TARGET,
+  MEAN_REVERSION_RATE,
+  meanReversionDrift,
+} from "@/lib/governorOffice/devolution/rules";
 
 // ─── First Minister high-desire election bonus ───────────────────────────────
 
