@@ -26,6 +26,8 @@ const EFF_TONE = { success: "up", warn: "warning", error: "down" } as const;
  * region assignment, and command detail. Read-only when the office has no defense seat.
  */
 export function CommandsBuilder({
+  canAct,
+  conflictsEnabled,
   commands,
   units,
   commanders,
@@ -35,6 +37,8 @@ export function CommandsBuilder({
   countryCode,
   positionId,
 }: {
+  canAct: boolean;
+  conflictsEnabled: boolean;
   commands: MilitaryCommand[];
   units: MilitaryUnit[];
   commanders: CommanderRef[];
@@ -62,7 +66,7 @@ export function CommandsBuilder({
     countryCode,
     positionId,
   });
-  const canWrite = !!positionId;
+  const canWrite = canAct && !!positionId;
   const [assignments, setAssignments] = useState<ConflictAssignment[]>(conflictAssignments);
   const [createOpen, setCreateOpen] = useState(false);
   const [assignOpen, setAssignOpen] = useState(false);
@@ -190,15 +194,20 @@ export function CommandsBuilder({
           build the force here — commands, the units in them, and each command&rsquo;s Commanding
           General. You do not send units to a war directly. A unit is wherever the general it is
           assigned to is posted, and it is that command&rsquo;s{" "}
-          <a
-            href={`/country/${countryCode}/general/commands`}
-            className="font-semibold text-foreground underline decoration-dotted underline-offset-2 hover:text-gov-soft"
-            title="The Commanding General's own page, where postings are made"
-          >
-            Commanding general
-          </a>{" "}
+          {conflictsEnabled ? (
+            <a
+              href={`/country/${countryCode}/general/commands`}
+              className="font-semibold text-foreground underline decoration-dotted underline-offset-2 hover:text-gov-soft"
+              title="The Commanding General's own page, where postings are made"
+            >
+              Commanding general
+            </a>
+          ) : (
+            <span className="font-semibold text-foreground">Commanding general</span>
+          )}{" "}
           who posts generals to a conflict and names one of them Theater Commander. Assign a unit to
           a general here; it arrives at the front when that general does.
+          {!conflictsEnabled && " Conflict postings are unavailable while Conflicts is disabled."}
         </div>
       </SectionCard>
 
@@ -226,6 +235,7 @@ export function CommandsBuilder({
               regionThreats={regionThreats}
               assignments={assignments}
               conflicts={conflicts}
+              conflictsEnabled={conflictsEnabled}
               countryCode={countryCode}
               onSetPosting={setPosting}
               onSetInCharge={setInCharge}

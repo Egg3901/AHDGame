@@ -132,6 +132,10 @@ describe("POST commission a general", () => {
   });
 
   it("403s a non-holder non-admin", async () => {
+    db.collectionMocks.gameState.findOne.mockResolvedValue({
+      conflictsEnabled: false,
+      currentTurn: 40,
+    });
     vi.mocked(requireAuth).mockResolvedValue({
       ok: true,
       user: { isAdmin: false, character: { _id: "nobody" } },
@@ -141,11 +145,15 @@ describe("POST commission a general", () => {
     expect(res.status).toBe(403);
   });
 
-  it("404s when conflicts is disabled", async () => {
-    db.collectionMocks.gameState.findOne.mockResolvedValue({ conflictsEnabled: false });
+  it("commissions a general when conflicts is disabled", async () => {
+    db.collectionMocks.gameState.findOne.mockResolvedValue({
+      conflictsEnabled: false,
+      currentTurn: 40,
+    });
     const { POST } = await import(ROUTE);
     const res = await POST(req({ characterId: RECRUIT }), call);
-    expect(res.status).toBe(404);
+    expect(res.status).toBe(200);
+    expect(db.collectionMocks.characterGenerals.updateOne).toHaveBeenCalled();
   });
 
   it("404s a well-formed id that matches no character", async () => {

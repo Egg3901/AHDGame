@@ -129,14 +129,14 @@ describe("resolveCabinetTabs", () => {
     expect(tabs.some((t) => t.id === "doctrine")).toBe(true);
   });
 
-  it("omits Commands + Doctrine tabs for a defense seat when Conflicts is disabled", () => {
+  it("keeps Commands but omits Doctrine for a defense seat when Conflicts is disabled", () => {
     const tabs = resolveCabinetTabs({
       countryId: "US",
       positionId: "secretary_of_defense",
       mechanics: { ...base, positionId: "secretary_of_defense" },
       conflictsEnabled: false,
     });
-    expect(tabs.some((t) => t.id === "commands")).toBe(false);
+    expect(tabs.some((t) => t.id === "commands")).toBe(true);
     expect(tabs.some((t) => t.id === "doctrine")).toBe(false);
   });
 

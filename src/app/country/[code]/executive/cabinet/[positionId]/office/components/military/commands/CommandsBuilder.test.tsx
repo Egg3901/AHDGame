@@ -60,6 +60,8 @@ function unit(): MilitaryUnit {
 }
 
 const base = {
+  canAct: true,
+  conflictsEnabled: true,
   units: [unit()],
   conflictAssignments: [],
   commanders: [{ id: "char_9", name: "Gen. Real", spec: "armor", level: 2, fit: 70 }],
@@ -82,10 +84,27 @@ describe("CommandsBuilder", () => {
     expect(screen.getByText(/Create command/i)).toBeTruthy();
   });
 
+  it("keeps command administration available without conflict posting", () => {
+    render(
+      <CommandsBuilder
+        commands={[command({ commanderIds: ["char_9"] })]}
+        {...base}
+        conflictsEnabled={false}
+      />
+    );
+    expect(screen.getByRole("button", { name: /create command/i })).toBeTruthy();
+    expect(screen.queryByLabelText("Post Gen. Real to a conflict")).toBeNull();
+    expect(
+      screen.getByText(/Conflict postings are unavailable while Conflicts is disabled/)
+    ).toBeTruthy();
+  });
+
   it("is read-only with no defense seat (no create control)", () => {
     render(
       <CommandsBuilder
         commands={[]}
+        canAct={true}
+        conflictsEnabled={true}
         units={base.units}
         commanders={[]}
         conflictAssignments={[]}
@@ -162,6 +181,8 @@ describe("CommandsBuilder", () => {
     render(
       <CommandsBuilder
         commands={[command({ commanderIds: ["char_9"], commandingGeneralId: null })]}
+        canAct={true}
+        conflictsEnabled={true}
         units={base.units}
         commanders={base.commanders}
         conflictAssignments={[]}
@@ -216,6 +237,8 @@ describe("CommandsBuilder", () => {
     render(
       <CommandsBuilder
         commands={[command({ commanderIds: ["char_9"] })]}
+        canAct={true}
+        conflictsEnabled={true}
         units={base.units}
         commanders={base.commanders}
         conflictAssignments={[]}
@@ -330,6 +353,8 @@ describe("posture trade-offs", () => {
     render(
       <CommandsBuilder
         commands={[command({ posture: "Rapid Response" })]}
+        canAct={false}
+        conflictsEnabled={true}
         units={base.units}
         commanders={[]}
         conflictAssignments={[]}
