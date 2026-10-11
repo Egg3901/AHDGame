@@ -7,6 +7,7 @@ import {
 
 const neutral = {
   policy: "pro" as const,
+  westminsterPolicy: "pro" as const,
   regionalApproval: 50,
   nationalApproval: 50,
   inflationPercent: 3,
@@ -31,10 +32,15 @@ describe("independence desire precision and trajectories", () => {
   });
 
   it("preserves fractional Westminster approval and sub-hundredth net movement", () => {
-    const result = step({ ...neutral, previous: 60, nationalApproval: 49.9 });
-    expect(result.drivers.nationalApproval).toBeCloseTo(0.0002, 6);
-    expect(result.next).toBe(59.9972);
-    expect(result.delta).toBe(-0.0028);
+    const result = step({
+      ...neutral,
+      previous: 60,
+      westminsterPolicy: "anti",
+      nationalApproval: 49.9,
+    });
+    expect(result.drivers.nationalApproval).toBeCloseTo(0.0001, 6);
+    expect(result.next).toBe(59.9771);
+    expect(result.delta).toBe(-0.0229);
   });
 
   it.each([0, 10, 25, 75, 90, 100])("caps approval contributions at %s approval", (approval) => {

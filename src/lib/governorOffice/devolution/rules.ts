@@ -9,7 +9,7 @@ import type { DevolutionPolicy } from "@/lib/db/types/governorOfficeState";
  * Drift contribution per turn from the FM's Devolution Policy choice.
  * Policy alone adds 2.4 points per game year before baseline recovery.
  * A popular separatist government at 70 approval adds about 4.2 points
- * annually with neutral Westminster approval and normal inflation.
+ * annually with a neutral pro-devolution Westminster stance and normal inflation.
  */
 export const DEVOLUTION_POLICY_DRIFT: Record<DevolutionPolicy, number> = {
   anti: -0.04,
@@ -53,10 +53,20 @@ export function regionalApprovalDrift(approval: number, policy: DevolutionPolicy
   return approvalMandate(approval) * direction;
 }
 
-/** Unpopular Westminster governments increase desire regardless of FM stance. */
-export function nationalApprovalDrift(approval: number): number {
-  if (approval === 50) return 0;
-  return -approvalMandate(approval);
+/** Westminster has half the local government's direct and approval influence. */
+export const WESTMINSTER_INFLUENCE = 0.5;
+export function westminsterPolicyDrift(policy: DevolutionPolicy): number {
+  return DEVOLUTION_POLICY_DRIFT[policy] * WESTMINSTER_INFLUENCE;
+}
+
+/** Approval endorses Westminster's chosen stance toward this particular region. */
+export function nationalApprovalDrift(approval: number, policy: DevolutionPolicy = "anti"): number {
+  return regionalApprovalDrift(approval, policy) * WESTMINSTER_INFLUENCE;
+}
+
+/** Missing fields on older worlds retain a unionist constitutional position. */
+export function resolveWestminsterPolicy(policy?: DevolutionPolicy): DevolutionPolicy {
+  return policy ?? "anti";
 }
 
 /** Drift from national inflation rate (annualised percent). High inflation
@@ -85,11 +95,14 @@ export function meanReversionDrift(current: number): number {
 export interface IndependenceDesireDriftPerRegion {
   stateId: string;
   policy: DevolutionPolicy;
+  westminsterPolicy: DevolutionPolicy;
+  trend: number;
   previous: number;
   next: number;
   delta: number;
   drivers: {
     policy: number;
+    westminsterPolicy: number;
     regionalApproval: number;
     nationalApproval: number;
     inflation: number;
@@ -124,6 +137,7 @@ function round6(x: number): number {
 export function computeIndependenceDesireDriftSnapshot(args: {
   previous: number;
   policy: DevolutionPolicy;
+  westminsterPolicy?: DevolutionPolicy;
   regionalApproval: number;
   nationalApproval: number;
   inflationPercent: number;
@@ -136,12 +150,17 @@ export function computeIndependenceDesireDriftSnapshot(args: {
   const drivers = {
     policy: DEVOLUTION_POLICY_DRIFT[policy],
     regionalApproval: regionalApprovalDrift(regionalApproval, policy),
-    nationalApproval: nationalApprovalDrift(nationalApproval),
+    westminsterPolicy: westminsterPolicyDrift(resolveWestminsterPolicy(args.westminsterPolicy)),
+    nationalApproval: nationalApprovalDrift(
+      nationalApproval,
+      resolveWestminsterPolicy(args.westminsterPolicy)
+    ),
     inflation: inflationDrift(inflationPercent),
     meanReversion: meanReversionDrift(previous),
   };
   const delta =
     drivers.policy +
+    drivers.westminsterPolicy +
     drivers.regionalApproval +
     drivers.nationalApproval +
     drivers.inflation +
@@ -149,4 +168,22 @@ export function computeIndependenceDesireDriftSnapshot(args: {
   const next = round6(clamp(previous + delta, 0, 100));
   // Trend is the movement actually stored, including clipping at either bound.
   return { drivers, delta: round6(next - previous), next };
+}
+
+export const DEVOLUTION_POLICY_CHANGE_AP_COST = 2;
+export const DEVOLUTION_POLICY_CHANGE_COOLDOWN_TURNS = 72;
+
+/** Shared policy-change eligibility, including independent regional cooldowns. */
+export function westminsterStanceChangeError(args: {
+  currentPolicy: DevolutionPolicy;
+  policy: DevolutionPolicy;
+  changedAtTurn?: number;
+  currentTurn: number;
+  actions: number;
+}): string | null {
+  if (args.currentPolicy === args.policy) return "Policy is already set to this value.";
+  if (args.actions < DEVOLUTION_POLICY_CHANGE_AP_COST) return "Insufficient office action points.";
+  const readyAt = (args.changedAtTurn ?? -Infinity) + DEVOLUTION_POLICY_CHANGE_COOLDOWN_TURNS;
+  if (args.currentTurn < readyAt) return `Policy change on cooldown until turn ${readyAt}.`;
+  return null;
 }

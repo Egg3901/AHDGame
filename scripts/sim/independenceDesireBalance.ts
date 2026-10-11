@@ -62,7 +62,13 @@ const legacy = (args: Inputs) => legacySnapshot(args).next;
 const scenarios: { name: string; inputs: Omit<Inputs, "previous">; reverseAt?: number }[] = [
   {
     name: "neutral",
-    inputs: { policy: "pro", regionalApproval: 50, nationalApproval: 50, inflationPercent: 3 },
+    inputs: {
+      policy: "pro",
+      westminsterPolicy: "pro",
+      regionalApproval: 50,
+      nationalApproval: 50,
+      inflationPercent: 3,
+    },
   },
   {
     name: "policy_only",
@@ -173,7 +179,7 @@ assert(gain("popular_fm") >= 3 && gain("popular_fm") <= 5);
 assert(gain("maximum") <= 8.2);
 assert(Math.abs(gain("neutral") + 0.144) < 1e-6);
 assert(gain("rejected_fm") < 0);
-assert(gain("popular_westminster") < 0);
+assert(Math.abs(gain("popular_westminster") - 0.096) < 1e-6);
 for (const previous of [24.999, 25.001]) {
   assert.equal(candidate({ ...scenarios[0].inputs, previous }).next, 25);
 }
@@ -209,8 +215,8 @@ const report = {
     "all trajectories finite and bounded",
     "popular FM annual gain 3-5",
     "maximum annual gain <=8.2",
-    "neutral recovery preserves 0.144 annually",
-    "rejected FM and popular Westminster can reverse growth",
+    "neutral pro-devolution Westminster preserves 0.144 annual recovery",
+    "rejected FM reverses growth; popular unionist Westminster slows a neutral-approval separatist FM to 0.096 annually",
     "baseline recovery stops at target",
   ],
   candidateAnnualGains: Object.fromEntries(

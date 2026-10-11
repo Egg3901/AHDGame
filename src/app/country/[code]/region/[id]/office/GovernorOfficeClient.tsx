@@ -69,6 +69,7 @@ interface Props {
     currentValue: number;
     currentTrend: number;
     currentPolicy: DevolutionPolicy;
+    westminsterPolicy: DevolutionPolicy;
     policyChangedAtTurn: number | null;
     highDesireElectionBonus: number;
     driverPreview: DevolutionDriverSnapshot;
@@ -237,6 +238,7 @@ export function GovernorOfficeClient(props: Props) {
               currentValue={props.devolution.currentValue}
               currentTrend={props.devolution.currentTrend}
               currentPolicy={props.devolution.currentPolicy}
+              westminsterPolicy={props.devolution.westminsterPolicy}
               policyChangedAtTurn={props.devolution.policyChangedAtTurn}
               currentTurn={props.currentTurn}
               gubernatorialActions={props.gubernatorialActions}

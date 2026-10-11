@@ -3,6 +3,7 @@ import type { ElectedOfficial, GovernorOfficeState } from "@/lib/db/types";
 import type { DevolutionPolicy } from "@/lib/db/types/governorOfficeState";
 import {
   COUNTRY_ORDER,
+  COUNTRY_CONFIGS,
   getRegionalExecutiveOfficeKey,
   type CountryId,
 } from "@/lib/constants/countries";
@@ -121,6 +122,15 @@ export async function seedOfficeStates(
           stateId: nationalStateId,
           characterId: null,
           characterName: "National Office",
+          ...(countryId === COUNTRY_CONFIGS.UK.id
+            ? {
+                westminsterStances: {
+                  SCO: { policy: "anti" as const },
+                  WAL: { policy: "anti" as const },
+                  NIR: { policy: "anti" as const },
+                },
+              }
+            : {}),
           gubernatorialActions: GUBERNATORIAL_ACTION_CAP,
           lastActionGrantedTurn: currentTurn,
           createdAt: now,

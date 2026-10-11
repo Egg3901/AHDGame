@@ -4,16 +4,18 @@ The referendum system models constitutional campaigns in the United Kingdom's de
 
 ## What moves desire
 
-Independence Desire in Scotland and Wales, and Reunification Desire in Northern Ireland, changes each turn with the First Minister's devolution policy, regional approval, Westminster approval and UK inflation.
+Independence Desire in Scotland and Wales, and Reunification Desire in Northern Ireland, changes each turn with the First Minister's devolution policy, regional approval, Westminster’s stance for that region, Westminster approval and UK inflation.
 
 - A pro-independence or reunification policy adds 0.05 points per turn. Anti-devolution subtracts 0.04; pro-devolution contributes zero.
 - Regional approval above 50% advances the First Minister's stance; approval below 50% weakens it. Pro-devolution remains neutral on separation.
-- Westminster approval below 50% raises desire; approval above 50% lowers it.
-- Each approval point from 50% contributes 0.002 points per turn, up to 0.05 in either direction.
+- Westminster chooses a separate stance for Scotland, Wales and Northern Ireland from the UK Executive Devolution tab. Its direct policy effect is half the First Minister’s: +0.025 for independence or reunification, -0.020 for anti-devolution, and zero for pro-devolution.
+- Westminster approval above 50% advances its chosen stance; approval below 50% weakens it. Pro-devolution is neutral. Its approval effect is half the regional effect: 0.001 per approval point from 50%, capped at 0.025 in either direction.
+- Changing a Westminster stance costs 2 national office AP, with a separate 72-turn cooldown for each region. The PM and FMs can see both governments’ stances and all drift drivers.
+- Each regional approval point from 50% contributes 0.002 points per turn, up to 0.05 in either direction.
 - Inflation above 5% adds 0.02 points per turn. Inflation below 2% subtracts 0.01; rates from 2% through 5% contribute zero.
 - Desire gradually returns toward 25 by up to 0.003 points per turn when other influences do not outweigh that pull.
 
-There are 48 turns per game year. For example, a pro-independence government at 70% regional approval, with Westminster approval at 50%, inflation at 3% and desire above 25, gains about 4.2 points per year. Referendum outcomes and Northern Ireland peace-process decisions can also change desire directly.
+There are 48 turns per game year. For example, a pro-independence government at 70% regional approval, with Westminster on pro-devolution, inflation at 3% and desire above 25, gains about 4.2 points per year. Referendum outcomes and Northern Ireland peace-process decisions can also change desire directly.
 
 ## Opening a referendum
 
