@@ -49,6 +49,19 @@ export function computeCapitalUsage(
 }
 
 /**
+ * Pair the bottleneck with the throttle it explains. When an applied throttle
+ * exists, its persisted input is authoritative; the current world projection
+ * may differ after regional delivery or internal supply.
+ */
+export function resolveThroughputBindingInput(
+  applied: number | null,
+  recorded: string | null | undefined,
+  projected: string | null
+): string | null {
+  return applied == null ? projected : (recorded ?? null);
+}
+
+/**
  * Build the supplies/demands rows and the price-realization, pricing,
  * capital, and throughput sections for a sector. Reads the market-system
  * mode (one gameConfig read) at the same point the inline code did.
@@ -402,18 +415,24 @@ export async function buildSectorCommoditySections(args: {
   }
 
   // Throughput coupling (marketSystemMode >= "clearing"): projected raw
-  // Leontief minimum from current lagged balances; `applied` is last turn's
-  // ramped factor (persisted by the corp phase).
+  // Leontief minimum from global lagged balances; `applied` and its binding
+  // input are the last turn's actual telemetry, which can include regional
+  // delivery and internal supply.
   let throughput:
     { applied: number | null; projected: number; bindingInput: string | null } | undefined;
   if (market.throughputEnabled) {
     const demandRatesMap: Partial<Record<CommodityType, number>> = {};
     for (const f of demandFlows) demandRatesMap[f.commodity] = f.rate;
     const t = computeThroughput(demandRatesMap, globalBalances);
+    const applied = typeof sector.throughputFactor === "number" ? sector.throughputFactor : null;
     throughput = {
-      applied: typeof sector.throughputFactor === "number" ? sector.throughputFactor : null,
+      applied,
       projected: Math.round(t.throughput * 1000) / 1000,
-      bindingInput: t.bindingInput,
+      bindingInput: resolveThroughputBindingInput(
+        applied,
+        sector.throughputBindingInput,
+        t.bindingInput
+      ),
     };
   }
 
