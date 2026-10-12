@@ -791,7 +791,19 @@ export function runClearingPrePass(input: ClearingPrePassInput): ClearingPrePass
           stateBySector.set(input.sectorId, stateId);
           corporationBySector.set(input.sectorId, corporationId);
         }
-        mediaOwnership = { shareCap, stateBySector, corporationBySector };
+        const demandByState = new Map<string, number>();
+        for (const stateId of new Set(stateBySector.values())) {
+          const demand = lookups.rawStateBalances?.get(stateId)?.get("advertising")?.demand;
+          if (typeof demand === "number" && Number.isFinite(demand) && demand > 0)
+            demandByState.set(stateId, demand);
+        }
+        mediaOwnership = {
+          shareCap,
+          stateBySector,
+          corporationBySector,
+          demandByState,
+          limitUnitsByOwner: new Map(),
+        };
       }
       for (const sector of clearingInputs) {
         const sectorId = sector.sectorId;
