@@ -694,6 +694,96 @@ function handleCastBallot(
   return { allowed: true, next, transition };
 }
 
+/**
+ * A player chair replaces the automatic Taylor motion with their own. Allowed
+ * only while the meeting is voting and before any player has balloted, so no
+ * governor votes on a motion that later changes under them. NPP ballots are
+ * direction preferences and stay valid. The delta must sit on the rate grid,
+ * point the motion's way and pass the same limits a committee move executes
+ * under (term cap, cooldown, delta clamps, FX commitment, command economy).
+ */
+function handleSetMotion(
+  state: JurisdictionState,
+  command: Extract<GovernanceCommand, { type: "set_motion" }>,
+  actor: GovernanceActor,
+  clock: GovernanceClock
+): GovernanceDecision {
+  const membership = checkMembership(state, command.countryId);
+  if (membership) return membership;
+  const committee = checkCommitteeBank(state);
+  if (committee) return committee;
+  const meeting = state.activeMeeting;
+  if (!meeting || meeting.status !== "voting") {
+    return refuse("no-meeting", "No meeting is currently taking votes.");
+  }
+  if (clock.turn > meeting.resolvesOnTurn || clock.now >= meeting.playerVoteDeadlineMs) {
+    return refuse("deadline-passed", "The vote window closed.");
+  }
+  const chair = chairSeat(state.board);
+  if (
+    !chair ||
+    chair.occupantType !== "player" ||
+    !actor.characterId ||
+    chair.characterId !== actor.characterId
+  ) {
+    return refuse("not-chair", "Only a player chair can table the motion.");
+  }
+  if (meeting.ballots.some((b) => !b.auto)) {
+    return refuse("ballots-cast", "Governors have already voted on this motion.");
+  }
+  let delta = 0;
+  if (command.motion !== "hold") {
+    const raw = command.delta;
+    if (typeof raw !== "number" || !Number.isFinite(raw)) {
+      return refuse("invalid-rate", "A raise or cut needs a rate change.");
+    }
+    delta = Math.round(raw / PRIME_RATE_STEP) * PRIME_RATE_STEP;
+    delta = Math.round(delta * 100) / 100;
+    if (Math.abs(delta - raw) > EPSILON) {
+      return refuse("off-grid", `Rate changes move in steps of ${PRIME_RATE_STEP} points.`);
+    }
+    if (command.motion === "hike" ? delta <= 0 : delta >= 0) {
+      return refuse("wrong-direction", "The rate change must match the motion.");
+    }
+    if (delta > maxHikeDeltaFor(state.inflationGap) + EPSILON) {
+      return refuse(
+        "delta-hike",
+        "That raise is larger than the committee may move in one meeting."
+      );
+    }
+    const execution = committeeRateExecutionRefusal(state, delta, clock.turn);
+    if (execution) {
+      return refuse(execution, "The committee cannot move the rate by that much right now.");
+    }
+  }
+  if (meeting.motion === command.motion && Math.abs(meeting.proposedDelta - delta) < EPSILON) {
+    return refuse("already-motion", "That is already the motion on the table.");
+  }
+  const next = cloneState(state);
+  const transition = blankTransition();
+  const updated: MeetingState = { ...meeting, motion: command.motion, proposedDelta: delta };
+  next.activeMeeting = updated;
+  transition.set.activeFomcMeeting = updated;
+  transition.events.push({
+    kind: "meeting.transitioned",
+    command: "monetary.meeting.set_motion",
+    turn: clock.turn,
+    outcome: "ok",
+    bankId: state.institutionId,
+    subjectType: "meeting",
+    subjectId: meeting.meetingId,
+    statusBefore: "voting",
+    statusAfter: "voting",
+    meta: {
+      previousMotion: meeting.motion,
+      previousDelta: meeting.proposedDelta,
+      motion: command.motion,
+      proposedDelta: delta,
+    },
+  });
+  return { allowed: true, next, transition };
+}
+
 function handleResolveMeeting(
   state: JurisdictionState,
   command: Extract<GovernanceCommand, { type: "resolve_meeting" }>,
@@ -948,6 +1038,8 @@ function handleCommand(
       return handleOpenMeeting(state, command, clock);
     case "cast_ballot":
       return handleCastBallot(state, command, actor, clock);
+    case "set_motion":
+      return handleSetMotion(state, command, actor, clock);
     case "resolve_meeting":
       return handleResolveMeeting(state, command, clock);
     case "set_rate":
