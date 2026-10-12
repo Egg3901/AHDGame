@@ -162,6 +162,7 @@ export default function BuildCapacityDialog({
     queuedUnits: 0,
     cashAnchor: q.corpCapitalAnchor,
     operatingReserveAnchor: plants.investment?.operatingReserveAnchor ?? null,
+    indebted: plants.investment?.indebted === true,
     constrained:
       resourceSizingUnavailable ||
       plants.mothballed ||

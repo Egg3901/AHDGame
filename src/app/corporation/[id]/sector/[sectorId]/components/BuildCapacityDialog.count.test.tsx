@@ -136,8 +136,19 @@ describe("BuildCapacityDialog count control", () => {
     const demand = screen.getByRole("button", { name: "Match demand" }) as HTMLButtonElement;
     expect(demand.disabled).toBe(true);
     expect(
-      screen.getByText(/Automatic sizing is unavailable without current operating figures/)
+      screen.getByText(/Automatic sizing needs a full turn of operating figures/)
     ).toBeTruthy();
+  });
+
+  it("explains that outstanding debt withholds automatic sizing", () => {
+    renderDialog(vi.fn(), {
+      ...plants,
+      investment: { ...plants.investment!, indebted: true },
+    });
+    expect(
+      (screen.getByRole("button", { name: "Match demand" }) as HTMLButtonElement).disabled
+    ).toBe(true);
+    expect(screen.getByText(/loans, bonds or unpaid arrears/)).toBeTruthy();
   });
 
   it("does not offer Match demand for a build that fails the lower-price scenario", () => {

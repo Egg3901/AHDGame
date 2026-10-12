@@ -1,4 +1,3 @@
-import { COUNTRY_ORDER } from "@/lib/constants/countries";
 import type { CommodityPrice } from "@/lib/db/types";
 import type { State } from "@/lib/db/types/state";
 import type { CommodityPriceHistory } from "@/lib/db/types/commodityPriceHistory";
@@ -162,7 +161,7 @@ export function priceCommodity(
   // the same book.
   const scarcityMultByCountry: Record<string, number> = {};
   if (scarcityDriftEnabled) {
-    for (const countryId of COUNTRY_ORDER) {
+    for (const countryId of reachableBooks.keys()) {
       const book = reachableBooks.get(countryId)?.get(commodity);
       if (!book || (book.supply <= 0 && book.demand <= 0)) continue;
       scarcityMultByCountry[countryId] = updateScarcityMultiplier(
@@ -256,7 +255,7 @@ export function priceCommodity(
   const reachablePrices: Record<string, number> = {};
   {
     const pegged = existing?.hardPeg ?? nudgeMap.get(commodity);
-    for (const countryId of COUNTRY_ORDER) {
+    for (const countryId of reachableBooks.keys()) {
       const book = reachableBooks.get(countryId)?.get(commodity);
       if (!book || (book.supply <= 0 && book.demand <= 0)) continue;
       reachablePrices[countryId] =
@@ -310,7 +309,7 @@ export function priceCommodity(
       // ledger crushed food to 0.58x base across a West that was itself
       // 2.7M short. Partitioned clearing with unpartitioned pricing meant
       // the iron curtain stopped the goods but not the glut. Countries
-      // outside COUNTRY_ORDER (no book) keep the world aggregate.
+      // without a reachable book keep the world aggregate.
       const countryId = stateToCountry.get(stateId);
       const nationalLeg =
         countryId && nationalPrices[countryId] != null ? nationalPrices[countryId] : globalMktPrice;

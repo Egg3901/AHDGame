@@ -76,19 +76,30 @@ describe("unlockTechNode (v2 dual cost + lane)", () => {
   const TURN = 100;
 
   it("spends rdScore + cash and commits the lane on first unlock", async () => {
-    const corp = makeCorp();
-    const { db, updateOne } = mockDb({ revenues: [24_000] }); // daily gross 24k, 15% => 3.6k
+    const corp = makeCorp({ liquidCapital: 100_000_000 });
+    const { db, updateOne } = mockDb({ revenues: [60_000_000] }); // daily gross 60M, 15% => 9M
     const nodeId = corpNodeId("2019", 1); // cost 17
 
     const res = await unlockTechNode(db, corp, nodeId, YEAR, TURN);
 
-    expect(res).toMatchObject({ ok: true, status: 200, nodeId, cashSpent: 3_600 });
+    expect(res).toMatchObject({ ok: true, status: 200, nodeId, cashSpent: 9_000_000 });
     const [filter, update] = updateOne.mock.calls[0];
     expect(filter.rdScore).toEqual({ $gte: 48 }); // 2019 decade cost
-    expect(filter.liquidCapital).toEqual({ $gte: 3_600 });
-    expect(update.$inc).toMatchObject({ rdScore: -48, liquidCapital: -3_600 });
+    expect(filter.liquidCapital).toEqual({ $gte: 9_000_000 });
+    expect(update.$inc).toMatchObject({ rdScore: -48, liquidCapital: -9_000_000 });
     expect(update.$push).toEqual({ unlockedTechNodeIds: nodeId });
     expect(update.$set["techDecadeLane.2019"]).toBe("generic");
+  });
+
+  it("charges the era cash floor when revenue is tiny or zero (ticket #1506)", async () => {
+    for (const revenues of [[24_000], []]) {
+      const corp = makeCorp();
+      const { db, updateOne } = mockDb({ revenues });
+      const res = await unlockTechNode(db, corp, corpNodeId("2019", 1), YEAR, TURN);
+      // No world doc => era scale 1.0, so the floor is the 2019 anchor of 5M.
+      expect(res).toMatchObject({ ok: true, cashSpent: 5_000_000 });
+      expect(updateOne.mock.calls[0][1].$inc).toMatchObject({ liquidCapital: -5_000_000 });
+    }
   });
 
   it("rejects on insufficient cash (402) without writing", async () => {

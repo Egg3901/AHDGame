@@ -241,3 +241,17 @@ describe("processSocialAxisDrift", () => {
     expect(h.patchFor("BR")?.socialAxisDriftTurn).toBe(200);
   });
 });
+
+it("includes an activated successor in national law drift", async () => {
+  const h = harness({
+    targetId: "SCO",
+    targetNationalStateId: "sco_national",
+    rows: [{ legislationTypeId: "social_law", social: 4 }],
+    types: [SOCIAL_TYPE],
+  });
+  h.db
+    .collection("countryGameStates")
+    .find.mockReturnValue(cursorOf([{ _id: "SCO", status: "active" }]));
+  await processSocialAxisDrift(h.db as unknown as Db, 10);
+  expect(h.patchFor("SCO")?.socialAxisPosition).toBeCloseTo(-1.7);
+});

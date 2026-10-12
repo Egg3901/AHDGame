@@ -1,8 +1,9 @@
 import type { BankLoan } from "@/lib/db/types/bank";
-import type { SectorBuildOrder } from "@/lib/db/types/corporation";
+import type { CorporateSector, SectorBuildOrder } from "@/lib/db/types/corporation";
 import { unownedPoolCredit } from "@/lib/market/unownedPoolDraw";
-import { deliveredFraction } from "@/lib/corporations/buildDelivery";
+import { deliveredFraction, queueUndeliveredCost } from "@/lib/corporations/buildDelivery";
 import { CAPACITY_BUILD_CANCEL_REFUND } from "@/lib/constants/capacityEconomy";
+import { seedPlantLedger } from "@/lib/corporations/plantLedger";
 import { allocateConstructionCancellation } from "./constructionFinance";
 import { oid, type BankingTransition, type TransitionProjection } from "./boundary";
 import type { ConstructionBuildClaim } from "./constructionBuild";
@@ -21,6 +22,14 @@ export interface ConstructionCancellationQuote {
   bookDelta: number;
   destination: "bank" | "insurance";
   poolCredit?: TransitionProjection;
+  rollback?: {
+    capitalStock: number;
+    operatingCapacityUnits: number;
+    capacityBookAnchor: number;
+    plantCount: number;
+    plantUnitRemainder: number;
+    constructionInProgressAnchor: number;
+  };
   completed?: boolean;
   cleanupCompleted?: boolean;
   aborted?: boolean;
@@ -34,6 +43,8 @@ export function quoteConstructionCancellation(input: {
   turn: number;
   destination: ConstructionCancellationQuote["destination"];
   now?: Date;
+  fullRefund?: boolean;
+  sector?: CorporateSector;
 }): ConstructionCancellationQuote | null {
   const { claim, loan, queue, turn } = input;
   const orderIndex = queue.findIndex(
@@ -59,8 +70,8 @@ export function quoteConstructionCancellation(input: {
     return null;
   const refundLocal =
     claim.collateralCostLocal *
-    (1 - deliveredFraction(queue[orderIndex], turn)) *
-    CAPACITY_BUILD_CANCEL_REFUND;
+    (input.fullRefund ? 1 : 1 - deliveredFraction(queue[orderIndex], turn)) *
+    (input.fullRefund ? 1 : CAPACITY_BUILD_CANCEL_REFUND);
   if (!Number.isFinite(refundLocal) || refundLocal <= 0) return null;
   const { repayPrincipal, ownerRefund } = allocateConstructionCancellation(
     refundLocal,
@@ -72,11 +83,40 @@ export function quoteConstructionCancellation(input: {
     ? unownedPoolCredit(
         pool.bucket,
         (pool.units ?? queue[orderIndex].unitsOrdered) *
-          (1 - deliveredFraction(queue[orderIndex], turn)),
+          (input.fullRefund ? 1 : 1 - deliveredFraction(queue[orderIndex], turn)),
         input.now ?? claim.effects!.quotedAt,
         pool.eraUnitScale
       )
     : null;
+  const sector = input.sector;
+  const processedTurn = Math.min(turn, sector?.operatingCapacityTurn ?? turn - 1);
+  const delivered =
+    input.fullRefund && sector ? deliveredFraction(queue[orderIndex], processedTurn) : 0;
+  const stock = Math.max(
+    0,
+    (sector?.capitalStock ?? 0) - queue[orderIndex].unitsOrdered * delivered
+  );
+  const rollback =
+    input.fullRefund && sector
+      ? {
+          capitalStock: stock,
+          operatingCapacityUnits: stock,
+          capacityBookAnchor: Math.max(
+            0,
+            (sector.capacityBookAnchor ?? 0) - queue[orderIndex].costPaidAnchor * delivered
+          ),
+          ...seedPlantLedger(
+            sector.sectorType,
+            stock,
+            sector.industryModel,
+            sector.mediaDiscriminator
+          ),
+          constructionInProgressAnchor: queueUndeliveredCost(
+            queue.filter((_, index) => index !== orderIndex),
+            processedTurn
+          ),
+        }
+      : undefined;
   return {
     ...(pipeline && pool
       ? {
@@ -88,6 +128,7 @@ export function quoteConstructionCancellation(input: {
           },
         }
       : {}),
+    ...(rollback ? { rollback } : {}),
     key: `construction:${claim.claimId}:cancel:${turn}`,
     turn,
     queueBefore: [...queue],
@@ -135,7 +176,7 @@ export function cancellationRefundTransition(
         filter: identity,
         update: {
           $inc: { "constructionFinancing.escrowLocal": quote.refundLocal },
-          $set: { buildQueue: quote.queueAfter },
+          $set: { buildQueue: quote.queueAfter, ...(quote.rollback ?? {}) },
         },
         note: "Remove only the quoted build in the same write as its cash refund",
       },
@@ -239,6 +280,73 @@ export function cancellationPayoutTransition(
       command: "construction.cancel.payout",
       subjectId: claim.loanId,
       meta: { principalRecovered: quote.repayPrincipal, ownerRefund: quote.ownerRefund },
+    },
+  };
+}
+
+/** Complete an older partial cancellation first, then quote only the conversion top-up. */
+export function quoteConversionCancellationSupplement(input: {
+  previous: ConstructionCancellationQuote;
+  claim: ConstructionBuildClaim;
+  loan: BankLoan;
+  sector: CorporateSector;
+  turn: number;
+  now: Date;
+}): ConstructionCancellationQuote | null {
+  const { previous, claim, loan, sector, turn, now } = input;
+  if (previous.rollback || previous.refundLocal >= claim.collateralCostLocal) return null;
+  const order = previous.queueBefore.find((order) => order.constructionClaimId === claim.claimId);
+  if (!order) return null;
+  const pool = claim.effects?.pool;
+  const creditUnits = (pool?.units ?? order.unitsOrdered) * deliveredFraction(order, previous.turn);
+  const adjustedClaim = {
+    ...claim,
+    status: "building" as const,
+    ...(claim.effects && pool
+      ? { effects: { ...claim.effects, pool: { ...pool, units: creditUnits } } }
+      : {}),
+  };
+  const full = quoteConstructionCancellation({
+    claim: adjustedClaim,
+    loan,
+    queue: [order],
+    sector: {
+      ...sector,
+      operatingCapacityTurn: Math.min(
+        sector.operatingCapacityTurn ?? previous.turn - 1,
+        previous.turn
+      ),
+    },
+    turn,
+    now,
+    destination: previous.destination,
+    fullRefund: true,
+  });
+  if (!full) return null;
+  const refundLocal = claim.collateralCostLocal - previous.refundLocal;
+  const { repayPrincipal, ownerRefund } = allocateConstructionCancellation(
+    refundLocal,
+    loan.outstanding
+  );
+  const nextOutstanding = loan.outstanding - repayPrincipal;
+  return {
+    ...full,
+    key: `${previous.key}:conversion`,
+    refundLocal,
+    repayPrincipal,
+    ownerRefund,
+    previousOutstanding: loan.outstanding,
+    nextOutstanding,
+    nextStatus: nextOutstanding === 0 ? "repaid" : loan.status,
+    bookDelta: ["current", "arrears"].includes(loan.status) ? -repayPrincipal : 0,
+    queueBefore: [...(sector.buildQueue ?? [])],
+    queueAfter: [...(sector.buildQueue ?? [])],
+    rollback: {
+      ...full.rollback!,
+      constructionInProgressAnchor: queueUndeliveredCost(
+        sector.buildQueue ?? [],
+        sector.operatingCapacityTurn ?? turn - 1
+      ),
     },
   };
 }

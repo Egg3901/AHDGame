@@ -187,7 +187,7 @@ describe("runClearingPrePass with clearing enabled", () => {
     expect(result.contractedByCorpCommodity).toBeUndefined();
   });
 
-  it("enforces the final delivered owner share across multiple grown outlets", () => {
+  it("caps an owner against the audience, not against its rivals' delivery", () => {
     const { corp, sector, lookups } = makeSectorWorld();
     Object.assign(sector, {
       stateId: "US-CA",
@@ -245,7 +245,13 @@ describe("runClearingPrePass with clearing enabled", () => {
     expect(dominantFill).toBeCloseTo(secondOwnedFill ?? 0);
     const ownerUnits = 200 * (dominantFill ?? 0) + 100 * (secondOwnedFill ?? 0);
     const rivalUnits = 100 * (competitorFill ?? 0);
-    expect(ownerUnits / (ownerUnits + rivalUnits)).toBeCloseTo(0.65);
+    // The old rule held the owner to 65% of what everyone delivered, so a thin
+    // rival capped it. Measured against the audience, it may out-deliver that.
+    expect(ownerUnits / (ownerUnits + rivalUnits)).toBeGreaterThan(0.65);
+    expect(dominantFill).toBeLessThan(1);
+    expect(
+      market.clearingBySectorId?.get("sector1")?.regulationBlockedFraction ?? 0
+    ).toBeGreaterThan(0);
     expect(competitorFill).toBeCloseTo(1);
   });
   it("scopes the pre-repeal Fairness Doctrine to US broadcast outlets", () => {

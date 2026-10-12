@@ -1,3 +1,4 @@
+import { getRegisteredCountryIds } from "@/lib/country/registeredCountries";
 import type { Db } from "mongodb";
 import type {
   Character,
@@ -18,7 +19,9 @@ type OrgRow = { _id: { countryId: string; partyId: string }; organization: numbe
  * Used by the parties page trend chart.
  */
 export async function snapshotPartyHistory(db: Db, turn: number): Promise<number> {
-  const activeCountries = COUNTRY_ORDER.filter((id) => COUNTRY_CONFIGS[id].status === "active");
+  const activeCountries = (await getRegisteredCountryIds(db)).filter(
+    (id) => COUNTRY_CONFIGS[id].status === "active" || !COUNTRY_ORDER.includes(id)
+  );
   if (activeCountries.length === 0) return 0;
 
   const countryFilter = { countryId: { $in: activeCountries } };

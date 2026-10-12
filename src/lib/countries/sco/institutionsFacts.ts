@@ -179,8 +179,8 @@ export const SCO_MILITARY_BRANCHES: Branch[] = [];
  * all five the same way compiles here and fails at every forwarder.
  */
 export const SCO_CABINET_SEAT_IDS = {
-  energy: undefined,
-  infrastructure: undefined,
+  energy: "netZeroSecretary",
+  infrastructure: "transportSecretary",
   defense: null,
   foreignAffairs: null,
   tradeMinister: null,

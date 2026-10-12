@@ -13,7 +13,6 @@ import {
   getCountryConfig,
   hasConfidenceVoteMechanism,
   COUNTRY_CONFIGS,
-  COUNTRY_ORDER,
 } from "@/lib/constants/countries";
 import { getRegisteredCountryIds } from "@/lib/country/registeredCountries";
 import type { Election } from "@/lib/db/types";
@@ -132,6 +131,8 @@ const SEAT_UPDATE_OVERRIDES: Partial<Record<CountryId, () => Promise<void>>> = {
 
 export interface CountryBillPhaseEntry {
   phaseName:
+    | "scoBillLifecycle"
+    | "walBillLifecycle"
     | "ukBillLifecycle"
     | "jpBillLifecycle"
     | "ieBillLifecycle"
@@ -163,6 +164,16 @@ export interface CountryBillPhaseEntry {
 }
 
 export const COUNTRY_BILL_PHASES: Partial<Record<CountryId, CountryBillPhaseEntry>> = {
+  SCO: {
+    phaseName: "scoBillLifecycle",
+    fn: (now, context) => runBillLifecycleForConfiguredCountry("SCO", now, context),
+    emptyResult: { enacted: 0, failed: 0 },
+  },
+  WAL: {
+    phaseName: "walBillLifecycle",
+    fn: (now, context) => runBillLifecycleForConfiguredCountry("WAL", now, context),
+    emptyResult: { enacted: 0, failed: 0 },
+  },
   UK: {
     phaseName: "ukBillLifecycle",
     fn: (now, context) => runBillLifecycleForCountry(UK_NATIONAL_CONFIG, now, context),
@@ -467,8 +478,8 @@ export async function runPostElectionGovernmentPhases(
     // COUNTRY_ORDER: a country dissolved by a merge stays compiled into the
     // static list forever, and this loop must stop visiting it.
     const registered = new Set(await getRegisteredCountryIds(db));
-    const countryIds = COUNTRY_ORDER.filter(
-      (id) => registered.has(id) && COUNTRY_CONFIGS[id].legislature.lowerChamber.key
+    const countryIds = [...registered].filter(
+      (id) => COUNTRY_CONFIGS[id].legislature.lowerChamber.key
     );
     const parliamentary = new Set(getParliamentaryCountryIds(preset));
 

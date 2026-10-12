@@ -27,13 +27,60 @@
  *       _id), not just have its `countryId` flipped, or callers that rebuild the
  *       key from the new owner orphan it.
  */
+import { ENERGY_POSITION_BY_COUNTRY } from "@/lib/constants/cabinetEnergy";
+import { INFRA_POSITION_BY_COUNTRY } from "@/lib/constants/cabinetInfra";
+import type { CountryId } from "@/lib/constants/countries";
 import type { Db } from "mongodb";
 
 export type RegionKey =
-  "stateIdField" | "stateField" | "idIsState" | "homeStateField" | "compositeCountryState";
+  | "regionIdField"
+  | "stateIdField"
+  | "stateField"
+  | "idIsState"
+  | "homeStateField"
+  | "compositeCountryState";
+
+export type RegionCollectionName =
+  | "statePartyOrg"
+  | "seats"
+  | "characterStateOrg"
+  | "characters"
+  | "corporateSectors"
+  | "demographicDefaults"
+  | "electionVoteTallies"
+  | "elections"
+  | "enactedLaws"
+  | "energyPlants"
+  | "executiveEndorsements"
+  | "extractionContracts"
+  | "governorAddresses"
+  | "governorEndorsements"
+  | "governorExecutiveOrders"
+  | "governorLegislationQueue"
+  | "governorOfficeState"
+  | "infraProjects"
+  | "macroMetrics"
+  | "nppInfluenceAttempts"
+  | "politicalMetrics"
+  | "prospectingSurveys"
+  | "recruitmentSlates"
+  | "regionDemographics"
+  | "regionalBudgets"
+  | "slateCandidates"
+  | "stateApprovalHistory"
+  | "stateBills"
+  | "stateBudgets"
+  | "stateDemographicTurnout"
+  | "stateDemographics"
+  | "statePartyCandidates"
+  | "statePolicies"
+  | "stateRegistrationPool"
+  | "stateResourceCapacity"
+  | "subsidies"
+  | "unownedSectors";
 
 export interface RegionScope {
-  collection: string;
+  collection: RegionCollectionName;
   key: RegionKey;
   /**
    * Fields DROPPED as the region crosses the border, because they were derived
@@ -45,6 +92,9 @@ export interface RegionScope {
 }
 
 export const REGION_SCOPED_COLLECTIONS: RegionScope[] = [
+  { collection: "energyPlants", key: "regionIdField" },
+  { collection: "infraProjects", key: "regionIdField" },
+  { collection: "extractionContracts", key: "stateIdField" },
   // ── stateId-field rows ──────────────────────────────────────────────────────
   // NB: the region's party collections (statePartyOrg, partyBudget, the PS/org
   // ledgers, billWhips, statePartyElections) are NOT here — they are DELETED by
@@ -127,6 +177,8 @@ export const REGION_SCOPED_COLLECTIONS: RegionScope[] = [
 
 function filterFor(scope: RegionScope, regionId: string): Record<string, string> {
   switch (scope.key) {
+    case "regionIdField":
+      return { regionId };
     case "stateIdField":
       return { stateId: regionId };
     case "stateField":
@@ -207,7 +259,15 @@ export async function rescopeRegionToCountry(
       continue;
     }
     const update: Record<string, unknown> = {
-      $set: { countryId: toCountryId, updatedAt: now },
+      $set: {
+        countryId: toCountryId,
+        updatedAt: now,
+        ...(scope.collection === "energyPlants"
+          ? { positionId: ENERGY_POSITION_BY_COUNTRY[toCountryId as CountryId] }
+          : scope.collection === "infraProjects"
+            ? { positionId: INFRA_POSITION_BY_COUNTRY[toCountryId as CountryId] }
+            : {}),
+      },
     };
     if (scope.unsetOnRescope?.length) {
       update.$unset = Object.fromEntries(scope.unsetOnRescope.map((field) => [field, ""]));

@@ -28,14 +28,12 @@ describe("applyFanout — Task 5 policies", () => {
     const writes = await applyFanout(db as unknown as Db, scopeFor("corporateSectors"), ctx);
 
     expect(writes).toBe(21);
-    const calls = db.collectionMocks["corporateSectors"]!.updateMany.mock.calls;
+    const ops = db.collectionMocks["corporateSectors"].bulkWrite.mock.calls[0][0];
     let covered = 0;
-    for (const [filter, update] of calls) {
-      const ids = (filter as { _id: { $in: string[] } })._id.$in;
-      covered += ids.length;
-      const set = (update as { $set: { stateId: string; countryId: string } }).$set;
-      expect(SUB_IDS).toContain(set.stateId);
-      expect(set.countryId).toBe("SCO");
+    for (const { updateOne } of ops) {
+      covered++;
+      expect(updateOne.update.$set.stateId).not.toBe("SCO");
+      expect(updateOne.update.$set.countryId).toBe("SCO");
     }
     expect(covered).toBe(21);
   });

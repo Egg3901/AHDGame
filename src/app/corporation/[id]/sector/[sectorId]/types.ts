@@ -545,6 +545,16 @@ export interface ForSaleInfo {
   conflict: boolean;
   /** Buyer has enough liquid capital */
   hasFunds: boolean;
+  /** First reason the purchase is unavailable; null when eligible */
+  blockReason?:
+    | "invalid_price"
+    | "insufficient_funds"
+    | "merge_blocked"
+    | "construction"
+    | "not_ceo"
+    | "actions_paused"
+    | "state_controlled"
+    | null;
 }
 
 // ─── Plants tier (marketSystemMode >= "plants") ──────────────────────────────
@@ -622,6 +632,8 @@ export interface PlantsData {
   measuredDemandGapUnits?: number | null;
   /** This sector's own demand throttle bound last turn, so its room to build reads 0. */
   roomHeldByOwnIdle?: boolean;
+  /** Unsold-capacity retirement status. Absent when the plant is not glutted. */
+  idleRetirement?: { turns: number; graceTurns: number; retiredUnits: number };
   /** Unowned pool over owned capacity plus that pool, percent. */
   unclaimedSharePct?: number;
   /** Strategy suggestion when the valuable output is oversupplied. Absent on older payloads. */
@@ -633,6 +645,8 @@ export interface PlantsData {
     overheadDailyAnchor: number;
     /** One turn of company running costs; null when liabilities or current costs are unknown. */
     operatingReserveAnchor?: number | null;
+    /** Loans, bonds or arrears outstanding, so automatic sizing is withheld. */
+    indebted?: boolean;
     taxRatePercent: number;
     freightNetCostDailyAnchor?: number;
     inventoryRevenueDailyAnchor?: number;

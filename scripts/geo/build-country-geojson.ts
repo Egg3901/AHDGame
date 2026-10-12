@@ -1,3 +1,9 @@
+import {
+  SUCCESSOR_REGION_COUNCILS,
+  SUCCESSOR_COUNCIL_SOURCE,
+} from "../../src/lib/countries/ukSuccessorRegions";
+import { scoRegions } from "../../src/lib/seeds/sco/scoRegions";
+import { walRegions } from "../../src/lib/seeds/wal/walRegions";
 /**
  * Builds simplified macro-region GeoJSON files for IE, CN (+ Scotland/Wales) and
  * writes them to /public/. Each output file is a FeatureCollection where each
@@ -15,7 +21,7 @@
  *
  * Adjacent polygons within a macro-region are dissolved via topojson so the
  * resulting borders are clean (no internal seams). Run with:
- *   npx tsx scripts/build-country-geojson.ts
+ *   npx tsx scripts/geo/build-country-geojson.ts
  */
 
 import { writeFileSync } from "node:fs";
@@ -25,18 +31,12 @@ import { merge as topoMerge } from "topojson-client";
 import type { Feature, FeatureCollection, MultiPolygon, Polygon } from "geojson";
 import type { Topology, GeometryCollection } from "topojson-specification";
 
-const PUBLIC_DIR = resolve(__dirname, "..", "public");
+const PUBLIC_DIR = resolve(__dirname, "..", "..", "public");
 
 const NE_NUTS3_URL =
   "https://gisco-services.ec.europa.eu/distribution/v2/nuts/geojson/NUTS_RG_10M_2024_4326_LEVL_3.geojson";
 const CN_PROVINCES_URL =
   "https://raw.githubusercontent.com/codeforgermany/click_that_hood/main/public/data/china.geojson";
-// Pre-Brexit Eurostat NUTS3 (2016) still carries UK regions — Scotland (UKM*)
-// and Wales (UKL*) — which the 2024 file dropped. Used to build the seceded
-// SCO/WAL sub-region maps by dissolving NUTS3 into the seed macro-regions.
-const UK_NUTS3_2016_URL =
-  "https://gisco-services.ec.europa.eu/distribution/v2/nuts/geojson/NUTS_RG_10M_2016_4326_LEVL_3.geojson";
-
 async function fetchJson<T>(url: string): Promise<T> {
   const r = await fetch(url);
   if (!r.ok) throw new Error(`Fetch ${url}: ${r.status}`);
@@ -120,7 +120,8 @@ const CN_REGION_NAMES: Record<string, string> = {
  */
 function mergeByRegionId(
   features: Feature[],
-  nameByRegion: Record<string, string>
+  nameByRegion: Record<string, string>,
+  quantization = 1e3
 ): FeatureCollection {
   // Group features by region ID; each group becomes its own object in the
   // topology so topoMerge dissolves only within the group.
@@ -142,7 +143,7 @@ function mergeByRegionId(
   // detailed coastlines dominate the byte count.
   const topo = topology(
     objects as unknown as Record<string, GeometryCollection | FeatureCollection>,
-    1e3
+    quantization
   ) as Topology;
 
   const out: Feature[] = [];
@@ -249,113 +250,78 @@ async function buildChina1991(): Promise<void> {
   console.log(`✓ CN-1991: ${fc.features.length} regions → public/cn-regions-1991.json`);
 }
 
-/**
- * Scottish NUTS3 (2016, UKM*) → the 7 SCO seed macro-regions
- * (src/lib/seeds/sco/scoRegions.ts). Grouped by geography to match each seed
- * region's intent (Greater Glasgow, Edinburgh & the Lothians, …).
- */
-const SCO_NUTS3_TO_REGION: Record<string, string> = {
-  UKM82: "GLA",
-  UKM81: "GLA",
-  UKM83: "GLA", // Greater Glasgow + Dunbartonshire/Renfrewshire
-  UKM75: "LOT",
-  UKM73: "LOT",
-  UKM78: "LOT", // Edinburgh + East/Mid/West Lothian
-  UKM61: "HIG",
-  UKM62: "HIG",
-  UKM63: "HIG",
-  UKM64: "HIG",
-  UKM65: "HIG",
-  UKM66: "HIG", // Highlands & Islands
-  UKM50: "GRA", // Aberdeen City & Aberdeenshire
-  UKM71: "TAY",
-  UKM72: "TAY",
-  UKM77: "TAY", // Angus/Dundee + Fife + Perth/Stirling
-  UKM91: "STH",
-  UKM92: "STH",
-  UKM93: "STH",
-  UKM94: "STH",
-  UKM95: "STH", // Borders, D&G, Ayrshire, S Lanark
-  UKM84: "CSC",
-  UKM76: "CSC", // North Lanarkshire + Falkirk
-};
-const SCO_REGION_NAMES: Record<string, string> = {
-  GLA: "Greater Glasgow",
-  LOT: "Edinburgh & the Lothians",
-  HIG: "Highlands & Islands",
-  GRA: "North East Scotland",
-  TAY: "Tayside & Fife",
-  STH: "South Scotland",
-  CSC: "Central Scotland",
-};
-
-/** Welsh NUTS3 (2016, UKL*) → the 6 WAL seed macro-regions. */
-const WAL_NUTS3_TO_REGION: Record<string, string> = {
-  UKL22: "CDF",
-  UKL21: "CDF", // Cardiff & Vale + Monmouthshire/Newport
-  UKL14: "SWA",
-  UKL17: "SWA",
-  UKL18: "SWA", // South West Wales + Bridgend/NPT + Swansea
-  UKL15: "VAL",
-  UKL16: "VAL", // Central + Gwent Valleys
-  UKL24: "MWA", // Powys
-  UKL11: "NWW",
-  UKL12: "NWW",
-  UKL13: "NWW", // Anglesey + Gwynedd + Conwy/Denbighshire
-  UKL23: "NEW", // Flintshire & Wrexham
-};
-const WAL_REGION_NAMES: Record<string, string> = {
-  CDF: "Cardiff & South East",
-  SWA: "Swansea & South West",
-  VAL: "The Valleys",
-  MWA: "Mid Wales",
-  NWW: "North West Wales",
-  NEW: "North East Wales",
-};
-
-/** Shared builder: dissolve UK NUTS3 (2016) into a country's seed macro-regions. */
-async function buildUKDevolved(
+/** Dissolve whole councils from the same membership used by regional council seats. */
+export function buildSuccessorMap(
   country: "SCO" | "WAL",
-  prefix: "UKM" | "UKL",
-  nuts3ToRegion: Record<string, string>,
-  regionNames: Record<string, string>,
-  expectedRegions: number,
-  outFile: string
-): Promise<void> {
-  const src = await fetchJson<FeatureCollection>(UK_NUTS3_2016_URL);
+  source: FeatureCollection
+): FeatureCollection {
+  const groups: Record<string, readonly { code: string; name: string }[]> =
+    SUCCESSOR_REGION_COUNCILS[country];
+  const lookup = new Map(
+    Object.entries(groups).flatMap(([id, councils]) =>
+      councils.map((council) => [council.code as string, id] as const)
+    )
+  );
+  const expected = new Set(lookup.keys());
+  const seen = new Set<string>();
   const tagged: Feature[] = [];
-  const contains: Record<string, string[]> = {};
-  for (const f of src.features) {
-    const nuts = String((f.properties as { NUTS_ID?: string }).NUTS_ID ?? "");
-    if (!nuts.startsWith(prefix)) continue;
-    const regionId = nuts3ToRegion[nuts];
-    if (!regionId) {
-      console.warn(`${country}: unmapped NUTS3 ${nuts}`);
-      continue;
+  for (const feature of source.features) {
+    const code = String(feature.properties?.LAD24CD ?? "");
+    if (!code.startsWith(country === "SCO" ? "S" : "W")) continue;
+    const region = lookup.get(code);
+    if (!region || seen.has(code)) throw new Error(`Unmapped or duplicate council: ${code}`);
+    seen.add(code);
+    tagged.push({ ...feature, properties: { ...feature.properties, __regionId: region } });
+  }
+  if (seen.size !== expected.size) throw new Error(`${country}: missing council boundaries`);
+  const seeds = country === "SCO" ? scoRegions : walRegions;
+  const result = mergeByRegionId(
+    tagged,
+    Object.fromEntries(seeds.map((region) => [region._id, region.name])),
+    100_000
+  );
+  // Round quantized coordinates for transport; full floating point expansions
+  // waste megabytes without adding boundary precision (five decimals is ~1m).
+  for (const feature of result.features) {
+    const geometry = feature.geometry;
+    if (geometry.type === "Polygon" || geometry.type === "MultiPolygon") {
+      const polygons = geometry.type === "Polygon" ? [geometry.coordinates] : geometry.coordinates;
+      for (const polygon of polygons)
+        for (const ring of polygon)
+          for (const point of ring) {
+            point[0] = Number(point[0].toFixed(5));
+            point[1] = Number(point[1].toFixed(5));
+          }
     }
-    const name = String((f.properties as { NAME_LATN?: string }).NAME_LATN ?? nuts);
-    (contains[regionId] ??= []).push(name);
-    tagged.push({ ...f, properties: { ...(f.properties ?? {}), __regionId: regionId } });
+    const councils = groups[String(feature.id)];
+    feature.properties = {
+      ...feature.properties,
+      regionCode: feature.id,
+      contains: councils.map((council) => council.name),
+      councilCodes: councils.map((council) => council.code),
+      source: SUCCESSOR_COUNCIL_SOURCE,
+      license: "Open Government Licence v3.0",
+      attribution:
+        "Source: Office for National Statistics licensed under the Open Government Licence v.3.0. Contains OS data � Crown copyright and database right 2024.",
+    };
   }
-  const fc = mergeByRegionId(tagged, regionNames);
-  // Tag each merged feature with `regionCode` (RegionalGeoMap filters on it) and
-  // its constituent council/area names (hero-bar "covers …", per the IE map).
-  for (const feat of fc.features) {
-    const id = String(feat.id);
-    (feat.properties as Record<string, unknown>).regionCode = id;
-    (feat.properties as Record<string, unknown>).contains = (contains[id] ?? []).sort();
-  }
-  if (fc.features.length !== expectedRegions) {
-    throw new Error(`${country}: expected ${expectedRegions} features, got ${fc.features.length}`);
-  }
-  writeFileSync(resolve(PUBLIC_DIR, outFile), JSON.stringify(fc));
-  console.log(`✓ ${country}: ${fc.features.length} regions → public/${outFile}`);
+  return result;
 }
-
-const buildScotland = () =>
-  buildUKDevolved("SCO", "UKM", SCO_NUTS3_TO_REGION, SCO_REGION_NAMES, 7, "sco-regions.json");
-const buildWales = () =>
-  buildUKDevolved("WAL", "UKL", WAL_NUTS3_TO_REGION, WAL_REGION_NAMES, 6, "wal-regions.json");
+async function buildSuccessor(country: "SCO" | "WAL"): Promise<void> {
+  const query = new URLSearchParams({
+    where: "LAD24CD LIKE 'S%' OR LAD24CD LIKE 'W%'",
+    outFields: "LAD24CD,LAD24NM",
+    outSR: "4326",
+    f: "geojson",
+  });
+  const source = await fetchJson<FeatureCollection>(`${SUCCESSOR_COUNCIL_SOURCE}/query?${query}`);
+  writeFileSync(
+    resolve(PUBLIC_DIR, `${country.toLowerCase()}-regions.json`),
+    JSON.stringify(buildSuccessorMap(country, source))
+  );
+}
+const buildScotland = () => buildSuccessor("SCO");
+const buildWales = () => buildSuccessor("WAL");
 
 async function main(): Promise<void> {
   await Promise.all([
@@ -371,7 +337,8 @@ async function main(): Promise<void> {
   ]);
 }
 
-main().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
+if (process.argv[1] && resolve(process.argv[1]) === __filename)
+  main().catch((err) => {
+    console.error(err);
+    process.exit(1);
+  });

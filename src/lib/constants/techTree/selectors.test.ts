@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { getResearchableDecades, getDecadeForYear, TECH_DECADES } from "./decades";
 import { TECH_TREE, corpNodeId, sectorNodeId } from "./nodes";
-import { techNodeCashCost } from "./costs";
+import { techNodeCashCost, techNodeCashFloorAnchor, TECH_NODE_CASH_FLOOR_ANCHOR } from "./costs";
 import {
   canUnlock,
   getCommittedLane,
@@ -190,6 +190,22 @@ describe("cash cost", () => {
     const node = TECH_TREE.energy.find((n) => n.id === corpNodeId("2019", 1))!;
     expect(techNodeCashCost(node, 100_000)).toBe(15_000); // default 0.15
     expect(techNodeCashCost(node, 0)).toBe(0);
+  });
+
+  it("charges at least the floor so zero-revenue corps still pay cash (#1506)", () => {
+    const node = TECH_TREE.energy.find((n) => n.id === corpNodeId("2019", 1))!;
+    expect(techNodeCashCost(node, 0, 5_000_000)).toBe(5_000_000);
+    expect(techNodeCashCost(node, 10_000_000, 5_000_000)).toBe(5_000_000);
+    // Large corps are priced off revenue exactly as before.
+    expect(techNodeCashCost(node, 550_000_000, 5_000_000)).toBe(82_500_000);
+    expect(techNodeCashCost(node, 0, Number.NaN)).toBe(0);
+    expect(techNodeCashCost(node, 0, -1)).toBe(0);
+  });
+
+  it("scales the floor with the world era", () => {
+    expect(techNodeCashFloorAnchor(1)).toBe(TECH_NODE_CASH_FLOOR_ANCHOR);
+    expect(techNodeCashFloorAnchor(0.04)).toBeCloseTo(200_000);
+    expect(techNodeCashFloorAnchor(Number.NaN)).toBe(TECH_NODE_CASH_FLOOR_ANCHOR);
   });
 });
 

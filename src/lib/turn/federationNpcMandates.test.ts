@@ -129,3 +129,27 @@ describe("autonomous federation mandates", () => {
     ).toEqual({ strategic: "CZ2", unlocated: "CZ2" });
   });
 });
+
+describe("autonomous federation mandates at the year rollover", () => {
+  it("judges eligibility on the stored world year and never fails the phase", async () => {
+    const mem = createInMemoryDb();
+    mem.seed("gameState", [
+      { _id: "current", preset: "1991-default", currentYear: 1991, currentTurn: 48 },
+    ]);
+    mem.seed("states", csRegions1991 as unknown as Record<string, unknown>[]);
+    mem.seed("electedOfficials", [
+      {
+        _id: new ObjectId(),
+        countryId: "CS",
+        officeType: getLowerChamberOfficeType("CS", "1991-default"),
+        nppId: new ObjectId(),
+        characterId: null,
+      },
+    ]);
+    const db = mem as unknown as Db;
+    // The turn hands over the new year before the stored year has rolled.
+    await expect(processFederationNpcMandates(db, "1991-default", 1992, new Date(0))).resolves.toBe(
+      0
+    );
+  });
+});

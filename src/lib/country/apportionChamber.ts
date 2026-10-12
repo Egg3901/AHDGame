@@ -41,6 +41,7 @@ export interface ChamberOfficial {
  */
 const CHAMBER_SIZE_FIELD: Record<string, "houseDistricts" | "stateSenateSeats"> = {
   bundestag: "houseDistricts",
+  dail: "houseDistricts",
   landtag: "stateSenateSeats",
 };
 

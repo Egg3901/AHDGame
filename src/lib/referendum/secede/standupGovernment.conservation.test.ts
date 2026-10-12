@@ -1,15 +1,19 @@
+vi.mock("@/lib/turn/parliamentaryGovernment", () => ({
+  ensureParliamentaryGovernmentFormation: vi.fn(),
+  unformGovernmentAndVacatePM: vi.fn(),
+}));
 /**
  * End-to-end SP2c conservation: splitParties → carryOverOfficials in sequence,
  * verifying the party-remap `idMap` flows correctly into the official carry-over
  * and that no official or member is orphaned.
  */
-import { describe, it, expect } from "vitest";
-import { makeInMemoryStore } from "@/lib/test-utils/inMemoryStore";
+import { describe, it, expect, vi } from "vitest";
+import { makeStrictInMemoryStore } from "@/lib/test-utils/inMemoryStore";
 import { splitParties } from "./splitParties";
 import { carryOverOfficials } from "./carryOverOfficials";
 
 function seedWorld() {
-  return makeInMemoryStore({
+  return makeStrictInMemoryStore({
     politicalParties: [
       { _id: "snp", sequentialId: 20, countryId: "UK", name: "SNP", abbreviation: "SNP" },
       { _id: "lab", sequentialId: 21, countryId: "UK", name: "Labour", abbreviation: "LAB" },
@@ -72,7 +76,7 @@ describe("SP2c government standup conservation", () => {
     const carried = await carryOverOfficials(db, "SCO", "UK", "SCO", idMap);
 
     expect(idMap).toEqual({ 20: 1 });
-    expect(carried).toEqual({ msps: 3, headOfGov: 1 });
+    expect(carried).toEqual({ msps: 0, headOfGov: 1 });
 
     // Parties: SNP transfers wholesale; LAB independentized (UK parent stays),
     // CON not in SCO.
@@ -94,20 +98,11 @@ describe("SP2c government standup conservation", () => {
     const party = (id: string) => cols.characters.find((c) => c._id === id)!.party;
     expect([party("cA"), party("cB"), party("cC")]).toEqual(["1", "independent", "independent"]);
 
-    // Every SCO MP carried to the new chamber; only SNP keeps a party (id 1),
-    // LAB/CON members are independent.
+    // Regional mandates retire; residents must run in the new snap elections.
     const o = (id: string) => cols.electedOfficials.find((x) => x._id === id)!;
-    expect(o("mpSNP")).toMatchObject({ countryId: "SCO", officeType: "holyrood", party: "1" });
-    expect(o("mpLAB")).toMatchObject({
-      countryId: "SCO",
-      officeType: "holyrood",
-      party: "independent",
-    });
-    expect(o("mpCON")).toMatchObject({
-      countryId: "SCO",
-      officeType: "holyrood",
-      party: "independent",
-    });
+    expect(
+      ["mpSNP", "mpLAB", "mpCON"].some((id) => cols.electedOfficials.some((row) => row._id === id))
+    ).toBe(false);
     // FM → head of government.
     expect(o("fm")).toMatchObject({ countryId: "SCO", officeType: "firstMinister", party: "1" });
     expect(cols.governmentFormations[0]).toMatchObject({

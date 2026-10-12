@@ -1,7 +1,8 @@
 /**
  * Media regulation changes how much advertising a private outlet can deliver.
  * Censorship and ownership laws limit audience access before clearing. The
- * ownership limit applies to the final delivered share in each state.
+ * ownership limit caps each owner's delivery at a share of the state's
+ * advertising audience.
  */
 
 export interface MediaOutletDelivery {
@@ -200,39 +201,66 @@ export interface MediaOwnershipMarket {
   shareCap: number;
   stateBySector: ReadonlyMap<string, string>;
   corporationBySector: ReadonlyMap<string, string>;
+  /** Lagged advertising demand by state, from the commodity ledger. */
+  demandByState?: ReadonlyMap<string, number>;
+  /**
+   * Filled by clearing with each owner's audience limit in units, keyed
+   * `${stateId}:${corporationId}`, so later political delivery uses the same
+   * ceiling as commercial delivery.
+   */
+  limitUnitsByOwner?: Map<string, number>;
 }
 
 /**
- * Keep the largest feasible subset of already-cleared delivery under a share
- * cap. Delivery is reduced, never invented or moved between owners. If too few
- * owners delivered to satisfy the law, no positive delivery is feasible.
+ * Bound each owner's delivered advertising in a state by a share of that
+ * state's advertising audience. The audience is the larger of the state's own
+ * lagged advertising demand and the clearing-book demand its regulated outlets
+ * competed for (`demandUnits`, each seller's slice of its book's demand).
+ * Advertising clears in a reachable book, so a state's outlets can serve far
+ * more buyers than sit in the state; the ledger state demand alone reads zero
+ * in states with no local ad buyers. The limit is measured against demand,
+ * not against what competitors delivered, so a sole or dominant broadcaster
+ * can serve up to the cap share of its audience. Delivery is reduced, never
+ * invented or moved between owners.
  */
 export function capDeliveredMediaUnits(
-  rows: readonly { sectorId: string; stateId: string; corporationId: string; units: number }[],
-  shareCap: number
+  rows: readonly {
+    sectorId: string;
+    stateId: string;
+    corporationId: string;
+    units: number;
+    demandUnits?: number;
+  }[],
+  shareCap: number,
+  demandByState?: ReadonlyMap<string, number>,
+  limitUnitsByOwnerOut?: Map<string, number>
 ): Map<string, number> {
-  const safeUnits = (units: number) => (Number.isFinite(units) ? Math.max(0, units) : 0);
+  const safeUnits = (units: number | undefined) =>
+    typeof units === "number" && Number.isFinite(units) ? Math.max(0, units) : 0;
   const result = new Map(rows.map((row) => [row.sectorId, safeUnits(row.units)]));
   if (!Number.isFinite(shareCap) || shareCap <= 0 || shareCap >= 1) return result;
-  const states = new Map<string, Map<string, number>>();
+  const bookDemandByState = new Map<string, number>();
+  const unitsByOwner = new Map<string, number>();
   for (const row of rows) {
-    const owners = states.get(row.stateId) ?? new Map<string, number>();
-    const units = Number.isFinite(row.units) ? Math.max(0, row.units) : 0;
-    owners.set(row.corporationId, (owners.get(row.corporationId) ?? 0) + units);
-    states.set(row.stateId, owners);
+    const key = `${row.stateId}:${row.corporationId}`;
+    unitsByOwner.set(key, (unitsByOwner.get(key) ?? 0) + safeUnits(row.units));
+    bookDemandByState.set(
+      row.stateId,
+      (bookDemandByState.get(row.stateId) ?? 0) + safeUnits(row.demandUnits)
+    );
   }
   const scales = new Map<string, number>();
-  for (const [stateId, owners] of states) {
-    const positive = [...owners.values()].filter((units) => units > 0).sort((a, b) => a - b);
-    let total = positive.reduce((sum, units) => sum + units, 0);
-    let prefix = 0;
-    for (let i = 0; i <= positive.length; i++) {
-      const denominator = 1 - (positive.length - i) * shareCap;
-      if (denominator > 0) total = Math.min(total, prefix / denominator);
-      prefix += positive[i] ?? 0;
-    }
-    for (const [owner, units] of owners)
-      scales.set(`${stateId}:${owner}`, units > 0 ? Math.min(1, (shareCap * total) / units) : 0);
+  for (const row of rows) {
+    const key = `${row.stateId}:${row.corporationId}`;
+    if (scales.has(key)) continue;
+    const audience = Math.max(
+      safeUnits(demandByState?.get(row.stateId)),
+      bookDemandByState.get(row.stateId) ?? 0
+    );
+    const limit = shareCap * audience;
+    limitUnitsByOwnerOut?.set(key, limit);
+    const units = unitsByOwner.get(key) ?? 0;
+    scales.set(key, units > 0 ? Math.min(1, limit / units) : 0);
   }
   for (const row of rows)
     result.set(

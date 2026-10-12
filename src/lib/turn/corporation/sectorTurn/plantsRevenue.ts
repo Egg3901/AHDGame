@@ -33,7 +33,11 @@ import type { CommodityType } from "@/lib/constants/commodities";
 import type { ExtractableResource } from "@/lib/constants/commodities";
 import type { CorporationLookups } from "../types";
 import { computeContractProduction } from "../contractProduction";
-import { soldOutMarketHeadroomUnits, throttleSoldUnits } from "../demandThrottle";
+import {
+  soldOutMarketHeadroomUnits,
+  throttleSoldUnits,
+  withRegulationBlockedFill,
+} from "../demandThrottle";
 
 export interface PlantsRevenueInput {
   sector: Pick<
@@ -144,6 +148,11 @@ export interface PlantsRevenueResult {
   soldUnits: number;
   contractAchievableUnits: number;
   demandThrottleFactor: number;
+  /**
+   * Last turn's sold share of output, valued as the throttle values it. Null
+   * without a fresh clearing signal. Feeds idle capacity retirement.
+   */
+  demandFill: number | null;
   plantsTechPriceLeg: number;
   plantsDerivedHourlyRevenue: number;
   marketHourlyRevenue: number;
@@ -385,12 +394,44 @@ export function resolvePlantsRevenue(input: PlantsRevenueInput): PlantsRevenueRe
   // The pre-pass just cleared the persisted prior output. Use that fill with
   // that quantity, not the saved fill from an older clearing book. Prices and
   // revenue retain their existing lagged-market convention.
+  // Units a media ownership law refused still had buyers, so they count as
+  // demand here; a capped outlet must not shrink because of a legal limit.
   const feedbackFill =
-    clearingEnabled && clearing ? clearing.soldByCommodity : sector.soldByCommodity;
+    clearingEnabled && clearing
+      ? withRegulationBlockedFill(clearing.soldByCommodity, clearing.regulationBlockedByCommodity)
+      : sector.soldByCommodity;
   const feedbackSold =
     clearingEnabled && clearing && sector.producedUnits != null
-      ? sector.producedUnits * clearing.soldFraction
+      ? sector.producedUnits *
+        Math.min(1, clearing.soldFraction + (clearing.regulationBlockedFraction ?? 0))
       : sector.soldUnits;
+  const priorThrottleSoldUnits = (() => {
+    const sold = throttleSoldUnits({
+      producedUnits: sector.producedUnits,
+      soldUnits: feedbackSold,
+      soldByCommodity: feedbackFill,
+      supplyRates: strategySupply,
+      priceRatioFor: (commodity) =>
+        throttleLegPriceRatio?.(commodity as CommodityType) ??
+        priceRatioByCommodity.get(commodity as CommodityType),
+    });
+    return sold == null ? sold : sold * priorProductionUnitRatio;
+  })();
+  const priorThrottleProducedUnits =
+    sector.producedUnits == null
+      ? sector.producedUnits
+      : sector.producedUnits * priorProductionUnitRatio;
+  // Last turn's value-weighted sell-through, the same evidence the throttle
+  // reads. Without clearing, sold equals produced and this reads 1.
+  const demandFill =
+    plantsEnabled &&
+    typeof priorThrottleSoldUnits === "number" &&
+    Number.isFinite(priorThrottleSoldUnits) &&
+    typeof priorThrottleProducedUnits === "number" &&
+    Number.isFinite(priorThrottleProducedUnits) &&
+    priorThrottleProducedUnits > 0
+      ? Math.max(0, Math.min(1, priorThrottleSoldUnits / priorThrottleProducedUnits))
+      : null;
   const production = computeContractProduction({
     plantsEnabled,
     actualNameplateUnits: productionNameplateUnits,
@@ -406,22 +447,8 @@ export function resolvePlantsRevenue(input: PlantsRevenueInput): PlantsRevenueRe
     // Sales restated by what buyers paid for each output leg, so a mixed plant
     // that sells out its valuable product is not cut for its glutted co-product
     // (ticket 1370). Single-output sectors read `soldUnits` unchanged.
-    priorSoldUnits: (() => {
-      const sold = throttleSoldUnits({
-        producedUnits: sector.producedUnits,
-        soldUnits: feedbackSold,
-        soldByCommodity: feedbackFill,
-        supplyRates: strategySupply,
-        priceRatioFor: (commodity) =>
-          throttleLegPriceRatio?.(commodity as CommodityType) ??
-          priceRatioByCommodity.get(commodity as CommodityType),
-      });
-      return sold == null ? sold : sold * priorProductionUnitRatio;
-    })(),
-    priorProducedUnits:
-      sector.producedUnits == null
-        ? sector.producedUnits
-        : sector.producedUnits * priorProductionUnitRatio,
+    priorSoldUnits: priorThrottleSoldUnits,
+    priorProducedUnits: priorThrottleProducedUnits,
     guaranteedDemandUnits: marketPlantsEnabled
       ? contractProductionTargetBySectorId?.get(sector._id.toString())
       : undefined,
@@ -544,6 +571,7 @@ export function resolvePlantsRevenue(input: PlantsRevenueInput): PlantsRevenueRe
     soldUnits,
     contractAchievableUnits,
     demandThrottleFactor,
+    demandFill,
     plantsTechPriceLeg,
     plantsDerivedHourlyRevenue,
     marketHourlyRevenue,

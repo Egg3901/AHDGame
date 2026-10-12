@@ -651,3 +651,71 @@ describe("ensureBetaParliamentElections (FR/IT/ES/SE/TR, #3239)", () => {
     });
   });
 });
+
+describe("successor lower chambers", () => {
+  it.each([
+    ["SCO", "holyrood"],
+    ["WAL", "senedd"],
+  ] as const)("%s suppresses regular races while a snap is live", async (country, type) => {
+    const mock = makeMockDb(
+      country,
+      [{ id: "TEST", houseDistricts: 20 }],
+      [
+        {
+          countryId: country,
+          state: "TEST",
+          electionType: `snap_${type}`,
+          status: "active",
+        } as Election,
+      ],
+      [],
+      { preset: "1991-default", startingYear: 1991, currentTurn: 100, status: "active" }
+    );
+    await mountDb(mock);
+    const { ensureSecededChamberElections } = await import("./perpetualElections/shared");
+    await ensureSecededChamberElections(country, type, NOW, undefined, 100);
+    expect(mock.insertCalls).toHaveLength(0);
+    expect(mock.electionsCollection.find).toHaveBeenCalledWith(
+      expect.objectContaining({
+        electionType: { $in: [type, `snap_${type}`] },
+        status: { $in: ["active", "upcoming"] },
+      })
+    );
+  });
+});
+
+it.each([
+  ["SCO", "holyrood"],
+  ["WAL", "senedd"],
+] as const)("%s schedules the next regular from a called snap", async (country, type) => {
+  const previous = {
+    _id: new ObjectId(),
+    createdAt: new Date(0),
+    countryId: country,
+    state: "TEST",
+    electionType: `snap_${type}`,
+    status: "resolved",
+    cycle: 1,
+    endTurn: 100,
+    resolvedAtTurn: 100,
+    updatedAt: new Date(NOW.getTime() - 3_600_000),
+    endTime: new Date(NOW.getTime() - 3_600_000),
+  } as Election;
+  const mock = makeMockDb(country, [{ id: "TEST", houseDistricts: 20 }], [], [previous], {
+    preset: "1991-default",
+    startingYear: 1991,
+    currentTurn: 101,
+    status: "active",
+  });
+  await mountDb(mock);
+  const { ensureSecededChamberElections } = await import("./perpetualElections/shared");
+  await ensureSecededChamberElections(country, type, NOW, undefined, 101);
+  const [race] = mock.insertCalls.flat();
+  expect(race).toMatchObject({
+    electionType: type,
+    totalSeats: 20,
+    endTurn: 340,
+    shiftedScheduleEndTurn: 340,
+  });
+  expect(race.primaryEndTurn).toBe(316);
+});

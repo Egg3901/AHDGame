@@ -201,14 +201,18 @@ export function settlePoliticalAdMarket(args: {
     for (const seller of sellers) {
       const owner = ownerKey(seller.sectorId);
       if (!owner) continue;
-      const maximum = Math.max(
-        0,
-        mediaPoliticalResidualLimit(
-          commercialByOwner.get(owner.key) ?? 0,
-          commercialByState.get(owner.stateId) ?? 0,
-          law.shareCap
-        ) - (reservedByOwner.get(owner.key) ?? 0)
-      );
+      // Clearing's audience limit bounds commercial plus political delivery.
+      // Without it, fall back to the delivered-share bound.
+      const audienceLimit = law.limitUnitsByOwner?.get(owner.key);
+      const allowance =
+        audienceLimit !== undefined
+          ? audienceLimit - (commercialByOwner.get(owner.key) ?? 0)
+          : mediaPoliticalResidualLimit(
+              commercialByOwner.get(owner.key) ?? 0,
+              commercialByState.get(owner.stateId) ?? 0,
+              law.shareCap
+            );
+      const maximum = Math.max(0, allowance - (reservedByOwner.get(owner.key) ?? 0));
       const residual = residualByOwner.get(owner.key) ?? 0;
       seller.unsoldUnits *= residual > 0 ? Math.min(1, maximum / residual) : 0;
     }

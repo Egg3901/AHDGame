@@ -70,6 +70,26 @@ describe("proposeNationalBill — origin/current chamber storage", () => {
     return call![0] as Record<string, unknown>;
   }
 
+  it.each([
+    ["SCO", "holyrood"],
+    ["WAL", "senedd"],
+  ] as const)("allows a seated %s member to propose a national bill", async (country, chamber) => {
+    const { authUser } = seatDelegate({ countryId: country, officeType: chamber });
+    const result = await proposeNationalBill(db as unknown as Db, country, authUser, {
+      title: "Successor Country Bill",
+      summary: "Synthetic qualification bill",
+      chamber,
+      category: "custom",
+      provisions: [],
+    });
+    expect(result.status).toBe(201);
+    expect(insertedBill()).toMatchObject({
+      countryId: country,
+      originChamber: chamber,
+      currentChamber: chamber,
+    });
+  });
+
   it("persists an eligible euro adoption provision and charges its legislative cost", async () => {
     db.collection("gameState").findOne.mockResolvedValue({ currentYear: 1999 });
     db.collection("organizationMemberships").find.mockReturnValue({
@@ -438,12 +458,10 @@ describe("proposeNationalBill — countries with no bill lifecycle (#806)", () =
   };
 
   it("refuses to mint a bill for a legislature no turn phase walks", async () => {
-    // SCO has a chamber and elections but no registered bill lifecycle, so a
-    // bill filed there would never advance, enact, veto or fail — it would sit
-    // on the floor forever with nothing to close it and nothing reporting it.
+    // An unregistered country has no engine to advance or close its bills.
     const res = await proposeNationalBill(
       db as unknown as Db,
-      "SCO" as never,
+      "JO" as never,
       { userId: new ObjectId().toString() } as AuthUser,
       input as never
     );
@@ -457,7 +475,7 @@ describe("proposeNationalBill — countries with no bill lifecycle (#806)", () =
   it("rejects before touching the database, so no partial bill is written", async () => {
     await proposeNationalBill(
       db as unknown as Db,
-      "SCO" as never,
+      "JO" as never,
       { userId: new ObjectId().toString() } as AuthUser,
       input as never
     );

@@ -30,9 +30,19 @@ export async function processFederationNpcMandates(
   if (preset !== "1991-default") return 0;
   if (!Number.isSafeInteger(currentYear) || !Number.isFinite(now.getTime()))
     throw new Error("Federation NPC mandate needs a valid year and time");
+  // The proposal checks eligibility against the STORED world year. On the turn
+  // the year rolls over, the year this phase is handed can run ahead of it, so
+  // judge eligibility on the stored year too; otherwise the proposal throws
+  // and takes the whole government formation phase down with it.
+  const stored = await db
+    .collection<{ _id: string; currentYear?: number }>("gameState")
+    .findOne({ _id: "current" }, { projection: { currentYear: 1 } });
+  const year = Number.isSafeInteger(stored?.currentYear)
+    ? (stored?.currentYear as number)
+    : currentYear;
   const eligible = SOURCES.filter((source) => {
-    const year = earliestFederationDecisionYear(preset, source);
-    return year !== null && currentYear >= year;
+    const from = earliestFederationDecisionYear(preset, source);
+    return from !== null && year >= from;
   });
   if (eligible.length === 0) return 0;
   const [proposals, applications, officials, governments] = await Promise.all([
@@ -87,13 +97,19 @@ export async function processFederationNpcMandates(
       !federalOfficials.some((official) => official.officeType === lowerOffice && official.nppId)
     )
       continue;
-    await openDefaultFederationPoliticalProposal({
-      db,
-      sourceCountryId: source,
-      currentYear,
-      now,
-    });
-    opened += 1;
+    try {
+      await openDefaultFederationPoliticalProposal({
+        db,
+        sourceCountryId: source,
+        currentYear: year,
+        now,
+      });
+      opened += 1;
+    } catch (error) {
+      // One country's mandate must not fail government formation for every
+      // country; it is retried next turn.
+      console.warn(`[federationNpcMandates] ${source}: mandate not opened`, error);
+    }
   }
   return opened;
 }

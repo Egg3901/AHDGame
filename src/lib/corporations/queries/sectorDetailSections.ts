@@ -1,5 +1,6 @@
 import type { PlantIdleCause, PlantBuildOrderView, SectorPlantsSection } from "./sectorPlantsTypes";
 export type { PlantIdleCause, PlantBuildOrderView, SectorPlantsSection } from "./sectorPlantsTypes";
+import { IDLE_RETIRE_GRACE_TURNS } from "@/lib/turn/corporation/rules/idleCapacityRetirement";
 import { hasProtectedConstructionProperty } from "@/lib/corporations/securedConstructionProperty";
 import { getCorporateSectorLaneQuery } from "@/lib/corporations/sectorLocation";
 /**
@@ -481,24 +482,47 @@ export async function buildSectorForSaleInfo(
     )
   );
   const hasFunds = (viewerCorporation.liquidCapital ?? 0) >= priceInViewerCapital;
+  const priceValid = Number.isFinite(listing.priceAnchor) && listing.priceAnchor > 0;
+  const mergeBlocked =
+    !!conflict && (!!listing.pledged || hasProtectedConstructionProperty(conflict));
+  const constructionBlocked =
+    !!sector.constructionPropertyTransition ||
+    (hasProtectedConstructionProperty(sector) &&
+      !(
+        sector.constructionFinancing?.loanFunded === true &&
+        ["building", "released"].includes(sector.constructionFinancing.status)
+      ));
+  // First reason the purchase is unavailable, so the buyer panel can say why
+  // instead of disappearing. Null when eligible.
+  const blockReason: SectorPurchaseBlockReason | null = !priceValid
+    ? "invalid_price"
+    : !hasFunds
+      ? "insufficient_funds"
+      : mergeBlocked
+        ? "merge_blocked"
+        : constructionBlocked
+          ? "construction"
+          : null;
   return {
     viewerCorporationId: viewerCorporation._id.toString(),
     viewerLiquidCurrencyCode: resolveCorpLiquidCurrencyCode(viewerCorporation),
     priceInViewerCapital,
     viewerCapitalAnchor,
-    eligible:
-      hasFunds &&
-      Number.isFinite(listing.priceAnchor) &&
-      listing.priceAnchor > 0 &&
-      !(conflict && (listing.pledged || hasProtectedConstructionProperty(conflict))) &&
-      !sector.constructionPropertyTransition &&
-      (!hasProtectedConstructionProperty(sector) ||
-        (sector.constructionFinancing?.loanFunded === true &&
-          ["building", "released"].includes(sector.constructionFinancing.status))),
+    eligible: blockReason === null,
+    blockReason: blockReason as SectorPurchaseBlockReason | null,
     conflict: !!conflict,
     hasFunds,
   };
 }
+
+export type SectorPurchaseBlockReason =
+  | "invalid_price"
+  | "insufficient_funds"
+  | "merge_blocked"
+  | "construction"
+  | "not_ceo"
+  | "actions_paused"
+  | "state_controlled";
 
 /** Tech-tree growth-cost reduction (%) shown on the financials panel. */
 export function computeTechGrowthCostReductionPct(args: {
@@ -1667,6 +1691,15 @@ export function buildSectorPlantsSection(args: {
     demandGapUnits: roomHeldByOwnIdle ? 0 : nonNeg(demandGapUnits),
     measuredDemandGapUnits: roomHeldByOwnIdle ? 0 : (args.measuredDemandGapUnits ?? null),
     roomHeldByOwnIdle,
+    ...(!mothballed && (num(sector.demandIdleTurns) ?? 0) > 0
+      ? {
+          idleRetirement: {
+            turns: num(sector.demandIdleTurns) ?? 0,
+            graceTurns: IDLE_RETIRE_GRACE_TURNS,
+            retiredUnits: nonNeg(num(sector.idleCapacityRetiredUnits) ?? 0),
+          },
+        }
+      : {}),
     ...(unclaimedSharePct != null ? { unclaimedSharePct } : {}),
     retoolHint,
     currentTurn,

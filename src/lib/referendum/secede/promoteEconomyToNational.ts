@@ -1,3 +1,5 @@
+import { ObjectId } from "mongodb";
+import { getCountryConfig } from "@/lib/constants/countries";
 /**
  * Stand up the seceding country's national fiscal footprint from its GDP share
  * of the pre-secession UK — the inverse of `reapportionNationalBudget` (which
@@ -15,6 +17,7 @@
  * Run AFTER `expandToSubRegions` (the GDP weight reads the post-expand `states`
  * GDP sums: seceding sub-regions vs the rump-UK regions).
  */
+import { splitConversionAppropriations } from "./rules/appropriations";
 import type { Db } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
 import type { FederalBudget, State } from "@/lib/db/types";
@@ -42,12 +45,17 @@ const BUDGET_MAGNITUDE_FIELDS = [
   "gdp",
   "gdpSmoothed",
   "surplus",
+  "treasuryCashLocal",
+  "debt.ceiling",
+  "militaryPriceBaselineGdp",
+  "financialCrisisAusterityBaseSpending",
 ];
 
 export async function promoteEconomyToNational(
   db: Db,
   fromCountryId: CountryId,
-  toCountryId: CountryId
+  toCountryId: CountryId,
+  conversionTurn = 0
 ): Promise<void> {
   const budgets = db.collection<FederalBudget>("federalBudget");
 
@@ -68,13 +76,13 @@ export async function promoteEconomyToNational(
     .reduce((a, s) => a + (s.gdp ?? 0), 0);
   const before = newGdp + rumpGdp;
   const weight = before > 0 ? newGdp / before : 0;
-  if (!(weight > 0 && weight < 1)) return;
+  if (!(weight > 0 && weight < 1)) throw new Error("Independence requires valid live national GDP");
 
   const ukBudget = (await budgets.findOne({ _id: fromCountryId })) as Record<
     string,
     unknown
   > | null;
-  if (!ukBudget) return;
+  if (!ukBudget) throw new Error("Independence requires the source national budget");
   const now = new Date();
 
   // The new sovereign assumes its GDP-share of the national debt WITH the
@@ -85,18 +93,41 @@ export async function promoteEconomyToNational(
     .collection<Bond>("bonds")
     .find({ issuerType: "sovereign", countryId: fromCountryId, matured: false })
     .toArray();
+  if (sourceBonds.some((bond) => bond.sovereignMaturityClaim))
+    throw new Error("A sovereign maturity settlement must finish before independence");
+  if (
+    sourceBonds.some((bond) =>
+      bond.holders?.some((holder) => holder.bankTreasuryTradeId || holder.saleIntentId)
+    )
+  )
+    throw new Error("A bond holder settlement must finish before independence");
+  if (
+    sourceBonds.some((bond) => {
+      const receipt = bond as Bond & {
+        pendingMoneyMoveReceipt?: unknown;
+        pendingSettlementProjection?: unknown;
+      };
+      return receipt.pendingMoneyMoveReceipt || receipt.pendingSettlementProjection;
+    })
+  )
+    throw new Error("A bond cash receipt must finish before independence");
   const preOutstanding = sumOutstandingSovereignPrincipal(sourceBonds);
   const scoOutstanding = preOutstanding * weight;
   const ukOutstanding = preOutstanding * (1 - weight);
   const ukGdp = typeof ukBudget["gdp"] === "number" ? (ukBudget["gdp"] as number) : 0;
   const ukGdpSmoothed =
     typeof ukBudget["gdpSmoothed"] === "number" ? (ukBudget["gdpSmoothed"] as number) : undefined;
-  const debtTermsFor = (principal: number, gdp: number, gdpSmoothed: number | undefined) =>
+  const debtTermsFor = (
+    principal: number,
+    gdp: number,
+    gdpSmoothed: number | undefined,
+    source = false
+  ) =>
     sovereignDebtTerms(principal, {
       gdp,
       gdpSmoothed,
       investorConfidence: ukBudget["investorConfidence"] as number | undefined,
-      imfBailoutActive: ukBudget["imfSovereignBailoutActive"] as boolean | undefined,
+      imfBailoutActive: source ? (ukBudget["imfBailoutActive"] as boolean | undefined) : undefined,
       sovereignRiskAnchor: ukBudget["sovereignRiskAnchor"] as FederalBudget["sovereignRiskAnchor"],
     });
   const scoTerms = debtTermsFor(
@@ -107,18 +138,46 @@ export async function promoteEconomyToNational(
   const ukTerms = debtTermsFor(
     ukOutstanding,
     ukGdp * (1 - weight),
-    ukGdpSmoothed != null ? ukGdpSmoothed * (1 - weight) : undefined
+    ukGdpSmoothed != null ? ukGdpSmoothed * (1 - weight) : undefined,
+    true
   );
 
   // New country budget = the GDP-share slice of every magnitude field; all
   // structural fields (rates, factors, year) carry over from the clone. Its
   // debt stock is its share of the split bond ledger, with the service terms
   // refreshed off that stock.
+  const appropriationSplit = splitConversionAppropriations(
+    ukBudget as unknown as FederalBudget,
+    weight,
+    conversionTurn
+  );
   const newBudget = structuredClone(ukBudget);
   newBudget._id = toCountryId;
   newBudget.countryId = toCountryId;
   newBudget.currencyCode = "GBP";
   newBudget.updatedAt = now;
+  // Existing international facilities and country-owned commitments stay with their obligor.
+  for (const key of Object.keys(newBudget))
+    if (
+      key.startsWith("imf") ||
+      [
+        "defenseAppropriation",
+        "intelligenceAppropriation",
+        "departmentAccounts",
+        "mergedInto",
+        "appliedPeaceIndemnityOfferIds",
+        "disasterFiscalReceipts",
+        "treasuryAccrual",
+        "bankSovereignClaims",
+        "sovereignCouponClaims",
+        "sovereignCouponFrozenThrough",
+        "pendingMoneyMoveReceipt",
+        "pendingSettlementProjection",
+        "settledKeys",
+      ].includes(key)
+    )
+      delete newBudget[key];
+  Object.assign(newBudget, appropriationSplit.moved);
   for (const field of BUDGET_MAGNITUDE_FIELDS) {
     const v = getPath(newBudget, field);
     if (v !== undefined) setPath(newBudget, field, scaleDeep(v, weight));
@@ -132,6 +191,7 @@ export async function promoteEconomyToNational(
   // Debit the UK by the moved share (dot-path $set preserves the kept fields).
   const set: Record<string, unknown> = {
     updatedAt: now,
+    ...appropriationSplit.kept,
     "debt.principal": ukOutstanding,
     "debt.interestRate": ukTerms.interestRate,
     debtToGdpRatio: ukTerms.debtToGdpRatio,
@@ -176,8 +236,22 @@ export async function promoteEconomyToNational(
       sourceBonds.map((bond) => {
         const { _id, ...rest } = bond;
         void _id;
+        // Only issued debt moves. The UK's open issuance mandate and receipt witnesses stay on its original series.
+        delete rest.requestedUnits;
+        delete rest.unsoldUnits;
+        delete rest.primaryUnderwriting;
+        const successor = rest as typeof rest & {
+          settledKeys?: string[];
+          pendingMoneyMoveReceipt?: unknown;
+          pendingSettlementProjection?: unknown;
+        };
+        delete successor.settledKeys;
+        delete successor.pendingMoneyMoveReceipt;
+        delete successor.pendingSettlementProjection;
         return {
-          ...rest,
+          ...successor,
+          corporationId: new ObjectId(),
+          issuerName: getCountryConfig(toCountryId).name,
           countryId: toCountryId,
           totalIssued: (bond.totalIssued ?? 0) * weight,
           publicFloat: (bond.publicFloat ?? 0) * weight,

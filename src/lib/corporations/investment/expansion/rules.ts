@@ -80,6 +80,9 @@ export function expansionOperatingReserve(input: {
   if (!Number.isFinite(input.overheadPerTurnAnchor) || input.overheadPerTurnAnchor < 0) return null;
   let reserve = input.overheadPerTurnAnchor;
   for (const sector of input.sectors) {
+    // A sector with no plants and nothing queued has no running costs to
+    // reserve, whether or not it has run a turn yet.
+    if (sector.capacityUnits === 0 && sector.queuedUnits === 0) continue;
     if (
       !sector.current ||
       ![sector.costPerTurnAnchor, sector.capacityUnits, sector.queuedUnits].every(
@@ -97,7 +100,7 @@ export function expansionOperatingReserve(input: {
 }
 
 export type ExpansionSizingReason =
-  "history" | "constraints" | "unprofitable" | "cash" | "demand" | null;
+  "history" | "debt" | "constraints" | "unprofitable" | "cash" | "demand" | null;
 export function recommendSectorExpansion(input: {
   unitsPerFacility: number;
   /** Buildable capacity units, already adjusted for output productivity. */
@@ -106,6 +109,8 @@ export function recommendSectorExpansion(input: {
   queuedUnits: number;
   cashAnchor: number;
   operatingReserveAnchor: number | null;
+  /** Loans, bonds or arrears outstanding: the cash budget cannot model repayments. */
+  indebted?: boolean;
   constrained: boolean;
   forecast: InvestmentForecastInput | null;
 }): {
@@ -120,6 +125,7 @@ export function recommendSectorExpansion(input: {
     reason,
     reserveAnchor: input.operatingReserveAnchor,
   });
+  if (input.indebted) return empty("debt");
   const observed = input.forecast;
   if (
     !observed ||

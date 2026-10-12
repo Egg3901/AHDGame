@@ -447,6 +447,14 @@ export interface SectorClearingResult {
    * restate it; computeClearingFactors always populates it.
    */
   soldByCommodity?: Partial<Record<CommodityType, number>>;
+  /**
+   * Offered fraction buyers took but a media ownership law refused, overall
+   * and per output. Not sold and not paid; production feedback counts it as
+   * demand so a capped outlet does not shrink because of a legal limit.
+   * Absent when nothing was blocked.
+   */
+  regulationBlockedFraction?: number;
+  regulationBlockedByCommodity?: Partial<Record<CommodityType, number>>;
   /** Exact normalized units delivered, emitted only when recording is enabled. */
   deliveredUnitsByCommodity?: Partial<Record<CommodityType, number>>;
   /** Posture actually used (player's, or the auto value). */
@@ -710,6 +718,9 @@ export function computeClearingFactors(args: {
   const soldByCommodityBySector = new Map<CommodityType, Map<string, number>>();
   const supplyShareByCommodity = new Map<CommodityType, Map<string, number>>();
   const deliveredByCommodityBySector = new Map<CommodityType, Map<string, number>>();
+  // Offered fraction a buyer took but an ownership law refused, kept apart
+  // from sold so production feedback does not read a legal limit as no demand.
+  const regulationBlockedByCommodityBySector = new Map<CommodityType, Map<string, number>>();
   for (const [commodity, sellers] of sellersByCommodity) {
     // Market partition: split the commodity's sellers into per-group books
     // (seller's home country) and clear each book against ITS reachable
@@ -798,6 +809,9 @@ export function computeClearingFactors(args: {
     // settlement sink can credit a state contract and a corporation-wide one
     // separately. Shares sum to `contractedShareBySector`.
     const contractedKeysBySector = new Map<string, Array<{ key: string; share: number }>>();
+    // Each seller's slice of its book's demand, the audience an ownership law
+    // measures against.
+    const demandSliceBySector = new Map<string, number>();
     for (const [g, groupSellers] of partitioned) {
       const bal = balanceForBook(g, commodity);
       const laggedSupply = bal?.supply ?? 0;
@@ -805,6 +819,11 @@ export function computeClearingFactors(args: {
       const totalSupply = Math.max(laggedSupply, offeredUnits);
       const share = totalSupply > 0 ? offeredUnits / totalSupply : 1;
       const demandForPass = (bal?.demand ?? 0) * share;
+      for (const s of groupSellers)
+        demandSliceBySector.set(
+          s.id,
+          offeredUnits > 0 ? (demandForPass * s.units) / offeredUnits : 0
+        );
 
       // Contracted allocation: distribute each supplier corp's contracted volume
       // for this commodity across its selling sectors, proportional to their
@@ -881,15 +900,27 @@ export function computeClearingFactors(args: {
                 stateId,
                 corporationId,
                 units: seller.units * (sold.get(seller.id) ?? 0),
+                demandUnits: demandSliceBySector.get(seller.id) ?? 0,
               },
             ]
           : [];
       });
-      const capped = capDeliveredMediaUnits(rows, args.mediaOwnership.shareCap);
+      const capped = capDeliveredMediaUnits(
+        rows,
+        args.mediaOwnership.shareCap,
+        args.mediaOwnership.demandByState,
+        args.mediaOwnership.limitUnitsByOwner
+      );
+      const blocked = new Map<string, number>();
       for (const seller of sellers) {
         const units = capped.get(seller.id);
-        if (units !== undefined) sold.set(seller.id, seller.units > 0 ? units / seller.units : 0);
+        if (units === undefined) continue;
+        const before = sold.get(seller.id) ?? 0;
+        const after = seller.units > 0 ? units / seller.units : 0;
+        sold.set(seller.id, after);
+        if (before - after > 0) blocked.set(seller.id, before - after);
       }
+      regulationBlockedByCommodityBySector.set(commodity, blocked);
     }
     soldByCommodityBySector.set(commodity, sold);
     if (args.recordDelivery)
@@ -958,6 +989,8 @@ export function computeClearingFactors(args: {
     const marketSupplyShareByCommodity: Partial<Record<CommodityType, number>> = {};
     const deliveredUnitsByCommodity: Partial<Record<CommodityType, number>> = {};
     const offerFactorByCommodity: Partial<Record<CommodityType, number>> = {};
+    const regulationBlockedByCommodity: Partial<Record<CommodityType, number>> = {};
+    let blockedSum = 0;
     const sectorGroup = args.groupBySector?.get(s.sectorId);
     const groupRatios = sectorGroup != null ? args.priceRatioByGroup?.get(sectorGroup) : undefined;
     const outputCommodities = new Set([
@@ -1013,6 +1046,12 @@ export function computeClearingFactors(args: {
       quotedPostureSum += weight * (offerFactor / priceLeg - 1);
       soldSum += weight * sold;
       soldByCommodity[commodity] = sold;
+      const blocked =
+        (regulationBlockedByCommodityBySector.get(commodity)?.get(s.sectorId) ?? 0) * availability;
+      if (blocked > 0) {
+        regulationBlockedByCommodity[commodity] = blocked;
+        blockedSum += weight * blocked;
+      }
       marketSupplyShareByCommodity[commodity] =
         supplyShareByCommodity.get(commodity)?.get(s.sectorId) ?? 0;
       if (args.recordDelivery)
@@ -1032,6 +1071,9 @@ export function computeClearingFactors(args: {
       soldByCommodity,
       marketSupplyShareByCommodity,
       ...(args.recordDelivery ? { deliveredUnitsByCommodity } : {}),
+      ...(blockedSum > 0
+        ? { regulationBlockedFraction: blockedSum / rateSum, regulationBlockedByCommodity }
+        : {}),
       effectivePosture: s.inputCostIndex !== undefined ? quotedPostureSum / rateSum : posture,
       offerFactorByCommodity,
       ...(s.productProjectId
