@@ -1274,6 +1274,7 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
         workers: sector.workers ?? calculateWorkers(sectorRevenueAnchor, metrics.workforceSkill),
         investment: {
           operatingReserveAnchor,
+          indebted: unsettled,
           overheadDailyAnchor:
             corpLiquidCapitalToAnchor(
               corpLevelCosts + (corporation.rdBudget ?? 0),

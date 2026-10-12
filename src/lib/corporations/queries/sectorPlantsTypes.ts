@@ -153,6 +153,8 @@ export interface SectorPlantsSection {
     overheadDailyAnchor: number;
     /** One turn of company running costs; null when liabilities or current costs are unknown. */
     operatingReserveAnchor?: number | null;
+    /** Loans, bonds or arrears outstanding, so automatic sizing is withheld. */
+    indebted?: boolean;
     taxRatePercent: number;
     freightNetCostDailyAnchor?: number;
     inventoryRevenueDailyAnchor?: number;
