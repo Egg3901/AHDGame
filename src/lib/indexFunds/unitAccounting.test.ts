@@ -142,6 +142,31 @@ describe("splitIndexFundDividend", () => {
 });
 
 describe("quoteCashOnlyRedemption", () => {
+  it("pays fractional managed units and retains the exact unpaid claim", () => {
+    const quote = quoteCashOnlyRedemption({
+      quotedNav: 100,
+      requestedUnits: 0.75,
+      cashAnchor: 25,
+      allowFractionalUnits: true,
+    });
+    expect(quote).toMatchObject({
+      redeemableUnits: 0.25,
+      queuedUnits: 0.5,
+      paidAmountAnchor: 25,
+      queuedAmountAnchor: 50,
+      remainingCashAnchor: 0,
+      status: "partial",
+    });
+    expect(() =>
+      quoteCashOnlyRedemption({
+        quotedNav: 100,
+        requestedUnits: -1,
+        cashAnchor: 25,
+        allowFractionalUnits: true,
+      })
+    ).toThrow();
+  });
+
   it("pays entirely from cash when the fund is liquid", () => {
     expect(quoteCashOnlyRedemption({ quotedNav: 100, requestedUnits: 3, cashAnchor: 500 })).toEqual(
       {
@@ -190,7 +215,7 @@ describe("quoteCashOnlyRedemption", () => {
 describe("blendedRedeemFxRate (#857 grandfather)", () => {
   const rate = 109.51; // JPY per ₳
 
-  it("pays all-legacy units rate-free (× 1) — the JPY whale gets no windfall", () => {
+  it("pays all-legacy units rate-free (× 1) - the JPY whale gets no windfall", () => {
     // 16M legacy units of a fund at NAV 116.6 ₳ redeem at × 1, so native payout
     // = 16M × 116.6 ≈ ¥1.87B (what they paid), NOT ¥204B (16M × 116.6 × 109.51).
     expect(
@@ -319,8 +344,8 @@ describe("legacyAdjustedDisplayUnits (#857 grandfather display)", () => {
 
   it("ticket #1072: non-legacy redeem ₳ payout equals subscribe cost (shared display basis)", () => {
     // Subscribe quotes `units * nav` in ₳ then formatFull converts through the
-    // wallet preference. Redeem must start from the same ₳ figure — not native
-    // face × fund symbol — so a DD viewer does not see M376 to buy and $79 to
+    // wallet preference. Redeem must start from the same ₳ figure - not native
+    // face × fund symbol - so a DD viewer does not see M376 to buy and $79 to
     // sell the same unit.
     const nav = 79;
     const units = 1;

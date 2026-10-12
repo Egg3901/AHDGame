@@ -41,6 +41,7 @@ function FundDetailPageInner({ params }: { params: Promise<{ country: string; sl
   const { formatAmount, formatPrice, forexEnabled, forexRates } = useCurrency();
   const [data, setData] = useState<{
     fund: FundDetail;
+    pendingSubscriptions?: { operationId: string; amountAnchor: number; dueTurn: number }[];
     corporationAccounts?: FundCorporationAccount[];
     summary: { totalHolders: number; totalNonReserveUnits: number };
     myPosition: { units: number; legacyUnits: number; avgNavAnchor: number | null } | null;
@@ -243,12 +244,44 @@ function FundDetailPageInner({ params }: { params: Promise<{ country: string; sl
           quotedNav={fund.quotedNav}
           anchorCurrencyCode={fund.anchorCurrencyCode}
           status={fund.status}
+          canSubscribe={fund.canSubscribe ?? false}
+          canRedeem={fund.canRedeem ?? false}
+          nextTurnSubscriptions={fund.nextTurnSubscriptions}
           myUnits={myPosition?.units ?? 0}
           myLegacyUnits={myPosition?.legacyUnits ?? myPosition?.units ?? 0}
           onSuccess={() => void load()}
         />
 
-        {/* Stat strip — open hairline (no nested cards) */}
+        {data.pendingSubscriptions?.map((order) => (
+          <div
+            key={order.operationId}
+            className="flex items-center justify-between gap-3 py-3 text-sm"
+          >
+            <span>
+              Your investment of {formatAmount(order.amountAnchor, ccy)} is waiting for turn{" "}
+              {order.dueTurn}.
+            </span>
+            <button
+              type="button"
+              className="underline"
+              onClick={() =>
+                void (async () => {
+                  const response = await fetch(
+                    `/api/investment-funds/subscriptions/${order.operationId}`,
+                    { method: "DELETE" }
+                  );
+                  if (response.ok) await load();
+                  else
+                    setError((await response.json()).error ?? "Could not cancel this investment.");
+                })()
+              }
+            >
+              Cancel investment
+            </button>
+          </div>
+        ))}
+
+        {/* Stat strip - open hairline (no nested cards) */}
         <div className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-4 border-b border-card-border py-3">
           {[
             { label: "AUM", value: formatAmount(fund.aumAnchor, ccy) },
@@ -256,7 +289,7 @@ function FundDetailPageInner({ params }: { params: Promise<{ country: string; sl
             { label: "Holders", value: summary.totalHolders.toLocaleString("en-US") },
             {
               label: "Backing ratio",
-              value: fund.backingRatio != null ? `${(fund.backingRatio * 100).toFixed(1)}%` : "—",
+              value: fund.backingRatio != null ? `${(fund.backingRatio * 100).toFixed(1)}%` : "-",
             },
           ].map((s) => (
             <div key={s.label} className="whitespace-nowrap">
@@ -432,7 +465,7 @@ function FundDetailPageInner({ params }: { params: Promise<{ country: string; sl
 /** Format the rebalance timestamp for the holdings tab. */
 function formatRebalanceDate(iso: string): string {
   const t = Date.parse(iso);
-  if (!Number.isFinite(t)) return "—";
+  if (!Number.isFinite(t)) return "-";
   const d = new Date(t);
   return d.toISOString().slice(0, 10);
 }

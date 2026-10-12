@@ -1,5 +1,8 @@
+import { fundCreationEligibility } from "./eligibility";
+import { bankMayManageFunds } from "./rules/eligibility";
+import { validatePickedStocks, type PickedStockMandate } from "../rules/mandate";
 import { ObjectId, type Db } from "mongodb";
-import type { Corporation, GameConfig, FederalBudget } from "@/lib/db/types";
+import type { Corporation, FederalBudget } from "@/lib/db/types";
 import type {
   IndexFund,
   IndexFundKind,
@@ -44,6 +47,7 @@ export interface CharterFundInput {
   expenseRatioAnnual: number;
   seedCapitalAnchor: number;
   currentTurn: number;
+  pickedStocks?: PickedStockMandate["stocks"];
 }
 
 export type CharterFundResult =
@@ -108,42 +112,12 @@ export async function charterFund(db: Db, input: CharterFundInput): Promise<Char
   const tickerSymbol = input.tickerSymbol.trim().toUpperCase();
   const name = input.name.trim();
 
-  // Player fund sponsorship is gated until explicitly enabled: the default
-  // (system) funds trade normally, but corporations cannot charter their own.
-  const config = await db
-    .collection<GameConfig>("gameConfig")
-    .findOne({ _id: "default" }, { projection: { playerFundSponsorshipEnabled: 1 } });
-  if (!config?.playerFundSponsorshipEnabled) {
-    return {
-      ok: false,
-      error: "Player-sponsored index funds are not available yet.",
-      status: 403,
-    };
-  }
-
-  const sectors = await db
-    .collection<{ corporationId: ObjectId; sectorType: OperatingSectorType }>("corporateSectors")
-    .find({ corporationId: sponsor._id })
-    .project<{ sectorType: OperatingSectorType }>({ sectorType: 1 })
-    .toArray();
-  const invalid = validateCharter(
-    { ...input, tickerSymbol, name },
-    sectors.map((s) => s.sectorType)
-  );
-  if (invalid) return { ok: false, error: invalid, status: 400 };
-
-  // Bank / fund separation: a corporation that runs a bank may not also sponsor
-  // an index fund. Enforced at creation only, so corporations that already hold
-  // both (pre-rule) are grandfathered. The mirror check lives in
-  // `banking/charter.ts` checkCharterEligibility.
-  if (sponsor.bankCharter?.status === "active") {
-    return {
-      ok: false,
-      status: 400,
-      error:
-        "A corporation that operates a bank cannot also sponsor an index fund. Wind down the bank charter first.",
-    };
-  }
+  const eligibility = await fundCreationEligibility(db, sponsor, {
+    replay: !!(await db
+      .collection("indexFunds")
+      .findOne({ slug: sponsoredFundSlug(tickerSymbol), sponsorCorporationId: sponsor._id })),
+  });
+  if (eligibility) return { ok: false, status: 403, error: eligibility };
 
   return withSessionDb(db, (tx) => commitCharter(tx, input, tickerSymbol, name));
 }
@@ -163,8 +137,72 @@ async function commitCharter(
       status: 403,
       error: "Corporation ownership changed. Reload before creating a fund.",
     };
-  if (sponsor.bankCharter?.status === "active")
-    return { ok: false, status: 400, error: "Bank fund creation is not available yet." };
+  const eligibility = await fundCreationEligibility(db, sponsor, {
+    replay: !!(await db
+      .collection("indexFunds")
+      .findOne({ slug: sponsoredFundSlug(tickerSymbol), sponsorCorporationId: sponsor._id })),
+  });
+  if (eligibility) return { ok: false, status: 403, error: eligibility };
+  let mandate: PickedStockMandate | undefined;
+  if (sponsor.bankCharter || input.pickedStocks) {
+    if (!bankMayManageFunds(sponsor.bankCharter))
+      return {
+        ok: false,
+        status: 403,
+        error: "An active investment or universal bank charter is required.",
+      };
+    if (
+      input.scope !== "country" ||
+      input.countryId !== sponsor.countryId ||
+      input.kind !== "broad" ||
+      input.sectorType
+    )
+      return { ok: false, status: 400, error: "Pick companies in the bank's home country." };
+    mandate = {
+      version: 1,
+      mode: "picked_stocks",
+      scope: "country",
+      kind: "broad",
+      countryId: input.countryId,
+      anchorCurrencyCode: COUNTRY_CURRENCY_MAP[input.countryId!] ?? "USD",
+      cashWeightBps: 2500,
+      issuerCapBps: 1500,
+      stocks: input.pickedStocks ?? [],
+    };
+    const invalid = validatePickedStocks(mandate);
+    if (invalid) return { ok: false, status: 400, error: invalid };
+    const issuers = await db
+      .collection<Corporation>("corporations")
+      .find(
+        {
+          _id: { $in: mandate.stocks.map((s) => new ObjectId(s.corporationId)) },
+          countryId: sponsor.countryId,
+          isPrivate: { $ne: true },
+          hiddenFromExchange: { $ne: true },
+          isNationalized: { $ne: true },
+          countryOwnerId: { $exists: false },
+          sharePrice: { $gt: 0 },
+          totalShares: { $gt: 0 },
+          liquidCapital: { $gte: 0 },
+        },
+        { projection: { userId: 1, sharePrice: 1 } }
+      )
+      .toArray();
+    if (
+      issuers.length !== mandate.stocks.length ||
+      issuers.some(
+        (c) =>
+          c._id.equals(sponsor._id) ||
+          String(c.userId) === String(sponsor.userId) ||
+          !Number.isFinite(c.sharePrice)
+      )
+    )
+      return {
+        ok: false,
+        status: 400,
+        error: "Pick public companies at home that you do not control.",
+      };
+  }
   const sectors = await db
     .collection<{ corporationId: ObjectId; sectorType: OperatingSectorType }>("corporateSectors")
     .find({ corporationId: sponsor._id }, { projection: { sectorType: 1 } })
@@ -187,7 +225,9 @@ async function commitCharter(
     prior.countryId === input.countryId &&
     prior.sectorType === input.sectorType &&
     prior.expenseRatioAnnual === input.expenseRatioAnnual &&
-    prior.seedCapitalAnchor === input.seedCapitalAnchor
+    prior.seedCapitalAnchor === input.seedCapitalAnchor &&
+    JSON.stringify(prior.mandate?.mode === "picked_stocks" ? prior.mandate : undefined) ===
+      JSON.stringify(mandate)
   )
     return { ok: true, fundId: prior._id, slug };
   // The unique slug index arbitrates concurrent requests for the same contract.
@@ -246,6 +286,7 @@ async function commitCharter(
     quotedNav: INDEX_FUND_INITIAL_NAV,
     unitSupply: units,
     seedAccounting: "paid_units",
+    ...(mandate ? { mandate } : {}),
     reserveUnits: 0,
     cashAnchor: input.seedCapitalAnchor,
     targetConstituents: [],

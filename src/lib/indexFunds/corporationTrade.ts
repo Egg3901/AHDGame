@@ -1,3 +1,4 @@
+import { fundTradeCapabilities } from "./tradeCapabilities";
 /**
  * Corporations buy fund units with their own liquid capital and redeem at NAV.
  * Corporate cash uses the corporation's currency; fund cash and positions use
@@ -50,6 +51,10 @@ export async function tradeCorporationFund(
   order: { corporationId: string; operationId: string; units: number },
   kind: "subscribe" | "redeem"
 ): Promise<Response> {
+  if (kind === "subscribe" && fund.mandate?.mode === "picked_stocks") {
+    const { queueBankFundSubscription } = await import("./subscriptions");
+    return queueBankFundSubscription(db, { fund, characterId, userId, ...order });
+  }
   const corporationId = new ObjectId(order.corporationId);
   const corporation = await db
     .collection<Corporation>("corporations")
@@ -69,7 +74,7 @@ export async function tradeCorporationFund(
     await resumeFundCommandAudit(db, command.key);
     return response;
   };
-  if (!(await isIndexFundsFullMode()))
+  if (fund.mandate?.mode !== "picked_stocks" && !(await isIndexFundsFullMode()))
     return finish(errorResponse(403, INDEX_FUNDS_PARTIAL_MESSAGE));
   const turnRejection = await rejectDuringTurn(db);
   if (turnRejection) return finish(turnRejection);
@@ -77,7 +82,25 @@ export async function tradeCorporationFund(
     return finish(errorResponse(400, "Fund is not accepting subscriptions"));
   if (kind === "redeem" && fund.status === "delisted")
     return finish(errorResponse(400, "Fund is delisted"));
-  const amountAnchor = quoteIndexFundSubscription(fund.quotedNav, order.units).costAnchor;
+  const ownedPosition = await getPosition(db, fund._id, "corporation", { corporationId });
+  const caps = await fundTradeCapabilities(db, fund, {
+    hasCharacter: true,
+    units: ownedPosition?.units ?? 0,
+    corporationId,
+  });
+  if (kind === "subscribe" ? !caps.canSubscribe : !caps.canRedeem)
+    return finish(
+      errorResponse(
+        400,
+        kind === "redeem" && fund.sponsorCorporationId?.equals(corporationId)
+          ? "Sponsor units stay invested while other investors or withdrawals remain."
+          : "This fund action is unavailable."
+      )
+    );
+  const amountAnchor =
+    kind === "subscribe"
+      ? quoteIndexFundSubscription(fund.quotedNav, order.units).costAnchor
+      : fund.quotedNav * order.units;
   const currency = resolveCorpLiquidCurrencyCode(corporation);
   const forex = await isForexEnabled();
   const rates = forex ? await loadFxRatesRecord(db) : {};

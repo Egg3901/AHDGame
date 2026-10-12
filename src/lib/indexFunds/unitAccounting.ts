@@ -115,7 +115,7 @@ export function quoteIndexFundSubscription(
 
 // KEPT INTENTIONALLY (issue #2824): creditFundUnits/debitFundUnits form the
 // double-entry, NAV-weighted fund unit ledger. They are tested but not yet
-// wired into production fund flows — they await integration with the shadow
+// wired into production fund flows - they await integration with the shadow
 // ledger arc (financialTxLog conservation checks). Do not delete as dead code.
 export function creditFundUnits(
   position: WeightedUnitPosition,
@@ -232,12 +232,20 @@ export function quoteCashOnlyRedemption(input: {
   quotedNav: number;
   requestedUnits: number;
   cashAnchor: number;
+  allowFractionalUnits?: boolean;
 }): CashOnlyRedemptionQuote {
   assertFinitePositive(input.quotedNav, "quotedNav");
-  const requestedUnits = assertWholeFundUnits(input.requestedUnits);
+  if (input.allowFractionalUnits) assertFinitePositive(input.requestedUnits, "requestedUnits");
+  const requestedUnits = input.allowFractionalUnits
+    ? input.requestedUnits
+    : assertWholeFundUnits(input.requestedUnits);
   const cashAnchor = Number.isFinite(input.cashAnchor) ? Math.max(0, input.cashAnchor) : 0;
   const requestedAmountAnchor = requestedUnits * input.quotedNav;
-  const redeemableUnits = Math.min(requestedUnits, Math.floor(cashAnchor / input.quotedNav));
+  const cashUnits = cashAnchor / input.quotedNav;
+  const redeemableUnits = Math.min(
+    requestedUnits,
+    input.allowFractionalUnits ? cashUnits : Math.floor(cashUnits)
+  );
   const paidAmountAnchor = redeemableUnits * input.quotedNav;
   const queuedUnits = requestedUnits - redeemableUnits;
   const queuedAmountAnchor = requestedAmountAnchor - paidAmountAnchor;
@@ -278,10 +286,10 @@ export function blendedRedeemFxRate(params: {
 }
 
 /**
- * Ticket #857 grandfather — display side. A position is valued in the UI by
+ * Ticket #857 grandfather - display side. A position is valued in the UI by
  * feeding an ₳ amount to the currency layer, which multiplies by the fund's FX
  * rate to render native currency. Legacy units redeem rate-free (× 1), so in ₳
- * terms they are worth only `1 / rate` of a normal unit — otherwise the display
+ * terms they are worth only `1 / rate` of a normal unit - otherwise the display
  * layer's × rate step over-states a legacy holder's position by ~rate× (≈100×),
  * showing a value the holder can never actually redeem. This returns the
  * legacy-adjusted unit count to substitute for raw `units` when computing any
@@ -289,7 +297,7 @@ export function blendedRedeemFxRate(params: {
  * value, cost basis, per-unit avg NAV). After the display layer applies × rate,
  * the legacy portion collapses back to its true rate-free native value. Returns
  * `units` unchanged when forex is off, there is no position, or nothing is
- * legacy — so post-fix holders are untouched.
+ * legacy - so post-fix holders are untouched.
  */
 export function legacyAdjustedDisplayUnits(params: {
   units: number;

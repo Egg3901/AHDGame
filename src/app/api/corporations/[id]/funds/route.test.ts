@@ -14,6 +14,7 @@ vi.mock("@/lib/indexFunds/featureFlag", () => ({ isIndexFundsEnabled: vi.fn() })
 vi.mock("@/lib/indexFunds/fundQueries", () => ({ listFundsBySponsor: vi.fn() }));
 vi.mock("@/lib/currency/corporationCapital", () => ({
   getCorpFxRate: vi.fn().mockResolvedValue(2),
+  resolveCorpLiquidCurrencyCode: (corp: { liquidCurrencyCode?: string }) => corp.liquidCurrencyCode,
   anchorToCorpLiquidCapital: (amount: number, _corp: unknown, rate: number) => amount * rate,
 }));
 
@@ -22,16 +23,18 @@ let corp: ReturnType<typeof makeCorporation>;
 beforeEach(() => {
   vi.clearAllMocks();
   db = createMockDb();
-  corp = makeCorporation({ liquidCapital: 30_000_000, liquidCurrencyCode: "USD" });
+  corp = makeCorporation({ countryId: "US", liquidCapital: 30_000_000, liquidCurrencyCode: "USD" });
   vi.mocked(getDb).mockResolvedValue(db as unknown as Db);
   vi.mocked(getAuthUser).mockResolvedValue({ userId: String(corp.userId) } as never);
   vi.mocked(isIndexFundsEnabled).mockResolvedValue(true);
   vi.mocked(listFundsBySponsor).mockResolvedValue([]);
   db.collection("corporations").findOne.mockImplementation(async () => corp);
   db.collection("gameConfig").findOne.mockResolvedValue({ playerFundSponsorshipEnabled: true });
-  db.collection("corporateSectors")
-    .find()
-    .toArray.mockResolvedValue([{ sectorType: "financial" }]);
+  db.collection("federalBudget").findOne.mockResolvedValue({
+    countryId: corp.countryId,
+    currencyCode: "USD",
+  });
+  db.collection("corporateSectors").findOne.mockResolvedValue({ sectorType: "financial" });
 });
 async function read() {
   const res = await GET(new Request("http://localhost/api/corporations/1/funds"), {
@@ -44,6 +47,10 @@ async function read() {
 describe("fund creation capability", () => {
   it("allows a funded eligible CEO", async () => {
     expect((await read()).canCreate).toBe(true);
+  });
+  it("hides creation when the fee cannot settle in the corporation currency", async () => {
+    db.collection("federalBudget").findOne.mockResolvedValue({ currencyCode: "GBP" });
+    expect((await read()).canCreate).toBe(false);
   });
   it("denies spectators and vacant CEO seats", async () => {
     vi.mocked(getAuthUser).mockResolvedValue({ userId: String(new ObjectId()) } as never);
@@ -62,17 +69,13 @@ describe("fund creation capability", () => {
     db.collection("gameState").findOne.mockResolvedValue({ corporationActionsPaused: true });
     expect((await read()).canCreate).toBe(false);
   });
-  it("denies active banks, corporations without a finance sector and insufficient local cash", async () => {
+  it("denies ineligible banks, corporations without a finance sector and insufficient local cash", async () => {
     corp.bankCharter = { status: "active" } as never;
     expect((await read()).canCreate).toBe(false);
     delete corp.bankCharter;
-    db.collection("corporateSectors")
-      .find()
-      .toArray.mockResolvedValue([{ sectorType: "manufacturing" }]);
+    db.collection("corporateSectors").findOne.mockResolvedValue(null);
     expect((await read()).canCreate).toBe(false);
-    db.collection("corporateSectors")
-      .find()
-      .toArray.mockResolvedValue([{ sectorType: "financial" }]);
+    db.collection("corporateSectors").findOne.mockResolvedValue({ sectorType: "financial" });
     corp.liquidCapital = 24_999_999;
     expect((await read()).canCreate).toBe(false);
   });

@@ -1,3 +1,4 @@
+import { fundTradeCapabilities } from "@/lib/indexFunds/tradeCapabilities";
 import { tradeCorporationFund } from "@/lib/indexFunds/corporationTrade";
 import { resumeFundCommandAudit } from "@/lib/indexFunds/playerCommandAudit";
 import {
@@ -41,9 +42,9 @@ import { getCurrentTurn } from "@/lib/turn/currentTurn";
 import { subscribeIndexFundSchema } from "@/lib/api/schemas/indexFunds";
 import { recordAudit } from "@/lib/audit/recordAudit";
 
-// POST /api/investment-funds/[slug]/subscribe — Subscribe (buy) fund units
+// POST /api/investment-funds/[slug]/subscribe - Subscribe (buy) fund units
 // Auth: logged-in user with a character
-// Requires "full" mode — partial mode blocks player transactions.
+// Requires "full" mode - partial mode blocks player transactions.
 // Debits character's personal balance in the fund's anchor currency.
 export async function POST(request: Request, { params }: { params: Promise<{ slug: string }> }) {
   let claimedOperationId: string | undefined;
@@ -69,6 +70,16 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
       return errorResponse(parsed.status, parsed.error);
     }
     const { units, operationId, payCurrency } = parsed.data;
+    if (fund.mandate?.mode === "picked_stocks") {
+      const { queueBankFundSubscription } = await import("@/lib/indexFunds/subscriptions");
+      return queueBankFundSubscription(db, {
+        fund,
+        characterId,
+        userId: auth.userId,
+        ...parsed.data,
+      });
+    }
+
     if (parsed.data.corporationId)
       return tradeCorporationFund(
         db,
@@ -87,6 +98,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
     });
     if (command.response) return command.response;
     const execute = async () => {
+      if (!(await fundTradeCapabilities(db, fund, { hasCharacter: true, units: 0 })).canSubscribe)
+        return errorResponse(403, "This fund is not accepting investments.");
       if (!(await isIndexFundsEnabled())) {
         return errorResponse(403, INDEX_FUNDS_DISABLED_MESSAGE);
       }
@@ -112,7 +125,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
       // charging, exactly as the share-trading path does (`buyPublicShares`
       // costInHome). Skipping this undercharges/overcharges every fund whose
       // currency rate ≠ 1 (JPY ~107×, CNY ~8×, GBP ~1.5×). `cashAnchor` and the
-      // transaction `amountAnchor` stay in ₳ — only the wallet legs are native.
+      // transaction `amountAnchor` stay in ₳ - only the wallet legs are native.
       let fundFxRate = 1.0;
       if (forexEnabled) {
         const fxResult = await loadCharacterFxRate(db, fundCurrency);

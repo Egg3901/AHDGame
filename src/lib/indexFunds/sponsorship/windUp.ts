@@ -157,7 +157,10 @@ export async function completeWindUp(
     const withdrawals = await tx
       .collection("indexFundRedemptionQueue")
       .countDocuments({ fundId: fund._id, status: { $in: ["queued", "partial", "processing"] } });
-    if (bonds || orders || withdrawals)
+    const subscriptions = await tx
+      .collection("indexFundCommands")
+      .countDocuments({ "subscription.fundId": fund._id, "subscription.status": "queued" });
+    if (bonds || orders || withdrawals || subscriptions)
       throw new Error("Fund settlement must finish before wind-up");
     return settleWindUp(tx, current, currentTurn);
   });

@@ -1,3 +1,4 @@
+import { bankMayManageFunds } from "./rules/eligibility";
 /** Sponsor fees transfer marked fund backing to corporate income once per turn. */
 import { ObjectId, type Db } from "mongodb";
 import type { Corporation, IndexFund, IndexFundTransaction } from "@/lib/db/types";
@@ -64,7 +65,7 @@ export async function chargeSponsorExpenseFees(
             ),
           },
         },
-        { projection: { name: 1, countryId: 1, liquidCurrencyCode: 1 } }
+        { projection: { name: 1, countryId: 1, liquidCurrencyCode: 1, bankCharter: 1 } }
       )
       .toArray();
     const sponsorById = new Map(sponsors.map((sponsor) => [String(sponsor._id), sponsor]));
@@ -84,7 +85,11 @@ export async function chargeSponsorExpenseFees(
     const witnesses = [];
     for (const fund of current) {
       const sponsor = sponsorById.get(String(fund.sponsorCorporationId));
-      if (!sponsor) continue;
+      if (
+        !sponsor ||
+        (fund.mandate?.mode === "picked_stocks" && !bankMayManageFunds(sponsor.bankCharter))
+      )
+        continue;
       const id = String(fund._id);
       const aumAnchor = markedFundBacking({
         cashAnchor: fund.cashAnchor,

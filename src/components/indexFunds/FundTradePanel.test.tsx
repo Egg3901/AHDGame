@@ -34,6 +34,28 @@ describe("FundTradePanel currency display (ticket #1072)", () => {
     vi.restoreAllMocks();
   });
 
+  it("can select the entire fractional position without rounding away units", () => {
+    render(
+      <FundTradePanel
+        fundId="picked"
+        quotedNav={100}
+        anchorCurrencyCode="USD"
+        status="active"
+        myUnits={0.00000023}
+        myLegacyUnits={0}
+        canSubscribe={false}
+        canRedeem
+        defaultMode="redeem"
+        nextTurnSubscriptions
+        onSuccess={vi.fn()}
+      />
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Withdraw all" }));
+    expect((screen.getByLabelText("Units to withdraw") as HTMLInputElement).valueAsNumber).toBe(
+      0.00000023
+    );
+  });
+
   it("quotes subscribe cost and redeem payout in the same display currency", () => {
     render(
       <FundTradePanel
@@ -50,7 +72,7 @@ describe("FundTradePanel currency display (ticket #1072)", () => {
     expect(screen.getByText("Estimated cost").nextElementSibling?.textContent).toBe("M376");
     expect(screen.queryByText("$79.00")).toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: "Redeem" }));
+    fireEvent.click(screen.getByRole("button", { name: "Withdraw" }));
 
     expect(screen.getByText("Quoted payout").nextElementSibling?.textContent).toBe("M376");
     expect(screen.queryByText("$79.00")).toBeNull();
@@ -125,7 +147,7 @@ describe("FundTradePanel currency display (ticket #1072)", () => {
       const submit = () =>
         screen
           .getAllByRole("button", {
-            name: mode === "subscribe" ? "Subscribe" : "Redeem units",
+            name: mode === "subscribe" ? "Subscribe" : "Withdraw",
           })
           .at(-1)!;
       await waitFor(() => expect(submit().hasAttribute("disabled")).toBe(false));

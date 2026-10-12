@@ -1,4 +1,4 @@
-// POST /api/index-funds/charter — a finance corporation charters a sponsored fund (A5).
+// POST /api/index-funds/charter - a finance corporation charters a sponsored fund (A5).
 // Auth: requireBasicAuth, CEO of the sponsoring corporation
 // Errors: 400, 401, 403, 404, 409, 429
 
@@ -15,9 +15,7 @@ import type { Corporation } from "@/lib/db/types";
 import { isOperatingSectorType } from "@/lib/constants/corporations";
 import { COUNTRY_CONFIGS } from "@/lib/constants/countries";
 import { getCurrentTurn } from "@/lib/turn/currentTurn";
-import { isIndexFundsEnabled } from "@/lib/indexFunds/featureFlag";
 import { charterFund } from "@/lib/indexFunds/sponsorship/charterFund";
-import { INDEX_FUNDS_DISABLED_MESSAGE } from "@/lib/indexFunds/fundCron";
 
 const schema = z.object({
   sponsorCorporationId: z.string(),
@@ -29,6 +27,16 @@ const schema = z.object({
   sectorType: z.string().optional(),
   expenseRatioAnnual: z.number(),
   seedCapitalAnchor: z.number(),
+  pickedStocks: z
+    .array(
+      z.object({
+        corporationId: z.string().regex(/^[a-f0-9]{24}$/),
+        weightBps: z.number().int().min(1).max(1500),
+      })
+    )
+    .min(1)
+    .max(10)
+    .optional(),
 });
 
 export async function POST(request: Request) {
@@ -42,7 +50,6 @@ export async function POST(request: Request) {
     const db = await getDb();
     const corpGuard = await requireCorporationActionsEnabled(db);
     if (corpGuard) return corpGuard;
-    if (!(await isIndexFundsEnabled())) return errorResponse(403, INDEX_FUNDS_DISABLED_MESSAGE);
 
     const parsed = await parseJsonBody(request, schema);
     if (!parsed.success) return errorResponse(parsed.status, parsed.error);
@@ -72,6 +79,7 @@ export async function POST(request: Request) {
       expenseRatioAnnual: body.expenseRatioAnnual,
       seedCapitalAnchor: body.seedCapitalAnchor,
       currentTurn: await getCurrentTurn(db),
+      pickedStocks: body.pickedStocks,
     });
     if (!result.ok) return errorResponse(result.status, result.error);
 

@@ -28,6 +28,8 @@ export interface Shareholder {
   corporationId?: ObjectId;
   /** Index fund holder, present for passive fund-owned positions */
   fundId?: ObjectId;
+  /** Managed funds do not earn passive index price or credit benefits. */
+  passiveIndexEligible?: boolean;
   /** NPP holder, present for NPP CEO-owned positions */
   nppId?: ObjectId;
   shares: number;
@@ -1236,14 +1238,14 @@ export interface CorporateSector {
    * Consecutive turns the sector cleared less than STRANDED_LOW_FILL_THRESHOLD
    * of its output (clearing mode only; mothballed turns hold the count). The
    * chronic-stranding signal behind the player stranded-plant warning and the
-   * NPP stranded-divest — one turn of soldFraction flickers on market noise,
+   * NPP stranded-divest - one turn of soldFraction flickers on market noise,
    * this does not.
    */
   lowFillTurns?: number;
   /**
    * Consecutive turns the sector's measured P&L was negative (plants
    * `plantsPnl.profit < 0`). Maintained by the NPP decision pass for NPP-run
-   * corps only — players never get this field written — and reset on the
+   * corps only - players never get this field written - and reset on the
    * first profitable turn and on mothball restart. The chronic-cost-loss
    * signal behind NPP cost-mothballing (demand audit step 5): fill-based
    * machinery cannot see a plant that sells everything yet bleeds on costs.
@@ -1258,7 +1260,7 @@ export interface CorporateSector {
   /**
    * Inventory pile, units per storable output commodity (daily unit basis,
    * same as producedUnits). Spoils per COMMODITY_SPOILAGE_PER_TURN, carries a
-   * flat per-turn cost, and sells down when the fresh offer fully clears —
+   * flat per-turn cost, and sells down when the fresh offer fully clears -
    * see sectorInventory.ts.
    */
   inventoryUnits?: Partial<Record<string, number>>;

@@ -19,6 +19,9 @@ export async function canRedeemSponsorUnits(
     },
     options
   );
+  const pendingSubscriptions = await db
+    .collection("indexFundCommands")
+    .countDocuments({ "subscription.fundId": fund._id, "subscription.status": "queued" }, options);
   const pendingWithdrawals = await db.collection("indexFundRedemptionQueue").countDocuments(
     {
       fundId: fund._id,
@@ -29,7 +32,7 @@ export async function canRedeemSponsorUnits(
   return !sponsorUnitsLocked({
     accounting: fund.seedAccounting,
     isSponsor: true,
-    otherHolders,
+    otherHolders: otherHolders + pendingSubscriptions,
     pendingWithdrawals,
   });
 }

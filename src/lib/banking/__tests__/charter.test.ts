@@ -249,6 +249,35 @@ describe("banking charter", () => {
   });
 
   describe("checkCharterEligibility", () => {
+    it.each(["retail", "investment", "universal"] as const)(
+      "checks sponsored funds for a proposed %s charter",
+      async (type) => {
+        db.collection("indexFunds");
+        db.collectionMocks.indexFunds!.countDocuments.mockResolvedValue(1);
+        const { checkCharterEligibility } = await importCharter();
+        const result = await checkCharterEligibility(db as unknown as Db, makeCorp(), type, "USD");
+        expect(result.eligible).toBe(type !== "retail");
+      }
+    );
+    it("blocks switching a fund manager to retail", async () => {
+      db.collection("indexFunds");
+      db.collectionMocks.indexFunds!.countDocuments.mockResolvedValue(1);
+      const { previewCharterSwitch } = await importCharter();
+      const corp = makeCorp({
+        bankCharter: {
+          type: "investment",
+          status: "active",
+          currency: "USD",
+          charteredTurn: 1,
+          postedCapital: 1000000,
+          totalDeposits: 0,
+        } as BankCharter,
+      });
+      const result = await previewCharterSwitch(db as unknown as Db, corp, "retail", 42);
+      expect(result.allowed).toBe(false);
+      expect(result.blockers).toContain("sponsored_funds");
+    });
+
     it("fails when private banking flag is off", async () => {
       db.collectionMocks.gameConfig!.findOne.mockResolvedValue({
         _id: "default",
