@@ -340,3 +340,12 @@ describe("COUNTRY_BILL_PHASES — Ireland", () => {
     expect(ie!.emptyResult).toEqual({ enacted: 0, failed: 0 });
   });
 });
+
+it.each(["SCO", "WAL"] as const)(
+  "registers %s national bill processing and parliamentary government",
+  async (country) => {
+    expect(COUNTRY_BILL_PHASES[country]?.phaseName).toBe(`${country.toLowerCase()}BillLifecycle`);
+    const { getParliamentaryCountryIds } = await import("./parliamentaryGovernment");
+    expect(getParliamentaryCountryIds()).toContain(country);
+  }
+);

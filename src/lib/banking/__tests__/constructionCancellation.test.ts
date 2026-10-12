@@ -112,6 +112,81 @@ function world(outstanding = 75_000, epoch = 2, defaults = false) {
 }
 
 describe("principal-first financed build cancellation", () => {
+  it("tops up an interrupted partial cancellation to the full original cost on conversion", async () => {
+    const w = world();
+    await w.db.collection("corporateSectors").updateOne(
+      { _id: w.sectorId },
+      {
+        $set: {
+          sectorType: "manufacturing",
+          operatingCapacityTurn: 12,
+          capacityBookAnchor: 250000,
+        },
+      }
+    );
+    const crash = withInjectedCrash(w.memory, {
+      collection: "corporateSectors",
+      op: "updateOne",
+      onCall: 1,
+      afterWrite: true,
+      matches: (args) =>
+        (args[1] as { $inc?: Record<string, number> }).$inc?.[
+          "constructionFinancing.escrowLocal"
+        ] === 37500,
+    });
+    await expect(
+      cancelFinancedConstruction({ ...w.input, db: crash.db, turn: 12 })
+    ).rejects.toBeInstanceOf(InjectedCrash);
+    expect(
+      await cancelFinancedConstruction({ ...w.input, turn: 13, fullRefund: true })
+    ).toMatchObject({ ok: true });
+    await cancelFinancedConstruction({ ...w.input, turn: 14, fullRefund: true });
+    expect(await w.db.collection("corporations").findOne({ _id: w.borrowerId })).toMatchObject({
+      liquidCapital: 75000,
+    });
+    expect(await w.db.collection("corporations").findOne({ _id: w.bankId })).toMatchObject({
+      bankCharter: { cashReserves: 1075000, totalLoans: 0 },
+    });
+    expect(await w.db.collection("corporateSectors").findOne({ _id: w.sectorId })).toMatchObject({
+      capitalStock: 200,
+      capacityBookAnchor: 200000,
+      buildQueue: [],
+      constructionFinancing: { escrowLocal: 0, status: "released" },
+    });
+  });
+  it("fully refunds a conversion order, removes delivered capacity and repays principal exactly once", async () => {
+    const w = world();
+    await w.db.collection("corporateSectors").updateOne(
+      { _id: w.sectorId },
+      {
+        $set: {
+          sectorType: "manufacturing",
+          operatingCapacityTurn: 12,
+          capitalStock: 250,
+          capacityBookAnchor: 250000,
+        },
+      }
+    );
+    expect(await cancelFinancedConstruction({ ...w.input, turn: 12, fullRefund: true })).toEqual({
+      ok: true,
+      refunded: 100000,
+      principalRepaid: 75000,
+      ownerRefund: 25000,
+    });
+    expect(await w.db.collection("corporateSectors").findOne({ _id: w.sectorId })).toMatchObject({
+      capitalStock: 200,
+      capacityBookAnchor: 200000,
+      buildQueue: [],
+      constructionInProgressAnchor: 0,
+    });
+    await cancelFinancedConstruction({ ...w.input, turn: 13, fullRefund: true });
+    expect(await w.db.collection("corporations").findOne({ _id: w.borrowerId })).toMatchObject({
+      liquidCapital: 75000,
+    });
+    expect(await w.db.collection("corporations").findOne({ _id: w.bankId })).toMatchObject({
+      bankCharter: { totalLoans: 0, cashReserves: 1075000 },
+    });
+  });
   it("returns only the growth portion of a financed mixed replacement build", async () => {
     const w = world();
     const poolId = new ObjectId();

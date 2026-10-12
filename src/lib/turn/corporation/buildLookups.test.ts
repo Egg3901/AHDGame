@@ -177,6 +177,24 @@ describe("buildCorporationLookups — bond holdings", () => {
     expect(db.collectionMocks.resetMetricSnapshots!.find).toHaveBeenCalledOnce();
   });
 
+  it("builds an era clearing book for activated successor countries", async () => {
+    db.collection("gameState").findOne.mockResolvedValue({
+      _id: "current",
+      preset: "1953-default",
+      currentYear: 1953,
+      startingYear: 1953,
+    });
+    db.collection("countryGameStates").find.mockReturnValue(
+      makeCursor([
+        { _id: "SCO", status: "active" },
+        { _id: "WAL", status: "active" },
+      ])
+    );
+    const result = await buildCorporationLookups(db as unknown as Db);
+    expect(result.countryClearingBooks?.has("SCO")).toBe(true);
+    expect(result.countryClearingBooks?.has("WAL")).toBe(true);
+  });
+
   it("includes sovereign bond holdings in bondsHeldByCorpId", async () => {
     const lookups = await buildCorporationLookups(db as unknown as Db);
 

@@ -1,3 +1,5 @@
+import { refundConversionConstruction } from "../refundConversionConstruction";
+import { updateParliamentaryGovernmentSeats } from "@/lib/turn/parliamentaryGovernment";
 import { withSessionDb, afterCommit, unboundDb, boundSession } from "@/lib/db/sessionDb";
 /**
  * Atomic driver that transfers a region from one country to another (NI →
@@ -17,6 +19,11 @@ import { withSessionDb, afterCommit, unboundDb, boundSession } from "@/lib/db/se
  */
 import type { Db } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
+import { convertLawPrograms } from "../conversionPrograms";
+import { convertPublicCurrency } from "./convertPublicCurrency";
+import { loadFxScalePair } from "@/lib/country/mergeFxScale";
+import { carryNorthernIrelandMPs, mirrorNorthernIrelandMPs } from "./carryNorthernIrelandMPs";
+import type { ElectedOfficial } from "@/lib/db/types/officials";
 import type { State } from "@/lib/db/types";
 import { computeNationalMetrics } from "@/lib/nationalMetrics";
 import { recordCountryEvent } from "@/lib/turn/history/recordCountryEvent";
@@ -126,16 +133,48 @@ async function transferRegionInTransaction(
     await ensureIrelandResetV2ForReunification(db);
   }
 
+  const reunifyingNorthernIreland =
+    regionId === "NIR" && fromCountryId === "UK" && toCountryId === "IE";
+  const carriedMPs = reunifyingNorthernIreland
+    ? await db
+        .collection<ElectedOfficial>("electedOfficials")
+        .find({ countryId: "UK", state: "NIR", officeType: "commons" })
+        .toArray()
+    : [];
+  const currencyPair = reunifyingNorthernIreland
+    ? await loadFxScalePair(db, fromCountryId, toCountryId)
+    : undefined;
+  if (currencyPair?.kind === "missing-rate")
+    throw new Error("Reunification requires usable exchange rates");
+  const currencyScale = currencyPair?.kind === "convert" ? currencyPair.scale : 1;
+  if (reunifyingNorthernIreland) {
+    await refundConversionConstruction(db, regionId, currentTurn);
+    if (currencyPair?.kind === "convert") {
+      // Freeze inferred GBP before countryId changes, including legacy unstamped corporations.
+      await db.collection("corporations").updateMany(
+        {
+          headquartersState: regionId,
+          $or: [
+            { liquidCurrencyCode: { $exists: false } },
+            { liquidCurrencyCode: null },
+            { liquidCurrencyCode: "" },
+          ],
+        },
+        { $set: { liquidCurrencyCode: currencyPair.oldCurrency } }
+      );
+    }
+  }
   const evacuated = await evacuateRegionPolitics(db, {
     regionId,
     fromCountryId,
     toCountryId,
     relocateToRegionId,
   });
+  await carryNorthernIrelandMPs(db, carriedMPs, new Date());
   const rescoped = await rescopeRegionToCountry(db, regionId, fromCountryId, toCountryId);
   await convertRegionDoc(db, { regionId, toCountryId, province, displayName, votingSystem });
   if (fromCountryId === "UK" && toCountryId === "IE") {
-    await transferResetV2RegionToIreland(db, regionId);
+    await transferResetV2RegionToIreland(db, regionId, currencyScale);
   }
 
   // A delegation carried in by a DISSOLVING source is sized for the chamber it
@@ -145,8 +184,15 @@ async function transferRegionInTransaction(
   // region's `houseDistricts` / `stateSenateSeats` and `convertRegionDoc` only
   // just wrote them. On the evacuate path there is no carried delegation to
   // rescale -- the officials were deleted -- so this is a no-op.
-  if (relocateToRegionId === null) {
+  if (relocateToRegionId === null || reunifyingNorthernIreland) {
     await rescaleRegionDelegations(db, { regionId, countryId: toCountryId, now: new Date() });
+    if (reunifyingNorthernIreland) {
+      const seated = await db
+        .collection<ElectedOfficial>("electedOfficials")
+        .find({ countryId: "IE", state: "NIR", officeType: "dail" })
+        .toArray();
+      await mirrorNorthernIrelandMPs(db, seated, new Date());
+    }
   }
 
   // Shift the region's GDP-weighted share of national tax bases + spending
@@ -161,7 +207,8 @@ async function transferRegionInTransaction(
       regionId,
       fromCountryId,
       toCountryId,
-      relocateToRegionId === null
+      relocateToRegionId === null,
+      currencyScale
     );
 
   if (boundSession(db)) await budgetShift();
@@ -170,15 +217,32 @@ async function transferRegionInTransaction(
       console.error(`${regionId} budget reapportion failed:`, err)
     );
 
+  if (reunifyingNorthernIreland) {
+    await convertPublicCurrency(db, regionId, currencyScale);
+    await convertLawPrograms(db, { regionId, countryId: "IE", scale: currencyScale });
+  }
+
   // Re-denominate the region's corps + resident players into the new country's
-  // currency (NI pounds → euro). Best-effort: a forex hiccup must not abort the
+  // currency (sterling to Irish pounds). Best-effort: a forex hiccup must not abort the
   // transfer (balances can be re-converted; the region has already moved).
   if (boundSession(db))
-    await convertTransferredResidentsCurrency(db, regionId, fromCountryId, toCountryId, true);
+    await convertTransferredResidentsCurrency(
+      db,
+      regionId,
+      fromCountryId,
+      toCountryId,
+      true,
+      currencyPair
+    );
   else
     await convertTransferredResidentsCurrency(db, regionId, fromCountryId, toCountryId).catch(
       (err) => console.error(`${regionId} currency conversion failed:`, err)
     );
+
+  if (reunifyingNorthernIreland) {
+    await updateParliamentaryGovernmentSeats(db, fromCountryId);
+    await updateParliamentaryGovernmentSeats(db, toCountryId);
+  }
 
   // Both of the following are COUNTRY-wide, not region-scoped, so a merge moving
   // many regions runs them once at the end instead of once per region. See

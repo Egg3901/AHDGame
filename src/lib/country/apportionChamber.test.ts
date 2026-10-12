@@ -24,32 +24,35 @@ describe("apportionOfficialsToChamber", () => {
     db.collection("electedOfficials").updateOne.mockResolvedValue({ modifiedCount: 1 });
   });
 
-  it("sizes the Bundestag delegation from houseDistricts, not from the seats doc", async () => {
-    // Saxony: 151 Volkskammer seats landing in a 55-seat Bundestag delegation.
-    // The `DE-bundestag-SN` document says 16, but that is the WAHLKREIS count and
-    // sizing from it would more than halve the delegation.
-    db.collection("states").findOne.mockResolvedValue({
-      _id: "SN",
-      houseDistricts: 55,
-      stateSenateSeats: 160,
-    });
-    db.collection("seats").findOne.mockResolvedValue({ totalSeats: 16 });
-    const seated = await apportionOfficialsToChamber(db as unknown as Db, {
-      regionId: "SN",
-      officeType: "bundestag",
-      officials: [
-        { _id: A, party: "7", seatsHeld: 83 },
-        { _id: B, party: "9", seatsHeld: 68 },
-      ],
-      now: new Date(),
-    });
-    const total = db.collectionMocks["electedOfficials"].updateOne.mock.calls.reduce(
-      (sum, c) => sum + c[1].$set.seatsHeld,
-      0
-    );
-    expect(total).toBe(55);
-    expect(seated).toBe(2);
-  });
+  it.each(["bundestag", "dail"])(
+    "sizes the %s delegation from houseDistricts, not from the seats doc",
+    async (officeType) => {
+      // Saxony: 151 Volkskammer seats landing in a 55-seat Bundestag delegation.
+      // The `DE-bundestag-SN` document says 16, but that is the WAHLKREIS count and
+      // sizing from it would more than halve the delegation.
+      db.collection("states").findOne.mockResolvedValue({
+        _id: "SN",
+        houseDistricts: 55,
+        stateSenateSeats: 160,
+      });
+      db.collection("seats").findOne.mockResolvedValue({ totalSeats: 16 });
+      const seated = await apportionOfficialsToChamber(db as unknown as Db, {
+        regionId: "SN",
+        officeType,
+        officials: [
+          { _id: A, party: "7", seatsHeld: 83 },
+          { _id: B, party: "9", seatsHeld: 68 },
+        ],
+        now: new Date(),
+      });
+      const total = db.collectionMocks["electedOfficials"].updateOne.mock.calls.reduce(
+        (sum, c) => sum + c[1].$set.seatsHeld,
+        0
+      );
+      expect(total).toBe(55);
+      expect(seated).toBe(2);
+    }
+  );
 
   it("sizes a Landtag delegation from stateSenateSeats", async () => {
     db.collection("states").findOne.mockResolvedValue({

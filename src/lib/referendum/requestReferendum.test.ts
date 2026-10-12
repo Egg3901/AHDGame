@@ -198,3 +198,17 @@ describe("requestReferendum", () => {
     expect(db.collection("referendums").insertOne).not.toHaveBeenCalled();
   });
 });
+
+it("reads constitutional cooldowns independently of later peace ballots", async () => {
+  const db = createMockDb();
+  seed(db, { desire: 70, ap: 5 });
+  db.collectionMocks.referendums.find.mockReturnValue(cursorOf([{ cooldownReadyAtTurn: 580 }]));
+  const result = await requestReferendum(db as unknown as Db, { countryId: "UK", stateId: "SCO" });
+  expect(result.status).toBe(400);
+  expect(db.collectionMocks.referendums.find).toHaveBeenCalledWith(
+    expect.objectContaining({
+      kind: { $in: ["independence", "reunification"] },
+    })
+  );
+  expect(db.collectionMocks.referendums.insertOne).not.toHaveBeenCalled();
+});

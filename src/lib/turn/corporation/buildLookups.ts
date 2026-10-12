@@ -48,7 +48,7 @@ import { reconcileSignedEmbargoBills } from "@/lib/trade/reconcileEmbargoes";
 import { buildTradeAffinity } from "@/lib/trade/tradeAffinity";
 import { buildCountryClearingBooks } from "@/lib/market/tradePartition";
 import { sectorCountryForClearing } from "./sectorCountry";
-import { COUNTRY_ORDER } from "@/lib/constants/countries";
+import { getRegisteredCountryIds } from "@/lib/country/registeredCountries";
 import {
   MANUFACTURING_PRODUCT_PROJECTS_V2,
   type ManufacturingProductProject,
@@ -1069,18 +1069,19 @@ export async function buildCorporationLookups(
     // among themselves; membership from the engine's MARKETIZATION_SCHEDULE via
     // isCurtained, so the curtain lifts on the historical marketization dates
     // and the Tito-split exemption keeps Yugoslavia trading with the open world.
-    const [curtainCfg, curtainState] = await Promise.all([
+    const [curtainCfg, curtainState, countries] = await Promise.all([
       db
         .collection<{ _id: string; commandEconomyEnabled?: boolean }>("gameConfig")
         .findOne({ _id: "default" }, { projection: { commandEconomyEnabled: 1 } }),
       db
         .collection<GameState>("gameState")
         .findOne({ _id: "current" }, { projection: { currentYear: 1 } }),
+      getRegisteredCountryIds(db),
     ]);
     const curtainEnabled = curtainCfg?.commandEconomyEnabled === true;
     const curtainYear = curtainState?.currentYear ?? null;
     const curtainedCountries = new Set<string>(
-      COUNTRY_ORDER.filter((c) => isCurtained(c, curtainYear, curtainEnabled))
+      countries.filter((c) => isCurtained(c, curtainYear, curtainEnabled))
     );
     const { affinityFor, capUnitsFor, importCostMultiplierFor } = buildTradeAffinity({
       ftaPairs: activeFtaPairs,
@@ -1090,7 +1091,7 @@ export async function buildCorporationLookups(
       curtainedCountries,
     });
     countryClearingBooks = buildCountryClearingBooks({
-      countries: COUNTRY_ORDER,
+      countries,
       nationalBalances: nationalCommodityBalancesByCountry,
       affinityFor,
       capUnitsFor,

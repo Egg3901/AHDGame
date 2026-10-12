@@ -195,3 +195,50 @@ describe("buildPriceHistoryDocs", () => {
     expect(food.turn).toBe(7);
   });
 });
+
+it("prices the reachable markets of runtime successors", () => {
+  const ctx = pricingContext(
+    { supply: 20_000_000, demand: 100_000_000 },
+    { scarcityDriftEnabled: true }
+  );
+  ctx.reachableBooks.set(
+    "SCO",
+    new Map([
+      [
+        "food",
+        {
+          supply: 20_000_000,
+          demand: 100_000_000,
+          domesticDemand: 100_000_000,
+          imports: 0,
+          exports: 0,
+          blockedSupply: 0,
+          untradedSupply: 0,
+        },
+      ],
+    ])
+  );
+  ctx.reachableBooks.set(
+    "WAL",
+    new Map([
+      [
+        "food",
+        {
+          supply: 100_000_000,
+          demand: 20_000_000,
+          domesticDemand: 20_000_000,
+          imports: 0,
+          exports: 0,
+          blockedSupply: 0,
+          untradedSupply: 0,
+        },
+      ],
+    ])
+  );
+  const { priceOp } = priceCommodity(ctx, "food", new Set());
+  const prices = priceOp.updateOne.update.$set;
+  expect(prices.reachablePrices?.SCO).toBeGreaterThan(prices.reachablePrices?.WAL ?? Infinity);
+  expect(prices.scarcityMultByCountry?.SCO).toBeGreaterThan(
+    prices.scarcityMultByCountry?.WAL ?? Infinity
+  );
+});

@@ -44,7 +44,6 @@ import {
   type CountryId,
   COUNTRY_CONFIGS,
   getCountryConfig,
-  COUNTRY_ORDER,
   getExecutiveOfficeKey,
   getHeadOfGovernmentOfficeKey,
   isParliamentarySystem,
@@ -2087,7 +2086,7 @@ export async function failInProgressBills(
 
 /** Returns all active/beta/coming-soon parliamentary country IDs. */
 export function getParliamentaryCountryIds(preset?: string): CountryId[] {
-  return COUNTRY_ORDER.filter((id) => {
+  return (Object.keys(COUNTRY_CONFIGS) as CountryId[]).filter((id) => {
     const config = getCountryConfig(id, preset);
     return (
       isParliamentarySystem(config) ||

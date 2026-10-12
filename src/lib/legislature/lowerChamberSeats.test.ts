@@ -38,6 +38,14 @@ describe("getLiveLowerChamberSeats", () => {
     db = createMockDb();
   });
 
+  it.each([630, 571, 531])("shrinks Commons to its surviving %s seats", async (seats) => {
+    db.collection("states").find.mockReturnValue(cursorOf([{ houseDistricts: seats }]));
+    expect(await getLiveLowerChamberSeats(db as unknown as Db, "UK")).toBe(seats);
+  });
+  it("retains the known two-seat UK seed discrepancy", async () => {
+    db.collection("states").find.mockReturnValue(cursorOf([{ houseDistricts: 648 }]));
+    expect(await getLiveLowerChamberSeats(db as unknown as Db, "UK")).toBe(650);
+  });
   it("sums region houseDistricts (so a transferred-in region grows the chamber)", async () => {
     db.collection("states").find.mockReturnValue(
       cursorOf([{ houseDistricts: 160 }, { houseDistricts: 65 }])

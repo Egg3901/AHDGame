@@ -1,3 +1,4 @@
+import { liveSingleTierChamber } from "./rules/liveChamber";
 /**
  * Live lower-chamber size = the sum of the country's region `houseDistricts`.
  *
@@ -7,7 +8,8 @@
  * region transfer — e.g. NI joining Ireland grows the Dáil). Parliamentary
  * majority math reads the live total so the threshold tracks the real chamber.
  *
- * Reported as `max(config base, region sum)`: the chamber never under-reports its
+ * Usually reported as `max(config base, region sum)`. UK territorial departures
+ * instead use the surviving regional total. Other chambers retain their
  * config base (so a region's seat-data discrepancy can't shrink an untransferred
  * chamber — e.g. UK regions summing to 648 still report the 650-seat Commons), and
  * grows above the base when a region is added (NI joining → 160 + 71). Bulgaria's
@@ -130,7 +132,7 @@ export async function getLiveLowerChamberSeats(db: Db, countryId: CountryId): Pr
     .project<{ houseDistricts?: number }>({ houseDistricts: 1 })
     .toArray();
   const sum = regions.reduce((acc, r) => acc + (r.houseDistricts ?? 0), 0);
-  return Math.max(sum, config.legislature.lowerChamber.seats);
+  return liveSingleTierChamber(countryId, sum, config.legislature.lowerChamber.seats);
 }
 
 /** Simple-majority threshold for a chamber of `totalSeats`. */

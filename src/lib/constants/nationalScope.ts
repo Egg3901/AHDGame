@@ -8,6 +8,8 @@ import type { CountryId } from "./countries";
 export const NATIONAL_SCOPE: Record<string, CountryId> = {
   federal: "US",
   uk_national: "UK",
+  sco_national: "SCO",
+  wal_national: "WAL",
   jp_national: "JP",
   de_national: "DE",
   br_national: "BR",

@@ -1,3 +1,4 @@
+import { splitPartyOrgReserves } from "./rules/partyOrganization";
 /**
  * Reconcile a seceding region's parties to the new country's CONFIGURED MAJORS:
  *
@@ -12,14 +13,16 @@
  * are NOT migrated here — `carryOverOfficials` (the next step) applies the
  * returned `idMap` to them. Idempotent: re-running once reconciled is a no-op.
  */
-import { ObjectId, type Db } from "mongodb";
+import { type Db } from "mongodb";
 import { getCountryConfig, type CountryId } from "@/lib/constants/countries";
 import type { PoliticalParty } from "@/lib/db/types/party";
 import type { StatePartyOrg } from "@/lib/db/types/statePartyOrg";
 import { TIER_LOSE_REGION_ORG_PCT } from "@/lib/parties/partyTier";
 import type { ElectedOfficial } from "@/lib/db/types/officials";
 import type { Counter } from "@/lib/db/types/counter";
-import { CAPITAL_SUBREGION, type SecedingCountryId } from "./subRegions";
+import type { State } from "@/lib/db/types/state";
+import { populationWeights } from "./apportion";
+import { SUB_REGION_SEEDS, CAPITAL_SUBREGION, type SecedingCountryId } from "./subRegions";
 import { planPartyRemap, type RegionParty } from "./partyRemap";
 
 /** Region-party ledger collections dissolved on secession (the new country reseeds). */
@@ -29,7 +32,7 @@ const REGION_PARTY_LEDGERS = [
   "orgRegLedger",
   "billWhips",
   "statePartyElections",
-];
+] as const;
 
 export interface SplitPartiesResult {
   wholesale: number;
@@ -84,7 +87,8 @@ export async function splitParties(
   const parties = await db
     .collection<PoliticalParty>("politicalParties")
     .find({ countryId: fromCountryId })
-    .toArray();
+    .toArray()
+    .then((rows) => rows.map((row) => ({ ...row })));
   const partyBySeq = new Map(parties.map((p) => [p.sequentialId, p]));
   const partyAbbrevById: Record<number, string> = {};
   const regionParties: RegionParty[] = [];
@@ -95,6 +99,15 @@ export async function splitParties(
     regionParties.push({ sequentialId: seqId, isRegionHomed: !hasOutsidePresence(seqId) });
   }
 
+  const residentLeaders = await db
+    .collection("characters")
+    .find(
+      { countryId: { $in: [fromCountryId, toCountryId] } },
+      { projection: { _id: 1, countryId: 1, party: 1 } }
+    )
+    .toArray()
+    .then((rows) => rows.map((row) => ({ ...row })));
+
   // Next free sequentialId in the new country (stood up fresh — usually 1).
   const existingNew = await db
     .collection<PoliticalParty>("politicalParties")
@@ -103,6 +116,16 @@ export async function splitParties(
   const nextSequentialId = existingNew.reduce((m, p) => Math.max(m, p.sequentialId ?? 0), 0) + 1;
 
   const plan = planPartyRemap({ majorPartyIds, regionParties, partyAbbrevById, nextSequentialId });
+
+  if (!plan.wholesale.length && !plan.independentized.length)
+    return { wholesale: 0, independentized: 0, idMap: {} };
+
+  const successorStates = await db
+    .collection<State>("states")
+    .find({ countryId: toCountryId })
+    .toArray();
+  const regions = successorStates.length ? successorStates : SUB_REGION_SEEDS[toCountryId];
+  const shares = populationWeights(regions);
 
   // ── Wholesale: flip the region-homed major's doc to the new country ─────────
   for (const oldSeq of plan.wholesale) {
@@ -114,52 +137,247 @@ export async function splitParties(
       );
   }
 
-  // ── Re-party the new country's member characters ────────────────────────────
-  // Snapshot-then-write so a freshly-assigned new id can't collide with an old
-  // id mid-remap. Only members whose CURRENT party is in THIS run's old-id scope
-  // move: a major's old id → its mapped id; a non-major's old id → independent.
-  // Members already carried (new ids) or unrelated are left untouched — so a
-  // re-run (empty plan) is a no-op rather than independentizing everyone.
-  const independentizedSet = new Set(plan.independentized.map(String));
-  const members = (await db
-    .collection("characters")
-    .find({ countryId: toCountryId })
-    .toArray()) as Array<{ _id: unknown; party?: string }>;
-  for (const m of members) {
-    const mapped = plan.idMap[Number(m.party)];
-    let target: string | undefined;
-    if (mapped != null) target = String(mapped);
-    else if (m.party != null && independentizedSet.has(m.party)) target = "independent";
-    if (target != null && target !== m.party) {
-      await db
-        .collection("characters")
-        .updateOne({ _id: m._id as ObjectId }, { $set: { party: target, updatedAt: now } });
-    }
-  }
+  // Snapshot both actor rosters before any party id changes can collide.
+  const memberOps = async (collection: "characters" | "npps") => {
+    const members = await db
+      .collection(collection)
+      .find({ countryId: toCountryId }, { projection: { _id: 1, party: 1 } })
+      .toArray();
+    const ops = members.map((member) => ({
+      updateOne: {
+        filter: { _id: member._id },
+        update: {
+          $set: {
+            party:
+              plan.idMap[Number(member.party)] != null
+                ? String(plan.idMap[Number(member.party)])
+                : "independent",
+            updatedAt: now,
+          },
+        },
+      },
+    }));
+    if (ops.length && (plan.wholesale.length || plan.independentized.length))
+      await db.collection(collection).bulkWrite(ops);
+  };
+  await memberOps("characters");
+  await memberOps("npps");
 
-  // ── statePartyOrg: re-home the transferred major to the capital; drop the rest ──
-  for (const oldSeq of plan.wholesale) {
-    const regionOrgs = orgs.filter((g) => g.stateId === regionId && g.partyId === String(oldSeq));
-    for (const g of regionOrgs) {
-      const newPartyId = String(plan.idMap[oldSeq]);
-      const newId = `${toCountryId}_${capital}_${newPartyId}`;
-      await db.collection<StatePartyOrg>("statePartyOrg").deleteOne({ _id: g._id });
-      await db.collection<StatePartyOrg>("statePartyOrg").insertOne({
-        ...g,
-        _id: newId,
-        countryId: toCountryId,
-        stateId: capital,
-        partyId: newPartyId,
-      });
+  // Office permissions cannot stay with a party member who crossed into another country.
+  const leadershipOps = parties.map((party) => {
+    const destination = plan.idMap[party.sequentialId] !== undefined ? toCountryId : fromCountryId;
+    const allowed = new Set(
+      residentLeaders
+        .filter(
+          (actor) =>
+            actor.countryId === destination && String(actor.party) === String(party.sequentialId)
+        )
+        .map((actor) => String(actor._id))
+    );
+    const retain = (id: PoliticalParty["chairId"]) => (id && allowed.has(String(id)) ? id : null);
+    return {
+      updateOne: {
+        filter: { _id: party._id },
+        update: {
+          $set: {
+            chairId: retain(party.chairId),
+            viceChairId: retain(party.viceChairId),
+            treasurerId: retain(party.treasurerId),
+            campaignerIds: (party.campaignerIds ?? []).filter((id) => allowed.has(String(id))),
+            committeeIds: (party.committeeIds ?? []).filter((id) => allowed.has(String(id))),
+            shadowCabinet: Object.fromEntries(
+              Object.entries(party.shadowCabinet ?? {}).filter(([, appointment]) =>
+                allowed.has(String(appointment.characterId))
+              )
+            ),
+          },
+        },
+      },
+    };
+  });
+  if (leadershipOps.length)
+    await db.collection<PoliticalParty>("politicalParties").bulkWrite(leadershipOps);
+
+  const movedOrgs: StatePartyOrg[] = [];
+  const refunds = new Map<number, number>();
+  const pools = await db
+    .collection<{ _id: string; stateId: string; independent: number }>("stateRegistrationPool")
+    .find({ countryId: toCountryId })
+    .toArray();
+  const removedRegistration = orgs
+    .filter((org) => org.stateId === regionId && plan.idMap[Number(org.partyId)] == null)
+    .reduce((sum, org) => sum + (org.registration ?? 0), 0);
+  for (const org of orgs) {
+    const oldSeq = Number(org.partyId);
+    const mapped = plan.idMap[oldSeq];
+    if (mapped !== undefined && org.stateId === regionId) {
+      for (const region of regions)
+        movedOrgs.push({
+          ...org,
+          _id: `${toCountryId}_${region._id}_${mapped}`,
+          countryId: toCountryId,
+          stateId: region._id,
+          partyId: String(mapped),
+          ...splitPartyOrgReserves(org, shares[region._id]),
+          chairId:
+            region._id === capital &&
+            residentLeaders.some(
+              (actor) =>
+                String(actor._id) === String(org.chairId) &&
+                actor.countryId === toCountryId &&
+                String(actor.party) === String(oldSeq)
+            )
+              ? org.chairId
+              : null,
+          viceChairId:
+            region._id === capital &&
+            residentLeaders.some(
+              (actor) =>
+                String(actor._id) === String(org.viceChairId) &&
+                actor.countryId === toCountryId &&
+                String(actor.party) === String(oldSeq)
+            )
+              ? org.viceChairId
+              : null,
+          treasurerId:
+            region._id === capital &&
+            residentLeaders.some(
+              (actor) =>
+                String(actor._id) === String(org.treasurerId) &&
+                actor.countryId === toCountryId &&
+                String(actor.party) === String(oldSeq)
+            )
+              ? org.treasurerId
+              : null,
+          campaignerId:
+            region._id === capital &&
+            residentLeaders.some(
+              (actor) =>
+                String(actor._id) === String(org.campaignerId) &&
+                actor.countryId === toCountryId &&
+                String(actor.party) === String(oldSeq)
+            )
+              ? org.campaignerId
+              : null,
+        });
+    } else if (org.stateId === regionId || mapped !== undefined) {
+      refunds.set(oldSeq, (refunds.get(oldSeq) ?? 0) + (org.treasury ?? 0));
     }
   }
-  if (plan.independentized.length > 0) {
-    await db.collection("statePartyOrg").deleteMany({
-      countryId: fromCountryId,
-      stateId: regionId,
-      partyId: { $in: plan.independentized.map(String) },
-    });
-  }
+  if (movedOrgs.length) await db.collection<StatePartyOrg>("statePartyOrg").insertMany(movedOrgs);
+  await db.collection<StatePartyOrg>("statePartyOrg").deleteMany({
+    countryId: fromCountryId,
+    $or: [{ stateId: regionId }, { partyId: { $in: plan.wholesale.map(String) } }],
+  });
+  const refundOps = [...refunds].map(([old, amount]) => {
+    const owner = partyBySeq.get(old);
+    if (!owner) throw new Error("Regional party funds have no surviving owner");
+    return {
+      updateOne: {
+        filter: { _id: owner._id },
+        update: { $inc: { treasury: amount } },
+      },
+    };
+  });
+  if (refundOps.length)
+    await db.collection<PoliticalParty>("politicalParties").bulkWrite(refundOps);
+  if (pools.length && removedRegistration > 0)
+    await db.collection<{ _id: string; independent: number }>("stateRegistrationPool").bulkWrite(
+      pools.map((pool) => ({
+        updateOne: {
+          filter: { _id: pool._id },
+          update: { $set: { independent: pool.independent + removedRegistration } },
+        },
+      }))
+    );
+
+  const wholesaleIds = plan.wholesale.map(String);
+  // Outside seed-floor organisations retire with their party. Restore their registrations to the local independent pool.
+  const outside = orgs.filter(
+    (org) => org.stateId !== regionId && wholesaleIds.includes(org.partyId)
+  );
+  if (outside.length)
+    await db.collection<{ _id: string; independent: number }>("stateRegistrationPool").bulkWrite(
+      outside.map((org) => ({
+        updateOne: {
+          filter: { _id: `${fromCountryId}_${org.stateId}` },
+          update: { $inc: { independent: org.registration ?? 0 } },
+        },
+      }))
+    );
+  const outsideMembers = { countryId: fromCountryId, party: { $in: wholesaleIds } };
+  const independentize = { $set: { party: "independent", updatedAt: now } };
+  await db.collection("characters").updateMany(outsideMembers, independentize);
+  await db.collection("npps").updateMany(outsideMembers, independentize);
+  const budgets = await db
+    .collection("partyBudget")
+    .find({ countryId: fromCountryId, scope: "national", partyId: { $in: wholesaleIds } })
+    .toArray();
+  if (budgets.length)
+    await db.collection("partyBudget").bulkWrite(
+      budgets.map((row) => ({
+        updateOne: {
+          filter: { _id: row._id },
+          update: {
+            $set: {
+              countryId: toCountryId,
+              partyId: String(plan.idMap[Number(row.partyId)]),
+              updatedAt: now,
+            },
+          },
+        },
+      }))
+    );
+  const remapRoster = async (
+    collection: "recruitmentSlates" | "statePartyCandidates" | "slateCandidates"
+  ) => {
+    const rows = await db
+      .collection(collection)
+      .find(
+        {
+          $or: [
+            { countryId: toCountryId },
+            {
+              countryId: fromCountryId,
+              $or: [{ party: { $in: wholesaleIds } }, { partyId: { $in: wholesaleIds } }],
+            },
+          ],
+        },
+        { projection: { _id: 1, countryId: 1, party: 1, partyId: 1 } }
+      )
+      .toArray();
+    if (rows.length)
+      await db.collection(collection).bulkWrite(
+        rows.map((row) => ({
+          updateOne: {
+            filter: { _id: row._id },
+            update: {
+              $set: {
+                ...(row.party != null
+                  ? {
+                      party:
+                        row.countryId === toCountryId && plan.idMap[Number(row.party)] != null
+                          ? String(plan.idMap[Number(row.party)])
+                          : "independent",
+                    }
+                  : {}),
+                ...(row.partyId != null
+                  ? {
+                      partyId:
+                        row.countryId === toCountryId && plan.idMap[Number(row.partyId)] != null
+                          ? String(plan.idMap[Number(row.partyId)])
+                          : "independent",
+                    }
+                  : {}),
+              },
+            },
+          },
+        }))
+      );
+  };
+  await remapRoster("recruitmentSlates");
+  await remapRoster("statePartyCandidates");
+  await remapRoster("slateCandidates");
 
   // ── Dissolve the region's party-ledger history (the new country reseeds) ────
   for (const coll of REGION_PARTY_LEDGERS) {

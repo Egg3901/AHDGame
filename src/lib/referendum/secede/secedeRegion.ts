@@ -1,3 +1,5 @@
+import { refundConversionConstruction } from "../refundConversionConstruction";
+import { updateParliamentaryGovernmentSeats } from "@/lib/turn/parliamentaryGovernment";
 import { withSessionDb, afterCommit, unboundDb } from "@/lib/db/sessionDb";
 /**
  * Atomic driver that stands a seceding UK region up as a sovereign country
@@ -13,24 +15,19 @@ import { withSessionDb, afterCommit, unboundDb } from "@/lib/db/sessionDb";
  *   3. Economy    — stand up the federal budget from the region's GDP share +
  *                   split treasury/debt (SP2b).
  *   4. Parties    — reconcile region parties to the configured majors (SP2c).
- *   5. Officials  — carry MPs over as MSPs/MSs + FM to head of government (SP2c).
+ *   5. Officials  — retire departing mandates + retain FM as head of government (SP2c).
  *   6. Elections  — seed the standup chamber cycle (SP2c).
  *   7. Recompute  — national metrics for rump-UK + the new country.
  *   8. History    — record a secession event for both sides.
  */
+import { convertLawPrograms } from "../conversionPrograms";
+import { ObjectId } from "mongodb";
+import { standupElections } from "./standupElections";
 import type { Db } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
 import type { State } from "@/lib/db/types";
 import { computeNationalMetrics } from "@/lib/nationalMetrics";
 import { recordCountryEvent } from "@/lib/turn/history/recordCountryEvent";
-import {
-  ensureSCOElections,
-  ensureWALElections,
-  ensureSCOGovernorElections,
-  ensureWALGovernorElections,
-  ensureSCORegionalCouncilElections,
-  ensureWALRegionalCouncilElections,
-} from "@/lib/turn/perpetualElections";
 import { activateCountry } from "@/lib/country/registeredCountries";
 import { CAPITAL_SUBREGION, type SecedingCountryId } from "./subRegions";
 import { expandToSubRegions } from "./expandToSubRegions";
@@ -38,16 +35,6 @@ import { promoteEconomyToNational } from "./promoteEconomyToNational";
 import { splitParties } from "./splitParties";
 import { carryOverOfficials } from "./carryOverOfficials";
 import { promoteResetV2ForIndependence } from "./promoteResetV2";
-
-// Spawn the full devolved election slate at secession — chamber + regional
-// governors + regional councils. The chamber alone is not enough: the
-// governor/council turn phases only run for an already-active country, and on
-// the secession turn that phase pass runs BEFORE the region activates, so they
-// would otherwise not appear until the following turn.
-const STANDUP_ELECTION_SPAWNERS: Record<SecedingCountryId, ((now: Date) => Promise<void>)[]> = {
-  SCO: [ensureSCOElections, ensureSCOGovernorElections, ensureSCORegionalCouncilElections],
-  WAL: [ensureWALElections, ensureWALGovernorElections, ensureWALRegionalCouncilElections],
-};
 
 export interface SecedeRegionArgs {
   regionId: string;
@@ -90,33 +77,60 @@ async function secedeRegionInTransaction(
     .collection<State>("states")
     .findOne({ _id: CAPITAL_SUBREGION[toCountryId] });
   if (capital) {
-    await promoteResetV2ForIndependence(db, toCountryId);
+    await promoteResetV2ForIndependence(db, toCountryId, currentTurn);
     return { ok: true, skipped: "already-seceded" };
   }
   if (!aggregate) return { ok: false, skipped: "region-not-found" };
 
+  await refundConversionConstruction(db, regionId, currentTurn);
+
   // 1. Register the country at runtime.
   await activateCountry(db, toCountryId);
 
+  const oldRaces = await db
+    .collection("elections")
+    .find(
+      {
+        countryId: fromCountryId,
+        state: regionId,
+        status: { $in: ["active", "upcoming", "completed"] },
+      },
+      { projection: { _id: 1 } }
+    )
+    .toArray();
+  const electionIds = oldRaces.map((row) => row._id);
+  await db.collection("electionCandidates").deleteMany({ electionId: { $in: electionIds } });
+  await db.collection("elections").deleteMany({ _id: { $in: electionIds } });
+
   // 2-3. Stand up the data + economy.
   const expanded = await expandToSubRegions(db, toCountryId);
-  await promoteEconomyToNational(db, fromCountryId, toCountryId);
-  await promoteResetV2ForIndependence(db, toCountryId);
+  await promoteEconomyToNational(db, fromCountryId, toCountryId, currentTurn);
+  await promoteResetV2ForIndependence(db, toCountryId, currentTurn);
+
+  await convertLawPrograms(db, { regionId, countryId: toCountryId, independent: true });
 
   // 4-5. Government: parties then officials (officials consume the split idMap).
   const split = await splitParties(db, regionId, fromCountryId, toCountryId);
   const carried = await carryOverOfficials(db, regionId, fromCountryId, toCountryId, split.idMap);
 
-  await afterCommit(db, async () => {
-    // 6. Stand up the devolved election slate (best-effort — the turn phases
-    // re-run each as a net next turn).
-    const standupNow = new Date();
-    for (const spawn of STANDUP_ELECTION_SPAWNERS[toCountryId]) {
-      await spawn(standupNow).catch((err) =>
-        console.error(`${regionId} standup election seed failed (retries next turn):`, err)
-      );
-    }
+  await updateParliamentaryGovernmentSeats(db, fromCountryId);
+  await standupElections(db, toCountryId, currentTurn, new Date());
+  await db.collection("organizationMemberships").updateOne(
+    { organizationId: "UN", countryId: toCountryId },
+    {
+      $setOnInsert: {
+        _id: new ObjectId(),
+        organizationId: "UN",
+        countryId: toCountryId,
+        status: "active",
+        joinedAt: new Date(),
+        joinedTurn: currentTurn,
+      },
+    },
+    { upsert: true }
+  );
 
+  await afterCommit(db, async () => {
     // 7. Recompute rump-UK + the new country's national figures.
     await computeNationalMetrics(originalDb).catch((err) =>
       console.error(`${regionId} secession national-metrics recompute failed:`, err)

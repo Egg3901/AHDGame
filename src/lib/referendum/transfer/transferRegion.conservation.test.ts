@@ -1,3 +1,17 @@
+vi.mock("@/lib/referendum/refundConversionConstruction", () => ({
+  refundConversionConstruction: vi.fn().mockResolvedValue(undefined),
+}));
+vi.mock("./reseedJoinedRegionElections", () => ({
+  reseedJoinedRegionElections: vi.fn().mockResolvedValue(undefined),
+}));
+vi.mock("@/lib/country/mergeFxScale", () => ({
+  loadFxScalePair: vi.fn().mockResolvedValue({ kind: "same-currency" }),
+}));
+vi.mock("@/lib/turn/parliamentaryGovernment", () => ({
+  updateParliamentaryGovernmentSeats: vi.fn(),
+  ensureParliamentaryGovernmentFormation: vi.fn(),
+  unformGovernmentAndVacatePM: vi.fn(),
+}));
 vi.mock("@/lib/db/sessionDb", () => ({
   boundSession: () => undefined,
   unboundDb: (db: unknown) => db,
@@ -23,80 +37,10 @@ vi.mock("@/lib/turn/history/recordCountryEvent", () => ({
 
 import { transferRegion } from "./transferRegion";
 
-// ── Minimal in-memory Mongo-like store supporting the migration's operations ──
+import { makeStrictInMemoryStore } from "@/lib/test-utils/inMemoryStore";
 type Doc = Record<string, unknown>;
-
-function matches(doc: Doc, filter: Doc): boolean {
-  for (const [k, v] of Object.entries(filter)) {
-    if (v && typeof v === "object" && "$in" in (v as object)) {
-      if (!(v as { $in: unknown[] }).$in.includes(doc[k])) return false;
-    } else if (v && typeof v === "object" && "$ne" in (v as object)) {
-      if (doc[k] === (v as { $ne: unknown }).$ne || doc[k] === undefined) return false;
-    } else if (doc[k] !== v) {
-      return false;
-    }
-  }
-  return true;
-}
-
-function applyUpdate(doc: Doc, update: Doc): void {
-  if (update.$set) Object.assign(doc, update.$set);
-  if (update.$unset) for (const k of Object.keys(update.$unset as Doc)) delete doc[k];
-}
-
 function makeStore(seed: Record<string, Doc[]>): Db {
-  const cols: Record<string, Doc[]> = {};
-  for (const [name, docs] of Object.entries(seed)) cols[name] = docs.map((d) => ({ ...d }));
-  const col = (name: string) => (cols[name] ??= []);
-
-  const collection = (name: string) => ({
-    find: (filter: Doc = {}) => ({
-      sort: () => collection(name).find(filter),
-      limit: () => collection(name).find(filter),
-      project: () => collection(name).find(filter),
-      toArray: async () => col(name).filter((d) => matches(d, filter)),
-    }),
-    findOne: async (filter: Doc = {}) => col(name).find((d) => matches(d, filter)) ?? null,
-    updateOne: async (filter: Doc, update: Doc, opts?: { upsert?: boolean }) => {
-      const hit = col(name).find((d) => matches(d, filter));
-      if (hit) {
-        applyUpdate(hit, update);
-        return { matchedCount: 1, modifiedCount: 1 };
-      }
-      if (opts?.upsert) {
-        const doc: Doc = { ...(filter._id != null ? { _id: filter._id } : {}) };
-        if ((update.$setOnInsert as Doc)?._id != null) doc._id = (update.$setOnInsert as Doc)._id;
-        applyUpdate(doc, update);
-        col(name).push(doc);
-        return { matchedCount: 0, modifiedCount: 0, upsertedCount: 1 };
-      }
-      return { matchedCount: 0, modifiedCount: 0 };
-    },
-    updateMany: async (filter: Doc, update: Doc) => {
-      let n = 0;
-      for (const d of col(name))
-        if (matches(d, filter)) {
-          applyUpdate(d, update);
-          n++;
-        }
-      return { matchedCount: n, modifiedCount: n };
-    },
-    deleteOne: async (filter: Doc) => {
-      const i = col(name).findIndex((d) => matches(d, filter));
-      if (i >= 0) {
-        col(name).splice(i, 1);
-        return { deletedCount: 1 };
-      }
-      return { deletedCount: 0 };
-    },
-    deleteMany: async (filter: Doc) => {
-      const before = col(name).length;
-      cols[name] = col(name).filter((d) => !matches(d, filter));
-      return { deletedCount: before - cols[name].length };
-    },
-  });
-
-  return { collection } as unknown as Db;
+  return makeStrictInMemoryStore(seed).db;
 }
 
 function seedWorld() {
@@ -184,7 +128,9 @@ describe("transferRegion — NI → Ireland (evacuate) conservation", () => {
     // The region's party orgs / officials / seats are all dissolved.
     expect(await db.collection("statePartyOrg").find({ stateId: "NIR" }).toArray()).toHaveLength(0);
     expect(await db.collection("partyBudget").find({ stateId: "NIR" }).toArray()).toHaveLength(0);
-    expect(await db.collection("electedOfficials").find({}).toArray()).toHaveLength(0);
+    expect(await db.collection("electedOfficials").find({}).toArray()).toEqual([
+      expect.objectContaining({ countryId: "IE", officeType: "dail", state: "NIR" }),
+    ]);
     expect(await db.collection("seats").find({}).toArray()).toHaveLength(0);
 
     // The NPP relocated to London (still UK), office dropped; its corp followed.

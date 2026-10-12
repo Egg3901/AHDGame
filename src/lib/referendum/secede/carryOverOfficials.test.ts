@@ -1,9 +1,13 @@
-import { describe, it, expect } from "vitest";
-import { makeInMemoryStore } from "@/lib/test-utils/inMemoryStore";
+vi.mock("@/lib/turn/parliamentaryGovernment", () => ({
+  ensureParliamentaryGovernmentFormation: vi.fn(),
+  unformGovernmentAndVacatePM: vi.fn(),
+}));
+import { describe, it, expect, vi } from "vitest";
+import { makeStrictInMemoryStore } from "@/lib/test-utils/inMemoryStore";
 import { carryOverOfficials } from "./carryOverOfficials";
 
 function seedWorld() {
-  return makeInMemoryStore({
+  return makeStrictInMemoryStore({
     electedOfficials: [
       {
         _id: "mp1",
@@ -28,15 +32,11 @@ function seedWorld() {
 }
 
 describe("carryOverOfficials", () => {
-  it("turns region MPs into new-chamber members with remapped party", async () => {
+  it("unseats region MPs for the new country's elections", async () => {
     const { db, cols } = seedWorld();
-    const res = await carryOverOfficials(db, "SCO", "UK", "SCO", { 20: 1, 21: 2 });
-
-    expect(res.msps).toBe(2);
-    const mp1 = cols.electedOfficials.find((o) => o._id === "mp1")!;
-    expect(mp1).toMatchObject({ countryId: "SCO", officeType: "holyrood", party: "1" });
-    const mp2 = cols.electedOfficials.find((o) => o._id === "mp2")!;
-    expect(mp2).toMatchObject({ countryId: "SCO", officeType: "holyrood", party: "independent" });
+    const res = await carryOverOfficials(db, "SCO", "UK", "SCO", { 20: 1 });
+    expect(res.msps).toBe(0);
+    expect(cols.electedOfficials.some((row) => row._id === "mp1" || row._id === "mp2")).toBe(false);
   });
 
   it("leaves rump-UK MPs untouched", async () => {
@@ -52,13 +52,20 @@ describe("carryOverOfficials", () => {
 
     expect(res.headOfGov).toBe(1);
     const fm = cols.electedOfficials.find((o) => o._id === "fm")!;
-    expect(fm).toMatchObject({ countryId: "SCO", officeType: "firstMinister", party: "1" });
+    expect(fm).toMatchObject({
+      countryId: "SCO",
+      officeType: "firstMinister",
+      party: "1",
+      state: "LOT",
+    });
     // Forms a government under the CANONICAL fields the parliamentary system
     // reads (pmCharacterId + "formed" status), not the dead headOfGov field.
     expect(cols.governmentFormations[0]).toMatchObject({
       _id: "SCO",
       countryId: "SCO",
       status: "formed",
+      formationType: "minority",
+      isMinority: true,
       pmCharacterId: "fmChar",
       governingPartyId: "1",
     });

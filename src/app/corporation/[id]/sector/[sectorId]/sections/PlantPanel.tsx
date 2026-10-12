@@ -84,6 +84,7 @@ export default function PlantPanel({
   const sites = facilityPlural(sectorType);
   const money = (anchor: number) => formatAmount(anchor);
   const mothballed = plants.mothballed;
+  const idleRetirement = plants.idleRetirement;
   const hasRun = plants.producedUnits != null;
   const workersDesired = plants.workersDesired ?? plants.workers;
   const labourStaffingFactor =
@@ -191,11 +192,33 @@ export default function PlantPanel({
         )}
       </div>
 
+      {isCeo && !mothballed && idleRetirement && (
+        <div className="mt-4 rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-body-sm text-foreground">
+          {idleRetirement.retiredUnits > 0 ? (
+            <p>
+              {fmtUnits(idleRetirement.retiredUnits)} units of capacity retired last turn because
+              buyers here have not taken this plant&apos;s output for {idleRetirement.turns} turns.
+              Retirement continues a little each turn until the plant is close to what it sells.
+              Parked capacity is not retired{onResize ? ", so park any you want to keep" : ""}.
+            </p>
+          ) : (
+            <p>
+              Sales here are below this plant&apos;s run. If that lasts{" "}
+              {Math.max(1, idleRetirement.graceTurns - idleRetirement.turns + 1)} more turn
+              {idleRetirement.graceTurns - idleRetirement.turns === 0 ? "" : "s"}, unsold capacity
+              starts to retire a little each turn.
+              {onResize ? " Park capacity below to keep it." : ""}
+            </p>
+          )}
+        </div>
+      )}
+
       {mothballed && (
         <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-muted/40 bg-muted/10 p-4">
           <p className="text-body-sm text-foreground">
             {capitalizeFacility(sites)} here are in cold storage. They make nothing and pay{" "}
-            {fmtPct(0.2)} of normal upkeep. Turn them back on when you want to run again.
+            {fmtPct(COLD_CAPACITY_UPKEEP_FRACTION)} of normal upkeep. Turn them back on when you
+            want to run again.
           </p>
           {isCeo && (
             <Button variant="primary" size="sm" onClick={onReactivate} isLoading={busy}>

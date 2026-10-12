@@ -13,6 +13,10 @@ import {
  */
 export const POSITION_BY_ELECTION_TYPE: Readonly<Record<string, ElectionPosition>> = {
   // lower chambers
+  holyrood: "lowerChamber",
+  snap_holyrood: "lowerChamber",
+  senedd: "lowerChamber",
+  snap_senedd: "lowerChamber",
   house: "lowerChamber",
   commons: "lowerChamber",
   snap_commons: "lowerChamber",

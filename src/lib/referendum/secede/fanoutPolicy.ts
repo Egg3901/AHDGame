@@ -1,4 +1,7 @@
-import type { RegionKey } from "@/lib/referendum/transfer/regionScopedCollections";
+import type {
+  RegionKey,
+  RegionCollectionName,
+} from "@/lib/referendum/transfer/regionScopedCollections";
 
 /**
  * How a single-region aggregate's data fans out across the seeded sub-regions
@@ -30,10 +33,12 @@ export type FanoutPolicy =
   | "scaleNumeric"
   | "partitionGdp"
   | "rekeyCopyShares"
-  | "rehomeCapital";
+  | "rehomeCapital"
+  | "splitCapacity"
+  | "splitContracts";
 
 export interface FanoutScope {
-  collection: string;
+  collection: RegionCollectionName;
   key: RegionKey;
   policy: FanoutPolicy;
   /** Dot-paths to count vectors scaled by population weight (scaleCounts only). */
@@ -46,7 +51,7 @@ export interface FanoutScope {
   scaleFields?: string[];
 }
 
-const rehome = (collection: string): FanoutScope => ({
+const rehome = (collection: RegionCollectionName): FanoutScope => ({
   collection,
   key: "stateIdField",
   policy: "rehomeCapital",
@@ -66,7 +71,10 @@ export const SECEDE_FANOUT: FanoutScope[] = [
   rehome("governorAddresses"),
   rehome("governorEndorsements"),
   rehome("executiveEndorsements"),
-  rehome("stateResourceCapacity"),
+  { collection: "stateResourceCapacity", key: "stateIdField", policy: "splitCapacity" },
+  { collection: "extractionContracts", key: "stateIdField", policy: "splitContracts" },
+  { collection: "energyPlants", key: "regionIdField", policy: "partitionGdp" },
+  { collection: "infraProjects", key: "regionIdField", policy: "partitionGdp" },
   rehome("stateApprovalHistory"),
   rehome("characterStateOrg"),
   rehome("nppInfluenceAttempts"),

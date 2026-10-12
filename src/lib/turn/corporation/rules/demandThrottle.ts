@@ -261,3 +261,22 @@ export function withLatentDemand(
   }
   return { supply: balance.supply, demand: balance.demand * factor };
 }
+
+/**
+ * Per-output fill for production feedback, with units a media ownership law
+ * refused added back. Those units had buyers, so a capped outlet keeps its run
+ * instead of reading the legal limit as weak demand. Clamped to a full fill.
+ */
+export function withRegulationBlockedFill<T extends string>(
+  soldByCommodity: Partial<Record<T, number>> | null | undefined,
+  blockedByCommodity: Partial<Record<T, number>> | null | undefined
+): Partial<Record<T, number>> | null | undefined {
+  if (!soldByCommodity || !blockedByCommodity) return soldByCommodity;
+  const fill: Partial<Record<T, number>> = { ...soldByCommodity };
+  for (const [commodity, blocked] of Object.entries(blockedByCommodity) as [T, number][]) {
+    const sold = fill[commodity];
+    if (typeof sold !== "number" || !(blocked > 0)) continue;
+    fill[commodity] = Math.min(1, sold + blocked);
+  }
+  return fill;
+}

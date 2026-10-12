@@ -14,7 +14,7 @@ describe("expandToSubRegions — structural", () => {
   it("inserts the 7 SCO sub-regions and deletes the aggregate states doc", async () => {
     // Aggregate "SCO" state exists; capital sub-region does not yet.
     db.collection("states").findOne.mockImplementation(async (q: { _id: string }) =>
-      q._id === "SCO" ? { _id: "SCO", countryId: "SCO", population: 5_440_000 } : null
+      q._id === "SCO" ? { _id: "SCO", countryId: "SCO", population: 5_440_000, gdp: 163_000 } : null
     );
 
     const res = await expandToSubRegions(db as unknown as Db, "SCO");

@@ -5,8 +5,14 @@
  * Tasks 4 implements the `_id`-keyed policies (cloneIdentical / scaleCounts /
  * copyDoc / scaleNumeric). Task 5 adds the bulk/composite/re-home policies.
  */
+import { BSON, ObjectId } from "mongodb";
+import { MONEY_MOVE_COLLECTION } from "@/lib/banking/moneyMove";
+import { splitExtractionFields } from "./rules/extraction";
+import { ENERGY_POSITION_BY_COUNTRY } from "@/lib/constants/cabinetEnergy";
+import { INFRA_POSITION_BY_COUNTRY } from "@/lib/constants/cabinetInfra";
 import type { Db } from "mongodb";
 import type { State } from "@/lib/db/types";
+import type { RegionCollectionName } from "../transfer/regionScopedCollections";
 import type { FanoutScope } from "./fanoutPolicy";
 import { CAPITAL_SUBREGION, type SecedingCountryId } from "./subRegions";
 import { gdpWeights, partitionByGdp, populationWeights, splitCountVector } from "./apportion";
@@ -43,7 +49,7 @@ type AggDoc = Record<string, unknown>;
 
 async function readAggregate(
   db: Db,
-  collection: string,
+  collection: RegionCollectionName,
   countryId: string
 ): Promise<AggDoc | null> {
   return (await db
@@ -62,7 +68,7 @@ async function clonePerSubRegion(
   if (!agg) return 0;
   const now = new Date();
   const docs = ctx.seeds.map((s) => {
-    const clone = structuredClone(agg);
+    const clone = BSON.EJSON.parse(BSON.EJSON.stringify(agg)) as AggDoc;
     clone._id = s._id;
     clone.countryId = ctx.countryId;
     clone.updatedAt = now;
@@ -79,7 +85,9 @@ export async function applyFanout(db: Db, scope: FanoutScope, ctx: FanoutContext
     case "cloneIdentical":
     case "copyDoc":
       // Identical copy per sub-region (snapshots / rate-profile docs).
-      return clonePerSubRegion(db, scope, ctx, () => {});
+      return clonePerSubRegion(db, scope, ctx, (clone) => {
+        if (scope.collection === "politicalMetrics") delete clone.residuals;
+      });
 
     case "apportionShares": {
       // Voter-archetype split: replace each sub-region's `groups` with a
@@ -133,22 +141,103 @@ export async function applyFanout(db: Db, scope: FanoutScope, ctx: FanoutContext
     case "partitionGdp": {
       // Distribute the many sector docs across sub-regions by GDP weight (revenue).
       const coll = db.collection<AggDoc>(scope.collection);
-      const docs = (await coll.find({ stateId: ctx.countryId }).toArray()) as Array<{
+      const field = scope.key === "regionIdField" ? "regionId" : "stateId";
+      const docs = (await coll
+        .find(
+          { [field]: ctx.countryId },
+          { projection: { _id: 1, revenue: 1, capacityBase: 1, outputBase: 1 } }
+        )
+        .toArray()) as Array<{
         _id: unknown;
         revenue?: number;
+        capacityBase?: number;
+        outputBase?: number;
       }>;
       if (docs.length === 0) return 0;
-      const buckets = partitionByGdp(docs, (d) => d.revenue ?? 0, ctx.seeds);
+      const buckets = partitionByGdp(
+        docs,
+        (d) => d.revenue ?? d.capacityBase ?? d.outputBase ?? 1,
+        ctx.seeds
+      );
       const now = new Date();
-      let writes = 0;
-      for (const [subId, items] of Object.entries(buckets)) {
-        if (items.length === 0) continue;
-        await coll.updateMany({ _id: { $in: items.map((d) => d._id) } } as AggDoc, {
-          $set: { stateId: subId, countryId: ctx.countryId, updatedAt: now },
-        });
-        writes += items.length;
+      const ops = Object.entries(buckets).flatMap(([subId, items]) =>
+        items.map((item) => ({
+          updateOne: {
+            filter: { _id: item._id as ObjectId },
+            update: {
+              $set: {
+                [field]: subId,
+                countryId: ctx.countryId,
+                updatedAt: now,
+                ...(scope.collection === "energyPlants"
+                  ? { positionId: ENERGY_POSITION_BY_COUNTRY[ctx.countryId] }
+                  : scope.collection === "infraProjects"
+                    ? { positionId: INFRA_POSITION_BY_COUNTRY[ctx.countryId] }
+                    : {}),
+              },
+            },
+          },
+        }))
+      );
+      if (ops.length) await coll.bulkWrite(ops);
+      return docs.length;
+    }
+
+    case "splitCapacity":
+    case "splitContracts": {
+      const coll = db.collection<AggDoc>(scope.collection);
+      const docs = await coll.find({ stateId: ctx.countryId }).toArray();
+      if (!docs.length) return 0;
+      if (scope.policy === "splitContracts") {
+        const keys = docs.flatMap((doc) =>
+          typeof doc.signingFeeAttemptKey === "string"
+            ? [`extraction-signing-fee:${doc.signingFeeAttemptKey}`]
+            : []
+        );
+        if (keys.length) {
+          const receipts = await db
+            .collection<{
+              _id: string;
+              status: string;
+              projections?: Array<{ applied?: boolean }>;
+            }>(MONEY_MOVE_COLLECTION)
+            .find({ _id: { $in: keys } }, { projection: { status: 1, projections: 1 } })
+            .toArray();
+          if (
+            keys.some(
+              (key) =>
+                !receipts.some(
+                  (receipt) =>
+                    receipt._id === key &&
+                    receipt.status === "applied" &&
+                    receipt.projections?.every((projection) => projection.applied)
+                )
+            )
+          )
+            throw new Error("An extraction signing-fee settlement must finish before independence");
+        }
       }
-      return writes;
+      const rows = docs.flatMap((doc) =>
+        ctx.seeds.map((seed) => ({
+          ...doc,
+          _id: new ObjectId(),
+          stateId: seed._id,
+          countryId: ctx.countryId,
+          ...splitExtractionFields(
+            doc,
+            ctx.gdpWeights[seed._id],
+            ctx.countryId,
+            seed._id,
+            scope.policy === "splitCapacity"
+          ),
+          ...(scope.policy === "splitContracts" && doc.status === "active"
+            ? { signingFeeAttemptKey: undefined }
+            : {}),
+        }))
+      );
+      await coll.insertMany(rows);
+      await coll.deleteMany({ stateId: ctx.countryId });
+      return rows.length;
     }
 
     case "rekeyCopyShares": {
@@ -173,7 +262,12 @@ export async function applyFanout(db: Db, scope: FanoutScope, ctx: FanoutContext
     case "rehomeCapital": {
       // Move the single-region docs onto the capital sub-region; residents (and
       // every re-homed doc) also adopt the new country.
-      const field = scope.key === "homeStateField" ? "homeState" : "stateId";
+      const field =
+        scope.key === "homeStateField"
+          ? "homeState"
+          : scope.key === "stateField"
+            ? "state"
+            : "stateId";
       const res = await db
         .collection<AggDoc>(scope.collection)
         .updateMany(

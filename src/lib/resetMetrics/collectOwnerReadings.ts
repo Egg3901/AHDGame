@@ -1,3 +1,7 @@
+import {
+  inheritedCalibrationRegion,
+  inheritedCalibrationCountry,
+} from "./rules/conversionCalibration";
 /**
  * First live owners for the v2 board. Legacy macro readings are underlying
  * economic inputs, not a second set of player-facing primary metrics.
@@ -247,7 +251,8 @@ export async function collectResetMetricOwnerReadings(
                   ? health?.hseWaitingListMonths?.value
                   : health?.nhsWaitingTime?.value,
             };
-        const reference = openingHealth[board.countryId as keyof typeof openingHealth];
+        const reference =
+          openingHealth[inheritedCalibrationCountry(board.countryId) as keyof typeof openingHealth];
         const physicianReference = reference?.physicianRate ?? inputs?.physicianRate ?? null;
         const preparednessReference = reference?.preparedness ?? inputs?.preparedness ?? null;
         const access = liveHealthProxies({
@@ -304,7 +309,10 @@ export async function collectResetMetricOwnerReadings(
         if (due.has("02")) {
           const current = liveMacro;
           const opening =
-            openingGross[board.countryId as keyof typeof openingGross]?.[board.regionId!];
+            openingGross[
+              inheritedCalibrationRegion(board.countryId, board.regionId!)
+                .countryId as keyof typeof openingGross
+            ]?.[inheritedCalibrationRegion(board.countryId, board.regionId!).regionId];
           const income = current?.economic?.medianIncome?.value;
           const basket = current?.economic?.costOfLiving?.value;
           if (opening && typeof income === "number" && typeof basket === "number") {
@@ -327,7 +335,10 @@ export async function collectResetMetricOwnerReadings(
         const cohort = liveMacro?.resetCohortReading;
         if (cohort?.asOfTurn === turn) {
           const lifeCalibration =
-            openingLife[board.countryId as keyof typeof openingLife]?.[board.regionId!];
+            openingLife[
+              inheritedCalibrationRegion(board.countryId, board.regionId!)
+                .countryId as keyof typeof openingLife
+            ]?.[inheritedCalibrationRegion(board.countryId, board.regionId!).regionId];
           const measures = [
             [
               "20",
