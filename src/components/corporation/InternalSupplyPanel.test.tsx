@@ -34,7 +34,7 @@ function show() {
 }
 it("loads the saved policy, explains physical limits quietly and displays actual delivery", async () => {
   show();
-  await screen.findByText("Actual deliveries, turn 12");
+  await screen.findByText("Reserved supply, turn 12");
   expect(screen.getByLabelText("Supply priority")).toHaveProperty("value", "market");
   expect(screen.getByText("iron")).toBeTruthy();
   expect(screen.getByText("Net internal discount credit: ₳20 per day.")).toBeTruthy();
@@ -43,7 +43,7 @@ it("loads the saved policy, explains physical limits quietly and displays actual
 });
 it("sends the selected priority and discount then confirms next-turn timing", async () => {
   show();
-  await screen.findByText("Actual deliveries, turn 12");
+  await screen.findByText("Reserved supply, turn 12");
   fireEvent.change(screen.getByLabelText("Supply priority"), { target: { value: "group" } });
   fireEvent.change(screen.getByLabelText("Internal discount"), { target: { value: "0.1" } });
   fetcher.mockResolvedValueOnce({
@@ -59,7 +59,7 @@ it("sends the selected priority and discount then confirms next-turn timing", as
 });
 it("preserves the draft after an unsuccessful save and never claims success", async () => {
   show();
-  await screen.findByText("Actual deliveries, turn 12");
+  await screen.findByText("Reserved supply, turn 12");
   fireEvent.change(screen.getByLabelText("Supply priority"), { target: { value: "own" } });
   fetcher.mockRejectedValueOnce(new Error("Connection lost"));
   fireEvent.click(screen.getByText("Save policy"));
@@ -75,10 +75,10 @@ it("reloads persisted selection on remount", async () => {
     json: async () => ({ ...view, policy: { priority: "own", discount: 0.1 } }),
   });
   const first = show();
-  await screen.findByText("Actual deliveries, turn 12");
+  await screen.findByText("Reserved supply, turn 12");
   first.unmount();
   show();
-  await screen.findByText("Actual deliveries, turn 12");
+  await screen.findByText("Reserved supply, turn 12");
   expect(screen.getByLabelText("Supply priority")).toHaveProperty("value", "own");
   expect(screen.getByLabelText("Internal discount")).toHaveProperty("value", "0.1");
 });
@@ -102,5 +102,5 @@ it("can retry a failed load", async () => {
   show();
   await screen.findByRole("alert");
   fireEvent.click(screen.getByText("Retry"));
-  await waitFor(() => expect(screen.getByText("Actual deliveries, turn 12")).toBeTruthy());
+  await waitFor(() => expect(screen.getByText("Reserved supply, turn 12")).toBeTruthy());
 });

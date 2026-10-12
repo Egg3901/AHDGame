@@ -1313,6 +1313,9 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
                 compliance: sectorAmountAnchor(enginePnl.compliance),
                 otherOpex: sectorAmountAnchor(enginePnl.otherOpex),
                 financialLegs: sectorAmountAnchor(enginePnl.financialLegs),
+                internalSupplyDiscountAnchor: sectorAmountAnchor(
+                  enginePnl.internalSupplyDiscountCost ?? 0
+                ),
                 inventoryCarry: sectorAmountAnchor(enginePnl.inventoryCarry ?? 0),
                 policyCredit: sectorAmountAnchor(enginePnl.policyCredit),
                 policyPp: enginePnl.policyPp,

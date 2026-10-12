@@ -114,6 +114,8 @@ const world = (
     group,
     mothballed,
     factoryProduced: r.updates[1]?.producedUnits ?? 0,
+    factoryRevenueDaily: r.updates[1]?.plantsPnl?.revenue ?? 0,
+    factoryProfitDaily: r.updates[1]?.plantsPnl?.profit ?? 0,
     factoryThroughput: r.updates[1]?.throughputFactor ?? 0,
     factoryReservedIron: r.updates[1]?.internalSupplyReceipt?.received.iron ?? 0,
     factoryConsumedIron: r.buyer.internalSupplyInputUnits?.get("iron") ?? null,
