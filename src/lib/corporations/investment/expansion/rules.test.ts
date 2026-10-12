@@ -94,6 +94,26 @@ describe("automatic expansion sizing", () => {
       })
     ).toBeNull();
   });
+  it("ignores a company sector with no plants and nothing queued", () => {
+    expect(
+      expansionOperatingReserve({
+        overheadPerTurnAnchor: 10,
+        sectors: [
+          { costPerTurnAnchor: 100, capacityUnits: 1000, queuedUnits: 0, current: true },
+          { costPerTurnAnchor: NaN, capacityUnits: 0, queuedUnits: 0, current: false },
+        ],
+      })
+    ).toBe(110);
+    expect(
+      expansionOperatingReserve({
+        overheadPerTurnAnchor: 10,
+        sectors: [{ costPerTurnAnchor: 0, capacityUnits: 0, queuedUnits: 100, current: true }],
+      })
+    ).toBeNull();
+  });
+  it("reports outstanding debt separately from missing operating figures", () => {
+    expect(recommendSectorExpansion({ ...input, indebted: true }).reason).toBe("debt");
+  });
   it("keeps current company expenses plus full new running costs in cash, including FX fees", () => {
     const result = recommendSectorExpansion(input);
     expect(result.demandFacilities).toBe(6); // 6*(110 purchase + 20 running) leaves 220.

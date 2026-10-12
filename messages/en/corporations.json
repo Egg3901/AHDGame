@@ -184,7 +184,8 @@
       "measuredDemandTitle": "Buyer demand unavailable",
       "measuredDemandUnavailable": "Measured demand for every output is unavailable. Choose a quantity manually after checking the market.",
       "sizingReasons": {
-        "history": "Automatic sizing is unavailable without current operating figures and a running-cost budget. Outstanding debt needs a manual repayment budget.",
+        "history": "Automatic sizing needs a full turn of operating figures for this company. Check again after the next turn, or choose a quantity manually.",
+        "debt": "Automatic sizing is off while the company has loans, bonds or unpaid arrears, because it cannot plan the repayments. Choose a quantity manually.",
         "constraints": "Resolve staffing, parked capacity, delivery or production limits before using automatic sizing.",
         "unprofitable": "Expansion does not produce positive cash when sale prices fall and input costs rise in the operating scenario. No quantity is recommended.",
         "cash": "There is not enough cash to build one facility while retaining the operating reserve.",
