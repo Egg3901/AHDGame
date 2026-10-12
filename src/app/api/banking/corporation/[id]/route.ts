@@ -38,6 +38,7 @@ import { bankBalanceSheet, explainBankCaps } from "@/lib/banking/balanceSheet";
 import { buildBankOutlook } from "@/lib/banking/outlook";
 import { isDepositTakingCharter } from "@/lib/banking/charterKinds";
 import { getCurrentTurn } from "@/lib/currentTurn";
+import { loanCharterEpochFilter } from "@/lib/banking/loanEpoch";
 import { getBankTreasuryOverview } from "@/lib/banking/bankTreasury";
 import {
   CREDIT_BANDS,
@@ -273,14 +274,22 @@ async function handleGET(_request: Request, { params }: RouteParams) {
       rates = await getEffectiveBankRates(db, charter);
     }
 
-    const loans = hasActiveCharter
-      ? await db
-          .collection<BankLoan>("bankLoans")
-          .find({ bankCorporationId: corporation._id })
-          .sort({ originatedTurn: -1 })
-          .limit(200)
-          .toArray()
-      : [];
+    // Only this charter's book. A bank that was revoked and chartered again
+    // keeps the same corporation id, so an unscoped read showed the previous
+    // charter's loans (and folded them into the household funding inputs)
+    // even though the turn and the charter's own totalLoans ignore them.
+    const loans =
+      hasActiveCharter && charter
+        ? await db
+            .collection<BankLoan>("bankLoans")
+            .find({
+              bankCorporationId: corporation._id,
+              ...loanCharterEpochFilter(charter.charteredTurn),
+            })
+            .sort({ originatedTurn: -1 })
+            .limit(200)
+            .toArray()
+        : [];
 
     const interbankLoans =
       hasActiveCharter && propTradingEnabled
