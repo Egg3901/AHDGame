@@ -195,7 +195,7 @@ describe("unavailable sector purchases", () => {
         isCeo: false,
         viewerCorpFxRate: 1,
       })
-    ).toMatchObject({ hasFunds: true, eligible: false });
+    ).toMatchObject({ hasFunds: true, eligible: false, blockReason: "merge_blocked" });
   });
 
   it("includes the ordinary acquisition FX fee in affordability", async () => {
@@ -213,7 +213,12 @@ describe("unavailable sector purchases", () => {
         viewerCorpFxRate: 2,
         sellerCurrency: "USD",
       })
-    ).toMatchObject({ hasFunds: false, eligible: false, priceInViewerCapital: 301500 });
+    ).toMatchObject({
+      hasFunds: false,
+      eligible: false,
+      blockReason: "insufficient_funds",
+      priceInViewerCapital: 301500,
+    });
   });
 });
 
