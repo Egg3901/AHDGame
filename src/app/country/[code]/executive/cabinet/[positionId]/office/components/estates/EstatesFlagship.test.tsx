@@ -42,7 +42,7 @@ const regions = [
   { id: "US-NY", name: "New York" },
 ];
 
-function renderFlagship(estates: EstateView[], canAct = true, onUpdate = vi.fn()) {
+function renderFlagship(estates: EstateView[], canAct = true, onUpdate = vi.fn(), ministerialActions?: number) {
   return render(
     <EstatesFlagship
       countryCode="us"
@@ -50,6 +50,7 @@ function renderFlagship(estates: EstateView[], canAct = true, onUpdate = vi.fn()
       portfolioKey="education"
       estates={estates}
       estateSummary={summary}
+      ministerialActions={ministerialActions}
       canAct={canAct}
       currencySymbol="$"
       regions={regions}
@@ -91,5 +92,17 @@ describe("EstatesFlagship", () => {
     renderFlagship([estate({})]);
     fireEvent.click(screen.getByText("Budget"));
     expect(screen.getByText("Portfolio discretionary budget")).toBeTruthy();
+  });
+
+  it("shows the daily ministerial actions the estate routes spend", () => {
+    renderFlagship([estate({})], true, vi.fn(), 0);
+    const line = screen.getByTestId("estate-ministerial-actions");
+    expect(line.textContent).toContain("0/4 left today");
+    expect(line.textContent).toContain("midnight Eastern Time");
+  });
+
+  it("omits the ministerial action line when the balance is unknown", () => {
+    renderFlagship([estate({})]);
+    expect(screen.queryByTestId("estate-ministerial-actions")).toBeNull();
   });
 });

@@ -572,6 +572,7 @@ export default function CabinetOfficePage() {
                           portfolioKey: estatePortfolio,
                           estates: data.estates,
                           estateSummary: data.estateSummary,
+                          ministerialActions: data.member?.ministerialActions,
                         }
                       : null
                   }
