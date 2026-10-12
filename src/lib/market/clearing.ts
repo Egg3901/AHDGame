@@ -956,7 +956,8 @@ export function computeClearingFactors(args: {
         commodity,
         sold,
         sellers,
-        contractedShareBySector
+        contractedShareBySector,
+        regulationBlockedByCommodityBySector.get(commodity)
       );
     soldByCommodityBySector.set(commodity, sold);
     if (args.recordDelivery)

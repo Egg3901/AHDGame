@@ -880,7 +880,8 @@ export function processSector(
   // back to the sector's HOST-state functional currency for storage (the market
   // it operates in, not the parent corp's home currency). Sectors with no
   // resolvable host currency passthrough in the helper, preserving ₳-on-disk.
-  const sectorUpdate: Record<string, unknown> = {
+  const sectorUpdate: Record<string, unknown> &
+    Pick<Partial<CorporateSector>, "plantsPnl" | "internalSupplyReceipt"> = {
     // Under plants the nameplate stops compounding and is restated from owned
     // capacity instead (see `plantsNameplateRevenue`); `newRevenue` outside it.
     // Realized earnings live in `realizedRevenue` below, in both modes.

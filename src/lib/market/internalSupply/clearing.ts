@@ -19,7 +19,7 @@ export interface InternalSupplyClearing {
   buyers: readonly {
     sectorId: string;
     corporationId: string;
-    demand: ReadonlyMap<CommodityType, number>;
+    demand: ReadonlyMap<string, number>;
     committed?: ReadonlyMap<CommodityType, number>;
     availability?: ReadonlyMap<CommodityType, number>;
   }[];
@@ -33,6 +33,7 @@ export interface InternalSupplyClearing {
     supply: number;
     demand: number;
     marketPrice: number;
+    sellers: readonly { id: string; units: number }[];
   }>;
 }
 
@@ -84,6 +85,7 @@ export function reserveInternalSupply(args: {
     supply: args.supply,
     demand: args.demand,
     marketPrice: args.marketPrice,
+    sellers: args.sellers.map((s) => ({ id: s.id, units: s.units })),
   });
   const reservations = new Map(args.committed ?? []);
   for (const t of trades)
@@ -97,7 +99,8 @@ export function finishInternalSupplyCommodity(
   commodity: CommodityType,
   sold: ReadonlyMap<string, number>,
   sellers: readonly ClearingSeller[],
-  committed: ReadonlyMap<string, number>
+  committed: ReadonlyMap<string, number>,
+  blockedFraction?: ReadonlyMap<string, number>
 ): void {
   const internalBySeller = new Map<string, number>();
   for (const book of context.pendingBooks ?? []) {
@@ -130,7 +133,14 @@ export function finishInternalSupplyCommodity(
     for (const [id, availability] of internalSupplyAvailability(
       book.buyers,
       trades,
-      book.supply,
+      Math.max(
+        0,
+        book.supply -
+          book.sellers.reduce(
+            (sum, seller) => sum + seller.units * (blockedFraction?.get(seller.id) ?? 0),
+            0
+          )
+      ),
       book.demand
     )) {
       const byCommodity = context.availabilityOut.get(id) ?? new Map<CommodityType, number>();

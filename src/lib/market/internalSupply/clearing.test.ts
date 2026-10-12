@@ -127,6 +127,7 @@ it("does not reserve or discount media output refused by an ownership cap", () =
   });
   expect(result.get("mine")?.soldFraction).toBe(0.35);
   expect(own.tradesOut.reduce((n, t) => n + t.units, 0)).toBe(35);
+  expect(own.availabilityOut.get("factory")?.get("advertising")).toBeCloseTo(35 / 80);
   expect(own.discountCostOut.get("mine")).toBeCloseTo(
     (35 * COMMODITY_BASE_PRICES.advertising * 0.1) / 24
   );
