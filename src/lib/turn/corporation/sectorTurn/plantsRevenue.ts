@@ -44,6 +44,7 @@ export interface PlantsRevenueInput {
     | "capacityUtilization"
     | "militaryDivertedFraction"
     | "militaryDivertedTurn"
+    | "plantsGovernorExempt"
   >;
   corp: Pick<Corporation, "_id" | "countryId" | "bankCharter">;
   strategySupply: Partial<Record<CommodityType, number>> | undefined;
@@ -481,7 +482,9 @@ export function resolvePlantsRevenue(input: PlantsRevenueInput): PlantsRevenueRe
   const marketHourlyRevenue = mothballed
     ? 0
     : plantsEnabled
-      ? input.costPlusPricingEnabled
+      ? // A player-built sector born under plants has nothing to smooth: it
+        // earns its derived revenue from its first turn (ticket 1498).
+        input.costPlusPricingEnabled || sector.plantsGovernorExempt
         ? plantsDerivedHourlyRevenue
         : softenedMarketRealizationAmount(
             baselineHourlyRevenue * activeFraction,
