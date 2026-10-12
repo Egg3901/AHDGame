@@ -384,6 +384,20 @@ describe("player-built sectors skip the launch governor (ticket 1498)", () => {
     expect(r.marketHourlyRevenue).toBeGreaterThan((NEW_SECTOR_ANCHOR / TURNS_PER_DAY) * 2);
   });
 
+  it("never pays an exempt sector less than the governor would (ticket 1502)", () => {
+    // Market pays a tenth of the anchor: the governor holds revenue near the
+    // anchor, and the exemption must not drop it to the raw derived value.
+    const weak = { ...midRamp, plantsMixPrice: 2.4 } as const;
+    const governed = resolvePlantsRevenue(input(weak));
+    const base = input(weak);
+    const exempt = resolvePlantsRevenue({
+      ...base,
+      sector: { ...base.sector, plantsGovernorExempt: true },
+    });
+    expect(governed.marketHourlyRevenue).toBeGreaterThan(governed.plantsDerivedHourlyRevenue);
+    expect(exempt.marketHourlyRevenue).toBeCloseTo(governed.marketHourlyRevenue, 6);
+  });
+
   it("still earns nothing when mothballed", () => {
     const base = input({ ...midRamp, mothballed: true });
     const r = resolvePlantsRevenue({
