@@ -5,7 +5,7 @@ summary: >-
   Sectors that players build or split off now sell at the market price right
   away instead of being held near a starting rate for many turns.
 tags: [economy, corporations]
-badges: [fix]
+badges: [patch]
 areas: [engine]
 ---
 
