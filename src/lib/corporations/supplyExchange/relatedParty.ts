@@ -56,4 +56,4 @@ export function resolveRelatedParty(
 }
 
 export const RELATED_PARTY_MESSAGE =
-  "Related corporations cannot contract with each other. The same owner, the same CEO, or a 5% shareholding on either side counts.";
+  "Related corporations cannot contract unless both belong to the same formalized group. The same owner, CEO, or a 5% shareholding on either side counts.";
