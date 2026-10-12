@@ -318,3 +318,39 @@ describe("absolute cost-plus quotes", () => {
     );
   });
 });
+
+describe("governor anchor carries output-per-capacity gains (ticket 1498)", () => {
+  it("does not clamp away the 1991 energy productivity ramp mid-governor", () => {
+    const over = {
+      sector: {
+        _id: new ObjectId(),
+        sectorType: "energy",
+        countryId: "JP",
+        stateId: "JP-CHU",
+        soldUnits: undefined,
+        producedUnits: undefined,
+        capacityUtilization: undefined,
+        militaryDivertedFraction: 0,
+        militaryDivertedTurn: undefined,
+      } as PlantsRevenueInput["sector"],
+      preset: "1991-default",
+      currentTurn: 130,
+      plantsStartTurn: 10,
+      governorRampTurns: GOVERNOR_RAMP_TURNS,
+      plantsCapacity: 1000,
+      plantsMixPrice: 10,
+      // Nameplate matches capacity x mix price, so only the ramp separates
+      // derived revenue from the anchor.
+      preFlipNameplateRevenue: 1000 * 10,
+      plantsNameplateRevenue: 1000 * 10,
+    } as const;
+    const r = resolvePlantsRevenue(input(over));
+    expect(r.plantsTechOutputMultiplier).toBeGreaterThan(1);
+    expect(r.baselineHourlyRevenue).toBeCloseTo(
+      ((1000 * 10) / TURNS_PER_DAY) * r.plantsTechOutputMultiplier,
+      6
+    );
+    // Per-unit revenue holds at the mix price instead of being diluted.
+    expect(r.marketHourlyRevenue).toBeCloseTo(r.plantsDerivedHourlyRevenue, 6);
+  });
+});
