@@ -1,37 +1,19 @@
-/**
- * The expense ratio: the sponsor's entire business model, and a real drag on
- * every unit holder's return.
- *
- * The fee moves fund cash to the sponsor corporation. It is CONSERVED — nothing
- * is minted, and both legs are ledgered — and it lands in the sponsor's
- * `liquidCapital`, so it flows into corporate profit, tax and share price like
- * any other revenue.
- *
- * Two guards make the arrangement honest rather than extractive:
- *
- *  1. **The fee stops when the holders are impaired.** Below
- *     `FEE_SUSPENDED_BELOW_BACKING_RATIO` the sponsor is paid nothing. A fund
- *     that cannot back its units is not a fund anyone should be earning from,
- *     and the suspension is what points the sponsor at fixing it.
- *  2. **A wind-up earns nothing.** Once the sponsor has decided to close the
- *     fund they stop being paid to run it, so the incentive is to wind up
- *     promptly rather than to milk a dying fund.
- */
-
+/** Sponsor fees transfer marked fund backing to corporate income once per turn. */
 import { ObjectId, type Db } from "mongodb";
-import type { Corporation } from "@/lib/db/types";
-import type { IndexFund, IndexFundTransaction } from "@/lib/db/types/indexFund";
+import type { Corporation, IndexFund, IndexFundTransaction } from "@/lib/db/types";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import {
   anchorToCorpLiquidCapital,
-  getCorpFxRate,
+  loadFxRatesRecord,
   resolveCorpLiquidCurrencyCode,
 } from "@/lib/currency/corporationCapital";
-import { creditCorpLiquidCapital } from "@/lib/financialTxLog/atomicCashGuard";
+import { withSessionDb } from "@/lib/db/sessionDb";
 import { emitTx } from "@/lib/financialTxLog/emit";
-import { expenseFeeForTurn, FEE_SUSPENDED_BELOW_BACKING_RATIO } from "./constants";
-
-const FUND_TX = "indexFundTransactions";
+import { sumFundBondHoldingsByFundId } from "@/lib/bonds/fundBondHoldings";
+import { loadOpenOrdersEscrowByFundId, loadQueuedRedemptionUnitsByFundId } from "../fundValuation";
+import { computeHoldingsValueAnchor } from "../fundAllocation";
+import { feeDecision, markedFundBacking } from "./rules/accounting";
+export { feeDecision } from "./rules/accounting";
 
 export interface ExpenseFeeOutcome {
   fundsCharged: number;
@@ -40,116 +22,113 @@ export interface ExpenseFeeOutcome {
 }
 
 /**
- * Decide the fee for one fund. Pure, so the reasons a fee was skipped are
- * testable without a database.
- */
-export function feeDecision(params: {
-  status: IndexFund["status"];
-  expenseRatioAnnual: number | undefined;
-  aumAnchor: number;
-  backingRatio: number | undefined;
-  cashAnchor: number;
-}): { feeAnchor: number; reason?: "not_sponsored" | "winding_down" | "impaired" | "no_cash" } {
-  if (!params.expenseRatioAnnual || params.expenseRatioAnnual <= 0)
-    return { feeAnchor: 0, reason: "not_sponsored" };
-  if (params.status !== "active") return { feeAnchor: 0, reason: "winding_down" };
-  if (
-    typeof params.backingRatio === "number" &&
-    params.backingRatio < FEE_SUSPENDED_BELOW_BACKING_RATIO
-  )
-    return { feeAnchor: 0, reason: "impaired" };
-
-  const feeAnchor = expenseFeeForTurn(params.aumAnchor, params.expenseRatioAnnual);
-  if (feeAnchor <= 0) return { feeAnchor: 0 };
-  // Fees come out of CASH, never by forcing a holding sale: a fund should not
-  // be made to liquidate its portfolio to pay the person running it.
-  if (params.cashAnchor < feeAnchor) return { feeAnchor: 0, reason: "no_cash" };
-  return { feeAnchor };
-}
-
-/**
- * Charge every sponsored fund its per-turn expense fee. Called from the fund
- * cron after NAV has been recomputed, so AUM is the marked value rather than a
- * stale one.
+ * Required transaction: fee receipts, both cash legs and the replay guard commit
+ * together. A standalone database refuses this operation without moving money.
+ * All books are reloaded in one snapshot rather than using stale quoted NAV.
  */
 export async function chargeSponsorExpenseFees(
   db: Db,
   funds: IndexFund[],
   currentTurn: number
 ): Promise<ExpenseFeeOutcome> {
-  const outcome: ExpenseFeeOutcome = { fundsCharged: 0, totalFeeAnchor: 0, suspended: 0 };
-  const sponsored = funds.filter((f) => f.sponsorCorporationId && f.expenseRatioAnnual);
-  if (sponsored.length === 0) return outcome;
-
-  const sponsors = await db
-    .collection<Corporation>("corporations")
-    .find({ _id: { $in: sponsored.map((f) => f.sponsorCorporationId as ObjectId) } })
-    .toArray();
-  const sponsorById = new Map(sponsors.map((c) => [c._id.toString(), c]));
+  const ids = funds
+    .filter((fund) => fund.sponsorCorporationId && fund.expenseRatioAnnual)
+    .map((fund) => fund._id);
+  const empty: ExpenseFeeOutcome = { fundsCharged: 0, totalFeeAnchor: 0, suspended: 0 };
+  if (!ids.length) return empty;
   const now = new Date();
-
-  for (const fund of sponsored) {
-    const sponsor = sponsorById.get(fund.sponsorCorporationId!.toString());
-    // Sponsor gone (dissolved, acquired and deleted): the fund keeps running
-    // for its holders and simply stops charging. Wind-up is then an admin call,
-    // not something a vanished corporation can be made to do.
-    if (!sponsor) continue;
-
-    const aumAnchor = fund.cashAnchor + (fund.quotedNav ?? 0) * (fund.unitSupply ?? 0);
-    const { feeAnchor, reason } = feeDecision({
-      status: fund.status,
-      expenseRatioAnnual: fund.expenseRatioAnnual,
-      aumAnchor,
-      backingRatio: fund.backingRatio,
-      cashAnchor: fund.cashAnchor,
-    });
-    if (feeAnchor <= 0) {
-      if (reason === "impaired" || reason === "no_cash") outcome.suspended += 1;
-      continue;
-    }
-
-    // Debit the fund first and only credit the sponsor if it landed, so a
-    // failed guard cannot mint the fee.
-    const debited = await db.collection<IndexFund>("indexFunds").updateOne(
-      { _id: fund._id, cashAnchor: { $gte: feeAnchor } },
-      {
-        $inc: { cashAnchor: -feeAnchor, feesPaidToSponsorAnchor: feeAnchor },
-        $set: { updatedAt: now },
-      }
-    );
-    if (debited.modifiedCount === 0) {
-      outcome.suspended += 1;
-      continue;
-    }
-
-    const fxRate = await getCorpFxRate(db, sponsor);
-    const feeLocal = Math.round(anchorToCorpLiquidCapital(feeAnchor, sponsor, fxRate));
-    if (feeLocal > 0) await creditCorpLiquidCapital(db, sponsor._id, feeLocal);
-
-    await Promise.all([
-      emitTx(db, {
-        type: "corp_revenue",
-        turn: currentTurn,
-        createdAt: now,
-        subjectType: "corporation",
-        subjectId: sponsor._id,
-        subjectName: sponsor.name,
-        amount: feeLocal,
-        currencyCode: (resolveCorpLiquidCurrencyCode(sponsor) ?? "USD") as CurrencyCode,
-        counterpartyType: "system",
-        counterpartyName: fund.name,
-        meta: {
-          kind: "fund_expense_fee",
-          fundId: fund._id.toString(),
-          // #992 tranche 3: the shadow ledger mirrors this row against the
-          // fund cash account only when the fund currency is present and
-          // matches the row currency (fail-closed otherwise).
-          fundCurrency: fund.anchorCurrencyCode,
-          expenseRatioAnnual: fund.expenseRatioAnnual,
-          aumAnchor: Math.round(aumAnchor),
+  return withSessionDb(db, async (tx) => {
+    const outcome = { ...empty };
+    const current = await tx
+      .collection<IndexFund>("indexFunds")
+      .find(
+        {
+          _id: { $in: ids },
+          status: "active",
+          $or: [
+            { lastExpenseFeeTurn: { $exists: false } },
+            { lastExpenseFeeTurn: { $lt: currentTurn } },
+          ],
         },
-      }),
-      db.collection<IndexFundTransaction>(FUND_TX).insertOne({
+        { projection: { floatSettlementPlan: 0 } }
+      )
+      .toArray();
+    if (!current.length) return outcome;
+    const sponsors = await tx
+      .collection<Corporation>("corporations")
+      .find(
+        {
+          _id: {
+            $in: current.flatMap((fund) =>
+              fund.sponsorCorporationId ? [fund.sponsorCorporationId] : []
+            ),
+          },
+        },
+        { projection: { name: 1, countryId: 1, liquidCurrencyCode: 1 } }
+      )
+      .toArray();
+    const sponsorById = new Map(sponsors.map((sponsor) => [String(sponsor._id), sponsor]));
+    const rates = await loadFxRatesRecord(tx);
+    const bonds = await sumFundBondHoldingsByFundId(tx, current, rates);
+    const escrow = await loadOpenOrdersEscrowByFundId(
+      tx,
+      current.map((fund) => fund._id)
+    );
+    const queue = await loadQueuedRedemptionUnitsByFundId(
+      tx,
+      current.map((fund) => fund._id)
+    );
+    const fundUpdates = [];
+    const sponsorUpdates = [];
+    const receipts: IndexFundTransaction[] = [];
+    const witnesses = [];
+    for (const fund of current) {
+      const sponsor = sponsorById.get(String(fund.sponsorCorporationId));
+      if (!sponsor) continue;
+      const id = String(fund._id);
+      const aumAnchor = markedFundBacking({
+        cashAnchor: fund.cashAnchor,
+        stockValueAnchor: computeHoldingsValueAnchor(fund),
+        bondValueAnchor: bonds.get(id) ?? 0,
+        orderEscrowAnchor: escrow.get(id) ?? 0,
+      });
+      const { feeAnchor, reason } = feeDecision({
+        status: fund.status,
+        expenseRatioAnnual: fund.expenseRatioAnnual,
+        aumAnchor,
+        backingRatio: fund.backingRatio,
+        cashAnchor: fund.cashAnchor,
+      });
+      if (feeAnchor <= 0) {
+        if (reason === "impaired" || reason === "no_cash") outcome.suspended += 1;
+        continue;
+      }
+      const currencyCode = resolveCorpLiquidCurrencyCode(sponsor);
+      const rate = currencyCode ? rates[currencyCode] : 1;
+      if (!rate || !Number.isFinite(rate) || rate <= 0)
+        throw new Error("Sponsor exchange rate unavailable");
+      const feeLocal = anchorToCorpLiquidCapital(feeAnchor, sponsor, rate);
+      const totalClaims = fund.unitSupply + (queue.get(id) ?? 0);
+      fundUpdates.push({
+        updateOne: {
+          filter: { _id: fund._id, cashAnchor: { $gte: feeAnchor } },
+          update: {
+            $inc: { cashAnchor: -feeAnchor, feesPaidToSponsorAnchor: feeAnchor },
+            $set: {
+              lastExpenseFeeTurn: currentTurn,
+              updatedAt: now,
+              ...(totalClaims > 0 ? { quotedNav: (aumAnchor - feeAnchor) / totalClaims } : {}),
+            },
+          },
+        },
+      });
+      sponsorUpdates.push({
+        updateOne: {
+          filter: { _id: sponsor._id },
+          update: { $inc: { liquidCapital: feeLocal } },
+        },
+      });
+      receipts.push({
         _id: new ObjectId(),
         fundId: fund._id,
         kind: "expense_fee",
@@ -158,12 +137,39 @@ export async function chargeSponsorExpenseFees(
         amountAnchor: -feeAnchor,
         note: `Expense fee to ${sponsor.name}`,
         createdAt: now,
-      } as IndexFundTransaction),
-    ]);
-
-    outcome.fundsCharged += 1;
-    outcome.totalFeeAnchor += feeAnchor;
-  }
-
-  return outcome;
+      });
+      witnesses.push({
+        type: "corp_revenue" as const,
+        turn: currentTurn,
+        createdAt: now,
+        subjectType: "corporation" as const,
+        subjectId: sponsor._id,
+        subjectName: sponsor.name,
+        amount: feeLocal,
+        anchorAmount: feeAnchor,
+        currencyCode: (currencyCode ?? "USD") as CurrencyCode,
+        counterpartyType: "system" as const,
+        counterpartyName: fund.name,
+        meta: {
+          kind: "fund_expense_fee",
+          fundId: id,
+          fundCurrency: fund.anchorCurrencyCode,
+          expenseRatioAnnual: fund.expenseRatioAnnual,
+          aumAnchor,
+        },
+      });
+      outcome.fundsCharged += 1;
+      outcome.totalFeeAnchor += feeAnchor;
+    }
+    if (!receipts.length) return outcome;
+    const debits = await tx.collection<IndexFund>("indexFunds").bulkWrite(fundUpdates);
+    if (debits.matchedCount !== receipts.length) throw new Error("Fund fee debit failed");
+    const credits = await tx.collection<Corporation>("corporations").bulkWrite(sponsorUpdates);
+    if (credits.matchedCount !== receipts.length) throw new Error("Sponsor fee credit failed");
+    await tx.collection<IndexFundTransaction>("indexFundTransactions").insertMany(receipts);
+    for (const witness of witnesses) {
+      if ((await emitTx(tx, witness)) === "failed") throw new Error("Fund fee witness failed");
+    }
+    return outcome;
+  });
 }

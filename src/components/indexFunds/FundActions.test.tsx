@@ -149,3 +149,52 @@ describe("fund holdings pagination", () => {
     expect(screen.getByText("1 / 2 (12 total)")).toBeTruthy();
   });
 });
+
+describe("sponsor redemption capability", () => {
+  const props = {
+    fundId: "fund",
+    quotedNav: 10,
+    anchorCurrencyCode: "USD",
+    status: "active",
+    myUnits: 0,
+    myLegacyUnits: 0,
+    onSuccess: vi.fn(),
+  };
+  it("hides redemption when the only account holds locked sponsor units", () => {
+    render(
+      <FundActions
+        {...props}
+        corporations={[
+          {
+            id: "sponsor",
+            name: "Sponsor",
+            currencyCode: "USD",
+            liquidCapital: 100,
+            units: 3,
+            canRedeem: false,
+          },
+        ]}
+      />
+    );
+    expect(screen.queryByRole("button", { name: "Redeem units" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Buy fund units" })).toBeTruthy();
+  });
+  it("offers redemption through an eligible corporate account", () => {
+    render(
+      <FundActions
+        {...props}
+        corporations={[
+          {
+            id: "investor",
+            name: "Investor",
+            currencyCode: "USD",
+            liquidCapital: 100,
+            units: 3,
+            canRedeem: true,
+          },
+        ]}
+      />
+    );
+    expect(screen.getByRole("button", { name: "Redeem units" })).toBeTruthy();
+  });
+});

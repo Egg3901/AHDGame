@@ -8,6 +8,7 @@ import type {
   IndexFundHolding,
 } from "@/lib/db/types";
 import { isDuplicateKeyError } from "@/lib/api/errors";
+import { resolveFundMandate } from "./mandate";
 
 // ── Collection names ──────────────────────────────────────────────────
 
@@ -134,7 +135,7 @@ export async function listServiceableFunds(db: Db): Promise<IndexFund[]> {
 
 /**
  * Funds a corporation sponsors, newest first, excluding delisted. Powers the
- * owner-facing "funds this corp sponsors" surface — there was previously no way
+ * owner-facing "funds this corp sponsors" surface - there was previously no way
  * to list a corp's own funds after the session that chartered them (ticket 1088).
  */
 export async function listFundsBySponsor(
@@ -155,7 +156,10 @@ export async function listFundsBySponsor(
 
 /** Insert a new fund definition. Returns the inserted _id. */
 export async function insertFund(db: Db, fund: Omit<IndexFund, "_id">): Promise<ObjectId> {
-  const result = await db.collection<IndexFund>(FUND_COLLECTION).insertOne(fund as IndexFund);
+  const result = await db.collection<IndexFund>(FUND_COLLECTION).insertOne({
+    ...fund,
+    mandate: resolveFundMandate(fund),
+  } as IndexFund);
   return result.insertedId;
 }
 
@@ -173,7 +177,8 @@ export async function updateFundConstituents(
    * empty array: the list is the whole current picture, so anything not in it
    * has stopped failing and must not keep an old count.
    */
-  listingFailureStreaks?: IndexFund["listingFailureStreaks"]
+  listingFailureStreaks?: IndexFund["listingFailureStreaks"],
+  mandate?: IndexFund["mandate"]
 ): Promise<void> {
   await db.collection<IndexFund>(FUND_COLLECTION).updateOne(
     { _id: fundId },
@@ -182,6 +187,7 @@ export async function updateFundConstituents(
         targetConstituents,
         lastRebalancedAt,
         ...(listingFailureStreaks ? { listingFailureStreaks } : {}),
+        ...(mandate ? { mandate } : {}),
         updatedAt: new Date(),
       },
     }
@@ -398,7 +404,7 @@ export async function creditFundPosition(
 
   if (incResult) return incResult;
 
-  // Position doesn't exist — create it. New positions are post-#857-fix, so
+  // Position doesn't exist - create it. New positions are post-#857-fix, so
   // none of their units are legacy (they were charged the correct × rate cost).
   const newPosition: Omit<IndexFundPosition, "_id"> = {
     fundId,
@@ -419,7 +425,7 @@ export async function creditFundPosition(
     return { ...newPosition, _id: insertResult.insertedId } as IndexFundPosition;
   } catch (err) {
     if (isDuplicateKeyError(err)) {
-      // Another request won the race — retry the increment.
+      // Another request won the race - retry the increment.
       const retry = await db
         .collection<IndexFundPosition>(FUND_POSITION_COLLECTION)
         .findOneAndUpdate(
@@ -589,7 +595,7 @@ export type DebitFundPositionResult =
  * Atomically debit fund units from a holder position.
  * Removes the position document if units drop to zero.
  * Returns `{ ok: false }` when the holder has no position with at least
- * `units` units (guard failed — e.g. a concurrent debit drained it).
+ * `units` units (guard failed - e.g. a concurrent debit drained it).
  * Callers MUST check `ok` before paying out against the debit.
  * On success, `position` is the updated position (null if removed at zero).
  */
@@ -614,10 +620,10 @@ export async function debitFundPosition(
   if (holderFilter.nppId) identityFields.nppId = holderFilter.nppId;
 
   // Single atomic debit. We request the PRE-image so `legacyUnitsRedeemed` is
-  // derived from the exact document the update acted on — no separate read that
+  // derived from the exact document the update acted on - no separate read that
   // could race the update on a non-transactional (standalone-Mongo) path. The
   // pipeline drains legacy units first; absent legacyUnits defaults to the full
-  // position (conservative: all legacy, never over-pays) — see the type.
+  // position (conservative: all legacy, never over-pays) - see the type.
   const now = new Date();
   const before = await db.collection<IndexFundPosition>(FUND_POSITION_COLLECTION).findOneAndUpdate(
     { ...identityFields, units: { $gte: units } },

@@ -60,8 +60,10 @@ export function SponsorshipCard({
       <h2 className="text-sm font-semibold">Sponsored fund</h2>
       <p className="mt-1 text-[11px] leading-relaxed text-muted">
         Run by <span className="font-medium text-foreground">{fund.sponsorName}</span>, which takes
-        an annual expense ratio off assets under management and holds seed capital at risk until
-        every unit holder has been paid.
+        a management fee each game year.{" "}
+        {fund.seedAccounting === "paid_units"
+          ? "Its seed money buys fund units that share gains and losses with investors."
+          : "Its legacy seed money has no units and any cash left after payouts returns to the sponsor."}
       </p>
 
       <div className="mt-3 space-y-1.5 text-xs">
@@ -70,7 +72,7 @@ export function SponsorshipCard({
             <span className="text-muted">Expense ratio</span>
             <span className="font-mono font-bold">
               {(fund.expenseRatioAnnual * 100).toFixed(2)}% (
-              {expenseRatioBasisPoints(fund.expenseRatioAnnual)} bps) / year
+              {expenseRatioBasisPoints(fund.expenseRatioAnnual)} bps) / game year
             </span>
           </div>
         )}
@@ -99,7 +101,7 @@ export function SponsorshipCard({
       {windingDown && !delisted && (
         <p className="mt-3 rounded-lg border border-warning/30 bg-warning/5 px-3 py-2 text-[11px] text-warning">
           Winding down since turn {fund.windDownStartedAtTurn ?? "?"}. Holdings are being sold,
-          holders will be paid at the final value, and the seed capital returns to the sponsor last.
+          holders will be paid at the final value.
         </p>
       )}
 
@@ -124,8 +126,8 @@ export function SponsorshipCard({
             <div className="space-y-2">
               <p className="text-[11px] leading-relaxed text-muted">
                 This closes {fund.tickerSymbol} for good. The fund stops taking subscriptions, sells
-                its holdings over the coming turns, and pays every holder at the final value. Your
-                seed capital comes back only after they are paid, and this cannot be undone.
+                its holdings over the coming turns, and pays every holder at the final value. This
+                cannot be undone.
               </p>
               <div className="flex gap-2">
                 <button

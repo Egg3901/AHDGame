@@ -2,6 +2,7 @@ import type { ObjectId } from "mongodb";
 import type { CountryId } from "../../constants/countries";
 import type { CurrencyCode } from "../../constants/currencies";
 import type { OperatingSectorType } from "../../constants/corporations";
+import type { IndexMandate } from "@/lib/indexFunds/rules/mandate";
 
 export type IndexFundScope = "country" | "global";
 /**
@@ -55,6 +56,8 @@ export interface IndexFund {
   tickerSymbol: string;
   scope: IndexFundScope;
   kind: IndexFundKind;
+  /** Absent on pre-mandate books until the compatible policy is persisted. */
+  mandate?: IndexMandate;
   /** Present for country-scoped funds. Omitted only for the global top-50 fund. */
   countryId?: CountryId;
   /** Present for sector funds. */
@@ -82,7 +85,7 @@ export interface IndexFund {
   /**
    * Present only on SPONSORED funds. Absent means a system-seeded fund: no
    * sponsor, no fee, and no wind-up path. Every sponsorship field is optional
-   * for exactly that reason — the seeded funds must stay byte-identical.
+   * for exactly that reason - the seeded funds must stay byte-identical.
    */
   sponsorCorporationId?: ObjectId;
   sponsorName?: string;
@@ -90,10 +93,14 @@ export interface IndexFund {
   expenseRatioAnnual?: number;
   charteredAtTurn?: number;
   /**
-   * Seed capital the sponsor put up (₳). Stays at risk for the fund's life and
-   * is returned at wind-up only after every unit holder has been paid.
+   * Seed cash posted by the sponsor (anchor units). New contracts buy ordinary
+   * units; existing contracts retain their legacy residual policy.
    */
   seedCapitalAnchor?: number;
+  /** Existing contracts keep their residual rights; new seed cash buys units. */
+  seedAccounting?: "legacy_residual" | "paid_units";
+  /** Committed with both fee cash legs; retries cannot charge the turn again. */
+  lastExpenseFeeTurn?: number;
   /** Running total of expense fees this fund has paid its sponsor (₳). */
   feesPaidToSponsorAnchor?: number;
   /** Turn the sponsor initiated wind-up; set with `status: "winding_down"`. */

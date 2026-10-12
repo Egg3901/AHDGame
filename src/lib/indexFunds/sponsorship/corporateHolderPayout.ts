@@ -48,11 +48,16 @@ export async function payCorporateWindUpHolders(
   let distributedAnchor = 0;
   for (const position of corporatePositions) {
     const corp = byId.get(position.corporationId!.toString());
-    const amountAnchor = Math.floor(position.units * finalNav);
-    if (!corp || amountAnchor <= 0) continue;
+    const amountAnchor =
+      fund.seedAccounting === "paid_units"
+        ? position.units * finalNav
+        : Math.floor(position.units * finalNav);
+    if (!corp) throw new Error("Corporate fund holder no longer exists");
+    if (amountAnchor <= 0) continue;
     const currency = resolveCorpLiquidCurrencyCode(corp);
     const rate = forex && currency ? rates[currency] : 1;
-    if (!rate || rate <= 0) throw new Error("Corporate payout exchange rate unavailable");
+    if (!rate || !Number.isFinite(rate) || rate <= 0)
+      throw new Error("Corporate payout exchange rate unavailable");
     operations.push({
       updateOne: {
         filter: { _id: corp._id },
@@ -77,7 +82,9 @@ export async function payCorporateWindUpHolders(
     distributedAnchor += amountAnchor;
   }
   if (operations.length) {
-    await db.collection("corporations").bulkWrite(operations);
+    const credited = await db.collection("corporations").bulkWrite(operations);
+    if (credited.matchedCount !== operations.length)
+      throw new Error("Corporate fund payout failed");
     await db.collection<IndexFundTransaction>("indexFundTransactions").insertMany(transactions);
   }
   return { holdersPaid: operations.length, distributedAnchor };
