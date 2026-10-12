@@ -11,8 +11,9 @@ import type { Corporation } from "@/lib/db/types/corporation";
 import type { GameConfig } from "@/lib/db/types/gameConfig";
 import type { GameState } from "@/lib/db/types/gameState";
 import type { TradeEmbargo } from "@/lib/db/types/tradeEmbargo";
+import { getControllingCorporateParent } from "@/lib/corporations/corporateOwnership";
 import { buildTradeAffinity } from "@/lib/trade/tradeAffinity";
-import { RELATED_PARTY_MESSAGE, resolveRelatedParty, type RelatedPartyCorp } from "./relatedParty";
+import { RELATED_PARTY_MESSAGE, resolveRelatedParty } from "./relatedParty";
 
 /**
  * Gates shared by every way a supply contract can be opened or changed:
@@ -93,7 +94,20 @@ export async function isSupplyLaneClosed(
   return affinityFor(commodity, supplier, buyer) <= 0;
 }
 
-type GuardedCorp = RelatedPartyCorp & Pick<Corporation, "countryId">;
+type GuardedCorp = Corporation;
+
+/**
+ * A formalized group may contract internally; unrelated related parties may not.
+ * Subsidiary groups currently have one generation, so the pair must be the
+ * formalized child and its controlling parent.
+ */
+function shareFormalizedGroup(a: GuardedCorp, b: GuardedCorp): boolean {
+  const isFormalizedChildOf = (child: GuardedCorp, parent: GuardedCorp) => {
+    if (child.subsidiaryFormalizedAtTurn == null) return false;
+    return getControllingCorporateParent(child)?.corporationId.equals(parent._id) ?? false;
+  };
+  return isFormalizedChildOf(a, b) || isFormalizedChildOf(b, a);
+}
 
 /** Related-party and embargo-lane checks. Returns a player-facing error, or null when clear. */
 export async function checkSupplyContractParties(
@@ -101,7 +115,14 @@ export async function checkSupplyContractParties(
   args: { supplier: GuardedCorp; buyer: GuardedCorp; commodity: CommodityType }
 ): Promise<string | null> {
   const { supplier, buyer, commodity } = args;
-  if (resolveRelatedParty(supplier, buyer)) return RELATED_PARTY_MESSAGE;
+  if (resolveRelatedParty(supplier, buyer)) {
+    const world = await db
+      .collection<GameState>("gameState")
+      .findOne({ _id: "current" }, { projection: { subsidiaryCorporationsEnabled: 1 } });
+    if (world?.subsidiaryCorporationsEnabled !== true || !shareFormalizedGroup(supplier, buyer)) {
+      return RELATED_PARTY_MESSAGE;
+    }
+  }
   if (
     await isSupplyLaneClosed(db, {
       supplierCountry: supplier.countryId,

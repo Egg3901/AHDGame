@@ -358,14 +358,16 @@ export default function CommoditiesPanel({
             width={300}
           >
             <p className="text-muted text-xs">
-              Whichever input is hardest to get caps what you can make. If the world market supplies
-              only 60% of the steel everyone wants, you can only build about 60% of your cars, no
-              matter what is available in your own state or region. This limit phases in over 5 game
-              years so supply chains have time to adapt, and it never cuts you below 50%.
+              The value at right is a projection from the latest world-market balances. The throttle
+              applied last turn can differ when regional deliveries or internal supply improve what
+              reaches your plant. The throttle phases in over 5 game years and never cuts you below
+              50%.
               {commodities.throughput.bindingInput && (
                 <>
                   {" "}
-                  Binding input:{" "}
+                  {commodities.throughput.applied != null
+                    ? "Last turn's binding input: "
+                    : "Projected binding input: "}
                   <span className="font-medium text-foreground">
                     {commodities.throughput.bindingInput.replace(/_/g, " ")}
                   </span>
