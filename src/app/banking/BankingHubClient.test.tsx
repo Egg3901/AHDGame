@@ -253,15 +253,20 @@ describe("BankingHubClient", () => {
     expect(screen.getByText(/separate from bond issuance capacity/i)).toBeTruthy();
   });
 
-  it("keeps the pinned action cell opaque when a bank row is hovered", async () => {
+  it("keeps the pinned action cell opaque and aligned with the row hover", async () => {
     renderBankingHub();
 
     const depositButton = await screen.findByRole("button", {
       name: "Deposit savings at Continental Trust",
     });
     const actionsCell = depositButton.closest("td");
+    const bankRow = actionsCell?.closest("tr");
+    const hoverBackground = "bg-[color-mix(in_srgb,var(--background)_40%,var(--card))]";
 
-    expect(actionsCell?.classList.contains("group-hover:bg-card")).toBe(true);
+    expect(actionsCell?.classList.contains("bg-card")).toBe(true);
+    expect(actionsCell?.classList.contains("group-hover:" + hoverBackground)).toBe(true);
+    expect(bankRow?.classList.contains("hover:" + hoverBackground)).toBe(true);
+    expect(actionsCell?.classList.contains("group-hover:bg-card")).toBe(false);
   });
 
   it("deposits from the bank table using a review modal and routes savings to that bank", async () => {
