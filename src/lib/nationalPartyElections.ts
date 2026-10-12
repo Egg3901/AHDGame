@@ -159,6 +159,43 @@ export async function createMissingNationalElections(
       .toArray(),
   ]);
 
+  // A charter proposer is seated as the party's first chair. Keep that seat
+  // out of the first regular election cycle: the cycle opens immediately for
+  // vice-chair and treasurer, and the chair race starts after one of those
+  // first-cycle elections has completed. Without this guard, the hourly sweep
+  // recreates the chair election that ratifyCharter deliberately omits.
+  const firstTermChairParties = parties.filter(
+    (party) => party.chairId != null && typeof party.createdTurn === "number"
+  );
+  const firstTermChairPartyKeys = new Set<string>();
+  if (firstTermChairParties.length > 0) {
+    const foundingPartyIds = firstTermChairParties.map((party) => String(party.sequentialId));
+    const completedFirstCycleElections = await db
+      .collection<NationalPartyElection>("nationalPartyElections")
+      .find(
+        applyOptionalCountryScope(
+          {
+            status: "completed",
+            position: { $in: ["viceChair", "treasurer"] },
+            partyId: { $in: foundingPartyIds },
+          },
+          countryId
+        )
+      )
+      .toArray();
+
+    for (const election of completedFirstCycleElections) {
+      const party = firstTermChairParties.find(
+        (candidate) =>
+          String(candidate.sequentialId) === election.partyId &&
+          (candidate.countryId ?? "US") === (election.countryId ?? "US")
+      );
+      if (party && election.endTurn >= (party.createdTurn as number)) {
+        firstTermChairPartyKeys.add(`${party.countryId ?? "US"}:${party.sequentialId}`);
+      }
+    }
+  }
+
   // Use countryId:partyId:position as the key to distinguish parties across countries
   const activeSet = new Set(
     activeElections.map((e) => `${e.countryId ?? "US"}:${e.partyId}_${e.position}`)
@@ -209,6 +246,12 @@ export async function createMissingNationalElections(
       party.customElectionDurationTurns ?? cycleDurationFor(partyCountryId);
     for (const position of NATIONAL_ALL_POSITIONS) {
       const key = `${partyCountryId}:${String(party.sequentialId)}_${position}`;
+      const firstTermChairIsProtected =
+        position === "chair" &&
+        party.chairId != null &&
+        typeof party.createdTurn === "number" &&
+        !firstTermChairPartyKeys.has(`${partyCountryId}:${party.sequentialId}`);
+      if (firstTermChairIsProtected) continue;
       if (!activeSet.has(key) && !deferredSet.has(key)) {
         toCreate.push({
           partyId: String(party.sequentialId),
