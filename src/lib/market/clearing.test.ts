@@ -180,6 +180,49 @@ describe("computeClearingFactors", () => {
     expect(r.soldFraction).toBeLessThan(r.soldByCommodity!.natural_gas!);
   });
 
+  it("records each output's share of realized revenue (ticket 1507)", () => {
+    // Same split market: the share is weight x sold x offer factor over the
+    // sector total, so the per-product sale price can be read back on the page.
+    const prices = { oil: 100, natural_gas: 100 } as Record<CommodityType, number>;
+    const input: Parameters<typeof computeClearingFactors>[0] = {
+      sectors: [
+        {
+          sectorId: "tx",
+          revenue: 10_000,
+          supplyRates: { oil: 0.58, natural_gas: 0.32 },
+          posture: 0,
+        },
+      ],
+      balances: bals([
+        ["oil", { supply: 200, demand: 100 }],
+        ["natural_gas", { supply: 100, demand: 300 }],
+      ]),
+      priceRatioByCommodity: new Map([
+        ["oil", 1],
+        ["natural_gas", 1],
+      ]),
+      basePrices: prices,
+    };
+    const r = computeClearingFactors(input).get("tx")!;
+    const share = r.revenueShareByCommodity!;
+    expect(share.oil! + share.natural_gas!).toBeCloseTo(1, 9);
+    const oilWeight = 0.58 * r.soldByCommodity!.oil! * r.offerFactorByCommodity!.oil!;
+    const gasWeight =
+      0.32 * r.soldByCommodity!.natural_gas! * r.offerFactorByCommodity!.natural_gas!;
+    expect(share.oil).toBeCloseTo(oilWeight / (oilWeight + gasWeight), 9);
+    expect(share.natural_gas).toBeCloseTo(gasWeight / (oilWeight + gasWeight), 9);
+  });
+
+  it("omits the revenue split when nothing sold", () => {
+    const r = computeClearingFactors({
+      sectors: [{ sectorId: "tx", revenue: 10_000, supplyRates: { oil: 1 }, posture: 0 }],
+      balances: bals([["oil", { supply: 100, demand: 0 }]]),
+      priceRatioByCommodity: new Map([["oil", 1]]),
+      basePrices: { oil: 100 } as Record<CommodityType, number>,
+    }).get("tx");
+    expect(r?.revenueShareByCommodity).toBeUndefined();
+  });
+
   it("quality lifts the realized premium for a premium poster (sellout)", () => {
     const results = computeClearingFactors({
       sectors: [
