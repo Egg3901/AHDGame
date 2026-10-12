@@ -991,14 +991,6 @@ export default function ExpandMarketModal({
                         </p>
                       )}
 
-                      {/* No unowned pool notice */}
-                      {!plantsMode && activeSuggestion.unownedRevenue === 0 && (
-                        <p className="text-[11px] text-warning">
-                          No unowned revenue pool: this market is fully captured by existing
-                          corporations. You cannot split here currently.
-                        </p>
-                      )}
-
                       {/* CTA — plants: quote the charge, then send them to build */}
                       {plantsMode && foundingQuote && (
                         <div className="pt-1">
@@ -1129,25 +1121,29 @@ export default function ExpandMarketModal({
                       )}
 
                       {/* CTA */}
-                      <div className={plantsMode ? "hidden" : "pt-1"}>
-                        {activeSuggestion.ownedSectorId ? (
-                          <Link
-                            href={`/corporation/${corpId}/sector/${activeSuggestion.ownedSectorId}`}
-                            onClick={onClose}
-                            className="block w-full rounded-lg border border-primary/30 bg-primary/10 px-4 py-2 text-center text-sm font-medium text-primary hover:bg-primary/20 transition-colors"
-                          >
-                            View your sector and split
-                          </Link>
-                        ) : (
-                          <Link
-                            href={`${regionUrl(activeSuggestion.countryId, activeSuggestion.stateId)}?tab=economy&sector=${encodeURIComponent(selectedType)}`}
-                            onClick={onClose}
-                            className="block w-full rounded-lg border border-card-border bg-card-elevated/50 px-4 py-2 text-center text-sm font-medium text-foreground hover:bg-card-elevated transition-colors"
-                          >
-                            View state economy to split
-                          </Link>
+                      {!plantsMode &&
+                        (activeSuggestion.ownedSectorId ||
+                          (activeSuggestion.unownedRevenue > 0 && activeSuggestion.canAfford)) && (
+                          <div className="pt-1">
+                            {activeSuggestion.ownedSectorId ? (
+                              <Link
+                                href={`/corporation/${corpId}/sector/${activeSuggestion.ownedSectorId}`}
+                                onClick={onClose}
+                                className="block w-full rounded-lg border border-primary/30 bg-primary/10 px-4 py-2 text-center text-sm font-medium text-primary hover:bg-primary/20 transition-colors"
+                              >
+                                View your sector
+                              </Link>
+                            ) : (
+                              <Link
+                                href={`${regionUrl(activeSuggestion.countryId, activeSuggestion.stateId)}?tab=economy&sector=${encodeURIComponent(selectedType)}`}
+                                onClick={onClose}
+                                className="block w-full rounded-lg border border-card-border bg-card-elevated/50 px-4 py-2 text-center text-sm font-medium text-foreground hover:bg-card-elevated transition-colors"
+                              >
+                                View state economy to split
+                              </Link>
+                            )}
+                          </div>
                         )}
-                      </div>
                     </div>
                   )}
 

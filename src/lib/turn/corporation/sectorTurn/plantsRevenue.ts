@@ -15,7 +15,11 @@ import { productionProductivityMultiplier } from "@/lib/corporations/rules/produ
 import { TURNS_PER_DAY } from "@/lib/constants/turnTime";
 import { getOutputMultiplier } from "@/lib/utils/productionPolicy";
 import { CAPACITY_BINDING_THRESHOLD } from "@/lib/extraction/capacityHaircut";
-import { softenedMarketRealization, softenedMarketRealizationAmount } from "@/lib/market/capital";
+import {
+  governorAnchorTurn,
+  softenedMarketRealization,
+  softenedMarketRealizationAmount,
+} from "@/lib/market/capital";
 import { computePriceRealization } from "@/lib/market/priceRealization";
 import { TRADE_EMBARGO_EXPORT_LOSS_SHARE } from "@/lib/trade/constants";
 import { computeExportExposure } from "@/lib/trade/exportPremium";
@@ -44,6 +48,7 @@ export interface PlantsRevenueInput {
     | "capacityUtilization"
     | "militaryDivertedFraction"
     | "militaryDivertedTurn"
+    | "plantsGovernorExempt"
   >;
   corp: Pick<Corporation, "_id" | "countryId" | "bankCharter">;
   strategySupply: Partial<Record<CommodityType, number>> | undefined;
@@ -91,6 +96,8 @@ export interface PlantsRevenueInput {
   preset?: string;
   governorCap: number;
   governorRampTurns: number;
+  /** World flip turn (see `MarketContext.worldGovernorAnchorTurn`). */
+  worldGovernorAnchorTurn?: number | null;
   privateBankingEnabled?: boolean;
   marketPlantsEnabled: boolean;
   contractProductionTargetBySectorId: MarketContext["contractProductionTargetBySectorId"];
@@ -188,6 +195,7 @@ export function resolvePlantsRevenue(input: PlantsRevenueInput): PlantsRevenueRe
     plantsStartTurn,
     governorCap,
     governorRampTurns,
+    worldGovernorAnchorTurn,
     privateBankingEnabled,
     marketPlantsEnabled,
     contractProductionTargetBySectorId,
@@ -210,7 +218,7 @@ export function resolvePlantsRevenue(input: PlantsRevenueInput): PlantsRevenueRe
       : softenedMarketRealization(
           computePriceRealization(strategySupply ?? {}, priceRatioByCommodity),
           clearingFactor,
-          clearingStartTurn,
+          governorAnchorTurn(clearingStartTurn, worldGovernorAnchorTurn),
           currentTurn,
           governorCap,
           governorRampTurns
@@ -258,35 +266,6 @@ export function resolvePlantsRevenue(input: PlantsRevenueInput): PlantsRevenueRe
     plantsExtractionHardMin,
     activeFraction
   );
-  // `baselineHourlyRevenue` is the pre-plants COUNTERFACTUAL. Under plants it is
-  // the governor's clamp anchor, so it must carry the legs capital mode carried
-  // (`capacityHaircut` and `capitalFactor`). Gating them off here jumps the
-  // anchor on flip (λ = 0 returns the anchor verbatim). Do not "fix" the
-  // asymmetry. Not a compounding decay: under plants `sector.revenue` was
-  // restated as `plantsCapacity x plantsMixPrice`, so the haircut multiplies the
-  // anchor once per turn at a constant level. `governorEffectiveCap` drops the
-  // clamp at full ramp; after that `plantsExtractionHardMin` and capacity price
-  // it.
-  // A mid-transition sector governs against its transitioning nameplate once
-  // divergence is allowed, but on the flip turn (lambda 0) the governor
-  // returns the anchor verbatim: the anchor must be the capital-mode
-  // counterfactual there, or the flip books headroom plus the blend as
-  // revenue (measured +12% on a manufacturing standard to premium flip).
-  const baselineHourlyRevenue =
-    ((plantsEnabled && strategyIsTransitioning && retoolCapacityRatio !== 1 && plantsRampLambda > 0
-      ? plantsNameplateRevenue
-      : preFlipNameplateRevenue) /
-      TURNS_PER_DAY) *
-    revenueMultiplier *
-    nationalizationTransition *
-    capacityHaircut *
-    clearingRevenueLeg *
-    throughputFactor *
-    capitalFactor *
-    labourOutputFactor *
-    // Embargo: legacy total mothball earns nothing (factor 0); the trade-exposure
-    // model keeps the domestic remainder (1 − exported share). 1 when unembargoed.
-    embargoRevenueFactor;
   // P3a scoped touch #1 — tech output rate reaches the PLANTS units chain.
   //
   // `techEffects.outputRateMult` is applied to the supply rates the sector
@@ -315,6 +294,42 @@ export function resolvePlantsRevenue(input: PlantsRevenueInput): PlantsRevenueRe
         preset,
       })
     : 1;
+  // `baselineHourlyRevenue` is the pre-plants COUNTERFACTUAL. Under plants it is
+  // the governor's clamp anchor, so it must carry the legs capital mode carried
+  // (`capacityHaircut` and `capitalFactor`). Gating them off here jumps the
+  // anchor on flip (λ = 0 returns the anchor verbatim). Do not "fix" the
+  // asymmetry. Not a compounding decay: under plants `sector.revenue` was
+  // restated as `plantsCapacity x plantsMixPrice`, so the haircut multiplies the
+  // anchor once per turn at a constant level. `governorEffectiveCap` drops the
+  // clamp at full ramp; after that `plantsExtractionHardMin` and capacity price
+  // it.
+  // A mid-transition sector governs against its transitioning nameplate once
+  // divergence is allowed, but on the flip turn (lambda 0) the governor
+  // returns the anchor verbatim: the anchor must be the capital-mode
+  // counterfactual there, or the flip books headroom plus the blend as
+  // revenue (measured +12% on a manufacturing standard to premium flip).
+  const baselineHourlyRevenue =
+    ((plantsEnabled && strategyIsTransitioning && retoolCapacityRatio !== 1 && plantsRampLambda > 0
+      ? plantsNameplateRevenue
+      : preFlipNameplateRevenue) /
+      TURNS_PER_DAY) *
+    revenueMultiplier *
+    nationalizationTransition *
+    capacityHaircut *
+    clearingRevenueLeg *
+    throughputFactor *
+    capitalFactor *
+    labourOutputFactor *
+    // Ticket 1498: output-per-capacity gains (tech output rate, the 1991 energy
+    // productivity ramp) raise `producedUnits`, so the anchor must carry them
+    // too. Without this the governor read the extra output as excess revenue
+    // and clamped it away during the ramp, so every unit sold below the price
+    // the clearing leg promised. Exactly 1 without tech or the ramp, so the
+    // flip identity and every other sector are unchanged.
+    plantsTechOutputMultiplier *
+    // Embargo: legacy total mothball earns nothing (factor 0); the trade-exposure
+    // model keeps the domestic remainder (1 − exported share). 1 when unembargoed.
+    embargoRevenueFactor;
   // Ticket #1072: which production-policy curve throttles TONNAGE.
   //
   // The policy slider publishes two curves: an OUTPUT curve (−10%…+15%, what
@@ -474,12 +489,14 @@ export function resolvePlantsRevenue(input: PlantsRevenueInput): PlantsRevenueRe
   const marketHourlyRevenue = mothballed
     ? 0
     : plantsEnabled
-      ? input.costPlusPricingEnabled
+      ? // A player-built sector born under plants has nothing to smooth: it
+        // earns its derived revenue from its first turn (ticket 1498).
+        input.costPlusPricingEnabled || sector.plantsGovernorExempt
         ? plantsDerivedHourlyRevenue
         : softenedMarketRealizationAmount(
             baselineHourlyRevenue * activeFraction,
             plantsDerivedHourlyRevenue,
-            plantsStartTurn,
+            governorAnchorTurn(plantsStartTurn, worldGovernorAnchorTurn),
             currentTurn,
             governorCap,
             governorRampTurns

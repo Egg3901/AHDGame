@@ -58,7 +58,20 @@ export default function AttackPanel({
   targetCurrencyCode,
 }: AttackPanelProps) {
   const { formatAmount } = useCurrency();
-  const [selectedStrength, setSelectedStrength] = useState<SplitStrength>("full");
+  const affordableStrengths = (["full", "half"] as SplitStrength[]).filter((strength) => {
+    const quote = attackInfo.splitStrengths?.[strength];
+    const cost = quote?.splitCost ?? (strength === "full" ? attackInfo.splitCost : 0);
+    const msCost = quote?.splitMsCost ?? attackInfo.splitMsCost;
+    return (
+      cost > 0 && attackInfo.userLiquidCapital >= cost && attackInfo.userMarketingStrength >= msCost
+    );
+  });
+  const [selectedStrength, setSelectedStrength] = useState<SplitStrength>(
+    affordableStrengths[0] ?? "full"
+  );
+  const activeStrength = affordableStrengths.includes(selectedStrength)
+    ? selectedStrength
+    : (affordableStrengths[0] ?? "full");
   const [plannerOpen, setPlannerOpen] = useState(false);
 
   const targetNativeCurrency = targetCurrencyCode ?? sectorCurrencyCode;
@@ -72,8 +85,8 @@ export default function AttackPanel({
 
   // Resolve active strength info — fall back to full strength if splitStrengths not yet present
   const activeStrengthInfo: SplitStrengthInfo | null =
-    attackInfo.splitStrengths?.[selectedStrength] ??
-    (selectedStrength === "full"
+    attackInfo.splitStrengths?.[activeStrength] ??
+    (activeStrength === "full"
       ? {
           splitCost: attackInfo.splitCost,
           splitMsCost: attackInfo.splitMsCost,
@@ -95,8 +108,14 @@ export default function AttackPanel({
   const hasStrengthData = !!attackInfo.splitStrengths;
 
   const canAttack =
-    attackInfo.userLiquidCapital >= attackInfo.attackCost &&
-    attackInfo.userMarketingStrength >= attackInfo.splitMsCost;
+    attackInfo.userLiquidCapital >=
+      (plantsMode
+        ? (attackInfo.plantSplitQuote?.cashCostAnchor ?? Infinity)
+        : attackInfo.attackCost) &&
+    attackInfo.userMarketingStrength >=
+      (plantsMode
+        ? (attackInfo.plantSplitQuote?.marketingStrengthCost ?? Infinity)
+        : attackInfo.splitMsCost);
 
   if (
     (plantsMode && (!showAttack || !attackInfo.plantSplitQuote || attackInfo.plantCount == null)) ||
@@ -109,26 +128,14 @@ export default function AttackPanel({
     attackInfo.userLiquidCapital >= activeSplitCost &&
     attackInfo.userMarketingStrength >= activeSplitMsCost;
 
-  const attackReason = !canAttack
-    ? attackInfo.userLiquidCapital < attackInfo.attackCost
-      ? `Need ${formatTargetMoney(attackInfo.attackCost)} capital`
-      : `Need ${attackInfo.splitMsCost} MS, have ${formatMarketingStrength(attackInfo.userMarketingStrength)}`
-    : showSplit
-      ? "Attack this sector to capture market share"
-      : "Take over plants from this rival";
+  const availableAttack = showAttack && attackInfo.canAttack !== false && canAttack;
+  const availableSplit = showSplit && attackInfo.canSplit !== false && canSplit;
+  if (!availableAttack && !availableSplit) return null;
 
-  const splitCapitalShort = attackInfo.userLiquidCapital < activeSplitCost;
-  const splitMsShort = attackInfo.userMarketingStrength < activeSplitMsCost;
-  const splitReason =
-    activeSplitCost <= 0
-      ? "No unowned market remains in this sector"
-      : !canSplit
-        ? splitCapitalShort && splitMsShort
-          ? `Need ${formatSectorMoney(activeSplitCost)} capital and ${activeSplitMsCost} MS (you have ${formatUserMoney(attackInfo.userLiquidCapital)} / ${formatMarketingStrength(attackInfo.userMarketingStrength)} MS)`
-          : splitCapitalShort
-            ? `Need ${formatSectorMoney(activeSplitCost)} capital, you have ${formatUserMoney(attackInfo.userLiquidCapital)}`
-            : `Need ${activeSplitMsCost} MS, have ${formatMarketingStrength(attackInfo.userMarketingStrength)}`
-        : "Split the unowned market from this sector page";
+  const attackReason = showSplit
+    ? "Attack this sector to capture market share"
+    : "Take over plants from this rival";
+  const splitReason = "Split the unowned market from this sector page";
 
   const netIncomeTooltip =
     "Estimated daily net income from the captured revenue, using this sector's current effective margin as a proxy. Actual income depends on your own sector's margin modifiers (tariffs, state metrics, dominance, etc.).";
@@ -148,13 +155,15 @@ export default function AttackPanel({
       <p className="mb-4 text-xs text-muted">
         {plantsMode
           ? "Attempt a sector split against this rival's whole plants."
-          : showSplit
-            ? "Attack this corporation or split the unowned share of this sector."
-            : "Attack this corporation in this market."}
+          : availableAttack
+            ? availableSplit
+              ? "Attack this corporation or split the unowned share of this sector."
+              : "Attack this corporation in this market."
+            : "Split the unowned share of this sector."}
       </p>
 
-      <div className={`grid gap-4 ${showAttack && showSplit ? "lg:grid-cols-2" : ""}`}>
-        {showAttack &&
+      <div className={`grid gap-4 ${availableAttack && availableSplit ? "lg:grid-cols-2" : ""}`}>
+        {availableAttack &&
           plantsMode &&
           attackInfo.plantSplitQuote &&
           attackInfo.plantCount != null && (
@@ -208,7 +217,7 @@ export default function AttackPanel({
             </div>
           )}
 
-        {showAttack && !plantsMode && (
+        {availableAttack && !plantsMode && (
           <div className="rounded-xl border border-error/20 bg-background/40 p-4">
             <h3 className="text-sm font-semibold text-foreground">
               {showSplit ? "Attack sector" : "Take over plants"}
@@ -253,7 +262,7 @@ export default function AttackPanel({
               </div>
               <button
                 onClick={() => void onAttack()}
-                disabled={attacking || !canAttack}
+                disabled={attacking}
                 className="rounded-lg border border-error/30 bg-error/10 px-4 py-2 text-sm font-medium text-error transition-colors hover:bg-error/20 disabled:cursor-not-allowed disabled:opacity-40"
                 title={attackReason}
               >
@@ -263,7 +272,7 @@ export default function AttackPanel({
           </div>
         )}
 
-        {showSplit && (
+        {availableSplit && (
           <div className="rounded-xl border border-primary/20 bg-background/40 p-4">
             <h3 className="text-sm font-semibold text-foreground">Split unowned market</h3>
             <p className="mt-1 text-xs text-muted">
@@ -276,12 +285,12 @@ export default function AttackPanel({
               <div className="mt-3">
                 <div className="mb-1 text-body-sm font-medium text-muted">Split strength</div>
                 <div className="flex gap-1">
-                  {(["full", "half"] as SplitStrength[]).map((strength) => (
+                  {affordableStrengths.map((strength) => (
                     <button
                       key={strength}
                       onClick={() => setSelectedStrength(strength)}
                       className={`flex-1 rounded-md border px-2 py-1 text-xs font-medium transition-colors ${
-                        selectedStrength === strength
+                        activeStrength === strength
                           ? "border-primary/60 bg-primary/15 text-primary"
                           : "border-card-border/60 bg-background text-muted hover:text-foreground"
                       }`}
@@ -301,16 +310,6 @@ export default function AttackPanel({
             {splitMsg && (
               <div className="mt-3 rounded-lg border border-success/30 bg-success/10 p-3 text-xs text-success">
                 {splitMsg}
-              </div>
-            )}
-            {!canSplit && activeSplitCost > 0 && (
-              <div className="mt-3 rounded-lg border border-warning/30 bg-warning/10 p-3 text-xs text-warning">
-                {splitReason}
-              </div>
-            )}
-            {activeSplitCost <= 0 && (
-              <div className="mt-3 rounded-lg border border-warning/30 bg-warning/10 p-3 text-xs text-warning">
-                No unowned market remains in this sector
               </div>
             )}
             {activeDominanceWarning && canSplit && (
@@ -387,38 +386,41 @@ export default function AttackPanel({
                 )}
               </div>
               <button
-                onClick={() => onSplit(selectedStrength)}
-                disabled={splitting || !canSplit}
+                onClick={() => onSplit(activeStrength)}
+                disabled={splitting}
                 className="rounded-lg border border-primary/30 bg-primary/10 px-4 py-2 text-sm font-medium text-primary transition-colors hover:bg-primary/20 disabled:cursor-not-allowed disabled:opacity-40"
                 title={splitReason}
               >
                 {splitting
                   ? "Splitting..."
-                  : `Split${selectedStrength !== "full" ? ` ${STRENGTH_LABELS[selectedStrength]}` : ""}`}
+                  : `Split${activeStrength !== "full" ? ` ${STRENGTH_LABELS[activeStrength]}` : ""}`}
               </button>
             </div>
           </div>
         )}
       </div>
 
-      {plantsMode && attackInfo.plantSplitQuote && attackInfo.plantCount != null && (
-        <PlantSplitPlannerModal
-          open={plannerOpen}
-          targetName={targetName}
-          defenderPlantCount={attackInfo.plantCount}
-          quote={attackInfo.plantSplitQuote}
-          userLiquidCapitalAnchor={attackInfo.userLiquidCapital}
-          userMarketingStrength={attackInfo.userMarketingStrength}
-          submitting={attacking}
-          errorMessage={attackError}
-          onClose={() => {
-            if (!attacking) setPlannerOpen(false);
-          }}
-          onConfirm={async () => {
-            if (await onAttack()) setPlannerOpen(false);
-          }}
-        />
-      )}
+      {availableAttack &&
+        plantsMode &&
+        attackInfo.plantSplitQuote &&
+        attackInfo.plantCount != null && (
+          <PlantSplitPlannerModal
+            open={plannerOpen}
+            targetName={targetName}
+            defenderPlantCount={attackInfo.plantCount}
+            quote={attackInfo.plantSplitQuote}
+            userLiquidCapitalAnchor={attackInfo.userLiquidCapital}
+            userMarketingStrength={attackInfo.userMarketingStrength}
+            submitting={attacking}
+            errorMessage={attackError}
+            onClose={() => {
+              if (!attacking) setPlannerOpen(false);
+            }}
+            onConfirm={async () => {
+              if (await onAttack()) setPlannerOpen(false);
+            }}
+          />
+        )}
     </div>
   );
 }

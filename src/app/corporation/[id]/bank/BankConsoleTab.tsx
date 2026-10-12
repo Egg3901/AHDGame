@@ -70,34 +70,12 @@ export function BankConsoleTab({ corporationId, isCeo }: Props) {
     );
   }
 
-  if (!data.visible) {
-    return (
-      <p className="py-2 text-xs text-muted">
-        No bank console. Own a financial sector to charter a bank, or open a corporation that
-        already holds a charter.
-      </p>
-    );
-  }
+  if (!data.visible) return null;
 
   const canMutate = data.canMutate && isCeo;
-  // Why the actions are off matters to the player. `canMutate` folds two very
-  // different reasons together (not CEO / banking frozen), and the panels used
-  // to blame the CEO check for both, telling a sitting CEO they were not the
-  // CEO during a freeze.
-  const blockReason = canMutate
-    ? null
-    : !isCeo || !data.isCeo
-      ? "Only the CEO can issue a charter."
-      : "Bank actions are paused while private banking is frozen.";
 
   return (
     <div className="space-y-6">
-      {!data.privateBankingEnabled && (
-        <p role="status" className="text-xs text-warning">
-          Private banking is frozen. You can view this console, but bank actions are disabled.
-        </p>
-      )}
-
       {data.charter ? (
         <>
           <ActiveCharterPanel
@@ -106,7 +84,7 @@ export function BankConsoleTab({ corporationId, isCeo }: Props) {
             onChanged={load}
             showToast={showToast}
           />
-          <CapsPanel data={data} />
+          {canMutate && <CapsPanel data={data} />}
           {data.primaryUnderwritingEnabled && (
             <section className="space-y-3 rounded-lg border border-border bg-surface p-4">
               <div>
@@ -141,15 +119,14 @@ export function BankConsoleTab({ corporationId, isCeo }: Props) {
             </section>
           )}
         </>
-      ) : (
+      ) : canMutate && data.eligibleTypes.length > 0 ? (
         <CharterIssueForm
           data={data}
           canMutate={canMutate}
-          blockReason={blockReason}
           onChanged={load}
           showToast={showToast}
         />
-      )}
+      ) : null}
     </div>
   );
 }

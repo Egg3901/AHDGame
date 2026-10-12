@@ -36,14 +36,14 @@ export function CharterSwitchForm({
   const charter = data.charter;
 
   // Types the bank could switch INTO: every legal type except its current one.
-  const options = (data.legalCharterTypes ?? []).filter((t) => t !== charter?.type);
+  const options = data.switchableTypes ?? [];
 
   const [{ type, busy }, update] = useReducer(
     mergeState<{ type: BankCharterType; busy: boolean }>,
     { type: options[0] ?? ("retail" as BankCharterType), busy: false }
   );
 
-  if (!charter) return null;
+  if (!charter || !canMutate || options.length === 0) return null;
 
   const cooldownUntil = charter.charterSwitchCooldownUntilTurn;
   const turnsRemaining =

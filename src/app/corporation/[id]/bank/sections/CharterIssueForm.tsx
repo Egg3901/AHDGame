@@ -12,13 +12,11 @@ import { BankPanel } from "../components/BankSection";
 export function CharterIssueForm({
   data,
   canMutate,
-  blockReason,
   onChanged,
   showToast,
 }: {
   data: ConsolePayload;
   canMutate: boolean;
-  blockReason: string | null;
   onChanged: () => Promise<void>;
   showToast: ShowToast;
 }) {
@@ -55,7 +53,8 @@ export function CharterIssueForm({
     }
   };
 
-  const types = data.legalCharterTypes.length > 0 ? data.legalCharterTypes : [];
+  const types = data.eligibleTypes;
+  if (!canMutate || types.length === 0) return null;
 
   return (
     <BankPanel kind="ceoControl" title="Issue bank charter" className="max-w-2xl">
@@ -119,7 +118,6 @@ export function CharterIssueForm({
           </span>
           , currency {data.currency}
         </p>
-        {!canMutate && <p className="text-xs text-muted">{blockReason}</p>}
       </div>
     </BankPanel>
   );

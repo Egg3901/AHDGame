@@ -163,22 +163,24 @@ export function ShareBuybackEscrowPanel({
 
         {!managedMarketActive && (
           <div className="space-y-1">
-            <label className="flex items-center justify-between gap-2 text-xs text-muted">
-              Auto-fund per turn
-              <span className="inline-flex items-center gap-1">
-                <span>{sym}</span>
-                <input
-                  type="number"
-                  min={0}
-                  step={1}
-                  value={editEscrowFundingPerTurn}
-                  onChange={(e) => setEditEscrowFundingPerTurn(e.target.value)}
-                  disabled={!isEscrowMode}
-                  placeholder="0"
-                  className="h-7 w-28 rounded-md border border-card-border bg-background px-2 text-right text-[13px] tabular-nums text-foreground focus:border-foreground focus:outline-none disabled:opacity-50"
-                />
-              </span>
-            </label>
+            {isEscrowMode && (
+              <label className="flex items-center justify-between gap-2 text-xs text-muted">
+                Auto-fund per turn
+                <span className="inline-flex items-center gap-1">
+                  <span>{sym}</span>
+                  <input
+                    type="number"
+                    min={0}
+                    step={1}
+                    value={editEscrowFundingPerTurn}
+                    onChange={(e) => setEditEscrowFundingPerTurn(e.target.value)}
+                    disabled={!isEscrowMode}
+                    placeholder="0"
+                    className="h-7 w-28 rounded-md border border-card-border bg-background px-2 text-right text-[13px] tabular-nums text-foreground focus:border-foreground focus:outline-none disabled:opacity-50"
+                  />
+                </span>
+              </label>
+            )}
             {showFundingWarning && (
               <p className="text-[11px] leading-snug text-warning">
                 This is more than recent net income (~{fmtLocal(recentNetIncome)}/turn). The desk
@@ -193,7 +195,7 @@ export function ShareBuybackEscrowPanel({
           </div>
         )}
 
-        {(!managedMarketActive || escrowBalance > 0) && (
+        {canWithdraw && (
           <div className="space-y-1">
             <div className="flex items-center gap-1.5">
               <span className="text-xs text-muted">{sym}</span>

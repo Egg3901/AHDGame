@@ -1,6 +1,6 @@
 /** @vitest-environment happy-dom */
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, cleanup, fireEvent, waitFor, act } from "@testing-library/react";
 import AdvertisingAgreementsPanel from "./AdvertisingAgreementsPanel";
 
 afterEach(cleanup);
@@ -244,12 +244,12 @@ describe("AdvertisingAgreementsPanel", () => {
   it("collapses the buyer entry point on a corporation without media sectors", async () => {
     const calls = stubFetch([]);
     render(<AdvertisingAgreementsPanel corpId="corp1" ownsMediaSector={false} />);
-    await waitFor(() => expect(calls.length).toBeGreaterThan(0));
-    expect(screen.getByText("Buy coverage advertising from a media corporation")).toBeTruthy();
+    await screen.findByText("Buy coverage advertising from a media corporation");
+    expect(calls.length).toBeGreaterThan(0);
     expect(screen.queryByText("Coverage advertising")).toBeNull();
   });
 
-  it("says why the propose button is disabled and never shows an empty picker", async () => {
+  it("hides the proposal entry and form when no suppliers are available", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async (url: string) => ({
@@ -261,17 +261,10 @@ describe("AdvertisingAgreementsPanel", () => {
       }))
     );
     render(<AdvertisingAgreementsPanel corpId="corp1" />);
-    fireEvent.click(await screen.findByText("Buy coverage advertising from a media corporation"));
-    await screen.findByText("No media corporation to buy from");
-    expect(
-      screen.getByText(
-        "Only media corporations with a human CEO and an eligible advertising model are listed. Media sectors using the default count as newspapers. None are available right now."
-      )
-    ).toBeTruthy();
-    expect(screen.getByText("Pick a media corporation first.")).toBeTruthy();
-    expect(
-      (screen.getByRole("button", { name: "Propose agreement" }) as HTMLButtonElement).disabled
-    ).toBe(true);
+    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(2));
+    expect(screen.queryByText("Buy coverage advertising from a media corporation")).toBeNull();
+    expect(screen.queryByLabelText("Media corporation")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Propose agreement" })).toBeNull();
   });
 
   it("shows live agreements in full on a corporation without media sectors", async () => {
@@ -287,5 +280,92 @@ describe("AdvertisingAgreementsPanel", () => {
     render(<AdvertisingAgreementsPanel corpId="corp1" ownsMediaSector={false} />);
     expect(await screen.findByText("Media Co")).toBeTruthy();
     expect(screen.getByText("Coverage advertising")).toBeTruthy();
+  });
+  it("hides supplier controls and management copy when GET denies CEO access", async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: false,
+      json: async () => ({ error: "Forbidden" }),
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+    const { container } = render(<AdvertisingAgreementsPanel corpId="corp1" ownsMediaSector />);
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    expect(container.textContent).toBe("");
+    expect(screen.queryByRole("button")).toBeNull();
+  });
+  it("hides the previous corporation's controls immediately after switching corporations", async () => {
+    const calls = stubFetch([
+      {
+        id: "ad1",
+        role: "supplier",
+        status: "pending",
+        allocationShareBps: 2500,
+        counterparty: { id: "buyer", name: "Buyer Co" },
+      },
+    ]);
+    const { rerender, container } = render(
+      <AdvertisingAgreementsPanel corpId="corp1" ownsMediaSector />
+    );
+    await screen.findByRole("button", { name: "Accept" });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({ ok: false, json: async () => ({ error: "Forbidden" }) }))
+    );
+    rerender(<AdvertisingAgreementsPanel corpId="corp2" ownsMediaSector />);
+    expect(container.textContent).toBe("");
+    expect(screen.queryByRole("button", { name: "Accept" })).toBeNull();
+    expect(calls.length).toBeGreaterThan(0);
+  });
+
+  it("clears management access after a denied agreement refresh", async () => {
+    stubFetch([
+      {
+        id: "ad1",
+        role: "supplier",
+        status: "pending",
+        allocationShareBps: 2500,
+        counterparty: { id: "buyer", name: "Buyer Co" },
+      },
+    ]);
+    const { container } = render(<AdvertisingAgreementsPanel corpId="corp1" ownsMediaSector />);
+    await screen.findByRole("button", { name: "Accept" });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string, init?: RequestInit) => ({
+        ok: init?.method === "PATCH",
+        json: async () => (init?.method === "PATCH" ? { success: true } : { error: "Forbidden" }),
+      }))
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Accept" }));
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Accept" })).toBeNull());
+    expect(container.textContent).toBe("");
+  });
+
+  it("ignores a previous corporation's response after its request is aborted", async () => {
+    let finishOld: (value: unknown) => void = () => undefined;
+    const oldResponse = new Promise((resolve) => {
+      finishOld = resolve;
+    });
+    const fetchMock = vi.fn(async (url: string) =>
+      url.includes("corp1/")
+        ? oldResponse
+        : { ok: false, json: async () => ({ error: "Forbidden" }) }
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const { rerender, container } = render(
+      <AdvertisingAgreementsPanel corpId="corp1" ownsMediaSector />
+    );
+    rerender(<AdvertisingAgreementsPanel corpId="corp2" ownsMediaSector />);
+    await act(async () => {
+      finishOld({
+        ok: true,
+        json: async () => ({
+          agreements: [
+            { id: "ad1", role: "supplier", status: "pending", allocationShareBps: 2500 },
+          ],
+        }),
+      });
+    });
+    expect(container.textContent).toBe("");
+    expect(screen.queryByRole("button")).toBeNull();
   });
 });

@@ -326,3 +326,75 @@ describe("GET /api/corporations/[id]", () => {
     expect(json.corporation.liquidCapital).toBe(Math.round(160_000 * factor));
   });
 });
+
+describe("acquisition navigation capability", () => {
+  it.each([
+    { role: "ceo", vacant: false, enabled: true, paused: false, expected: true },
+    { role: "spectator", vacant: false, enabled: true, paused: false, expected: false },
+    { role: "ceo", vacant: true, enabled: true, paused: false, expected: false },
+    { role: "ceo", vacant: false, enabled: false, paused: false, expected: false },
+    { role: "ceo", vacant: false, enabled: true, paused: true, expected: false },
+  ])(
+    "returns $expected for $role with vacancy $vacant, enabled $enabled and paused $paused",
+    async ({ role, vacant, enabled, paused, expected }) => {
+      await wireDb();
+      const corporation = makeCorporation({ countryId: "US", ceoVacant: vacant });
+      db.collection("corporations").findOne.mockResolvedValue(corporation);
+      db.collection("gameState").findOne.mockResolvedValue({
+        corpDealsEnabled: enabled,
+        corporationActionsPaused: paused,
+      });
+      const { getAuthUser } = await import("@/lib/auth");
+      vi.mocked(getAuthUser).mockResolvedValue({
+        userId: role === "ceo" ? String(corporation.userId) : String(new ObjectId()),
+      } as never);
+      const { loadCorporationDetailView } =
+        await import("@/lib/corporations/queries/corporationDetail");
+      vi.mocked(loadCorporationDetailView).mockResolvedValue({
+        corporation: { _id: String(corporation._id) },
+        sectors: [],
+      } as never);
+      const { GET } = await import("./route");
+      const res = await GET(new Request("http://localhost/api/corporations/1"), {
+        params: Promise.resolve({ id: String(corporation._id) }),
+      });
+      expect(res.status).toBe(200);
+      expect((await res.json()).corporation.canManageAcquisitions).toBe(expected);
+    }
+  );
+});
+
+describe("editorial management capability", () => {
+  it.each([
+    { paused: false, enabled: true, sector: "media", role: "ceo", expected: true },
+    { paused: true, enabled: true, sector: "media", role: "ceo", expected: false },
+    { paused: false, enabled: false, sector: "media", role: "ceo", expected: false },
+    { paused: false, enabled: true, sector: "manufacturing", role: "ceo", expected: false },
+    { paused: false, enabled: true, sector: "media", role: "spectator", expected: false },
+  ])(
+    "returns $expected for $role, pause $paused and sector $sector",
+    async ({ paused, enabled, sector, role, expected }) => {
+      await wireDb();
+      const corporation = makeCorporation({ countryId: "US", type: "media" });
+      db.collection("corporations").findOne.mockResolvedValue(corporation);
+      db.collection("gameState").findOne.mockResolvedValue({ corporationActionsPaused: paused });
+      db.collection("gameConfig").findOne.mockResolvedValue({ mediaEditorialEnabled: enabled });
+      const { getAuthUser } = await import("@/lib/auth");
+      vi.mocked(getAuthUser).mockResolvedValue({
+        userId: role === "ceo" ? String(corporation.userId) : String(new ObjectId()),
+      } as never);
+      const { loadCorporationDetailView } =
+        await import("@/lib/corporations/queries/corporationDetail");
+      vi.mocked(loadCorporationDetailView).mockResolvedValue({
+        corporation: { _id: String(corporation._id) },
+        sectors: [{ sectorType: sector }],
+      } as never);
+      const { GET } = await import("./route");
+      const res = await GET(new Request("http://localhost/api/corporations/1"), {
+        params: Promise.resolve({ id: String(corporation._id) }),
+      });
+      expect(res.status).toBe(200);
+      expect((await res.json()).corporation.canEditEditorialStance).toBe(expected);
+    }
+  );
+});

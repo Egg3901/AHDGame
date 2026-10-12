@@ -12,6 +12,7 @@ import { savingsReadsAuthoritative } from "@/lib/banking/rules/policy";
 import { lifecycleStage, stageActions } from "@/lib/banking/rules/lifecycle";
 import {
   checkCharterEligibility,
+  previewCharterSwitch,
   loadCharterCapitalRequirements,
   isChairOfCurrencyBank,
 } from "@/lib/banking/charter";
@@ -197,6 +198,7 @@ async function handleGET(_request: Request, { params }: RouteParams) {
         isAdmin: auth.user.isAdmin === true,
         isChair: false,
         canMutate: false,
+        canIssueCharter: false,
         canRevoke: false,
         corporation: {
           id: corporation._id.toString(),
@@ -208,6 +210,7 @@ async function handleGET(_request: Request, { params }: RouteParams) {
         },
         currency: resolveCorpLiquidCurrencyCode(corporation) ?? "USD",
         legalCharterTypes: [],
+        switchableTypes: [],
         eligibleTypes: [],
         eligibilityReasons: [],
         capitalRequirement: 0,
@@ -266,6 +269,14 @@ async function handleGET(_request: Request, { params }: RouteParams) {
         } else if (eligibilityReasons.length === 0) {
           eligibilityReasons = result.reasons;
         }
+      }
+    }
+
+    const switchableTypes: BankCharterType[] = [];
+    if (hasActiveCharter && isCeo && privateEnabled) {
+      for (const type of legalTypes) {
+        const preview = await previewCharterSwitch(db, corporation, type, currentTurn);
+        if (preview.allowed) switchableTypes.push(type);
       }
     }
 
@@ -498,7 +509,11 @@ async function handleGET(_request: Request, { params }: RouteParams) {
       isAdmin,
       isChair,
       canMutate: isCeo && privateEnabled,
-      canRevoke: (isAdmin || isChair) && privateEnabled && hasActiveCharter,
+      canIssueCharter: isCeo && privateEnabled && eligibleTypes.length > 0,
+      canRevoke:
+        (isAdmin || (isChair && corporation.userId?.toString() !== auth.user.userId)) &&
+        privateEnabled &&
+        hasActiveCharter,
       corporation: {
         id: corporation._id.toString(),
         name: corporation.name,
@@ -511,6 +526,7 @@ async function handleGET(_request: Request, { params }: RouteParams) {
       // Drives the charter-switch cooldown countdown in the console.
       currentTurn,
       legalCharterTypes: legalTypes,
+      switchableTypes,
       eligibleTypes,
       eligibilityReasons,
       capitalRequirement,

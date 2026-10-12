@@ -318,3 +318,78 @@ describe("absolute cost-plus quotes", () => {
     );
   });
 });
+
+describe("governor anchor carries output-per-capacity gains (ticket 1498)", () => {
+  it("does not clamp away the 1991 energy productivity ramp mid-governor", () => {
+    const over = {
+      sector: {
+        _id: new ObjectId(),
+        sectorType: "energy",
+        countryId: "JP",
+        stateId: "JP-CHU",
+        soldUnits: undefined,
+        producedUnits: undefined,
+        capacityUtilization: undefined,
+        militaryDivertedFraction: 0,
+        militaryDivertedTurn: undefined,
+      } as PlantsRevenueInput["sector"],
+      preset: "1991-default",
+      currentTurn: 130,
+      plantsStartTurn: 10,
+      governorRampTurns: GOVERNOR_RAMP_TURNS,
+      plantsCapacity: 1000,
+      plantsMixPrice: 10,
+      // Nameplate matches capacity x mix price, so only the ramp separates
+      // derived revenue from the anchor.
+      preFlipNameplateRevenue: 1000 * 10,
+      plantsNameplateRevenue: 1000 * 10,
+    } as const;
+    const r = resolvePlantsRevenue(input(over));
+    expect(r.plantsTechOutputMultiplier).toBeGreaterThan(1);
+    expect(r.baselineHourlyRevenue).toBeCloseTo(
+      ((1000 * 10) / TURNS_PER_DAY) * r.plantsTechOutputMultiplier,
+      6
+    );
+    // Per-unit revenue holds at the mix price instead of being diluted.
+    expect(r.marketHourlyRevenue).toBeCloseTo(r.plantsDerivedHourlyRevenue, 6);
+  });
+});
+
+describe("player-built sectors skip the launch governor (ticket 1498)", () => {
+  // Two turns into its own ramp, in a market paying three times the nameplate:
+  // the governor holds an ordinary sector near its anchor, but a sector built
+  // under plants has nothing to smooth and earns the derived revenue.
+  // Anchor: 24,000 a day (1,000 an hour). Derived: 1,000 units x 100 / 24 an
+  // hour, about four times the anchor, as in a shortage.
+  const NEW_SECTOR_ANCHOR = 24_000;
+  const midRamp = {
+    plantsStartTurn: CURRENT_TURN - 2,
+    plantsMixPrice: 100,
+    preFlipNameplateRevenue: NEW_SECTOR_ANCHOR,
+    plantsNameplateRevenue: NEW_SECTOR_ANCHOR,
+  } as const;
+
+  it("holds a non-exempt new sector near the anchor mid-ramp", () => {
+    const r = resolvePlantsRevenue(input(midRamp));
+    expect(r.marketHourlyRevenue).toBeLessThan(r.plantsDerivedHourlyRevenue * 0.5);
+  });
+
+  it("pays an exempt sector its derived revenue from its first turn", () => {
+    const base = input(midRamp);
+    const r = resolvePlantsRevenue({
+      ...base,
+      sector: { ...base.sector, plantsGovernorExempt: true },
+    });
+    expect(r.marketHourlyRevenue).toBeCloseTo(r.plantsDerivedHourlyRevenue, 6);
+    expect(r.marketHourlyRevenue).toBeGreaterThan((NEW_SECTOR_ANCHOR / TURNS_PER_DAY) * 2);
+  });
+
+  it("still earns nothing when mothballed", () => {
+    const base = input({ ...midRamp, mothballed: true });
+    const r = resolvePlantsRevenue({
+      ...base,
+      sector: { ...base.sector, plantsGovernorExempt: true },
+    });
+    expect(r.marketHourlyRevenue).toBe(0);
+  });
+});

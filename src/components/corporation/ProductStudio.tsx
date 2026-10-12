@@ -113,7 +113,14 @@ export function ProductStudio({
 
   const money: Money = (anchor) =>
     formatAmount(anchor, (studio.liquidCurrencyCode ?? undefined) as CurrencyCode | undefined);
-  const visible = studio.domains.filter((domain) => domain.enabled && domain.hasSectors);
+  const visible = studio.domains.filter(
+    (domain) =>
+      domain.enabled &&
+      domain.hasSectors &&
+      (domain.active != null ||
+        domain.recent.length > 0 ||
+        (studio.isCeo && domain.lines.some((line) => line.available)))
+  );
   if (visible.length === 0) return null;
 
   return (
@@ -245,7 +252,6 @@ function DomainPanel({
 }) {
   const copy = DOMAIN_COPY[domain.domain];
   const available = domain.lines.filter((line) => line.available);
-  const locked = domain.lines.filter((line) => !line.available);
   const [lineId, setLineId] = useState(available[0]?.id ?? "");
   const [name, setName] = useState("");
   const [tier, setTier] = useState("standard");
@@ -255,7 +261,7 @@ function DomainPanel({
     available.find((line) => line.id === lineId) ?? available[0];
   const tierOdds = selected?.oddsByTier.find((entry) => entry.id === tier);
   const hasPast = domain.recent.length > 0;
-  const showIntro = studio.isCeo || domain.active != null || hasPast;
+  const showIntro = studio.isCeo;
 
   async function start() {
     if (!selected || !tierOdds) return;
@@ -298,46 +304,40 @@ function DomainPanel({
           money={money}
           onChanged={onChanged}
         />
-      ) : studio.isCeo ? (
+      ) : studio.isCeo && available.length > 0 ? (
         <div className="space-y-3 py-2">
-          {available.length === 0 ? (
-            <p className="text-sm text-muted">
-              None of your {copy.sectors} can make a product right now.
-            </p>
-          ) : (
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div>
-                <label htmlFor={`line-${domain.domain}`} className="mb-1 block text-xs text-muted">
-                  Product line
-                </label>
-                <select
-                  id={`line-${domain.domain}`}
-                  className="block h-9 w-full rounded-md border border-card-border bg-card px-2 text-sm"
-                  value={selected?.id ?? ""}
-                  onChange={(event) => setLineId(event.target.value)}
-                >
-                  {available.map((line) => (
-                    <option key={line.id} value={line.id}>
-                      {line.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label htmlFor={`name-${domain.domain}`} className="mb-1 block text-xs text-muted">
-                  {copy.nameLabel}
-                </label>
-                <Input
-                  id={`name-${domain.domain}`}
-                  value={name}
-                  maxLength={60}
-                  className="!h-9 !rounded-md !px-2 !py-1 !text-sm"
-                  placeholder={copy.namePlaceholder}
-                  onChange={(event) => setName(event.target.value)}
-                />
-              </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <label htmlFor={`line-${domain.domain}`} className="mb-1 block text-xs text-muted">
+                Product line
+              </label>
+              <select
+                id={`line-${domain.domain}`}
+                className="block h-9 w-full rounded-md border border-card-border bg-card px-2 text-sm"
+                value={selected?.id ?? ""}
+                onChange={(event) => setLineId(event.target.value)}
+              >
+                {available.map((line) => (
+                  <option key={line.id} value={line.id}>
+                    {line.label}
+                  </option>
+                ))}
+              </select>
             </div>
-          )}
+            <div>
+              <label htmlFor={`name-${domain.domain}`} className="mb-1 block text-xs text-muted">
+                {copy.nameLabel}
+              </label>
+              <Input
+                id={`name-${domain.domain}`}
+                value={name}
+                maxLength={60}
+                className="!h-9 !rounded-md !px-2 !py-1 !text-sm"
+                placeholder={copy.namePlaceholder}
+                onChange={(event) => setName(event.target.value)}
+              />
+            </div>
+          </div>
 
           {selected && (
             <>
@@ -385,26 +385,8 @@ function DomainPanel({
               </div>
             </>
           )}
-          {locked.length > 0 && (
-            <details className="text-xs text-muted">
-              <summary className="cursor-pointer">
-                {locked.length} {locked.length === 1 ? "line" : "lines"} you cannot make yet
-              </summary>
-              <ul className="mt-1 space-y-0.5">
-                {locked.map((line) => (
-                  <li key={line.id}>
-                    <span className="font-medium text-foreground">{line.label}</span>: {line.reason}
-                  </li>
-                ))}
-              </ul>
-            </details>
-          )}
         </div>
-      ) : (
-        <p className="py-2 text-sm text-muted">
-          Only the CEO can start a {copy.noun}.{!hasPast && ` None has been released yet.`}
-        </p>
-      )}
+      ) : null}
 
       {hasPast && (
         <div className="pt-2">
@@ -529,56 +511,60 @@ function ActiveVenture({
         />
       )}
 
-      {venture.pendingEvents.map((event) => (
-        <div
-          key={event.eventId}
-          className="rounded-md border border-primary p-3"
-          role="group"
-          aria-label={event.title}
-        >
-          <h4 className="text-sm font-semibold">{event.title}</h4>
-          <p className="mt-1 text-sm">{event.body}</p>
-          <p className="mt-1 text-xs text-muted">
-            {studio.isCeo
-              ? `Answer by turn ${event.deadlineTurn}. If you do not, the marked default applies.`
-              : `The CEO answers by turn ${event.deadlineTurn}, or the marked default applies.`}
-          </p>
-          <ul className="mt-2 divide-y divide-card-border/60">
-            {event.choices.map((choice) => (
-              <li
-                key={choice.id}
-                className="flex flex-wrap items-center justify-between gap-2 py-1.5"
-              >
-                <div className="min-w-0 text-sm">
-                  <span className="font-medium">
-                    {choice.label}
-                    {choice.isDefault ? " (default)" : ""}
-                  </span>
-                  <span className="block text-xs text-muted">
-                    {choice.detail}
-                    {choice.chargeAnchor ? ` About ${money(choice.chargeAnchor)}.` : ""}
-                  </span>
-                </div>
-                {studio.isCeo && (
-                  <SmallButton
-                    disabled={busy}
-                    ariaLabel={choice.label}
-                    onClick={() =>
-                      void patch({
-                        action: "answer_event",
-                        eventId: event.eventId,
-                        choiceId: choice.id,
-                      })
-                    }
-                  >
-                    Choose
-                  </SmallButton>
-                )}
-              </li>
-            ))}
-          </ul>
-        </div>
-      ))}
+      {!studio.isCeo && venture.pendingEvents.length > 0 && (
+        <p className="text-xs text-muted">The product is awaiting a decision from the CEO.</p>
+      )}
+      {studio.isCeo &&
+        venture.pendingEvents.map((event) => (
+          <div
+            key={event.eventId}
+            className="rounded-md border border-primary p-3"
+            role="group"
+            aria-label={event.title}
+          >
+            <h4 className="text-sm font-semibold">{event.title}</h4>
+            <p className="mt-1 text-sm">{event.body}</p>
+            <p className="mt-1 text-xs text-muted">
+              {studio.isCeo
+                ? `Answer by turn ${event.deadlineTurn}. If you do not, the marked default applies.`
+                : `The CEO answers by turn ${event.deadlineTurn}, or the marked default applies.`}
+            </p>
+            <ul className="mt-2 divide-y divide-card-border/60">
+              {event.choices.map((choice) => (
+                <li
+                  key={choice.id}
+                  className="flex flex-wrap items-center justify-between gap-2 py-1.5"
+                >
+                  <div className="min-w-0 text-sm">
+                    <span className="font-medium">
+                      {choice.label}
+                      {choice.isDefault ? " (default)" : ""}
+                    </span>
+                    <span className="block text-xs text-muted">
+                      {choice.detail}
+                      {choice.chargeAnchor ? ` About ${money(choice.chargeAnchor)}.` : ""}
+                    </span>
+                  </div>
+                  {studio.isCeo && (
+                    <SmallButton
+                      disabled={busy}
+                      ariaLabel={choice.label}
+                      onClick={() =>
+                        void patch({
+                          action: "answer_event",
+                          eventId: event.eventId,
+                          choiceId: choice.id,
+                        })
+                      }
+                    >
+                      Choose
+                    </SmallButton>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
 
       {venture.resolvedEvents.length > 0 && (
         <ul className="text-xs text-muted">

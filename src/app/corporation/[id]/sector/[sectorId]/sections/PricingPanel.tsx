@@ -51,7 +51,7 @@ export default function PricingPanel({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           pricingPosture: value,
-          ...(pricing.costPlusEnabled ? { pricingMode: mode } : {}),
+          pricingMode: mode,
         }),
       });
       const data = (await res.json()) as {
@@ -96,6 +96,18 @@ export default function PricingPanel({
           : null
       : null;
 
+  if (!isCeo) {
+    return (
+      <p className="text-sm text-muted">
+        {pricing.posture == null
+          ? "This sector prices its output automatically."
+          : pricingMode === "costPlus"
+            ? `This sector prices its output at ${Math.round(pricing.posture * 100)}% above operating costs.`
+            : `This sector prices its output at ${postureLabel(pricing.posture)} relative to the market.`}
+      </p>
+    );
+  }
+
   return (
     <div className="rounded-xl border border-card-border bg-card p-6">
       <div className="flex items-center justify-between gap-2 mb-1">
@@ -128,69 +140,74 @@ export default function PricingPanel({
           : "Your posted price relative to the market. Demand fills the cheapest sellers first. Undercut to sell out ahead of rivals, or skim for margin and risk holding unsold output."}
       </p>
 
-      {pricing.costPlusEnabled && (
-        <div className="flex gap-2 mb-3" aria-label="Pricing basis">
-          <button
-            type="button"
-            disabled={!isCeo || saving}
-            onClick={() => void save(draft, "market")}
-            aria-pressed={pricingMode === "market"}
-            className="rounded-lg border border-card-border px-3 py-1.5 text-xs disabled:opacity-50"
-          >
-            {costPlusText("marketMode")}
-          </button>
-          <button
-            type="button"
-            disabled={!isCeo || saving || !pricing.costPlusReady}
-            title={pricing.costPlusReady ? undefined : costPlusText("notReady")}
-            onClick={() => void save(draft ?? 0.1, "costPlus")}
-            aria-pressed={pricingMode === "costPlus"}
-            className="rounded-lg border border-card-border px-3 py-1.5 text-xs disabled:opacity-50"
-          >
-            {costPlusText("costPlusMode")}
-          </button>
-        </div>
-      )}
+      {(pricing.costPlusEnabled || pricingMode === "costPlus") &&
+        (pricing.costPlusReady || pricingMode === "costPlus") && (
+          <div className="flex gap-2 mb-3" aria-label="Pricing basis">
+            <button
+              type="button"
+              disabled={saving}
+              onClick={() => void save(draft, "market")}
+              aria-pressed={pricingMode === "market"}
+              className="rounded-lg border border-card-border px-3 py-1.5 text-xs disabled:opacity-50"
+            >
+              {costPlusText("marketMode")}
+            </button>
+            {pricing.costPlusEnabled && pricing.costPlusReady && (
+              <button
+                type="button"
+                disabled={saving}
+                onClick={() => void save(draft ?? 0.1, "costPlus")}
+                aria-pressed={pricingMode === "costPlus"}
+                className="rounded-lg border border-card-border px-3 py-1.5 text-xs disabled:opacity-50"
+              >
+                {costPlusText("costPlusMode")}
+              </button>
+            )}
+          </div>
+        )}
 
       <div className="flex flex-wrap gap-1.5 mb-3">
-        {POSTURE_STEPS.map((p) => {
-          const active = draft === p;
-          return (
-            <button
-              key={p}
-              type="button"
-              disabled={!isCeo || saving}
-              onClick={() => void save(p)}
-              title={
-                p < 0
-                  ? "Undercut the market: thinner margin per unit, but your order book fills first."
-                  : p > 0
-                    ? "Premium: more revenue per unit sold, but you sell last, so in a glut this output can go unsold."
-                    : "Sell at the market price."
-              }
-              className={`rounded-lg border px-3 py-1.5 text-xs font-medium tabular-nums transition-colors disabled:opacity-50 ${
-                active
-                  ? "border-primary/40 bg-primary/10 text-primary"
-                  : "border-card-border bg-background hover:bg-card"
-              }`}
-            >
-              {postureLabel(p)}
-            </button>
-          );
-        })}
-        <button
-          type="button"
-          disabled={!isCeo || saving || draft === null}
-          onClick={() => void save(null, "market")}
-          title="Let the sector position itself: skim mild premiums into shortages, undercut into gluts."
-          className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors disabled:opacity-50 ${
-            draft === null
-              ? "border-primary/40 bg-primary/10 text-primary"
-              : "border-card-border bg-background hover:bg-card"
-          }`}
-        >
-          Auto
-        </button>
+        {(pricingMode !== "costPlus" || (pricing.costPlusEnabled && pricing.costPlusReady)) &&
+          POSTURE_STEPS.map((p) => {
+            const active = draft === p;
+            return (
+              <button
+                key={p}
+                type="button"
+                disabled={saving}
+                onClick={() => void save(p)}
+                title={
+                  p < 0
+                    ? "Undercut the market: thinner margin per unit, but your order book fills first."
+                    : p > 0
+                      ? "Premium: more revenue per unit sold, but you sell last, so in a glut this output can go unsold."
+                      : "Sell at the market price."
+                }
+                className={`rounded-lg border px-3 py-1.5 text-xs font-medium tabular-nums transition-colors disabled:opacity-50 ${
+                  active
+                    ? "border-primary/40 bg-primary/10 text-primary"
+                    : "border-card-border bg-background hover:bg-card"
+                }`}
+              >
+                {postureLabel(p)}
+              </button>
+            );
+          })}
+        {(draft !== null || pricingMode !== "market") && (
+          <button
+            type="button"
+            disabled={saving}
+            onClick={() => void save(null, "market")}
+            title="Let the sector position itself: skim mild premiums into shortages, undercut into gluts."
+            className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors disabled:opacity-50 ${
+              draft === null
+                ? "border-primary/40 bg-primary/10 text-primary"
+                : "border-card-border bg-background hover:bg-card"
+            }`}
+          >
+            Auto
+          </button>
+        )}
       </div>
 
       {message ? (
