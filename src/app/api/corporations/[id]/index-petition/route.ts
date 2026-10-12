@@ -42,6 +42,20 @@ export async function GET(_request: Request, { params }: RouteParams) {
     if (!resolved.ok) return resolved.response;
     const { corporation } = resolved;
 
+    // A private corporation has no float for an index to buy and cannot file
+    // (the service rejects it), so it has no standing with the committee at
+    // all. A null committee hides the panel instead of offering a petition
+    // that can only fail.
+    if (corporation.isPrivate) {
+      return NextResponse.json({
+        committee: null,
+        isCeo: corporation.ceoId?.equals(auth.user.character._id) ?? false,
+        suggestedContributionAnchor: 0,
+        pending: null,
+        waiver: null,
+      });
+    }
+
     const gameState = await getGameState();
     const currentTurn = gameState?.currentTurn ?? 0;
     const authority = await resolveMergerAuthority(
