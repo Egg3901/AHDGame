@@ -258,6 +258,7 @@ describe("GET /api/banking/corporation/[id]", () => {
         "bankTreasury",
         "bankTreasuryEnabled",
         "blacklistableFunds",
+        "canIssueCharter",
         "canMutate",
         "canRevoke",
         "capitalRequirement",
@@ -287,6 +288,7 @@ describe("GET /api/banking/corporation/[id]", () => {
         "rates",
         "reserveRatio",
         "risk",
+        "switchableTypes",
         "visible",
       ]);
       expect(body).toMatchObject({
@@ -392,6 +394,7 @@ describe("GET /api/banking/corporation/[id]", () => {
         "bankPropTradingEnabled",
         "bankTreasury",
         "bankTreasuryEnabled",
+        "canIssueCharter",
         "canMutate",
         "canRevoke",
         "capitalRequirement",
@@ -414,6 +417,7 @@ describe("GET /api/banking/corporation/[id]", () => {
         "privateBankingEnabled",
         "rates",
         "reserveRatio",
+        "switchableTypes",
         "visible",
       ]);
       expect(body).toMatchObject({
