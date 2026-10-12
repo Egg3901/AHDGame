@@ -206,4 +206,25 @@ describe("ExpandMarketModal plants market finder", () => {
     await screen.findByText("Best fit");
     expect(screen.queryByText(/You can still build here/i)).toBeNull();
   });
+  it("hides the split action and warning for a fully captured market", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({ ...marketResponse, plantsMode: false }),
+      }))
+    );
+    render(
+      <ExpandMarketModal
+        corpId="corp-1"
+        primaryType="retail"
+        initialSectorType="retail"
+        liquidCapital={25_400}
+        onClose={() => undefined}
+      />
+    );
+    await screen.findByText("California");
+    expect(screen.queryByRole("link", { name: "View state economy to split" })).toBeNull();
+    expect(screen.queryByText(/You cannot split here currently/)).toBeNull();
+  });
 });

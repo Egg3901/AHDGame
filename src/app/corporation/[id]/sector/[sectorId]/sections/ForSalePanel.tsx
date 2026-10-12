@@ -43,12 +43,9 @@ export default function ForSalePanel({
   const isListed = !!sector.forSale;
 
   // ── Buyer view ────────────────────────────────────────────────────────────
-  if (!isCeo && isListed && forSaleInfo) {
+  if (!isCeo && isListed && forSaleInfo?.eligible && forSaleInfo.hasFunds) {
     const buyerCurrency =
       (forSaleInfo.viewerLiquidCurrencyCode as CurrencyCode | undefined) ?? undefined;
-    const fundWarning = !forSaleInfo.hasFunds
-      ? `Need ${formatAmount(sector.forSale!.priceAnchor, buyerCurrency)} to purchase. You have ${formatAmount(forSaleInfo.viewerCapitalAnchor, buyerCurrency)}.`
-      : null;
 
     return (
       <div className="rounded-xl border border-success/30 bg-success/5 p-6">
@@ -95,11 +92,6 @@ export default function ForSalePanel({
               : `You already operate this market in ${sector.stateName}. Purchasing will merge its revenue and workers into your existing site.`}
           </div>
         )}
-        {fundWarning ? (
-          <div className="mt-3 rounded-lg border border-warning/30 bg-warning/10 p-3 text-xs text-warning">
-            {fundWarning}
-          </div>
-        ) : null}
         <div className="mt-4">
           {confirmBuy ? (
             <div className="space-y-3">
@@ -126,7 +118,7 @@ export default function ForSalePanel({
                     setConfirmBuy(false);
                     onBuy();
                   }}
-                  disabled={buying || !forSaleInfo.eligible}
+                  disabled={buying}
                   className="flex-1 rounded-lg border border-success/40 bg-success px-3 py-2 text-sm font-semibold text-white transition-colors hover:bg-success/90 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {buying
@@ -151,12 +143,9 @@ export default function ForSalePanel({
             <button
               type="button"
               onClick={() => setConfirmBuy(true)}
-              disabled={!forSaleInfo.eligible || buying}
+              disabled={buying}
               className="w-full rounded-lg border border-success/30 bg-success/10 px-4 py-2 text-sm font-semibold text-success transition-colors hover:bg-success/20 disabled:cursor-not-allowed disabled:opacity-50"
-              title={
-                fundWarning ??
-                (forSaleInfo.conflict ? "Merge into your existing sector" : "Buy this sector")
-              }
+              title={forSaleInfo.conflict ? "Merge into your existing sector" : "Buy this sector"}
             >
               {forSaleInfo.conflict ? "Buy & merge sector" : "Buy sector"}
             </button>
@@ -168,6 +157,10 @@ export default function ForSalePanel({
 
   // ── Seller view (CEO only) ─────────────────────────────────────────────────
   if (!isCeo) return null;
+
+  if (sector.forSale?.foreclosed) {
+    return <p className="text-sm text-muted">This sector is listed for secured recovery.</p>;
+  }
 
   if (isListed && sector.forSale) {
     return (
@@ -212,14 +205,10 @@ export default function ForSalePanel({
         <button
           type="button"
           onClick={onUnlist}
-          disabled={unlisting || sector.forSale.foreclosed === true}
+          disabled={unlisting}
           className="mt-4 w-full rounded-lg border border-warning/30 bg-warning/10 px-4 py-2 text-sm font-semibold text-warning transition-colors hover:bg-warning/20 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {sector.forSale.foreclosed
-            ? "Listed for secured recovery"
-            : unlisting
-              ? "Unlisting…"
-              : "Unlist sector"}
+          {unlisting ? "Unlisting…" : "Unlist sector"}
         </button>
       </div>
     );

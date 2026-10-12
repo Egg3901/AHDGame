@@ -2,7 +2,9 @@ import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { handleRouteError } from "@/lib/api/errors";
-import { resolveCorporation } from "@/lib/api/corporations/resolveQuery";
+import { requireCorporationActionsEnabled } from "@/lib/api/requireCorporationActions";
+import { requireCorpDealsEnabled } from "@/lib/api/requireCorpDeals";
+import { requireCeo, resolveCorporation } from "@/lib/api/corporations/resolveQuery";
 import { getGameState } from "@/lib/gameState";
 import { getAuthUser } from "@/lib/auth";
 import { loadCorporationDetailView } from "@/lib/corporations/queries/corporationDetail";
@@ -93,6 +95,11 @@ export async function GET(request: Request, { params }: RouteParams) {
 
     if (!resolved.ok) return resolved.response;
     const { corporation } = resolved;
+    const canManageCorporation =
+      !!authUser &&
+      !requireCeo(corporation, authUser.userId) &&
+      !(await requireCorporationActionsEnabled(db));
+    const canManageAcquisitions = canManageCorporation && !(await requireCorpDealsEnabled(db));
     const mediaEditorialEnabled = config?.mediaEditorialEnabled === true;
     const mediaOperatingModelsEnabled = config?.mediaOperatingModelsEnabled === true;
     const mediaProductSlatesEnabled =
@@ -119,12 +126,22 @@ export async function GET(request: Request, { params }: RouteParams) {
         (detail.sectors as Array<{ sectorType?: string }>).some(
           (sector) => sector.sectorType === "media"
         ));
+    const canEditEditorialStance =
+      canManageCorporation &&
+      mediaEditorialEnabled &&
+      Array.isArray(detail.sectors) &&
+      (detail.sectors as Array<{ sectorType?: string }>).some(
+        (sector) => sector.sectorType === "media"
+      );
+    (detail.corporation as Record<string, unknown>).canEditEditorialStance = canEditEditorialStance;
     if (mediaEditorialEnabled && hasMediaSector) {
       const editorial = await db
         .collection<Corporation>("corporations")
         .findOne({ _id: corporation._id }, { projection: { editorialStance: 1 } });
       if (editorial?.editorialStance) corporation.editorialStance = editorial.editorialStance;
     }
+
+    (detail.corporation as Record<string, unknown>).canManageAcquisitions = canManageAcquisitions;
 
     // Surface any open privatization vote so the corp page can mount the panel.
     // Must be nested inside `corporation` — the page sets state from data.corporation,
@@ -233,6 +250,8 @@ export async function GET(request: Request, { params }: RouteParams) {
         corporation: {
           ...redactPrivateCorporation(innerCorp),
           viewerIsControllingParentCeo,
+          canManageAcquisitions: false,
+          canEditEditorialStance: false,
           openPrivatizationVoteId,
           nationalizationRisk,
           nationalizationThreat,

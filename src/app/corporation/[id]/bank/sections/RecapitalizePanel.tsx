@@ -94,6 +94,8 @@ export function RecapitalizePanel({
     }
   };
 
+  if (!canMutate) return null;
+
   return (
     <BankPanel kind="ceoControl" title="Capital adequacy">
       <div className="space-y-2 py-1.5">
@@ -171,17 +173,19 @@ export function RecapitalizePanel({
             <SmallButton tone="primary" onClick={() => void move("in")} disabled={busy}>
               {busy ? "Working..." : "Move into bank"}
             </SmallButton>
-            <SmallButton
-              onClick={() => void move("out")}
-              disabled={busy || withdrawable <= 0}
-              title={
-                withdrawable > 0
-                  ? undefined
-                  : "Nothing free to withdraw: reserves are required against deposits, or the supervisor has not cleared the bank."
-              }
-            >
-              Withdraw to treasury
-            </SmallButton>
+            {withdrawable > 0 && (
+              <SmallButton
+                onClick={() => void move("out")}
+                disabled={busy || withdrawable <= 0}
+                title={
+                  withdrawable > 0
+                    ? undefined
+                    : "Nothing free to withdraw: reserves are required against deposits, or the supervisor has not cleared the bank."
+                }
+              >
+                Withdraw to treasury
+              </SmallButton>
+            )}
           </div>
         )}
       </div>

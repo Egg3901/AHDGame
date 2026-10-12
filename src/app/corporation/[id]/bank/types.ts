@@ -40,6 +40,7 @@ export type ConsolePayload = {
   isAdmin: boolean;
   isChair: boolean;
   canMutate: boolean;
+  canIssueCharter?: boolean;
   canRevoke: boolean;
   corporation: {
     id: string;
@@ -53,6 +54,7 @@ export type ConsolePayload = {
   /** Current game turn, for the charter-switch cooldown countdown. */
   currentTurn: number;
   legalCharterTypes: BankCharterType[];
+  switchableTypes: BankCharterType[];
   eligibleTypes: BankCharterType[];
   eligibilityReasons: string[];
   capitalRequirement: number;

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Badge, Input } from "@/components/ui";
 import { DenseSection, InlineStatus, SmallButton, TableScroll, Td, Th } from "./dense/DenseKit";
 import type { CurrencyCode } from "@/lib/constants/currencies";
@@ -84,8 +84,26 @@ export default function AdvertisingAgreementsPanel({
   corpId: string;
   ownsMediaSector?: boolean;
 }) {
+  return (
+    <AdvertisingAgreementsContent
+      key={`${corpId}:${ownsMediaSector}`}
+      corpId={corpId}
+      ownsMediaSector={ownsMediaSector}
+    />
+  );
+}
+
+function AdvertisingAgreementsContent({
+  corpId,
+  ownsMediaSector,
+}: {
+  corpId: string;
+  ownsMediaSector: boolean;
+}) {
   const { formatAmount } = useCurrency();
   const [agreements, setAgreements] = useState<AgreementRow[]>([]);
+  const [managedCorpId, setManagedCorpId] = useState<string | null>(null);
+  const requestController = useRef<AbortController | null>(null);
   const [mediaSectorModelCounts, setMediaSectorModelCounts] =
     useState<MediaSectorModelCounts | null>(null);
   const [suppliers, setSuppliers] = useState<SupplierList | null>(null);
@@ -96,44 +114,73 @@ export default function AdvertisingAgreementsPanel({
   const [notice, setNotice] = useState<{ text: string; tone: "success" | "error" } | null>(null);
 
   const refresh = useCallback(async () => {
-    const response = await fetch(`/api/corporations/${corpId}/advertising-agreements`);
-    if (!response.ok) return;
+    const controller = requestController.current;
+    const response = await fetch(`/api/corporations/${corpId}/advertising-agreements`, {
+      signal: controller?.signal,
+    });
+    if (controller?.signal.aborted) return;
+    if (!response.ok) {
+      setManagedCorpId(null);
+      setSuppliers(null);
+      return;
+    }
     const data = (await response.json()) as {
       agreements?: AgreementRow[];
       mediaSectorModelCounts?: MediaSectorModelCounts;
     };
+    if (controller?.signal.aborted) return;
+    setManagedCorpId(corpId);
     setAgreements(data.agreements ?? []);
     setMediaSectorModelCounts(data.mediaSectorModelCounts ?? null);
   }, [corpId]);
 
   useEffect(() => {
     const controller = new AbortController();
+    requestController.current = controller;
     const opts = { signal: controller.signal };
     void fetch(`/api/corporations/${corpId}/advertising-agreements`, opts)
       .then(async (response) => {
-        if (!response.ok) return;
+        if (controller.signal.aborted) return;
+        if (!response.ok) {
+          setManagedCorpId(null);
+          setSuppliers(null);
+          return;
+        }
         const data = (await response.json()) as {
           agreements?: AgreementRow[];
           mediaSectorModelCounts?: MediaSectorModelCounts;
         };
+        if (controller.signal.aborted) return;
+        setManagedCorpId(corpId);
         setAgreements(data.agreements ?? []);
         setMediaSectorModelCounts(data.mediaSectorModelCounts ?? null);
       })
       .catch((error: unknown) => {
-        if (!(error instanceof DOMException && error.name === "AbortError")) {
+        if (
+          !controller.signal.aborted &&
+          !(error instanceof DOMException && error.name === "AbortError")
+        ) {
           setNotice({ text: "Could not load advertising agreements.", tone: "error" });
         }
       });
     if (!ownsMediaSector) {
       void fetch(`/api/corporations/${corpId}/advertising-agreements/suppliers`, opts)
         .then(async (response) => {
-          if (!response.ok) return;
+          if (controller.signal.aborted) return;
+          if (!response.ok) {
+            setSuppliers(null);
+            return;
+          }
           const data = (await response.json()) as SupplierList;
+          if (controller.signal.aborted) return;
           setSuppliers(data);
           setSupplierId((current) => current || data.suppliers[0]?.id || "");
         })
         .catch((error: unknown) => {
-          if (!(error instanceof DOMException && error.name === "AbortError")) {
+          if (
+            !controller.signal.aborted &&
+            !(error instanceof DOMException && error.name === "AbortError")
+          ) {
             setNotice({ text: "Could not load media corporations.", tone: "error" });
           }
         });
@@ -163,6 +210,7 @@ export default function AdvertisingAgreementsPanel({
   async function propose(event: React.FormEvent) {
     event.preventDefault();
     if (!selected || blocker) return;
+    const controller = requestController.current;
     setBusy(true);
     setNotice(null);
     const response = await fetch(`/api/corporations/${corpId}/advertising-agreements`, {
@@ -175,16 +223,18 @@ export default function AdvertisingAgreementsPanel({
       }),
     });
     const data = await response.json();
+    if (controller?.signal.aborted) return;
     setNotice(
       response.ok
         ? { text: "Advertising proposal sent", tone: "success" }
         : { text: adErrorText(data, "The proposal did not go through."), tone: "error" }
     );
     if (response.ok) await refresh();
-    setBusy(false);
+    if (!controller?.signal.aborted) setBusy(false);
   }
 
   async function update(id: string, action: "accept" | "cancel") {
+    const controller = requestController.current;
     setBusy(true);
     setNotice(null);
     const response = await fetch(`/api/corporations/${corpId}/advertising-agreements/${id}`, {
@@ -193,6 +243,7 @@ export default function AdvertisingAgreementsPanel({
       body: JSON.stringify({ action }),
     });
     const data = await response.json();
+    if (controller?.signal.aborted) return;
     setNotice(
       response.ok
         ? {
@@ -202,7 +253,7 @@ export default function AdvertisingAgreementsPanel({
         : { text: adErrorText(data, "That did not go through."), tone: "error" }
     );
     if (response.ok) await refresh();
-    setBusy(false);
+    if (!controller?.signal.aborted) setBusy(false);
   }
 
   const supplierSide = ownsMediaSector;
@@ -297,6 +348,8 @@ export default function AdvertisingAgreementsPanel({
     <InlineStatus message={notice.text} tone={notice.tone} className="py-1" />
   );
 
+  if (managedCorpId !== corpId) return null;
+
   if (supplierSide) {
     const hasMediaSectorsWithoutModels =
       mediaSectorModelCounts !== null && mediaSectorModelCounts.withoutModel > 0;
@@ -323,6 +376,19 @@ export default function AdvertisingAgreementsPanel({
         )}
       </DenseSection>
     );
+  }
+
+  if (
+    !suppliers ||
+    suppliers.suppliers.length === 0 ||
+    suppliers.buyerMarketingPerTurnAnchor <= 0
+  ) {
+    return agreements.length > 0 ? (
+      <DenseSection title="Coverage advertising">
+        {status}
+        {list}
+      </DenseSection>
+    ) : null;
   }
 
   const noSuppliers = !!suppliers && suppliers.suppliers.length === 0;

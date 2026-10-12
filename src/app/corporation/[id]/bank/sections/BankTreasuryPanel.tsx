@@ -24,6 +24,17 @@ export function BankTreasuryPanel({
   const [units, setUnits] = useState("1");
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const currency = overview.currency;
+  const hasManualTrade =
+    overview.positions.some(
+      (position) =>
+        position.eligibleToBuy || (position.units > 0 && position.executablePoolDepthUnits > 0)
+    ) ||
+    (overview.primaryOffers ?? []).some(
+      (offer) =>
+        offer.unsoldUnits > 0 &&
+        offer.askPerUnitLocal > 0 &&
+        overview.spendableCash >= offer.askPerUnitLocal
+    );
 
   const subscribePrimary = async (offer: BankTreasuryPosition & { unsoldUnits: number }) => {
     const count = Number(units);
@@ -142,6 +153,8 @@ export function BankTreasuryPanel({
     }
   };
 
+  if (!canMutate) return null;
+
   return (
     <BankPanel
       kind="ceoControl"
@@ -186,20 +199,22 @@ export function BankTreasuryPanel({
         interest. Bill marks use current pool bids; sale proceeds are limited to cash actually
         available in the pool.
       </p>
-      <label className="mb-2 flex items-center gap-2 text-xs">
-        Units per manual trade
-        <input
-          aria-label="Bill units per trade"
-          className="w-28 rounded border border-card-border bg-background px-2 py-1 font-mono"
-          inputMode="numeric"
-          min="1"
-          step="1"
-          type="number"
-          value={units}
-          onChange={(event) => setUnits(event.target.value)}
-          disabled={!canMutate || busyKey !== null}
-        />
-      </label>
+      {hasManualTrade && (
+        <label className="mb-2 flex items-center gap-2 text-xs">
+          Units per manual trade
+          <input
+            aria-label="Bill units per trade"
+            className="w-28 rounded border border-card-border bg-background px-2 py-1 font-mono"
+            inputMode="numeric"
+            min="1"
+            step="1"
+            type="number"
+            value={units}
+            onChange={(event) => setUnits(event.target.value)}
+            disabled={!canMutate || busyKey !== null}
+          />
+        </label>
+      )}
       {overview.primaryOffers && overview.primaryOffers.length > 0 && (
         <section
           className="mb-3 rounded border border-card-border p-2 text-xs"
@@ -219,14 +234,18 @@ export function BankTreasuryPanel({
                   per unit
                 </div>
               </div>
-              <button
-                type="button"
-                className="rounded border border-card-border px-2 py-1 disabled:opacity-50"
-                disabled={!canMutate || busyKey !== null}
-                onClick={() => void subscribePrimary(offer)}
-              >
-                Subscribe
-              </button>
+              {offer.unsoldUnits > 0 &&
+                offer.askPerUnitLocal > 0 &&
+                overview.spendableCash >= offer.askPerUnitLocal && (
+                  <button
+                    type="button"
+                    className="rounded border border-card-border px-2 py-1 disabled:opacity-50"
+                    disabled={!canMutate || busyKey !== null}
+                    onClick={() => void subscribePrimary(offer)}
+                  >
+                    Subscribe
+                  </button>
+                )}
             </div>
           ))}
         </section>
@@ -253,27 +272,31 @@ export function BankTreasuryPanel({
                 </div>
               </div>
               <div className="flex gap-2">
-                <button
-                  type="button"
-                  className="rounded border border-card-border px-2 py-1 disabled:opacity-50"
-                  disabled={!canMutate || busyKey !== null || !position.eligibleToBuy}
-                  onClick={() => void trade(position, "buy")}
-                >
-                  Buy
-                </button>
-                <button
-                  type="button"
-                  className="rounded border border-card-border px-2 py-1 disabled:opacity-50"
-                  disabled={
-                    !canMutate ||
-                    busyKey !== null ||
-                    position.units <= 0 ||
-                    position.executablePoolDepthUnits <= 0
-                  }
-                  onClick={() => void trade(position, "sell")}
-                >
-                  Sell
-                </button>
+                {position.eligibleToBuy && (
+                  <button
+                    type="button"
+                    className="rounded border border-card-border px-2 py-1 disabled:opacity-50"
+                    disabled={!canMutate || busyKey !== null || !position.eligibleToBuy}
+                    onClick={() => void trade(position, "buy")}
+                  >
+                    Buy
+                  </button>
+                )}
+                {position.units > 0 && position.executablePoolDepthUnits > 0 && (
+                  <button
+                    type="button"
+                    className="rounded border border-card-border px-2 py-1 disabled:opacity-50"
+                    disabled={
+                      !canMutate ||
+                      busyKey !== null ||
+                      position.units <= 0 ||
+                      position.executablePoolDepthUnits <= 0
+                    }
+                    onClick={() => void trade(position, "sell")}
+                  >
+                    Sell
+                  </button>
+                )}
               </div>
             </div>
           ))}

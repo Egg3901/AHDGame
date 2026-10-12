@@ -49,6 +49,17 @@ export function EditorialStancePanel({
     }
   }
 
+  if (!isCeo) {
+    return (
+      <p className="text-sm text-muted">
+        {t("published", {
+          economic: stanceValue(stance?.economic ?? 0),
+          social: stanceValue(stance?.social ?? 0),
+        })}
+      </p>
+    );
+  }
+
   const changed = economic !== (stance?.economic ?? 0) || social !== (stance?.social ?? 0);
   const axes = [
     {

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useTranslations } from "next-intl";
-import { EmptyState, Tooltip } from "@/components/ui";
+import { Tooltip } from "@/components/ui";
 import { formatBankMoney, formatRatePercent } from "@/components/banking/formatBankMoney";
 import { TURNS_PER_YEAR } from "@/lib/constants/turnTime";
 import { assessCapital, borrowingsFromCharter } from "@/lib/banking/capitalAdequacy";
@@ -107,7 +107,13 @@ function LoanApprovalToggle({
  * one turn, not a rate. Earned and paid lines are magnitudes; only the net
  * and the bottom line carry a sign.
  */
-function EarningsBreakdown({ data, onTreasury }: { data: ConsolePayload; onTreasury: () => void }) {
+function EarningsBreakdown({
+  data,
+  onTreasury,
+}: {
+  data: ConsolePayload;
+  onTreasury?: () => void;
+}) {
   const t = useTranslations("corporations.bankConsole");
   const charter = data.charter!;
   const depositInterest = charter.lastBankingDepositInterest ?? 0;
@@ -224,16 +230,18 @@ function EarningsBreakdown({ data, onTreasury }: { data: ConsolePayload; onTreas
           />
         </tbody>
       </table>
-      <p className="pt-1.5 text-xs text-muted">
-        {t("tooltips.takeProfits")}{" "}
-        <button
-          type="button"
-          onClick={onTreasury}
-          className="text-foreground underline decoration-card-border underline-offset-2 hover:decoration-foreground"
-        >
-          Withdraw in Treasury
-        </button>
-      </p>
+      {onTreasury && (
+        <p className="pt-1.5 text-xs text-muted">
+          {t("tooltips.takeProfits")}{" "}
+          <button
+            type="button"
+            onClick={onTreasury}
+            className="text-foreground underline decoration-card-border underline-offset-2 hover:decoration-foreground"
+          >
+            Withdraw in Treasury
+          </button>
+        </p>
+      )}
     </BankPanel>
   );
 }
@@ -293,7 +301,7 @@ export function ActiveCharterPanel({
     charter.pointerDeposits ?? Math.max(0, charter.totalDeposits - charter.npcDeposits)
   );
   const householdCash = Math.max(0, charter.npcDeposits);
-  const investingVisible = propEligible;
+  const investingVisible = propEligible && data.bankPropTradingEnabled;
   const [tab, setTab] = useState<BankTab>("overview");
 
   // Attention routing: each red dot names the job that needs the CEO, so the
@@ -334,8 +342,53 @@ export function ActiveCharterPanel({
       hint: treasuryAttention ? treasuryHints.join(" · ") : undefined,
     },
     ...(investingVisible ? [{ id: "investing" as const, label: "Investing" }] : []),
-    { id: "charter", label: "Charter" },
+    ...((data.switchableTypes?.length ?? 0) > 0 || data.canRevoke
+      ? [{ id: "charter" as const, label: "Charter" }]
+      : []),
   ];
+
+  if (!canMutate) {
+    return (
+      <div className="space-y-4">
+        {!data.privateBankingEnabled ? (
+          <p className="text-xs text-muted">
+            Banking is paused, so this bank cannot accept new deposits or loans.
+          </p>
+        ) : (
+          <>
+            {capitalStanding !== "adequate" && (
+              <p className="text-xs text-muted">This bank has a capital shortfall.</p>
+            )}
+            {data.rates && depositTaking && (
+              <p className="text-xs text-muted">
+                This bank pays {formatRatePercent(data.rates.depositRatePercent)} on deposits and
+                charges {formatRatePercent(data.rates.lendingRatePercent)} on loans.
+              </p>
+            )}
+            {charter.status === "active" && (
+              <CustomerBankPanel
+                corporationId={data.corporation.id}
+                bankName={data.corporation.name}
+                currency={charter.currency}
+                depositTaking={depositTaking}
+                depositRatePercent={data.rates?.depositRatePercent ?? null}
+                onChanged={() => void onChanged()}
+                showToast={showToast}
+              />
+            )}
+          </>
+        )}
+        <EarningsBreakdown data={data} />
+        {data.canRevoke && (
+          <RevokeCharterForm
+            corporationId={data.corporation.id}
+            onChanged={onChanged}
+            showToast={showToast}
+          />
+        )}
+      </div>
+    );
+  }
 
   const blacklist = charter.blacklist ? (
     <BlacklistEditor
@@ -478,7 +531,10 @@ export function ActiveCharterPanel({
               />
             </div>
           </BankPanel>
-          <EarningsBreakdown data={data} onTreasury={() => setTab("treasury")} />
+          <EarningsBreakdown
+            data={data}
+            onTreasury={charter.upstreamCapacity > 0 ? () => setTab("treasury") : undefined}
+          />
         </>
       )}
 
@@ -592,7 +648,7 @@ export function ActiveCharterPanel({
 
       {tab === "investing" && (
         <div className="space-y-6">
-          {data.bankPropTradingEnabled ? (
+          {data.bankPropTradingEnabled && (
             <PropBookPanel
               key={data.propAssetOptions?.join(",") ?? "legacy"}
               assetOptions={data.propAssetOptions}
@@ -609,11 +665,6 @@ export function ActiveCharterPanel({
               forexFeesEnabled={data.bankPropForexFeesEnabled === true}
               onChanged={onChanged}
               showToast={showToast}
-            />
-          ) : (
-            <EmptyState
-              title="Investing is frozen"
-              description="The bank's own investments and interbank markets are switched off for this world."
             />
           )}
         </div>
@@ -643,12 +694,7 @@ export function ActiveCharterPanel({
               onChanged={onChanged}
               showToast={showToast}
             />
-          ) : (
-            <p className="text-xs text-muted">
-              Only the chartering currency&apos;s central bank chair or an admin can revoke a
-              charter.
-            </p>
-          )}
+          ) : null}
         </div>
       )}
     </div>

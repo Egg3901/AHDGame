@@ -172,9 +172,12 @@ describe("DefenceContractsTab — answering an offer", () => {
     expect(screen.getAllByText("0").length).toBeGreaterThanOrEqual(2);
   });
 
-  it("shows a non-CEO viewer the offer without the buttons", () => {
+  it("hides the pending-offer management panel from a non-CEO", () => {
     setup({ defence: pending(), isCeo: false });
-    expect(screen.getByText("Offers awaiting you")).toBeTruthy();
+    expect(screen.queryByText("Offers awaiting you")).toBeNull();
+    expect(screen.queryByText("Offers awaiting your answer")).toBeNull();
+    expect(screen.queryByText("awaiting your answer")).toBeNull();
+    expect(screen.getByText("awaiting the CEO's answer")).toBeTruthy();
     expect(screen.queryByText("Accept")).toBeNull();
     expect(screen.queryByText("Decline")).toBeNull();
   });
