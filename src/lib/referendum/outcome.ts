@@ -1,3 +1,4 @@
+import { withSessionDb, afterCommit } from "@/lib/db/sessionDb";
 /**
  * Apply a resolved referendum's outcome.
  *
@@ -39,7 +40,18 @@ export async function applyReferendumOutcome(
   ref: Referendum,
   outcome: ReferendumVoteOutcome,
   currentTurn: number
-): Promise<void> {
+): Promise<boolean> {
+  return withSessionDb(db, (transactionDb) =>
+    applyReferendumOutcomeInTransaction(transactionDb, ref, outcome, currentTurn)
+  );
+}
+
+async function applyReferendumOutcomeInTransaction(
+  db: Db,
+  ref: Referendum,
+  outcome: ReferendumVoteOutcome,
+  currentTurn: number
+): Promise<boolean> {
   const refs = getReferendumCollection(db);
   const now = new Date();
   const result = { ...outcome, resolvedTurn: currentTurn };
@@ -58,7 +70,7 @@ export async function applyReferendumOutcome(
         },
       }
     );
-    if (written.modifiedCount === 0) return;
+    if (written.modifiedCount === 0) return false;
     await recordWireEvent(db, {
       referendumId: ref._id!,
       countryId: ref.countryId,
@@ -68,15 +80,27 @@ export async function applyReferendumOutcome(
       side: outcome.passed ? "yes" : "no",
       summary: `Northern Ireland ${outcome.passed ? "ratified" : "rejected"} the peace agreement with ${outcome.finalYesShare.toFixed(1)}% Yes.`,
     }).catch(() => {});
-    await announceReferendumVoteResult(ref, outcome).catch(() => {});
-    return;
+    await afterCommit(db, () => announceReferendumVoteResult(ref, outcome).catch(() => {}));
+    return true;
   }
 
+  // Claim the territorial count before creating bills. The claim, bills and
+  // metric reset commit together; a stale/retried count creates no side effects.
+  const claimed = await refs.updateOne(
+    { _id: ref._id, status: "polling", result: null },
+    {
+      $set: {
+        status: outcome.passed ? "actuating" : "settled",
+        result,
+        yesShare: outcome.finalYesShare,
+        ...(outcome.passed ? {} : { cooldownReadyAtTurn: currentTurn + SETTLED_COOLDOWN_TURNS }),
+        updatedAt: now,
+      },
+    }
+  );
+  if (claimed.modifiedCount === 0) return false;
+
   if (outcome.passed) {
-    // Open the conversion window. Only reunification has an actuation engine
-    // today, so only it gets an auto-convert deadline; independence sits in
-    // `actuating` until the secession engine (Phases 2–3). Admins can still
-    // resolve/block either via the admin route.
     // Both kinds open a conversion window with parliamentary consent. Reunification
     // always needs Westminster consent and also needs Dáil consent when Ireland is
     // already player enabled. Independence needs only Westminster consent.
@@ -86,9 +110,12 @@ export async function applyReferendumOutcome(
         : null;
     const bills =
       ref.kind === "reunification"
-        ? await createReunificationConsentBills(db, ref, currentTurn)
+        ? await createReunificationConsentBills(db, { ...ref, result }, currentTurn)
         : ref.kind === "independence"
-          ? { ...(await createIndependenceConsentBill(db, ref, currentTurn)), dailBillId: null }
+          ? {
+              ...(await createIndependenceConsentBill(db, { ...ref, result }, currentTurn)),
+              dailBillId: null,
+            }
           : { westminsterBillId: null, dailBillId: null };
     await refs.updateOne(
       { _id: ref._id },
@@ -118,16 +145,18 @@ export async function applyReferendumOutcome(
         finalYesShare: outcome.finalYesShare,
         turnout: outcome.turnout,
         conversionDeadlineTurn,
-        note: "Conversion window open — admin may resolve early or block; else auto-converts.",
+        note: "Parliamentary consent voting is open; conversion follows enactment.",
       },
     }).catch((err) =>
       console.error(`${ref.regionId} referendum_passed history write failed:`, err)
     );
-    await announceReferendumVoteResult(ref, {
-      passed: true,
-      finalYesShare: outcome.finalYesShare,
-      dailConsentRequired: bills.dailBillId != null,
-    }).catch(() => {});
+    await afterCommit(db, () =>
+      announceReferendumVoteResult(ref, {
+        passed: true,
+        finalYesShare: outcome.finalYesShare,
+        dailConsentRequired: bills.dailBillId != null,
+      }).catch(() => {})
+    );
     await recordWireEvent(db, {
       referendumId: ref._id!,
       countryId: ref.countryId,
@@ -137,20 +166,9 @@ export async function applyReferendumOutcome(
       side: "yes",
       summary: `Carried at the ballot box — ${Math.round(outcome.finalYesShare)}% Yes.`,
     }).catch(() => {});
-    return;
+    return true;
   }
 
-  await refs.updateOne(
-    { _id: ref._id },
-    {
-      $set: {
-        status: "settled",
-        result,
-        cooldownReadyAtTurn: currentTurn + SETTLED_COOLDOWN_TURNS,
-        updatedAt: now,
-      },
-    }
-  );
   // SP5: independenceDesire lives top-level on macroMetrics.
   await db.collection<MacroMetricsDoc>("macroMetrics").updateOne(
     { _id: ref.regionId },
@@ -173,10 +191,12 @@ export async function applyReferendumOutcome(
       turnout: outcome.turnout,
     },
   }).catch((err) => console.error(`${ref.regionId} referendum_failed history write failed:`, err));
-  await announceReferendumVoteResult(ref, {
-    passed: false,
-    finalYesShare: outcome.finalYesShare,
-  }).catch(() => {});
+  await afterCommit(db, () =>
+    announceReferendumVoteResult(ref, {
+      passed: false,
+      finalYesShare: outcome.finalYesShare,
+    }).catch(() => {})
+  );
   await recordWireEvent(db, {
     referendumId: ref._id!,
     countryId: ref.countryId,
@@ -186,4 +206,5 @@ export async function applyReferendumOutcome(
     side: "no",
     summary: `Defeated — ${Math.round(outcome.finalYesShare)}% Yes.`,
   }).catch(() => {});
+  return true;
 }

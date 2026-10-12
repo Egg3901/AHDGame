@@ -1,3 +1,9 @@
+vi.mock("@/lib/db/sessionDb", () => ({
+  boundSession: () => undefined,
+  unboundDb: (db: unknown) => db,
+  withSessionDb: (_db: unknown, work: (db: unknown) => Promise<unknown>) => work(_db),
+  afterCommit: (_db: unknown, effect: () => Promise<unknown>) => effect(),
+}));
 /**
  * End-to-end conservation test for the NI → Ireland transfer, run against a
  * compact in-memory store (the repo's MockDb doesn't persist, so the migration

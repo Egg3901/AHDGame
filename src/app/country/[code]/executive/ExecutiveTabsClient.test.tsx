@@ -190,11 +190,38 @@ describe("UK executive devolution navigation", () => {
   afterEach(() => {
     tabParam = "";
   });
-  it("lets an ordinary viewer track the public stances", () => {
+  it("hides the tab and rejects direct links for ordinary viewers", () => {
     tabParam = "tab=devolution";
     renderTabs({});
+    expect(screen.queryByTestId("westminster-devolution")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Devolution" })).toBeNull();
+    expect(screen.getByTestId("ov")).toBeTruthy();
+  });
+  it.each([{ viewerIsLeader: true }, { viewerIsAdmin: true }])(
+    "allows an authorized viewer %j",
+    (viewer) => {
+      tabParam = "tab=devolution";
+      renderTabs(viewer);
+      expect(screen.getByTestId("westminster-devolution")).toBeTruthy();
+      expect(screen.getByRole("button", { name: "Devolution" })).toBeTruthy();
+    }
+  );
+  it("removes an open devolution panel when PM authority is lost", () => {
+    tabParam = "tab=devolution";
+    const view = renderTabs({ viewerIsLeader: true });
     expect(screen.getByTestId("westminster-devolution")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Devolution" })).toBeTruthy();
+    view.rerender(
+      <NextIntlClientProvider locale="en" messages={navMessages}>
+        <ExecutiveTabsClient
+          countryId="UK"
+          overview={<div>Overview</div>}
+          viewerIsLeader={false}
+          viewerIsAdmin={false}
+        />
+      </NextIntlClientProvider>
+    );
+    expect(screen.queryByTestId("westminster-devolution")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Devolution" })).toBeNull();
   });
   it("does not expose the UK panel on another country's executive page", () => {
     tabParam = "tab=devolution";

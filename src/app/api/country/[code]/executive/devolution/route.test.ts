@@ -17,6 +17,7 @@ vi.mock("@/lib/governorOffice/devolution/queries", () => ({
 import { getDb } from "@/lib/mongodb";
 import { requireAuth, requireHumanSessionWithCharacter } from "@/lib/api/requireAuth";
 import { isSittingLeader } from "@/lib/governorOffice/isSittingLeader";
+import { loadIndependenceDesireSnapshots } from "@/lib/governorOffice/devolution/queries";
 import { GET, POST } from "./route";
 const context = (code = "uk") => ({ params: Promise.resolve({ code }) });
 const request = (body: unknown = { stateId: "SCO", policy: "independence" }) =>
@@ -61,14 +62,58 @@ describe("UK executive devolution API", () => {
     expect((await POST(request(), context())).status).toBe(403);
     expect(getDb).not.toHaveBeenCalled();
   });
-  it("lets FMs and ordinary authenticated viewers read stances without edit authority", async () => {
+  it("rejects FMs, former PMs and ordinary viewers before loading dashboard data", async () => {
     vi.mocked(isSittingLeader).mockResolvedValue(false);
+    expect((await GET(request(), context())).status).toBe(403);
+    expect(loadIndependenceDesireSnapshots).not.toHaveBeenCalled();
+    expect(db.collection("governorOfficeState").findOne).not.toHaveBeenCalled();
+  });
+  it.each([false, true])(
+    "lets admins read without PM authority, with character: %s",
+    async (hasCharacter) => {
+      vi.mocked(requireAuth).mockResolvedValue({
+        ok: true,
+        user: { isAdmin: true, character: hasCharacter ? { _id: new ObjectId() } : null },
+      } as never);
+      vi.mocked(isSittingLeader).mockResolvedValue(false);
+      const response = await GET(request(), context());
+      expect(response.status).toBe(200);
+      expect(await response.json()).toMatchObject({
+        canManage: false,
+        regions: [{ stateId: "NIR", westminsterPolicy: "independence" }],
+      });
+      expect(response.headers.get("Cache-Control")).toBe("private, no-store");
+    }
+  );
+  it("rejects non-admin viewers without a character", async () => {
+    vi.mocked(requireAuth).mockResolvedValue({
+      ok: true,
+      user: { isAdmin: false, character: null },
+    } as never);
+    expect((await GET(request(), context())).status).toBe(403);
+    expect(isSittingLeader).not.toHaveBeenCalled();
+    expect(loadIndependenceDesireSnapshots).not.toHaveBeenCalled();
+  });
+  it("lets the sitting PM read and manage stances", async () => {
     const response = await GET(request(), context());
     expect(response.status).toBe(200);
-    expect(await response.json()).toMatchObject({
-      canManage: false,
-      regions: [{ stateId: "NIR", westminsterPolicy: "independence" }],
-    });
+    expect(await response.json()).toMatchObject({ canManage: true });
+  });
+  it("rechecks PM authority on subsequent reads", async () => {
+    expect((await GET(request(), context())).status).toBe(200);
+    vi.mocked(loadIndependenceDesireSnapshots).mockClear();
+    vi.mocked(isSittingLeader).mockResolvedValue(false);
+    expect((await GET(request(), context())).status).toBe(403);
+    expect(loadIndependenceDesireSnapshots).not.toHaveBeenCalled();
+  });
+  it("does not grant admins stance editing authority", async () => {
+    vi.mocked(requireHumanSessionWithCharacter).mockResolvedValue({
+      ok: true,
+      user: { isAdmin: true, character: { _id: new ObjectId() } },
+    } as never);
+    vi.mocked(isSittingLeader).mockResolvedValue(false);
+    expect((await POST(request(), context())).status).toBe(403);
+    expect(db.collection("governorOfficeState").updateOne).not.toHaveBeenCalled();
   });
   it("rejects an FM or former PM attempting a write", async () => {
     vi.mocked(isSittingLeader).mockResolvedValue(false);

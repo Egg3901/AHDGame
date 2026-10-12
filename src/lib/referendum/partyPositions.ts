@@ -1,3 +1,4 @@
+import { withSessionDb } from "@/lib/db/sessionDb";
 /**
  * Declare / withdraw a party's public referendum position. A stance only —
  * independent of campaign spend, and mutable solely while the campaign runs.
@@ -28,10 +29,24 @@ export async function declarePartyPosition(
   db: Db,
   input: DeclarePositionInput
 ): Promise<PositionResult> {
+  return withSessionDb(db, (transactionDb) =>
+    declarePartyPositionInTransaction(transactionDb, input)
+  );
+}
+
+async function declarePartyPositionInTransaction(
+  db: Db,
+  input: DeclarePositionInput
+): Promise<PositionResult> {
+  if (!ObjectId.isValid(input.referendumId))
+    return { status: 400, body: { error: "Invalid referendum ID." } };
   const refs = getReferendumCollection(db);
   const ref = await refs.findOne({ _id: new ObjectId(input.referendumId) });
   if (!ref) return { status: 404, body: { error: "Referendum not found." } };
-  if (ref.status !== "campaigning") {
+  if (
+    ref.status !== "campaigning" ||
+    (ref.campaignCloseTurn != null && input.turn != null && input.turn >= ref.campaignCloseTurn)
+  ) {
     return { status: 400, body: { error: "Positions can only change during the campaign." } };
   }
 
@@ -45,7 +60,7 @@ export async function declarePartyPosition(
     },
   ];
   await refs.updateOne(
-    { _id: ref._id },
+    { _id: ref._id, status: "campaigning" },
     { $set: { partyPositions: positions, updatedAt: new Date() } }
   );
   await recordWireEvent(db, {
@@ -64,15 +79,29 @@ export async function withdrawPartyPosition(
   db: Db,
   input: { referendumId: string; partyId: string; turn?: number; actorName?: string }
 ): Promise<PositionResult> {
+  return withSessionDb(db, (transactionDb) =>
+    withdrawPartyPositionInTransaction(transactionDb, input)
+  );
+}
+
+async function withdrawPartyPositionInTransaction(
+  db: Db,
+  input: { referendumId: string; partyId: string; turn?: number; actorName?: string }
+): Promise<PositionResult> {
+  if (!ObjectId.isValid(input.referendumId))
+    return { status: 400, body: { error: "Invalid referendum ID." } };
   const refs = getReferendumCollection(db);
   const ref = await refs.findOne({ _id: new ObjectId(input.referendumId) });
   if (!ref) return { status: 404, body: { error: "Referendum not found." } };
-  if (ref.status !== "campaigning") {
+  if (
+    ref.status !== "campaigning" ||
+    (ref.campaignCloseTurn != null && input.turn != null && input.turn >= ref.campaignCloseTurn)
+  ) {
     return { status: 400, body: { error: "Positions can only change during the campaign." } };
   }
   const positions = (ref.partyPositions ?? []).filter((p) => p.partyId !== input.partyId);
   await refs.updateOne(
-    { _id: ref._id },
+    { _id: ref._id, status: "campaigning" },
     { $set: { partyPositions: positions, updatedAt: new Date() } }
   );
   await recordWireEvent(db, {

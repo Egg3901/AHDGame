@@ -106,3 +106,11 @@ describe("aggregateYesShare saturates raw modifiers", () => {
     expect(v).toBeLessThan(63);
   });
 });
+
+describe("bounded baseline recentering", () => {
+  it.each([0, 2, 55, 60, 98, 100])("preserves Desire %s even when cohorts saturate", (desire) => {
+    const cohorts = buildReferendumCohorts(sections, desire, { a: 40, b: -40 });
+    expect(aggregateYesShare(cohorts, [], 0)).toBeCloseTo(desire, 8);
+    expect(cohorts.every((c) => c.yesLean >= 0 && c.yesLean <= 100)).toBe(true);
+  });
+});

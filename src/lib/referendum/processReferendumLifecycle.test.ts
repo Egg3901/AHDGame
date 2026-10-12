@@ -1,6 +1,12 @@
+vi.mock("@/lib/db/sessionDb", () => ({
+  boundSession: () => undefined,
+  unboundDb: (db: unknown) => db,
+  withSessionDb: (_db: unknown, work: (db: unknown) => Promise<unknown>) => work(_db),
+  afterCommit: (_db: unknown, effect: () => Promise<unknown>) => effect(),
+}));
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { type Db } from "mongodb";
-import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
+import { createMockDb, bulkOps, type MockDb } from "@/lib/test-utils/mockDb";
 import { ObjectId } from "mongodb";
 import { processReferendumLifecycle } from "./processReferendumLifecycle";
 import { runReferendumActuation, cancelReferendum } from "./transfer/actuateReferendum";
@@ -13,7 +19,7 @@ import type { Referendum } from "@/lib/db/types/referendum";
 // Stub the actuation so the auto-convert branch doesn't run a real transfer.
 vi.mock("./transfer/actuateReferendum", () => ({
   runReferendumActuation: vi.fn().mockResolvedValue({ ok: true }),
-  cancelReferendum: vi.fn().mockResolvedValue(undefined),
+  cancelReferendum: vi.fn().mockResolvedValue(true),
 }));
 
 vi.mock("@/lib/referendum/referendumWebhooks", () => ({
@@ -83,12 +89,16 @@ function setup(
 ) {
   db.collectionMocks["referendums"] = db.collection("referendums");
   db.collectionMocks["referendums"].find.mockReturnValue(cursorOf(active));
+  db.collection("referendums").bulkWrite.mockImplementation(async (ops: unknown[]) => ({
+    matchedCount: ops.length,
+  }));
   db.collectionMocks["electedOfficials"] = db.collection("electedOfficials");
   db.collectionMocks["electedOfficials"].find.mockReturnValue(cursorOf(mps));
 }
 
 function lastSet(db: MockDb, collection: string) {
-  const calls = db.collectionMocks[collection].updateOne.mock.calls;
+  const batch = bulkOps(db.collectionMocks[collection].bulkWrite);
+  const calls = batch.length ? batch : db.collectionMocks[collection].updateOne.mock.calls;
   return calls[calls.length - 1][1].$set;
 }
 
@@ -441,4 +451,87 @@ describe("peace agreement public ballot", () => {
       expect(db.collection("macroMetrics").updateOne).not.toHaveBeenCalled();
     }
   );
+});
+
+vi.mock("./grantReferendum", () => ({
+  grantReferendum: vi.fn().mockResolvedValue({ status: 200 }),
+}));
+import { grantReferendum } from "./grantReferendum";
+describe("request and snapshot lifecycle edge cases", () => {
+  beforeEach(() => vi.clearAllMocks());
+  it.each([
+    [123, null],
+    [124, "grant"],
+  ] as const)("handles an NPP request at turn %i", async (turn, expected) => {
+    const db = createMockDb();
+    setup(db, [refDoc({ status: "requested", requestedTurn: 100 })]);
+    db.collection("governmentFormations").findOne.mockResolvedValue({
+      status: "formed",
+      pmNppId: new ObjectId(),
+      pmCharacterId: null,
+    });
+    db.collection("governorOfficeState").findOne.mockResolvedValue({
+      westminsterStances: { SCO: { policy: "pro" } },
+    });
+    await processReferendumLifecycle(db as unknown as Db, turn);
+    if (expected)
+      expect(grantReferendum).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ action: expected, isPM: true })
+      );
+    else expect(grantReferendum).not.toHaveBeenCalled();
+  });
+  it("leaves a human PM's request for their decision", async () => {
+    const db = createMockDb();
+    setup(db, [refDoc({ status: "requested" })]);
+    db.collection("governmentFormations").findOne.mockResolvedValue({
+      status: "formed",
+      pmNppId: null,
+      pmCharacterId: new ObjectId(),
+    });
+    await processReferendumLifecycle(db as unknown as Db, 200);
+    expect(grantReferendum).not.toHaveBeenCalled();
+  });
+  it("does not report an opening when its stale snapshot loses the write", async () => {
+    const db = createMockDb();
+    setup(db, [refDoc()]);
+    db.collection("referendums").find.mockReturnValueOnce(cursorOf([refDoc()]));
+    db.collection("referendums").find.mockReturnValue(cursorOf([]));
+    const result = await processReferendumLifecycle(db as unknown as Db, 110);
+    expect(result?.processed).toBe(0);
+    expect(recordWireEvent).not.toHaveBeenCalled();
+  });
+});
+
+it("does not report a transition when another worker already counted the ballot", async () => {
+  const db = createMockDb();
+  setup(db, [polling(60)]);
+  db.collection("referendums").updateOne.mockResolvedValue({ modifiedCount: 0 });
+  const result = await processReferendumLifecycle(db as unknown as Db, 160);
+  expect(result).toEqual({ processed: 0, transitions: [] });
+  expect(db.collection("bills").insertOne).not.toHaveBeenCalled();
+});
+
+it("batches three campaign transitions into one write", async () => {
+  const db = createMockDb();
+  const refs = ["SCO", "WAL", "NIR"].map((regionId) => refDoc({ _id: new ObjectId(), regionId }));
+  setup(db, refs);
+  const result = await processReferendumLifecycle(db as unknown as Db, 110);
+  expect(result?.processed).toBe(3);
+  expect(db.collection("referendums").bulkWrite).toHaveBeenCalledOnce();
+  expect(bulkOps(db.collection("referendums").bulkWrite)).toHaveLength(3);
+  expect(db.collection("referendums").updateOne).not.toHaveBeenCalled();
+});
+
+it("reports only snapshots still eligible when the batch commits", async () => {
+  const db = createMockDb();
+  const refs = [refDoc({ _id: new ObjectId() }), refDoc({ _id: new ObjectId() })];
+  setup(db, refs);
+  db.collection("referendums").find.mockReturnValueOnce(cursorOf(refs));
+  db.collection("referendums").find.mockReturnValue(cursorOf([refs[1]]));
+  const result = await processReferendumLifecycle(db as unknown as Db, 110);
+  expect(result?.transitions).toEqual([
+    { referendumId: String(refs[1]._id), from: "granted", to: "campaigning" },
+  ]);
+  expect(bulkOps(db.collection("referendums").bulkWrite)[0][0]).toMatchObject({ _id: refs[1]._id });
 });

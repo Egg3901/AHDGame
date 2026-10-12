@@ -1,3 +1,5 @@
+import { constitutionalConsentForce } from "@/lib/referendum/rules/consent";
+import type { Referendum } from "@/lib/db/types/referendum";
 // src/lib/turn/npp/billVoting.ts
 /**
  * NPP Bill Voting
@@ -6,7 +8,7 @@
  * **federal** legislature (House/Senate chambers). As of Phase 4 of the
  * party-npp-rework, this path is RNG-free: every vote is the sum of four
  * signed forces (ideology, whip, district, donors) with verdict thresholds at
- * ±15. See `crossPressure.ts` for the full model.
+ * ±5. See `crossPressure.ts` for the full model.
  *
  * KEY DESIGN DECISIONS:
  *
@@ -88,6 +90,53 @@ export async function processBillVoting(ctx: NPPContext): Promise<number> {
     ...bill,
     countryId: resolveNppBillCountryId(bill, ctx.statesById),
   }));
+  const legacyConsentIds = activeBills
+    .filter(
+      (b) =>
+        (b.category === "independence" || b.category === "reunification") && !b.referendumConsent
+    )
+    .map((b) => b._id);
+  const legacyRefs = legacyConsentIds.length
+    ? await db
+        .collection<Referendum>("referendums")
+        .find(
+          {
+            $or: [
+              { westminsterBillId: { $in: legacyConsentIds } },
+              { dailBillId: { $in: legacyConsentIds } },
+            ],
+          },
+          {
+            projection: {
+              westminsterBillId: 1,
+              dailBillId: 1,
+              regionId: 1,
+              countryId: 1,
+              result: 1,
+              yesShare: 1,
+              partyPositions: 1,
+            },
+          }
+        )
+        .toArray()
+    : [];
+  const legacyConsentSnapshots = new Set<string>();
+  for (const bill of activeBills) {
+    if (bill.referendumConsent) continue;
+    const ref = legacyRefs.find(
+      (r) =>
+        String(r.westminsterBillId) === String(bill._id) ||
+        String(r.dailBillId) === String(bill._id)
+    );
+    if (ref) {
+      legacyConsentSnapshots.add(String(bill._id));
+      bill.referendumConsent = {
+        regionId: ref.regionId,
+        yesShare: ref.result?.finalYesShare ?? ref.yesShare,
+        partyPositions: bill.countryId === ref.countryId ? (ref.partyPositions ?? []) : [],
+      };
+    }
+  }
   let votescast = 0;
   const officialsByOfficeType = new Map<string, typeof nppOfficials>();
   for (const official of nppOfficials) {
@@ -331,7 +380,11 @@ export async function processBillVoting(ctx: NPPContext): Promise<number> {
       // The already-voted check reads THIS official's own map, not the bill's single
       // field: on a concurrent bill the two chambers have separate maps.
       if (closedField(officialField)) continue; // This chamber's clock already ran out
-      if (votesInField(officialField)[nppKey]) continue; // Already voted
+      const previousVote = votesInField(officialField)[nppKey];
+      // Legacy provision-less consent votes lacked constitutional pressure.
+      // Reconsider only their procedural abstentions, then persist the snapshot.
+      const reconsider = legacyConsentSnapshots.has(String(bill._id)) && previousVote === "abstain";
+      if (previousVote && !reconsider) continue; // Already voted
 
       const npp = nppMap.get(official.nppId.toString());
       if (!npp) continue;
@@ -383,6 +436,9 @@ export async function processBillVoting(ctx: NPPContext): Promise<number> {
           caucusWhip: null,
         },
       });
+
+      if (bill.referendumConsent)
+        forces.ideology = constitutionalConsentForce(bill.referendumConsent, npp.party);
 
       // War-entry bills carry a frozen national pressure snapshot. Fold it into
       // the ideology bucket so the existing prediction schema remains replayable:
@@ -447,7 +503,9 @@ export async function processBillVoting(ctx: NPPContext): Promise<number> {
         vote = "against";
       }
 
+      if (reconsider && vote === previousVote) continue;
       const b = bucket(officialField);
+      if (reconsider) b.abstainW -= weight;
       b.updates[nppKey] = vote;
       if (vote === "for") b.forW += weight;
       else if (vote === "against") b.againstW += weight;
@@ -479,6 +537,8 @@ export async function processBillVoting(ctx: NPPContext): Promise<number> {
 
     // Build update
     const setFields: Record<string, unknown> = { updatedAt: now };
+    if (legacyConsentSnapshots.has(String(bill._id)))
+      setFields.referendumConsent = bill.referendumConsent;
     const incFields: Record<string, number> = {};
     for (const [field, b] of byField) {
       for (const [k, v] of Object.entries(b.updates)) {

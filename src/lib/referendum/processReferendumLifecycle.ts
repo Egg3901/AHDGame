@@ -1,3 +1,11 @@
+import { withSessionDb } from "@/lib/db/sessionDb";
+import { grantReferendum } from "./grantReferendum";
+import { nppReferendumDecision } from "./rules/decisions";
+import { getGovernmentFormationsCollection } from "@/lib/db/collections/governmentFormation";
+import type { GovernorOfficeState } from "@/lib/db/types/governorOfficeState";
+import { getNationalStateId } from "@/lib/policy/nationalStateId";
+import { cohortTurnout } from "./rules/cohorts";
+import { GG_TURNOUT_MOD_CAP } from "@/lib/constants/referendum";
 /**
  * Per-turn driver for the referendum state machine. Advances every active
  * referendum one edge per turn (the PM's grant/decline and the bill votes are
@@ -15,8 +23,8 @@
  *
  * See docs/superpowers/specs/2026-06-16-independence-process-design.md §5.1.
  */
-import type { Db } from "mongodb";
-import type { ReferendumStatus } from "@/lib/db/types/referendum";
+import type { Db, Filter, ObjectId } from "mongodb";
+import type { Referendum, ReferendumStatus } from "@/lib/db/types/referendum";
 import type { Bill, StateDemographics } from "@/lib/db/types";
 import { getReferendumCollection } from "@/lib/db/collections/referendum";
 import { applyReferendumOutcome } from "@/lib/referendum/outcome";
@@ -32,7 +40,7 @@ import { cohortAffinitiesFor } from "@/lib/constants/referendumCohorts";
 import { getBucketProfileForRegion } from "@/lib/demographics/bucketProfile";
 import { getGameStatePresetOrDefault } from "@/lib/db/collections/gameState";
 import { referendumYesShare } from "@/lib/referendum/resolveYesShare";
-import { recordWireEvent } from "@/lib/referendum/wire";
+import { recordWireEvent, type WireInput } from "@/lib/referendum/wire";
 import { WIRE_SWING_THRESHOLD } from "@/lib/constants/referendum";
 
 /**
@@ -71,7 +79,13 @@ async function buildCohortBaseline(
     : [{ groupId: "_all", share: 1, turnout: 60, yesLean: regionDesire }];
 }
 
-const ACTIVE_STATUSES: ReferendumStatus[] = ["granted", "campaigning", "polling", "actuating"];
+const ACTIVE_STATUSES: ReferendumStatus[] = [
+  "requested",
+  "granted",
+  "campaigning",
+  "polling",
+  "actuating",
+];
 
 export interface ReferendumLifecycleResult {
   processed: number;
@@ -92,6 +106,40 @@ export function seededVariance(id: string, turn: number): number {
   return ((h >>> 0) / 0xffffffff) * 2 - 1;
 }
 
+interface CampaignSnapshot {
+  id: ObjectId;
+  filter: Filter<Referendum>;
+  set: Partial<Referendum>;
+  from: ReferendumStatus;
+  to?: ReferendumStatus;
+  wire: WireInput[];
+}
+
+/** Recheck every frozen snapshot and commit the eligible updates in one batch.
+ * The transaction retries on concurrent campaign writes, so a newer paid effect
+ * is neither overwritten nor reported as our transition. No per-row writes.
+ */
+async function commitCampaignSnapshots(db: Db, snapshots: CampaignSnapshot[]) {
+  if (snapshots.length === 0) return [];
+  return withSessionDb(db, async (tx) => {
+    const refs = getReferendumCollection(tx);
+    const current = await refs
+      .find({ $or: snapshots.map((snapshot) => snapshot.filter) }, { projection: { _id: 1 } })
+      .toArray();
+    const ids = new Set(current.map((ref) => String(ref._id)));
+    const eligible = snapshots.filter((snapshot) => ids.has(String(snapshot.id)));
+    if (eligible.length === 0) return [];
+    const result = await refs.bulkWrite(
+      eligible.map((snapshot) => ({
+        updateOne: { filter: snapshot.filter, update: { $set: snapshot.set } },
+      }))
+    );
+    if (result.matchedCount !== eligible.length)
+      throw new Error("Campaign snapshot batch lost its claim.");
+    return eligible;
+  });
+}
+
 export async function processReferendumLifecycle(
   db: Db,
   currentTurn: number
@@ -100,13 +148,52 @@ export async function processReferendumLifecycle(
   const active = await refs.find({ status: { $in: ACTIVE_STATUSES } }).toArray();
   if (active.length === 0) return null;
 
+  const hasRequests = active.some((ref) => ref.status === "requested");
+  const ministry = hasRequests
+    ? await getGovernmentFormationsCollection(db).findOne({ _id: "UK" })
+    : null;
+  const nationalOffice = hasRequests
+    ? await db
+        .collection<GovernorOfficeState>("governorOfficeState")
+        .findOne({ countryId: "UK", stateId: getNationalStateId("UK") })
+    : null;
   const transitions: ReferendumLifecycleResult["transitions"] = [];
   const now = new Date();
+  const snapshots: CampaignSnapshot[] = [];
 
   for (const ref of active) {
     const id = String(ref._id);
     const from = ref.status;
 
+    if (ref.status === "requested") {
+      if (
+        ref.countryId === "UK" &&
+        ministry?.status === "formed" &&
+        ministry.pmNppId &&
+        !ministry.pmCharacterId
+      ) {
+        const policy =
+          nationalOffice?.westminsterStances?.[ref.regionId as "SCO" | "WAL" | "NIR"]?.policy ??
+          "anti";
+        const action = nppReferendumDecision(currentTurn, ref.requestedTurn, policy);
+        if (action) {
+          const decision = await grantReferendum(db, {
+            countryId: "UK",
+            referendumId: id,
+            isPM: true,
+            currentTurn,
+            action,
+          });
+          if (decision.status === 200)
+            transitions.push({
+              referendumId: id,
+              from,
+              to: action === "grant" ? "granted" : "declined",
+            });
+        }
+      }
+      continue;
+    }
     if (ref.status === "granted") {
       // Seed the opening poll point at the campaign's baseline + snapshot the
       // cohort model (anchored to the same baseline desire).
@@ -122,19 +209,23 @@ export async function processReferendumLifecycle(
         openDesire,
         ref.kind === "peace_agreement"
       );
-      await refs.updateOne(
-        { _id: ref._id },
-        { $set: { status: "campaigning", pollHistory, cohortBaseline, updatedAt: now } }
-      );
-      await recordWireEvent(db, {
-        referendumId: ref._id!,
-        countryId: ref.countryId,
-        regionId: ref.regionId,
-        turn: currentTurn,
-        kind: "opened",
-        summary: "Campaign opened.",
-      }).catch(() => {});
-      transitions.push({ referendumId: id, from, to: "campaigning" });
+      snapshots.push({
+        id: ref._id!,
+        filter: { _id: ref._id, status: ref.status, updatedAt: ref.updatedAt },
+        set: { status: "campaigning", pollHistory, cohortBaseline, updatedAt: now },
+        from,
+        to: "campaigning",
+        wire: [
+          {
+            referendumId: ref._id!,
+            countryId: ref.countryId,
+            regionId: ref.regionId,
+            turn: currentTurn,
+            kind: "opened",
+            summary: "Campaign opened.",
+          },
+        ],
+      });
       continue;
     }
 
@@ -152,10 +243,11 @@ export async function processReferendumLifecycle(
       // vote will resolve on — never the stale stored scalar.
       const canonical = referendumYesShare(ref);
       // A notable per-turn move (since the previous reading) hits the wire.
+      const campaignWire: WireInput[] = [];
       const prevReading = (ref.pollHistory ?? []).at(-1)?.yesShare ?? null;
       if (prevReading != null && Math.abs(canonical - prevReading) >= WIRE_SWING_THRESHOLD) {
         const delta = canonical - prevReading;
-        await recordWireEvent(db, {
+        campaignWire.push({
           referendumId: ref._id!,
           countryId: ref.countryId,
           regionId: ref.regionId,
@@ -164,7 +256,7 @@ export async function processReferendumLifecycle(
           side: delta >= 0 ? "yes" : "no",
           delta: Number(delta.toFixed(2)),
           summary: `Yes ${delta >= 0 ? "surged" : "slipped"} ${delta >= 0 ? "+" : ""}${delta.toFixed(1)}.`,
-        }).catch(() => {});
+        });
       }
       // Live-seed an opening poll point for a campaign that predates poll history.
       let pollHistory = ref.pollHistory ?? [];
@@ -177,37 +269,21 @@ export async function processReferendumLifecycle(
       }
       pollHistory = upsertPollPoint(pollHistory, currentTurn, canonical);
 
-      if (ref.campaignCloseTurn != null && currentTurn >= ref.campaignCloseTurn) {
-        // Fold the final reading into the transition write.
-        await refs.updateOne(
-          { _id: ref._id },
-          {
-            $set: {
-              status: "polling",
-              pollHistory,
-              cohortBaseline: ref.cohortBaseline,
-              yesShare: canonical,
-              updatedAt: now,
-            },
-          }
-        );
-        transitions.push({ referendumId: id, from, to: "polling" });
-      } else {
-        // Display-only write — never let a snapshot failure break the turn.
-        await refs
-          .updateOne(
-            { _id: ref._id },
-            {
-              $set: {
-                pollHistory,
-                cohortBaseline: ref.cohortBaseline,
-                yesShare: canonical,
-                updatedAt: now,
-              },
-            }
-          )
-          .catch((err) => console.error(`${ref.regionId} poll snapshot write failed:`, err));
-      }
+      const closes = ref.campaignCloseTurn != null && currentTurn >= ref.campaignCloseTurn;
+      snapshots.push({
+        id: ref._id!,
+        filter: { _id: ref._id, status: "campaigning", updatedAt: ref.updatedAt },
+        set: {
+          ...(closes ? { status: "polling" as const } : {}),
+          pollHistory,
+          cohortBaseline: ref.cohortBaseline,
+          yesShare: canonical,
+          updatedAt: now,
+        },
+        from,
+        ...(closes ? { to: "polling" as const } : {}),
+        wire: campaignWire,
+      });
       continue;
     }
 
@@ -219,10 +295,17 @@ export async function processReferendumLifecycle(
         yesShare: canonicalYesShare,
         varianceRoll: seededVariance(
           id,
-          ref.kind === "peace_agreement" ? (ref.campaignCloseTurn ?? currentTurn) : currentTurn
+          ref.campaignCloseTurn ?? ref.grantedTurn ?? ref.requestedTurn
         ),
       });
-      await applyReferendumOutcome(db, ref, outcome, currentTurn);
+      if (ref.cohortBaseline?.length)
+        outcome.turnout = cohortTurnout(
+          ref.cohortBaseline,
+          ref.cohortModifiers ?? [],
+          GG_TURNOUT_MOD_CAP
+        );
+      const counted = await applyReferendumOutcome(db, ref, outcome, currentTurn);
+      if (!counted) continue;
       transitions.push({
         referendumId: id,
         from,
@@ -236,6 +319,11 @@ export async function processReferendumLifecycle(
     }
 
     if (ref.status === "actuating") {
+      if (ref.westminsterBillId == null) {
+        if (await cancelReferendum(db, ref, currentTurn, { cooldown: false }))
+          transitions.push({ referendumId: id, from, to: "cancelled" });
+        continue;
+      }
       // Reunification always gates on Westminster. An Ireland that was already
       // open to players when the referendum passed also gets a Dáil consent
       // bill; a dormant Ireland does not block the UK-side process.
@@ -301,8 +389,8 @@ export async function processReferendumLifecycle(
             console.error(`${ref.regionId} auto-conversion failed: ${res.error}`);
           }
         } else if (billFailed(westminster) || (dailRequired && billFailed(dail))) {
-          await cancelReferendum(db, ref, currentTurn, { cooldown: false });
-          transitions.push({ referendumId: id, from, to: "cancelled" });
+          if (await cancelReferendum(db, ref, currentTurn, { cooldown: false }))
+            transitions.push({ referendumId: id, from, to: "cancelled" });
         }
       }
 
@@ -348,13 +436,18 @@ export async function processReferendumLifecycle(
             console.error(`${ref.regionId} auto-secession failed: ${res.error}`);
           }
         } else if (billFailed(westminster)) {
-          await cancelReferendum(db, ref, currentTurn, { cooldown: false });
-          transitions.push({ referendumId: id, from, to: "cancelled" });
+          if (await cancelReferendum(db, ref, currentTurn, { cooldown: false }))
+            transitions.push({ referendumId: id, from, to: "cancelled" });
         }
       }
       continue;
     }
   }
 
+  for (const snapshot of await commitCampaignSnapshots(db, snapshots)) {
+    if (snapshot.to)
+      transitions.push({ referendumId: String(snapshot.id), from: snapshot.from, to: snapshot.to });
+    for (const event of snapshot.wire) await recordWireEvent(db, event).catch(() => {});
+  }
   return { processed: transitions.length, transitions };
 }

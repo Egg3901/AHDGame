@@ -34,7 +34,7 @@ describe("POST /api/singleplayer/shutdown", () => {
     mocks.command.mockResolvedValueOnce({ ok: 1 });
     const response = await POST(request());
     expect(response.status).toBe(200);
-    expect(mocks.command).toHaveBeenCalledWith({ shutdown: 1 });
+    expect(mocks.command).toHaveBeenCalledWith({ shutdown: 1, force: true });
   });
 
   it("treats the connection mongod drops while exiting as success", async () => {

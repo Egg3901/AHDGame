@@ -1,3 +1,4 @@
+import { withSessionDb, afterCommit } from "@/lib/db/sessionDb";
 /**
  * PM decision on a requested referendum. The Prime Minister grants it (opening
  * the campaign) or declines it (cooldown). There is no separate Commons consent
@@ -28,6 +29,8 @@ export interface GrantReferendumInput {
   /** True when the acting character is the sitting UK PM. */
   isPM: boolean;
   action: GrantReferendumAction;
+  /** Turn hosts supply the phase turn; HTTP callers use persisted GameState. */
+  currentTurn?: number;
   /** Admin override — bypasses the PM gate. Routes must verify the caller. */
   adminOverride?: boolean;
 }
@@ -41,6 +44,13 @@ export async function grantReferendum(
   db: Db,
   input: GrantReferendumInput
 ): Promise<GrantReferendumResult> {
+  return withSessionDb(db, (transactionDb) => grantReferendumInTransaction(transactionDb, input));
+}
+
+async function grantReferendumInTransaction(
+  db: Db,
+  input: GrantReferendumInput
+): Promise<GrantReferendumResult> {
   if (input.countryId !== "UK") {
     return { status: 400, body: { error: "Referendums are UK-only." } };
   }
@@ -48,6 +58,8 @@ export async function grantReferendum(
     return { status: 403, body: { error: "Only the Prime Minister can decide on a referendum." } };
   }
 
+  if (!ObjectId.isValid(input.referendumId))
+    return { status: 400, body: { error: "Invalid referendum ID." } };
   const refs = getReferendumCollection(db);
   const ref = await refs.findOne({ _id: new ObjectId(input.referendumId) });
   if (!ref) return { status: 404, body: { error: "Referendum not found." } };
@@ -55,11 +67,11 @@ export async function grantReferendum(
     return { status: 400, body: { error: "Referendum is not awaiting a decision." } };
   }
 
-  const currentTurn = await getCurrentTurn(db);
+  const currentTurn = input.currentTurn ?? (await getCurrentTurn(db));
 
   if (input.action === "decline") {
     await refs.updateOne(
-      { _id: ref._id },
+      { _id: ref._id, status: "requested" },
       {
         $set: {
           status: "declined",
@@ -84,7 +96,7 @@ export async function grantReferendum(
         },
       }
     );
-    await announceReferendumDecision(ref, "decline").catch(() => {});
+    await afterCommit(db, () => announceReferendumDecision(ref, "decline").catch(() => {}));
     await recordWireEvent(db, {
       referendumId: ref._id!,
       countryId: ref.countryId,
@@ -104,7 +116,7 @@ export async function grantReferendum(
     .findOne({ _id: ref.regionId });
   const baseYesShare = metric?.independenceDesire?.value ?? ref.yesShare;
   await refs.updateOne(
-    { _id: ref._id },
+    { _id: ref._id, status: "requested" },
     {
       $set: {
         status: "granted",
@@ -117,7 +129,7 @@ export async function grantReferendum(
       },
     }
   );
-  await announceReferendumDecision(ref, "grant").catch(() => {});
+  await afterCommit(db, () => announceReferendumDecision(ref, "grant").catch(() => {}));
   await recordWireEvent(db, {
     referendumId: ref._id!,
     countryId: ref.countryId,
