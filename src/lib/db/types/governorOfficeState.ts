@@ -27,6 +27,8 @@ export interface GovernorOfficeState {
 
   /** Office action points (cap GUBERNATORIAL_ACTION_CAP). */
   gubernatorialActions: number;
+  /** Request serialization counter. Runtime office rows are wiped on reset. */
+  referendumRequestRevision?: number;
   /** Turn when the AP pool last incremented. */
   lastActionGrantedTurn: number;
 

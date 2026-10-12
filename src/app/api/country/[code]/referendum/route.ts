@@ -6,7 +6,7 @@ import { getDb } from "@/lib/mongodb";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { getReferendumCollection } from "@/lib/db/collections/referendum";
 import { getCurrentTurn } from "@/lib/turn/currentTurn";
-import { getHeadOfGovernmentCharacterId } from "@/lib/api/headOfGovernment";
+import { canDecideReferendum } from "@/lib/referendum/pmAccess";
 import { isCountryEnabledForPlayers } from "@/lib/countryAccess";
 
 // GET /api/country/[code]/referendum
@@ -29,20 +29,21 @@ export async function GET(request: Request, { params }: { params: Promise<{ code
     if (!auth.ok) return auth.response;
 
     const db = await getDb();
-    const viewerId = String(auth.user.character._id);
 
     const pending = await getReferendumCollection(db)
-      .find({ countryId, status: { $in: ["requested", "granted", "campaigning", "actuating"] } })
+      .find({
+        countryId,
+        status: { $in: ["requested", "granted", "campaigning", "polling", "actuating"] },
+      })
       .sort({ requestedTurn: 1 })
       .toArray();
     const isAdmin = auth.user.isAdmin === true;
 
-    const [pmId, currentTurn, irelandPlayerEnabled] = await Promise.all([
-      getHeadOfGovernmentCharacterId(db, countryId),
+    const [isPM, currentTurn, irelandPlayerEnabled] = await Promise.all([
+      canDecideReferendum(db, auth.user.character._id),
       getCurrentTurn(db),
       isCountryEnabledForPlayers(db, "IE"),
     ]);
-    const isPM = pmId != null && String(pmId) === viewerId;
 
     // Current independence/reunification desire per region (0–100), so the card
     // can show the sentiment driving each request.

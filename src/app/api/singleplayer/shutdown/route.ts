@@ -23,7 +23,9 @@ export async function POST(request: Request) {
   if (denied) return denied;
   try {
     const client = await getMongoClient();
-    await client.db("admin").command({ shutdown: 1 });
+    // A single-node primary has no secondary to hand off to. Force skips
+    // that wait while still flushing and checkpointing the local database.
+    await client.db("admin").command({ shutdown: 1, force: true });
   } catch (error) {
     // mongod drops every connection as it exits, so the driver reports the
     // successful shutdown as a closed connection. Anything else is a failure.

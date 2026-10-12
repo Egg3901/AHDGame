@@ -19,12 +19,20 @@ export async function processIndependenceDesireDrift(
   const perRegion = await loadIndependenceDesireSnapshots(db);
   if (perRegion.length === 0) return null;
   const now = new Date();
-  const writes = perRegion.map(({ stateId, next, delta }) => ({
+  const writes = perRegion.map(({ stateId, previous, next, delta }) => ({
     updateOne: {
-      filter: { _id: stateId },
+      filter: {
+        _id: stateId,
+        $or: [
+          { "independenceDesire.value": previous },
+          { "independenceDesire.value": { $exists: false } },
+        ],
+      },
       update: { $set: { independenceDesire: { value: next, trend: delta }, lastUpdated: now } },
     },
   }));
-  await db.collection<MacroMetricsDoc>("macroMetrics").bulkWrite(writes);
-  return { regionsProcessed: writes.length, perRegion };
+  // A PM decision or referendum count may have changed Desire since the read.
+  // Leave that newer value intact; the next turn computes a fresh drift.
+  const result = await db.collection<MacroMetricsDoc>("macroMetrics").bulkWrite(writes);
+  return { regionsProcessed: result.matchedCount, perRegion };
 }

@@ -1,3 +1,4 @@
+import { boundSession } from "@/lib/db/sessionDb";
 import type { Db, AnyBulkWriteOperation, MongoServerError, ClientSession } from "mongodb";
 import type { Corporation, CorporateSector, ShareOrder, ShareListing } from "@/lib/db/types";
 import type { CurrencyCode } from "@/lib/constants/currencies";
@@ -410,32 +411,36 @@ export async function convertCorpCurrency(
     }
   };
 
-  try {
-    await runTransactionWithSessionRetry(getMongoClient, async (session) => {
-      // `session` is undefined on the standalone fallback path (topology probe
-      // returned false), where a partial write must be compensated by hand.
-      await applyCorpAndSectors({ session }, !session);
-    });
-  } catch (err) {
-    // Standalone mongods report TransactionNotSupported (code 20). Fall back
-    // to sequential writes so dev-on-standalone still functions — production
-    // Atlas always runs a replica set and gets the atomicity guarantee.
-    const code = (err as MongoServerError | undefined)?.code;
-    if (code === 20 || code === 263 /* IllegalOperation for sessions */) {
-      try {
-        await applyCorpAndSectors({}, true);
-      } catch (fallbackError) {
-        if (!(fallbackError instanceof CorpCurrencyConversionUncertainError))
+  const outerSession = boundSession(db);
+  if (outerSession) {
+    await applyCorpAndSectors({ session: outerSession }, false);
+  } else
+    try {
+      await runTransactionWithSessionRetry(getMongoClient, async (session) => {
+        // `session` is undefined on the standalone fallback path (topology probe
+        // returned false), where a partial write must be compensated by hand.
+        await applyCorpAndSectors({ session }, !session);
+      });
+    } catch (err) {
+      // Standalone mongods report TransactionNotSupported (code 20). Fall back
+      // to sequential writes so dev-on-standalone still functions — production
+      // Atlas always runs a replica set and gets the atomicity guarantee.
+      const code = (err as MongoServerError | undefined)?.code;
+      if (code === 20 || code === 263 /* IllegalOperation for sessions */) {
+        try {
+          await applyCorpAndSectors({}, true);
+        } catch (fallbackError) {
+          if (!(fallbackError instanceof CorpCurrencyConversionUncertainError))
+            await releaseTransitions();
+          throw fallbackError;
+        }
+      } else {
+        if (!(err instanceof CorpCurrencyConversionUncertainError)) {
           await releaseTransitions();
-        throw fallbackError;
+        }
+        throw err;
       }
-    } else {
-      if (!(err instanceof CorpCurrencyConversionUncertainError)) {
-        await releaseTransitions();
-      }
-      throw err;
     }
-  }
 
   await releaseTransitions();
 

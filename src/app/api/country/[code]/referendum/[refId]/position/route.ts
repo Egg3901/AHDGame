@@ -46,6 +46,7 @@ export async function POST(
       return errorResponse(400, "Pick a side.");
     }
 
+    if (!ObjectId.isValid(refId)) return errorResponse(400, "Invalid referendum ID.");
     const db = await getDb();
     const ref = await getReferendumCollection(db).findOne({ _id: new ObjectId(refId) });
     if (!ref) return errorResponse(404, "Referendum not found.");

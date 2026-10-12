@@ -46,7 +46,7 @@ function inTurns(targetTurn: number | null, currentTurn: number): string {
 function statusLine(ref: ReferendumSummary, currentTurn: number): string {
   switch (ref.status) {
     case "requested":
-      return "Requested — awaiting the Prime Minister to put it to the House of Commons.";
+      return "Requested: awaiting the Prime Minister's decision.";
     case "granted":
     case "campaigning":
       return ref.campaignCloseTurn != null
@@ -164,7 +164,8 @@ export function ReferendumPanel({ countryId, stateId, currentTurn, viewerCanMana
           {!ref && (
             <p className="text-sm text-muted">
               With sufficient {noun.toLowerCase()} desire, the First Minister may formally request a
-              referendum. The Prime Minister must then put it to the House of Commons.
+              referendum. The Prime Minister then grants or declines the request. An NPP ministry
+              acts after 24 turns if its party leadership has not decided sooner.
             </p>
           )}
           {/* The cooldown line above already explains a cooldown block, so only

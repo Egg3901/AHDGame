@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { type Db } from "mongodb";
+import { ObjectId, type Db } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 import { createReunificationConsentBills } from "./reunificationBills";
 import { CONVERSION_WINDOW_TURNS } from "@/lib/constants/referendum";
@@ -67,6 +67,27 @@ describe("createReunificationConsentBills", () => {
 
     expect(String(ids.westminsterBillId)).toBe(String(uk._id));
     expect(String(ids.dailBillId)).toBe(String(ie._id));
+  });
+
+  it("keeps UK party declarations out of the Irish consent vote", async () => {
+    const ref = refDoc();
+    ref.partyPositions = [
+      { partyId: "1", side: "no", declaredByCharacterId: new ObjectId(), declaredTurn: 120 },
+    ];
+    await createReunificationConsentBills(db as unknown as Db, ref, 176);
+    const bills = db
+      .collection("bills")
+      .insertOne.mock.calls.map(
+        (call: [{ countryId: string; referendumConsent: { partyPositions: unknown[] } }]) => call[0]
+      );
+    expect(
+      bills.find((b: { countryId: string }) => b.countryId === "UK")!.referendumConsent
+        .partyPositions
+    ).toEqual([{ partyId: "1", side: "no" }]);
+    expect(
+      bills.find((b: { countryId: string }) => b.countryId === "IE")!.referendumConsent
+        .partyPositions
+    ).toEqual([]);
   });
 
   it("omits the Dáil bill while Ireland is not player enabled", async () => {

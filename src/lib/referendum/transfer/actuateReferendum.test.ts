@@ -1,5 +1,11 @@
+vi.mock("@/lib/db/sessionDb", () => ({
+  boundSession: () => undefined,
+  unboundDb: (db: unknown) => db,
+  withSessionDb: (_db: unknown, work: (db: unknown) => Promise<unknown>) => work(_db),
+  afterCommit: (_db: unknown, effect: () => Promise<unknown>) => effect(),
+}));
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { type Db } from "mongodb";
+import { ObjectId, type Db } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 
 vi.mock("./transferRegion", () => ({
@@ -43,6 +49,8 @@ const reunification = {
   regionId: "NIR",
   countryId: "UK",
   targetCountryId: "IE",
+  westminsterBillId: new ObjectId(),
+  dailBillId: null,
 };
 
 describe("actuateReferendumTransfer", () => {
@@ -50,6 +58,7 @@ describe("actuateReferendumTransfer", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     db = createMockDb();
+    db.collection("bills").find.mockReturnValue({ toArray: async () => [{ status: "signed" }] });
   });
 
   it("resolve: transfers the region and marks the referendum completed", async () => {
@@ -66,7 +75,7 @@ describe("actuateReferendumTransfer", () => {
       toCountryId: "IE",
       province: "Ulster",
     });
-    expect(db.collectionMocks["referendums"].updateOne.mock.calls[0][1].$set.status).toBe(
+    expect(db.collectionMocks["referendums"].updateOne.mock.calls.at(-1)![1].$set.status).toBe(
       "completed"
     );
     expect(recordWireEvent).toHaveBeenCalledWith(
@@ -148,7 +157,7 @@ describe("actuateReferendumTransfer", () => {
     expect(res.status).toBe(404);
   });
 
-  it("completes idempotently when the region was already transferred", async () => {
+  it("does not certify an interrupted legacy transfer from the map alone", async () => {
     vi.mocked(transferRegion).mockResolvedValueOnce({ ok: true, skipped: "already-transferred" });
     setRef(db, reunification);
     const res = await actuateReferendumTransfer(db as unknown as Db, {
@@ -156,9 +165,47 @@ describe("actuateReferendumTransfer", () => {
       currentTurn: 300,
       action: "resolve",
     });
-    expect(res.status).toBe(200);
-    expect(db.collectionMocks["referendums"].updateOne.mock.calls[0][1].$set.status).toBe(
-      "completed"
-    );
+    expect(res.status).toBe(400);
+    expect(res.body.error).toContain("require review");
+    expect(
+      db
+        .collection("referendums")
+        .updateOne.mock.calls.some(
+          (call: [unknown, { $set?: { status?: string } }]) => call[1].$set?.status === "completed"
+        )
+    ).toBe(false);
+  });
+  it("requires Irish consent when a Dail bill was issued", async () => {
+    setRef(db, { ...reunification, dailBillId: new ObjectId() });
+    db.collection("bills").find.mockReturnValue({
+      toArray: async () => [{ status: "signed" }, { status: "active" }],
+    });
+    const res = await actuateReferendumTransfer(db as unknown as Db, {
+      referendumId: REF_ID,
+      currentTurn: 300,
+      action: "resolve",
+    });
+    expect(res.status).toBe(400);
+    expect(transferRegion).not.toHaveBeenCalled();
+  });
+  it("does not withdraw bills when cancellation loses a race to completion", async () => {
+    setRef(db, reunification);
+    db.collection("referendums").updateOne.mockResolvedValueOnce({ modifiedCount: 0 });
+    const res = await actuateReferendumTransfer(db as unknown as Db, {
+      referendumId: REF_ID,
+      currentTurn: 300,
+      action: "block",
+    });
+    expect(res.status).toBe(409);
+    expect(db.collection("bills").updateMany).not.toHaveBeenCalled();
+  });
+  it("rejects a malformed identifier without querying Mongo", async () => {
+    const res = await actuateReferendumTransfer(db as unknown as Db, {
+      referendumId: "bad",
+      currentTurn: 300,
+      action: "resolve",
+    });
+    expect(res.status).toBe(400);
+    expect(db.collection("referendums").findOne).not.toHaveBeenCalled();
   });
 });

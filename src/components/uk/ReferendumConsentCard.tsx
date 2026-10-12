@@ -221,7 +221,7 @@ export function ReferendumConsentCard({
                       (r.conversionDeadlineTurn > currentTurn
                         ? r.kind === "reunification"
                           ? ` The ${r.dailConsentRequired ? "bills' votes" : "bill's vote"} close${r.dailConsentRequired ? "" : "s"} in ${r.conversionDeadlineTurn - currentTurn} turns.`
-                          : ` Converts automatically in ${r.conversionDeadlineTurn - currentTurn} turns unless blocked.`
+                          : ` Consent voting is scheduled to close in ${r.conversionDeadlineTurn - currentTurn} turns; conversion follows enactment.`
                         : " Resolving…")}
                   </p>
                   {isAdmin && (

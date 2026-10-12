@@ -1,3 +1,10 @@
+import { grantReferendum } from "./grantReferendum";
+import { nppReferendumDecision } from "./rules/decisions";
+import { getGovernmentFormationsCollection } from "@/lib/db/collections/governmentFormation";
+import type { GovernorOfficeState } from "@/lib/db/types/governorOfficeState";
+import { getNationalStateId } from "@/lib/policy/nationalStateId";
+import { cohortTurnout } from "./rules/cohorts";
+import { GG_TURNOUT_MOD_CAP } from "@/lib/constants/referendum";
 /**
  * Per-turn driver for the referendum state machine. Advances every active
  * referendum one edge per turn (the PM's grant/decline and the bill votes are
@@ -71,7 +78,13 @@ async function buildCohortBaseline(
     : [{ groupId: "_all", share: 1, turnout: 60, yesLean: regionDesire }];
 }
 
-const ACTIVE_STATUSES: ReferendumStatus[] = ["granted", "campaigning", "polling", "actuating"];
+const ACTIVE_STATUSES: ReferendumStatus[] = [
+  "requested",
+  "granted",
+  "campaigning",
+  "polling",
+  "actuating",
+];
 
 export interface ReferendumLifecycleResult {
   processed: number;
@@ -100,6 +113,15 @@ export async function processReferendumLifecycle(
   const active = await refs.find({ status: { $in: ACTIVE_STATUSES } }).toArray();
   if (active.length === 0) return null;
 
+  const hasRequests = active.some((ref) => ref.status === "requested");
+  const ministry = hasRequests
+    ? await getGovernmentFormationsCollection(db).findOne({ _id: "UK" })
+    : null;
+  const nationalOffice = hasRequests
+    ? await db
+        .collection<GovernorOfficeState>("governorOfficeState")
+        .findOne({ countryId: "UK", stateId: getNationalStateId("UK") })
+    : null;
   const transitions: ReferendumLifecycleResult["transitions"] = [];
   const now = new Date();
 
@@ -107,6 +129,35 @@ export async function processReferendumLifecycle(
     const id = String(ref._id);
     const from = ref.status;
 
+    if (ref.status === "requested") {
+      if (
+        ref.countryId === "UK" &&
+        ministry?.status === "formed" &&
+        ministry.pmNppId &&
+        !ministry.pmCharacterId
+      ) {
+        const policy =
+          nationalOffice?.westminsterStances?.[ref.regionId as "SCO" | "WAL" | "NIR"]?.policy ??
+          "anti";
+        const action = nppReferendumDecision(currentTurn, ref.requestedTurn, policy);
+        if (action) {
+          const decision = await grantReferendum(db, {
+            countryId: "UK",
+            referendumId: id,
+            isPM: true,
+            currentTurn,
+            action,
+          });
+          if (decision.status === 200)
+            transitions.push({
+              referendumId: id,
+              from,
+              to: action === "grant" ? "granted" : "declined",
+            });
+        }
+      }
+      continue;
+    }
     if (ref.status === "granted") {
       // Seed the opening poll point at the campaign's baseline + snapshot the
       // cohort model (anchored to the same baseline desire).
@@ -122,10 +173,11 @@ export async function processReferendumLifecycle(
         openDesire,
         ref.kind === "peace_agreement"
       );
-      await refs.updateOne(
-        { _id: ref._id },
+      const opened = await refs.updateOne(
+        { _id: ref._id, status: ref.status, updatedAt: ref.updatedAt },
         { $set: { status: "campaigning", pollHistory, cohortBaseline, updatedAt: now } }
       );
+      if (opened.modifiedCount === 0) continue;
       await recordWireEvent(db, {
         referendumId: ref._id!,
         countryId: ref.countryId,
@@ -179,8 +231,8 @@ export async function processReferendumLifecycle(
 
       if (ref.campaignCloseTurn != null && currentTurn >= ref.campaignCloseTurn) {
         // Fold the final reading into the transition write.
-        await refs.updateOne(
-          { _id: ref._id },
+        const closed = await refs.updateOne(
+          { _id: ref._id, status: "campaigning", updatedAt: ref.updatedAt },
           {
             $set: {
               status: "polling",
@@ -191,12 +243,12 @@ export async function processReferendumLifecycle(
             },
           }
         );
-        transitions.push({ referendumId: id, from, to: "polling" });
+        if (closed.modifiedCount !== 0) transitions.push({ referendumId: id, from, to: "polling" });
       } else {
         // Display-only write — never let a snapshot failure break the turn.
         await refs
           .updateOne(
-            { _id: ref._id },
+            { _id: ref._id, status: ref.status, updatedAt: ref.updatedAt },
             {
               $set: {
                 pollHistory,
@@ -219,10 +271,17 @@ export async function processReferendumLifecycle(
         yesShare: canonicalYesShare,
         varianceRoll: seededVariance(
           id,
-          ref.kind === "peace_agreement" ? (ref.campaignCloseTurn ?? currentTurn) : currentTurn
+          ref.campaignCloseTurn ?? ref.grantedTurn ?? ref.requestedTurn
         ),
       });
-      await applyReferendumOutcome(db, ref, outcome, currentTurn);
+      if (ref.cohortBaseline?.length)
+        outcome.turnout = cohortTurnout(
+          ref.cohortBaseline,
+          ref.cohortModifiers ?? [],
+          GG_TURNOUT_MOD_CAP
+        );
+      const counted = await applyReferendumOutcome(db, ref, outcome, currentTurn);
+      if (!counted) continue;
       transitions.push({
         referendumId: id,
         from,
@@ -236,6 +295,11 @@ export async function processReferendumLifecycle(
     }
 
     if (ref.status === "actuating") {
+      if (ref.westminsterBillId == null) {
+        if (await cancelReferendum(db, ref, currentTurn, { cooldown: false }))
+          transitions.push({ referendumId: id, from, to: "cancelled" });
+        continue;
+      }
       // Reunification always gates on Westminster. An Ireland that was already
       // open to players when the referendum passed also gets a Dáil consent
       // bill; a dormant Ireland does not block the UK-side process.
@@ -301,8 +365,8 @@ export async function processReferendumLifecycle(
             console.error(`${ref.regionId} auto-conversion failed: ${res.error}`);
           }
         } else if (billFailed(westminster) || (dailRequired && billFailed(dail))) {
-          await cancelReferendum(db, ref, currentTurn, { cooldown: false });
-          transitions.push({ referendumId: id, from, to: "cancelled" });
+          if (await cancelReferendum(db, ref, currentTurn, { cooldown: false }))
+            transitions.push({ referendumId: id, from, to: "cancelled" });
         }
       }
 
@@ -348,8 +412,8 @@ export async function processReferendumLifecycle(
             console.error(`${ref.regionId} auto-secession failed: ${res.error}`);
           }
         } else if (billFailed(westminster)) {
-          await cancelReferendum(db, ref, currentTurn, { cooldown: false });
-          transitions.push({ referendumId: id, from, to: "cancelled" });
+          if (await cancelReferendum(db, ref, currentTurn, { cooldown: false }))
+            transitions.push({ referendumId: id, from, to: "cancelled" });
         }
       }
       continue;

@@ -41,7 +41,7 @@ The final vote adds a deterministic swing of up to 4 percentage points. Yes must
 
 ## What a passing vote changes
 
-A passing vote enters a 24-turn conversion window. Independence requires the Westminster consent bill before the new country is created. Northern Ireland reunification always requires a Westminster release bill. If Ireland is already open to players when the referendum passes, it also requires a Dáil admission bill. Otherwise Ireland opens to players automatically when the transfer completes. If the required consent is in place, the region transfers automatically when the window closes. An admin can resolve or block the conversion early.
+A passing vote opens a 24-turn parliamentary consent ballot. Independence requires the Westminster consent bill before the new country is created. Northern Ireland reunification always requires a Westminster release bill. If Ireland is already open to players when the referendum passes, it also requires a Dáil admission bill. Otherwise Ireland opens to players automatically when the transfer completes. Once the required consent bills are enacted, the region transfers automatically. Government formation and Royal Assent may extend the process. An admin can block conversion or resolve it after the required consent is enacted.
 
 The transfer updates regional ownership, offices, parties, elections, corporations, natural resources, and the affected country maps. It is a world-state change, not a cosmetic result.
 

@@ -73,3 +73,17 @@ describe("convertTransferredResidentsCurrency", () => {
     expect(convertCorpCurrency).not.toHaveBeenCalled();
   });
 });
+
+it("refuses strict conversion when exchange rates are missing", async () => {
+  const db = createMockDb();
+  const { loadFxScalePair } = await import("@/lib/country/mergeFxScale");
+  const spy = vi
+    .spyOn(await import("@/lib/country/mergeFxScale"), "loadFxScalePair")
+    .mockResolvedValueOnce({ kind: "missing-rate" });
+  await expect(
+    convertTransferredResidentsCurrency(db as unknown as Db, "NIR", "UK", "IE", true)
+  ).rejects.toThrow("exchange rates");
+  expect(db.collection("characters").updateOne).not.toHaveBeenCalled();
+  spy.mockRestore();
+  void loadFxScalePair;
+});

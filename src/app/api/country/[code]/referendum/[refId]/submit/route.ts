@@ -4,7 +4,7 @@ import { handleRouteError, errorResponse, statusResponse } from "@/lib/api/error
 import { parseJsonBody } from "@/lib/api/validate";
 import { getDb } from "@/lib/mongodb";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
-import { getHeadOfGovernmentCharacterId } from "@/lib/api/headOfGovernment";
+import { canDecideReferendum } from "@/lib/referendum/pmAccess";
 import { grantReferendum } from "@/lib/referendum/grantReferendum";
 
 // POST /api/country/[code]/referendum/[refId]/submit
@@ -43,8 +43,7 @@ export async function POST(
 
     const isAdmin = auth.user.isAdmin === true;
     const adminOverride = parsed.data.adminOverride === true && isAdmin;
-    const pmId = await getHeadOfGovernmentCharacterId(db, countryId);
-    const isPM = pmId != null && pmId.equals(auth.user.character._id);
+    const isPM = await canDecideReferendum(db, auth.user.character._id);
 
     const result = await grantReferendum(db, {
       countryId,

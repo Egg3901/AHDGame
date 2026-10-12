@@ -1,3 +1,4 @@
+import { withSessionDb, afterCommit } from "@/lib/db/sessionDb";
 /**
  * Domain logic for a UK First Minister requesting an independence /
  * reunification referendum. Mirrors the changeDevolutionPolicy contract:
@@ -46,6 +47,13 @@ export async function requestReferendum(
   db: Db,
   input: RequestReferendumInput
 ): Promise<RequestReferendumResult> {
+  return withSessionDb(db, (transactionDb) => requestReferendumInTransaction(transactionDb, input));
+}
+
+async function requestReferendumInTransaction(
+  db: Db,
+  input: RequestReferendumInput
+): Promise<RequestReferendumResult> {
   const { countryId } = input;
   const stateId = input.stateId.toUpperCase();
   const adminOverride = input.adminOverride === true;
@@ -58,6 +66,10 @@ export async function requestReferendum(
   const currentTurn = await getCurrentTurn(db);
   const refs = getReferendumCollection(db);
 
+  // A shared office write serializes requests even when an admin pays no AP.
+  await db
+    .collection<GovernorOfficeState>("governorOfficeState")
+    .updateOne({ countryId, stateId }, { $inc: { referendumRequestRevision: 1 } });
   const active = await refs.findOne({ regionId: stateId, status: { $in: ACTIVE_STATUSES } });
   const lastTerminal = await refs
     .find({ regionId: stateId, status: { $in: TERMINAL_STATUSES } })
@@ -75,13 +87,14 @@ export async function requestReferendum(
     cooldownReadyAtTurn: lastTerminal[0]?.cooldownReadyAtTurn ?? null,
     currentTurn,
   });
+  if (active) return { status: 400, body: { error: "A referendum is already in progress." } };
   if (!elig.eligible && !adminOverride) return { status: 400, body: { error: elig.reason } };
 
   const office = await db
     .collection<GovernorOfficeState>("governorOfficeState")
     .findOne({ countryId, stateId });
   if (!office) return { status: 400, body: { error: "Office state row missing." } };
-  if (!adminOverride && office.gubernatorialActions < REQUEST_AP_COST) {
+  if (!adminOverride && (office.gubernatorialActions ?? 0) < REQUEST_AP_COST) {
     return { status: 400, body: { error: "Insufficient office action points." } };
   }
 
@@ -108,9 +121,22 @@ export async function requestReferendum(
     createdAt: now,
     updatedAt: now,
   };
+  if (!adminOverride) {
+    const debit = await db
+      .collection<GovernorOfficeState>("governorOfficeState")
+      .updateOne(
+        { countryId, stateId, gubernatorialActions: { $gte: REQUEST_AP_COST } },
+        { $inc: { gubernatorialActions: -REQUEST_AP_COST }, $set: { updatedAt: now } }
+      );
+    if (debit.modifiedCount === 0)
+      return { status: 400, body: { error: "Insufficient office action points." } };
+  }
+
   const ins = await refs.insertOne(doc);
 
-  await announceReferendumRequested({ ...doc, _id: ins.insertedId }).catch(() => {});
+  await afterCommit(db, () =>
+    announceReferendumRequested({ ...doc, _id: ins.insertedId }).catch(() => {})
+  );
   await recordWireEvent(db, {
     referendumId: ins.insertedId,
     countryId,
@@ -121,15 +147,6 @@ export async function requestReferendum(
       kind === "reunification" ? "reunification" : "independence"
     } referendum.`,
   }).catch(() => {});
-
-  if (!adminOverride) {
-    await db
-      .collection<GovernorOfficeState>("governorOfficeState")
-      .updateOne(
-        { countryId, stateId },
-        { $inc: { gubernatorialActions: -REQUEST_AP_COST }, $set: { updatedAt: now } }
-      );
-  }
 
   return { status: 200, body: { referendumId: String(ins.insertedId), kind } };
 }
