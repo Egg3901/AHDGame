@@ -461,6 +461,15 @@ export interface SectorClearingResult {
   effectivePosture: number;
   /** Exact quoted offer factor per output, before sold quantity is applied. */
   offerFactorByCommodity?: Partial<Record<CommodityType, number>>;
+  /**
+   * Each output's share of the sector's realized revenue this pass (weight x
+   * sold x offer factor, normalized to sum to 1). Telemetry only: the money
+   * path still uses the blended `factor`. The sector page uses it to split
+   * the blended "sold at" price into a sale price per product, which matters
+   * when outputs are priced far apart (ordnance vs. industrial chemicals).
+   * Absent when nothing sold.
+   */
+  revenueShareByCommodity?: Partial<Record<CommodityType, number>>;
   /** Project-owned offer identity and units, carried through commodity clearing. */
   productProjectId?: string;
   productOutputTurn?: number;
@@ -989,6 +998,7 @@ export function computeClearingFactors(args: {
     const marketSupplyShareByCommodity: Partial<Record<CommodityType, number>> = {};
     const deliveredUnitsByCommodity: Partial<Record<CommodityType, number>> = {};
     const offerFactorByCommodity: Partial<Record<CommodityType, number>> = {};
+    const revenueWeightByCommodity: Partial<Record<CommodityType, number>> = {};
     const regulationBlockedByCommodity: Partial<Record<CommodityType, number>> = {};
     let blockedSum = 0;
     const sectorGroup = args.groupBySector?.get(s.sectorId);
@@ -1043,6 +1053,7 @@ export function computeClearingFactors(args: {
       offerFactorByCommodity[commodity] = offerFactor;
       rateSum += weight;
       factorSum += weight * sold * offerFactor;
+      revenueWeightByCommodity[commodity] = weight * sold * offerFactor;
       quotedPostureSum += weight * (offerFactor / priceLeg - 1);
       soldSum += weight * sold;
       soldByCommodity[commodity] = sold;
@@ -1059,6 +1070,15 @@ export function computeClearingFactors(args: {
           deliveredByCommodityBySector.get(commodity)?.get(s.sectorId) ?? 0;
     }
     if (rateSum <= 0) continue;
+    const revenueShareByCommodity: Partial<Record<CommodityType, number>> = {};
+    if (factorSum > 0 && Number.isFinite(factorSum)) {
+      for (const [commodity, revenueWeight] of Object.entries(revenueWeightByCommodity) as Array<
+        [CommodityType, number]
+      >) {
+        if (Number.isFinite(revenueWeight) && revenueWeight > 0)
+          revenueShareByCommodity[commodity] = revenueWeight / factorSum;
+      }
+    }
     const projectSoldUnitsByCommodity = Object.fromEntries(
       Object.entries(s.projectOutputUnitsByCommodity ?? {}).map(([commodity, units]) => [
         commodity,
@@ -1076,6 +1096,7 @@ export function computeClearingFactors(args: {
         : {}),
       effectivePosture: s.inputCostIndex !== undefined ? quotedPostureSum / rateSum : posture,
       offerFactorByCommodity,
+      ...(Object.keys(revenueShareByCommodity).length > 0 ? { revenueShareByCommodity } : {}),
       ...(s.productProjectId
         ? {
             productProjectId: s.productProjectId,
