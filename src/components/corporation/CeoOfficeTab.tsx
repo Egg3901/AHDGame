@@ -1,5 +1,6 @@
 "use client";
 
+import InternalSupplyPanel from "./InternalSupplyPanel";
 import { useCallback } from "react";
 import { isSprawlExemptSectorType, type OperatingSectorType } from "@/lib/constants/corporations";
 import {
@@ -267,6 +268,8 @@ export default function CeoOfficeTab({
           onSaveSettings={handleSaveSettings}
         />
       </div>
+
+      <InternalSupplyPanel key={corpId} corpId={corpId} />
 
       <CeoOperationsTable
         corporation={corporation}

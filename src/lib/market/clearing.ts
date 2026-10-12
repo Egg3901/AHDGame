@@ -1,3 +1,8 @@
+import {
+  reserveInternalSupply,
+  finishInternalSupplyCommodity,
+  type InternalSupplyClearing,
+} from "./internalSupply/clearing";
 import { normalizedOfferShare } from "./rules/demandAllocation";
 import { capDeliveredMediaUnits, type MediaOwnershipMarket } from "@/lib/mediaRegulation/rules";
 import type { CommodityType } from "@/lib/constants/commodities";
@@ -475,6 +480,8 @@ export interface SectorClearingResult {
  */
 export function computeClearingFactors(args: {
   sectors: readonly SectorClearingInput[];
+  /** Optional own-group supply policy, inert when omitted. */
+  internalSupply?: InternalSupplyClearing;
   /** Enabled ownership laws constrain actual advertising fills before receipts. */
   mediaOwnership?: MediaOwnershipMarket;
   recordDelivery?: boolean;
@@ -881,11 +888,32 @@ export function computeClearingFactors(args: {
         }
       }
 
+      const internalReservations =
+        args.internalSupply && args.sectorCorpId
+          ? reserveInternalSupply({
+              context: args.internalSupply,
+              commodity,
+              sellers: groupSellers,
+              corporationBySector: args.sectorCorpId,
+              committed: contractedUnitsById,
+              book: g,
+              bookForSector: (id) => bookKeyFor(commodity, id),
+              supply: Math.min(laggedSupply, offeredUnits),
+              demand: bal?.demand ?? 0,
+              reservationRoom: Math.max(
+                0,
+                demandForPass -
+                  [...(contractedUnitsById?.values() ?? [])].reduce((n, u) => n + u, 0)
+              ),
+              marketPrice:
+                basePrices[commodity] * realizedPriceFor(commodity, groupSellers[0]?.id ?? ""),
+            })
+          : undefined;
       const groupSold = clearCommodityMarket(
         demandForPass,
         groupSellers,
         loyaltyBySectorId,
-        contractedUnitsById
+        internalReservations ?? contractedUnitsById
       );
       for (const [id, f] of groupSold) sold.set(id, f);
     }
@@ -922,6 +950,14 @@ export function computeClearingFactors(args: {
       }
       regulationBlockedByCommodityBySector.set(commodity, blocked);
     }
+    if (args.internalSupply)
+      finishInternalSupplyCommodity(
+        args.internalSupply,
+        commodity,
+        sold,
+        sellers,
+        contractedShareBySector
+      );
     soldByCommodityBySector.set(commodity, sold);
     if (args.recordDelivery)
       deliveredByCommodityBySector.set(
