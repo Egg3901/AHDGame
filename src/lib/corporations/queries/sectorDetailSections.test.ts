@@ -138,7 +138,11 @@ describe("pledged property sale affordability", () => {
     const viewer = makeCorp({ liquidCurrencyCode: "EUR", liquidCapital: 300_500 });
     const sector = makeSector({
       forSale: { priceAnchor: 150_000, listedAt: new Date(0), npvAnchor: 150_000, pledged: true },
-      constructionFinancing: { currency: "USD" } as CorporateSector["constructionFinancing"],
+      constructionFinancing: {
+        currency: "USD",
+        loanFunded: true,
+        status: "building",
+      } as CorporateSector["constructionFinancing"],
     });
     memory.seed("corporateSectors", []);
     const args = { sector, viewerCorporation: viewer, isCeo: false, viewerCorpFxRate: 2 };
@@ -163,6 +167,53 @@ describe("pledged property sale affordability", () => {
       conflict: true,
       eligible: false,
     });
+  });
+});
+
+describe("unavailable sector purchases", () => {
+  it("rejects a merge into a buyer's protected construction property", async () => {
+    const memory = createInMemoryDb();
+    const viewer = makeCorp({ liquidCapital: 1000 });
+    const sector = makeSector({
+      forSale: { priceAnchor: 100, listedAt: new Date(0), npvAnchor: 125 },
+    });
+    memory.seed("corporateSectors", [
+      {
+        ...makeSector({
+          corporationId: viewer._id,
+          constructionFinancing: {
+            status: "building",
+            escrowLocal: 100,
+          } as CorporateSector["constructionFinancing"],
+        }),
+      },
+    ]);
+    expect(
+      await buildSectorForSaleInfo(memory as unknown as Db, {
+        sector,
+        viewerCorporation: viewer,
+        isCeo: false,
+        viewerCorpFxRate: 1,
+      })
+    ).toMatchObject({ hasFunds: true, eligible: false });
+  });
+
+  it("includes the ordinary acquisition FX fee in affordability", async () => {
+    const memory = createInMemoryDb();
+    const viewer = makeCorp({ liquidCurrencyCode: "EUR", liquidCapital: 300500 });
+    const sector = makeSector({
+      forSale: { priceAnchor: 150000, listedAt: new Date(0), npvAnchor: 150000 },
+    });
+    memory.seed("corporateSectors", []);
+    expect(
+      await buildSectorForSaleInfo(memory as unknown as Db, {
+        sector,
+        viewerCorporation: viewer,
+        isCeo: false,
+        viewerCorpFxRate: 2,
+        sellerCurrency: "USD",
+      })
+    ).toMatchObject({ hasFunds: false, eligible: false, priceInViewerCapital: 301500 });
   });
 });
 

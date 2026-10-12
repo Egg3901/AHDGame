@@ -23,6 +23,8 @@ import { SubsidiaryManagementCard } from "@/components/corporation/SubsidiaryMan
 import { PrivatizationVotePanel } from "@/components/corporation/PrivatizationVotePanel";
 import { ManagePrivateShareholdersPanel } from "@/components/corporation/ManagePrivateShareholdersPanel";
 import PrivateSalePanel from "@/components/corporation/shares/PrivateSalePanel";
+import IndexCommitteePanel from "@/components/corporation/IndexCommitteePanel";
+import SponsoredFundPanel from "@/components/corporation/SponsoredFundPanel";
 import { NationalizationStatusCard } from "@/components/corporation/NationalizationStatusCard";
 import BondMaturityNotice from "@/components/corporation/BondMaturityNotice";
 import PrivateNotListedNotice from "@/components/corporation/PrivateNotListedNotice";
@@ -264,8 +266,11 @@ export default function CorporationDetailPage() {
     let cancelled = false;
     void fetch(`/api/banking/corporation/${id}`)
       .then(async (res) => {
-        const json = (await res.json().catch(() => ({}))) as { visible?: boolean };
-        if (!cancelled) setShowBankTab(json.visible === true);
+        const json = (await res.json().catch(() => ({}))) as {
+          charter?: unknown;
+          canIssueCharter?: boolean;
+        };
+        if (!cancelled) setShowBankTab(!!json.charter || json.canIssueCharter === true);
       })
       .catch(() => {
         if (!cancelled) setShowBankTab(false);
@@ -801,11 +806,11 @@ export default function CorporationDetailPage() {
 
   const visibleTabs = [
     ...gatedTabs,
-    ...(isCeo && !isNationalCorp ? [DEALS_TAB] : []),
+    ...(isCeo && !isNationalCorp && corporation.canManageAcquisitions ? [DEALS_TAB] : []),
     ...(showStructureTab ? [STRUCTURE_TAB] : []),
     ...(isCeo && !isNationalCorp ? [CEO_TAB] : []),
   ];
-  const bankVisible = showBankTab || sectors.some((s) => s.sectorType === "financial");
+  const bankVisible = showBankTab;
   const navTabs = [
     ...buildCorpNavTabs(visibleTabs, {
       badges: {
@@ -903,7 +908,17 @@ export default function CorporationDetailPage() {
           showBanner={activeTab === "overview"}
         />
 
-        <NationalizationStatusCard corpId={id} />
+        <NationalizationStatusCard
+          corpId={id}
+          hasExposure={
+            isCeo ||
+            corporation.shareholders?.some(
+              (holder) =>
+                (!!myCharacterId && holder.characterId === myCharacterId) ||
+                (!!myCorporation?.id && holder.corporationId === myCorporation.id)
+            ) === true
+          }
+        />
 
         {/* Bond principal is repaid in one lump on the maturity turn, and that
             debit is inside the same negative-liquid-capital test that declares a
@@ -1150,7 +1165,7 @@ export default function CorporationDetailPage() {
                         <EditorialStancePanel
                           corporationId={id}
                           stance={corporation.editorialStance}
-                          isCeo={isCeo}
+                          isCeo={corporation.canEditEditorialStance === true}
                           onSaved={() => void fetchCorporation()}
                         />
                       )}
@@ -1331,16 +1346,8 @@ export default function CorporationDetailPage() {
                   />
                 )}
 
-                {tab === "deals" && (
-                  <DealsTab
-                    corpId={id}
-                    isCeo={isCeo}
-                    canSponsorFund={
-                      corporation.type === "financial" ||
-                      corporation.secondaryType === "financial" ||
-                      sectors.some((s) => s.sectorType === "financial")
-                    }
-                  />
+                {tab === "deals" && corporation.canManageAcquisitions && (
+                  <DealsTab corpId={id} isCeo={isCeo} />
                 )}
 
                 {tab === "structure" && (
@@ -1359,16 +1366,20 @@ export default function CorporationDetailPage() {
                 )}
 
                 {tab === "ceo" && isCeo && financials && (
-                  <CeoOfficeTab
-                    corporation={corporation}
-                    financials={financials}
-                    sectors={sectors}
-                    corpId={id}
-                    currentTurn={corporation.currentTurn ?? 0}
-                    onRefresh={fetchCorporation}
-                    myCashOnHand={myCashOnHand}
-                    myCurrencyBalances={myCurrencyBalances}
-                  />
+                  <div className="space-y-6">
+                    <IndexCommitteePanel corpId={id} />
+                    <SponsoredFundPanel corpId={id} />
+                    <CeoOfficeTab
+                      corporation={corporation}
+                      financials={financials}
+                      sectors={sectors}
+                      corpId={id}
+                      currentTurn={corporation.currentTurn ?? 0}
+                      onRefresh={fetchCorporation}
+                      myCashOnHand={myCashOnHand}
+                      myCurrencyBalances={myCurrencyBalances}
+                    />
+                  </div>
                 )}
               </div>
             );

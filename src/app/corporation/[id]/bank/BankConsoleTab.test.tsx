@@ -48,7 +48,8 @@ const payload = {
     ownsFinancial: true,
   },
   currency: "USD",
-  legalCharterTypes: ["retail"],
+  legalCharterTypes: ["retail", "investment"],
+  switchableTypes: ["investment"],
   eligibleTypes: ["retail"],
   eligibilityReasons: [],
   capitalRequirement: 1_000_000,
@@ -71,6 +72,7 @@ const payload = {
     currency: "USD",
     charteredTurn: 100,
     postedCapital: 1_000_000,
+    upstreamCapacity: 100_000,
     depositOffset: 0,
     lendingOffset: 1,
     totalDeposits: 2_000_000,
@@ -251,13 +253,16 @@ describe("charter type switch (ticket 1069)", () => {
       currentTurn: 150,
       legalCharterTypes: ["retail", "investment"],
       charter: { ...payload.charter, charterSwitchCooldownUntilTurn: 160 },
+      switchableTypes: [],
     };
     global.fetch = vi.fn(async () => ok(cooling)) as unknown as typeof fetch;
 
     render(<BankConsoleTab corporationId="corp1" isCeo />);
-    fireEvent.click(await screen.findByRole("button", { name: "Charter" }));
+    await screen.findByRole("button", { name: "Overview" });
+    expect(screen.queryByRole("button", { name: "Charter" })).toBeNull();
 
-    expect(await screen.findByText(/locked for 10 turns \(about 10 hours\)/i)).toBeTruthy();
+    expect(screen.queryByText("Change charter type")).toBeNull();
+    expect(screen.queryByRole("combobox", { name: "New charter type" })).toBeNull();
     expect(screen.queryByRole("button", { name: /Switch to/i })).toBeNull();
   });
 });
@@ -394,31 +399,73 @@ describe("last turn earnings (issue 1748)", () => {
   });
 });
 
-describe("charter issue block reason", () => {
-  const unchartered = { ...payload, charter: null };
-
-  it("blames the freeze, not the CEO check, when banking is paused for a CEO", async () => {
+describe("bank action visibility", () => {
+  it.each([
+    { isCeo: false, canMutate: false, privateBankingEnabled: true },
+    { isCeo: true, canMutate: false, privateBankingEnabled: false },
+    { isCeo: true, canMutate: true, privateBankingEnabled: true, eligibleTypes: [] },
+  ])("hides unavailable charter creation", async (state) => {
     global.fetch = vi.fn(async () =>
-      ok({ ...unchartered, privateBankingEnabled: false, canMutate: false })
+      ok({ ...payload, charter: null, ...state })
     ) as unknown as typeof fetch;
-
-    render(<BankConsoleTab corporationId="corp1" isCeo />);
-
-    await screen.findByText("Issue bank charter");
-    expect(screen.getByText(/you can view this console/i)).toBeTruthy();
-    expect(screen.getByText(/bank actions are paused/i)).toBeTruthy();
+    const { container } = render(<BankConsoleTab corporationId="corp1" isCeo={state.isCeo} />);
+    await waitFor(() => expect(container.querySelector(".animate-pulse")).toBeNull());
+    expect(screen.queryByText("Issue bank charter")).toBeNull();
+    expect(screen.queryByRole("combobox")).toBeNull();
     expect(screen.queryByText(/only the ceo/i)).toBeNull();
   });
 
-  it("still says only the CEO can charter when the viewer is not the CEO", async () => {
+  it("keeps customer actions without exposing bank management to other viewers", async () => {
     global.fetch = vi.fn(async () =>
-      ok({ ...unchartered, isCeo: false, canMutate: false })
+      ok({ ...payload, isCeo: false, canMutate: false })
     ) as unknown as typeof fetch;
-
     render(<BankConsoleTab corporationId="corp1" isCeo={false} />);
+    await screen.findByText("Last turn earnings");
+    expect(screen.queryByRole("navigation", { name: "Bank console" })).toBeNull();
+    expect(screen.queryByText("Capital adequacy")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Withdraw in Treasury" })).toBeNull();
+    expect(screen.queryByRole("slider")).toBeNull();
+    expect(screen.queryByText(/only.*CEO/i)).toBeNull();
+    expect(
+      screen.getByText(/This bank pays 2.00% on deposits and charges 4.00% on loans/)
+    ).toBeTruthy();
+    expect(screen.getByText("Deposit savings")).toBeTruthy();
+  });
 
-    await screen.findByText("Issue bank charter");
-    expect(screen.getByText(/only the ceo can issue a charter/i)).toBeTruthy();
+  it("reduces a frozen bank to a status sentence and financial information", async () => {
+    global.fetch = vi.fn(async () =>
+      ok({ ...payload, privateBankingEnabled: false, canMutate: false })
+    ) as unknown as typeof fetch;
+    render(<BankConsoleTab corporationId="corp1" isCeo />);
+    await screen.findByText("Banking is paused, so this bank cannot accept new deposits or loans.");
+    expect(screen.queryByRole("navigation")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Withdraw in Treasury" })).toBeNull();
+    expect(screen.queryByRole("textbox")).toBeNull();
+    expect(screen.queryByText("Deposit savings")).toBeNull();
+    expect(screen.queryByText("Capital adequacy")).toBeNull();
+  });
+
+  it("hides withdrawal controls when no capital can be withdrawn", async () => {
+    global.fetch = vi.fn(async () =>
+      ok({ ...payload, charter: { ...payload.charter, upstreamCapacity: 0 } })
+    ) as unknown as typeof fetch;
+    render(<BankConsoleTab corporationId="corp1" isCeo />);
+    await screen.findByText("Last turn earnings");
+    expect(screen.queryByRole("button", { name: "Withdraw in Treasury" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /^Treasury/ }));
+    await screen.findByText("Capital adequacy");
+    expect(screen.queryByRole("button", { name: "Withdraw to treasury" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Move into bank" })).toBeTruthy();
+  });
+
+  it("does not advertise investing while proprietary trading is unavailable", async () => {
+    global.fetch = vi.fn(async () =>
+      ok({ ...payload, charter: { ...payload.charter, type: "universal" } })
+    ) as unknown as typeof fetch;
+    render(<BankConsoleTab corporationId="corp1" isCeo />);
+    await screen.findByRole("button", { name: "Overview" });
+    expect(screen.queryByRole("button", { name: "Investing" })).toBeNull();
+    expect(screen.queryByText("Investing is frozen")).toBeNull();
   });
 });
 

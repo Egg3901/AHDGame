@@ -153,12 +153,12 @@ describe("ProductStudio", () => {
     expect(screen.getByText(/Name your product to start/)).toBeTruthy();
   });
 
-  it("lists lines the plants cannot make with the reason, never in the picker", async () => {
+  it("hides locked lines and their reasons", async () => {
     stub(studio());
     render(<ProductStudio corporationId="c1" />);
     const picker = (await screen.findByLabelText("Product line")) as HTMLSelectElement;
     expect([...picker.options].map((o) => o.textContent)).toEqual(["Passenger car"]);
-    expect(screen.getByText(/Needs a plant that produces electronics/)).toBeTruthy();
+    expect(screen.queryByText(/Needs a plant that produces electronics/)).toBeNull();
   });
 
   it("starts development at the chosen funding level", async () => {
@@ -241,6 +241,21 @@ describe("ProductStudio", () => {
     await screen.findByText("Falcon");
     expect(screen.queryByRole("button", { name: "Cancel development" })).toBeNull();
     expect(screen.queryByRole("button", { name: /Reject and reorder/ })).toBeNull();
-    expect(screen.getByText(/The CEO answers by turn/)).toBeTruthy();
+    expect(screen.getByText("The product is awaiting a decision from the CEO.")).toBeTruthy();
+    expect(screen.queryByRole("group", { name: "A supplier ships defective parts" })).toBeNull();
+    expect(screen.queryByText("Rework in house")).toBeNull();
+  });
+  it("hides creation when a CEO has no available lines", async () => {
+    stub(studio({ lines: [] }));
+    const { container } = render(<ProductStudio corporationId="c1" />);
+    await waitFor(() => expect(screen.queryByText("Loading product studio")).toBeNull());
+    expect(container.textContent).toBe("");
+  });
+
+  it("hides the empty studio from a non-CEO", async () => {
+    stub(studio({}, false));
+    const { container } = render(<ProductStudio corporationId="c1" />);
+    await waitFor(() => expect(screen.queryByText("Loading product studio")).toBeNull());
+    expect(container.textContent).toBe("");
   });
 });

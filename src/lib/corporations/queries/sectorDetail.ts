@@ -10,9 +10,12 @@ import { findMergedRegionMetrics } from "@/lib/macroMetrics/merge";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { getAuthUser } from "@/lib/auth";
+import { getCharacterByUserId } from "@/lib/db/characterLookup";
 import { getControllingCorporateParent } from "@/lib/corporations/corporateOwnership";
 import { handleRouteError, errorResponse } from "@/lib/api/errors";
-import { resolveCorporation } from "@/lib/api/corporations/resolveQuery";
+import { resolveCorporation, requireCeo } from "@/lib/api/corporations/resolveQuery";
+import { loadCommandEconomyBlockedCountries } from "@/lib/economy/queries/commandEconomyMarketGate";
+import { isPrivateEnterpriseBlocked } from "@/lib/economy/queries/privateEnterpriseGate";
 import { buildPoliticalBaseModifiers } from "@/lib/politicalLegislation/marginAdapter";
 import { isPoliticalApprovalCountry } from "@/lib/politicalLegislation/politicalApprovalProvider";
 import type { PoliticalMetricsDoc } from "@/lib/db/types/politicalMetrics";
@@ -31,6 +34,8 @@ import type {
   StateBudget,
   State,
   Character,
+  User,
+  ImperialCharacter,
   Tariff,
   UnownedSector,
   Subsidy,
@@ -209,7 +214,7 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
 
     // Check if requesting user is CEO
     const user = await getAuthUser().catch(() => null);
-    const isCeo = !!(user && corporation.userId?.toString() === user.userId);
+    const isCeo = !!user && requireCeo(corporation, user.userId) === null;
     const viewerIsAdmin = user?.isAdmin === true;
     const modViewEnabled =
       !viewerIsAdmin &&
@@ -252,18 +257,36 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
 
     // Look up the viewer's corporation (for attack/split UI)
     let viewerCorporation: Corporation | null = null;
-    if (isCeo) {
-      viewerCorporation = corporation;
-    } else if (user) {
-      const viewerChar = await db
-        .collection<Character>("characters")
-        .findOne({ userId: new ObjectId(user.userId) });
+    if (user) {
+      const userDoc = await db
+        .collection<User>("users")
+        .findOne(
+          { _id: new ObjectId(user.userId) },
+          { projection: { activeCharacterType: 1, activeImperialCharacterId: 1 } }
+        );
+      const imperialActive =
+        userDoc?.activeCharacterType === "imperial" && !!userDoc.activeImperialCharacterId;
+      const viewerChar = imperialActive
+        ? await db.collection<ImperialCharacter>("imperialCharacters").findOne(
+            {
+              _id: userDoc.activeImperialCharacterId,
+              userId: new ObjectId(user.userId),
+            },
+            { projection: { _id: 1 } }
+          )
+        : await getCharacterByUserId(db, user.userId);
       if (viewerChar) {
         viewerCorporation = await db.collection<Corporation>("corporations").findOne(
-          { ceoId: viewerChar._id, ceoVacant: { $ne: true } },
+          {
+            ceoId: viewerChar._id,
+            ...(imperialActive ? { ceoType: "imperial" } : {}),
+            ceoVacant: { $ne: true },
+          },
           {
             projection: {
               _id: 1,
+              userId: 1,
+              ceoVacant: 1,
               marketingStrength: 1,
               liquidCapital: 1,
               splitEscalation: 1,
@@ -1351,6 +1374,48 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
       );
     }
 
+    const marketActionsAvailable =
+      !!viewerCorporation &&
+      !gameState?.corporationActionsPaused &&
+      !(await loadCommandEconomyBlockedCountries(db, [sectorCountryId])).has(sectorCountryId);
+    const sectorAttackInfo =
+      marketActionsAvailable && viewerCorporation
+        ? buildSectorAttackInfo({
+            viewerCorporation,
+            defenderMarketingStrength: corporation.marketingStrength ?? 0,
+            viewerCorpFxRate,
+            sectorHostFxRate,
+            sectorHostLiquidCode,
+            sector,
+            sectorType,
+            sectorCountryId,
+            allTariffs,
+            activeFtaPairs,
+            unownedRevenue,
+            effectiveMarket,
+            mods,
+            siblingsSectors,
+            siblingRevenueAnchorById,
+            plantsMode: plantsEnabled,
+          })
+        : null;
+    const forSaleInfo = await buildSectorForSaleInfo(db, {
+      sector,
+      viewerCorporation,
+      isCeo,
+      viewerCorpFxRate,
+      sellerCurrency: resolveCorpLiquidCurrencyCode(corporation),
+    });
+    if (forSaleInfo) {
+      forSaleInfo.eligible =
+        forSaleInfo.eligible &&
+        !!user &&
+        !!viewerCorporation &&
+        requireCeo(viewerCorporation, user.userId) === null &&
+        !gameState?.corporationActionsPaused &&
+        !(await isPrivateEnterpriseBlocked(db, sectorCountryId));
+    }
+
     const payload: Record<string, unknown> = {
       sector: {
         _id: sector._id,
@@ -1576,32 +1641,18 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
       // resource(s). null when the sector isn't capacity-bound or nowhere has
       // headroom. Read-only guidance (see computeResourceOpportunities).
       extractionOpportunities,
-      attackInfo: viewerCorporation
-        ? buildSectorAttackInfo({
-            viewerCorporation,
-            defenderMarketingStrength: corporation.marketingStrength ?? 0,
-            viewerCorpFxRate,
-            sectorHostFxRate,
-            sectorHostLiquidCode,
-            sector,
-            sectorType,
-            sectorCountryId,
-            allTariffs,
-            activeFtaPairs,
-            unownedRevenue,
-            effectiveMarket,
-            mods,
-            siblingsSectors,
-            siblingRevenueAnchorById,
-            plantsMode: plantsEnabled,
-          })
+      attackInfo: sectorAttackInfo
+        ? {
+            ...sectorAttackInfo,
+            canAttack:
+              plantsEnabled &&
+              viewerCorporation?._id.toString() !== corporation._id.toString() &&
+              !corporation.countryOwnerId &&
+              !corporation.suspended,
+            canSplit: !plantsEnabled,
+          }
         : null,
-      forSaleInfo: await buildSectorForSaleInfo(db, {
-        sector,
-        viewerCorporation,
-        isCeo,
-        viewerCorpFxRate,
-      }),
+      forSaleInfo,
       strategy: buildSectorStrategySection({
         preset: sectorDetailPreset,
         sector,

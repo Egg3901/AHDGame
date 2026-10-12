@@ -217,20 +217,24 @@ function LendingProfilePicker({
               return (
                 <tr key={profile.id} className={active ? "bg-card-elevated" : undefined}>
                   <Td wrap>
-                    <button
-                      type="button"
-                      disabled={!canMutate || busy}
-                      onClick={() => void save(profile.id)}
-                      aria-pressed={active}
-                      title={profile.blurb}
-                      className={`text-left disabled:cursor-not-allowed ${
-                        active
-                          ? "font-medium text-foreground"
-                          : "text-foreground underline decoration-card-border underline-offset-2 hover:decoration-foreground disabled:no-underline disabled:opacity-60"
-                      }`}
-                    >
-                      {profile.label}
-                    </button>
+                    {canMutate ? (
+                      <button
+                        type="button"
+                        disabled={!canMutate || busy}
+                        onClick={() => void save(profile.id)}
+                        aria-pressed={active}
+                        title={profile.blurb}
+                        className={`text-left disabled:cursor-not-allowed ${
+                          active
+                            ? "font-medium text-foreground"
+                            : "text-foreground underline decoration-card-border underline-offset-2 hover:decoration-foreground disabled:no-underline disabled:opacity-60"
+                        }`}
+                      >
+                        {profile.label}
+                      </button>
+                    ) : (
+                      <span>{profile.label}</span>
+                    )}
                     {active && <span className="ml-1.5 text-[11px] text-muted">current</span>}
                   </Td>
                   <Td className="font-mono text-muted">to {profile.floorBand}</Td>

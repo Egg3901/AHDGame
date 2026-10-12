@@ -85,6 +85,8 @@ export function CapacityAllocationEditor({
     }
   };
 
+  if (!canMutate) return null;
+
   return (
     <BankPanel
       kind="ceoControl"
