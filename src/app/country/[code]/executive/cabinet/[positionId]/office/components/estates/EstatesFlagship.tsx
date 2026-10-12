@@ -18,6 +18,7 @@ export function EstatesFlagship({
   portfolioKey,
   estates,
   estateSummary,
+  ministerialActions,
   canAct,
   currencySymbol,
   regions,
@@ -29,6 +30,7 @@ export function EstatesFlagship({
   portfolioKey: string;
   estates: EstateView[];
   estateSummary: EstateSummaryView;
+  ministerialActions?: number;
   canAct: boolean;
   currencySymbol: string;
   regions: Array<{ id: string; name: string }>;
@@ -64,6 +66,7 @@ export function EstatesFlagship({
           positionId={positionId}
           portfolioKey={portfolioKey}
           estates={estates}
+          ministerialActions={ministerialActions}
           canAct={canAct}
           currencySymbol={currencySymbol}
           isForeign={isForeign}
