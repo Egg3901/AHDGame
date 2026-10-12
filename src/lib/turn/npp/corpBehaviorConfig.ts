@@ -19,7 +19,7 @@ export function pickBestNppTechNode(
   corp: Corporation,
   currentYear: number,
   dailyGrossRevenue: number,
-  options: { cashReserve?: number } = {}
+  options: { cashReserve?: number; cashFloorLocal?: number } = {}
 ): { node: TechTreeNode; cashCost: number } | null {
   const rdScore = corp.rdScore ?? 0;
   const cashAvailable = Math.max(
@@ -33,7 +33,10 @@ export function pickBestNppTechNode(
       corp.mediaDiscriminator
     ) as Corporation["type"]
   )
-    .map((node) => ({ node, cashCost: techNodeCashCost(node, dailyGrossRevenue) }))
+    .map((node) => ({
+      node,
+      cashCost: techNodeCashCost(node, dailyGrossRevenue, options.cashFloorLocal ?? 0),
+    }))
     .filter(
       ({ node, cashCost }) =>
         canUnlock(corp, node.id, currentYear, { rdScore, cashAvailable, cashCost }).ok
@@ -66,6 +69,8 @@ export function maybePushNppTechUnlock(args: {
   corp: Corporation;
   /** Already-daily gross revenue, converted into the corporation's currency. */
   dailyGrossRevenueLocal: number;
+  /** Era-scaled minimum node cash price in the corp's currency (#1506). */
+  techCashFloorLocal?: number;
   techCurrentYear: number;
   turn: number;
   now: Date;
@@ -86,7 +91,7 @@ export function maybePushNppTechUnlock(args: {
     { ...corp, liquidCapital: cashAfterDecision },
     techCurrentYear,
     args.dailyGrossRevenueLocal,
-    { cashReserve: args.cashReserve }
+    { cashReserve: args.cashReserve, cashFloorLocal: args.techCashFloorLocal }
   );
   if (!pick) return;
   const { node: techNode, cashCost } = pick;

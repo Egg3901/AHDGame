@@ -102,6 +102,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
     // Daily gross revenue → per-node cash cost. Null when redacted.
     let dailyGrossRevenue: number | null = null;
     let capacityFloorApplied = false;
+    let techCashFloorLocal = 0;
     if (!redact) {
       // Ticket #1118: one helper for both the quoted price and the charged
       // price, and it converts each sector out of its host currency before
@@ -109,6 +110,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
       const pricing = await corpDailyGrossRevenuePricingLocal(db, corporation);
       dailyGrossRevenue = pricing.dailyGrossRevenueLocal;
       capacityFloorApplied = pricing.capacityFloorApplied;
+      techCashFloorLocal = pricing.techCashFloorLocal;
     }
     const rdScore = redact ? null : Math.floor(corporation.rdScore ?? 0);
     const liquidCapital = redact ? null : Math.floor(corporation.liquidCapital ?? 0);
@@ -122,7 +124,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
       const isPastDecade = passedDecades.has(decadeId);
       return getDecadeLaneNodes(operatingSectorType, decadeId, lane).map((node) => {
         const owned = unlocked.has(node.id);
-        const cashCost = techNodeCashCost(node, dailyGrossRevenue ?? 0);
+        const cashCost = techNodeCashCost(node, dailyGrossRevenue ?? 0, techCashFloorLocal);
         // Past decades have both lanes auto-granted — no lane commitment applies.
         const laneLocked = isPastDecade ? false : !!committed && committed !== lane;
         const prereqIds = getNodePrereqIds(node);
