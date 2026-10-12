@@ -15,7 +15,8 @@ export type Doc = Record<string, unknown>;
  * and never matches. Several election-entry suites now depend on that leniency,
  * so honouring `$exists` for everyone changes their behaviour. Opt in with
  * `makeInMemoryStore(seed, { strictOperators: true })` when your code under test
- * actually issues these, and leave the default alone.
+ * actually issues these, and leave the default alone. Strict mode also resolves
+ * dotted paths for `$exists` and plain equality, and applies `$inc` in updateOne.
  */
 export interface StoreOptions {
   strictOperators?: boolean;
@@ -36,15 +37,34 @@ function matches(doc: Doc, filter: Doc, opts: StoreOptions = {}): boolean {
     } else if (opts.strictOperators && v && typeof v === "object" && "$nin" in (v as object)) {
       if ((v as { $nin: unknown[] }).$nin.includes(doc[k])) return false;
     } else if (opts.strictOperators && v && typeof v === "object" && "$exists" in (v as object)) {
-      const present = k in doc && doc[k] !== undefined;
+      const present = readPath(doc, k) !== undefined;
       if (present !== (v as { $exists: boolean }).$exists) return false;
     } else if (opts.strictOperators && v && typeof v === "object" && "$gt" in (v as object)) {
       if (!(typeof doc[k] === "number" && doc[k] > (v as { $gt: number }).$gt)) return false;
-    } else if (doc[k] !== v) {
+    } else if ((opts.strictOperators && k.includes(".") ? readPath(doc, k) : doc[k]) !== v) {
       return false;
     }
   }
   return true;
+}
+
+function readPath(doc: Doc, path: string): unknown {
+  return path
+    .split(".")
+    .reduce<unknown>(
+      (cur, part) => (cur && typeof cur === "object" ? (cur as Doc)[part] : undefined),
+      doc
+    );
+}
+
+function applyInc(doc: Doc, inc: Doc): void {
+  for (const [k, v] of Object.entries(inc)) {
+    const parts = k.split(".");
+    let cur = doc;
+    for (let i = 0; i < parts.length - 1; i++) cur = (cur[parts[i]] ??= {}) as Doc;
+    const last = parts[parts.length - 1];
+    cur[last] = (typeof cur[last] === "number" ? (cur[last] as number) : 0) + (v as number);
+  }
 }
 
 function applySet(doc: Doc, set: Doc): void {
@@ -102,6 +122,7 @@ export function makeInMemoryStore(
     updateOne: async (filter: Doc, update: Doc, opts?: { upsert?: boolean }) => {
       const hit = col(name).find((d) => matches(d, filter, options));
       if (hit) {
+        if (options.strictOperators && update.$inc) applyInc(hit, update.$inc as Doc);
         if (update.$set) applySet(hit, update.$set as Doc);
         if (update.$unset) for (const k of Object.keys(update.$unset as Doc)) delete hit[k];
         return { matchedCount: 1, modifiedCount: 1 };

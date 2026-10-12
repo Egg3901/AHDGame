@@ -350,7 +350,11 @@ export function StatusBar({
   const showCorpStrip = layout === "corp" || isFullLayout;
   const showStandardCorpCashOnly = layout === "standard" && !!stats?.corp;
   // Corp/elections/minimal use compact inline count; full gets its own placement in the right chip area
+  // Standard shows the labelled count in the same row (pushed right) rather than
+  // absolutely centred, which overlapped the turn timer and price refresh note.
   const compactOnlineCount = layout === "corp" || layout === "elections" || isMinimalLayout;
+  const inlineOnlineCount = compactOnlineCount || layout === "standard";
+  const labelledOnlineCount = isMinimalLayout || layout === "standard";
 
   return (
     <div
@@ -381,7 +385,9 @@ export function StatusBar({
 
           {/* Turn Timer & LARP Date */}
           {gameState && (
-            <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted sm:flex-nowrap sm:gap-x-4 sm:text-sm">
+            // sm:shrink-0: on desktop the turn/price row keeps its width instead of
+            // shrinking and painting its overflow over the online count beside it.
+            <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted sm:shrink-0 sm:flex-nowrap sm:gap-x-4 sm:text-sm">
               <span className="shrink-0 tabular-nums text-muted" title="Current turn">
                 Turn {gameState.currentTurn}
               </span>
@@ -469,16 +475,18 @@ export function StatusBar({
           )}
 
           {/* Corp/elections/minimal: compact online count inline */}
-          {compactOnlineCount && onlineStatus && (
+          {inlineOnlineCount && onlineStatus && (
             <>
               {/* Pipe separator before online count — minimal only */}
               {isMinimalLayout && (
                 <span className="mx-3 hidden h-4 w-px shrink-0 bg-card-border/60 sm:block sm:mx-4" />
               )}
-              <div className="hidden sm:flex items-center gap-2 text-sm text-muted shrink-0">
+              <div
+                className={`hidden sm:flex min-w-0 items-center gap-2 text-sm text-muted ${isMinimalLayout ? "shrink-0" : "sm:ml-auto"}`}
+              >
                 <OnlineStatusDot />
-                {isMinimalLayout ? (
-                  <span>
+                {labelledOnlineCount ? (
+                  <span className="truncate">
                     <span className="font-medium text-foreground tabular-nums">
                       {onlineStatus.online}
                     </span>{" "}
@@ -493,17 +501,6 @@ export function StatusBar({
             </>
           )}
         </div>
-
-        {/* Standard only: centered "N Player(s) Online" — full uses right-chip-area instead */}
-        {!compactOnlineCount && !isFullLayout && onlineStatus && (
-          <div className="pointer-events-none hidden sm:flex absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 items-center gap-2 text-sm text-muted">
-            <OnlineStatusDot />
-            <span>
-              <span className="font-medium text-foreground">{onlineStatus.online}</span> Player
-              {onlineStatus.online !== 1 ? "s" : ""} Online
-            </span>
-          </div>
-        )}
 
         {/* Right side - Colored Chips (hidden in minimal layout) */}
         <div
