@@ -15,20 +15,25 @@ import { loadWestminsterGovernment } from "@/lib/governorOffice/devolution/westm
 
 type Context = { params: Promise<{ code: string }> };
 
-// Authenticated viewers can track public constitutional stances; only the PM can change them.
+// Only the sitting UK PM and admins can view this dashboard; only the PM can change stances.
 export async function GET(_request: Request, { params }: Context) {
   try {
     if ((await params).code.toUpperCase() !== "UK") return errorResponse(404, "UK-only feature.");
     const auth = await requireAuth();
     if (!auth.ok) return auth.response;
     const db = await getDb();
-    const [regions, office, currentTurn, canManage, government] = await Promise.all([
+    const canManage = auth.user.character
+      ? await isSittingLeader(db, "UK", auth.user.character._id)
+      : false;
+    if (!canManage && !auth.user.isAdmin) {
+      return errorResponse(403, "Only the sitting Prime Minister or an admin can view devolution.");
+    }
+    const [regions, office, currentTurn, government] = await Promise.all([
       loadIndependenceDesireSnapshots(db),
       db
         .collection<GovernorOfficeState>("governorOfficeState")
         .findOne({ countryId: "UK", stateId: getNationalStateId("UK") }),
       getCurrentTurn(db),
-      auth.user.character ? isSittingLeader(db, "UK", auth.user.character._id) : false,
       loadWestminsterGovernment(db),
     ]);
     return NextResponse.json(
