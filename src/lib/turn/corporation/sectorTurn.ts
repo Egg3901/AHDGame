@@ -65,6 +65,8 @@ import {
 } from "@/lib/corporations/rules/marketBoost";
 import { isStateScopedCommodity } from "@/lib/market/commodityMarketScope";
 import { withLatentDemand } from "./demandThrottle";
+import { idleCapacityRetirement } from "./rules/idleCapacityRetirement";
+import { seedPlantLedger } from "@/lib/corporations/plantLedger";
 import {
   inputBasketCostIndex,
   recordCostPlusBasis,
@@ -445,6 +447,7 @@ export function processSector(
     soldUnits,
     contractAchievableUnits,
     demandThrottleFactor,
+    demandFill,
     embargoExportExposure,
     hourlyRevenue: realizedHourlyRevenue,
     capacityBindingEvent,
@@ -524,6 +527,33 @@ export function processSector(
   if (capacityBindingEvent) {
     pendingCapacityBindingEvents.push(capacityBindingEvent);
   }
+  // Capacity the market persistently will not buy retires toward the size the
+  // plant can sell (see rules/idleCapacityRetirement). It is applied to the
+  // stock persisted for NEXT turn: this turn runs, staffs and bills the plant
+  // it started with, and the paid basis and plant ledger shrink with the stock
+  // so the per-unit book stays flat, exactly as depreciation does.
+  const idleRetirement = idleCapacityRetirement({
+    plantsEnabled,
+    mothballed,
+    activeFraction,
+    demandThrottleFactor,
+    demandFill,
+    priorStreak: sector.demandIdleTurns,
+    rampLambda: plantsRampLambda,
+  });
+  const retainedCapacityShare = 1 - idleRetirement.retireFraction;
+  const persistedOwnedCapacity = plantsOwnedCapacity * retainedCapacityShare;
+  const idleCapacityRetiredUnits = plantsOwnedCapacity - persistedOwnedCapacity;
+  const persistedCapacityBookAnchor = capacityBookAnchor * retainedCapacityShare;
+  const persistedPlantLedger =
+    idleRetirement.retireFraction > 0
+      ? seedPlantLedger(
+          sector.sectorType,
+          persistedOwnedCapacity,
+          sector.industryModel,
+          sector.mediaDiscriminator
+        )
+      : plantLedger;
   // Phased stock-market boost, phase A: lift realized operating revenue AFTER
   // every market-microstructure leg (governor, clearing, embargo) has run, so
   // those legs keep pricing what the market actually cleared. Nameplate
@@ -941,7 +971,7 @@ export function processSector(
     // it breaks the invertibility of the retool unit conversion. Capital mode's
     // derived stock keeps its 2dp rounding exactly as before.
     sectorUpdate.capitalStock = plantsEnabled
-      ? plantsOwnedCapacity
+      ? persistedOwnedCapacity
       : Math.round(newCapitalStock * 100) / 100;
     sectorUpdate.capitalUtilization =
       Math.round(
@@ -960,14 +990,16 @@ export function processSector(
     if (plantsEnabled) {
       sectorUpdate.operatingCapacityUnits = plantsCapacity;
       sectorUpdate.operatingCapacityTurn = currentTurn;
-      sectorUpdate.capacityBookAnchor = capacityBookAnchor;
-      sectorUpdate.plantCount = plantLedger?.plantCount ?? 0;
-      sectorUpdate.plantUnitRemainder = plantLedger?.plantUnitRemainder ?? 0;
+      sectorUpdate.capacityBookAnchor = persistedCapacityBookAnchor;
+      sectorUpdate.plantCount = persistedPlantLedger?.plantCount ?? 0;
+      sectorUpdate.plantUnitRemainder = persistedPlantLedger?.plantUnitRemainder ?? 0;
     }
   }
   // Plants ramp anchor (stamped once, on the flip turn).
   if (plantsEnabled) {
     sectorUpdate.plantsStartTurn = plantsStartTurn ?? null;
+    sectorUpdate.demandIdleTurns = idleRetirement.streak;
+    sectorUpdate.idleCapacityRetiredUnits = idleCapacityRetiredUnits;
     // Stamp the idle-upkeep margin basis ONCE, from the live margin, and then
     // hold it — the anti-spiral half of the upkeep fix above. Written on the
     // first plants turn the sector runs, so the value stamped IS the value the

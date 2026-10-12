@@ -622,6 +622,8 @@ export interface PlantsData {
   measuredDemandGapUnits?: number | null;
   /** This sector's own demand throttle bound last turn, so its room to build reads 0. */
   roomHeldByOwnIdle?: boolean;
+  /** Unsold-capacity retirement status. Absent when the plant is not glutted. */
+  idleRetirement?: { turns: number; graceTurns: number; retiredUnits: number };
   /** Unowned pool over owned capacity plus that pool, percent. */
   unclaimedSharePct?: number;
   /** Strategy suggestion when the valuable output is oversupplied. Absent on older payloads. */

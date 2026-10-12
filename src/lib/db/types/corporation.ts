@@ -1000,6 +1000,14 @@ export interface CorporateSector {
    */
   demandThrottleFactor?: number | null;
   /**
+   * Plants tier: consecutive turns this sector was demand-limited into a glut
+   * (throttled and selling under the glut fill). Drives idle capacity
+   * retirement; 0 resets it. See `rules/idleCapacityRetirement`.
+   */
+  demandIdleTurns?: number;
+  /** Owned capacity units retired last turn because the market would not buy them. */
+  idleCapacityRetiredUnits?: number;
+  /**
    * Units this sector could have produced after external constraints but before
    * the operator's production-policy and mothball choices. Used by supply
    * agreement damages. Absent until the sector has run after rollout.

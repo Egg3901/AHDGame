@@ -1,5 +1,6 @@
 import type { PlantIdleCause, PlantBuildOrderView, SectorPlantsSection } from "./sectorPlantsTypes";
 export type { PlantIdleCause, PlantBuildOrderView, SectorPlantsSection } from "./sectorPlantsTypes";
+import { IDLE_RETIRE_GRACE_TURNS } from "@/lib/turn/corporation/rules/idleCapacityRetirement";
 import { hasProtectedConstructionProperty } from "@/lib/corporations/securedConstructionProperty";
 import { getCorporateSectorLaneQuery } from "@/lib/corporations/sectorLocation";
 /**
@@ -1662,6 +1663,15 @@ export function buildSectorPlantsSection(args: {
     demandGapUnits: roomHeldByOwnIdle ? 0 : nonNeg(demandGapUnits),
     measuredDemandGapUnits: roomHeldByOwnIdle ? 0 : (args.measuredDemandGapUnits ?? null),
     roomHeldByOwnIdle,
+    ...(!mothballed && (num(sector.demandIdleTurns) ?? 0) > 0
+      ? {
+          idleRetirement: {
+            turns: num(sector.demandIdleTurns) ?? 0,
+            graceTurns: IDLE_RETIRE_GRACE_TURNS,
+            retiredUnits: nonNeg(num(sector.idleCapacityRetiredUnits) ?? 0),
+          },
+        }
+      : {}),
     ...(unclaimedSharePct != null ? { unclaimedSharePct } : {}),
     retoolHint,
     currentTurn,
