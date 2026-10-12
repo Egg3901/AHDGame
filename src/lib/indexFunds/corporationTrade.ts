@@ -52,7 +52,7 @@ export async function tradeCorporationFund(
   kind: "subscribe" | "redeem"
 ): Promise<Response> {
   if (kind === "subscribe" && fund.mandate?.mode === "picked_stocks") {
-    const { queueBankFundSubscription } = await import("./subscriptions");
+    const { queueBankFundSubscription } = await import("./subscriptionOrders");
     return queueBankFundSubscription(db, { fund, characterId, userId, ...order });
   }
   const corporationId = new ObjectId(order.corporationId);

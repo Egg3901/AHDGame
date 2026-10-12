@@ -105,26 +105,43 @@ export function FundTradePanel({
     onPendingChange?.(!!pendingOrder);
   }, [pendingOrder, onPendingChange]);
 
-  const loadWallet = useCallback(async () => {
+  const fetchWallet = useCallback(async () => {
     try {
       const res = await fetch("/api/character/me", { cache: "no-store" });
-      if (!res.ok) return;
+      if (!res.ok) return null;
       const data = (await res.json()) as { character?: CharacterWallet };
-      if (!data.character) return;
-      setWallet(data.character);
-      if (data.character.autoConvertEnabled !== undefined) {
-        setAutoConvertEnabled(data.character.autoConvertEnabled);
-      }
-      const home = (data.character.homeCurrency ?? fundCurrency) as CurrencyCode;
-      setSelectedPayCurrency(home);
+      return data.character ?? null;
     } catch {
-      // Non-fatal - subscribe still works for same-currency wallets.
+      // Non-fatal: same-currency subscriptions can still proceed.
+      return null;
     }
-  }, [fundCurrency]);
+  }, []);
+
+  const applyWallet = useCallback(
+    (character: CharacterWallet | null) => {
+      if (!character) return;
+      setWallet(character);
+      if (character.autoConvertEnabled !== undefined) {
+        setAutoConvertEnabled(character.autoConvertEnabled);
+      }
+      setSelectedPayCurrency(character.homeCurrency ?? fundCurrency);
+    },
+    [fundCurrency]
+  );
+
+  const loadWallet = useCallback(async () => {
+    applyWallet(await fetchWallet());
+  }, [fetchWallet, applyWallet]);
 
   useEffect(() => {
-    void loadWallet();
-  }, [loadWallet]);
+    let active = true;
+    void fetchWallet().then((character) => {
+      if (active) applyWallet(character);
+    });
+    return () => {
+      active = false;
+    };
+  }, [fetchWallet, applyWallet]);
 
   useEffect(() => {
     if (!currencyDropdownOpen) return;

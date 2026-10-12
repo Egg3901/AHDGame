@@ -38,6 +38,10 @@ export default function FundDetailPage({
 
 function FundDetailPageInner({ params }: { params: Promise<{ country: string; slug: string }> }) {
   const { country, slug } = use(params);
+  return <FundDetailContent key={`${country}/${slug}`} country={country} slug={slug} />;
+}
+
+function FundDetailContent({ country, slug }: { country: string; slug: string }) {
   const { formatAmount, formatPrice, forexEnabled, forexRates } = useCurrency();
   const [data, setData] = useState<{
     fund: FundDetail;
@@ -60,9 +64,7 @@ function FundDetailPageInner({ params }: { params: Promise<{ country: string; sl
 
   const stockMarketHref = `/stockmarket/${country.toLowerCase()}?tab=funds`;
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError("");
+  const fetchFund = useCallback(async () => {
     try {
       const [fundRes, txData] = await Promise.all([
         fetch(`/api/investment-funds/${slug}`, { cache: "no-store" }),
@@ -73,29 +75,41 @@ function FundDetailPageInner({ params }: { params: Promise<{ country: string; sl
       ]);
 
       if (fundRes.status === 403) {
-        setError("Index funds are not enabled.");
-        return;
+        return { error: "Index funds are not enabled." };
       }
       if (!fundRes.ok) {
         const body = (await fundRes.json()) as { error?: string };
-        setError(apiErrorText(body, "Fund not found"));
-        return;
+        return { error: apiErrorText(body, "Fund not found") };
       }
-      setData(await fundRes.json());
-
-      if (txData) {
-        setFinancials(txData);
-      }
+      const detail: NonNullable<typeof data> = await fundRes.json();
+      return { detail, financials: txData };
     } catch {
-      setError("Failed to load fund");
-    } finally {
-      setLoading(false);
+      return { error: "Failed to load fund" };
     }
   }, [slug]);
 
+  const applyFund = useCallback((result: Awaited<ReturnType<typeof fetchFund>>) => {
+    setError(result.error ?? "");
+    if (result.detail) setData(result.detail);
+    if (result.financials) setFinancials(result.financials);
+    setLoading(false);
+  }, []);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError("");
+    applyFund(await fetchFund());
+  }, [fetchFund, applyFund]);
+
   useEffect(() => {
-    void load();
-  }, [load]);
+    let active = true;
+    void fetchFund().then((result) => {
+      if (active) applyFund(result);
+    });
+    return () => {
+      active = false;
+    };
+  }, [fetchFund, applyFund]);
 
   if (loading) {
     return (

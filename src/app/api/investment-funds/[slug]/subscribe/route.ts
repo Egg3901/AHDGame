@@ -71,7 +71,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
     }
     const { units, operationId, payCurrency } = parsed.data;
     if (fund.mandate?.mode === "picked_stocks") {
-      const { queueBankFundSubscription } = await import("@/lib/indexFunds/subscriptions");
+      const { queueBankFundSubscription } = await import("@/lib/indexFunds/subscriptionOrders");
       return queueBankFundSubscription(db, {
         fund,
         characterId,

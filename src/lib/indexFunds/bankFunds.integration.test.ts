@@ -1,3 +1,4 @@
+import { queueBankFundSubscription } from "./subscriptionOrders";
 import { BSON, ObjectId, type ClientSession, type Db } from "mongodb";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Corporation, IndexFund } from "@/lib/db/types";
@@ -7,11 +8,7 @@ import { getAuthUser, getAuthUserWithCharacter } from "@/lib/auth";
 import { charterFund } from "./sponsorship/charterFund";
 import { fundCreationEligibility } from "./sponsorship/eligibility";
 import { bankMayManageFunds } from "./sponsorship/rules/eligibility";
-import {
-  queueBankFundSubscription,
-  cancelBankFundSubscription,
-  settleBankFundSubscriptions,
-} from "./subscriptions";
+import { cancelBankFundSubscription, settleBankFundSubscriptions } from "./subscriptions";
 import { rebalanceConstituents, rebalanceFundToTarget } from "./fundCronRebalance";
 import { processQueuedRedemptions } from "./processQueuedRedemptions";
 import { executeFundShareBuy } from "./fundFloatBuyExecution";
@@ -526,6 +523,52 @@ describe("next-turn subscription conservation", () => {
     await settleBankFundSubscriptions(f.db, 11, [f.fund._id]);
     await reconcile();
   });
+  it.each(["character", "corporation"] as const)(
+    "records the %s investor and escrow as distinct subjects",
+    async (holderKind) => {
+      const f = fixture();
+      await queueBankFundSubscription(f.db, {
+        ...f.input,
+        ...(holderKind === "corporation" ? { corporationId: String(f.sponsor._id) } : {}),
+      });
+      const rows = f.memory.collection("financialTxLog").docs;
+      expect(rows[0]).toMatchObject({
+        subjectType: holderKind,
+        subjectId: holderKind === "corporation" ? f.sponsor._id : f.character._id,
+        amount: -2000,
+        anchorAmount: -1000,
+      });
+      expect(rows[0].subjectName).toEqual(expect.any(String));
+      expect(rows[1]).toMatchObject({ subjectType: "system", amount: 2000, anchorAmount: 1000 });
+      expect(rows[1].subjectId).toBeUndefined();
+      await settleBankFundSubscriptions(f.db, 11, [f.fund._id]);
+      expect(rows[2]).toMatchObject({ subjectType: "system", amount: -2000, anchorAmount: -1000 });
+      expect(rows[2].subjectId).toBeUndefined();
+      expect(rows[3]).toMatchObject({ subjectType: "fund", subjectId: f.fund._id, amount: 1000 });
+    }
+  );
+
+  it("rolls back a partially matched receipt batch before retrying", async () => {
+    const f = fixture();
+    const before = f.total();
+    await queueBankFundSubscription(f.db, f.input);
+    const commands = f.memory.collection("indexFundCommands");
+    const bulkWrite = commands.bulkWrite.bind(commands);
+    vi.spyOn(commands, "bulkWrite").mockImplementationOnce(async (operations) => ({
+      ...(await bulkWrite(operations)),
+      matchedCount: 0,
+    }));
+    await expect(settleBankFundSubscriptions(f.db, 11, [f.fund._id])).rejects.toThrow(
+      "Subscription receipts changed"
+    );
+    expect(f.total()).toBe(before);
+    expect(f.book().unitSupply).toBe(100);
+    expect(f.orders()[0]).toMatchObject({ subscription: { status: "queued" } });
+    await settleBankFundSubscriptions(f.db, 11, [f.fund._id]);
+    expect(f.total()).toBe(before);
+    expect(f.book().unitSupply).toBe(110);
+  });
+
   it("settles more than one bounded batch in the same due turn", async () => {
     const f = fixture();
     const before = f.total();
@@ -737,7 +780,11 @@ describe("next-turn subscription conservation", () => {
               : step === "command"
                 ? "indexFundCommands"
                 : "financialTxLog";
-      if (step === "command" || step === "cash")
+      if (step === "command")
+        vi.spyOn(f.memory.collection(collection), "bulkWrite").mockRejectedValueOnce(
+          new Error("interrupted")
+        );
+      else if (step === "cash")
         vi.spyOn(f.memory.collection(collection), "updateOne").mockRejectedValueOnce(
           new Error("interrupted")
         );
