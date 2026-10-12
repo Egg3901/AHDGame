@@ -24,6 +24,7 @@ vi.mock("@/lib/imageOptimize", () => ({
 vi.mock("@/lib/r2", () => ({
   isR2Enabled: vi.fn(() => true),
   deleteByPrefix: vi.fn(async () => undefined),
+  deleteFileByUrl: vi.fn(async () => undefined),
   uploadFile: vi.fn(async (pathname: string) => `https://cdn.example/${pathname}`),
 }));
 
@@ -157,7 +158,8 @@ describe("POST /api/upload/corporation-logo", () => {
 });
 
 describe("group logo upload target", () => {
-  it.each([1, 0])(
+  beforeEach(() => vi.clearAllMocks());
+  it.each([1, 0, -1, -2])(
     "writes only the group logo and rejects a changed CEO (matched=%s)",
     async (matchedCount) => {
       const db = createMockDb(),
@@ -174,7 +176,14 @@ describe("group logo upload target", () => {
       const { resolveCorporation } = await import("@/lib/api/corporations/resolveQuery");
       vi.mocked(resolveCorporation).mockResolvedValue({
         ok: true,
-        corporation: { _id: id, userId, ceoId },
+        corporation: {
+          _id: id,
+          userId,
+          ceoId,
+          groupManagement: {
+            logoUrl: `https://cdn.example/subsidiary-group-logos/${id.toString()}-old.png`,
+          },
+        },
       } as never);
       const { loadGroupManagement } = await import("@/lib/corporations/groups/management");
       vi.mocked(loadGroupManagement).mockResolvedValue({
@@ -192,6 +201,37 @@ describe("group logo upload target", () => {
       form.set("target", "group");
       form.set("file", new Blob(["raw"], { type: "image/png" }), "logo.png");
       const { POST } = await import("./route");
+      if (matchedCount === -2) {
+        const response = await POST(
+          new Request("http://localhost/api/upload/corporation-logo", {
+            method: "POST",
+            headers: { host: "localhost", origin: "https://untrusted.invalid" },
+            body: form,
+          })
+        );
+        expect(response.status).toBe(403);
+        const { uploadFile, deleteByPrefix, deleteFileByUrl } = await import("@/lib/r2");
+        expect(uploadFile).not.toHaveBeenCalled();
+        expect(deleteByPrefix).not.toHaveBeenCalled();
+        expect(deleteFileByUrl).not.toHaveBeenCalled();
+        expect(db.collectionMocks.corporations.updateOne).not.toHaveBeenCalled();
+        return;
+      }
+      if (matchedCount === -1) {
+        const { uploadFile, deleteByPrefix, deleteFileByUrl } = await import("@/lib/r2");
+        vi.mocked(uploadFile).mockRejectedValueOnce(new Error("Upload unavailable"));
+        const response = await POST(
+          new Request("http://localhost/api/upload/corporation-logo", {
+            method: "POST",
+            body: form,
+          })
+        );
+        expect(response.status).toBe(500);
+        expect(deleteByPrefix).not.toHaveBeenCalled();
+        expect(deleteFileByUrl).not.toHaveBeenCalled();
+        expect(db.collectionMocks.corporations.updateOne).not.toHaveBeenCalled();
+        return;
+      }
       expect(
         (
           await POST(
@@ -202,7 +242,14 @@ describe("group logo upload target", () => {
           )
         ).status
       ).toBe(matchedCount ? 200 : 409);
-      const { uploadFile } = await import("@/lib/r2");
+      const { uploadFile, deleteByPrefix, deleteFileByUrl } = await import("@/lib/r2");
+      expect(deleteByPrefix).not.toHaveBeenCalled();
+      expect(deleteFileByUrl).toHaveBeenCalledWith(
+        matchedCount
+          ? `https://cdn.example/subsidiary-group-logos/${id.toString()}-old.png`
+          : await vi.mocked(uploadFile).mock.results.at(-1)!.value
+      );
+      expect(deleteFileByUrl).toHaveBeenCalledTimes(1);
       expect(uploadFile).toHaveBeenCalledWith(
         expect.stringContaining("subsidiary-group-logos/"),
         expect.any(Buffer)
@@ -214,6 +261,7 @@ describe("group logo upload target", () => {
           ceoId,
           ceoVacant: { $ne: true },
           suspended: { $ne: true },
+          "groupManagement.logoUrl": `https://cdn.example/subsidiary-group-logos/${id.toString()}-old.png`,
         }),
         {
           $set: {

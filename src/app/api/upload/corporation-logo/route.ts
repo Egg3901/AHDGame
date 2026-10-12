@@ -1,3 +1,5 @@
+import { assertSameOrigin } from "@/lib/api/assertSameOrigin";
+import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
@@ -6,7 +8,7 @@ import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import type { Corporation } from "@/lib/db/types";
 import { optimizeImage, IMAGE_PRESETS } from "@/lib/imageOptimize";
-import { isR2Enabled, uploadFile, deleteByPrefix } from "@/lib/r2";
+import { isR2Enabled, uploadFile, deleteByPrefix, deleteFileByUrl } from "@/lib/r2";
 import { parseFormData } from "@/lib/api/validate";
 import { loadGroupManagement } from "@/lib/corporations/groups/management";
 import { resolveCorporation, requireCeo } from "@/lib/api/corporations/resolveQuery";
@@ -82,6 +84,8 @@ export async function POST(request: Request) {
     }
     const groupTarget = target === "group";
     if (groupTarget) {
+      const origin = assertSameOrigin(request);
+      if (origin) return origin;
       const context = await loadGroupManagement(db, corporation, authUser.userId);
       if (!context?.parent || !context.enabled || !context.root._id.equals(corporation._id)) {
         return errorResponse(403, "Only the parent CEO can change the group logo.");
@@ -96,12 +100,12 @@ export async function POST(request: Request) {
       IMAGE_PRESETS.corporationLogo
     );
 
-    const timestamp = Date.now();
+    const timestamp = groupTarget ? randomUUID() : Date.now();
     let url: string;
 
     if (isR2Enabled()) {
       try {
-        await deleteByPrefix(`${storageKind}/${corporation._id.toString()}`);
+        if (!groupTarget) await deleteByPrefix(`${storageKind}/${corporation._id.toString()}`);
       } catch {
         /* ignore delete errors */
       }
@@ -120,7 +124,7 @@ export async function POST(request: Request) {
       try {
         const files = await fs.readdir(uploadsDir);
         const corpPrefix = corporation._id.toString();
-        const oldFiles = files.filter((f) => f.startsWith(corpPrefix));
+        const oldFiles = groupTarget ? [] : files.filter((f) => f.startsWith(corpPrefix));
         await Promise.all(oldFiles.map((f) => fs.unlink(path.join(uploadsDir, f)).catch(() => {})));
       } catch {
         /* ignore */
@@ -139,6 +143,7 @@ export async function POST(request: Request) {
         _id: corporation._id,
         ...(groupTarget
           ? {
+              "groupManagement.logoUrl": corporation.groupManagement?.logoUrl,
               userId: new ObjectId(authUser.userId),
               ceoId: corporation.ceoId,
               ceoVacant: { $ne: true },
@@ -159,8 +164,38 @@ export async function POST(request: Request) {
       }
     );
 
-    if (groupTarget && !saved.matchedCount)
-      return errorResponse(409, "The parent CEO or corporation changed. Refresh and try again.");
+    if (groupTarget) {
+      // Cleanup only the exact obsolete image after the compare-and-set result.
+      // Never delete a whole prefix while another upload might be publishing.
+      const obsolete = saved.matchedCount ? corporation.groupManagement?.logoUrl : url;
+      if (obsolete && obsolete !== (saved.matchedCount ? url : undefined)) {
+        try {
+          if (isR2Enabled()) {
+            const pathname = new URL(obsolete).pathname;
+            if (pathname.includes(`/subsidiary-group-logos/${corporation._id.toString()}-`))
+              await deleteFileByUrl(obsolete);
+          } else {
+            const prefix = `/api/uploads/subsidiary-group-logos/${corporation._id.toString()}-`;
+            const filename = obsolete.split("/").at(-1)!;
+            if (
+              obsolete.startsWith(prefix) &&
+              /^[a-f0-9-]+\.(png|jpg|jpeg|webp|gif)$/.test(filename)
+            ) {
+              const fs = await import("fs/promises");
+              const path = await import("path");
+              await fs.unlink(path.join(process.cwd(), "uploads", storageKind, filename));
+            }
+          }
+        } catch {
+          /* A cleanup failure must not invalidate a published image. */
+        }
+      }
+      if (!saved.matchedCount)
+        return errorResponse(
+          409,
+          "The parent CEO, corporation or logo changed. Refresh and try again."
+        );
+    }
     return NextResponse.json({ url });
   } catch (error) {
     return handleRouteError(error);
