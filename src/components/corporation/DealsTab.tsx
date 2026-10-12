@@ -3,8 +3,6 @@
 import { apiErrorText } from "@/lib/errors/catalog";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import MergerReviewPanel from "@/components/corporation/MergerReviewPanel";
-import IndexCommitteePanel from "@/components/corporation/IndexCommitteePanel";
-import SponsoredFundPanel from "@/components/corporation/SponsoredFundPanel";
 import { DenseSection, InlineStatus, SmallButton, Td, Th } from "./dense/DenseKit";
 
 interface DealSummary {
@@ -35,16 +33,7 @@ interface CorpSearchResult {
 
 const fmt = (n: number) => "₳" + Math.round(n).toLocaleString("en-US");
 
-export default function DealsTab({
-  corpId,
-  isCeo,
-  canSponsorFund = false,
-}: {
-  corpId: string;
-  isCeo: boolean;
-  /** True when the corporation has a financial sector, the gate for chartering a fund. */
-  canSponsorFund?: boolean;
-}) {
+export default function DealsTab({ corpId, isCeo }: { corpId: string; isCeo: boolean }) {
   const [data, setData] = useState<DealsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
@@ -80,8 +69,8 @@ export default function DealsTab({
   }, [corpId]);
 
   useEffect(() => {
-    void fetchDeals();
-  }, [fetchDeals]);
+    if (isCeo) void fetchDeals();
+  }, [fetchDeals, isCeo]);
 
   // Debounced corporation name search (reuses the player-run corp search;
   // excludes this corp). Skips while a target is already selected.
@@ -170,10 +159,9 @@ export default function DealsTab({
     }
   }
 
-  if (!isCeo) return <p className="text-xs text-muted">Only the CEO can manage acquisitions.</p>;
+  if (!isCeo) return null;
   if (loading) return <p className="text-xs text-muted">Loading deals.</p>;
-  if (data && !data.enabled)
-    return <p className="text-xs text-muted">Corporate acquisitions are not currently enabled.</p>;
+  if (!data?.enabled) return null;
 
   return (
     <div className="space-y-6">
@@ -363,10 +351,6 @@ export default function DealsTab({
         </div>
       </DenseSection>
       <MergerReviewPanel />
-
-      <IndexCommitteePanel corpId={corpId} />
-
-      {canSponsorFund && <SponsoredFundPanel corpId={corpId} />}
     </div>
   );
 }

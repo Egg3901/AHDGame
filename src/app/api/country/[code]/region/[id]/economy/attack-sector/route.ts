@@ -419,6 +419,8 @@ export async function POST(request: Request, { params }: RouteParams) {
               plantCount: quote.plantsAtRisk,
               plantUnitRemainder: 0,
               plantsStartTurn: gameState?.currentTurn ?? 0,
+              // Built under plants by a player: earns the market from its first turn.
+              ...(freshAttacker.ceoType === "character" ? { plantsGovernorExempt: true } : {}),
               profitMargin: DEFAULT_PROFIT_MARGIN,
               workers: DEFAULT_SECTOR_STARTING_WORKERS,
               createdAt: now,

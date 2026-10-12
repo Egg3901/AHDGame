@@ -1299,6 +1299,14 @@ export interface CorporateSector {
    */
   plantsStartTurn?: number | null;
   /**
+   * Plants tier: true for a sector a player-run company built (or split off)
+   * while plants was already on. The launch-safety governor exists to smooth a
+   * running sector across the plants flip; a sector born under plants has no
+   * prior revenue to smooth, so it earns its derived market revenue from its
+   * first turn instead of being held near the governor anchor for the ramp.
+   */
+  plantsGovernorExempt?: boolean;
+  /**
    * Plants tier (P3a): outstanding capacity build orders, oldest first. Each
    * order is capacity that has been PAID FOR but is not yet productive; it
    * converts into `capitalStock` on the turn `onlineTurn` is reached, and the

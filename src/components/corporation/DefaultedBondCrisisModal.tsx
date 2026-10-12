@@ -209,7 +209,7 @@ export default function DefaultedBondCrisisModal({
     }
   }
 
-  if (!open) return null;
+  if (!open || loading || !data) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm">
@@ -306,131 +306,150 @@ export default function DefaultedBondCrisisModal({
               )}
             </div>
 
-            <div className="rounded-lg border border-primary/30 bg-primary/5 p-3">
-              <div className="font-medium text-foreground mb-2">1. Pay cash</div>
-              <p className="text-muted text-body-xs mb-2">
-                Pay the full defaulted principal from corporate cash. Bondholders receive principal
-                and defaulted bonds are closed.
+            {(!data.cash.canPay ||
+              !data.refinance.canRefinance ||
+              data.refinance.imfRestructuring) && (
+              <p className="text-body-xs text-muted">
+                {!data.cash.canPay && `Paying in cash needs ${formatAmount(data.cash.cost)}. `}
+                {data.refinance.imfRestructuring
+                  ? "Refinancing is closed while the IMF restructuring program runs."
+                  : !data.refinance.canRefinance
+                    ? "Refinancing is not available right now."
+                    : ""}
               </p>
-              <Button
-                variant="primary"
-                disabled={!data.cash.canPay || submitting !== null}
-                isLoading={submitting === "cash"}
-                onClick={handleCash}
-              >
-                {data.cash.canPay
-                  ? `Pay ${formatAmount(data.cash.cost)}`
-                  : `Insufficient cash (need ${formatAmount(data.cash.cost)})`}
-              </Button>
-            </div>
-
-            <div className="rounded-lg border border-secondary/30 bg-secondary/5 p-3">
-              <div className="font-medium text-foreground mb-2">2. Refinance</div>
-              {data.refinance.imfRestructuring ? (
-                <p className="text-body-xs text-warning mb-2 rounded-md border border-warning/40 bg-warning/10 px-2 py-1.5">
-                  This corporation is under <span className="font-medium">IMF restructuring</span>.
-                  Refinancing defaulted bonds is not available until that program ends (admin).
+            )}
+            {data.cash.canPay && (
+              <div className="rounded-lg border border-primary/30 bg-primary/5 p-3">
+                <div className="font-medium text-foreground mb-2">1. Pay cash</div>
+                <p className="text-muted text-body-xs mb-2">
+                  Pay the full defaulted principal from corporate cash. Bondholders receive
+                  principal and defaulted bonds are closed.
                 </p>
-              ) : null}
-              <p className="text-muted text-body-xs mb-2">
-                Roll defaulted bondholders into a new {formatAmount(data.refinance.requiredFace)}{" "}
-                bond at par, clearing the default and restoring holders&apos; claim to face value.
-                This is a debt-for-debt swap. No cash is added to the corporation. Holders keep
-                their units (no payout), and the new bond carries the current (CCC-floored) coupon.
-                Still subject to 2× equity limits. Cooldown is waived for this emergency issuance.{" "}
-                <span className="text-muted">
-                  Used {data.refinance.refinanceCount} of {data.refinance.maxRefinances} lifetime
-                  refinances.
-                </span>
-                {data.refinance.couponRate != null && (
-                  <>
-                    {" "}
-                    Estimated coupon:{" "}
-                    <span className="font-medium text-foreground">
-                      {data.refinance.couponRate.toFixed(2)}% annual
-                    </span>
-                    {data.refinance.primeRate != null && (
-                      <span className="text-muted">
-                        {" "}
-                        (prime {data.refinance.primeRate.toFixed(2)}% + credit spread)
-                      </span>
-                    )}
-                    .
-                  </>
-                )}
-              </p>
-              <label className="block text-body-xs text-muted mb-1">Maturity</label>
-              <select
-                value={maturityTurns}
-                onChange={(e) => setMaturityTurns(Number(e.target.value) as BondMaturityTurns)}
-                className="mb-3 w-full rounded-lg border border-card-border bg-background px-3 py-2 text-body-sm text-foreground"
-              >
-                {MATURITY_OPTIONS.map((t) => (
-                  <option key={t} value={t}>
-                    {BOND_MATURITY_LABELS[t]} ({t} turns)
-                  </option>
-                ))}
-              </select>
-              <Button
-                variant="secondary"
-                disabled={!data.refinance.canRefinance || submitting !== null}
-                isLoading={submitting === "refinance"}
-                onClick={handleRefinance}
-              >
-                {data.refinance.canRefinance
-                  ? "Issue refinance bond"
-                  : data.refinance.imfRestructuring
-                    ? "Unavailable (IMF restructuring)"
-                    : data.refinance.refinanceCount >= data.refinance.maxRefinances
-                      ? `Refinance limit reached (${data.refinance.maxRefinances} used)`
-                      : `Cannot issue (max ${formatAmount(data.refinance.maxAllowedFace)} under limits)`}
-              </Button>
-            </div>
-
-            <div className="rounded-lg border border-accent/30 bg-accent/5 p-3">
-              <div className="font-medium text-foreground mb-2">3. Restructure</div>
-              <p className="text-muted text-body-xs mb-2">
-                Sell off the minimum number of sectors needed to repay defaulted bondholders{" "}
-                <em>in full</em>, then clear the default. The corporation survives with its
-                remaining sectors and cash. Liquidated sectors recover 85% of their estimated value.
-              </p>
-              <div className="text-body-xs text-muted mb-2 space-y-0.5">
-                <div>
-                  Repays bondholders: {formatAmount(data.restructure.cost)} (100% of defaulted
-                  principal)
-                </div>
-                {data.restructure.feasible ? (
-                  <>
-                    <div>
-                      Sectors liquidated: {data.restructure.sectorsToLiquidate} of{" "}
-                      {data.restructure.totalSectors} (raises{" "}
-                      {formatAmount(data.restructure.proceeds)})
-                    </div>
-                    <div>
-                      Liquid capital after: {formatAmount(data.restructure.residualLiquidCapital)}
-                    </div>
-                  </>
-                ) : (
-                  <div className="text-warning">
-                    Not enough sector value to cover the default: even selling every sector raises
-                    only {formatAmount(data.restructure.totalSalvageAvailable)}. Use Dissolve &amp;
-                    settle instead.
-                  </div>
-                )}
+                <Button
+                  variant="primary"
+                  disabled={!data.cash.canPay || submitting !== null}
+                  isLoading={submitting === "cash"}
+                  onClick={handleCash}
+                >
+                  {data.cash.canPay
+                    ? `Pay ${formatAmount(data.cash.cost)}`
+                    : `Insufficient cash (need ${formatAmount(data.cash.cost)})`}
+                </Button>
               </div>
-              <Button
-                variant="secondary"
-                disabled={!data.restructure.feasible || submitting !== null}
-                isLoading={submitting === "restructure"}
-                onClick={handleRestructure}
-              >
-                {data.restructure.feasible
-                  ? `Restructure (sell ${data.restructure.sectorsToLiquidate} sector${
-                      data.restructure.sectorsToLiquidate === 1 ? "" : "s"
-                    })`
-                  : "Insufficient sector value"}
-              </Button>
-            </div>
+            )}
+            {data.refinance.canRefinance && !data.refinance.imfRestructuring && (
+              <div className="rounded-lg border border-secondary/30 bg-secondary/5 p-3">
+                <div className="font-medium text-foreground mb-2">2. Refinance</div>
+                {data.refinance.imfRestructuring ? (
+                  <p className="text-body-xs text-warning mb-2 rounded-md border border-warning/40 bg-warning/10 px-2 py-1.5">
+                    This corporation is under <span className="font-medium">IMF restructuring</span>
+                    . Refinancing defaulted bonds is not available until that program ends (admin).
+                  </p>
+                ) : null}
+                <p className="text-muted text-body-xs mb-2">
+                  Roll defaulted bondholders into a new {formatAmount(data.refinance.requiredFace)}{" "}
+                  bond at par, clearing the default and restoring holders&apos; claim to face value.
+                  This is a debt-for-debt swap. No cash is added to the corporation. Holders keep
+                  their units (no payout), and the new bond carries the current (CCC-floored)
+                  coupon. Still subject to 2× equity limits. Cooldown is waived for this emergency
+                  issuance.{" "}
+                  <span className="text-muted">
+                    Used {data.refinance.refinanceCount} of {data.refinance.maxRefinances} lifetime
+                    refinances.
+                  </span>
+                  {data.refinance.couponRate != null && (
+                    <>
+                      {" "}
+                      Estimated coupon:{" "}
+                      <span className="font-medium text-foreground">
+                        {data.refinance.couponRate.toFixed(2)}% annual
+                      </span>
+                      {data.refinance.primeRate != null && (
+                        <span className="text-muted">
+                          {" "}
+                          (prime {data.refinance.primeRate.toFixed(2)}% + credit spread)
+                        </span>
+                      )}
+                      .
+                    </>
+                  )}
+                </p>
+                <label className="block text-body-xs text-muted mb-1">Maturity</label>
+                <select
+                  value={maturityTurns}
+                  onChange={(e) => setMaturityTurns(Number(e.target.value) as BondMaturityTurns)}
+                  className="mb-3 w-full rounded-lg border border-card-border bg-background px-3 py-2 text-body-sm text-foreground"
+                >
+                  {MATURITY_OPTIONS.map((t) => (
+                    <option key={t} value={t}>
+                      {BOND_MATURITY_LABELS[t]} ({t} turns)
+                    </option>
+                  ))}
+                </select>
+                <Button
+                  variant="secondary"
+                  disabled={!data.refinance.canRefinance || submitting !== null}
+                  isLoading={submitting === "refinance"}
+                  onClick={handleRefinance}
+                >
+                  {data.refinance.canRefinance
+                    ? "Issue refinance bond"
+                    : data.refinance.imfRestructuring
+                      ? "Unavailable (IMF restructuring)"
+                      : data.refinance.refinanceCount >= data.refinance.maxRefinances
+                        ? `Refinance limit reached (${data.refinance.maxRefinances} used)`
+                        : `Cannot issue (max ${formatAmount(data.refinance.maxAllowedFace)} under limits)`}
+                </Button>
+              </div>
+            )}
+
+            {data.restructure.feasible && (
+              <div className="rounded-lg border border-accent/30 bg-accent/5 p-3">
+                <div className="font-medium text-foreground mb-2">3. Restructure</div>
+                <p className="text-muted text-body-xs mb-2">
+                  Sell off the minimum number of sectors needed to repay defaulted bondholders{" "}
+                  <em>in full</em>, then clear the default. The corporation survives with its
+                  remaining sectors and cash. Liquidated sectors recover 85% of their estimated
+                  value.
+                </p>
+                <div className="text-body-xs text-muted mb-2 space-y-0.5">
+                  <div>
+                    Repays bondholders: {formatAmount(data.restructure.cost)} (100% of defaulted
+                    principal)
+                  </div>
+                  {data.restructure.feasible ? (
+                    <>
+                      <div>
+                        Sectors liquidated: {data.restructure.sectorsToLiquidate} of{" "}
+                        {data.restructure.totalSectors} (raises{" "}
+                        {formatAmount(data.restructure.proceeds)})
+                      </div>
+                      <div>
+                        Liquid capital after: {formatAmount(data.restructure.residualLiquidCapital)}
+                      </div>
+                    </>
+                  ) : (
+                    <div className="text-warning">
+                      Not enough sector value to cover the default: even selling every sector raises
+                      only {formatAmount(data.restructure.totalSalvageAvailable)}. Use Dissolve
+                      &amp; settle instead.
+                    </div>
+                  )}
+                </div>
+                <Button
+                  variant="secondary"
+                  disabled={!data.restructure.feasible || submitting !== null}
+                  isLoading={submitting === "restructure"}
+                  onClick={handleRestructure}
+                >
+                  {data.restructure.feasible
+                    ? `Restructure (sell ${data.restructure.sectorsToLiquidate} sector${
+                        data.restructure.sectorsToLiquidate === 1 ? "" : "s"
+                      })`
+                    : "Insufficient sector value"}
+                </Button>
+              </div>
+            )}
 
             <div className="rounded-lg border border-warning/40 bg-warning/10 p-3">
               <div className="font-medium text-warning mb-2">4. Dissolve &amp; settle</div>

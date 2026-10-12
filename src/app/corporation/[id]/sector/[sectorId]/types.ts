@@ -441,6 +441,8 @@ export interface SplitStrengthInfo {
 }
 
 export interface AttackInfo {
+  canAttack?: boolean;
+  canSplit?: boolean;
   attackCost: number;
   splitCost: number;
   splitEstimatedCapture: number;

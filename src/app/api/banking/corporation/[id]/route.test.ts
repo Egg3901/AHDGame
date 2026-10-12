@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ObjectId } from "mongodb";
+import { NextResponse } from "next/server";
 import { createMockDb } from "@/lib/test-utils/mockDb";
 import { getEraUnitScale } from "@/lib/constants/sectorSeedEra";
 import { getGdpAnchorRate } from "@/lib/currency/gdpAnchorRate";
@@ -30,9 +31,13 @@ vi.mock("@/lib/banking/reserves", () => ({ getReserveRequirement: vi.fn(async ()
 vi.mock("@/lib/currentTurn", () => ({ getCurrentTurn: vi.fn(async () => 27) }));
 
 import { GET } from "./route";
+import { requireCeo } from "@/lib/api/corporations/resolveQuery";
 
 describe("bank console charter quotes", () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(requireCeo).mockReturnValue(null);
+  });
 
   it.each(["1953-default", "1991-default", "2019-default"])(
     "uses one preset read and preserves failed eligibility for %s",
@@ -68,6 +73,8 @@ describe("bank console charter quotes", () => {
       );
       expect(body.capitalRequirement).toBe(expected);
       expect(body.eligibleTypes).toEqual([]);
+      expect(body.canIssueCharter).toBe(false);
+      expect(body.switchableTypes).toEqual([]);
       expect(body.eligibilityReasons).toEqual([
         `Insufficient treasury: need ${expected.toLocaleString()} USD posted capital`,
       ]);
@@ -79,9 +86,17 @@ describe("bank console charter quotes", () => {
 });
 
 describe("bank console loan book", () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(requireCeo).mockReturnValue(null);
+  });
 
-  it("reads only the active charter's loans after a recharter", async () => {
+  it.each([
+    { cooldown: false, owner: true },
+    { cooldown: true, owner: true },
+    { cooldown: false, owner: false },
+  ])("reads the active charter and excludes blocked switches (%j)", async ({ cooldown, owner }) => {
+    vi.mocked(requireCeo).mockReturnValue(owner ? null : new NextResponse(null, { status: 403 }));
     const db = createMockDb();
     const corporation = {
       _id: new ObjectId(),
@@ -94,6 +109,7 @@ describe("bank console loan book", () => {
         status: "active",
         currency: "USD",
         charteredTurn: 20,
+        charterSwitchCooldownUntilTurn: cooldown ? 40 : null,
         postedCapital: 1000,
         cashReserves: 1000,
         totalLoans: 0,
@@ -114,10 +130,13 @@ describe("bank console loan book", () => {
     db.collection("corporateSectors");
     db.collectionMocks.corporateSectors!.findOne.mockResolvedValue({ _id: new ObjectId() });
 
-    await GET(new Request("http://localhost/api/banking/corporation/1"), {
+    const response = await GET(new Request("http://localhost/api/banking/corporation/1"), {
       params: Promise.resolve({ id: "1" }),
     });
 
+    const body = await response.json();
+    expect(body.switchableTypes).toEqual(cooldown || !owner ? [] : ["investment", "universal"]);
+    expect(body.canIssueCharter).toBe(false);
     db.collection("bankLoans");
     const find = db.collectionMocks.bankLoans!.find;
     expect(find).toHaveBeenCalled();

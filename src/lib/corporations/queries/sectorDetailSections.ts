@@ -1,5 +1,6 @@
 import type { PlantIdleCause, PlantBuildOrderView, SectorPlantsSection } from "./sectorPlantsTypes";
 export type { PlantIdleCause, PlantBuildOrderView, SectorPlantsSection } from "./sectorPlantsTypes";
+import { hasProtectedConstructionProperty } from "@/lib/corporations/securedConstructionProperty";
 import { getCorporateSectorLaneQuery } from "@/lib/corporations/sectorLocation";
 /**
  * Payload-section builders for the sector detail query: apportioned taxes,
@@ -113,7 +114,7 @@ import { projectStrategyRevenuePerTurn } from "@/lib/corporations/strategyRevenu
 import type { SectorBuildOrder } from "@/lib/db/types";
 import { STRIKE_REVENUE_THROTTLE } from "@/lib/labour/strikes";
 import { calculatePlantSectorSplit } from "@/lib/corporations/plantSectorSplit";
-import { CAPITAL_DEPRECIATION_PER_TURN } from "@/lib/market/capital";
+import { CAPITAL_DEPRECIATION_PER_TURN, governorAnchorTurn } from "@/lib/market/capital";
 import { isNppOwned } from "@/lib/corporations/nppOwned";
 import { SOLD_OUT_FILL } from "@/lib/turn/corporation/demandThrottle";
 import { plantsNetMarginPct } from "@/lib/corporations/rules/netMargin";
@@ -438,9 +439,10 @@ export async function buildSectorForSaleInfo(
     viewerCorporation: Corporation | null;
     isCeo: boolean;
     viewerCorpFxRate: number;
+    sellerCurrency?: CurrencyCode | null;
   }
 ) {
-  const { sector, viewerCorporation, isCeo, viewerCorpFxRate } = args;
+  const { sector, viewerCorporation, isCeo, viewerCorpFxRate, sellerCurrency } = args;
   const listing = sector.forSale;
   if (!listing || !viewerCorporation || isCeo) return null;
   // Detect buyers who already operate this sector type in this state; the
@@ -451,7 +453,7 @@ export async function buildSectorForSaleInfo(
       stateId: sector.stateId,
       ...getCorporateSectorLaneQuery(sector),
     },
-    { projection: { _id: 1 } }
+    { projection: { _id: 1, constructionFinancing: 1, constructionPropertyTransition: 1 } }
   );
   const buyerCurrency = resolveCorpLiquidCurrencyCode(viewerCorporation);
   const feeLocal =
@@ -463,7 +465,10 @@ export async function buildSectorForSaleInfo(
             listing.priceAnchor
           ).spreadAnchor * viewerCorpFxRate
         )
-      : 0;
+      : Math.round(
+          sectorFxSpreadBetween(buyerCurrency, sellerCurrency ?? buyerCurrency, listing.priceAnchor)
+            .spreadAnchor * viewerCorpFxRate
+        );
   const priceInViewerCapital =
     Math.round(
       anchorToCorpLiquidCapital(listing.priceAnchor, viewerCorporation, viewerCorpFxRate)
@@ -481,7 +486,15 @@ export async function buildSectorForSaleInfo(
     viewerLiquidCurrencyCode: resolveCorpLiquidCurrencyCode(viewerCorporation),
     priceInViewerCapital,
     viewerCapitalAnchor,
-    eligible: hasFunds && !(conflict && listing.pledged),
+    eligible:
+      hasFunds &&
+      Number.isFinite(listing.priceAnchor) &&
+      listing.priceAnchor > 0 &&
+      !(conflict && (listing.pledged || hasProtectedConstructionProperty(conflict))) &&
+      !sector.constructionPropertyTransition &&
+      (!hasProtectedConstructionProperty(sector) ||
+        (sector.constructionFinancing?.loanFunded === true &&
+          ["building", "released"].includes(sector.constructionFinancing.status))),
     conflict: !!conflict,
     hasFunds,
   };
@@ -1145,6 +1158,8 @@ export function buildSectorPlantsSection(args: {
   currentYear: number;
   governorCap: number;
   governorRampTurns: number;
+  /** World flip turn the governor ramp anchors to (see `MarketContext`). */
+  worldGovernorAnchorTurn?: number | null;
   marketSharePercent: number;
   /** Corporation's aggregate share of the host country's sector market. */
   nationalMarketSharePercent?: number;
@@ -1370,7 +1385,8 @@ export function buildSectorPlantsSection(args: {
   });
 
   // ─── Governor ("market support") ──────────────────────────────────────────
-  const plantsStartTurn = num(sector.plantsStartTurn);
+  const plantsStartTurn =
+    governorAnchorTurn(num(sector.plantsStartTurn), args.worldGovernorAnchorTurn) ?? null;
   const governorTurnsRemaining =
     plantsStartTurn != null
       ? nonNeg(plantsStartTurn + governorRampTurns - currentTurn)

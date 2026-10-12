@@ -66,6 +66,14 @@ export default function ShareStructurePanel({ corporation, trading }: ShareStruc
   const reverseRange = `${minTotalShares.toLocaleString("en-US")} to ${(corporation.totalShares - 1).toLocaleString("en-US")}`;
   const forwardRange = `${(corporation.totalShares + 1).toLocaleString("en-US")} to ${maxForwardTotal.toLocaleString("en-US")}`;
 
+  if (!canEditShareStructureTarget) {
+    return (
+      <p className="text-xs text-muted">
+        The corporation has {corporation.totalShares.toLocaleString("en-US")} shares.
+      </p>
+    );
+  }
+
   return (
     <DenseSection title="Stock split" meta="CEO">
       <div className="space-y-2 py-1">
@@ -103,32 +111,30 @@ export default function ShareStructurePanel({ corporation, trading }: ShareStruc
             disabled={!canEditShareStructureTarget}
             className="h-7 w-40 rounded-md border border-card-border bg-background px-2 text-right text-[13px] tabular-nums text-foreground focus:border-foreground focus:outline-none disabled:opacity-50"
           />
-          <SmallButton
-            disabled={!canEditShareStructureTarget}
-            onClick={() =>
-              setConsolidateTarget(
-                Math.max(minTotalShares, Math.floor(corporation.totalShares / 10))
-              )
-            }
-          >
-            10:1 reverse
-          </SmallButton>
-          <SmallButton
-            disabled={!canEditShareStructureTarget || corporation.totalShares * 2 > maxForwardTotal}
-            onClick={() => setConsolidateTarget(corporation.totalShares * 2)}
-          >
-            2:1 forward
-          </SmallButton>
-          <SmallButton
-            disabled={
-              !canEditShareStructureTarget ||
-              foundingShares >= corporation.totalShares ||
-              foundingShares < minTotalShares
-            }
-            onClick={() => setConsolidateTarget(foundingShares)}
-          >
-            Founding size ({foundingShares.toLocaleString("en-US")})
-          </SmallButton>
+          {corporation.totalShares > minTotalShares && (
+            <SmallButton
+              onClick={() =>
+                setConsolidateTarget(
+                  Math.max(minTotalShares, Math.floor(corporation.totalShares / 10))
+                )
+              }
+            >
+              10:1 reverse
+            </SmallButton>
+          )}
+          {corporation.totalShares * 2 <= maxForwardTotal && (
+            <SmallButton
+              disabled={!canEditShareStructureTarget}
+              onClick={() => setConsolidateTarget(corporation.totalShares * 2)}
+            >
+              2:1 forward
+            </SmallButton>
+          )}
+          {foundingShares < corporation.totalShares && foundingShares >= minTotalShares && (
+            <SmallButton onClick={() => setConsolidateTarget(foundingShares)}>
+              Founding size ({foundingShares.toLocaleString("en-US")})
+            </SmallButton>
+          )}
           <SmallButton
             tone="primary"
             onClick={handleConsolidateShares}

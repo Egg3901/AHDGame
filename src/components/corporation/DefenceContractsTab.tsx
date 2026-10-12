@@ -134,7 +134,7 @@ export default function DefenceContractsTab({
           aria-label="Procurement summary"
           className="grid grid-cols-3 gap-x-6 gap-y-3 py-1 lg:grid-cols-6"
         >
-          {figure("Offers awaiting you", pending.length.toLocaleString("en-US"))}
+          {isCeo && figure("Offers awaiting you", pending.length.toLocaleString("en-US"))}
           {figure("Lots outstanding", outstanding.toLocaleString("en-US"))}
           {figure("Lots per turn", formatRate(perTurn))}
           {figure("Earned to date", formatAmount(defence?.totalEarned ?? 0))}
@@ -153,7 +153,7 @@ export default function DefenceContractsTab({
 
       <InlineStatus message={error} tone="error" />
 
-      {pending.length > 0 && (
+      {isCeo && pending.length > 0 && (
         <DenseSection title="Offers awaiting your answer" meta={`${pending.length}`}>
           <p className="py-1 text-xs text-muted">
             A government has offered these orders. Nothing is built and nothing is paid until you
@@ -339,7 +339,9 @@ export default function DefenceContractsTab({
                           {c.status === "active"
                             ? `${remaining.toLocaleString("en-US")} outstanding, ${formatRate(c.projectedLotsPerTurn)}/turn`
                             : c.status === "pending"
-                              ? "awaiting your answer"
+                              ? isCeo
+                                ? "awaiting your answer"
+                                : "awaiting the CEO's answer"
                               : `${Math.round(pct)}% delivered`}
                         </Td>
                         <Td align="right">{formatAmount(c.pricePerLot)}</Td>

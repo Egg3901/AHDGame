@@ -293,3 +293,36 @@ describe("softenedMarketRealizationAmount (C5: zero means zero)", () => {
     expect(softenedMarketRealizationAmount(0, 0, 0, rt)).toBe(0);
   });
 });
+
+import { governorAnchorTurn } from "./capital";
+
+describe("governorAnchorTurn: new sectors join the world's ramp", () => {
+  it("anchors a sector founded after the world flip at the flip turn", () => {
+    expect(governorAnchorTurn(129, 0)).toBe(0);
+    expect(governorAnchorTurn(129, 40)).toBe(40);
+  });
+  it("keeps a sector's own stamp when it predates the world anchor", () => {
+    expect(governorAnchorTurn(10, 40)).toBe(10);
+  });
+  it("passes through when either side is missing", () => {
+    expect(governorAnchorTurn(null, 0)).toBeNull();
+    expect(governorAnchorTurn(undefined, 0)).toBeUndefined();
+    expect(governorAnchorTurn(129, null)).toBe(129);
+  });
+  it("lets a post-flip sector realise the world's ramp share, not a fresh clamp", () => {
+    // World on plants since turn 0, now turn 130 of a 240-turn ramp. A sector
+    // born on turn 129 must be clamped like every other sector, not at λ≈0.
+    const own = softenedMarketRealizationAmount(1_000, 3_000, 129, 130, 1, 240);
+    const joined = softenedMarketRealizationAmount(
+      1_000,
+      3_000,
+      governorAnchorTurn(129, 0),
+      130,
+      1,
+      240
+    );
+    const peer = softenedMarketRealizationAmount(1_000, 3_000, 0, 130, 1, 240);
+    expect(joined).toBeCloseTo(peer, 9);
+    expect(joined).toBeGreaterThan(own);
+  });
+});

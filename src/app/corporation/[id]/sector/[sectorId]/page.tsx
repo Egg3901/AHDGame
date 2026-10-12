@@ -42,17 +42,9 @@ import MarketMoneyPanel from "./sections/MarketMoneyPanel";
 import InputsOutputsPanel from "./sections/InputsOutputsPanel";
 import BuildCapacityDialog from "./components/BuildCapacityDialog";
 import { useGameTurnStatus } from "@/hooks/useGameEvents";
-import {
-  ArrowLeft,
-  BarChart3,
-  BriefcaseBusiness,
-  Factory,
-  Settings2,
-  UsersRound,
-} from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { apiErrorText } from "@/lib/errors/catalog";
-
-type WorkspaceTab = "overview" | "operations" | "market" | "people" | "management";
+import SectorWorkspaceTabs, { type WorkspaceTab } from "./components/SectorWorkspaceTabs";
 
 export default function SectorDetailPage() {
   const params = useParams();
@@ -700,33 +692,12 @@ export default function SectorDetailPage() {
         )}
 
         <div className="sticky top-0 z-20 mb-6 -mx-4 border-y border-card-border bg-background/95 px-4 py-2 shadow-sm backdrop-blur sm:mx-0 sm:rounded-xl sm:border sm:bg-card/95">
-          <div className="flex gap-1 overflow-x-auto" role="tablist" aria-label="Sector workspace">
-            {(
-              [
-                ["overview", "Overview", BarChart3],
-                ["operations", "Operations", Factory],
-                ["market", "Market & supply", BriefcaseBusiness],
-                ["people", "People", UsersRound],
-                ...(isCeo ? [["management", "Manage", Settings2]] : []),
-              ] as [WorkspaceTab, string, typeof BarChart3][]
-            ).map(([id, label, Icon]) => (
-              <button
-                key={id}
-                type="button"
-                role="tab"
-                aria-selected={activeTab === id}
-                onClick={() => setActiveTab(id)}
-                className={`inline-flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
-                  activeTab === id
-                    ? "bg-primary text-primary-foreground shadow-sm"
-                    : "text-muted hover:bg-card-elevated hover:text-foreground"
-                }`}
-              >
-                <Icon className="h-4 w-4" />
-                {label}
-              </button>
-            ))}
-          </div>
+          <SectorWorkspaceTabs
+            activeTab={activeTab}
+            onChange={setActiveTab}
+            isCeo={isCeo}
+            labourEnabled={labourEnabled}
+          />
         </div>
 
         {activeTab === "overview" && (
@@ -1017,7 +988,7 @@ export default function SectorDetailPage() {
           </div>
         )}
 
-        {activeTab === "people" && (
+        {labourEnabled && activeTab === "people" && (
           <div className="mx-auto max-w-3xl space-y-6" role="tabpanel">
             <div>
               <h2 className="text-xl font-bold text-foreground">People</h2>
@@ -1025,11 +996,6 @@ export default function SectorDetailPage() {
                 Workforce policy and labour relations, without the financial noise.
               </p>
             </div>
-            {!labourEnabled && (
-              <div className="rounded-xl border border-card-border bg-card p-8 text-center text-sm text-muted">
-                Workforce controls are not enabled in this game.
-              </div>
-            )}
             {labourEnabled && (
               <WageLevelPanel
                 sector={sector}

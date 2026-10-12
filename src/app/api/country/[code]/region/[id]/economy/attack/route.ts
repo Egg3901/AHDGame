@@ -448,7 +448,13 @@ export async function POST(request: Request, { params }: RouteParams) {
         // is never re-seeded as capacity.
         revenue: plantsEnabled ? 0 : actualCaptureLocal,
         ...(plantsEnabled
-          ? { capitalStock: capitalStockDelta, plantsStartTurn: gameState?.currentTurn ?? 0 }
+          ? {
+              capitalStock: capitalStockDelta,
+              plantsStartTurn: gameState?.currentTurn ?? 0,
+              // Built under plants by a player: no flip to smooth, so it earns
+              // the market from its first turn.
+              ...(corporation.ceoType === "character" ? { plantsGovernorExempt: true } : {}),
+            }
           : {}),
         profitMargin: DEFAULT_PROFIT_MARGIN,
         workers: DEFAULT_SECTOR_STARTING_WORKERS,

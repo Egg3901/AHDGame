@@ -1,5 +1,6 @@
 "use client";
 
+import { fetchJson } from "@/lib/observability/fetchJson";
 import { InlineError } from "@/components/ui/InlineError";
 import { apiErrorText } from "@/lib/errors/catalog";
 import { useState, useEffect, type FormEvent } from "react";
@@ -39,54 +40,6 @@ const fundPageHref = (scope: string, countryId: string | null, slug: string) =>
 const sponsoredFundHref = (f: SponsoredFund) => fundPageHref(f.scope, f.countryId, f.slug);
 
 /**
- * Funds this corporation already sponsors. Before this, a chartered fund
- * vanished from the owner's view once the charter session ended (ticket 1088):
- * nothing listed a corp's own funds. `refreshKey` re-fetches after a new charter.
- */
-function SponsoredFundList({ corpId, refreshKey }: { corpId: string; refreshKey: string | null }) {
-  const [funds, setFunds] = useState<SponsoredFund[] | null>(null);
-
-  useEffect(() => {
-    let alive = true;
-    void (async () => {
-      try {
-        const res = await fetch(`/api/corporations/${corpId}/funds`);
-        const json = (await res.json().catch(() => ({}))) as { funds?: SponsoredFund[] };
-        if (alive) setFunds(res.ok ? (json.funds ?? []) : []);
-      } catch {
-        if (alive) setFunds([]);
-      }
-    })();
-    return () => {
-      alive = false;
-    };
-  }, [corpId, refreshKey]);
-
-  if (!funds || funds.length === 0) return null;
-
-  return (
-    <div className="mb-4">
-      <h4 className="mb-1 border-b border-card-border pb-1.5 text-sm font-semibold text-foreground">
-        Funds this corporation sponsors
-      </h4>
-      <ul className="space-y-1.5">
-        {funds.map((f) => (
-          <li key={f.id} className="flex items-center justify-between gap-3 text-sm">
-            <Link
-              href={sponsoredFundHref(f)}
-              className="font-medium text-foreground hover:underline"
-            >
-              {f.name} <span className="font-mono text-xs text-muted">{f.ticker}</span>
-            </Link>
-            <span className="text-xs text-muted">{f.status === "active" ? f.kind : f.status}</span>
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
-
-/**
  * A5 charter surface: a finance corporation's CEO charters a sponsored index
  * fund from the same tab that hosts the index committee. The form mirrors the
  * refusals `POST /api/index-funds/charter` enforces, so a submission that
@@ -95,6 +48,11 @@ function SponsoredFundList({ corpId, refreshKey }: { corpId: string; refreshKey:
  */
 export default function SponsoredFundPanel({ corpId }: { corpId: string }) {
   const resolveCountryName = useCountryDisplayName();
+  const [availability, setAvailability] = useState<{
+    corpId: string;
+    canCreate: boolean;
+    funds: SponsoredFund[];
+  } | null>(null);
   const [name, setName] = useState("");
   const [ticker, setTicker] = useState("");
   const [scope, setScope] = useState<"country" | "global">("country");
@@ -106,6 +64,24 @@ export default function SponsoredFundPanel({ corpId }: { corpId: string }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [chartered, setChartered] = useState<{ slug: string; ticker: string } | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    void fetchJson<{ canCreate?: boolean; funds?: SponsoredFund[] }>(
+      `/api/corporations/${corpId}/funds`,
+      { feature: "sponsored-funds" }
+    )
+      .then((data) => {
+        if (alive)
+          setAvailability({ corpId, canCreate: data.canCreate === true, funds: data.funds ?? [] });
+      })
+      .catch(() => {
+        if (alive) setAvailability({ corpId, canCreate: false, funds: [] });
+      });
+    return () => {
+      alive = false;
+    };
+  }, [corpId, chartered?.slug]);
 
   const minPct = MIN_EXPENSE_RATIO_ANNUAL * 100;
   const maxPct = MAX_EXPENSE_RATIO_ANNUAL * 100;
@@ -167,9 +143,27 @@ export default function SponsoredFundPanel({ corpId }: { corpId: string }) {
 
   const fundHref = chartered ? fundPageHref(scope, countryId, chartered.slug) : "";
 
+  if (!availability || availability.corpId !== corpId) return null;
+  const fundContext =
+    availability.funds.length > 0 ? (
+      <p className="text-xs text-muted">
+        This corporation sponsors{" "}
+        {availability.funds.map((fund, index) => (
+          <span key={fund.id}>
+            {index > 0 ? ", " : ""}
+            <Link href={sponsoredFundHref(fund)} className="underline">
+              {fund.name}
+            </Link>
+          </span>
+        ))}
+        .
+      </p>
+    ) : null;
+  if (!availability.canCreate) return fundContext;
+
   return (
     <section className="min-w-0 space-y-2">
-      <SponsoredFundList corpId={corpId} refreshKey={chartered?.slug ?? null} />
+      {fundContext}
       <div className="flex min-h-8 items-baseline border-b border-card-border pb-1.5">
         <h2 className="text-sm font-semibold text-foreground">Charter a sponsored fund</h2>
       </div>

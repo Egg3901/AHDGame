@@ -301,6 +301,90 @@ describe("getCorporationSectorDetail", () => {
     }
   });
 
+  it("withholds market actions while corporation actions are paused", async () => {
+    const { getAuthUser } = await import("@/lib/auth");
+    const corporationId = new ObjectId();
+    const viewerId = new ObjectId();
+    const viewerCorporationId = new ObjectId();
+    const sectorId = new ObjectId();
+    const characterId = new ObjectId();
+    vi.mocked(getAuthUser).mockResolvedValueOnce({ userId: viewerId.toHexString() } as Awaited<
+      ReturnType<typeof getAuthUser>
+    >);
+    db.collectionMocks.corporations.findOne.mockImplementation(async (query) =>
+      query.ceoId
+        ? {
+            _id: viewerCorporationId,
+            userId: viewerId,
+            liquidCapital: 1000000,
+            countryId: "US",
+            liquidCurrencyCode: "USD",
+          }
+        : {
+            _id: corporationId,
+            name: "Test corporation",
+            countryId: "US",
+            liquidCurrencyCode: "USD",
+          }
+    );
+    db.collectionMocks.corporateSectors.findOne.mockResolvedValue({
+      _id: sectorId,
+      corporationId,
+      stateId: "CA",
+      countryId: "US",
+      sectorType: "technology",
+      revenue: 1000000,
+      forSale: { priceAnchor: 100, npvAnchor: 125, listedAt: new Date(0) },
+    });
+    db.collection("characters");
+    db.collectionMocks.characters.findOne.mockResolvedValue({ _id: characterId, userId: viewerId });
+    db.collection("gameState");
+    db.collectionMocks.gameState.findOne.mockResolvedValue({
+      _id: "current",
+      corporationActionsPaused: true,
+    });
+    const response = await getCorporationSectorDetail(
+      new Request(`http://localhost/api/corporations/9/sectors/${sectorId}`),
+      { params: Promise.resolve({ id: "9", sectorId: sectorId.toHexString() }) }
+    );
+    const data = await response.json();
+    expect(response.status).toBe(200);
+    expect(data.attackInfo).toBeNull();
+    expect(data.forSaleInfo.eligible).toBe(false);
+  });
+
+  it("does not grant a vacant CEO seat's management capability", async () => {
+    const { getAuthUser } = await import("@/lib/auth");
+    const corporationId = new ObjectId();
+    const viewerId = new ObjectId();
+    const sectorId = new ObjectId();
+    vi.mocked(getAuthUser).mockResolvedValueOnce({ userId: viewerId.toHexString() } as Awaited<
+      ReturnType<typeof getAuthUser>
+    >);
+    db.collectionMocks.corporations.findOne.mockResolvedValue({
+      _id: corporationId,
+      name: "Test corporation",
+      userId: viewerId,
+      ceoVacant: true,
+      countryId: "US",
+      liquidCurrencyCode: "USD",
+    });
+    db.collectionMocks.corporateSectors.findOne.mockResolvedValue({
+      _id: sectorId,
+      corporationId,
+      stateId: "CA",
+      countryId: "US",
+      sectorType: "technology",
+      revenue: 1000000,
+    });
+    const response = await getCorporationSectorDetail(
+      new Request(`http://localhost/api/corporations/9/sectors/${sectorId}`),
+      { params: Promise.resolve({ id: "9", sectorId: sectorId.toHexString() }) }
+    );
+    expect(response.status).toBe(200);
+    expect((await response.json()).isCeo).toBe(false);
+  });
+
   it("does not fog a public corp's sector financials for its own CEO", async () => {
     const { getAuthUser } = await import("@/lib/auth");
     const corporationId = new ObjectId();

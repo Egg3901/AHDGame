@@ -113,3 +113,33 @@ describe("sovereign primary subscription consent", () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 });
+
+describe("treasury action visibility", () => {
+  it("renders nothing for a viewer without management permission", () => {
+    const { container } = render(
+      <BankTreasuryPanel
+        corporationId="bank"
+        overview={{ ...overview, primaryOffers: [offer], positions: [offer] }}
+        canMutate={false}
+        onChanged={vi.fn()}
+        showToast={vi.fn()}
+      />
+    );
+    expect(container.childElementCount).toBe(0);
+  });
+  it("omits unavailable purchases and sales", () => {
+    render(
+      <BankTreasuryPanel
+        corporationId="bank"
+        overview={{ ...overview, spendableCash: 0, primaryOffers: [offer], positions: [offer] }}
+        canMutate
+        onChanged={vi.fn()}
+        showToast={vi.fn()}
+      />
+    );
+    expect(screen.queryByRole("button", { name: "Buy" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Sell" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Subscribe" })).toBeNull();
+    expect(screen.queryByLabelText("Bill units per trade")).toBeNull();
+  });
+});

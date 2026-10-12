@@ -130,6 +130,8 @@ export function RateOffsetEditor({
     </label>
   );
 
+  if (!canMutate) return null;
+
   return (
     <BankPanel
       kind="ceoControl"
