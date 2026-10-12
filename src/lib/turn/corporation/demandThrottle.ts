@@ -7,4 +7,5 @@ export {
   DEMAND_THROTTLE_FLOOR,
   demandThrottleFactor,
   withLatentDemand,
+  withRegulationBlockedFill,
 } from "./rules/demandThrottle";

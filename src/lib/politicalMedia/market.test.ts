@@ -444,4 +444,34 @@ describe("political residual delivery under an ownership law", () => {
     );
     expect(result.clearingBySectorId.get("b")!.soldByCommodity!.advertising).toBe(1);
   });
+  it("lets a sole outlet fill political orders up to its audience limit", () => {
+    const soleOffer = {
+      ...offer,
+      input: { ...input, sectorId: "a1", supplyRates: { advertising: 1 } },
+      corporationId: "a",
+      sellerCurrencyCode: "USD",
+      sellerLocalPerAnchor: 1,
+      offeredUnits: 100,
+      clearing: { ...clearing, soldByCommodity: { advertising: 0.5 } },
+    };
+    const result = settlePoliticalAdMarket({
+      orders: [
+        { orderId: "order", countryId: "US", stateId: "CA", createdTurn: 1, budgetAnchor: 10000 },
+      ],
+      offers: [soleOffer],
+      clearingBySectorId: new Map([["a1", soleOffer.clearing]]),
+      clearingEnabled: true,
+      qualityPremiumEnabled: false,
+      turn: 1,
+      mediaOwnership: {
+        shareCap: 0.65,
+        stateBySector: new Map([["a1", "CA"]]),
+        corporationBySector: new Map([["a1", "a"]]),
+        limitUnitsByOwner: new Map([["CA:a", 65]]),
+      },
+    });
+    // Commercial delivery 50, audience limit 65: 15 political units remain.
+    // The delivered-share bound would have allowed none.
+    expect(result.allocations[0]!.deliveredUnits).toBeCloseTo(15);
+  });
 });

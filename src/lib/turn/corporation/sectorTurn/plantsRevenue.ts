@@ -33,7 +33,11 @@ import type { CommodityType } from "@/lib/constants/commodities";
 import type { ExtractableResource } from "@/lib/constants/commodities";
 import type { CorporationLookups } from "../types";
 import { computeContractProduction } from "../contractProduction";
-import { soldOutMarketHeadroomUnits, throttleSoldUnits } from "../demandThrottle";
+import {
+  soldOutMarketHeadroomUnits,
+  throttleSoldUnits,
+  withRegulationBlockedFill,
+} from "../demandThrottle";
 
 export interface PlantsRevenueInput {
   sector: Pick<
@@ -385,11 +389,16 @@ export function resolvePlantsRevenue(input: PlantsRevenueInput): PlantsRevenueRe
   // The pre-pass just cleared the persisted prior output. Use that fill with
   // that quantity, not the saved fill from an older clearing book. Prices and
   // revenue retain their existing lagged-market convention.
+  // Units a media ownership law refused still had buyers, so they count as
+  // demand here; a capped outlet must not shrink because of a legal limit.
   const feedbackFill =
-    clearingEnabled && clearing ? clearing.soldByCommodity : sector.soldByCommodity;
+    clearingEnabled && clearing
+      ? withRegulationBlockedFill(clearing.soldByCommodity, clearing.regulationBlockedByCommodity)
+      : sector.soldByCommodity;
   const feedbackSold =
     clearingEnabled && clearing && sector.producedUnits != null
-      ? sector.producedUnits * clearing.soldFraction
+      ? sector.producedUnits *
+        Math.min(1, clearing.soldFraction + (clearing.regulationBlockedFraction ?? 0))
       : sector.soldUnits;
   const production = computeContractProduction({
     plantsEnabled,

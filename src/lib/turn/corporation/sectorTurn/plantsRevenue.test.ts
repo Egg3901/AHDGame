@@ -274,6 +274,36 @@ describe("absolute cost-plus quotes", () => {
     expect(result.demandThrottleFactor).toBeCloseTo(0.23);
   });
 
+  it("does not shrink an outlet for units a media ownership law refused", () => {
+    // Buyers took all 1000 units; the law refused 350 of them. The plant keeps
+    // its run instead of reading 65% sell-through as weak demand.
+    const original = input();
+    const capped = (blocked: boolean) =>
+      resolvePlantsRevenue(
+        input({
+          sector: { ...original.sector, producedUnits: 1000, soldUnits: 1000 },
+          strategySupply: { advertising: 1 },
+          clearingEnabled: true,
+          clearing: {
+            factor: 0.65,
+            soldFraction: 0.65,
+            soldByCommodity: { advertising: 0.65 },
+            ...(blocked
+              ? {
+                  regulationBlockedFraction: 0.35,
+                  regulationBlockedByCommodity: { advertising: 0.35 },
+                }
+              : {}),
+            effectivePosture: 0,
+          },
+        })
+      );
+    expect(capped(true).demandThrottleFactor).toBe(1);
+    expect(capped(true).producedUnits).toBeCloseTo(1000);
+    // Without the blocked share the same sales would cut the run.
+    expect(capped(false).producedUnits).toBeLessThan(1000);
+  });
+
   it("uses a scoped share when recovering from a shortage and still caps physical output", () => {
     const original = input();
     const result = resolvePlantsRevenue(

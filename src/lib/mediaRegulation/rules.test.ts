@@ -168,27 +168,42 @@ describe("media regulation availability", () => {
   });
 });
 
-describe("current delivered ownership limits", () => {
-  const rows = (units: number[]) =>
+describe("audience ownership limits", () => {
+  const rows = (units: number[], demand: number[] = units) =>
     units.map((units, index) => ({
       sectorId: String(index),
       stateId: "CA",
       corporationId: String(index),
       units,
+      demandUnits: demand[index],
     }));
-  it("bounds final normalized shares instead of the prior audience denominator", () => {
-    const units = [...capDeliveredMediaUnits(rows([70, 30]), 0.65).values()];
-    expect(units[0]).toBeCloseTo((30 * 0.65) / 0.35);
+  it("caps an owner at the cap share of audience demand, not of rivals' delivery", () => {
+    const limits = new Map<string, number>();
+    const units = [...capDeliveredMediaUnits(rows([70, 30]), 0.65, undefined, limits).values()];
+    expect(units[0]).toBeCloseTo(65);
     expect(units[1]).toBe(30);
-    expect(units[0]! / (units[0]! + units[1]!)).toBeCloseTo(0.65);
+    expect(limits.get("CA:0")).toBeCloseTo(65);
   });
-  it("cannot invent another owner to make an infeasible market satisfy the law", () => {
-    expect([...capDeliveredMediaUnits(rows([70, 30]), 0.35).values()]).toEqual([0, 0]);
-    expect([...capDeliveredMediaUnits(rows([70, 20, 10]), 0.35).values()]).toEqual(
-      expect.arrayContaining([10])
-    );
-    const units = [...capDeliveredMediaUnits(rows([70, 20, 10]), 0.35).values()];
-    expect(Math.max(...units) / units.reduce((a, b) => a + b, 0)).toBeCloseTo(0.35);
+  it("lets a sole seller serve up to the cap share of demand", () => {
+    // The delivered-share rule left a sole seller with nothing.
+    expect([...capDeliveredMediaUnits(rows([100], [100]), 0.65).values()]).toEqual([65]);
+    expect([...capDeliveredMediaUnits(rows([50], [100]), 0.65).values()]).toEqual([50]);
+  });
+  it("does not tie a dominant seller to a small competitor's output", () => {
+    // Old rule: 5 * 0.65 / 0.35 = 9.3 units for the dominant seller.
+    const units = [...capDeliveredMediaUnits(rows([70, 5], [90, 10]), 0.65).values()];
+    expect(units[0]).toBeCloseTo(65);
+    expect(units[1]).toBe(5);
+  });
+  it("measures against the larger of the state's own demand and its book demand", () => {
+    const units = [
+      ...capDeliveredMediaUnits(rows([100], [20]), 0.65, new Map([["CA", 200]])).values(),
+    ];
+    expect(units).toEqual([100]);
+    const bookOnly = [
+      ...capDeliveredMediaUnits(rows([100], [100]), 0.65, new Map([["CA", 0]])).values(),
+    ];
+    expect(bookOnly).toEqual([65]);
   });
   it("combines split outlets under one owner and keeps states separate", () => {
     const result = capDeliveredMediaUnits(
@@ -197,12 +212,14 @@ describe("current delivered ownership limits", () => {
           ...row,
           corporationId: index < 2 ? "same" : "other",
         })),
-        { sectorId: "NY", stateId: "NY", corporationId: "same", units: 100 },
+        { sectorId: "NY", stateId: "NY", corporationId: "same", units: 100, demandUnits: 50 },
       ],
       0.65
     );
-    expect(result.get("0")! + result.get("1")!).toBeCloseTo((30 * 0.65) / 0.35);
-    expect(result.get("NY")).toBe(0);
+    expect(result.get("0")! + result.get("1")!).toBeCloseTo(65);
+    expect(result.get("0")! / result.get("1")!).toBeCloseTo(40 / 30);
+    expect(result.get("2")).toBe(30);
+    expect(result.get("NY")).toBeCloseTo(32.5);
   });
   it("bounds political delivery even when no other political seller is paid", () => {
     const extra = mediaPoliticalResidualLimit(20, 100, 0.65);

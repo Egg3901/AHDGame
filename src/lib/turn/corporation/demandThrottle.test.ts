@@ -6,6 +6,7 @@ import {
   soldOutMarketHeadroomUnits,
   throttleSoldUnits,
   withLatentDemand,
+  withRegulationBlockedFill,
 } from "./demandThrottle";
 
 describe("demandThrottleFactor — flip identity", () => {
@@ -284,5 +285,21 @@ describe("withLatentDemand", () => {
     expect(withLatentDemand(b, 1)).toBe(b);
     expect(withLatentDemand(b, Number.NaN)).toBe(b);
     expect(withLatentDemand(null, 2)).toBeNull();
+  });
+});
+
+describe("withRegulationBlockedFill", () => {
+  it("adds legally refused units back to the fill, clamped to a full fill", () => {
+    expect(
+      withRegulationBlockedFill({ advertising: 0.65, software: 0.4 }, { advertising: 0.35 })
+    ).toEqual({ advertising: 1, software: 0.4 });
+    expect(withRegulationBlockedFill({ advertising: 0.9 }, { advertising: 0.35 })).toEqual({
+      advertising: 1,
+    });
+  });
+  it("returns the fill unchanged when nothing was blocked", () => {
+    const fill = { advertising: 0.5 };
+    expect(withRegulationBlockedFill(fill, undefined)).toBe(fill);
+    expect(withRegulationBlockedFill(undefined, { advertising: 0.2 })).toBeUndefined();
   });
 });
