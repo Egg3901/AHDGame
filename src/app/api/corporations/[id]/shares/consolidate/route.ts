@@ -33,6 +33,7 @@ import { generateStockExchangeSnapshots } from "@/lib/turn/stockExchangeSnapshot
 import { isForexEnabled } from "@/lib/currency/featureFlag";
 import type { Character, Corporation, Shareholder, ImperialCharacter } from "@/lib/db/types";
 import type { CorporationVote } from "@/lib/db/types/corporationVote";
+import type { CorporationHistory } from "@/lib/db/types/corporationHistory";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { resolveCorpLiquidCurrencyCode } from "@/lib/currency/corporationCapital";
 
@@ -270,6 +271,33 @@ export async function POST(request: Request, { params }: RouteParams) {
     };
 
     await db.collection<Corporation>("corporations").updateOne({ _id: corporation._id }, { $set });
+
+    // Rescale this turn's history row too. Between turns the market tick
+    // recomputes prices in the split cooldown using this turn's persisted
+    // history price as its smoothing prior. That row was written by the turn
+    // before the split, so leaving it at the pre-split price pulls the live
+    // price back toward the old per-share level and moves market cap on a
+    // split that should be value-neutral (ticket #1500). Market cap on the row
+    // is unchanged by construction.
+    const currentHist = await db
+      .collection<CorporationHistory>("corporationHistory")
+      .findOne(
+        { corporationId: corporation._id, turn: currentTurn },
+        { projection: { sharePrice: 1 } }
+      );
+    if (currentHist && typeof currentHist.sharePrice === "number") {
+      const scaledHist = scaleSharePricesForStructureChange(
+        oldTotal,
+        targetTotalShares,
+        currentHist.sharePrice
+      );
+      await db
+        .collection<CorporationHistory>("corporationHistory")
+        .updateOne(
+          { _id: currentHist._id },
+          { $set: { sharePrice: scaledHist.sharePrice, totalShares: targetTotalShares } }
+        );
+    }
 
     // Mirror each surviving index fund's rescaled cap-table position into its
     // internal `holdings` ledger. allocateProportionalShareTotals already
