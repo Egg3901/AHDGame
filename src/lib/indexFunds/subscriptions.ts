@@ -113,11 +113,7 @@ export async function witnessSubscription(
 
 async function refundSubscription(tx: Db, fund: IndexFund, order: BankSubscription, turn: number) {
   const s = order.subscription;
-  const refunded = s.corporationId
-    ? await refundCorpLiquidCapital(tx, s.corporationId, s.amountNative)
-    : await refundCharacterCash(tx, s.characterId, s.currency, s.amountNative, s.forex);
-  if (!refunded) throw new Error("Subscription refund recipient is unavailable");
-  await tx.collection<BankSubscription>("indexFundCommands").updateOne(
+  const claimed = await tx.collection<BankSubscription>("indexFundCommands").updateOne(
     { _id: order._id, "subscription.status": "queued" },
     {
       $set: {
@@ -126,6 +122,11 @@ async function refundSubscription(tx: Db, fund: IndexFund, order: BankSubscripti
       },
     }
   );
+  if (claimed.modifiedCount !== 1) throw new Error("Subscription refund status changed");
+  const refunded = s.corporationId
+    ? await refundCorpLiquidCapital(tx, s.corporationId, s.amountNative)
+    : await refundCharacterCash(tx, s.characterId, s.currency, s.amountNative, s.forex);
+  if (!refunded) throw new Error("Subscription refund recipient is unavailable");
   await witnessSubscription(tx, fund, order, "refund", turn);
 }
 

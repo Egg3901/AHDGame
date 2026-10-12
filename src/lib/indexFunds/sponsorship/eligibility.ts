@@ -40,11 +40,8 @@ export async function fundCreationEligibility(
   });
   if (reason) return reason;
   if (state?.corporationActionsPaused) return "Corporation actions are currently paused.";
-  // Existing nonbank contracts keep their compatibility gate. Bank contracts are supported directly.
-  if (
-    !sponsor.bankCharter &&
-    (!config?.playerFundSponsorshipEnabled || !(await isIndexFundsEnabled(config)))
-  )
+  if (!(await isIndexFundsEnabled(config))) return "Investment funds are not enabled.";
+  if (!sponsor.bankCharter && !config?.playerFundSponsorshipEnabled)
     return "Player-sponsored index funds are not available yet.";
   if (!options?.replay && sponsor.bankCharter && liveFunds >= 3)
     return "A bank can manage at most three live funds.";

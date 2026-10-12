@@ -316,6 +316,52 @@ describe("bank fund eligibility and segregation", () => {
       expect(response.headers.get("cache-control")).toContain("no-store");
     }
   );
+  it.each(["investment", "universal"] as const)(
+    "hides and rejects %s bank creation and investing when the fund engine is off",
+    async (type) => {
+      const f = fixture(type);
+      f.memory.collection("gameConfig").docs[0].indexFundsMode = "off";
+      const before = f.total();
+      const { GET } = await import("@/app/api/corporations/[id]/funds/route");
+      const response = await GET(new Request("http://localhost/funds"), {
+        params: Promise.resolve({ id: String(f.sponsor._id) }),
+      });
+      expect(await response.json()).toMatchObject({ canCreate: false, stockChoices: [] });
+      expect(await fundCreationEligibility(f.db, f.sponsor)).not.toBeNull();
+      expect((await charterFund(f.db, f.creation)).ok).toBe(false);
+      expect(
+        (await fundTradeCapabilities(f.db, f.fund, { hasCharacter: true, units: 0 })).canSubscribe
+      ).toBe(false);
+      const { GET: getFund } = await import("@/app/api/investment-funds/[slug]/route");
+      const detail = await getFund(new Request("http://localhost/fund"), {
+        params: Promise.resolve({ slug: f.fund.slug }),
+      });
+      expect(detail.status).toBe(200);
+      expect((await detail.json()).fund.canSubscribe).toBe(false);
+      expect((await queueBankFundSubscription(f.db, f.input)).status).toBe(403);
+      const { POST } = await import("@/app/api/investment-funds/[slug]/subscribe/route");
+      expect(
+        (
+          await POST(
+            new Request("http://localhost/subscribe", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ units: 10, operationId: f.input.operationId }),
+            }),
+            { params: Promise.resolve({ slug: f.fund.slug }) }
+          )
+        ).status
+      ).toBe(403);
+      expect(f.orders()).toHaveLength(0);
+      expect(f.total()).toBe(before);
+      f.memory.collection("gameConfig").docs[0].indexFundsMode = "full";
+      expect(await fundCreationEligibility(f.db, f.sponsor)).toBeNull();
+      expect(
+        (await fundTradeCapabilities(f.db, f.fund, { hasCharacter: true, units: 0 })).canSubscribe
+      ).toBe(true);
+    }
+  );
+
   it("hides creation from other viewers and refuses inactive charters", async () => {
     const f = fixture();
     vi.mocked(getAuthUser).mockResolvedValue({ userId: String(new ObjectId()) } as never);
@@ -713,6 +759,75 @@ describe("next-turn subscription conservation", () => {
     expect(f.book().cashAnchor).toBe(paidCash);
     expect(f.total()).toBeCloseTo(before);
   });
+
+  it.each(["character", "corporation"] as const)(
+    "pays no %s refund or witness when the queued status cannot change",
+    async (holderKind) => {
+      const f = fixture();
+      await queueBankFundSubscription(f.db, {
+        ...f.input,
+        ...(holderKind === "corporation" ? { corporationId: String(f.sponsor._id) } : {}),
+      });
+      const cash = vi.spyOn(
+        f.memory.collection(holderKind === "corporation" ? "corporations" : "characters"),
+        "updateOne"
+      );
+      const witness = vi.spyOn(f.memory.collection("financialTxLog"), "insertOne");
+      const commands = vi
+        .spyOn(f.memory.collection("indexFundCommands"), "updateOne")
+        .mockResolvedValueOnce({ matchedCount: 1, modifiedCount: 0, upsertedCount: 0 });
+      await expect(
+        cancelBankFundSubscription(f.db, f.character._id, f.input.operationId)
+      ).rejects.toThrow("Subscription refund status changed");
+      expect(commands).toHaveBeenCalledWith(
+        { _id: `fund:${f.character._id}:${f.input.operationId}`, "subscription.status": "queued" },
+        expect.anything(),
+        expect.objectContaining({ session: f.session })
+      );
+      expect(cash).not.toHaveBeenCalled();
+      expect(witness).not.toHaveBeenCalled();
+      await cancelBankFundSubscription(f.db, f.character._id, f.input.operationId);
+      expect(cash).toHaveBeenCalledTimes(1);
+      expect(witness).toHaveBeenCalledTimes(2);
+      cash.mockClear();
+      witness.mockClear();
+      expect(
+        (await cancelBankFundSubscription(f.db, f.character._id, f.input.operationId)).status
+      ).toBe(200);
+      await settleBankFundSubscriptions(f.db, 11, [f.fund._id]);
+      expect(cash).not.toHaveBeenCalled();
+      expect(witness).not.toHaveBeenCalled();
+    }
+  );
+
+  it.each(["cash", "witness"])(
+    "rolls back the refund status after a %s failure and retries once",
+    async (step) => {
+      const f = fixture();
+      const before = f.total();
+      await queueBankFundSubscription(f.db, f.input);
+      const rowsBefore = f.memory.collection("financialTxLog").docs.length;
+      if (step === "cash")
+        vi.spyOn(f.memory.collection("characters"), "updateOne").mockRejectedValueOnce(
+          new Error("interrupted")
+        );
+      else
+        vi.spyOn(f.memory.collection("financialTxLog"), "insertOne").mockRejectedValueOnce(
+          new Error("interrupted")
+        );
+      await expect(
+        cancelBankFundSubscription(f.db, f.character._id, f.input.operationId)
+      ).rejects.toThrow("interrupted");
+      expect(f.orders()[0]).toMatchObject({ subscription: { status: "queued" } });
+      expect(f.memory.collection("financialTxLog").docs).toHaveLength(rowsBefore);
+      expect(f.total()).toBe(before);
+      await cancelBankFundSubscription(f.db, f.character._id, f.input.operationId);
+      await cancelBankFundSubscription(f.db, f.character._id, f.input.operationId);
+      expect(f.orders()[0]).toMatchObject({ subscription: { status: "refunded" } });
+      expect(f.memory.collection("financialTxLog").docs).toHaveLength(rowsBefore + 2);
+      expect(f.total()).toBe(before);
+    }
+  );
 
   it("cancels before settlement with an exact refund, including native FX", async () => {
     const f = fixture();
