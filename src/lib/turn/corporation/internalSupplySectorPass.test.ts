@@ -1,3 +1,4 @@
+import type { CorporateSector } from "@/lib/db/types";
 import { describe, expect, it } from "vitest";
 import { runInternalSupplyWorld } from "@/lib/test-utils/internalSupplyWorld";
 import { processSectors } from "./sectorCalculations";
@@ -73,8 +74,10 @@ it("aggregates finalized discounts once into real corporation income and persist
   expect(Number.isFinite(turns[0].totalIncomeGenerated)).toBe(true);
   expect(turns[1].totalIncomeGenerated).toBeCloseTo(turns[0].totalIncomeGenerated, 8);
   expect(turns[1].sectorOps).toHaveLength(2);
-  const writes = turns[1].sectorOps.map((op) => op.updateOne.update.$set);
-  expect(writes[0].plantsPnl?.internalSupplyDiscountCost).toBeGreaterThan(0);
-  expect(writes[1].plantsPnl?.internalSupplyDiscountCost).toBeLessThan(0);
+  const writes = turns[1].sectorOps.map(
+    (op) => op.updateOne.update.$set as Partial<CorporateSector> | undefined
+  );
+  expect(writes[0]?.plantsPnl?.internalSupplyDiscountCost).toBeGreaterThan(0);
+  expect(writes[1]?.plantsPnl?.internalSupplyDiscountCost).toBeLessThan(0);
   expect(turns[1].corpSnapshots[0].income).toBeCloseTo(turns[0].corpSnapshots[0].income, 8);
 });
