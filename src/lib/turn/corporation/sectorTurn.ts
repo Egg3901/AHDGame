@@ -748,16 +748,11 @@ export function processSector(
 
   // ─── P3.5: physical cost decomposition (plants only) ──────────────────────
   // Pure computation in `sectorTurn/sectorCosts.ts`; names are unchanged.
-  const {
-    plantsPhysicalEnabled,
-    plantsPolicyPp,
-    plantsPolicyNeutralBasis,
-    solvedOtherOpexPerUnit,
-    physicalPnl,
-    sectorNPV,
-    capitalBookAnchor,
-  } = decomposePhysicalCosts({
+  const physicalCostInput = {
     plantsEnabled,
+    internalSupplyDiscountCost: market.internalSupplyDiscountCostBySectorId?.get(
+      sector._id.toString()
+    ),
     explicitPlantCostsEnabled,
     embargoLegacyMothball,
     profitMargin: sector.profitMargin,
@@ -792,7 +787,17 @@ export function processSector(
     prevCapitalBookAnchor: sector.capitalBookAnchor,
     npvBoostMultiplier: sectorNpvBoostMultiplier(currentTurn),
     freightNetHourly: freightBilling.credit - freightBilling.charge,
-  });
+  };
+  const {
+    plantsPhysicalEnabled,
+    plantsPolicyPp,
+    plantsPolicyNeutralBasis,
+    solvedOtherOpexPerUnit,
+    physicalPnl,
+    sectorNPV,
+    capitalBookAnchor,
+    inputUnitsByCommodity,
+  } = decomposePhysicalCosts(physicalCostInput);
 
   const productProject = lookups.productLinesV2Enabled
     ? lookups.manufacturingProductByCorpId?.get(corp._id.toString())
@@ -875,7 +880,8 @@ export function processSector(
   // back to the sector's HOST-state functional currency for storage (the market
   // it operates in, not the parent corp's home currency). Sectors with no
   // resolvable host currency passthrough in the helper, preserving ₳-on-disk.
-  const sectorUpdate: Record<string, unknown> = {
+  const sectorUpdate: Record<string, unknown> &
+    Pick<Partial<CorporateSector>, "plantsPnl" | "internalSupplyReceipt"> = {
     // Under plants the nameplate stops compounding and is restated from owned
     // capacity instead (see `plantsNameplateRevenue`); `newRevenue` outside it.
     // Realized earnings live in `realizedRevenue` below, in both modes.
@@ -1127,6 +1133,9 @@ export function processSector(
       otherOpexCreditCapped: physicalPnl.otherOpexCreditCapped,
       otherOpexUncapped: daily(physicalPnl.otherOpexUncapped),
       financialLegs: daily(physicalPnl.financialLegs),
+      internalSupplyDiscountCost: daily(
+        market.internalSupplyDiscountCostBySectorId?.get(sector._id.toString()) ?? 0
+      ),
       policyCredit: daily(physicalPnl.policyCredit),
       policyPp: Math.round(plantsPolicyPp * 100) / 100,
       operatingCost: daily(physicalPnl.operatingCost),
@@ -1144,6 +1153,17 @@ export function processSector(
   // be if it ran, and is what the P3a mothball-upkeep pricing already reads.
   const reportedEffectiveMargin =
     physicalPnl && hourlyRevenue > 0 ? physicalPnl.derivedMarginPct : effectiveMargin;
+  if (market.plantsEnabled)
+    sectorUpdate.internalSupplyReceipt = {
+      ...(market.internalSupplyReceiptsBySectorId?.get(sector._id.toString()) ?? {
+        turn: currentTurn,
+        received: {},
+        reserved: {},
+      }),
+      discountCostAnchor:
+        (market.internalSupplyDiscountCostBySectorId?.get(sector._id.toString()) ?? 0) *
+        TURNS_PER_DAY,
+    };
   sectorUpdate.effectiveProfitMargin = Math.round(reportedEffectiveMargin * 100) / 100;
   // P3.5: stamp the solved calibration residual and the margin basis it was
   // solved at. Written once, on the sector's first producing physical-P&L turn,
@@ -1260,7 +1280,7 @@ export function processSector(
     });
   }
 
-  return {
+  const result: SectorTurnResult = {
     // Inventory sell-down earns beside operating revenue and rides the same
     // aggregation/tax rails; carry cost lands in `costs` below. The freight
     // billing credit (canonical freight billing, flag-gated, 0 otherwise) is
@@ -1310,4 +1330,38 @@ export function processSector(
     stateId: sector.stateId,
     countryId: sectorCountryId,
   };
+  if (market.internalSupplyTrades?.length && physicalPnl) {
+    result.internalSupplyInputUnits = new Map(
+      [...inputUnitsByCommodity].map(([commodity, units]) => [
+        commodity,
+        units * TURNS_PER_DAY * lookups.eraUnitScale,
+      ])
+    );
+    result.applyInternalSupplyDiscount = (cost) => {
+      const recalculated = decomposePhysicalCosts({
+        ...physicalCostInput,
+        internalSupplyDiscountCost: cost,
+      });
+      const pnl = recalculated.physicalPnl!;
+      result.costs += cost;
+      result.effectiveMargin = hourlyRevenue > 0 ? pnl.derivedMarginPct : effectiveMargin;
+      result.npvContribution = market.capitalEnabled
+        ? Math.round(recalculated.capitalBookAnchor)
+        : recalculated.sectorNPV;
+      sectorUpdate.effectiveProfitMargin = Math.round(result.effectiveMargin * 100) / 100;
+      if (market.capitalEnabled)
+        sectorUpdate.capitalBookAnchor = Math.round(recalculated.capitalBookAnchor);
+      const daily = (amount: number) =>
+        writeCorpEconomicLocal(amount * TURNS_PER_DAY, sectorCurrencyCode, sectorFxRate);
+      const recorded = sectorUpdate.plantsPnl!;
+      recorded.internalSupplyDiscountCost = daily(cost);
+      recorded.financialLegs = daily(pnl.financialLegs);
+      recorded.operatingCost = daily(pnl.operatingCost);
+      recorded.totalCost = daily(pnl.totalCost + hourlyInventoryCarry);
+      recorded.profit = daily(pnl.profit + hourlyInventoryRevenue - hourlyInventoryCarry);
+      if (sectorUpdate.internalSupplyReceipt)
+        sectorUpdate.internalSupplyReceipt.discountCostAnchor = cost * TURNS_PER_DAY;
+    };
+  }
+  return result;
 }

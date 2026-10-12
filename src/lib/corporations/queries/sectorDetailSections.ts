@@ -1240,6 +1240,7 @@ export function buildSectorPlantsSection(args: {
       compliance: number;
       otherOpex: number;
       financialLegs: number;
+      internalSupplyDiscountAnchor?: number;
       inventoryCarry: number;
       policyCredit: number;
       policyPp: number;
@@ -1536,11 +1537,12 @@ export function buildSectorPlantsSection(args: {
   // margin's scope excludes and the profit includes.
   const engine = money.enginePnl ?? null;
   const inputsAnchor = engine ? engine.inputs : nonNeg(money.inputsAnchor);
+  const internalSupplyDiscountAnchor = engine?.internalSupplyDiscountAnchor ?? 0;
   const otherOperatingAnchor = engine
     ? // Financial legs (disaster losses) and inventory carry have no line of
       // their own in the cost chain, so they sit here, exactly as the residual
       // used to carry them.
-      engine.otherOpex + engine.financialLegs + engine.inventoryCarry
+      engine.otherOpex + engine.financialLegs + engine.inventoryCarry - internalSupplyDiscountAnchor
     : money.maintenanceNetAnchor - upkeepAnchor - complianceAnchor - inputsAnchor;
   // The whole modifier stack as one signed line: positive is a credit that
   // lowers cost. Rendered as its own row with a drilldown, so a player can see
@@ -1549,7 +1551,7 @@ export function buildSectorPlantsSection(args: {
   const policyAnchor = engine ? engine.policyCredit : 0;
   const policyPp = engine ? engine.policyPp : 0;
   const financialEventsAnchor = engine
-    ? nonNeg(engine.financialLegs)
+    ? nonNeg(engine.financialLegs - internalSupplyDiscountAnchor)
     : nonNeg((money.realizedRevenueAnchor * Math.abs(Math.min(0, crisisMarginPenaltyPp))) / 100);
 
   // ─── Truth headline ───────────────────────────────────────────────────────
@@ -1730,6 +1732,7 @@ export function buildSectorPlantsSection(args: {
       policyAnchor,
       policyPp,
       otherOperatingAnchor,
+      internalSupplyDiscountAnchor,
       freightCostAnchor,
       freightIncomeAnchor,
       growthAndBuildAnchor: engine ? nonNeg(engineGrowthAnchor) : nonNeg(money.growthCostAnchor),

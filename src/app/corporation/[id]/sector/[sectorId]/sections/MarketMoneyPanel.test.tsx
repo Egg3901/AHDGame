@@ -6,6 +6,7 @@ import type { ReactElement } from "react";
 import { NextIntlClientProvider } from "next-intl";
 import messages from "../../../../../../../messages/en/corporations.json";
 import { describe, expect, it, vi } from "vitest";
+import type { PlantsData } from "../types";
 import MarketMoneyPanel from "./MarketMoneyPanel";
 
 function render(view: ReactElement) {
@@ -154,4 +155,28 @@ describe("freight class explanation (ticket 1159)", () => {
     expect(screen.getByText(/Special freight limited/)).toBeTruthy();
     expect(screen.getByText(/three times as much shared freight capacity/)).toBeTruthy();
   });
+});
+
+it("shows the internal input credit as a named signed line in the plant account", () => {
+  function withCredit(base: PlantsData): PlantsData {
+    return {
+      ...base,
+      pnl: {
+        ...base.pnl,
+        internalSupplyDiscountAnchor: -200,
+        profitAnchor: base.pnl.profitAnchor + 200,
+      },
+    };
+  }
+  render(
+    <MarketMoneyPanel
+      plants={withCredit(plants)}
+      sectorType="manufacturing"
+      financials={null}
+      corporation={{ _id: "fixture", name: "Synthetic producer" }}
+    />
+  );
+  expect(screen.getByText("Internal supply credit")).toBeTruthy();
+  expect(screen.getByText("+ M200")).toBeTruthy();
+  expect(screen.getByText("M87900")).toBeTruthy();
 });

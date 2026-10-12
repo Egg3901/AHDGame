@@ -239,6 +239,7 @@ export interface SectorPlantsSection {
     /** The same stack in percentage points of revenue, after the soft cap. */
     policyPp: number;
     otherOperatingAnchor: number;
+    internalSupplyDiscountAnchor?: number;
     freightCostAnchor?: number;
     freightIncomeAnchor?: number;
     growthAndBuildAnchor: number;
