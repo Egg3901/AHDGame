@@ -21,6 +21,8 @@ export interface FederationArchivedRegionRow {
 
 function scopeFilter(scope: RegionScope, sourceCountryId: CountryId, stateIds: string[]): Document {
   switch (scope.key) {
+    case "regionIdField":
+      return { regionId: { $in: stateIds } };
     case "stateIdField":
       return { stateId: { $in: stateIds } };
     case "stateField":

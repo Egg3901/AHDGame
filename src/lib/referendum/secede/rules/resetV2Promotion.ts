@@ -12,21 +12,25 @@ export interface SuccessorRegionSeed {
 export function buildSuccessorMetricRows(input: {
   countryId: SecedingCountryId;
   aggregate: ResetMetricSnapshot;
+  national: ResetMetricSnapshot;
   regions: readonly SuccessorRegionSeed[];
 }): ResetMetricSnapshot[] {
   const { aggregate, countryId, regions } = input;
+  const national = input.national;
+  if (national.scope !== "national")
+    throw new Error("Successor national metrics require a national board");
   if (aggregate.scope !== "regional" || regions.length === 0) {
     throw new Error(`${countryId} metric promotion requires a regional aggregate and sub-regions`);
   }
   return [
     {
-      ...aggregate,
+      ...national,
       _id: `${countryId}:national`,
       countryId,
       scope: "national",
       regionId: undefined,
-      observations: structuredClone(aggregate.observations),
-      history: structuredClone(aggregate.history),
+      observations: structuredClone(national.observations),
+      history: structuredClone(national.history),
     },
     ...regions.map((region) => ({
       ...aggregate,

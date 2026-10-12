@@ -1,3 +1,4 @@
+import { unformGovernmentAndVacatePM } from "@/lib/turn/parliamentaryGovernment";
 /**
  * Prepare a transferring region's political actors for their new country.
  *
@@ -31,6 +32,9 @@
  */
 import type { Db, ObjectId } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
+import type { ParliamentaryGovernment } from "@/lib/db/types/parliamentaryGovernment";
+import type { StatePartyOrg } from "@/lib/db/types/statePartyOrg";
+import type { PoliticalParty } from "@/lib/db/types/party";
 import type { NPP } from "@/lib/db/types/npp";
 import { officeRemapFor, remapOffice } from "@/lib/country/dissolvingOfficeRemap";
 
@@ -50,7 +54,7 @@ export const REGION_PARTY_COLLECTIONS = [
   "orgRegLedger",
   "billWhips",
   "statePartyElections",
-];
+] as const;
 
 export interface EvacuateRegionPoliticsArgs {
   regionId: string;
@@ -122,6 +126,17 @@ export async function evacuateRegionPolitics(
     );
   }
 
+  if (nppIds.length && !dissolving) {
+    const held = { countryId: fromCountryId, nppId: { $in: nppIds } };
+    await db.collection("electedOfficials").deleteMany(held);
+    await db.collection("cabinetMembers").deleteMany(held);
+    const departingGovernment = await db
+      .collection<ParliamentaryGovernment>("governmentFormations")
+      .findOne({ _id: fromCountryId, pmNppId: { $in: nppIds } });
+    if (departingGovernment)
+      await unformGovernmentAndVacatePM(db, fromCountryId, now, { reason: "lost-seat" });
+  }
+
   // 1b. A corporation an evacuated NPP CEOs follows them — for free — to the
   //     same destination. Where that is depends on whether the source survives:
   //     to another of its regions if so, into the target with the region if not.
@@ -168,15 +183,14 @@ export async function evacuateRegionPolitics(
     );
     playersToIndependent = upd?.modifiedCount ?? 0;
     const heldInSource = { countryId: fromCountryId, characterId: { $in: playerIds } };
-    for (const col of ["cabinetMembers", "electedOfficials"]) {
+    for (const col of ["cabinetMembers", "electedOfficials"] as const) {
       await db.collection(col).deleteMany(heldInSource);
     }
-    await db
-      .collection<{ _id: string; headOfGovernmentCharacterId?: ObjectId }>("governmentFormations")
-      .updateMany(
-        { _id: fromCountryId, headOfGovernmentCharacterId: { $in: playerIds } },
-        { $set: { updatedAt: now }, $unset: { headOfGovernmentCharacterId: "" } }
-      );
+    const departingGovernment = await db
+      .collection<ParliamentaryGovernment>("governmentFormations")
+      .findOne({ _id: fromCountryId, pmCharacterId: { $in: playerIds } });
+    if (departingGovernment)
+      await unformGovernmentAndVacatePM(db, fromCountryId, now, { reason: "lost-seat" });
   }
   // A dissolving source's CABINET is handled at country level, not here — see
   // `retireNationalRemnants`. Its seats are keyed by position id rather than by
@@ -191,6 +205,34 @@ export async function evacuateRegionPolitics(
   // it dissolves — this is what carries each party's treasury, its registration
   // ledger and its organisational strength across the border rather than
   // destroying them along with the state.
+  if (!dissolving) {
+    // The surviving parent party retains the cash of its dissolved organisation.
+    const orgs = await db
+      .collection<StatePartyOrg>("statePartyOrg")
+      .find({ countryId: fromCountryId, stateId: regionId })
+      .toArray();
+    const cash = new Map<number, number>();
+    for (const org of orgs) {
+      if (org.treasury)
+        cash.set(Number(org.partyId), (cash.get(Number(org.partyId)) ?? 0) + org.treasury);
+    }
+    if (cash.size) {
+      const parties = await db
+        .collection<PoliticalParty>("politicalParties")
+        .find({ countryId: fromCountryId, sequentialId: { $in: [...cash.keys()] } })
+        .toArray();
+      if (parties.length !== cash.size)
+        throw new Error("Regional party cash has no surviving owner");
+      await db.collection<PoliticalParty>("politicalParties").bulkWrite(
+        parties.map((party) => ({
+          updateOne: {
+            filter: { _id: party._id },
+            update: { $inc: { treasury: cash.get(party.sequentialId)! } },
+          },
+        }))
+      );
+    }
+  }
   let partyDocsDeleted = 0;
   for (const coll of REGION_PARTY_COLLECTIONS) {
     if (dissolving) {

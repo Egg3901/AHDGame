@@ -12,7 +12,11 @@ import {
 } from "./rules/resetV2Transfer";
 
 /** Move Northern Ireland's world-bound v2 regional boards into Ireland. */
-export async function transferResetV2RegionToIreland(db: Db, regionId: string): Promise<void> {
+export async function transferResetV2RegionToIreland(
+  db: Db,
+  regionId: string,
+  scale = 1
+): Promise<void> {
   if (regionId !== "NIR") return;
   const gameState = await db.collection<GameState>("gameState").findOne(
     { _id: "current" },
@@ -30,7 +34,9 @@ export async function transferResetV2RegionToIreland(db: Db, regionId: string): 
   if (!gameState?.resetWorldId) return;
   const ukVersions = resetSystemVersionsForCountry(gameState, RESET_V2_READY, "UK");
   const ieVersions = resetSystemVersionsForCountry(gameState, RESET_V2_READY, "IE");
-  if (ukVersions.metrics !== "v2" || ieVersions.metrics !== "v2") return;
+  const metricsReady = ukVersions.metrics === "v2" && ieVersions.metrics === "v2";
+  if (!metricsReady && !(ukVersions.legislation === "v2" && ieVersions.legislation === "v2"))
+    return;
 
   const worldId = gameState.resetWorldId;
   const sourceId = `UK:${regionId}`;
@@ -41,12 +47,12 @@ export async function transferResetV2RegionToIreland(db: Db, regionId: string): 
   const legislationReady = ukVersions.legislation === "v2" && ieVersions.legislation === "v2";
   const [sourceMetric, sourceLaw, sourceFiscal, targetMetric, targetLaw, targetFiscal] =
     await Promise.all([
-      metrics.findOne({ _id: sourceId, worldId }),
+      metricsReady ? metrics.findOne({ _id: sourceId, worldId }) : Promise.resolve(null),
       legislationReady ? laws.findOne({ _id: sourceId, worldId }) : Promise.resolve(null),
       legislationReady
         ? regionalFinance.findOne({ _id: sourceId, worldId })
         : Promise.resolve(null),
-      metrics.findOne({ _id: targetId, worldId }),
+      metricsReady ? metrics.findOne({ _id: targetId, worldId }) : Promise.resolve(null),
       legislationReady ? laws.findOne({ _id: targetId, worldId }) : Promise.resolve(null),
       legislationReady
         ? regionalFinance.findOne({ _id: targetId, worldId })
@@ -55,25 +61,31 @@ export async function transferResetV2RegionToIreland(db: Db, regionId: string): 
   const metricInput = sourceMetric ?? targetMetric;
   const lawInput = sourceLaw ?? targetLaw;
   const fiscalInput = sourceFiscal ?? targetFiscal;
-  if (!metricInput) throw new Error(`${regionId} v2 metric board is missing before reunification`);
+  if (metricsReady && !metricInput)
+    throw new Error(`${regionId} v2 metric board is missing before reunification`);
   if (legislationReady && (!lawInput || !fiscalInput)) {
     throw new Error(`${regionId} v2 law or fiscal board is missing before reunification`);
   }
 
-  await metrics.replaceOne(
-    { _id: targetId },
-    transferResetV2MetricToIreland(metricInput, regionId),
-    { upsert: true }
-  );
+  if (metricsReady && metricInput)
+    await metrics.replaceOne(
+      { _id: targetId },
+      transferResetV2MetricToIreland(metricInput, regionId, sourceMetric ? scale : 1),
+      { upsert: true }
+    );
 
   if (legislationReady && lawInput && fiscalInput) {
     await Promise.all([
-      laws.replaceOne({ _id: targetId }, transferResetV2LawToIreland(lawInput, regionId), {
-        upsert: true,
-      }),
+      laws.replaceOne(
+        { _id: targetId },
+        transferResetV2LawToIreland(lawInput, regionId, sourceLaw ? scale : 1),
+        {
+          upsert: true,
+        }
+      ),
       regionalFinance.replaceOne(
         { _id: targetId },
-        transferResetV2FiscalToIreland(fiscalInput, regionId),
+        transferResetV2FiscalToIreland(fiscalInput, regionId, sourceFiscal ? scale : 1),
         { upsert: true }
       ),
     ]);

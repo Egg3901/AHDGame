@@ -1,6 +1,11 @@
+vi.mock("@/lib/turn/parliamentaryGovernment", () => ({
+  ensureParliamentaryGovernmentFormation: vi.fn(),
+  unformGovernmentAndVacatePM: vi.fn(),
+}));
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { type Db, ObjectId } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
+import { createInMemoryDb } from "@/lib/test-utils/inMemoryDb";
 import { evacuateRegionPolitics } from "./evacuateRegionPolitics";
 
 function cursorOf<T>(docs: T[]) {
@@ -18,6 +23,26 @@ const PLAYER = new ObjectId();
 const ELECTION = new ObjectId();
 
 describe("evacuateRegionPolitics", () => {
+  it("returns dissolved regional organisation cash to its parent once", async () => {
+    const memory = createInMemoryDb();
+    const party = new ObjectId();
+    memory.seed("politicalParties", [
+      { _id: party, countryId: "UK", sequentialId: 10, treasury: 500 },
+    ]);
+    memory.seed("statePartyOrg", [
+      { _id: "UK_NIR_10", countryId: "UK", stateId: "NIR", partyId: "10", treasury: 125 },
+    ]);
+    const args = {
+      regionId: "NIR",
+      fromCountryId: "UK" as const,
+      toCountryId: "IE" as const,
+      relocateToRegionId: "LON",
+    };
+    await evacuateRegionPolitics(memory as unknown as Db, args);
+    await evacuateRegionPolitics(memory as unknown as Db, args);
+    expect(memory.collection("politicalParties").docs[0].treasury).toBe(625);
+    expect(memory.collection("statePartyOrg").docs).toHaveLength(0);
+  });
   let db: MockDb;
   beforeEach(() => {
     vi.clearAllMocks();
@@ -74,9 +99,10 @@ describe("evacuateRegionPolitics", () => {
     await run();
     const filter = { countryId: "UK", characterId: { $in: [PLAYER] } };
     expect(db.collectionMocks["cabinetMembers"].deleteMany).toHaveBeenCalledWith(filter);
-    const govCall = db.collectionMocks["governmentFormations"].updateMany.mock.calls[0];
-    expect(govCall[0]).toEqual({ _id: "UK", headOfGovernmentCharacterId: { $in: [PLAYER] } });
-    expect(govCall[1].$unset).toHaveProperty("headOfGovernmentCharacterId");
+    expect(db.collectionMocks["governmentFormations"].findOne).toHaveBeenCalledWith({
+      _id: "UK",
+      pmCharacterId: { $in: [PLAYER] },
+    });
   });
 
   it("deletes the region's party orgs, officeholders, and seats", async () => {

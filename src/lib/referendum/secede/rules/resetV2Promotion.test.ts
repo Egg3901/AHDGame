@@ -38,10 +38,15 @@ const reference = {
 } as unknown as OpeningLawReference;
 
 describe("successor reset v2 promotion rules", () => {
-  it("uses the departing region aggregate for both sovereign and sub-region metrics", () => {
+  it("uses national metrics for the sovereign and departing region metrics for its sub-regions", () => {
     const rows = buildSuccessorMetricRows({
       countryId: "SCO",
       aggregate: aggregateMetric,
+      national: {
+        ...aggregateMetric,
+        scope: "national",
+        observations: { inflation: { ...aggregateMetric.observations.unemployment!, value: 4 } },
+      },
       regions: [
         { id: "LOT", population: 2 },
         { id: "HGL", population: 1 },
@@ -51,7 +56,8 @@ describe("successor reset v2 promotion rules", () => {
     expect(rows.map((row) => row._id)).toEqual(["SCO:national", "SCO:LOT", "SCO:HGL"]);
     expect(rows[0]).toMatchObject({ countryId: "SCO", scope: "national" });
     expect(rows[0]!.regionId).toBeUndefined();
-    expect(rows.every((row) => row.observations.unemployment!.value === 8)).toBe(true);
+    expect(rows[0].observations.inflation.value).toBe(4);
+    expect(rows.slice(1).every((row) => row.observations.unemployment!.value === 8)).toBe(true);
   });
 
   it("conserves the aggregate fiscal book and assigns each sub-region only its share", () => {

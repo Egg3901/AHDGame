@@ -1,3 +1,5 @@
+import { WAL_CABINET_SEAT_IDS } from "@/lib/countries/wal/institutionsFacts";
+import { SCO_CABINET_SEAT_IDS } from "@/lib/countries/sco/institutionsFacts";
 import type { CountryId } from "./countries";
 import type { EnergyPlant, EnergySource } from "@/lib/db/types/energyPlant";
 import { JP_CABINET_SEAT_IDS } from "@/lib/countries/jp/institutionsFacts";
@@ -100,6 +102,8 @@ export const ENERGY_SOURCES: EnergySourceDef[] = [
  * metric sits on the reserved transport seat → environment_secretary (net-zero home).
  */
 export const ENERGY_POSITION_BY_COUNTRY: Partial<Record<CountryId, string>> = {
+  SCO: SCO_CABINET_SEAT_IDS.energy,
+  WAL: WAL_CABINET_SEAT_IDS.energy,
   US: US_CABINET_SEAT_IDS.energy,
   UK: UK_CABINET_SEAT_IDS.energy,
   DE: DE_CABINET_SEAT_IDS.energy,

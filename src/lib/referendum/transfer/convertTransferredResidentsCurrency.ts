@@ -1,6 +1,6 @@
 /**
  * Re-denominate a transferred region's money into its new country's currency.
- * When NI joins Ireland its residents' pounds become euro (an involuntary
+ * When NI joins Ireland its residents' sterling becomes Irish pounds (an involuntary
  * currency-union change — unlike a voluntary HQ relocation, which leaves personal
  * forex holdings alone):
  *
@@ -13,11 +13,13 @@
  * No-op when forex is disabled, the two countries share a currency, or a rate is
  * missing (refuse rather than persist order-of-magnitude-wrong balances).
  */
+import { retainsCompletedSecuredCurrency } from "./rules/securedCurrency";
+import type { CorporateSector } from "@/lib/db/types/corporation";
 import type { Db, Filter } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
 import type { Corporation, Character } from "@/lib/db/types";
 import { type CurrencyCode } from "@/lib/constants/currencies";
-import { loadFxScalePair } from "@/lib/country/mergeFxScale";
+import { type FxScalePair, loadFxScalePair } from "@/lib/country/mergeFxScale";
 import { convertCorpCurrency } from "@/lib/corporations/convertCorpCurrency";
 
 export async function convertTransferredResidentsCurrency(
@@ -25,13 +27,14 @@ export async function convertTransferredResidentsCurrency(
   regionId: string,
   fromCountryId: CountryId,
   toCountryId: CountryId,
-  strict = false
+  strict = false,
+  frozenPair?: FxScalePair
 ): Promise<void> {
   // The SHARED merge rate source (`loadFxScalePair`), so every pot of money
   // that crosses in one merge crosses at one price. This caller's missing-rate
   // policy is REFUSE (the region already moved; balances can be re-converted
   // later) — unlike the national merge, which fails open at 1.
-  const pair = await loadFxScalePair(db, fromCountryId, toCountryId);
+  const pair = frozenPair ?? (await loadFxScalePair(db, fromCountryId, toCountryId));
   if (pair.kind === "missing-rate" && strict)
     throw new Error("Currency conversion requires usable exchange rates.");
   if (pair.kind !== "convert") return;
@@ -45,7 +48,32 @@ export async function convertTransferredResidentsCurrency(
     .collection<Corporation>("corporations")
     .find({ headquartersState: regionId, countryId: toCountryId })
     .toArray();
+  const securedSectors = strict
+    ? await db
+        .collection<CorporateSector>("corporateSectors")
+        .find(
+          { corporationId: { $in: corps.map((corp) => corp._id) } },
+          {
+            projection: {
+              corporationId: 1,
+              constructionFinancing: 1,
+              constructionPropertyTransition: 1,
+              buildQueue: 1,
+            },
+          }
+        )
+        .toArray()
+    : [];
   for (const corp of corps) {
+    // Country ownership changes, but a fully built pledged plant and its debt are not cancelled.
+    // Keeping the native corporate ledger preserves the lender's original currency and security.
+    if (
+      strict &&
+      retainsCompletedSecuredCurrency(
+        securedSectors.filter((sector) => String(sector.corporationId) === String(corp._id))
+      )
+    )
+      continue;
     // Forex is enabled by construction here — a "convert" pair only exists
     // with the feature on.
     const result = await convertCorpCurrency(db, corp, newCurrency, fxByCurrency, now, true);

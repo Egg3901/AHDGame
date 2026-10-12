@@ -1,3 +1,14 @@
+vi.mock("@/lib/referendum/refundConversionConstruction", () => ({
+  refundConversionConstruction: vi.fn().mockResolvedValue(undefined),
+}));
+vi.mock("@/lib/country/mergeFxScale", () => ({
+  loadFxScalePair: vi.fn().mockResolvedValue({ kind: "same-currency" }),
+}));
+vi.mock("@/lib/turn/parliamentaryGovernment", () => ({
+  updateParliamentaryGovernmentSeats: vi.fn(),
+  ensureParliamentaryGovernmentFormation: vi.fn(),
+  unformGovernmentAndVacatePM: vi.fn(),
+}));
 vi.mock("./convertTransferredResidentsCurrency", () => ({
   convertTransferredResidentsCurrency: vi.fn().mockResolvedValue(undefined),
 }));

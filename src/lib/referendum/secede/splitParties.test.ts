@@ -1,9 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { makeInMemoryStore } from "@/lib/test-utils/inMemoryStore";
+import { makeStrictInMemoryStore } from "@/lib/test-utils/inMemoryStore";
 import { splitParties } from "./splitParties";
 
 function seedWorld() {
-  return makeInMemoryStore({
+  return makeStrictInMemoryStore({
     politicalParties: [
       { _id: "snp", sequentialId: 20, countryId: "UK", name: "SNP", abbreviation: "SNP" },
       { _id: "lab", sequentialId: 21, countryId: "UK", name: "Labour", abbreviation: "LAB" },
@@ -95,6 +95,25 @@ describe("splitParties", () => {
     ).toBe(false);
   });
 
+  it("removes party leadership permissions that would remain across the new border", async () => {
+    const { db, cols } = seedWorld();
+    const snp = cols.politicalParties.find((row) => row._id === "snp")!;
+    const lab = cols.politicalParties.find((row) => row.abbreviation === "LAB")!;
+    Object.assign(snp, { chairId: "cA", viceChairId: "outside", committeeIds: ["cA", "outside"] });
+    Object.assign(lab, { chairId: "cB" });
+    const org = cols.statePartyOrg.find((row) => row._id === "UK_SCO_20")!;
+    Object.assign(org, { chairId: "cA", treasurerId: "outside", treasury: 100 });
+    await splitParties(db, "SCO", "UK", "SCO");
+    expect(snp).toMatchObject({ chairId: "cA", viceChairId: null, committeeIds: ["cA"] });
+    expect(lab.chairId).toBeNull();
+    const capital = cols.statePartyOrg.find((row) => row._id === "SCO_LOT_1")!;
+    expect(capital).toMatchObject({ chairId: "cA", treasurerId: null });
+    expect(
+      cols.statePartyOrg
+        .filter((row) => row.countryId === "SCO")
+        .reduce((sum, row) => sum + Number(row.treasury ?? 0), 0)
+    ).toBeCloseTo(100);
+  });
   it("re-parties members: the transferred major remapped, everyone else independent", async () => {
     const { db, cols } = seedWorld();
     await splitParties(db, "SCO", "UK", "SCO");

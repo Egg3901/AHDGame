@@ -11,6 +11,8 @@ import {
   ENERGY_DISCRETIONARY_FRACTION,
 } from "./cabinetEnergy";
 import { ESTATE_PORTFOLIO_BY_COUNTRY } from "./cabinetEstates";
+import { SCO_CABINET_POSITIONS } from "@/lib/countries/sco/data/scoCabinet";
+import { WAL_CABINET_POSITIONS } from "@/lib/countries/wal/data/walCabinet";
 import type { EnergyPlant } from "@/lib/db/types/energyPlant";
 
 function plant(p: Partial<EnergyPlant>): EnergyPlant {
@@ -57,14 +59,25 @@ describe("resolveEnergyPosition + collisions", () => {
       expect(transportish.test(seat!)).toBe(false);
     }
   });
-  it("every non-US energy seat is also an Estates seat (dual flagship)", () => {
+  it("legacy combined energy seats retain their Estates flagship", () => {
     for (const [cc, seat] of Object.entries(ENERGY_POSITION_BY_COUNTRY)) {
-      if (cc === "US") continue;
+      if (cc === "US" || cc === "SCO" || cc === "WAL") continue;
       expect(
         ESTATE_PORTFOLIO_BY_COUNTRY[cc as keyof typeof ESTATE_PORTFOLIO_BY_COUNTRY]?.[seat!]
       ).toBeDefined();
     }
     expect(ESTATE_PORTFOLIO_BY_COUNTRY.US?.["secretary_of_energy"]).toBeUndefined();
+  });
+  it("independent countries use their existing dedicated energy cabinet seat", () => {
+    for (const [countryId, positions] of [
+      ["SCO", SCO_CABINET_POSITIONS],
+      ["WAL", WAL_CABINET_POSITIONS],
+    ] as const) {
+      const seat = ENERGY_POSITION_BY_COUNTRY[countryId]!;
+      expect(positions.some((position) => position.id === seat)).toBe(true);
+      expect(resolveEnergyPosition(countryId, seat)).toBe(seat);
+      expect(ESTATE_PORTFOLIO_BY_COUNTRY[countryId]?.[seat]).toBeUndefined();
+    }
   });
 });
 
