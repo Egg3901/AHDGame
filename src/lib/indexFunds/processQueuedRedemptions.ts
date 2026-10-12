@@ -106,13 +106,13 @@ export async function processQueuedRedemptions(
 
   // Wallet credits are in the fund's native currency; the ₳ → native multiplier
   // is stamped on each queue entry at request time (entry.redeemFxRate, ticket
-  // #857 grandfather) — 1 for pre-fix legacy units, the fund rate for post-fix
+  // #857 grandfather) - 1 for pre-fix legacy units, the fund rate for post-fix
   // units. Fund `cashAnchor` and NPP investment cash stay in ₳. We still gate on
   // rate availability so a momentary outage defers rather than risks a bad payout.
   if (forexEnabled) {
     const fxResult = await loadCharacterFxRate(db, fund.anchorCurrencyCode);
     if (!fxResult.ok) {
-      // Rate unavailable — defer payouts to a later cycle.
+      // Rate unavailable - defer payouts to a later cycle.
       console.warn(
         `[indexfund-cron] deferring ${pending.length} queued redemption(s) for ${fund.slug}: FX rate for ${fund.anchorCurrencyCode} unavailable`
       );
@@ -263,6 +263,7 @@ export async function processQueuedRedemptions(
     const quote = quoteCashOnlyRedemption({
       quotedNav: redemptionNav,
       requestedUnits: unitsRemaining,
+      allowFractionalUnits: fundState.mandate?.mode === "picked_stocks",
       cashAnchor: cashForThisEntry,
     });
 

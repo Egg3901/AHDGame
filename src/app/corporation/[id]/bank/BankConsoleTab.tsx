@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useReducer } from "react";
+import { BankFundsPanel } from "@/components/corporation/BankFundsPanel";
 import { Skeleton } from "@/components/ui";
 import { useToast } from "@/contexts/ToastContext";
 import type { ConsolePayload } from "./types";
@@ -85,6 +86,7 @@ export function BankConsoleTab({ corporationId, isCeo }: Props) {
             showToast={showToast}
           />
           {canMutate && <CapsPanel data={data} />}
+          <BankFundsPanel corporationId={corporationId} />
           {data.primaryUnderwritingEnabled && (
             <section className="space-y-3 rounded-lg border border-border bg-surface p-4">
               <div>

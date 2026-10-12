@@ -94,8 +94,7 @@ describe("charterFund player-sponsorship gate", () => {
     expect(res.ok).toBe(false);
     if (res.ok) return;
     expect(res.status).toBe(403);
-    // No sector lookup happens: the gate returns before touching corporateSectors.
-    expect(db.collectionMocks.corporateSectors).toBeUndefined();
+    expect(db.collectionMocks.indexFunds!.insertOne).not.toHaveBeenCalled();
   });
 
   it("refuses when the flag is explicitly false", async () => {

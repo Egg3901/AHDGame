@@ -117,6 +117,7 @@ export async function claimFundFloatPlan(db: Db, fund: SettlementFund, plan: Fun
     {
       _id: fund._id,
       cashAnchor: fund.cashAnchor,
+      ...(fund.mandate?.mode === "picked_stocks" ? { mandate: fund.mandate } : {}),
       holdings: fund.holdings,
       floatSettlementGeneration: generation ?? { $exists: false },
       pendingMoneyMoveReceipt: { $exists: false },

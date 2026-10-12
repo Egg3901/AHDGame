@@ -58,7 +58,9 @@ export interface PensionInvestingResult {
  * same turn its employer does.
  */
 export function chooseSchemeFund(funds: IndexFund[], countryId: string): IndexFund | null {
-  const eligible = funds.filter((f) => f.status === "active" && f.kind === "broad");
+  const eligible = funds.filter(
+    (f) => f.status === "active" && f.kind === "broad" && f.mandate?.mode !== "picked_stocks"
+  );
   const home = eligible.find((f) => f.scope === "country" && f.countryId === countryId);
   if (home) return home;
   return eligible.find((f) => f.scope === "global") ?? null;
@@ -82,7 +84,7 @@ export async function runPensionSchemeInvestments(
 
   const funds = await db
     .collection<IndexFund>(INDEX_FUNDS)
-    .find({ status: "active", kind: "broad" })
+    .find({ status: "active", kind: "broad", "mandate.mode": { $ne: "picked_stocks" } })
     .toArray();
   if (funds.length === 0) return result;
 

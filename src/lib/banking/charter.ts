@@ -1,3 +1,4 @@
+import { bankMayManageFunds } from "@/lib/indexFunds/sponsorship/rules/eligibility";
 /**
  * Bank charters require a financial sector, legal charter type and posted capital.
  * loadCharterCapitalRequirements quotes capital for the world's era and currency;
@@ -66,7 +67,7 @@ export const INVESTMENT_CHARTER_CAPITAL_FRACTION = 1 / 3;
  * because the two decisions are not the same size. Changing what industry a
  * corporation is in should be close to permanent. Changing a bank between
  * taking deposits and running a proprietary book is a strategy change, and the
- * switch already costs the whole deposit base — that is the real price, and the
+ * switch already costs the whole deposit base - that is the real price, and the
  * cooldown only exists to stop a bank flipping charter every few turns to
  * arbitrage whichever facility happens to be cheaper.
  */
@@ -192,16 +193,12 @@ export async function checkCharterEligibility(
     reasons.push("Resolve the failed bank estate before rechartering");
   }
 
-  // Bank / fund separation: a corporation that sponsors an index fund may not
-  // also charter a bank. Creation-time only, so existing dual holders are
-  // grandfathered. The mirror check lives in
-  // `indexFunds/sponsorship/charterFund.ts`.
-  const sponsoredFundCount = await db
-    .collection("indexFunds")
-    .countDocuments({ sponsorCorporationId: corporation._id, status: { $ne: "delisted" } });
-  if (sponsoredFundCount > 0) {
-    reasons.push("Corporation sponsors an index fund; wind it down before chartering a bank");
-  }
+  const sponsoredFundCount = await db.collection("indexFunds").countDocuments({
+    sponsorCorporationId: corporation._id,
+    status: { $ne: "delisted" },
+  });
+  if (sponsoredFundCount > 0 && !bankMayManageFunds({ status: "active", type: requestedType }))
+    reasons.push("Wind down sponsored funds before choosing a retail charter");
 
   const legalTypes = await getLegalCharterTypes(db, getCountryIdForCurrency(currency));
   if (legalTypes.length === 0) {
@@ -614,7 +611,8 @@ export type CharterSwitchBlocker =
   | "cb_margin_outstanding"
   /** The charter's lifecycle stage does not admit a switch (impaired, or not active). */
   | "lifecycle_stage"
-  | "underwriting_settlement";
+  | "underwriting_settlement"
+  | "sponsored_funds";
 
 export type CharterSwitchPreview = {
   allowed: boolean;
@@ -640,6 +638,7 @@ export type SwitchCharterResult =
   | { ok: false; blockers: CharterSwitchBlocker[]; reasons: string[] };
 
 const SWITCH_BLOCKER_MESSAGE: Record<CharterSwitchBlocker, string> = {
+  sponsored_funds: "Wind down sponsored funds before choosing a retail charter.",
   no_active_charter: "This corporation has no active bank charter.",
   same_type: "The bank already holds that charter type.",
   illegal_type: "That charter type is not legal in this jurisdiction.",
@@ -687,6 +686,13 @@ export async function previewCharterSwitch(
   }
 
   if (corporation.bankUnderwritingFunding) blockers.push("underwriting_settlement");
+  if (
+    !bankMayManageFunds({ status: "active", type: targetType }) &&
+    (await db
+      .collection("indexFunds")
+      .countDocuments({ sponsorCorporationId: corporation._id, status: { $ne: "delisted" } })) > 0
+  )
+    blockers.push("sponsored_funds");
 
   if (charter.type === targetType) blockers.push("same_type");
 
@@ -732,7 +738,7 @@ export async function previewCharterSwitch(
  *
  * Before this existed the only route from retail to investment was to persuade
  * the central-bank chair to revoke your charter and then charter again from
- * scratch, posting capital twice — which is to say there was no route, and a
+ * scratch, posting capital twice - which is to say there was no route, and a
  * player who picked the wrong type at founding was stuck with it. That is the
  * complaint this fixes.
  *
@@ -740,11 +746,11 @@ export async function previewCharterSwitch(
  *
  * An investment bank cannot hold deposits, so switching to one returns the
  * whole book: player savings pointers flip back to the central bank (balances
- * untouched — it is a pointer, exactly as `moveCharacterSavings` treats it) and
+ * untouched - it is a pointer, exactly as `moveCharacterSavings` treats it) and
  * NPC household deposits go back to `externalBroadMoney` with conservation.
  *
  * The alternative was to refuse the switch until the CEO had shed deposits by
- * hand, and there is no mechanism for them to do that — they cannot evict
+ * hand, and there is no mechanism for them to do that - they cannot evict
  * depositors. Refusing would have reproduced the original complaint with extra
  * steps. Returning the book is also the honest price: the bank gives up the
  * funding base it spent turns building, which is a real cost that the cooldown

@@ -24,7 +24,7 @@ export type FundAllocationBreakdown = {
   stockPurchaseBudgetAnchor: number;
 };
 
-/** @deprecated Synthetic ledger — use sumFundBondHoldingsValueAnchor for real holdings. */
+/** @deprecated Synthetic ledger - use sumFundBondHoldingsValueAnchor for real holdings. */
 export function sumBondPrincipalAnchor(fund: Pick<IndexFund, "bondAllocations">): number {
   return (fund.bondAllocations ?? []).reduce(
     (sum, row) =>
@@ -61,6 +61,7 @@ export const BOND_FUND_MIN_RESERVE_ALLOCATION = 1;
 export function computeFundAllocationBreakdown(
   fund: Pick<IndexFund, "cashAnchor" | "holdings" | "bondAllocations"> & {
     kind?: IndexFund["kind"];
+    mandate?: IndexFund["mandate"];
   },
   options?: { bondPrincipalAnchor?: number; bondLiquidityTargetEnabled?: boolean }
 ): FundAllocationBreakdown {
@@ -71,7 +72,8 @@ export function computeFundAllocationBreakdown(
   const minReserveShare = isBondFund
     ? BOND_FUND_MIN_RESERVE_ALLOCATION
     : INDEX_FUND_MIN_BOND_RESERVE_ALLOCATION;
-  const liquidityTarget = isBondFund || options?.bondLiquidityTargetEnabled === true;
+  const picked = fund.mandate?.mode === "picked_stocks";
+  const liquidityTarget = !picked && (isBondFund || options?.bondLiquidityTargetEnabled === true);
   const holdingsValueAnchor = computeHoldingsValueAnchor(fund);
   const bondPrincipalAnchor = options?.bondPrincipalAnchor ?? sumBondPrincipalAnchor(fund);
   const cashAnchor = Number.isFinite(fund.cashAnchor) ? Math.max(0, fund.cashAnchor) : 0;
@@ -107,10 +109,14 @@ export function computeFundAllocationBreakdown(
   );
   const targetBondValueAnchor = liquidityTarget
     ? Math.max(0, minReserveValueAnchor - minCashBufferAnchor)
-    : bondPrincipalAnchor + reserveShortfallAnchor;
+    : picked
+      ? bondPrincipalAnchor
+      : bondPrincipalAnchor + reserveShortfallAnchor;
   const bondDeploymentNeededAnchor = liquidityTarget
     ? Math.max(0, targetBondValueAnchor - bondPrincipalAnchor)
-    : reserveShortfallAnchor;
+    : picked
+      ? 0
+      : reserveShortfallAnchor;
   const cashAvailableForBondDeployAnchor = Math.max(
     0,
     Math.min(bondDeploymentNeededAnchor, cashAnchor - minCashBufferAnchor)

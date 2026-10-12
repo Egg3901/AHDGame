@@ -1,5 +1,6 @@
+import { fundTradeCapabilities } from "@/lib/indexFunds/tradeCapabilities";
+import type { BankSubscription } from "@/lib/indexFunds/subscriptions";
 import { resolveCorpLiquidCurrencyCode } from "@/lib/currency/corporationCapital";
-import { canRedeemSponsorUnits } from "@/lib/indexFunds/sponsorship/sponsorUnits";
 import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
@@ -32,13 +33,12 @@ type CorpSummary = {
 export async function GET(_request: Request, { params }: { params: Promise<{ slug: string }> }) {
   try {
     const db = await getDb();
-    if (!(await isIndexFundsEnabled())) {
-      return errorResponse(403, INDEX_FUNDS_DISABLED_MESSAGE);
-    }
 
     const { slug } = await params;
     const fund = await resolveFundBySlugOrId(db, slug);
     if (!fund) throw notFound("Fund not found");
+    if (fund.mandate?.mode !== "picked_stocks" && !(await isIndexFundsEnabled()))
+      return errorResponse(403, INDEX_FUNDS_DISABLED_MESSAGE);
 
     const snapshots = await listFundSnapshots(db, fund._id, 1000);
     const navMetrics = buildFundNavMetrics(snapshots);
@@ -166,13 +166,41 @@ export async function GET(_request: Request, { params }: { params: Promise<{ slu
           liquidCapital: corp.liquidCapital,
           currencyCode: resolveCorpLiquidCurrencyCode(corp) ?? null,
           units: position?.units ?? 0,
-          canRedeem: await canRedeemSponsorUnits(db, fund, corp._id),
+          ...(await fundTradeCapabilities(db, fund, {
+            hasCharacter: !!characterId,
+            units: position?.units ?? 0,
+            corporationId: corp._id,
+          })),
         };
       })
     );
+    const capabilities = await fundTradeCapabilities(db, fund, {
+      hasCharacter: !!characterId,
+      units: myPosition?.units ?? 0,
+    });
+    const pendingSubscriptions = characterId
+      ? await db
+          .collection<BankSubscription>("indexFundCommands")
+          .find(
+            {
+              "subscription.fundId": fund._id,
+              "subscription.characterId": characterId,
+              "subscription.status": "queued",
+            },
+            { projection: { subscription: 1 } }
+          )
+          .toArray()
+      : [];
     const response = NextResponse.json({
       corporationAccounts,
+      pendingSubscriptions: pendingSubscriptions.map((o) => ({
+        operationId: o._id.split(":").at(-1),
+        amountAnchor: o.subscription.amountAnchor,
+        dueTurn: o.subscription.dueTurn,
+      })),
       fund: {
+        ...capabilities,
+        nextTurnSubscriptions: fund.mandate?.mode === "picked_stocks",
         id: fund.slug,
         slug: fund.slug,
         name: fund.name,

@@ -5,7 +5,7 @@ export function remainingRedemptionUnits(
   entry: Pick<IndexFundRedemptionQueueEntry, "units"> &
     Partial<Pick<IndexFundRedemptionQueueEntry, "paidAmountAnchor" | "requestedNavAnchor">>
 ): number {
-  return Math.max(0, Math.floor(entry.units));
+  return Number.isFinite(entry.units) ? Math.max(0, entry.units) : 0;
 }
 
 /** Whether a queue row should be retried by the cron payer. */
@@ -24,7 +24,7 @@ export function isRetryableRedemptionEntry(
 /**
  * Status after applying a payout against remaining units. Only called after a
  * successful nonzero payout, so "queued" (meaning "never touched") can't apply
- * here — a row that still has units left after being paid down is "partial",
+ * here - a row that still has units left after being paid down is "partial",
  * not indistinguishable from a fresh, untouched request.
  */
 export function redemptionEntryStatusAfterPayout(remainingUnits: number): "paid" | "partial" {

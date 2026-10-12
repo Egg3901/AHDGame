@@ -20,14 +20,14 @@ export const BALANCE_CHECKPOINTS_COLLECTION = "balanceSnapshotCheckpoints";
  * uninstrumented write (the Phase 3 coverage queue); legs that move an account
  * whose real balance didn't are the t841 wrong-currency class.
  *
- * Balances are stored in ₳ (anchor) units — local balance / FX rate — to match
+ * Balances are stored in ₳ (anchor) units - local balance / FX rate - to match
  * the ledger legs' `anchorAmount`. Missing rate ⇒ treated 1:1 (mirrors
  * financialTxLog/emit.ts's amountToAnchor fallback). Government treasury cash
  * instead uses the receipt valuation contract below, with account-specific
  * provenance and no fabricated rate for a missing active currency. See plan §2.
  *
  * Scope: every financialTxLog subject kind plus the fund cash its holders move
- * against — character personal + savings wallets, corporation liquidCapital,
+ * against - character personal + savings wallets, corporation liquidCapital,
  * party treasury, government treasuryBalance, NPP investment cash, pension
  * scheme cash (assetsAnchor), state-party treasury, and index-fund cashAnchor.
  * Scheme unit value (investedValueAnchor) is a marked-to-market valuation
@@ -177,7 +177,7 @@ async function collectBalanceState(
   }
 
   // --- Parties: treasury (home currency of the party's country) --------------
-  // Collection is `politicalParties` (there is no `parties` collection) — the
+  // Collection is `politicalParties` (there is no `parties` collection) - the
   // party `subjectId` on financialTxLog rows is the politicalParties `_id`, so
   // this is the balance the party primary legs reconcile against.
   const parties = db.collection<{ _id: ObjectId; treasury?: number; countryId?: string }>(
@@ -277,6 +277,23 @@ async function collectBalanceState(
       balances,
       accountId("fund", fund._id.toString(), fund.anchorCurrencyCode ?? "USD"),
       fund.cashAnchor
+    );
+  }
+
+  // Pending cash belongs to the subscriber and stays outside fund NAV and bank capital.
+  const subscriptions = db.collection<{
+    _id: string;
+    subscription: { amountAnchor: number; currency: CurrencyCode };
+  }>("indexFundCommands");
+  const subscriptionCursor = subscriptions.find(
+    { "subscription.status": "queued" },
+    { projection: { "subscription.amountAnchor": 1, "subscription.currency": 1 } }
+  );
+  for await (const order of subscriptionCursor) {
+    add(
+      balances,
+      accountId("fund_subscription_escrow", order._id, order.subscription.currency),
+      order.subscription.amountAnchor
     );
   }
 

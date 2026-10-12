@@ -1,3 +1,4 @@
+import { pickedStockTargetValue } from "./rules/mandate";
 import type { ObjectId } from "mongodb";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import type { IndexFund } from "@/lib/db/types/indexFund";
@@ -31,7 +32,7 @@ export type FundRebalancePlan = {
 export function planFundTargetRebalance(input: {
   fund: Pick<
     IndexFund,
-    "_id" | "anchorCurrencyCode" | "cashAnchor" | "holdings" | "targetConstituents"
+    "_id" | "anchorCurrencyCode" | "cashAnchor" | "holdings" | "targetConstituents" | "mandate"
   >;
   corps: RebalanceCorpRow[];
   exchangeRates: Partial<Record<CurrencyCode, number>>;
@@ -92,13 +93,16 @@ export function planFundTargetRebalance(input: {
 
     const targetWeight = targetMap.get(idStr) ?? 0;
     // Target value is the fraction of the 75% equity bucket to allocate to this constituent.
-    const targetValueAnchor = targetWeight * maxEquityValueAnchor;
+    const targetValueAnchor =
+      fund.mandate?.mode === "picked_stocks"
+        ? pickedStockTargetValue(targetWeight, totalBackingAnchor)
+        : targetWeight * maxEquityValueAnchor;
     const targetShares = Math.floor(targetValueAnchor / priceAnchor);
     const currentShares = sharesByCorp.get(idStr) ?? 0;
     const driftShares = currentShares - targetShares;
 
     if (driftShares < 0) {
-      // Underweight — buy from float now, bid for residual
+      // Underweight - buy from float now, bid for residual
       const float = corp.publicFloat ?? 0;
       const deficit = -driftShares;
 
@@ -144,7 +148,7 @@ export function planFundTargetRebalance(input: {
         });
       }
     } else if (driftShares > 0) {
-      // Overweight — sell
+      // Overweight - sell
       const sellCap = Math.max(1, Math.floor(corp.totalShares / 100));
       const sellShares = Math.min(driftShares, sellCap, currentShares);
       if (sellShares > 0) {
@@ -159,7 +163,7 @@ export function planFundTargetRebalance(input: {
   }
 
   // Step 7: apply cash budget to buys (greedy, sorted descending by valueAnchor).
-  // Budget = min(equity headroom, available cash) — the 25% reserve stays uninvested.
+  // Budget = min(equity headroom, available cash) - the 25% reserve stays uninvested.
   const stockBudgetAnchor = Math.max(
     0,
     Math.min(maxEquityValueAnchor - holdingsValueAnchor, fund.cashAnchor)
