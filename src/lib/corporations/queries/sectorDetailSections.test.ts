@@ -178,13 +178,15 @@ describe("unavailable sector purchases", () => {
       forSale: { priceAnchor: 100, listedAt: new Date(0), npvAnchor: 125 },
     });
     memory.seed("corporateSectors", [
-      makeSector({
-        corporationId: viewer._id,
-        constructionFinancing: {
-          status: "building",
-          escrowLocal: 100,
-        } as CorporateSector["constructionFinancing"],
-      }),
+      {
+        ...makeSector({
+          corporationId: viewer._id,
+          constructionFinancing: {
+            status: "building",
+            escrowLocal: 100,
+          } as CorporateSector["constructionFinancing"],
+        }),
+      },
     ]);
     expect(
       await buildSectorForSaleInfo(memory as unknown as Db, {
