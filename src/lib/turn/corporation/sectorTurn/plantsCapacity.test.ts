@@ -245,3 +245,19 @@ describe("computePlantsCapacity — plants capacity advance + P5 basis (#588)", 
     );
   });
 });
+
+describe("computePlantsCapacity: world governor anchor", () => {
+  it("ramps a post-flip sector from the world's flip turn, not its own birthday", () => {
+    const r = computePlantsCapacity(
+      input({ worldGovernorAnchorTurn: CURRENT_TURN - GOVERNOR_RAMP_TURNS / 2 })
+    );
+    // Its own stamp is still today (persisted as its first plants turn)...
+    expect(r.plantsStartTurn).toBe(CURRENT_TURN);
+    // ...but the clamp fades on the world's schedule.
+    expect(r.plantsRampLambda).toBeCloseTo(0.5, 10);
+  });
+  it("keeps the flip-day identity when the world flips this turn", () => {
+    const r = computePlantsCapacity(input({ worldGovernorAnchorTurn: CURRENT_TURN }));
+    expect(r.plantsRampLambda).toBe(0);
+  });
+});

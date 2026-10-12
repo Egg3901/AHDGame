@@ -100,6 +100,16 @@ export interface MarketContext {
    */
   governorCap: number;
   governorRampTurns: number;
+  /**
+   * World turn the governor ramp is anchored to: the turn the world's market
+   * mode last changed. The live readers pass 0 when the stamp is absent: it is
+   * cleared on reset and written on every flip, so a missing stamp means the
+   * world has run its current mode since it was seeded. Null = no world
+   * anchor (per-sector stamps only).
+   * Sectors ramp from the earlier of this and their own first-turn stamp, so
+   * a sector founded after the flip does not get a fresh launch clamp.
+   */
+  worldGovernorAnchorTurn?: number | null;
 }
 
 /** Baseline economy — every market-rework mechanic off. */
@@ -115,7 +125,7 @@ export const MARKET_DISABLED: MarketContext = {
 
 export function buildMarketContext(
   mode: MarketSystemMode,
-  governor?: { cap?: number | null; rampTurns?: number | null }
+  governor?: { cap?: number | null; rampTurns?: number | null; modeUpdatedTurn?: number | null }
 ): MarketContext {
   const cap =
     typeof governor?.cap === "number" && governor.cap >= 0 && governor.cap <= 1
@@ -133,5 +143,9 @@ export function buildMarketContext(
     plantsEnabled: marketAtLeast(mode, "plants"),
     governorCap: cap,
     governorRampTurns: rampTurns,
+    worldGovernorAnchorTurn:
+      typeof governor?.modeUpdatedTurn === "number" && Number.isFinite(governor.modeUpdatedTurn)
+        ? Math.max(0, governor.modeUpdatedTurn)
+        : null,
   };
 }
