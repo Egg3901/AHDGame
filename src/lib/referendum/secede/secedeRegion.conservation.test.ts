@@ -1,3 +1,6 @@
+vi.mock("@/lib/referendum/refundConversionConstruction", () => ({
+  refundConversionConstruction: vi.fn().mockResolvedValue(undefined),
+}));
 vi.mock("@/lib/db/sessionDb", () => ({
   boundSession: () => undefined,
   unboundDb: (db: unknown) => db,

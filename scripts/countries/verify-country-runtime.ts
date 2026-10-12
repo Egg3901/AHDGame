@@ -329,6 +329,9 @@ const DEVOLVED_ABSENCES: Record<string, string> = {
   SOVEREIGN_CORP_LEGAL_STRUCTURE: "not sovereign, so there is no sovereign-corp structure",
 };
 delete DEVOLVED_ABSENCES.ORDERS_BY_COUNTRY;
+// Dedicated seats manage assets after independence, using the same country facts as the registries.
+delete DEVOLVED_ABSENCES.ENERGY_POSITION_BY_COUNTRY;
+delete DEVOLVED_ABSENCES.INFRA_POSITION_BY_COUNTRY;
 
 const ECONOMY_TIER = ["FR", "IT", "ES", "SE", "TR"];
 const ECONOMY_TIER_NO_CENSUS = ["GR", "AT", "FI"];

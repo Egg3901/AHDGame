@@ -48,6 +48,44 @@ function mockOwnerSources(db: ReturnType<typeof createMockDb>) {
 }
 
 describe("first live v2 metric owners", () => {
+  it.each([
+    ["SCO", "LOT", "SCO"],
+    ["WAL", "CDF", "WAL"],
+    ["IE", "NIR", "NIR"],
+  ] as const)(
+    "continues purchasing and life owners after %s conversion",
+    async (countryId, regionId, sourceId) => {
+      const db = createMockDb();
+      mockOwnerSources(db);
+      const original = boards.find((board) => board._id === `UK:${sourceId}`)!;
+      const board = { ...original, _id: `${countryId}:${regionId}`, countryId, regionId };
+      const ref = opening.UK[sourceId]!;
+      db.collection("macroMetrics").find.mockReturnValue({
+        toArray: vi.fn().mockResolvedValue([
+          {
+            _id: regionId,
+            countryId,
+            economic: {
+              medianIncome: { value: ref.medianIncome },
+              costOfLiving: { value: ref.basketIndex },
+            },
+            resetCohortReading: {
+              asOfTurn: 49,
+              periodLifeExpectancy: lifeOpening.UK[sourceId]!.modeledYears + 1,
+              populationGrowthAnnualized: 1,
+              realizedTfr: 2,
+              dependencyBurden15To64: 50,
+            },
+          },
+        ]),
+      });
+      const readings = await collectResetMetricOwnerReadings(db as unknown as Db, [board], 49);
+      expect(readings[board._id].updates["02"]?.value).toEqual(expect.any(Number));
+      expect(readings[board._id].updates["20"]?.value).toBeCloseTo(
+        lifeOpening.UK[sourceId]!.openingYears + 1
+      );
+    }
+  );
   it("refreshes playable-region health from its current board when the retired store is absent", async () => {
     const db = createMockDb();
     mockOwnerSources(db);

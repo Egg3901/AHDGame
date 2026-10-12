@@ -1,3 +1,11 @@
+vi.mock("@/lib/referendum/refundConversionConstruction", () => ({
+  refundConversionConstruction: vi.fn().mockResolvedValue(undefined),
+}));
+vi.mock("@/lib/turn/parliamentaryGovernment", () => ({
+  updateParliamentaryGovernmentSeats: vi.fn(),
+  ensureParliamentaryGovernmentFormation: vi.fn(),
+  unformGovernmentAndVacatePM: vi.fn(),
+}));
 vi.mock("@/lib/db/sessionDb", () => ({
   boundSession: () => undefined,
   unboundDb: (db: unknown) => db,
@@ -8,14 +16,6 @@ import { describe, it, expect, vi } from "vitest";
 
 // Heavy / getDb-coupled steps are mocked — the orchestrator's job is composition
 // + ordering; the underlying steps are unit-tested in their own suites.
-vi.mock("@/lib/turn/perpetualElections", () => ({
-  ensureSCOElections: vi.fn().mockResolvedValue(undefined),
-  ensureWALElections: vi.fn().mockResolvedValue(undefined),
-  ensureSCOGovernorElections: vi.fn().mockResolvedValue(undefined),
-  ensureWALGovernorElections: vi.fn().mockResolvedValue(undefined),
-  ensureSCORegionalCouncilElections: vi.fn().mockResolvedValue(undefined),
-  ensureWALRegionalCouncilElections: vi.fn().mockResolvedValue(undefined),
-}));
 vi.mock("@/lib/nationalMetrics", () => ({
   computeNationalMetrics: vi.fn().mockResolvedValue(undefined),
 }));
@@ -26,19 +26,14 @@ vi.mock("./promoteResetV2", () => ({
   promoteResetV2ForIndependence: vi.fn().mockResolvedValue({ promoted: false }),
 }));
 
-import { makeInMemoryStore } from "@/lib/test-utils/inMemoryStore";
+import { makeStrictInMemoryStore } from "@/lib/test-utils/inMemoryStore";
 import { secedeRegion } from "./secedeRegion";
 import { scoRegions } from "@/lib/seeds/sco/scoRegions";
-import {
-  ensureSCOElections,
-  ensureSCOGovernorElections,
-  ensureSCORegionalCouncilElections,
-} from "@/lib/turn/perpetualElections";
 import { promoteResetV2ForIndependence } from "./promoteResetV2";
 
 function seedWorld() {
   const male = Array.from({ length: 101 }, () => 100);
-  return makeInMemoryStore({
+  return makeStrictInMemoryStore({
     states: [
       { _id: "SCO", countryId: "UK", regionType: "nation", population: 5_440_000, gdp: 163_000 },
       { _id: "LON", countryId: "UK", regionType: "region", population: 9_000_000, gdp: 837_000 },
@@ -128,18 +123,17 @@ describe("secedeRegion", () => {
     // The full devolved election slate is stood up at secession — chamber AND
     // regional governors AND regional councils (not just the chamber), since the
     // governor/council turn phases miss the activation turn.
-    expect(ensureSCOElections).toHaveBeenCalled();
-    expect(ensureSCOGovernorElections).toHaveBeenCalled();
-    expect(ensureSCORegionalCouncilElections).toHaveBeenCalled();
+    expect(cols.elections).toHaveLength(scoRegions.length * 3);
+    expect(cols.elections.every((row) => row.status === "active" && row.imposedSnap)).toBe(true);
+    expect(cols.elections.filter((row) => row.electionType === "snap_holyrood")).toHaveLength(
+      scoRegions.length
+    );
 
     // Government: SNP transfers wholesale; LAB independentized (UK parent only),
     // MPs → holyrood, FM → head of gov.
     expect(cols.politicalParties.find((p) => p._id === "snp")).toMatchObject({ countryId: "SCO" });
     expect(cols.politicalParties.filter((p) => p.abbreviation === "LAB")).toHaveLength(1);
-    expect(cols.electedOfficials.find((o) => o._id === "mpSNP")).toMatchObject({
-      countryId: "SCO",
-      officeType: "holyrood",
-    });
+    expect(cols.electedOfficials.some((o) => o._id === "mpSNP" || o._id === "mpLAB")).toBe(false);
     expect(cols.electedOfficials.find((o) => o._id === "fm")).toMatchObject({
       countryId: "SCO",
       officeType: "firstMinister",
@@ -166,6 +160,6 @@ describe("secedeRegion", () => {
     expect(
       await secedeRegion(db, { regionId: "SCO", fromCountryId: "UK", currentTurn: 301 })
     ).toEqual({ ok: true, skipped: "already-seceded" });
-    expect(promoteResetV2ForIndependence).toHaveBeenLastCalledWith(db, "SCO");
+    expect(promoteResetV2ForIndependence).toHaveBeenLastCalledWith(db, "SCO", 301);
   });
 });

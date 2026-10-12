@@ -1,6 +1,8 @@
+import { resetCorpFxRateCacheForTests } from "@/lib/currency/corporationCapital";
 import { processReferendumLifecycle } from "./processReferendumLifecycle";
 import { processIndependenceDesireDrift } from "@/lib/turn/independenceDesireDrift";
 import { loadIndependenceDesireSnapshots } from "@/lib/governorOffice/devolution/queries";
+import { refundConversionConstruction } from "./refundConversionConstruction";
 import { secedeRegion } from "./secede/secedeRegion";
 import { transferRegion } from "./transfer/transferRegion";
 import { REQUEST_AP_COST } from "@/lib/constants/referendum";
@@ -40,6 +42,7 @@ describe.runIf(REAL_MONGO_ENABLED)("atomic referendum lifecycle against owned Mo
     db = fixture.db;
   }, 60_000);
   beforeEach(async () => {
+    resetCorpFxRateCacheForTests();
     await assertOwnedMongod(fixture!.proc, fixture!.client);
     await db.dropDatabase();
     await db
@@ -184,6 +187,59 @@ describe.runIf(REAL_MONGO_ENABLED)("atomic referendum lifecycle against owned Mo
       (await db.collection("referendums").findOne({ _id: refId }))?.cohortModifiers
     ).toBeUndefined();
   });
+  it("refunds a whole partly delivered order atomically and removes its delivered capacity", async () => {
+    const owner = new ObjectId(),
+      sector = new ObjectId();
+    await db.collection("corporations").insertOne({
+      _id: owner,
+      name: "Synthetic builder",
+      headquartersState: "SCO",
+      countryId: "UK",
+      liquidCurrencyCode: "GBP",
+      liquidCapital: 500,
+    });
+    await db.collection("exchangeRates").insertOne({ currencyCode: "GBP", rate: 2 });
+    await db.collection("corporateSectors").insertOne({
+      _id: sector,
+      corporationId: owner,
+      stateId: "SCO",
+      countryId: "UK",
+      sectorType: "manufacturing",
+      capitalStock: 240,
+      capacityBookAnchor: 2400,
+      operatingCapacityTurn: 14,
+      buildQueue: [
+        { unitsOrdered: 100, costPaidAnchor: 1000, smooth: true, startTurn: 10, onlineTurn: 20 },
+      ],
+    });
+    await expect(
+      withSessionDb(db, async (tx) => {
+        await refundConversionConstruction(tx, "SCO", 15);
+        throw new Error("synthetic interruption");
+      })
+    ).rejects.toThrow("synthetic interruption");
+    expect(await db.collection("corporations").findOne({ _id: owner })).toMatchObject({
+      liquidCapital: 500,
+    });
+    expect(await db.collection("corporateSectors").findOne({ _id: sector })).toMatchObject({
+      capitalStock: 240,
+      buildQueue: [{ unitsOrdered: 100 }],
+    });
+    await withSessionDb(db, (tx) => refundConversionConstruction(tx, "SCO", 15));
+    await withSessionDb(db, (tx) => refundConversionConstruction(tx, "SCO", 16));
+    expect(await db.collection("corporations").findOne({ _id: owner })).toMatchObject({
+      liquidCapital: 2500,
+    });
+    expect(await db.collection("corporateSectors").findOne({ _id: sector })).toMatchObject({
+      capitalStock: 200,
+      capacityBookAnchor: 2000,
+      constructionInProgressAnchor: 0,
+      buildQueue: [],
+    });
+    expect(
+      await db.collection("unownedSectors").findOne({ stateId: "SCO", sectorType: "manufacturing" })
+    ).toMatchObject({ headroomUnits: 100 });
+  });
   it("rolls back Scotland's map and budget when later government migration fails", async () => {
     await db
       .collection<{ _id: string; countryId: string; gdp: number; population: number }>("states")
@@ -236,6 +292,169 @@ describe.runIf(REAL_MONGO_ENABLED)("atomic referendum lifecycle against owned Mo
           .findOne({ _id: "UK" })
       )?.treasuryBalance
     ).toBe(1000);
+  });
+  it.each(["SCO", "WAL"])(
+    "commits %s independence, caretaker and all snap elections exactly once",
+    async (countryId) => {
+      const leader = new ObjectId(),
+        other = new ObjectId();
+      await db.collection<{ _id: string; [key: string]: unknown }>("states").insertMany([
+        { _id: countryId, countryId: "UK", gdp: 100, population: 5000000, capitalStock: 250 },
+        { _id: "LON", countryId: "UK", gdp: 900, population: 9000000, houseDistricts: 500 },
+      ]);
+      await db.collection<{ _id: string; [key: string]: unknown }>("federalBudget").insertOne({
+        _id: "UK",
+        countryId: "UK",
+        gdp: 1000,
+        treasuryBalance: 1000,
+        taxBases: { income: 1000 },
+        debt: { principal: 0, interestRate: 3 },
+      });
+      await db.collection("characters").insertMany([
+        {
+          _id: leader,
+          countryId: "UK",
+          homeState: countryId,
+          party: "independent",
+          currentOffice: { type: "governor" },
+        },
+        {
+          _id: other,
+          countryId: "UK",
+          homeState: countryId,
+          party: "independent",
+          currentOffice: { type: "commons" },
+        },
+      ]);
+      await db.collection("electedOfficials").insertMany([
+        {
+          countryId: "UK",
+          state: countryId,
+          officeType: "governor",
+          characterId: leader,
+          characterName: "Synthetic FM",
+          party: "independent",
+        },
+        {
+          countryId: "UK",
+          state: countryId,
+          officeType: "commons",
+          characterId: other,
+          seatsHeld: 10,
+        },
+      ]);
+      const result = await secedeRegion(db, {
+        regionId: countryId,
+        fromCountryId: "UK",
+        currentTurn: 100,
+      });
+      expect(result.ok).toBe(true);
+      const regions = await db.collection("states").find({ countryId }).toArray();
+      expect(regions.reduce((sum, row) => sum + row.gdp, 0)).toBeCloseTo(100);
+      expect(regions.reduce((sum, row) => sum + row.population, 0)).toBe(5000000);
+      expect(await db.collection("elections").countDocuments({ countryId, status: "active" })).toBe(
+        regions.length * 3
+      );
+      expect(
+        await db.collection("electedOfficials").findOne({ characterId: leader })
+      ).toMatchObject({ countryId, officeType: "firstMinister" });
+      expect(await db.collection("electedOfficials").countDocuments({ characterId: other })).toBe(
+        0
+      );
+      expect(await db.collection("characters").findOne({ _id: other })).toMatchObject({
+        countryId,
+        currentOffice: null,
+      });
+      expect(await db.collection("organizationMemberships").findOne({ countryId })).toMatchObject({
+        organizationId: "UN",
+        status: "active",
+      });
+      expect(
+        await secedeRegion(db, { regionId: countryId, fromCountryId: "UK", currentTurn: 101 })
+      ).toMatchObject({ skipped: "already-seceded" });
+      expect(await db.collection("elections").countDocuments({ countryId })).toBe(
+        regions.length * 3
+      );
+      expect(
+        await db
+          .collection<{ _id: string; treasuryBalance: number }>("federalBudget")
+          .findOne({ _id: countryId })
+      ).toMatchObject({ treasuryBalance: 100 });
+    }
+  );
+  it("commits reunification with rescaled Dail mandates and one frozen public FX conversion", async () => {
+    const mp = new ObjectId();
+    await db.collection("exchangeRates").insertMany([
+      { currencyCode: "GBP", rate: 2 },
+      { currencyCode: "IEP", rate: 3 },
+    ]);
+    await db.collection<{ _id: string; [key: string]: unknown }>("states").insertMany([
+      {
+        _id: "NIR",
+        countryId: "UK",
+        gdp: 100,
+        capitalStock: 200,
+        population: 1500000,
+        houseDistricts: 18,
+        stateSenateSeats: 90,
+      },
+      { _id: "LON", countryId: "UK", gdp: 900, population: 9000000, houseDistricts: 500 },
+      {
+        _id: "DUB",
+        countryId: "IE",
+        gdp: 200,
+        population: 3000000,
+        houseDistricts: 160,
+        stateSenateSeats: 60,
+      },
+    ]);
+    await db.collection<{ _id: string; [key: string]: unknown }>("federalBudget").insertMany([
+      { _id: "UK", countryId: "UK", taxBases: { income: 1000 }, baselineStateGrants: 100 },
+      { _id: "IE", countryId: "IE", taxBases: { income: 200 }, baselineStateGrants: 20 },
+    ]);
+    await db.collection("characters").insertOne({
+      _id: mp,
+      countryId: "UK",
+      homeState: "NIR",
+      party: "independent",
+      currentOffice: { type: "commons", seatsHeld: 18 },
+    });
+    await db.collection("electedOfficials").insertOne({
+      countryId: "UK",
+      state: "NIR",
+      officeType: "commons",
+      characterId: mp,
+      party: "independent",
+      seatsHeld: 18,
+    });
+    const args = {
+      regionId: "NIR",
+      fromCountryId: "UK" as const,
+      toCountryId: "IE" as const,
+      province: "Ulster",
+      relocateToRegionId: "LON",
+      currentTurn: 100,
+      deferCountryWidePasses: true,
+    };
+    expect(await transferRegion(db, args)).toMatchObject({ ok: true });
+    expect(
+      await db.collection<{ _id: string; [key: string]: unknown }>("states").findOne({ _id: "NIR" })
+    ).toMatchObject({ countryId: "IE", gdp: 150, capitalStock: 300, houseDistricts: 80 });
+    expect(await db.collection("electedOfficials").findOne({ characterId: mp })).toMatchObject({
+      countryId: "IE",
+      state: "NIR",
+      officeType: "dail",
+      seatsHeld: 80,
+    });
+    expect(await db.collection("characters").findOne({ _id: mp })).toMatchObject({
+      countryId: "IE",
+      homeState: "NIR",
+      currentOffice: { type: "dail", seatsHeld: 80 },
+    });
+    expect(await transferRegion(db, args)).toMatchObject({ skipped: "already-transferred" });
+    expect(
+      await db.collection<{ _id: string; gdp: number }>("states").findOne({ _id: "NIR" })
+    ).toMatchObject({ gdp: 150 });
   });
   it("rolls back Northern Ireland's map and budget if currency conversion cannot finish", async () => {
     await db

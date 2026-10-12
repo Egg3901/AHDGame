@@ -101,6 +101,62 @@ describe("promoteEconomyToNational", () => {
     expect(newB.debt.principal + (set["debt.principal"] as number)).toBeCloseTo(500, 6);
   });
 
+  it("carries issued debt without copying the UK's pending issuance or receipt witnesses", async () => {
+    seedUkBudget();
+    db.collection("bonds").find.mockReturnValue(
+      cursorOf([
+        {
+          countryId: "UK",
+          issuerType: "sovereign",
+          issuerName: "United Kingdom",
+          totalIssued: 500,
+          publicFloat: 0.5,
+          holders: [],
+          matured: false,
+          defaulted: false,
+          requestedUnits: 10,
+          unsoldUnits: 9.5,
+          primaryUnderwriting: { bankId: "existing" },
+          settledKeys: ["old"],
+        },
+      ])
+    );
+    await promoteEconomyToNational(db as unknown as Db, "UK", "SCO");
+    const moved = db.collectionMocks.bonds.insertMany.mock.calls[0][0][0];
+    expect(moved).toMatchObject({ countryId: "SCO", issuerName: "Scotland", totalIssued: 100 });
+    expect(moved).not.toHaveProperty("unsoldUnits");
+    expect(moved).not.toHaveProperty("requestedUnits");
+    expect(moved).not.toHaveProperty("primaryUnderwriting");
+    expect(moved).not.toHaveProperty("settledKeys");
+    const source = db.collectionMocks.bonds.bulkWrite.mock.calls[0][0][0].updateOne.update.$set;
+    expect(source).not.toHaveProperty("unsoldUnits");
+  });
+  it.each(["bankTreasuryTradeId", "saleIntentId"])(
+    "defers a split while a holder has a pending %s",
+    async (field) => {
+      seedUkBudget();
+      db.collection("bonds").find.mockReturnValue(
+        cursorOf([{ totalIssued: 500, holders: [{ units: 1, [field]: "pending" }] }])
+      );
+      await expect(promoteEconomyToNational(db as unknown as Db, "UK", "SCO")).rejects.toThrow(
+        "holder settlement"
+      );
+      expect(db.collectionMocks.federalBudget.insertOne).not.toHaveBeenCalled();
+    }
+  );
+  it.each(["pendingMoneyMoveReceipt", "pendingSettlementProjection"])(
+    "defers a split while a bond has an unfinished %s",
+    async (field) => {
+      seedUkBudget();
+      db.collection("bonds").find.mockReturnValue(
+        cursorOf([{ totalIssued: 500, holders: [], [field]: { key: "pending" } }])
+      );
+      await expect(promoteEconomyToNational(db as unknown as Db, "UK", "SCO")).rejects.toThrow(
+        "cash receipt"
+      );
+      expect(db.collectionMocks.federalBudget.insertOne).not.toHaveBeenCalled();
+    }
+  );
   it("is a no-op when the new country's budget already exists", async () => {
     db.collection("federalBudget").findOne.mockResolvedValue({ _id: "SCO", countryId: "SCO" });
     await promoteEconomyToNational(db as unknown as Db, "UK", "SCO");

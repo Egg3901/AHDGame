@@ -1,3 +1,5 @@
+import { WAL_CABINET_SEAT_IDS } from "@/lib/countries/wal/institutionsFacts";
+import { SCO_CABINET_SEAT_IDS } from "@/lib/countries/sco/institutionsFacts";
 import type { CountryId } from "./countries";
 import type { InfraProject, BuildFundingLevel } from "@/lib/db/types/infraProject";
 import { JP_CABINET_SEAT_IDS } from "@/lib/countries/jp/institutionsFacts";
@@ -129,6 +131,8 @@ export const INFRA_ARCHETYPES: InfraArchetype[] = [
 
 /** Transportation seat per country (clean — never an Estates or Energy seat). */
 export const INFRA_POSITION_BY_COUNTRY: Partial<Record<CountryId, string>> = {
+  SCO: SCO_CABINET_SEAT_IDS.infrastructure,
+  WAL: WAL_CABINET_SEAT_IDS.infrastructure,
   US: US_CABINET_SEAT_IDS.infrastructure,
   UK: UK_CABINET_SEAT_IDS.infrastructure,
   DE: DE_CABINET_SEAT_IDS.infrastructure,

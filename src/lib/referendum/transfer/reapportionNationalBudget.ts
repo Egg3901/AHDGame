@@ -23,24 +23,8 @@ import type { Db } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
 import type { FederalBudget, State } from "@/lib/db/types";
 
+import { shiftNumericMap } from "./rules/fiscalCurrency";
 type NumMap = Record<string, number>;
-
-/** Split a numeric map: move `weight` of each `from` entry into `to`. */
-function shiftNumericMap(
-  from: NumMap | undefined,
-  to: NumMap | undefined,
-  weight: number
-): { from: NumMap; to: NumMap } {
-  const f: NumMap = { ...(from ?? {}) };
-  const t: NumMap = { ...(to ?? {}) };
-  for (const [k, v] of Object.entries(f)) {
-    if (typeof v !== "number" || !Number.isFinite(v)) continue;
-    const amt = v * weight;
-    f[k] = v - amt;
-    t[k] = (typeof t[k] === "number" ? t[k] : 0) + amt;
-  }
-  return { from: f, to: t };
-}
 
 export async function reapportionNationalBudget(
   db: Db,
@@ -57,7 +41,8 @@ export async function reapportionNationalBudget(
    * everything out of a country that keeps existing would strand it running
    * fiscal years over an emptied book.
    */
-  sourceDissolving = false
+  sourceDissolving = false,
+  currencyScale = 1
 ): Promise<void> {
   const region = await db
     .collection<State>("states")
@@ -93,14 +78,16 @@ export async function reapportionNationalBudget(
   const taxB = shiftNumericMap(
     from.taxBases as unknown as NumMap,
     to.taxBases as unknown as NumMap,
-    weight
+    weight,
+    currencyScale
   );
   const taxFrom = taxB.from as unknown as TaxBases;
   const taxTo = taxB.to as unknown as TaxBases;
   const spend = shiftNumericMap(
     from.baselineSpendingByCategory,
     to.baselineSpendingByCategory,
-    weight
+    weight,
+    currencyScale
   );
   const grant = (from.baselineStateGrants ?? 0) * weight;
 
@@ -121,7 +108,7 @@ export async function reapportionNationalBudget(
       $set: {
         taxBases: taxTo,
         baselineSpendingByCategory: spend.to,
-        baselineStateGrants: (to.baselineStateGrants ?? 0) + grant,
+        baselineStateGrants: (to.baselineStateGrants ?? 0) + grant * currencyScale,
         updatedAt: now,
       },
     }

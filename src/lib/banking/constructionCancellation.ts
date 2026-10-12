@@ -13,6 +13,7 @@ import { settleTransition, resumeSettlement, type SettlementResult } from "./set
 import { oid } from "./rules/boundary";
 import {
   quoteConstructionCancellation,
+  quoteConversionCancellationSupplement,
   cancellationRefundTransition,
   cancellationPayoutTransition,
   type ConstructionCancellationQuote,
@@ -31,12 +32,36 @@ export async function cancelFinancedConstruction(input: {
   sectorId: ObjectId;
   borrowerId: ObjectId;
   turn: number;
+  fullRefund?: boolean;
 }): Promise<Result> {
   if (!input.enabled) return { ok: false, error: "Construction finance is not enabled" };
   const { db, sectorId, borrowerId, turn } = input;
   const sectors = db.collection<CorporateSector>("corporateSectors");
-  const sector = await sectors.findOne({ _id: sectorId, corporationId: borrowerId });
+  const sector = await sectors.findOne(
+    { _id: sectorId, corporationId: borrowerId },
+    {
+      projection: {
+        corporationId: 1,
+        constructionFinancing: 1,
+        forSale: 1,
+        buildQueue: 1,
+        capitalStock: 1,
+        capacityBookAnchor: 1,
+        plantCount: 1,
+        plantUnitRemainder: 1,
+        sectorType: 1,
+        industryModel: 1,
+        mediaDiscriminator: 1,
+        operatingCapacityTurn: 1,
+      },
+    }
+  );
   let claim = sector?.constructionFinancing;
+  const needsConversionSupplement =
+    input.fullRefund === true &&
+    claim?.cancellation !== undefined &&
+    !claim.cancellation.completed &&
+    !claim.cancellation.rollback;
   if (
     !sector ||
     !claim ||
@@ -118,6 +143,8 @@ export async function cancelFinancedConstruction(input: {
       turn,
       destination: liveEpoch ? "bank" : "insurance",
       now: new Date(),
+      fullRefund: input.fullRefund,
+      sector,
     });
     if (!candidate) {
       await releaseConstructionLoanLock(db, loan, key);
@@ -224,6 +251,49 @@ export async function cancelFinancedConstruction(input: {
     },
     { $set: { "constructionFinancing.cancellation.cleanupCompleted": true } }
   );
+  if (needsConversionSupplement) {
+    const [updatedSector, updatedLoan] = await Promise.all([
+      sectors.findOne(
+        { _id: sectorId },
+        {
+          projection: {
+            corporationId: 1,
+            constructionFinancing: 1,
+            buildQueue: 1,
+            capitalStock: 1,
+            capacityBookAnchor: 1,
+            sectorType: 1,
+            industryModel: 1,
+            mediaDiscriminator: 1,
+            operatingCapacityTurn: 1,
+          },
+        }
+      ),
+      db.collection<BankLoan>("bankLoans").findOne({ _id: loan._id }),
+    ]);
+    if (!updatedSector?.constructionFinancing || !updatedLoan)
+      return { ok: false, error: "Missing conversion refund receipt" };
+    const supplement = quoteConversionCancellationSupplement({
+      previous: quote,
+      claim: updatedSector.constructionFinancing,
+      loan: updatedLoan,
+      sector: updatedSector,
+      turn,
+      now: new Date(),
+    });
+    if (supplement) {
+      const frozen = await sectors.updateOne(
+        {
+          _id: sectorId,
+          "constructionFinancing.cancellation.key": quote.key,
+          "constructionFinancing.cancellation.cleanupCompleted": true,
+        },
+        { $set: { "constructionFinancing.cancellation": supplement } }
+      );
+      if (frozen.matchedCount !== 1) return { ok: false, error: "Conversion refund changed" };
+      return cancelFinancedConstruction(input);
+    }
+  }
   return successful(quote);
 }
 
