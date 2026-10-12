@@ -25,6 +25,9 @@ vi.mock("@/lib/api/rateLimit", () => ({
   checkRateLimit: vi.fn(() => ({ ok: true })),
   rateLimitResponse: vi.fn(),
 }));
+vi.mock("@/lib/db/runRequiredTransaction", () => ({
+  runRequiredTransaction: vi.fn(async (run: (session: object) => Promise<unknown>) => run({})),
+}));
 vi.mock("@/lib/db/transactionWithRetry", () => ({
   runTransactionWithSessionRetry: vi.fn(
     async (_get: unknown, run: (session?: undefined) => Promise<unknown>) => run(undefined)
@@ -369,5 +372,53 @@ describe("corporation fund accounting", () => {
     expect(find).toHaveBeenCalledTimes(1);
     expect(bulk).toHaveBeenCalledTimes(1);
     expect(memory.collection("indexFundTransactions").docs).toHaveLength(2);
+  });
+});
+
+describe("sponsor unit withdrawal lock", () => {
+  it("refuses a sponsor withdrawal while investors hold units and retains all cash and custody", async () => {
+    const { memory, db } = setup();
+    const sponsored = {
+      ...fund,
+      seedAccounting: "paid_units" as const,
+      sponsorCorporationId: corporationId,
+    };
+    await db
+      .collection("indexFunds")
+      .updateOne(
+        { _id: fundId },
+        { $set: { seedAccounting: "paid_units", sponsorCorporationId: corporationId } }
+      );
+    memory.seed("indexFundPositions", [
+      {
+        _id: new ObjectId(),
+        fundId,
+        holderKind: "corporation",
+        corporationId,
+        units: 10,
+        legacyUnits: 0,
+      },
+      {
+        _id: new ObjectId(),
+        fundId,
+        holderKind: "character",
+        characterId: character,
+        units: 1,
+        legacyUnits: 0,
+      },
+    ]);
+    const result = await tradeCorporationFund(
+      db,
+      String(user),
+      character,
+      sponsored,
+      order(1),
+      "redeem"
+    );
+    expect(result.status).toBe(400);
+    expect((await result.json()).error).toContain("Sponsor units stay invested");
+    expect(memory.collection("indexFunds").docs[0].cashAnchor).toBe(10000);
+    expect(memory.collection("corporations").docs[0].liquidCapital).toBe(1000);
+    expect(memory.collection("indexFundPositions").docs[0].units).toBe(10);
   });
 });

@@ -78,11 +78,12 @@ export interface FundDetail {
   bondHoldingsValueAnchor?: number;
   holdings: FundHoldingRow[];
   targetConstituents: FundHoldingRow[];
-  // A5 sponsorship — all null on the seeded system funds.
+  // A5 sponsorship - all null on the seeded system funds.
   sponsorCorporationId?: string | null;
   sponsorName?: string | null;
   expenseRatioAnnual?: number | null;
   seedCapitalAnchor?: number | null;
+  seedAccounting?: "legacy_residual" | "paid_units";
   feesPaidToSponsorAnchor?: number | null;
   charteredAtTurn?: number | null;
   windDownStartedAtTurn?: number | null;

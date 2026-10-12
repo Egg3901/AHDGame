@@ -30,7 +30,8 @@ import {
   INDEX_FUND_RESERVE_CASH_BUFFER_FRACTION,
 } from "@/lib/indexFunds/fundAllocation";
 import { sovereignBondRemainingCapacityUnits } from "@/lib/bonds/holderCap";
-import { getAllFundDefinitions, type BondFundUniverse } from "@/lib/indexFunds/fundDefinitions";
+import type { BondFundUniverse } from "@/lib/indexFunds/fundDefinitions";
+import { resolveFundMandate } from "./mandate";
 import { CREDIT_RATINGS, type CreditRating } from "@/lib/db/types/centralBank";
 import { getNationalBudgetId } from "@/lib/bonds/sovereign";
 
@@ -269,11 +270,7 @@ async function deployBondReserve(
   // mandate, so it deploys exactly like a seeded home-only fund. Funds that
   // exist today all resolve through definitions, so this fallback never fires
   // for them and gate-off behavior is unchanged.
-  const bondUniverse =
-    fund.kind === "bond"
-      ? (getAllFundDefinitions().find((d) => d.slug === fund.slug)?.bondUniverse ??
-        (fund.countryId ? ({ issuerType: "sovereign", homeOnly: true } as const) : undefined))
-      : undefined;
+  const bondUniverse = fund.kind === "bond" ? resolveFundMandate(fund).bondUniverse : undefined;
   if (fund.kind === "bond" && !bondUniverse) {
     return { deployedAnchor: 0, markedValueAnchor: 0, unitsPurchased: 0, countryId };
   }
