@@ -4,6 +4,7 @@ import type { CurrencyCode } from "@/lib/constants/currencies";
 import { sectorEconomicScale } from "@/lib/corporations/sectorProfitBasis";
 import { getMarketSystemModeForDb, marketAtLeast } from "@/lib/market/featureFlag";
 import { loadWorldEraUnitScale } from "@/lib/currency/gdpAnchorRate";
+import { techNodeCashFloorAnchor } from "@/lib/constants/techTree/costs";
 import {
   anchorToCorpLiquidCapital,
   corpCapitalToAnchor,
@@ -36,6 +37,23 @@ import {
 export interface CorpDailyGrossRevenuePricing {
   dailyGrossRevenueLocal: number;
   capacityFloorApplied: boolean;
+  /** Era-scaled minimum tech node cash price in the corp's currency (#1506). */
+  techCashFloorLocal: number;
+}
+
+/**
+ * The era-scaled minimum tech node cash price, converted into the corp's own
+ * currency. Pure, so turn paths holding the era and FX snapshots can share it.
+ */
+export function corpTechCashFloorLocal(
+  corp: Pick<Corporation, "countryId" | "liquidCurrencyCode">,
+  options: { eraUnitScale: number; fxByCurrency: ReadonlyMap<CurrencyCode, number> }
+): number {
+  return anchorToCorpLiquidCapital(
+    techNodeCashFloorAnchor(options.eraUnitScale),
+    corp,
+    fxRateForCorpFromMap(corp, options.fxByCurrency)
+  );
 }
 
 /**
@@ -104,6 +122,7 @@ export async function corpDailyGrossRevenuePricingLocal(
       fxByCurrency,
     }),
     capacityFloorApplied: plantsEnabled,
+    techCashFloorLocal: corpTechCashFloorLocal(corp, { eraUnitScale, fxByCurrency }),
   };
 }
 
