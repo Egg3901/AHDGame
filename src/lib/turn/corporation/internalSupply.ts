@@ -112,6 +112,9 @@ export function finishInternalSupplyContext(
     receipts.set(trade.buyerSectorId, buyer);
   }
   market.internalSupplyReceiptsBySectorId = receipts;
+  market.internalSupplyCommittedInputsBySectorId = new Map(
+    context.buyers.map((b) => [b.sectorId, b.committed ?? new Map()])
+  );
   market.internalSupplyTrades = (context.pendingBooks ?? []).flatMap((book) =>
     context.tradesOut
       .filter(

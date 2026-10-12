@@ -1,5 +1,9 @@
 /** Synthetic internal supply qualification fixture. No DB, network or player data. */
 import { prepareInternalSupplySectorResults } from "@/lib/turn/corporation/internalSupplySectorPass";
+import {
+  resolveSectorHostCurrencyCode,
+  fxRateForSectorHostFromMap,
+} from "@/lib/currency/corporationCapital";
 import { ObjectId } from "mongodb";
 import type { Corporation, CorporateSector } from "@/lib/db/types";
 import type { CorporationLookups } from "@/lib/turn/corporation/types";
@@ -187,10 +191,29 @@ export function runInternalSupplyWorld(
   } as unknown as SectorTurnEnv;
   const prepared = prepareInternalSupplySectorResults(env);
   const seller =
-    prepared?.get(mineId.toString()) ?? processSector(env, corp, mine, 1, undefined, 1);
+    prepared?.get(mineId.toString()) ??
+    processSector(
+      env,
+      corp,
+      mine,
+      lookups.sectorsByCorp.get(parentId.toString())!.length,
+      resolveSectorHostCurrencyCode(mine, corp),
+      fxRateForSectorHostFromMap(mine, corp, lookups.exchangeRatesByCurrency)
+    );
   const buyer =
     prepared?.get(factoryId.toString()) ??
-    processSector(env, overrides.group ? child : corp, factory, 1, undefined, 1);
+    processSector(
+      env,
+      overrides.group ? child : corp,
+      factory,
+      overrides.group ? 1 : 2,
+      resolveSectorHostCurrencyCode(factory, overrides.group ? child : corp),
+      fxRateForSectorHostFromMap(
+        factory,
+        overrides.group ? child : corp,
+        lookups.exchangeRatesByCurrency
+      )
+    );
   const updates = sectorOps.map(
     (op) =>
       (op as { updateOne: { update: { $set: Partial<CorporateSector> } } }).updateOne.update.$set

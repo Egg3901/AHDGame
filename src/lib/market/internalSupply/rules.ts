@@ -200,11 +200,12 @@ export function internalSupplyAvailability(
       residualDemand > 0
         ? Math.min(1, Math.max(0, availableSupply - totalReserved) / residualDemand)
         : 0;
-    const committed = Math.min(positive(b.demand), positive(b.committed));
-    const openNeed = Math.max(0, positive(b.demand) - received - committed);
+    // Commitments exclude eligibility above; they are not a second source of
+    // physical goods beside the residual pool. Count every unreserved input once.
+    const openNeed = Math.max(0, positive(b.demand) - received);
     availabilityBySector.set(
       b.sectorId,
-      Math.min(1, (received + committed * local + openNeed * residualAvailability) / b.demand)
+      Math.min(1, (received + openNeed * residualAvailability) / b.demand)
     );
   }
   return availabilityBySector;
@@ -214,7 +215,8 @@ export function internalSupplyAvailability(
 export function settleConsumedInternalDiscounts(
   trades: readonly (InternalSupplyTrade & { commodity: string; marketPrice: number })[],
   consumption: ReadonlyMap<string, ReadonlyMap<string, number>>,
-  turnsPerDay: number
+  turnsPerDay: number,
+  committedInputs?: ReadonlyMap<string, ReadonlyMap<string, number>>
 ): Map<string, number> {
   const reserved = new Map<string, number>();
   for (const t of trades) {
@@ -224,7 +226,11 @@ export function settleConsumedInternalDiscounts(
   const costs = new Map<string, number>();
   for (const t of trades) {
     const key = `${t.buyerSectorId}:${t.commodity}`;
-    const actual = positive(consumption.get(t.buyerSectorId)?.get(t.commodity));
+    const actual = Math.max(
+      0,
+      positive(consumption.get(t.buyerSectorId)?.get(t.commodity)) -
+        positive(committedInputs?.get(t.buyerSectorId)?.get(t.commodity))
+    );
     const units = t.units * Math.min(1, actual / (reserved.get(key) ?? 1));
     for (const [id, cost] of internalSupplyDiscounts([{ ...t, units }], t.marketPrice, turnsPerDay))
       costs.set(id, (costs.get(id) ?? 0) + cost);

@@ -39,6 +39,8 @@ export interface MarketContext {
   mediaEditorialEnabled?: boolean;
   /** Selected US media communications policy option, read only while gated on. */
   mediaRegulationPolicyOptionIndex?: number;
+  /** Explicit agreements claim these daily input units before an internal rebate. */
+  internalSupplyCommittedInputsBySectorId?: ReadonlyMap<string, ReadonlyMap<string, number>>;
   internalSupplyTrades?: readonly (import("./internalSupply/rules").InternalSupplyTrade & {
     commodity: import("@/lib/constants/commodities").CommodityType;
     marketPrice: number;

@@ -39,9 +39,11 @@ export function prepareInternalSupplySectorResults(
   const costs = settleConsumedInternalDiscounts(
     env.market.internalSupplyTrades,
     consumption,
-    TURNS_PER_DAY
+    TURNS_PER_DAY,
+    env.market.internalSupplyCommittedInputsBySectorId
   );
   env.market.internalSupplyDiscountCostBySectorId = costs;
-  for (const [id, r] of results) r.applyInternalSupplyDiscount?.(costs.get(id) ?? 0);
+  for (const [id, cost] of costs)
+    if (cost !== 0) results.get(id)?.applyInternalSupplyDiscount?.(cost);
   return results;
 }

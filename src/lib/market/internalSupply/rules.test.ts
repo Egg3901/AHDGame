@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   allocateInternalSupply,
+  internalSupplyAvailability,
   internalSupplyDiscounts,
   settleConsumedInternalDiscounts,
   resolveSupplyPolicies,
@@ -169,4 +170,35 @@ it("prorates actual consumption across suppliers and leaves unused reservations 
   expect(costs.get("buyer")).toBe(-14);
   expect([...costs.values()].reduce((sum, n) => sum + n, 0)).toBe(0);
   expect(settleConsumedInternalDiscounts(trades, new Map(), 24).get("buyer")).toBe(0);
+});
+
+it("counts committed buyers only once in the remaining finite input pool", () => {
+  const buyers = [
+    { sectorId: "own", corporationId: "parent", demand: 40, committed: 20, availability: 0.6 },
+    { sectorId: "other", corporationId: "other", demand: 60, availability: 0.6 },
+  ];
+  const trades = [
+    {
+      supplierSectorId: "mine",
+      buyerSectorId: "own",
+      supplierCorpId: "parent",
+      buyerCorpId: "parent",
+      units: 20,
+      discount: 0.1,
+    },
+  ];
+  const availability = internalSupplyAvailability(buyers, trades, 60, 100);
+  expect((availability.get("own") ?? 0) * 40 + (availability.get("other") ?? 0) * 60).toBeCloseTo(
+    60
+  );
+  const consumption = new Map([["own", new Map([["iron", 25]])]]);
+  const committed = new Map([["own", new Map([["iron", 20]])]]);
+  const costs = settleConsumedInternalDiscounts(
+    trades.map((t) => ({ ...t, commodity: "iron", marketPrice: 120 })),
+    consumption,
+    24,
+    committed
+  );
+  expect(costs.get("mine")).toBe(2.5);
+  expect(costs.get("own")).toBe(-2.5);
 });

@@ -141,6 +141,11 @@ export function runClearingPrePass(input: ClearingPrePassInput): ClearingPrePass
     treasuryCashLedgerEnabled,
   } = input;
   let { contractedByCorpCommodity } = input;
+  const internalSupplyEnabled =
+    market.plantsEnabled &&
+    [...lookups.corpById.values()].some(
+      (c) => c.internalSupplyPolicy && c.internalSupplyPolicy.priority !== "market"
+    );
   let buyerDemandByCorpCommodity: Map<string, Map<string, number>> | undefined;
   let politicalMediaSettlementPlans: ClearingPrePassResult["politicalMediaSettlementPlans"] = [];
   // Brand loyalty (A2, shadow-safe): per-sector meta captured during the
@@ -387,7 +392,7 @@ export function runClearingPrePass(input: ClearingPrePassInput): ClearingPrePass
         // anonymous advertising settlement that follows clearing.
         sectorCorpId.set(sectorId, corpId);
         sectorTypeBySectorId.set(sectorId, sector.sectorType);
-        if (supplyAgreementsEnabled || market.plantsEnabled) {
+        if (supplyAgreementsEnabled || internalSupplyEnabled) {
           supplyAgreementDemandSectors.push({
             sectorId,
             corporationId: corpId,
@@ -843,14 +848,16 @@ export function runClearingPrePass(input: ClearingPrePassInput): ClearingPrePass
       market.deliveryLimitedBySectorId = deliveryLimitedBySectorId;
       market.deliveryLimitedClassBySectorId = deliveryLimitedClassBySectorId;
     }
-    const internalSupply = buildInternalSupplyContext({
-      freightSettlementActive,
-      lookups,
-      market,
-      sectors: supplyAgreementDemandSectors,
-      agreements: supplyAgreementsEnabled ? (settleableAgreements ?? []) : [],
-      turn: turn ?? 0,
-    });
+    const internalSupply = internalSupplyEnabled
+      ? buildInternalSupplyContext({
+          freightSettlementActive,
+          lookups,
+          market,
+          sectors: supplyAgreementDemandSectors,
+          agreements: supplyAgreementsEnabled ? (settleableAgreements ?? []) : [],
+          turn: turn ?? 0,
+        })
+      : undefined;
     market.clearingBySectorId = computeClearingFactors({
       sectors: clearingInputs,
       internalSupply,
