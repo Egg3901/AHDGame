@@ -59,6 +59,12 @@ const MONEY_HINTS = [
   "coupon",
 ];
 
+/** Holder balances: editing these ad hoc is a payment with no receipt. */
+const BALANCE_FIELDS: Record<string, string[]> = {
+  corporations: ["liquidCapital"],
+  characters: ["funds"],
+};
+
 function looksLikeMoney(field: string): boolean {
   const lower = field.toLowerCase();
   return MONEY_HINTS.some((hint) => lower.includes(hint));
@@ -121,6 +127,20 @@ export function validateAdhocSpec(spec: AdhocSpec): SpecProblem[] {
   }
   if (spec.action.kind === "unset" && spec.action.unset.length === 0) {
     problems.push({ field: "action.unset", detail: "empty — nothing would change" });
+  }
+
+  // A payment written as a balance edit leaves money with no transaction
+  // record (2026-10-12: 28 owner-approved credits had no receipt). Payments
+  // go through compensation; only corrections of a broken value come here.
+  const balanceFields = BALANCE_FIELDS[spec.collection] ?? [];
+  const balanceWrites = writtenFields(spec).filter((field) =>
+    balanceFields.includes(field.split(".")[0])
+  );
+  if (balanceWrites.length > 0 && spec.balanceCorrection !== true) {
+    problems.push({
+      field: "action",
+      detail: `${balanceWrites.join(", ")} on ${spec.collection} is a balance. To pay or repay someone use compensation (compensate-plan), which moves the exact amount and writes its ledger receipt. Set balanceCorrection: true only to repair a broken value, not to move money.`,
+    });
   }
 
   const moneyFields = writtenFields(spec).filter(looksLikeMoney);

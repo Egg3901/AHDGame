@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { useTranslations } from "next-intl";
 import { InfoTooltip } from "@/components/InfoTooltip";
@@ -32,6 +33,7 @@ export default function PricingPanel({
   isCeo,
   pricing,
 }: PricingPanelProps) {
+  const supplyText = useTranslations("corporations.internalSupply");
   const costPlusText = useTranslations("corporations.costPlusPricing");
   const [draft, setDraft] = useState<number | null>(pricing.posture);
   const [pricingMode, setPricingMode] = useState<"market" | "costPlus">(
@@ -140,6 +142,12 @@ export default function PricingPanel({
           : "Your posted price relative to the market. Demand fills the cheapest sellers first. Undercut to sell out ahead of rivals, or skim for margin and risk holding unsold output."}
       </p>
 
+      <p className="mb-3 text-xs text-muted">
+        {supplyText("pricingHint")}{" "}
+        <Link className="underline" href={`/corporation/${corporationId}?tab=ceo`}>
+          {supplyText("pricingLink")}
+        </Link>
+      </p>
       {(pricing.costPlusEnabled || pricingMode === "costPlus") &&
         (pricing.costPlusReady || pricingMode === "costPlus") && (
           <div className="flex gap-2 mb-3" aria-label="Pricing basis">

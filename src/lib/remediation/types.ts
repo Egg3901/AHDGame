@@ -287,6 +287,37 @@ export interface AdhocSpec {
   touchesMoney?: boolean;
   /** Required to run against an empty filter (the whole collection). */
   confirmWholeCollection?: boolean;
+  /**
+   * A corporation's liquidCapital or a character's funds can only be edited
+   * ad hoc as a correction (a NaN, a corrupted value), never as a payment:
+   * payments go through compensation so they leave a receipt.
+   */
+  balanceCorrection?: boolean;
+}
+
+/** One corporation owed money, in its own settlement currency. */
+export interface CompensationCredit {
+  corporationId: string;
+  amountLocal: number;
+  /** One line on how the amount was worked out; kept on the receipt. */
+  basis?: string;
+}
+
+/**
+ * Owner-approved repayment to corporations. "credit" moves the money and
+ * writes a restitution_credit receipt per corporation. "receipt-only" records
+ * money that already moved outside the heal engine, without moving it again.
+ */
+export interface CompensationSpec {
+  description: string;
+  ticket?: string;
+  mode: "credit" | "receipt-only";
+  credits: CompensationCredit[];
+  expectedMax: number;
+  /** receipt-only: ISO time the money actually moved. */
+  movedAt?: string;
+  /** receipt-only: the game clock at movedAt plus one (the turn that reconciled it). */
+  ledgerTurn?: number;
 }
 
 /**

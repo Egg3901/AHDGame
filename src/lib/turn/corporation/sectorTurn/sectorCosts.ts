@@ -108,6 +108,8 @@ export function computeGrowthAndRegulatory(input: GrowthRegulatoryInput): Growth
 
 export interface PhysicalCostsInput {
   plantsEnabled: boolean;
+  /** Matching supplier charge or buyer credit, applied after legacy calibration. */
+  internalSupplyDiscountCost?: number;
   explicitPlantCostsEnabled?: boolean;
   embargoLegacyMothball: boolean;
   profitMargin: number;
@@ -164,6 +166,7 @@ export interface PhysicalCostsResult {
   plantsPolicyNeutralBasis: number;
   plantsPolicyCredit: number;
   inputsCost: number;
+  inputUnitsByCommodity: Map<CommodityType, number>;
   financialLegs: number;
   otherOpexCalibrated: boolean;
   solvedOtherOpexPerUnit: number | null;
@@ -371,6 +374,7 @@ export function decomposePhysicalCosts(input: PhysicalCostsInput): PhysicalCosts
         complianceCost: regulatoryBurden,
         otherOpex,
         financialLegs,
+        internalSupplyDiscountCost: input.internalSupplyDiscountCost,
         growthCost: hourlyGrowthCost,
         policyCredit: plantsPolicyCredit,
       })
@@ -406,6 +410,9 @@ export function decomposePhysicalCosts(input: PhysicalCostsInput): PhysicalCosts
     plantsPolicyNeutralBasis,
     plantsPolicyCredit,
     inputsCost,
+    inputUnitsByCommodity: new Map(
+      inputsCostResult.lines.map((line) => [line.commodity, line.units])
+    ),
     financialLegs,
     otherOpexCalibrated,
     solvedOtherOpexPerUnit,
