@@ -128,6 +128,19 @@ export interface SectorPlantsSection {
    */
   roomHeldByOwnIdle?: boolean;
   /**
+   * Present while the plant is selling under its demand-limited run. Once
+   * `turns` passes `graceTurns`, active capacity the market will not buy
+   * retires a little each turn. Parked capacity is exempt.
+   */
+  idleRetirement?: {
+    /** Consecutive turns the plant has been demand-limited into a glut. */
+    turns: number;
+    /** Turns allowed before any capacity retires. */
+    graceTurns: number;
+    /** Capacity units retired at the end of the last turn. */
+    retiredUnits: number;
+  };
+  /**
    * Share of this market nobody has built into, in percent: the unowned pool
    * over owned capacity plus that pool. The same pool `headroomUnits` bounds a
    * build by, so the two numbers the panel shows side by side reconcile.
