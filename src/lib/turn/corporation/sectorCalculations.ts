@@ -5,6 +5,7 @@
  * interest and dividends (up to MAX_DIVIDEND_RATE), accrues R&D score
  * (rdMoraleFactor, computeRdDemandFactor), and converts each sector from its host currency.
  */
+import { prepareInternalSupplySectorResults } from "./internalSupplySectorPass";
 import { formalizedSubsidiaryCountByParentId } from "@/lib/corporations/subsidiaries/helpers";
 import type { AnyBulkWriteOperation, ObjectId } from "mongodb";
 import type { Bond, Corporation, MediaProductAdvertisingObligationV1 } from "@/lib/db/types";
@@ -227,6 +228,8 @@ export function processSectors(
     privateBankingEnabled,
   };
 
+  const internalSupplyResults = prepareInternalSupplySectorResults(sectorTurnEnv);
+
   const ceoSalaryPayments = new Map<string, Map<CurrencyCode, number>>();
   const dividendPayments = new Map<string, Map<CurrencyCode, number>>();
   const corpDividendPaymentsAnchorByCorpId = new Map<string, number>();
@@ -412,14 +415,16 @@ export function processSectors(
         corp,
         lookups.exchangeRatesByCurrency
       );
-      const r = processSector(
-        sectorTurnEnv,
-        corp,
-        sector,
-        sectors.length,
-        sectorCurrencyCode,
-        sectorFxRate
-      );
+      const r =
+        internalSupplyResults?.get(sector._id.toString()) ??
+        processSector(
+          sectorTurnEnv,
+          corp,
+          sector,
+          sectors.length,
+          sectorCurrencyCode,
+          sectorFxRate
+        );
       corpGrowthNumer += (r.newCurrentGrowthRate / 100) * r.hourlyRevenue;
       corpGrowthDenom += r.hourlyRevenue;
       corpSectorNPV += r.npvContribution;

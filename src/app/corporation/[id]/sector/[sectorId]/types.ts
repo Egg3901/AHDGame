@@ -689,6 +689,7 @@ export interface PlantsData {
     /** The same stack in percentage points of revenue. */
     policyPp?: number;
     otherOperatingAnchor: number;
+    internalSupplyDiscountAnchor?: number;
     freightCostAnchor?: number;
     freightIncomeAnchor?: number;
     growthAndBuildAnchor: number;

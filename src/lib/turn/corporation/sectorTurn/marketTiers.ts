@@ -116,12 +116,14 @@ export function computeMarketTiers(input: MarketTiersInput): MarketTiersResult {
   // and lagged global balances otherwise. A throttled sector therefore cannot
   // deepen the shortage that throttled it within the same turn. Ramped in per
   // sector over the same 240-turn window as the capacity haircut.
+  const priorityAvailability = market.internalInputAvailabilityBySectorId?.get(
+    sector._id.toString()
+  );
+  const inputAvailability = priorityAvailability
+    ? new Map([...(stateInputAvailabilityByState.get(stateId) ?? []), ...priorityAvailability])
+    : stateInputAvailabilityByState.get(stateId);
   const throughputRaw = market.throughputEnabled
-    ? computeThroughput(
-        strategyDemand ?? {},
-        wideCommodityBalances,
-        stateInputAvailabilityByState.get(stateId)
-      )
+    ? computeThroughput(strategyDemand ?? {}, wideCommodityBalances, inputAvailability)
     : { throughput: 1, bindingInput: null };
   const throughputStartTurn =
     market.throughputEnabled && throughputRaw.throughput < 1

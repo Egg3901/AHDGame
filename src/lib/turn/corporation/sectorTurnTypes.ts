@@ -39,6 +39,14 @@ export interface SectorTurnEnv {
 
 /** Per-sector contributions accumulated by processSectors. */
 export interface SectorTurnResult {
+  /** Exact current-turn input consumption, daily era units, for internal discount settlement. */
+  internalSupplyInputUnits?: ReadonlyMap<
+    import("@/lib/constants/commodities").CommodityType,
+    number
+  >;
+  /** Finalize matching discounts before corporation accounting and taxes. */
+  applyInternalSupplyDiscount?: (cost: number) => void;
+
   hourlyRevenue: number;
   newCurrentGrowthRate: number;
   effectiveMargin: number;

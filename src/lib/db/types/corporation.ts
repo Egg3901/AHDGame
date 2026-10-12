@@ -842,6 +842,9 @@ export interface Corporation {
    * the turn processor if no corporation controls >50% voting power anymore.
    */
   subsidiaryFormalizedAtTurn?: number;
+  /** Optional sourcing policy. Missing means the ordinary market; reset with corporations. */
+  internalSupplyPolicy?: import("@/lib/market/internalSupply/rules").InternalSupplyPolicy;
+
   /** Spin-off provenance (informational: UI labels, history). Phase 2. */
   isSpinOff?: boolean;
   spunOffFromCorpId?: ObjectId;
@@ -1218,6 +1221,14 @@ export interface CorporateSector {
    * anchors the fade-in ramp.
    */
   pricingPosture?: number | null;
+  /** Last turn's actual reserved physical deliveries. Cleared with the sector on reset. */
+  internalSupplyReceipt?: {
+    turn: number;
+    discountCostAnchor?: number;
+    received: Partial<Record<import("../../constants/commodities").CommodityType, number>>;
+    reserved: Partial<Record<import("../../constants/commodities").CommodityType, number>>;
+  };
+
   /** Optional industrial input-indexed pricing; ignored while explicit plant costs are off. */
   pricingMode?: "market" | "costPlus";
   /** Last producing turn's actual operating costs per nominal output value. */
@@ -1467,6 +1478,8 @@ export interface CorporateSector {
      */
     otherOpexCreditCapped?: boolean;
     otherOpexUncapped?: number;
+    /** Matching internal discount charge (positive) or input credit (negative), daily local money. */
+    internalSupplyDiscountCost?: number;
     financialLegs: number;
     /**
      * The policy/tech modifier stack as money. POSITIVE is a credit that

@@ -656,3 +656,52 @@ describe("P3.5 — the physical disaster leg hands over on the plants ramp", () 
     expect(withCrisis.result.costs).toBeGreaterThan(without.result.costs);
   });
 });
+
+describe("internal supply discounts in the actual sector turn", () => {
+  it("changes actual operating costs and persisted P&L by the exact matching amount", () => {
+    const sector = makeSector({ capitalStock: STOCK, otherOpexPerUnitAnchor: 0 });
+    const baseline = run("plants", sector);
+    const buyer = run("plants", sector, 1000, (env) => {
+      env.market.internalSupplyDiscountCostBySectorId = new Map([[SECTOR_ID.toString(), -12.5]]);
+    });
+    const supplier = run("plants", sector, 1000, (env) => {
+      env.market.internalSupplyDiscountCostBySectorId = new Map([[SECTOR_ID.toString(), 12.5]]);
+    });
+    expect(buyer.result.costs - baseline.result.costs).toBeCloseTo(-12.5, 8);
+    expect(supplier.result.costs - baseline.result.costs).toBeCloseTo(12.5, 8);
+    expect(profitOf(buyer) + profitOf(supplier)).toBeCloseTo(2 * profitOf(baseline), 8);
+    const pnl = buyer.update.plantsPnl as NonNullable<CorporateSector["plantsPnl"]>;
+    expect(pnl.internalSupplyDiscountCost).toBe(-12.5 * TURNS_PER_DAY);
+    expect(pnl.profit / TURNS_PER_DAY).toBeCloseTo(profitOf(buyer), 2);
+  });
+  it("does not absorb the discount into the first-turn calibration residual", () => {
+    const sector = makeSector({ capitalStock: STOCK });
+    const baseline = run("plants", sector);
+    const discounted = run("plants", sector, 1000, (env) => {
+      env.market.internalSupplyDiscountCostBySectorId = new Map([[SECTOR_ID.toString(), -12.5]]);
+    });
+    expect(discounted.update.otherOpexPerUnitAnchor).toBe(baseline.update.otherOpexPerUnitAnchor);
+    expect(discounted.result.costs - baseline.result.costs).toBeCloseTo(-12.5, 8);
+  });
+  it("uses the actual reserved input availability and clears stale receipts", () => {
+    const sector = makeSector({ capitalStock: STOCK, throughputStartTurn: 0 });
+    const scarce = run("plants", sector, 1000, (env) => {
+      env.lookups.globalCommodityBalances.set(INPUT_COMMODITY, { supply: 40, demand: 100 });
+    });
+    const priority = run("plants", sector, 1000, (env) => {
+      env.lookups.globalCommodityBalances.set(INPUT_COMMODITY, { supply: 40, demand: 100 });
+      env.market.internalInputAvailabilityBySectorId = new Map([
+        [SECTOR_ID.toString(), new Map([[INPUT_COMMODITY, 1]])],
+      ]);
+    });
+    expect(priority.update.throughputFactor).toBe(1);
+    expect(scarce.update.throughputFactor).toBeLessThan(1);
+    expect(priority.update.producedUnits).toBeGreaterThan(scarce.update.producedUnits as number);
+    expect(priority.update.internalSupplyReceipt).toEqual({
+      turn: 1000,
+      received: {},
+      reserved: {},
+      discountCostAnchor: 0,
+    });
+  });
+});
