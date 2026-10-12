@@ -1020,6 +1020,18 @@ export function computeClearingFactors(args: {
   }
 
   // 3) Weighted per-sector factor across outputs.
+  const internalUnitsByCommodity = new Map<CommodityType, Map<string, number>>();
+  for (const trade of args.internalSupply?.tradesOut ?? []) {
+    const units = internalUnitsByCommodity.get(trade.commodity) ?? new Map<string, number>();
+    units.set(trade.supplierSectorId, (units.get(trade.supplierSectorId) ?? 0) + trade.units);
+    internalUnitsByCommodity.set(trade.commodity, units);
+  }
+  const offeredUnitsByCommodity = new Map(
+    [...internalUnitsByCommodity.keys()].map((commodity) => [
+      commodity,
+      new Map((sellersByCommodity.get(commodity) ?? []).map((seller) => [seller.id, seller.units])),
+    ])
+  );
   const results = new Map<string, SectorClearingResult>();
   for (const s of sectors) {
     let rateSum = 0;
@@ -1087,10 +1099,17 @@ export function computeClearingFactors(args: {
               s.fixedCostShare
             )
           : (1 + effectivePremium) * priceLeg;
-      offerFactorByCommodity[commodity] = offerFactor;
+      const internalUnits = internalUnitsByCommodity.get(commodity)?.get(s.sectorId) ?? 0;
+      const offeredUnits = offeredUnitsByCommodity.get(commodity)?.get(s.sectorId) ?? 0;
+      const internalSold =
+        offeredUnits > 0 ? Math.min(sold, (internalUnits / offeredUnits) * availability) : 0;
+      // Internal units clear at the market price. Only open-market surplus
+      // earns the posted quote; the consumed-input discount settles separately.
+      const realizedRevenueFactor = (sold - internalSold) * offerFactor + internalSold * priceLeg;
+      offerFactorByCommodity[commodity] = sold > 0 ? realizedRevenueFactor / sold : offerFactor;
       rateSum += weight;
-      factorSum += weight * sold * offerFactor;
-      revenueWeightByCommodity[commodity] = weight * sold * offerFactor;
+      factorSum += weight * realizedRevenueFactor;
+      revenueWeightByCommodity[commodity] = weight * realizedRevenueFactor;
       quotedPostureSum += weight * (offerFactor / priceLeg - 1);
       soldSum += weight * sold;
       soldByCommodity[commodity] = sold;

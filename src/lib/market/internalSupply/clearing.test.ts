@@ -99,6 +99,38 @@ describe("internal supply inside real clearing", () => {
       computeClearingFactors(args)
     );
   });
+  it.each([0.2, -0.2])("prices reserved units at market despite posture %s", (posture) => {
+    const result = computeClearingFactors({
+      ...args,
+      sectors: [{ ...sectors[0]!, posture }],
+      balances: new Map([["iron", { supply: 60, demand: 30 }]]),
+      internalSupply: context(),
+    }).get("mine")!;
+    expect(result.soldFraction).toBe(0.5);
+    expect(result.factor).toBe(0.5);
+    expect(result.offerFactorByCommodity?.iron).toBe(1);
+  });
+  it("keeps premium pricing on open-market surplus only", () => {
+    const result = computeClearingFactors({
+      ...args,
+      sectors: [sectors[0]!],
+      balances: new Map([["iron", { supply: 60, demand: 60 }]]),
+      internalSupply: context(),
+    }).get("mine")!;
+    expect(result.soldFraction).toBe(1);
+    expect(result.factor).toBeCloseTo(1.1);
+    expect(result.offerFactorByCommodity?.iron).toBeCloseTo(1.1);
+  });
+  it("does not pass a cost-plus quote onto internal reservations", () => {
+    const result = computeClearingFactors({
+      ...args,
+      sectors: [{ ...sectors[0]!, inputCostIndex: 2 }],
+      balances: new Map([["iron", { supply: 60, demand: 30 }]]),
+      internalSupply: context(),
+    }).get("mine")!;
+    expect(result.factor).toBe(0.5);
+    expect(result.offerFactorByCommodity?.iron).toBe(1);
+  });
 });
 
 it("does not reserve or discount media output refused by an ownership cap", () => {
