@@ -30,6 +30,16 @@ export function isStoreAppUserAgent(userAgent: string): boolean {
 }
 
 /**
+ * The AHDClient phone app on anything but Android (iPhone or iPad). iPad runs the iPhone build
+ * with window controls over the top-left corner and no top safe-area inset,
+ * so the navbar keeps a minimum top gap there. Android reports its insets
+ * normally and must not get that extra gap.
+ */
+export function isIosStoreAppUserAgent(userAgent: string): boolean {
+  return isStoreAppUserAgent(userAgent) && !/Android/i.test(userAgent);
+}
+
+/**
  * Client-side: the root layout marked this document as the store app. For
  * data-driven UI (lists, routes) where hiding one element by CSS is not enough.
  */

@@ -938,8 +938,9 @@ html[data-store-app="true"] .store-app-hidden {
 
 /* iPad runs the iPhone app in a window whose controls (the three dots) sit
    over the top-left corner without reporting a top safe-area inset. Keep the
-   navbar clear of them in the store app; iPhones already inset by more. */
-html[data-store-app="true"] .ahd-navbar-enter {
+   navbar clear of them in the iOS store app; iPhones already inset by more.
+   Android reports real insets, so it keeps the plain safe-area padding. */
+html[data-store-app="true"][data-store-os="ios"] .ahd-navbar-enter {
   padding-top: max(env(safe-area-inset-top, 0px), 28px);
 }
 html:not([data-store-app="true"]) .store-app-only {

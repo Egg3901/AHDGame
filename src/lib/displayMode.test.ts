@@ -3,6 +3,7 @@ import {
   isClientShellUserAgent,
   isInAppWebViewUserAgent,
   isNativeAppUserAgent,
+  isIosStoreAppUserAgent,
   isStoreAppUserAgent,
 } from "./displayMode";
 
@@ -49,5 +50,15 @@ describe("in-app webview user agents", () => {
     expect(isStoreAppUserAgent(SHELL_DESKTOP)).toBe(false);
     expect(isStoreAppUserAgent(CAPACITOR)).toBe(false);
     expect(isStoreAppUserAgent(BROWSER)).toBe(false);
+  });
+});
+
+describe("isIosStoreAppUserAgent", () => {
+  it("matches only the iOS store app, not the Android one", () => {
+    expect(isIosStoreAppUserAgent(SHELL_IOS)).toBe(true);
+    expect(isIosStoreAppUserAgent(SHELL_ANDROID)).toBe(false);
+    expect(isIosStoreAppUserAgent(SHELL_DESKTOP)).toBe(false);
+    expect(isIosStoreAppUserAgent(CAPACITOR)).toBe(false);
+    expect(isIosStoreAppUserAgent(BROWSER)).toBe(false);
   });
 });
