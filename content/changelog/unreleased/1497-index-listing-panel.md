@@ -6,7 +6,7 @@ summary: >-
   players who cannot do anything with it, and its wording is plain.
 tags: [corporations, ui]
 badges: [minor]
-areas: [web]
+areas: [fullstack]
 ---
 
 ## What changed
