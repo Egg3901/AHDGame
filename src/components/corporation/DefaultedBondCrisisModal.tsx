@@ -306,6 +306,18 @@ export default function DefaultedBondCrisisModal({
               )}
             </div>
 
+            {(!data.cash.canPay ||
+              !data.refinance.canRefinance ||
+              data.refinance.imfRestructuring) && (
+              <p className="text-body-xs text-muted">
+                {!data.cash.canPay && `Paying in cash needs ${formatAmount(data.cash.cost)}. `}
+                {data.refinance.imfRestructuring
+                  ? "Refinancing is closed while the IMF restructuring program runs."
+                  : !data.refinance.canRefinance
+                    ? "Refinancing is not available right now."
+                    : ""}
+              </p>
+            )}
             {data.cash.canPay && (
               <div className="rounded-lg border border-primary/30 bg-primary/5 p-3">
                 <div className="font-medium text-foreground mb-2">1. Pay cash</div>

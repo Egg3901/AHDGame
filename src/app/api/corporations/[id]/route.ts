@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { withNoStore } from "@/lib/api/withNoStore";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { handleRouteError } from "@/lib/api/errors";
@@ -52,7 +53,9 @@ function numberOrNull(value: unknown): number | null {
 // GET /api/corporations/[id] — Return the corporation detail payload for the corporation page.
 // Auth: public
 // Errors: 400, 404
-export async function GET(request: Request, { params }: RouteParams) {
+// Per-viewer fields (management capabilities, viewer ids) must never be
+// cached across users.
+export const GET = withNoStore(async function GET(request: Request, { params }: RouteParams) {
   try {
     const { id } = await params;
     const db = await getDb();
@@ -442,4 +445,4 @@ export async function GET(request: Request, { params }: RouteParams) {
   } catch (error) {
     return handleRouteError(error, { request, route: "/api/corporations/[id]" });
   }
-}
+});

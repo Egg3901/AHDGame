@@ -149,7 +149,10 @@ describe("actionable management controls", () => {
     expect(screen.queryByText("1. Pay cash")).toBeNull();
     expect(screen.queryByText("2. Refinance")).toBeNull();
     expect(screen.queryByText("3. Restructure")).toBeNull();
-    expect(screen.queryByText(/IMF restructuring/)).toBeNull();
+    // One plain sentence tells the CEO why the other remedies are not offered.
+    expect(
+      screen.getByText(/Refinancing is closed while the IMF restructuring program runs/)
+    ).toBeTruthy();
   });
 
   it("renders no crisis controls after the permission check rejects access", async () => {
