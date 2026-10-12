@@ -1008,12 +1008,15 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
           sectorDetailPreset
         ).supply;
         const multiplier = producerOutputMultiplier(candidate, supply);
+        const capacityUnits = candidate.operatingCapacityUnits ?? candidate.capitalStock ?? NaN;
         return {
           stateId: candidate.stateId,
           countryId: stateCountry.get(candidate.stateId) ?? candidate.countryId,
-          capacity:
-            (candidate.operatingCapacityUnits ?? candidate.capitalStock ?? NaN) * multiplier,
-          produced: candidate.producedUnits,
+          capacity: capacityUnits * multiplier,
+          // A newly founded sector has no plants and has not run a turn yet, so
+          // it has no recorded output. With zero capacity it cannot produce
+          // anything, so its output is exactly zero rather than unknown.
+          produced: candidate.producedUnits ?? (capacityUnits === 0 ? 0 : undefined),
           queued:
             (candidate.buildQueue ?? []).reduce(
               (sum, order) =>
