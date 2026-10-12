@@ -132,3 +132,23 @@ it("does not reserve or discount media output refused by an ownership cap", () =
     (35 * COMMODITY_BASE_PRICES.advertising * 0.1) / 24
   );
 });
+
+it("does not invent cross-state internal freight routes, while same-state priority still works", () => {
+  const own = context();
+  own.deliveryStateBySector = new Map([
+    ["mine", "MN"],
+    ["factory", "CA"],
+    ["outside", "CA"],
+  ]);
+  computeClearingFactors({ ...args, internalSupply: own });
+  expect(own.tradesOut).toEqual([]);
+  const local = context();
+  local.deliveryStateBySector = new Map([
+    ["mine", "MN"],
+    ["factory", "MN"],
+    ["outside", "CA"],
+  ]);
+  computeClearingFactors({ ...args, internalSupply: local });
+  expect(local.tradesOut[0]?.units).toBe(30);
+  expect(local.availabilityOut.get("factory")?.get("iron")).toBe(1);
+});

@@ -12,9 +12,11 @@ import {
   type InternalSupplyTrade,
   type InternalSupplyPolicy,
 } from "./rules";
+import { FREIGHT_CLASS_BY_COMMODITY } from "@/lib/logistics/freightClass";
 import { TURNS_PER_DAY } from "@/lib/constants/turnTime";
 
 export interface InternalSupplyClearing {
+  deliveryStateBySector?: ReadonlyMap<string, string>;
   policies: ReadonlyMap<string, { root: string; policy: InternalSupplyPolicy }>;
   buyers: readonly {
     sectorId: string;
@@ -70,6 +72,9 @@ export function reserveInternalSupply(args: {
     })),
     buyers,
     policies: args.context.policies,
+    deliveryStateBySector: FREIGHT_CLASS_BY_COMMODITY[args.commodity]
+      ? args.context.deliveryStateBySector
+      : undefined,
     supply: args.supply,
     demand: args.demand,
     reservationRoom: Math.min(

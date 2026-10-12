@@ -461,7 +461,7 @@
       "how": "How priority and pricing work",
       "scope": "Existing supply agreements reserve first. Your own plants come next; group priority also includes plants in subsidiaries owned entirely by the same parent, including nested subsidiaries. Majority ownership alone does not qualify. Surplus still competes on the open market.",
       "priceNote": "The discount is a rebate on realized market price, capped by the reserved inputs the receiving plant actually consumes this turn. The supplier pays a matching charge and the receiving plant gets an input credit in its operating accounts. Within one corporation these cancel before tax. Open-market pricing posture stays a separate choice.",
-      "constraints": "Priority does not create goods. Plants must consume the commodity, and output must be available in the same reachable market. Freight and other local goods keep their location constraints. Your scarcest remaining input can still limit production.",
+      "constraints": "Priority does not create goods. Plants must consume the commodity, and output must be available in the same reachable market. Freight and other local goods keep their location constraints. With active freight settlement, priority for shipped goods stays within the same state; cross-state inputs keep ordinary freight sourcing. Your scarcest remaining input can still limit production.",
       "lastTurn": "Actual deliveries, turn {turn}",
       "waiting": "Waiting for the first clearing turn",
       "refresh": "Refresh",

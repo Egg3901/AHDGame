@@ -844,6 +844,7 @@ export function runClearingPrePass(input: ClearingPrePassInput): ClearingPrePass
       market.deliveryLimitedClassBySectorId = deliveryLimitedClassBySectorId;
     }
     const internalSupply = buildInternalSupplyContext({
+      freightSettlementActive,
       lookups,
       market,
       sectors: supplyAgreementDemandSectors,

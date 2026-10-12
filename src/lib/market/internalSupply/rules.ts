@@ -94,6 +94,8 @@ export function allocateInternalSupply(args: {
   supply: number;
   demand: number;
   reservationRoom: number;
+  /** Active freight cannot invent a cross-state route reservation. */
+  deliveryStateBySector?: ReadonlyMap<string, string>;
 }): { trades: InternalSupplyTrade[]; availabilityBySector: Map<string, number> } {
   const trades: InternalSupplyTrade[] = [];
   const sellers = [...args.sellers].sort((a, b) => a.sectorId.localeCompare(b.sectorId));
@@ -118,6 +120,13 @@ export function allocateInternalSupply(args: {
       )
         continue;
       const eligible = buyers.filter((b) => {
+        if (
+          args.deliveryStateBySector &&
+          (!args.deliveryStateBySector.has(s.sectorId) ||
+            args.deliveryStateBySector.get(s.sectorId) !==
+              args.deliveryStateBySector.get(b.sectorId))
+        )
+          return false;
         if (ownOnly ? b.corporationId !== s.corporationId : b.corporationId === s.corporationId)
           return false;
         return ownOnly || args.policies.get(b.corporationId)?.root === setting.root;

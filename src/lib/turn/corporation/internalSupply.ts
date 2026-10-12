@@ -20,6 +20,7 @@ export function buildInternalSupplyContext(args: {
   sectors: readonly (SupplyAgreementDemandSector & { sectorId: string })[];
   agreements: readonly SettleableSupplyAgreement[];
   turn: number;
+  freightSettlementActive?: boolean;
 }): InternalSupplyClearing | undefined {
   if (!args.market.plantsEnabled || !args.market.clearingEnabled) return undefined;
   const owners = [...args.lookups.corpById].map(([id, c]) => ({
@@ -73,7 +74,16 @@ export function buildInternalSupplyContext(args: {
   const discountCostOut = new Map<string, number>();
   args.market.internalInputAvailabilityBySectorId = availabilityOut;
   args.market.internalSupplyDiscountCostBySectorId = discountCostOut;
-  return { policies, buyers, availabilityOut, discountCostOut, tradesOut: [] };
+  return {
+    policies,
+    buyers,
+    availabilityOut,
+    discountCostOut,
+    tradesOut: [],
+    deliveryStateBySector: args.freightSettlementActive
+      ? new Map(args.sectors.filter((s) => !!s.stateId).map((s) => [s.sectorId, s.stateId!]))
+      : undefined,
+  };
 }
 
 /** Persist only actual deliveries, with empty current receipts clearing old results. */
