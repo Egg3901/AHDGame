@@ -44,11 +44,21 @@ import {
 } from "@/lib/remediation/runner";
 import { DEFECTS, requireDefect } from "@/lib/remediation/registry";
 import { compileAdhocDefect, validateAdhocSpec } from "@/lib/remediation/adhoc";
+import {
+  compileCompensationDefect,
+  validateCompensationSpec,
+} from "@/lib/remediation/compensation";
 import { scaffoldFor } from "@/lib/remediation/scaffold";
 import { listCollections, runCount, runDistinct, runQuery } from "@/lib/remediation/inspect";
 import { formatMatrix, ledgerStatus, type EnvResolver } from "@/lib/remediation/status";
 import { readTurnLock } from "@/lib/remediation/guards";
-import type { AdhocSpec, CodeGateResult, Defect, HealEnv } from "@/lib/remediation/types";
+import type {
+  AdhocSpec,
+  CompensationSpec,
+  CodeGateResult,
+  Defect,
+  HealEnv,
+} from "@/lib/remediation/types";
 import { HEAL_ENVS } from "@/lib/remediation/types";
 
 const argv = process.argv.slice(2);
@@ -198,6 +208,7 @@ async function main(): Promise<void> {
       [
         "ledger:  list | status | detect | plan | apply | verify | history | rollback | indexes",
         "ad-hoc:  adhoc-plan | adhoc-apply   (one-off repairs, same guards)",
+        "money:   compensate-plan | compensate-apply   (repayments with ledger receipts)",
         "inspect: query | count | distinct | collections   (read-only)",
         "author:  scaffold <DEFECT-ID>",
         "see the header of scripts/remediation/cli.ts for full usage",
@@ -368,6 +379,64 @@ async function main(): Promise<void> {
       console.log(`  ${JSON.stringify(result.run?.result)}`);
       console.log(`  rollback: npx tsx scripts/remediation/cli.ts rollback ${result.runId}`);
       console.log("  if this repair recurs, promote it to src/lib/remediation/defects/");
+    });
+    if (!result.ok) process.exit(1);
+    return;
+  }
+
+  // ── compensation ──────────────────────────────────────────────────────────
+  // Paying corporations what a bug cost them. Same path as ad-hoc (dry run,
+  // token, turn lock, cap, snapshot, audit row, rollback), but it moves an
+  // exact amount and writes a restitution_credit receipt per corporation.
+  // receipt-only records money that already moved outside the heal engine.
+  if (command === "compensate-plan" || command === "compensate-apply") {
+    const spec = jsonFlag<CompensationSpec>("spec");
+    const problems = validateCompensationSpec(spec);
+    if (problems.length > 0) {
+      out({ ok: false, problems }, () => {
+        console.error("compensation spec rejected:");
+        problems.forEach((p) => console.error(`  ${p.field}: ${p.detail}`));
+      });
+      process.exit(1);
+    }
+    const synthetic = compileCompensationDefect(spec);
+
+    if (command === "compensate-plan") {
+      const outcome = await withDb((db) =>
+        runPlan(db, synthetic, { env: ENV, operator: OPERATOR })
+      );
+      out({ ok: true, ...outcome, defectId: synthetic.id }, () => {
+        console.log(`COMPENSATION DRY RUN @ ${ENV}  (${synthetic.id})`);
+        console.log(`  ${outcome.plan.summary}`);
+        outcome.plan.notes?.forEach((n) => console.log(`    ${n}`));
+        outcome.guards.verdicts.forEach((v) =>
+          console.log(`    [${v.ok ? "ok " : "REFUSE"}] ${v.guard}: ${v.detail}`)
+        );
+        outcome.warnings.forEach((w) => console.log(`  WARNING: ${w}`));
+        console.log(
+          outcome.token
+            ? `\n  confirm token: ${outcome.token.id}  (10 min)`
+            : `\n  NO TOKEN ISSUED: ${outcome.tokenWithheld}`
+        );
+      });
+      return;
+    }
+
+    const tokenId = flag("token");
+    if (!tokenId) fail("compensate-apply needs --token from compensate-plan");
+    const result = await withDb((db) =>
+      runApply(db, synthetic, {
+        env: ENV,
+        tokenId,
+        operator: OPERATOR,
+        confirmProd: has("confirm-prod"),
+      })
+    );
+    out({ ...result, env: ENV, defectId: synthetic.id, spec }, () => {
+      if (!result.ok) return console.error(`REFUSED / FAILED: ${result.refusal}`);
+      console.log(`COMPENSATION APPLIED: run ${result.runId}`);
+      console.log(`  ${JSON.stringify(result.run?.result)}`);
+      console.log(`  rollback: npx tsx scripts/remediation/cli.ts rollback ${result.runId}`);
     });
     if (!result.ok) process.exit(1);
     return;
