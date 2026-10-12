@@ -1160,6 +1160,7 @@ export function buildSectorPlantsSection(args: {
   governorRampTurns: number;
   /** World flip turn the governor ramp anchors to (see `MarketContext`). */
   worldGovernorAnchorTurn?: number | null;
+  governorGlideEndTurn?: number | null;
   marketSharePercent: number;
   /** Corporation's aggregate share of the host country's sector market. */
   nationalMarketSharePercent?: number;
@@ -1387,10 +1388,14 @@ export function buildSectorPlantsSection(args: {
   // ─── Governor ("market support") ──────────────────────────────────────────
   const plantsStartTurn =
     governorAnchorTurn(num(sector.plantsStartTurn), args.worldGovernorAnchorTurn) ?? null;
-  const governorTurnsRemaining =
+  const ownTurnsRemaining =
     plantsStartTurn != null
       ? nonNeg(plantsStartTurn + governorRampTurns - currentTurn)
       : governorRampTurns;
+  const governorTurnsRemaining =
+    args.governorGlideEndTurn != null
+      ? Math.min(ownTurnsRemaining, nonNeg(args.governorGlideEndTurn - currentTurn))
+      : ownTurnsRemaining;
 
   // ─── Build quote ──────────────────────────────────────────────────────────
   const oneUnit = computeBuildCost({

@@ -40,6 +40,8 @@ export const STALE_PER_WORLD_GAME_CONFIG_UNSET: Readonly<Record<string, "">> = O
   // Launch guard reference (src/lib/market/launchGuard.ts): a new market's
   // drawdown must not be measured against the dead world's valuation.
   marketGuardReferenceMcap: "",
+  // Governor glide start: a turn on the old world's counter.
+  marketGovernorGlideStartTurn: "",
   marketGuardReferenceFundamentalMcap: "",
   marketGuardReferenceTurn: "",
   marketGuardTrippedAt: "",
@@ -87,6 +89,7 @@ export const TURN_ANCHORED_GAME_CONFIG_KEPT: Readonly<Record<string, string>> = 
   baseActionsPerTurn: "economy setting, rewritten from the reference config by the core seed",
   marketGovernorRampTurns: "admin tuning knob (a duration, not an anchor)",
   marketGuardGraceTurns: "admin tuning knob (a duration, not an anchor)",
+  marketGovernorGlideTurns: "admin tuning knob (a duration, not an anchor)",
   centralBankPricingPhaseIn:
     "rewritten to {} from the reference config by the core seed; the engine restamps it on the first economy turn",
   marketSystemModeUpdatedTurn: "cleared by STALE_MARKET_MODE_STAMP_UNSET with the tier provenance",

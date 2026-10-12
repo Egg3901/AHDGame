@@ -313,6 +313,16 @@ export interface GameConfig {
    */
   marketSystemModeUpdatedTurn?: number;
   /**
+   * Turn the plants launch governor starts gliding out. Unset = no glide; each
+   * sector fades the governor over its own ramp from its first plants turn.
+   * Once set, every sector's ramp share is at least
+   * `(turn - start) / marketGovernorGlideTurns`, so the governor is gone for
+   * everyone after the glide. See `governorGlideAnchorTurn`.
+   */
+  marketGovernorGlideStartTurn?: number;
+  /** Length of the governor glide in turns (default 24). */
+  marketGovernorGlideTurns?: number;
+  /**
    * Geographic freight rollout. Shadow records routes for calibration; active
    * also feeds delivered state inputs into next turn's plant throughput.
    */

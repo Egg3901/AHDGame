@@ -326,3 +326,49 @@ describe("governorAnchorTurn: new sectors join the world's ramp", () => {
     expect(joined).toBeGreaterThan(own);
   });
 });
+
+import { governorGlideAnchorTurn, MARKET_GOVERNOR_GLIDE_TURNS } from "./capital";
+
+describe("governorGlideAnchorTurn: phase the governor out on a schedule", () => {
+  const RAMP = 240;
+  const lambdaFor = (start: number, now: number, glideStart: number | null) => {
+    const anchor = governorAnchorTurn(start, governorGlideAnchorTurn(now, glideStart, 24, RAMP));
+    return Math.min(1, Math.max(0, now - (anchor ?? now)) / RAMP);
+  };
+
+  it("is inert with no glide configured", () => {
+    expect(governorGlideAnchorTurn(134, null, 24, RAMP)).toBeNull();
+    expect(governorGlideAnchorTurn(134, undefined, 24, RAMP)).toBeNull();
+    expect(lambdaFor(129, 134, null)).toBeCloseTo(5 / RAMP, 12);
+  });
+
+  it("changes nothing on the start turn", () => {
+    expect(lambdaFor(129, 140, 140)).toBeCloseTo(11 / RAMP, 12);
+    expect(lambdaFor(10, 140, 140)).toBeCloseTo(130 / RAMP, 12);
+  });
+
+  it("raises every sector to at least the glide share, in equal steps", () => {
+    for (let k = 0; k <= 24; k++) {
+      const young = lambdaFor(139, 140 + k, 140);
+      expect(young).toBeGreaterThanOrEqual(k / 24 - 1e-12);
+      if (k > 0) expect(young - lambdaFor(139, 139 + k, 140)).toBeLessThanOrEqual(1 / 24 + 1e-9);
+    }
+  });
+
+  it("keeps a sector already further along on its own ramp", () => {
+    expect(lambdaFor(0, 146, 140)).toBeCloseTo(146 / RAMP, 12);
+  });
+
+  it("releases the governor for every sector once the glide ends", () => {
+    expect(lambdaFor(163, 164, 140)).toBe(1);
+    expect(lambdaFor(0, 200, 140)).toBe(1);
+    expect(softenedMarketRealizationAmount(1_000, 3_000, 160, 164, 0.15, RAMP)).toBeLessThan(3_000);
+    const anchor = governorAnchorTurn(160, governorGlideAnchorTurn(164, 140, 24, RAMP));
+    expect(softenedMarketRealizationAmount(1_000, 3_000, anchor, 164, 0.15, RAMP)).toBe(3_000);
+  });
+
+  it("defaults the glide length", () => {
+    const a = governorGlideAnchorTurn(150, 140, undefined, RAMP);
+    expect(a).toBeCloseTo(150 - RAMP * (10 / MARKET_GOVERNOR_GLIDE_TURNS), 12);
+  });
+});
