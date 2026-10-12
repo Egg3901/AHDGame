@@ -15,7 +15,11 @@ import { productionProductivityMultiplier } from "@/lib/corporations/rules/produ
 import { TURNS_PER_DAY } from "@/lib/constants/turnTime";
 import { getOutputMultiplier } from "@/lib/utils/productionPolicy";
 import { CAPACITY_BINDING_THRESHOLD } from "@/lib/extraction/capacityHaircut";
-import { softenedMarketRealization, softenedMarketRealizationAmount } from "@/lib/market/capital";
+import {
+  governorAnchorTurn,
+  softenedMarketRealization,
+  softenedMarketRealizationAmount,
+} from "@/lib/market/capital";
 import { computePriceRealization } from "@/lib/market/priceRealization";
 import { TRADE_EMBARGO_EXPORT_LOSS_SHARE } from "@/lib/trade/constants";
 import { computeExportExposure } from "@/lib/trade/exportPremium";
@@ -91,6 +95,8 @@ export interface PlantsRevenueInput {
   preset?: string;
   governorCap: number;
   governorRampTurns: number;
+  /** World flip turn (see `MarketContext.worldGovernorAnchorTurn`). */
+  worldGovernorAnchorTurn?: number | null;
   privateBankingEnabled?: boolean;
   marketPlantsEnabled: boolean;
   contractProductionTargetBySectorId: MarketContext["contractProductionTargetBySectorId"];
@@ -188,6 +194,7 @@ export function resolvePlantsRevenue(input: PlantsRevenueInput): PlantsRevenueRe
     plantsStartTurn,
     governorCap,
     governorRampTurns,
+    worldGovernorAnchorTurn,
     privateBankingEnabled,
     marketPlantsEnabled,
     contractProductionTargetBySectorId,
@@ -210,7 +217,7 @@ export function resolvePlantsRevenue(input: PlantsRevenueInput): PlantsRevenueRe
       : softenedMarketRealization(
           computePriceRealization(strategySupply ?? {}, priceRatioByCommodity),
           clearingFactor,
-          clearingStartTurn,
+          governorAnchorTurn(clearingStartTurn, worldGovernorAnchorTurn),
           currentTurn,
           governorCap,
           governorRampTurns
@@ -479,7 +486,7 @@ export function resolvePlantsRevenue(input: PlantsRevenueInput): PlantsRevenueRe
         : softenedMarketRealizationAmount(
             baselineHourlyRevenue * activeFraction,
             plantsDerivedHourlyRevenue,
-            plantsStartTurn,
+            governorAnchorTurn(plantsStartTurn, worldGovernorAnchorTurn),
             currentTurn,
             governorCap,
             governorRampTurns

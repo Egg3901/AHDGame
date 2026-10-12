@@ -180,6 +180,7 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
         projection: {
           marketGovernorCap: 1,
           marketGovernorRampTurns: 1,
+          marketSystemModeUpdatedTurn: 1,
           explicitPlantCostsEnabled: 1,
           mediaEditorialEnabled: 1,
           mediaOperatingModelsEnabled: 1,
@@ -908,6 +909,7 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
       const marketCtx = buildMarketContext(marketMode, {
         cap: governorConfig?.marketGovernorCap,
         rampTurns: governorConfig?.marketGovernorRampTurns,
+        modeUpdatedTurn: governorConfig?.marketSystemModeUpdatedTurn ?? 0,
       });
       if (
         pricing &&
@@ -1228,6 +1230,7 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
         currentYear: techCurrentYear,
         governorCap: marketCtx.governorCap,
         governorRampTurns: marketCtx.governorRampTurns,
+        worldGovernorAnchorTurn: marketCtx.worldGovernorAnchorTurn,
         marketSharePercent: marketShare,
         nationalMarketSharePercent: nationalMarketShare,
         // Distinct RIVAL corps in this (state, type) cell. `siblingsSectors` is

@@ -185,6 +185,32 @@ export function softenedMarketRealization(
 }
 
 /**
+ * The turn a sector's launch-safety ramp is measured from.
+ *
+ * The governor exists to make the WORLD's tier flip a no-op and fade the new
+ * economics in from there. A sector's own stamp (`plantsStartTurn`,
+ * `clearingStartTurn`) records its first turn under the mode, which for a
+ * sector founded or captured long after the flip is just its birthday. Ramping
+ * from that birthday restarts the clamp for every new sector, pinning it near
+ * the old ledger baseline for its first months even though the world has been
+ * on the new model for ages. So the ramp anchors on the earlier of the
+ * sector's stamp and the world's flip turn. A sector with no stamp keeps its
+ * existing semantics (null in, null out).
+ */
+export function governorAnchorTurn(
+  sectorStartTurn: number | null | undefined,
+  worldAnchorTurn: number | null | undefined
+): number | null | undefined {
+  if (typeof sectorStartTurn !== "number" || !Number.isFinite(sectorStartTurn)) {
+    return sectorStartTurn;
+  }
+  if (typeof worldAnchorTurn !== "number" || !Number.isFinite(worldAnchorTurn)) {
+    return sectorStartTurn;
+  }
+  return Math.min(sectorStartTurn, worldAnchorTurn);
+}
+
+/**
  * Same governor, applied to a revenue AMOUNT rather than a factor.
  *
  * The difference is the whole point of the split: for a factor, `<= 0` means

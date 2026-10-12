@@ -383,6 +383,7 @@ export function processSector(
     newRevenue,
     currentTurn,
     governorRampTurns: market.governorRampTurns,
+    worldGovernorAnchorTurn: market.worldGovernorAnchorTurn,
     embargoLegacyMothball,
   });
   // (moved to computePlantsCapacity: plant ledger + owned-capacity advance)
@@ -493,6 +494,7 @@ export function processSector(
     plantsStartTurn,
     governorCap,
     governorRampTurns: market.governorRampTurns,
+    worldGovernorAnchorTurn: market.worldGovernorAnchorTurn,
     privateBankingEnabled: env.privateBankingEnabled,
     marketPlantsEnabled: market.plantsEnabled,
     contractProductionTargetBySectorId: market.contractProductionTargetBySectorId,
