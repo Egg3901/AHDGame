@@ -5,6 +5,7 @@ import { useTranslations } from "next-intl";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import { CorporationLogo } from "../CorporationLogo";
 import { GroupOverviewCard } from "../GroupOverviewCard";
+import { GroupSupplyForecast } from "./GroupSupplyForecast";
 import { GroupParticipation } from "./GroupParticipation";
 import { useGroupManagement } from "./useGroupManagement";
 import { combineGroupLatest } from "@/lib/corporations/groups/rules/financialHistory";
@@ -348,9 +349,11 @@ export function SubsidiaryGroupPage({ corpId }: { corpId: string }) {
       {section === "directions" && (
         <>
           <p className="text-sm text-muted">{t("directionNote")}</p>
-          <p className="rounded border border-border p-3 text-sm text-muted">
-            {t("directionsPending")}
-          </p>
+          {!data.supplyEngineEnabled && (
+            <p className="rounded border border-border p-3 text-sm text-muted">
+              {t("directionsPending")}
+            </p>
+          )}
           <div className="grid gap-4 md:grid-cols-2">
             {data.members
               .filter((m) => !m.isRoot && (data.canManage || m.canEdit))
@@ -363,7 +366,7 @@ export function SubsidiaryGroupPage({ corpId }: { corpId: string }) {
                   {data.canManage ? (
                     <form
                       className="space-y-3"
-                      key={m.direction?.setTurn + ":" + (m.direction?.objective ?? "")}
+                      key={m.direction?.revision ?? m.id}
                       onSubmit={(e) => {
                         e.preventDefault();
                         const form = new FormData(e.currentTarget);
@@ -371,10 +374,7 @@ export function SubsidiaryGroupPage({ corpId }: { corpId: string }) {
                           action: "direction",
                           memberId: m.id,
                           objective: form.get("objective") as GroupObjective,
-                          regions: String(form.get("regions") ?? "")
-                            .split(",")
-                            .map((s) => s.trim())
-                            .filter(Boolean),
+                          regions: form.getAll("regions").map(String),
                           allowInvestment: form.get("investment") === "on",
                         });
                       }}
@@ -395,11 +395,18 @@ export function SubsidiaryGroupPage({ corpId }: { corpId: string }) {
                       </label>
                       <label className="block text-sm">
                         {t("regions")}
-                        <input
+                        <select
+                          multiple
                           className="block mt-1 rounded bg-panel border border-border p-2 w-full"
                           name="regions"
-                          defaultValue={m.direction?.regions.join(", ") ?? ""}
-                        />
+                          defaultValue={m.direction?.regions ?? []}
+                        >
+                          {data.regions?.map((region) => (
+                            <option key={region.id} value={region.id}>
+                              {region.countryId}: {region.name}
+                            </option>
+                          ))}
+                        </select>
                       </label>
                       <label className="flex gap-2 text-sm">
                         <input
@@ -420,7 +427,9 @@ export function SubsidiaryGroupPage({ corpId }: { corpId: string }) {
                   )}
                   {m.direction && (
                     <p className="text-xs text-muted">
-                      {t("response", { response: m.direction.response })}
+                      {m.operator === "npp"
+                        ? t("nppEffective", { turn: m.direction.setTurn + 1 })
+                        : t("response", { response: m.direction.response })}
                     </p>
                   )}
                   {m.canEdit && m.direction && (
@@ -490,7 +499,7 @@ export function SubsidiaryGroupPage({ corpId }: { corpId: string }) {
             </>
           )}
           <p className="text-sm text-muted">{t("supplySafeguards")}</p>
-          <p className="text-sm text-muted">{t("forecastPending")}</p>
+          <GroupSupplyForecast data={data} />
         </>
       )}
     </main>

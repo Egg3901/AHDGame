@@ -1,3 +1,8 @@
+import { groupOperator } from "@/lib/corporations/groups/operator";
+import {
+  activeGroupDirection,
+  groupDirectionLevers,
+} from "@/lib/corporations/groups/rules/direction";
 /**
  * Autonomous corporations choose investment, entry, divestment and production.
  * makeNppCorpDecision uses the corporation, market signals and CEO strategy to
@@ -57,11 +62,7 @@ import type {
   NppCorpDecisionContext,
   NppPlantsContext,
 } from "@/lib/turn/npp/corpDecisionTypes";
-import {
-  advanceStrategy,
-  strategyLevers,
-  type StrategySituation,
-} from "@/lib/turn/npp/corpStrategy";
+import { advanceStrategy, type StrategySituation } from "@/lib/turn/npp/corpStrategy";
 import { memoizeOnce } from "@/lib/turn/npp/rules/strategyCadence";
 import { existingPlantGrowthStep, existingPlantGrowthUnits } from "./rules/existingPlantGrowth";
 import { lossChronicityUpdates } from "@/lib/turn/npp/costMothball";
@@ -298,7 +299,32 @@ export function makeNppCorpDecision(
         eligible: ctx.strategyEligible === true,
       })
     : null;
-  const levers = strategyLevers(strategyDecision?.state.id ?? "expand");
+  const directionContext = {
+    turn: ctx.turn,
+    ceoId: corp.ceoId?.toString() ?? "",
+    ceoTenureKey: ctx.groupDirection
+      ? groupOperator(corp, ctx.groupRootId ?? "").ceoTenureKey
+      : undefined,
+    rootId: ctx.groupRootId ?? "",
+    isNpp: corp.ceoType === "npp",
+    caretaker: !!corp.caretakerCeo,
+    distressed: debtDominant || corpMargin < 0,
+  };
+  const groupDirection = activeGroupDirection(ctx.groupDirection, directionContext);
+  const levers = groupDirectionLevers(
+    strategyDecision?.state.id ?? "expand",
+    groupDirection,
+    directionContext
+  );
+
+  const entryPools = groupDirection?.regions.length
+    ? new Map(
+        [...unownedByCountry].map(([country, rows]) => [
+          country,
+          rows.filter((row) => groupDirection.regions.includes(row.stateId)),
+        ])
+      )
+    : unownedByCountry;
 
   // ── 1. Divest losing sectors ──────────────────────────────────────────────
   // Divest a losing sector once its margin falls to/below the archetype's
@@ -652,7 +678,7 @@ export function makeNppCorpDecision(
   const entry = evaluateNppEntry({
     corp,
     sectors,
-    unownedByCountry,
+    unownedByCountry: entryPools,
     stateControlled,
     priceRatioOf,
     placementSignals,
@@ -1030,7 +1056,7 @@ export function makeNppCorpDecision(
   // alone: the seeded NatCorps and the command-economy national enterprises
   // carry `countryOwnerId` and no `ownershipState`, so the old local check saw
   // them as private.
-  if (plants?.enabled && !isStateOwned(corp)) {
+  if (plants?.enabled && !isStateOwned(corp) && groupDirection?.allowInvestment !== false) {
     // Shared-snapshot pool lookup; see reinvestCandidatePool.
     const poolFor = createReinvestPoolLookup(unownedByCountry);
 
@@ -1334,6 +1360,8 @@ export function makeNppCorpDecision(
     // and headroom, including the build size so replacement candidates differ.
     candidates.sort(
       (a, b) =>
+        Number(groupDirection?.regions.includes(b.sector.stateId) ?? false) -
+          Number(groupDirection?.regions.includes(a.sector.stateId) ?? false) ||
         Number(b.interventionPriority > 0) - Number(a.interventionPriority > 0) ||
         b.interventionPriority - a.interventionPriority ||
         b.fill * (b.headroomUnits + b.units) - a.fill * (a.headroomUnits + a.units)

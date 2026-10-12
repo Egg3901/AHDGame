@@ -1,6 +1,6 @@
 ---
 date: 2026-10-12
-title: Subsidiary Group hub and voluntary receiving preferences
+title: Subsidiary Group hub and voluntary supply coordination
 summary: >-
   Formalized corporate groups have a dedicated page for member comparisons,
   shared identity, objectives and voluntary receiving preferences.
@@ -15,5 +15,7 @@ areas: [fullstack]
 - Compare selected members, inspect authorized completed-turn results, and customize the group name and logo.
 - Parent CEOs can save objectives and group supply preferences; player CEOs control their own receiving preference in the group hub and their corporation's CEO Office.
 - Commercial independence hides group receiving controls and disables the CEO Office setting while retaining the saved preference.
-- Automatic NPP objective execution, internal supply settlement and policy forecasts are not active in this release. The page explains these limits.
+- A disabled-by-default plants-economy capability executes NPP directions and reserves eligible NPP supply at 100% market benchmark value after existing contracts. It respects current CEO consent, physical output, needs, cash protection, country boundaries and verified local delivery. Player output is never automatically committed.
+- Qualified enabled worlds capture bounded private forecast inputs for participation-sensitive, fixed-output comparisons. Estimates show direct revenue and operating-profit effects, exclude existing contracts, and do not predict production response or taxes.
+- Economic activation remains gated pending integrated world and long-horizon qualification. Disabled worlds add no group ownership reads or forecast writes.
 - Group sector values now use the operating country's currency instead of the owner's currency for foreign operations.

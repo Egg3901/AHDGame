@@ -526,6 +526,8 @@ export interface GameConfig {
    * src/lib/db/types/supplyAgreement.ts.
    */
   supplyAgreementsEnabled?: boolean;
+  /** Qualified subsidiary group routing and NPP objectives. Default off for existing worlds. */
+  groupSupplyCoordinationEnabled?: boolean;
   /**
    * Demographics as a 4th demand source (besides retail, corps, government).
    * When true, income demographics add consumer demand for final-consumer

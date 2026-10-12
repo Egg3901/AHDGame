@@ -1,3 +1,7 @@
+import {
+  groupInputCost,
+  type GroupInputAllocation,
+} from "@/lib/corporations/groups/rules/inputPricing";
 /**
  * Physical sector P&L (plants tier, wave P3.5).
  *
@@ -193,6 +197,7 @@ export function computeInputsCost(args: {
    * behavior).
    */
   statePremiums?: ReadonlyMap<CommodityType, number>;
+  groupAllocations?: ReadonlyMap<CommodityType, GroupInputAllocation>;
 }): InputsCostResult {
   const {
     nominalDailyRevenue,
@@ -236,10 +241,16 @@ export function computeInputsCost(args: {
     const unitPrice =
       basePrice * priceRealizationFactor(Number.isFinite(ratio) ? (ratio as number) : null) +
       (Number.isFinite(premium) && (premium as number) > 0 ? premium! : 0);
-    const cost = units * unitPrice;
+    const allocation = args.groupAllocations?.get(key);
+    const priced = allocation
+      ? groupInputCost(units, basePrice, unitPrice, allocation)
+      : { cost: units * unitPrice, groupUnits: 0 };
+    const cost =
+      priced.cost +
+      priced.groupUnits * (Number.isFinite(premium) && (premium as number) > 0 ? premium! : 0);
     if (!Number.isFinite(cost)) continue;
     total += cost;
-    lines.push({ commodity: key, units, unitPrice, cost });
+    lines.push({ commodity: key, units, unitPrice: allocation ? cost / units : unitPrice, cost });
   }
   return { total, lines };
 }

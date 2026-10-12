@@ -17,6 +17,23 @@ import {
 export interface MarketContext {
   /** Tier 1: realized revenue scaled by lagged output prices. */
   realizationEnabled: boolean;
+  groupSupplyEnabled?: boolean;
+  groupSupplyInputsBySector?: ReadonlyMap<
+    string,
+    ReadonlyMap<
+      import("@/lib/constants/commodities").CommodityType,
+      import("@/lib/corporations/groups/rules/inputPricing").GroupInputAllocation
+    >
+  >;
+  groupSupplyForecastByRoot?: ReadonlyMap<
+    string,
+    import("@/lib/corporations/groups/rules/forecast").GroupForecastBasis
+  >;
+  groupSupplyAvailabilityBySector?: ReadonlyMap<
+    string,
+    ReadonlyMap<import("@/lib/constants/commodities").CommodityType, number>
+  >;
+  groupSupplyReceipts?: readonly import("@/lib/corporations/groups/rules/marketCoordination").GroupMarketReceipt[];
   /** Tier 3 / D1: output throttled by the scarcest available input. */
   throughputEnabled: boolean;
   /** Tier 3 / Fix 2: posted-price market clearing. */

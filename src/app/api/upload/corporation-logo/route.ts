@@ -134,8 +134,23 @@ export async function POST(request: Request) {
     }
 
     // Update corporation record
-    await db.collection<Corporation>("corporations").updateOne(
-      { _id: corporation._id },
+    const saved = await db.collection<Corporation>("corporations").updateOne(
+      {
+        _id: corporation._id,
+        ...(groupTarget
+          ? {
+              userId: new ObjectId(authUser.userId),
+              ceoId: corporation.ceoId,
+              ceoVacant: { $ne: true },
+              suspended: { $ne: true },
+              countryOwnerId: corporation.countryOwnerId,
+              $or: [
+                { subsidiaryFormalizedAtTurn: { $exists: false } },
+                { subsidiaryFormalizedAtTurn: { $type: "null" } },
+              ],
+            }
+          : {}),
+      },
       {
         $set: {
           [groupTarget ? "groupManagement.logoUrl" : "logoUrl"]: url,
@@ -144,6 +159,8 @@ export async function POST(request: Request) {
       }
     );
 
+    if (groupTarget && !saved.matchedCount)
+      return errorResponse(409, "The parent CEO or corporation changed. Refresh and try again.");
     return NextResponse.json({ url });
   } catch (error) {
     return handleRouteError(error);

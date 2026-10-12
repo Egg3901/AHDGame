@@ -1,6 +1,6 @@
 /** @vitest-environment happy-dom */
 import { afterEach, beforeEach, describe, it, expect, vi } from "vitest";
-import { cleanup, render, screen, fireEvent, waitFor, within } from "@testing-library/react";
+import { act, cleanup, render, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import messages from "../../../../messages/en/corporations.json";
 vi.mock("@/contexts/CurrencyContext", () => ({
@@ -9,6 +9,7 @@ vi.mock("@/contexts/CurrencyContext", () => ({
 vi.mock("./useGroupManagement", () => ({ useGroupManagement: vi.fn() }));
 vi.mock("../GroupOverviewCard", () => ({ GroupOverviewCard: () => null }));
 import { useGroupManagement, type GroupManagementView } from "./useGroupManagement";
+import { GroupSupplyOffice } from "./GroupSupplyOffice";
 import { SubsidiaryGroupPage } from "./SubsidiaryGroupPage";
 const root = "100000000000000000000001",
   child = "100000000000000000000002";
@@ -111,11 +112,11 @@ describe("Subsidiary Group page", () => {
     fireEvent.click(screen.getByRole("button", { name: "Clear selection" }));
     await waitFor(() => expect(screen.queryAllByText("A300").length).toBe(0));
   });
-  it("hides receiving controls under commercial independence", () => {
+  it("hides receiving controls under commercial independence", async () => {
     window.history.replaceState(null, "", "#supply");
     mount();
     expect(screen.queryByRole("checkbox", { name: "Receive supply from group" })).toBeNull();
-    expect(screen.getByText(/Supply coordination is not active/)).toBeTruthy();
+    await waitFor(() => expect(screen.getByText(/Supply coordination is disabled/)).toBeTruthy());
   });
   it("shows receiving controls under members first and keeps other players disabled", () => {
     window.history.replaceState(null, "", "#supply");
@@ -131,5 +132,76 @@ describe("Subsidiary Group page", () => {
   it("has an explicit no-group state", () => {
     mount(null);
     expect(screen.getByText(/not part of a formalized/)).toBeTruthy();
+  });
+});
+
+describe("corporation office suggestions and supply estimates", () => {
+  it("renders policy comparisons and identifies the fixed-output assumptions", async () => {
+    const data = structuredClone(base);
+    data.forecast = {
+      basisTurn: 19,
+      appliesTurn: 21,
+      corporations: [
+        {
+          id: root,
+          independentRevenue: 100,
+          coordinatedRevenue: 120,
+          revenueDifference: 20,
+          operatingProfitDifference: 20,
+          receivingValue: 0,
+          supplyingValue: 120,
+        },
+      ],
+      total: {
+        independentRevenue: 100,
+        coordinatedRevenue: 120,
+        revenueDifference: 20,
+        operatingProfitDifference: 20,
+        internalTradingValue: 120,
+      },
+    };
+    await act(async () => {
+      mount(data);
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Supply chain" }));
+    expect(screen.getByText("Estimated supply policy effects")).toBeTruthy();
+    expect(screen.getByText(/Estimates hold output/)).toBeTruthy();
+    expect(screen.getByText("Combined group total")).toBeTruthy();
+  });
+  it("shows the corporation CEO the suggestion details and sends its revision", () => {
+    const data = structuredClone(base);
+    data.regions = [{ id: "US-PA", name: "Pennsylvania", countryId: "US" }];
+    data.members[0].direction = {
+      revision: "revision",
+      rootId: root,
+      ceoId: "ceo",
+      objective: "regional",
+      regions: ["US-PA"],
+      allowInvestment: false,
+      setTurn: 19,
+      response: "pending",
+    };
+    const save = vi.fn(async () => true);
+    vi.mocked(useGroupManagement).mockReturnValue({
+      data,
+      loading: false,
+      error: "",
+      busy: false,
+      save,
+      refresh: vi.fn(),
+    } as ReturnType<typeof useGroupManagement>);
+    render(
+      <NextIntlClientProvider locale="en" messages={messages}>
+        <GroupSupplyOffice corpId="1" />
+      </NextIntlClientProvider>
+    );
+    expect(screen.getByText("Target regions: Pennsylvania")).toBeTruthy();
+    expect(screen.getByText("New capital investment is not authorized.")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Acknowledge" }));
+    expect(save).toHaveBeenCalledWith({
+      action: "respond",
+      response: "acknowledged",
+      revision: "revision",
+    });
   });
 });

@@ -1,3 +1,4 @@
+import { buildGroupSupplyContext } from "./groupSupplyContext";
 import {
   computeClearingFactors,
   describeClearingBookBreach,
@@ -88,6 +89,7 @@ import { mediaProductOfferAvailability } from "@/lib/products/rules/mediaProduct
  * place, and returns the breach texts, loyalty updates, and contract maps.
  */
 export interface ClearingPrePassInput {
+  groupMembership?: import("@/lib/corporations/groups/groupMembership").GroupMembership;
   lookups: Awaited<ReturnType<typeof buildCorporationLookups>>;
   market: MarketContext;
   turn: number | undefined;
@@ -838,7 +840,21 @@ export function runClearingPrePass(input: ClearingPrePassInput): ClearingPrePass
       market.deliveryLimitedBySectorId = deliveryLimitedBySectorId;
       market.deliveryLimitedClassBySectorId = deliveryLimitedClassBySectorId;
     }
+    const groupSupply = market.groupSupplyEnabled
+      ? buildGroupSupplyContext(
+          lookups,
+          turn ?? 0,
+          freightSettlementActive,
+          settleableAgreements,
+          input.groupMembership
+        )
+      : undefined;
+    market.groupSupplyForecastByRoot = groupSupply?.forecastByRoot;
+    market.groupSupplyAvailabilityBySector = groupSupply?.availabilityBySector;
+    market.groupSupplyReceipts = groupSupply?.receipts;
+    market.groupSupplyInputsBySector = groupSupply?.inputAllocationsBySector;
     market.clearingBySectorId = computeClearingFactors({
+      groupSupply,
       sectors: clearingInputs,
       mediaOwnership,
       recordDelivery:

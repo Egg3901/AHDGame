@@ -1,21 +1,20 @@
+import { estimateGroupSupply } from "./rules/forecast";
 /**
  * Subsidiary group management lets the parent set identity and strategy while player CEOs choose receiving participation.
  * Settings do not themselves move cash or goods; supply settlement is a separate qualified engine capability.
  */
+import { groupOperator } from "./operator";
+export { groupOperator } from "./operator";
 import { randomUUID } from "node:crypto";
 import { ObjectId, type Db } from "mongodb";
 import type { CorporationHistory } from "@/lib/db/types/corporationHistory";
 import { groupHistoryInAnchor } from "./rules/financialHistory";
-import type { Corporation, GameState } from "@/lib/db/types";
+import type { Corporation, GameState, GameConfig, State } from "@/lib/db/types";
 import { requireCeo } from "@/lib/api/corporations/resolveQuery";
 import { resolveFormalizedGroups } from "./groupMembership";
 import { canActOnCorporationAsParent } from "../subsidiaries/authorization";
 import { requireCorporationActionsEnabled } from "@/lib/api/requireCorporationActions";
-import {
-  scheduleGroupReceiving,
-  effectiveGroupReceiving,
-  type GroupOperator,
-} from "./rules/participation";
+import { scheduleGroupReceiving, effectiveGroupReceiving } from "./rules/participation";
 import type { GroupManagementCommand } from "./managementSchema";
 import type { GroupManagement } from "./managementTypes";
 
@@ -24,28 +23,12 @@ export const defaultGroupManagement = (root: Corporation): GroupManagement => ({
   supplyPolicy: "independent",
   ...root.groupManagement,
 });
-export function groupOperator(c: Corporation, rootId: string): GroupOperator {
-  return {
-    id: c._id.toString(),
-    rootId,
-    ceoId: c.ceoId?.toString() ?? "",
-    ceoTenureKey: JSON.stringify([
-      c.ceoHistory?.length ?? 0,
-      c.ceoHistory?.at(-1)?.startTurn ?? null,
-      c.ceoHistory?.at(-1)?.endTurn ?? null,
-    ]),
-    userId: c.userId?.toString(),
-    operator: c.ceoType === "npp" ? "npp" : "player",
-    vacant: c.ceoVacant === true,
-    stateOwned: !!c.countryOwnerId,
-  };
-}
 export async function loadGroupManagement(db: Db, corporation: Corporation, userId: string) {
   const membership = await resolveFormalizedGroups(db, { includeReserved: true });
   const rootId = membership.rootByCorpId.get(corporation._id.toString());
   const ids = rootId ? membership.membersByRootId.get(rootId) : undefined;
   if (!rootId || !ids) return null;
-  const [corps, world] = await Promise.all([
+  const [corps, world, config, regions] = await Promise.all([
     db
       .collection<Corporation>("corporations")
       .find(
@@ -59,10 +42,13 @@ export async function loadGroupManagement(db: Db, corporation: Corporation, user
             ceoType: 1,
             userId: 1,
             ceoVacant: 1,
+            suspended: 1,
+            caretakerCeo: 1,
             countryOwnerId: 1,
             groupManagement: 1,
             groupReceiving: 1,
             groupDirection: 1,
+            groupSupplyBasis: 1,
             logoUrl: 1,
             shareholders: 1,
             totalShares: 1,
@@ -78,6 +64,16 @@ export async function loadGroupManagement(db: Db, corporation: Corporation, user
         { _id: "current" },
         { projection: { currentTurn: 1, subsidiaryCorporationsEnabled: 1 } }
       ),
+    db
+      .collection<GameConfig>("gameConfig")
+      .findOne(
+        { _id: "default" },
+        { projection: { groupSupplyCoordinationEnabled: 1, marketSystemMode: 1 } }
+      ),
+    db
+      .collection<State>("states")
+      .find({}, { projection: { name: 1, countryId: 1 } })
+      .toArray(),
   ]);
   const root = corps.find((c) => c._id.toString() === rootId);
   if (!root) return null;
@@ -85,10 +81,23 @@ export async function loadGroupManagement(db: Db, corporation: Corporation, user
     world?.subsidiaryCorporationsEnabled === true &&
     !requireCeo(root, userId) &&
     root.ceoType !== "npp" &&
+    !root.suspended &&
+    !!root.ceoId &&
     !root.countryOwnerId &&
     root.subsidiaryFormalizedAtTurn == null;
   const turn = world?.currentTurn ?? 0;
-  return { root, corps, turn, parent, enabled: world?.subsidiaryCorporationsEnabled === true };
+  return {
+    root,
+    corps,
+    turn,
+    parent,
+    regions,
+    supplyEngineEnabled:
+      config?.groupSupplyCoordinationEnabled === true &&
+      config?.marketSystemMode === "plants" &&
+      world?.subsidiaryCorporationsEnabled === true,
+    enabled: world?.subsidiaryCorporationsEnabled === true,
+  };
 }
 export async function groupManagementView(db: Db, corporation: Corporation, userId: string) {
   const ctx = await loadGroupManagement(db, corporation, userId);
@@ -132,14 +141,39 @@ export async function groupManagementView(db: Db, corporation: Corporation, user
     rows.push(converted);
     historyByCorp.set(key, rows);
   }
+  const basis = ctx.root.groupSupplyBasis;
+  const forecast =
+    ctx.supplyEngineEnabled &&
+    basis?.rootId === rootId &&
+    basis.turn <= ctx.turn &&
+    ctx.turn - basis.turn <= 1
+      ? estimateGroupSupply(
+          basis,
+          ctx.corps.map((c) => ({
+            ...groupOperator(c, rootId),
+            preference: c.groupReceiving,
+            cashAvailableAnchor: basis.cashByMember[c._id.toString()] ?? 0,
+          })),
+          ctx.turn + 1
+        )
+      : null;
+  const visibleIds = new Set(privateIds.map((id) => id.toString()));
   return {
+    forecast: forecast
+      ? {
+          ...forecast,
+          total: ctx.parent ? forecast.total : null,
+          corporations: forecast.corporations.filter((c) => visibleIds.has(c.id)),
+        }
+      : null,
     rootId,
     settings: defaultGroupManagement(ctx.root),
     currentTurn: ctx.turn,
     canManage: ctx.parent,
     managementEnabled: ctx.enabled,
     /** No economic activation is implied by saving a direction or participation preference. */
-    supplyEngineEnabled: false,
+    supplyEngineEnabled: ctx.supplyEngineEnabled,
+    regions: ctx.regions.map((r) => ({ id: String(r._id), name: r.name, countryId: r.countryId })),
     members: ctx.corps.map((c) => {
       const own = !requireCeo(c, userId) && c.ceoType !== "npp" && !c.countryOwnerId;
       const privateAccess = ctx.parent || own;
@@ -150,7 +184,12 @@ export async function groupManagementView(db: Db, corporation: Corporation, user
         preference.ceoId === operator.ceoId &&
         preference.ceoTenureKey === operator.ceoTenureKey &&
         preference.userId === operator.userId;
-      const direction = c.groupDirection?.rootId === rootId ? c.groupDirection : undefined;
+      const direction =
+        c.groupDirection?.rootId === rootId &&
+        c.groupDirection.ceoId === operator.ceoId &&
+        c.groupDirection.ceoTenureKey === operator.ceoTenureKey
+          ? c.groupDirection
+          : undefined;
       return {
         id: c._id.toString(),
         pathId: String(c.sequentialId ?? c._id),
@@ -159,7 +198,7 @@ export async function groupManagementView(db: Db, corporation: Corporation, user
         history: privateAccess ? (historyByCorp.get(c._id.toString()) ?? []) : null,
         operator: operator.operator,
         isRoot: c._id.equals(ctx.root._id),
-        canEdit: own && ctx.enabled,
+        canEdit: own && ctx.enabled && !operator.vacant,
         receiving: privateAccess ? effectiveGroupReceiving(operator, preference, ctx.turn) : null,
         requested:
           privateAccess && validPreference ? preference.enabled : privateAccess ? false : null,
@@ -185,6 +224,8 @@ export async function updateGroupManagement(
   const own =
     !requireCeo(corporation, userId) &&
     corporation.ceoType !== "npp" &&
+    !corporation.suspended &&
+    !!corporation.ceoId &&
     !corporation.countryOwnerId;
   if (command.action === "participation") {
     if (!own) return deny("Only this corporation's player CEO can change receiving participation.");
@@ -202,6 +243,7 @@ export async function updateGroupManagement(
         userId: new ObjectId(userId),
         ceoId: corporation.ceoId,
         ceoVacant: { $ne: true },
+        suspended: { $ne: true },
       },
       { $set: { groupReceiving: preference, updatedAt: now } }
     );
@@ -216,7 +258,8 @@ export async function updateGroupManagement(
       !direction ||
       direction.rootId !== rootId ||
       direction.revision !== command.revision ||
-      direction.ceoId !== corporation.ceoId?.toString()
+      direction.ceoId !== corporation.ceoId?.toString() ||
+      direction.ceoTenureKey !== groupOperator(corporation, rootId).ceoTenureKey
     )
       return deny("This suggestion is no longer current.", 409);
     const result = await db.collection<Corporation>("corporations").updateOne(
@@ -226,6 +269,8 @@ export async function updateGroupManagement(
         ceoId: corporation.ceoId,
         "groupDirection.revision": command.revision,
         "groupDirection.rootId": rootId,
+        ceoVacant: { $ne: true },
+        suspended: { $ne: true },
       },
       { $set: { "groupDirection.response": command.response, updatedAt: now } }
     );
@@ -235,17 +280,25 @@ export async function updateGroupManagement(
   }
   if (!ctx.parent) return deny("Only the parent corporation's player CEO can manage the group.");
   if (command.action === "direction") {
+    if (command.regions.some((id) => !ctx.regions.some((r) => String(r._id) === id)))
+      return deny("Choose a valid region.", 400);
     const target = ctx.corps.find((c) => c._id.toString() === command.memberId);
     if (!target || target._id.equals(ctx.root._id))
       return deny("Choose a current subsidiary.", 400);
     if (!(await canActOnCorporationAsParent(db, new ObjectId(userId), target)))
       return deny("You no longer control this subsidiary.");
     const result = await db.collection<Corporation>("corporations").updateOne(
-      { _id: target._id, ceoId: target.ceoId, subsidiaryFormalizedAtTurn: { $exists: true } },
+      {
+        _id: target._id,
+        ceoId: target.ceoId,
+        suspended: { $ne: true },
+        subsidiaryFormalizedAtTurn: { $exists: true },
+      },
       {
         $set: {
           groupDirection: {
             revision: randomUUID(),
+            ceoTenureKey: groupOperator(target, rootId).ceoTenureKey,
             rootId,
             objective: command.objective,
             regions: [...new Set(command.regions)],
@@ -272,6 +325,12 @@ export async function updateGroupManagement(
       userId: new ObjectId(userId),
       ceoId: ctx.root.ceoId,
       ceoVacant: { $ne: true },
+      suspended: { $ne: true },
+      countryOwnerId: ctx.root.countryOwnerId,
+      $or: [
+        { subsidiaryFormalizedAtTurn: { $exists: false } },
+        { subsidiaryFormalizedAtTurn: { $type: "null" } },
+      ],
     },
     { $set: { ...update, updatedAt: now } }
   );

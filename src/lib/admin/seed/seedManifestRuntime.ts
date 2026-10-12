@@ -332,7 +332,7 @@ export const RUNTIME: CollectionEntry[] = [
     name: "corporations",
     category: "runtime",
     notes:
-      "Group identity, objectives and CEO-bound receiving consent are embedded runtime state and reset with corporations.",
+      "Group identity, objectives, CEO-bound receiving consent and bounded private forecast inputs are embedded runtime state and reset with corporations.",
   },
   { name: "corporationCeoVotes", category: "runtime" },
   { name: "corporationHistory", category: "runtime" },

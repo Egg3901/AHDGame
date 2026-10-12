@@ -46,11 +46,13 @@ Weaker members of a group get pulled **up** toward the group's strongest Marketi
 
 Open the Subsidiary Group page from the link below My Corporation or from the group summary on a corporation page. Select members to compare their daily revenue, cash and operating footprint. Authorized CEOs can also inspect completed-turn results, valued using the exchange rate recorded in each snapshot. Combined figures include internal transactions; members still hold their own cash independently.
 
-The parent CEO can set a group name and logo and save subsidiary objectives. Player CEOs can acknowledge or decline their own suggestions. Automatic NPP objective execution is not active yet.
+The parent CEO can set a group name and logo and save subsidiary objectives. Player CEOs can acknowledge or decline their own suggestions. In qualified enabled plants economies, NPPs apply directions from the next turn using their existing strategy and cash safeguards. Player suggestions remain voluntary. Capital investment permission applies to new plant orders and expansion.
 
 The supply section saves Commercial independence or Group members first as the group's preference. Under Group members first, player CEOs can choose to receive group supplies. This is receiving-only and never commits their corporation's own output. Participation changes become effective next turn and remain bound to the same CEO and group. Under Commercial independence, Group receiving controls are hidden and the corporation's CEO Office setting is disabled with an explanation; the saved preference is retained.
 
-Internal supply coordination and policy forecasts are not connected to the turn engine yet. Saving these preferences does not move goods or cash. The intended supply rules use NPP-only automatic suppliers, 100% market benchmark pricing, existing contracts first, and limits on physical output, buyer need, funds and legal trade routes.
+Automatic supply coordination is disabled by default and requires world qualification before activation. Enabled plants economies reserve only NPP output at 100% of the applicable market benchmark, after existing contracts. Output, buyer needs, available funds and protected NPP reserves cap allocations. Allocations stay within the same country; with freight settlement they also require co-located plants and verified local delivery capacity. Unused output returns to normal market sales and per-turn allocations carry no shortfall damages.
+
+After an enabled world completes a turn, authorized CEOs can compare fixed-output estimates for both policies. Changing receiving participation recalculates group and per-corporation direct revenue and operating-profit differences. Existing contracts, production changes, taxes and longer-term price responses are excluded. Group totals include internal trading and are not consolidated net accounts. Missing or stale inputs show estimates as unavailable.
 
 ## Group balance sheet
 

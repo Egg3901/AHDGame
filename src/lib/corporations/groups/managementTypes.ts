@@ -19,6 +19,7 @@ export interface GroupReceivingPreference {
   previousEnabled: boolean;
 }
 export interface GroupDirection {
+  ceoTenureKey?: string;
   revision: string;
   rootId: string;
   objective: GroupObjective;

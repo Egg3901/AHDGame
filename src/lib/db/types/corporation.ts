@@ -196,6 +196,8 @@ export interface Corporation {
   groupManagement?: Partial<GroupManagement>;
   groupReceiving?: GroupReceivingPreference;
   groupDirection?: GroupDirection;
+  /** Bounded private forecast inputs, written only while coordination is enabled. */
+  groupSupplyBasis?: import("@/lib/corporations/groups/rules/forecast").GroupForecastBasis;
 
   _id: ObjectId;
   name: string;

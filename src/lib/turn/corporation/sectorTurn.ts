@@ -757,6 +757,7 @@ export function processSector(
     sectorNPV,
     capitalBookAnchor,
   } = decomposePhysicalCosts({
+    groupAllocations: market.groupSupplyInputsBySector?.get(sector._id.toString()),
     plantsEnabled,
     explicitPlantCostsEnabled,
     embargoLegacyMothball,

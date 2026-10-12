@@ -8,6 +8,7 @@ vi.mock("@/lib/corporations/subsidiaries/authorization", () => ({
 vi.mock("@/lib/api/requireCorporationActions", () => ({
   requireCorporationActionsEnabled: vi.fn(async () => null),
 }));
+import { coordinationFixture } from "./rules/testFixtures";
 import { updateGroupManagement, groupManagementView } from "./management";
 const rootId = new ObjectId(),
   subId = new ObjectId(),
@@ -38,6 +39,7 @@ let memory: InMemoryDb, db: Db;
 beforeEach(() => {
   memory = createInMemoryDb();
   memory.seed("corporations", [parent, sub]);
+  memory.seed("states", [{ _id: "US-PA", name: "Pennsylvania", countryId: "US" }]);
   memory.seed("gameState", [
     { _id: "current", currentTurn: 40, subsidiaryCorporationsEnabled: true },
   ]);
@@ -241,5 +243,123 @@ describe("group management authorization and persistence", () => {
         name: "Hidden",
       })
     ).toMatchObject({ ok: false, status: 409 });
+  });
+});
+
+describe("private participation-sensitive forecasts", () => {
+  async function seedForecast() {
+    const f = coordinationFixture();
+    const ids = new Map([
+      ["s", rootId.toString()],
+      ["b", subId.toString()],
+    ]);
+    await memory.collection("corporations").updateOne(
+      { _id: rootId },
+      {
+        $set: {
+          groupSupplyBasis: {
+            turn: 40,
+            rootId: rootId.toString(),
+            memberIds: [rootId.toString(), subId.toString()],
+            cashByMember: { [rootId.toString()]: 1000, [subId.toString()]: 1000 },
+            complete: true,
+            books: [
+              {
+                ...f,
+                sellers: f.sellers.map((s) => ({
+                  ...s,
+                  memberId: ids.get(s.memberId),
+                  openFill: 0.5,
+                  quoteFactor: 1,
+                })),
+                buyers: f.buyers.slice(0, 1).map((b) => ({ ...b, memberId: ids.get(b.memberId) })),
+              },
+            ],
+          },
+        },
+      }
+    );
+    // The parent in this API fixture is player operated, so automatic supplying stays zero.
+    memory.seed("gameConfig", [
+      { _id: "default", marketSystemMode: "plants", groupSupplyCoordinationEnabled: true },
+    ]);
+  }
+  it("never exposes another corporation's forecast rows, aggregate or raw inputs", async () => {
+    await seedForecast();
+    const owner = await groupManagementView(db, await doc(rootId), parentUser.toString());
+    expect(owner?.forecast?.corporations).toHaveLength(2);
+    expect(owner?.forecast?.total).not.toBeNull();
+    const player = await groupManagementView(db, await doc(subId), playerUser.toString());
+    expect(player?.forecast?.total).toBeNull();
+    expect(player?.forecast?.corporations.map((r) => r.id)).toEqual([subId.toString()]);
+    const other = await groupManagementView(db, await doc(subId), outsider.toString());
+    expect(other?.forecast?.corporations).toEqual([]);
+    expect(JSON.stringify(other)).not.toContain("cashByMember");
+    expect(JSON.stringify(other)).not.toContain("books");
+  });
+  it("refuses disabled, stale, incomplete or changed-membership forecasts", async () => {
+    await seedForecast();
+    await memory
+      .collection("corporations")
+      .updateOne({ _id: rootId }, { $set: { "groupSupplyBasis.turn": 38 } });
+    expect(
+      (await groupManagementView(db, await doc(rootId), parentUser.toString()))?.forecast
+    ).toBeNull();
+    await seedForecast();
+    await memory
+      .collection("corporations")
+      .updateOne({ _id: rootId }, { $set: { "groupSupplyBasis.complete": false } });
+    expect(
+      (await groupManagementView(db, await doc(rootId), parentUser.toString()))?.forecast
+    ).toBeNull();
+    await seedForecast();
+    await memory
+      .collection("corporations")
+      .updateOne({ _id: rootId }, { $set: { "groupSupplyBasis.memberIds": [rootId.toString()] } });
+    expect(
+      (await groupManagementView(db, await doc(rootId), parentUser.toString()))?.forecast
+    ).toBeNull();
+    await seedForecast();
+    await memory
+      .collection("gameConfig")
+      .updateOne({ _id: "default" }, { $set: { groupSupplyCoordinationEnabled: false } });
+    expect(
+      (await groupManagementView(db, await doc(rootId), parentUser.toString()))?.forecast
+    ).toBeNull();
+  });
+});
+
+describe("inactive corporation management", () => {
+  it("rejects a participation write when suspension occurs after the request snapshot", async () => {
+    const snapshot = await doc(subId);
+    await memory
+      .collection("corporations")
+      .updateOne({ _id: subId }, { $set: { suspended: true } });
+    expect(
+      await updateGroupManagement(db, snapshot, playerUser.toString(), {
+        action: "participation",
+        enabled: true,
+      })
+    ).toMatchObject({ ok: false, status: 409 });
+    expect((await doc(subId)).groupReceiving).toBeUndefined();
+  });
+  it("keeps suspended CEOs read only and refuses participation updates", async () => {
+    await memory
+      .collection("corporations")
+      .updateOne({ _id: subId }, { $set: { suspended: true } });
+    const view = await groupManagementView(db, await doc(subId), playerUser.toString());
+    expect(view?.members.find((m) => m.id === subId.toString())?.canEdit).toBe(false);
+    expect(
+      await updateGroupManagement(db, await doc(subId), playerUser.toString(), {
+        action: "participation",
+        enabled: true,
+      })
+    ).toMatchObject({ ok: false, status: 403 });
+    await memory
+      .collection("corporations")
+      .updateOne({ _id: rootId }, { $set: { suspended: true } });
+    expect(
+      (await groupManagementView(db, await doc(rootId), parentUser.toString()))?.canManage
+    ).toBe(false);
   });
 });
