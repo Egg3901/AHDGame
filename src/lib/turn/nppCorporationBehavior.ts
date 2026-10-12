@@ -98,7 +98,10 @@ import {
   type NppConstructionFinanceRequest,
 } from "@/lib/turn/npp/nppConstructionFinance";
 import { maybePushNppTechUnlock } from "@/lib/turn/npp/corpBehaviorConfig";
-import { corpDailyGrossRevenueLocalFromSectors } from "@/lib/corporations/dailyGrossRevenue";
+import {
+  corpDailyGrossRevenueLocalFromSectors,
+  corpTechCashFloorLocal,
+} from "@/lib/corporations/dailyGrossRevenue";
 import type { TechUnlockLedgerInput } from "@/lib/corporations/techTree/techUnlockLedger";
 import { loadNppPlacementSignals } from "@/lib/turn/npp/fragileMarketSupply";
 import {
@@ -509,6 +512,10 @@ export async function processNppCorporationDecisions(
         corp,
         dailyGrossRevenueLocal: corpDailyGrossRevenueLocalFromSectors(sectors, corp, {
           plantsEnabled,
+          eraUnitScale: plants?.eraUnitScale ?? 1,
+          fxByCurrency: fxByCurrency as ReadonlyMap<CurrencyCode, number>,
+        }),
+        techCashFloorLocal: corpTechCashFloorLocal(corp, {
           eraUnitScale: plants?.eraUnitScale ?? 1,
           fxByCurrency: fxByCurrency as ReadonlyMap<CurrencyCode, number>,
         }),
