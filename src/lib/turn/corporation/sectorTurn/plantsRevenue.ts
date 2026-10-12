@@ -489,17 +489,19 @@ export function resolvePlantsRevenue(input: PlantsRevenueInput): PlantsRevenueRe
   const marketHourlyRevenue = mothballed
     ? 0
     : plantsEnabled
-      ? // A player-built sector born under plants has nothing to smooth: it
-        // earns its derived revenue from its first turn (ticket 1498).
-        input.costPlusPricingEnabled || sector.plantsGovernorExempt
+      ? input.costPlusPricingEnabled
         ? plantsDerivedHourlyRevenue
-        : softenedMarketRealizationAmount(
-            baselineHourlyRevenue * activeFraction,
+        : governedOrExemptRevenue(
+            sector.plantsGovernorExempt === true,
             plantsDerivedHourlyRevenue,
-            governorAnchorTurn(plantsStartTurn, worldGovernorAnchorTurn),
-            currentTurn,
-            governorCap,
-            governorRampTurns
+            softenedMarketRealizationAmount(
+              baselineHourlyRevenue * activeFraction,
+              plantsDerivedHourlyRevenue,
+              governorAnchorTurn(plantsStartTurn, worldGovernorAnchorTurn),
+              currentTurn,
+              governorCap,
+              governorRampTurns
+            )
           )
       : baselineHourlyRevenue;
   // Final realization leg: output shipped to a government arsenal under a defence contract
@@ -549,4 +551,19 @@ export function resolvePlantsRevenue(input: PlantsRevenueInput): PlantsRevenueRe
     hourlyRevenue,
     capacityBindingEvent,
   };
+}
+
+/**
+ * A player-built sector born under plants is exempt from the launch governor
+ * so it is never held BELOW its market revenue (ticket 1498). The exemption
+ * may only lift revenue: where the governed value is higher (a sector whose
+ * pre-flip anchor sits above what its local market now pays, such as media
+ * stations in small states), it keeps the governed value (ticket 1502).
+ */
+export function governedOrExemptRevenue(
+  exempt: boolean,
+  derived: number,
+  governed: number
+): number {
+  return exempt ? Math.max(derived, governed) : governed;
 }
