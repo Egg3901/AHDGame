@@ -986,7 +986,7 @@ function PrivateBankRow({
   const estimatedRate = bank.lendingRatePercent + CHARACTER_LOAN_SPREAD_PP;
 
   return (
-    <tr className="group transition-colors hover:bg-background/40">
+    <tr className="group transition-colors hover:bg-[color-mix(in_srgb,var(--background)_40%,var(--card))]">
       <td className="px-5 py-3.5">
         <Link
           href={bank.href}
@@ -1064,7 +1064,7 @@ function PrivateBankRow({
       <td className="px-4 py-3.5 text-right font-mono text-sm tabular-nums text-foreground">
         {formatBankMoney(bank.totalDeposits, bank.currency)}
       </td>
-      <td className="sticky right-0 z-10 border-l border-card-border bg-card px-4 py-3.5 transition-colors group-hover:bg-card">
+      <td className="sticky right-0 z-10 border-l border-card-border bg-card px-4 py-3.5 transition-colors group-hover:bg-[color-mix(in_srgb,var(--background)_40%,var(--card))]">
         <div className="flex items-center justify-end gap-2">
           {customerBank && hasCharacter ? (
             <>
