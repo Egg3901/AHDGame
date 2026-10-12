@@ -8,8 +8,10 @@ import { DenseSection, InlineStatus, SmallButton, Td } from "./dense/DenseKit";
  * A7 part 2 surface, mirroring `MergerReviewPanel`: one panel serving both
  * roles off two endpoints. The issuer half shows this corporation's standing
  * with the committee and lets its CEO file. The committee half appears only for
- * whoever holds the seat, and is hidden entirely for everyone else rather than
- * showing them an empty inbox.
+ * whoever holds the seat. Nobody else sees this panel: a viewer who cannot act
+ * on it gets nothing rather than a notice they can do nothing about, and the
+ * CEO only sees it when the company actually misses a listing bar or already
+ * has a request or waiver in play.
  */
 
 interface Committee {
@@ -23,6 +25,7 @@ interface Committee {
 interface IssuerStanding {
   committee: Committee | null;
   isCeo: boolean;
+  needsWaiver?: boolean;
   suggestedContributionAnchor: number;
   pending: {
     id: string;
@@ -125,50 +128,53 @@ export default function IndexCommitteePanel({ corpId }: { corpId: string }) {
   }
 
   const committee = standing?.committee ?? null;
-  const showIssuer = committee !== null;
+  const showIssuer =
+    committee !== null &&
+    Boolean(standing?.isCeo) &&
+    Boolean(standing?.needsWaiver || standing?.pending || standing?.waiver);
   const showInbox = seatName !== null && inbox.length > 0;
   if (!showIssuer && !showInbox) return null;
 
   return (
-    <DenseSection title="Index committee">
+    <DenseSection title="Index fund listing">
       <div className="space-y-2 py-1 text-xs">
-        <p className="text-muted">
-          A corporation that misses a listing standard can ask to be admitted to the indices anyway.
-          Solvency is never waivable.
-        </p>
+        {showIssuer && (
+          <p className="text-muted">
+            Index funds only buy companies above a minimum size with enough shares on the open
+            market. Yours is below one of those bars, so you can ask to be included anyway.
+          </p>
+        )}
 
         {showIssuer && committee && (
           <div className="space-y-2">
             <p className="text-muted">
-              Decided by <span className="font-medium text-foreground">{committee.seatName}</span>
-              {committee.vacant
-                ? " (vacant, the deadline decides)"
-                : committee.holderIsNpp
-                  ? ` (${committee.holderName}, the deadline decides)`
-                  : ` (${committee.holderName})`}
+              The <span className="font-medium text-foreground">{committee.seatName}</span> decides
+              {committee.vacant || committee.holderIsNpp
+                ? ". Nobody is actively deciding right now, so the request is settled automatically at its deadline."
+                : ` (${committee.holderName}).`}
             </p>
 
             {standing?.waiver && (
               <p className="font-medium text-success">
-                Waiver in force through turn {standing.waiver.waiverUntilTurn ?? "?"}.
+                Included in index funds through turn {standing.waiver.waiverUntilTurn ?? "?"}.
               </p>
             )}
 
             {standing?.pending && (
               <p className="text-foreground">
-                Petition before the {standing.pending.seatName}, filed turn{" "}
-                {standing.pending.filedAtTurn}, decided by turn {standing.pending.deadlineAtTurn}.
-                Contribution {formatAnchor(standing.pending.contributionAnchor)}.
+                Request sent on turn {standing.pending.filedAtTurn} with a{" "}
+                {formatAnchor(standing.pending.contributionAnchor)} fee. Decided by turn{" "}
+                {standing.pending.deadlineAtTurn}.
               </p>
             )}
 
             {standing?.isCeo && !standing.pending && !standing.waiver && (
               <div className="space-y-1.5">
                 <p className="text-muted">
-                  Lobbying contribution, paid from corporate cash on filing and never refunded. An
-                  unattended petition needs at least{" "}
-                  {formatAnchor(standing.suggestedContributionAnchor)} to carry; one too far below
-                  the bar is refused at any price.
+                  The request costs a lobbying fee paid from company cash, and it is not refunded.
+                  If nobody decides it, a fee of at least{" "}
+                  {formatAnchor(standing.suggestedContributionAnchor)} gets it approved. Companies
+                  far below the bars are refused whatever the fee.
                 </p>
                 <div className="flex items-center gap-1.5">
                   <input
@@ -180,7 +186,7 @@ export default function IndexCommitteePanel({ corpId }: { corpId: string }) {
                     className="h-7 w-40 rounded-md border border-card-border bg-background px-2 text-right font-mono text-[13px] text-foreground focus:border-foreground focus:outline-none"
                   />
                   <SmallButton tone="primary" disabled={loading || !contribution} onClick={file}>
-                    Petition
+                    Ask to be included
                   </SmallButton>
                 </div>
               </div>
@@ -190,7 +196,9 @@ export default function IndexCommitteePanel({ corpId }: { corpId: string }) {
 
         {showInbox && (
           <div className="space-y-1">
-            <p className="font-medium text-foreground">Before you as {seatName}</p>
+            <p className="font-medium text-foreground">
+              Index listing requests waiting for you as {seatName}
+            </p>
             <table className="w-full border-collapse">
               <tbody>
                 {inbox.map((petition) => (
