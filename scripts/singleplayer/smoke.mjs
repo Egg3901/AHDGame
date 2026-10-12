@@ -63,10 +63,13 @@ async function freePort() {
   });
 }
 
+// A saved replica set records its database address. Keep it stable when the
+// same world restarts, while allowing the web server to use a new free port.
+const mongoPort = await freePort();
+
 async function start(label) {
-  const appPort = await freePort();
-  let mongoPort = await freePort();
-  while (mongoPort === appPort) mongoPort = await freePort();
+  let appPort = await freePort();
+  while (appPort === mongoPort) appPort = await freePort();
   const child = spawn(
     process.execPath,
     [

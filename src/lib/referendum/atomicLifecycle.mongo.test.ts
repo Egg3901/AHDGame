@@ -1,3 +1,4 @@
+import { processReferendumLifecycle } from "./processReferendumLifecycle";
 import { processIndependenceDesireDrift } from "@/lib/turn/independenceDesireDrift";
 import { loadIndependenceDesireSnapshots } from "@/lib/governorOffice/devolution/queries";
 import { secedeRegion } from "./secede/secedeRegion";
@@ -286,6 +287,49 @@ describe.runIf(REAL_MONGO_ENABLED)("atomic referendum lifecycle against owned Mo
           .findOne({ _id: "SCO" })
       )?.independenceDesire.value
     ).toBe(75);
+  });
+  it("rolls back every campaign snapshot when one update in the batch fails", async () => {
+    await db.createCollection("referendums", {
+      validator: { $nor: [{ regionId: "WAL", status: "campaigning" }] },
+    });
+    await db.collection("referendums").insertMany(
+      ["SCO", "WAL", "NIR"].map((regionId) => ({
+        countryId: "UK",
+        regionId,
+        kind: regionId === "NIR" ? "reunification" : "independence",
+        status: "granted",
+        yesShare: 65,
+        campaignBaseYesShare: 65,
+        campaignOpenTurn: 95,
+        campaignCloseTurn: 143,
+        updatedAt: new Date(0),
+      }))
+    );
+    await expect(processReferendumLifecycle(db, 100)).rejects.toThrow();
+    expect(await db.collection("referendums").countDocuments({ status: "granted" })).toBe(3);
+    expect(await db.collection("referendumWire").countDocuments({ kind: "opened" })).toBe(0);
+  });
+  it("commits each campaign opening once when lifecycle workers race", async () => {
+    const refs = ["SCO", "WAL", "NIR"].map((regionId) => ({
+      _id: new ObjectId(),
+      countryId: "UK",
+      regionId,
+      kind: regionId === "NIR" ? "reunification" : "independence",
+      status: "granted",
+      yesShare: 65,
+      campaignBaseYesShare: 65,
+      campaignOpenTurn: 95,
+      campaignCloseTurn: 143,
+      updatedAt: new Date(0),
+    }));
+    await db.collection("referendums").insertMany(refs);
+    const results = await Promise.all([
+      processReferendumLifecycle(db, 100),
+      processReferendumLifecycle(db, 100),
+    ]);
+    expect(results.reduce((sum, result) => sum + (result?.processed ?? 0), 0)).toBe(3);
+    expect(await db.collection("referendums").countDocuments({ status: "campaigning" })).toBe(3);
+    expect(await db.collection("referendumWire").countDocuments({ kind: "opened" })).toBe(3);
   });
   it("creates one consent bill when counting is retried concurrently", async () => {
     const ref = {

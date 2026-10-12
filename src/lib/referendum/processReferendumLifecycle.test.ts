@@ -6,7 +6,7 @@ vi.mock("@/lib/db/sessionDb", () => ({
 }));
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { type Db } from "mongodb";
-import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
+import { createMockDb, bulkOps, type MockDb } from "@/lib/test-utils/mockDb";
 import { ObjectId } from "mongodb";
 import { processReferendumLifecycle } from "./processReferendumLifecycle";
 import { runReferendumActuation, cancelReferendum } from "./transfer/actuateReferendum";
@@ -89,12 +89,16 @@ function setup(
 ) {
   db.collectionMocks["referendums"] = db.collection("referendums");
   db.collectionMocks["referendums"].find.mockReturnValue(cursorOf(active));
+  db.collection("referendums").bulkWrite.mockImplementation(async (ops: unknown[]) => ({
+    matchedCount: ops.length,
+  }));
   db.collectionMocks["electedOfficials"] = db.collection("electedOfficials");
   db.collectionMocks["electedOfficials"].find.mockReturnValue(cursorOf(mps));
 }
 
 function lastSet(db: MockDb, collection: string) {
-  const calls = db.collectionMocks[collection].updateOne.mock.calls;
+  const batch = bulkOps(db.collectionMocks[collection].bulkWrite);
+  const calls = batch.length ? batch : db.collectionMocks[collection].updateOne.mock.calls;
   return calls[calls.length - 1][1].$set;
 }
 
@@ -491,7 +495,8 @@ describe("request and snapshot lifecycle edge cases", () => {
   it("does not report an opening when its stale snapshot loses the write", async () => {
     const db = createMockDb();
     setup(db, [refDoc()]);
-    db.collection("referendums").updateOne.mockResolvedValueOnce({ modifiedCount: 0 });
+    db.collection("referendums").find.mockReturnValueOnce(cursorOf([refDoc()]));
+    db.collection("referendums").find.mockReturnValue(cursorOf([]));
     const result = await processReferendumLifecycle(db as unknown as Db, 110);
     expect(result?.processed).toBe(0);
     expect(recordWireEvent).not.toHaveBeenCalled();
@@ -505,4 +510,28 @@ it("does not report a transition when another worker already counted the ballot"
   const result = await processReferendumLifecycle(db as unknown as Db, 160);
   expect(result).toEqual({ processed: 0, transitions: [] });
   expect(db.collection("bills").insertOne).not.toHaveBeenCalled();
+});
+
+it("batches three campaign transitions into one write", async () => {
+  const db = createMockDb();
+  const refs = ["SCO", "WAL", "NIR"].map((regionId) => refDoc({ _id: new ObjectId(), regionId }));
+  setup(db, refs);
+  const result = await processReferendumLifecycle(db as unknown as Db, 110);
+  expect(result?.processed).toBe(3);
+  expect(db.collection("referendums").bulkWrite).toHaveBeenCalledOnce();
+  expect(bulkOps(db.collection("referendums").bulkWrite)).toHaveLength(3);
+  expect(db.collection("referendums").updateOne).not.toHaveBeenCalled();
+});
+
+it("reports only snapshots still eligible when the batch commits", async () => {
+  const db = createMockDb();
+  const refs = [refDoc({ _id: new ObjectId() }), refDoc({ _id: new ObjectId() })];
+  setup(db, refs);
+  db.collection("referendums").find.mockReturnValueOnce(cursorOf(refs));
+  db.collection("referendums").find.mockReturnValue(cursorOf([refs[1]]));
+  const result = await processReferendumLifecycle(db as unknown as Db, 110);
+  expect(result?.transitions).toEqual([
+    { referendumId: String(refs[1]._id), from: "granted", to: "campaigning" },
+  ]);
+  expect(bulkOps(db.collection("referendums").bulkWrite)[0][0]).toMatchObject({ _id: refs[1]._id });
 });
