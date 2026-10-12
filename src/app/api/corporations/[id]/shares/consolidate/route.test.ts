@@ -144,6 +144,34 @@ describe("POST /api/corporations/[id]/shares/consolidate", () => {
     );
   });
 
+  it("rescales this turn's history price so the between-turn tick keeps market cap (ticket #1500)", async () => {
+    const corp = baseCorp({ totalShares: 1_300_000, publicFloat: 1_300_000 });
+    const histId = new ObjectId();
+    db.collection("corporationHistory").findOne.mockResolvedValue({ _id: histId, sharePrice: 100 });
+
+    const response = await runConsolidate({ corp, targetTotalShares: 1_000_000, currentTurn: 100 });
+
+    expect(response.status).toBe(200);
+    expect(db.collectionMocks["corporationHistory"].findOne).toHaveBeenCalledWith(
+      { corporationId: corp._id, turn: 100 },
+      expect.anything()
+    );
+    expect(db.collectionMocks["corporationHistory"].updateOne).toHaveBeenCalledWith(
+      { _id: histId },
+      { $set: { sharePrice: 130, totalShares: 1_000_000 } }
+    );
+  });
+
+  it("skips the history rescale when this turn has no history row yet", async () => {
+    const corp = baseCorp();
+    db.collection("corporationHistory").findOne.mockResolvedValue(null);
+
+    const response = await runConsolidate({ corp, targetTotalShares: 1_000_000 });
+
+    expect(response.status).toBe(200);
+    expect(db.collectionMocks["corporationHistory"].updateOne).not.toHaveBeenCalled();
+  });
+
   it("scales fundamentalSharePrice down on a forward stock split", async () => {
     // 100 → 200 shares: factor = 0.5
     // sharePrice            : 50 × 0.5 = 25

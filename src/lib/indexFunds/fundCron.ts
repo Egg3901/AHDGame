@@ -1,3 +1,4 @@
+import { settleBankFundSubscriptions } from "./subscriptions";
 /**
  * Index Fund Cron Engine
  *
@@ -149,7 +150,12 @@ async function runFundCron(db: Db, options?: IndexFundCronOptions): Promise<Fund
   };
   const currentTurn = options?.currentTurn ?? 0;
 
-  if (!(await isIndexFundsEnabled())) {
+  if (
+    !(await isIndexFundsEnabled()) &&
+    !(await db
+      .collection("indexFunds")
+      .countDocuments({ "mandate.mode": "picked_stocks", status: { $ne: "delisted" } }))
+  ) {
     try {
       await refreshEquityLiquidityFacility({
         db,
@@ -179,7 +185,7 @@ async function runFundCron(db: Db, options?: IndexFundCronOptions): Promise<Fund
   }
 
   // Env-gated pass-level timing (SIM_CORP_TIMING=1), same mechanism as the
-  // corporation/NPP turn phases — zero-cost when off.
+  // corporation/NPP turn phases - zero-cost when off.
   const timingOn = process.env.SIM_CORP_TIMING === "1";
   const passTimings: Array<[string, number]> = [];
   let _tPrev = timingOn ? Date.now() : 0;
@@ -361,6 +367,19 @@ async function runFundCron(db: Db, options?: IndexFundCronOptions): Promise<Fund
   );
   mark("pass1a-nav");
 
+  try {
+    await settleBankFundSubscriptions(
+      db,
+      currentTurn,
+      navPreparations.flatMap((p) => (p.kind === "ready" ? [p.fund._id] : []))
+    );
+  } catch (error) {
+    result.errors.push(
+      `Fund subscriptions: ${error instanceof Error ? error.message : String(error)}`
+    );
+    return result;
+  }
+
   // Pass 1b: deploy bond reserves in the original stable fund order.
   for (const preparation of navPreparations) {
     if (preparation.kind === "error") {
@@ -375,7 +394,7 @@ async function runFundCron(db: Db, options?: IndexFundCronOptions): Promise<Fund
     result.navUpdates++;
     if (preparation.warning) result.errors.push(preparation.warning);
     try {
-      if (preparation.queuedUnits <= 0) {
+      if (preparation.queuedUnits <= 0 && preparation.fund.mandate?.mode !== "picked_stocks") {
         const bondDeploy = await deployBondReserveFromCash(
           db,
           preparation.fund,
@@ -556,6 +575,7 @@ async function runFundCron(db: Db, options?: IndexFundCronOptions): Promise<Fund
       const rebalFunds = (await listActiveFunds(db)).filter(
         (fund) =>
           fund.kind !== "bond" &&
+          fund.mandate?.mode !== "picked_stocks" &&
           navReadyFundIds.some((id) => id.toString() === fund._id.toString()) &&
           !queuedUnitsByFundId.has(fund._id.toString())
       );
@@ -676,8 +696,8 @@ async function runFundCron(db: Db, options?: IndexFundCronOptions): Promise<Fund
 
   mark("pass3c-redemptions+snapshot");
   // Step 6: NPP fund investments (GDP-proportional budget allocation).
-  // Throttled to every NPP_FUND_INVESTMENT_INTERVAL turns — the biggest
-  // per-turn write-volume phase — investing that many turns' worth at once so
+  // Throttled to every NPP_FUND_INVESTMENT_INTERVAL turns - the biggest
+  // per-turn write-volume phase - investing that many turns' worth at once so
   // net investment is unchanged (see processNPPFundInvestments's budget-
   // multiplier). Turn <= 0 (ad-hoc callers/tests) always runs at multiplier 1.
   const { processNPPFundInvestments, NPP_FUND_INVESTMENT_INTERVAL } =

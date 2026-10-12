@@ -3,6 +3,7 @@ import { ObjectId, type Db } from "mongodb";
 import type { IndexFund } from "@/lib/db/types/indexFund";
 import { createInMemoryDb } from "@/lib/test-utils/inMemoryDb";
 import { resolveFundMandate } from "./mandate";
+import { legacyIndexMandate, type IndexMandate } from "./rules/mandate";
 import { getAllFundDefinitions } from "./fundDefinitions";
 import { buildIndexFundTargetConstituents, type IndexFundCandidate } from "./constituents";
 import { insertFund } from "./fundQueries";
@@ -72,9 +73,9 @@ describe("stored fund mandates", () => {
   });
 
   it("honors the stored policy independently of a predefined slug", () => {
-    const mandate = {
-      ...resolveFundMandate(fund),
-      scope: "global" as const,
+    const mandate: IndexMandate = {
+      ...legacyIndexMandate(fund),
+      scope: "global",
       countryId: undefined,
       topN: 1,
     };

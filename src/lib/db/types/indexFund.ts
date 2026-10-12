@@ -2,7 +2,7 @@ import type { ObjectId } from "mongodb";
 import type { CountryId } from "../../constants/countries";
 import type { CurrencyCode } from "../../constants/currencies";
 import type { OperatingSectorType } from "../../constants/corporations";
-import type { IndexMandate } from "@/lib/indexFunds/rules/mandate";
+import type { FundMandate } from "@/lib/indexFunds/rules/mandate";
 
 export type IndexFundScope = "country" | "global";
 /**
@@ -57,7 +57,7 @@ export interface IndexFund {
   scope: IndexFundScope;
   kind: IndexFundKind;
   /** Absent on pre-mandate books until the compatible policy is persisted. */
-  mandate?: IndexMandate;
+  mandate?: FundMandate;
   /** Present for country-scoped funds. Omitted only for the global top-50 fund. */
   countryId?: CountryId;
   /** Present for sector funds. */

@@ -8,7 +8,7 @@ import type {
  * Shadow-ledger account registry.
  *
  * A small closed set of account KINDS. Each real (non-system) kind maps to
- * exactly ONE authoritative balance field in Mongo — that mapping is the audit
+ * exactly ONE authoritative balance field in Mongo - that mapping is the audit
  * surface the stock-vs-flow reconciler check diffs against (see
  * src/lib/ledger/balanceSnapshot.ts). The canonical account id is a
  * colon-delimited string whose LAST segment is always the currency code:
@@ -39,6 +39,7 @@ export type LedgerAccountKind =
   | "government"
   | "government_cash"
   | "fund"
+  | "fund_subscription_escrow"
   | "org"
   | "pension_scheme"
   | "npp"
@@ -57,7 +58,7 @@ export type LedgerAccountKind =
  * still-uninstrumented flows (org-build debits, dividend-reinvest fund
  * inflows, NPP fund investing, secession deletes, transfer currency
  * rescaling) report as honest amber findings with a lifecycle hint, not as
- * hidden backlog — see the StockVsFlowFinding lifecycleHint.
+ * hidden backlog - see the StockVsFlowFinding lifecycleHint.
  *
  * `org` is backed by organizationFunds.balanceLocal, keyed by organizationId
  * and the stored/founding country currency. Dues, aid, spending and refunds
@@ -74,6 +75,7 @@ export const REAL_ACCOUNT_KINDS: readonly LedgerAccountKind[] = [
   "government",
   "government_cash",
   "fund",
+  "fund_subscription_escrow",
   "org",
   "pension_scheme",
   "npp",
@@ -144,7 +146,7 @@ export function subjectAccount(
  * Map a financialTxLog counterparty to a real account id, when derivable from a
  * single-entry row. `system` and government counterparties (tx rows carry only
  * `counterpartyId`, never a countryId for the OTHER side) are NOT derivable
- * here — those fall through to a mint/sink contra leg.
+ * here - those fall through to a mint/sink contra leg.
  */
 export function counterpartyAccount(
   counterpartyType: FinancialCounterpartyType | undefined,
@@ -164,7 +166,7 @@ export function counterpartyAccount(
       return accountId("pension_scheme", counterpartyId, currency);
     case "npp":
       return accountId("npp", counterpartyId, currency);
-    // government counterparties have no countryId on the tx row — not derivable.
+    // government counterparties have no countryId on the tx row - not derivable.
     default:
       return null;
   }

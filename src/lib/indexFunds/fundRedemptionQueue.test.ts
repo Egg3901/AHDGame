@@ -6,6 +6,20 @@ import {
 } from "./fundRedemptionQueue";
 
 describe("fundRedemptionQueue", () => {
+  it("preserves a fractional unpaid claim", () => {
+    expect(
+      remainingRedemptionUnits({ units: 0.25, paidAmountAnchor: 100, requestedNavAnchor: 100 })
+    ).toBe(0.25);
+    expect(
+      isRetryableRedemptionEntry({
+        status: "partial",
+        units: 0.25,
+        paidAmountAnchor: 100,
+        requestedNavAnchor: 100,
+      })
+    ).toBe(true);
+  });
+
   it("treats entry.units as the remaining unpaid units", () => {
     expect(
       remainingRedemptionUnits({
@@ -56,7 +70,7 @@ describe("fundRedemptionQueue", () => {
 
   it("returns partial status when units remain after a payout (ticket #857)", () => {
     // This is only called after a successful nonzero payout, so a nonzero
-    // remainder means "partially paid," not "untouched" — "queued" would be
+    // remainder means "partially paid," not "untouched" - "queued" would be
     // indistinguishable from a fresh request that's never been paid at all.
     expect(redemptionEntryStatusAfterPayout(3)).toBe("partial");
     expect(redemptionEntryStatusAfterPayout(0)).toBe("paid");

@@ -1,3 +1,4 @@
+import { migration as bankFundSubscriptions } from "./entries/2026-10-12-bank-fund-subscriptions";
 import { migration as completeCabinetV2Accounts } from "./entries/2026-10-10-complete-cabinet-v2-accounts";
 import { migration as fundMandates } from "./entries/2026-10-12-fund-mandates";
 import { migration as corporateFundPositions } from "./entries/2026-10-09-corporate-fund-positions";
@@ -369,6 +370,7 @@ export const MIGRATIONS: Migration[] = [
   backfillSpinOffTechBaselines,
   completeCabinetV2Accounts,
   fundMandates,
+  bankFundSubscriptions,
 ];
 
 // D13 rollback drill - registered but deliberately OUTSIDE the normal chain.

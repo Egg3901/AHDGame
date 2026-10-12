@@ -12,6 +12,7 @@ export type FundCorporationAccount = {
   currencyCode: CurrencyCode | null;
   units: number;
   canRedeem?: boolean;
+  canSubscribe?: boolean;
 };
 type Props = React.ComponentProps<typeof FundTradePanel> & {
   corporations?: FundCorporationAccount[];
@@ -24,7 +25,8 @@ export function FundActions({ corporations = [], ...props }: Props) {
   );
   return (
     <div className="flex flex-wrap items-center gap-3 border-y border-card-border py-3">
-      {props.status === "active" && (
+      {((props.canSubscribe ?? props.status === "active") ||
+        corporations.some((c) => c.canSubscribe)) && (
         <button
           type="button"
           onClick={() => setMode("subscribe")}
@@ -33,22 +35,27 @@ export function FundActions({ corporations = [], ...props }: Props) {
           Buy fund units
         </button>
       )}
-      {props.status !== "delisted" && (props.myUnits > 0 || redeemAccounts.length > 0) && (
-        <button
-          type="button"
-          onClick={() => setMode("redeem")}
-          className="rounded-lg border border-card-border px-5 py-2.5 text-sm font-semibold disabled:opacity-50"
-        >
-          Redeem units
-        </button>
-      )}
+      {props.status !== "delisted" &&
+        ((props.canRedeem ?? props.myUnits > 0) || redeemAccounts.length > 0) && (
+          <button
+            type="button"
+            onClick={() => setMode("redeem")}
+            className="rounded-lg border border-card-border px-5 py-2.5 text-sm font-semibold disabled:opacity-50"
+          >
+            Withdraw
+          </button>
+        )}
       <span className="text-sm text-muted">
         Your position: {props.myUnits.toLocaleString("en-US")} units
       </span>
       {mode && (
         <FundTradeDialog
           {...props}
-          corporations={mode === "redeem" ? redeemAccounts : corporations}
+          corporations={
+            mode === "redeem"
+              ? redeemAccounts
+              : corporations.filter((c) => c.canSubscribe !== false)
+          }
           defaultMode={mode}
           onClose={() => setMode(null)}
         />
@@ -67,8 +74,10 @@ function FundTradeDialog({
     if (!pending) onClose();
   });
   const [account, setAccount] = useState(() =>
-    props.defaultMode === "redeem" && props.myUnits <= 0
-      ? (corporations.find((c) => c.units > 0)?.id ?? "")
+    (props.defaultMode === "redeem" && !(props.canRedeem ?? props.myUnits > 0)) ||
+    (props.defaultMode === "subscribe" && props.canSubscribe === false)
+      ? ((props.defaultMode === "redeem" ? corporations.find((c) => c.units > 0) : corporations[0])
+          ?.id ?? "")
       : ""
   );
   const corporation = corporations.find((c) => c.id === account);
@@ -103,7 +112,9 @@ function FundTradeDialog({
               onChange={(event) => setAccount(event.target.value)}
               className="mt-1 w-full rounded-lg border border-card-border bg-card px-3 py-2"
             >
-              <option value="">Personal cash</option>
+              {(props.defaultMode === "redeem"
+                ? (props.canRedeem ?? props.myUnits > 0)
+                : props.canSubscribe !== false) && <option value="">Personal cash</option>}
               {corporations.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name} (corporation)
@@ -116,6 +127,8 @@ function FundTradeDialog({
           key={account}
           {...props}
           corporation={corporation}
+          canSubscribe={corporation?.canSubscribe ?? props.canSubscribe}
+          canRedeem={corporation?.canRedeem ?? props.canRedeem}
           myUnits={corporation?.units ?? props.myUnits}
           myLegacyUnits={corporation ? 0 : props.myLegacyUnits}
           onPendingChange={setPending}

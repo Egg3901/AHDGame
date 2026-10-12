@@ -53,6 +53,9 @@ export interface FundBondHoldingRow {
 }
 
 export interface FundDetail {
+  canSubscribe?: boolean;
+  canRedeem?: boolean;
+  nextTurnSubscriptions?: boolean;
   id: string;
   slug: string;
   name: string;

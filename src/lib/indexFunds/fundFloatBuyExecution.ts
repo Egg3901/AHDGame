@@ -1,3 +1,4 @@
+import { pickedStockPurchaseShares } from "./rules/mandate";
 /**
  * Public float purchases for index funds: one trade at a time, or a whole
  * rebalance's buys for one fund as a single recoverable settlement batch.
@@ -63,13 +64,33 @@ export async function executeFundShareBuy(
 ): Promise<{ ok: boolean; sharesBought: number; anchorSpent: number }> {
   const expectedGeneration = batch?.expectedGeneration ?? fund.floatSettlementGeneration ?? 0;
   const pools = batch?.pools ?? (await loadEquityPoolsByCurrency(db));
-  const { executionPrice, executionPriceAnchor, actualCost } = await quoteFundShareBuy(
+  const { executionPrice, executionPriceAnchor } = await quoteFundShareBuy(
     db,
     corp,
     shares,
     referencePriceAnchor,
     pools
   );
+  if (fund.mandate?.mode === "picked_stocks") {
+    const current = await db
+      .collection<SettlementFund>("indexFunds")
+      .findOne({ _id: fund._id }, { projection: { cashAnchor: 1, holdings: 1 } });
+    if (!current) return { ok: false, sharesBought: 0, anchorSpent: 0 };
+    shares = pickedStockPurchaseShares({
+      mandate: fund.mandate,
+      corporationId: String(corp._id),
+      cashAnchor: current.cashAnchor,
+      holdings: current.holdings.map((h) => ({
+        corporationId: String(h.corporationId),
+        shares: h.shares,
+        valueAnchor: h.lastValueAnchor ?? h.shares * (h.avgCostPerShareAnchor ?? 0),
+      })),
+      requestedShares: shares,
+      priceAnchor: executionPriceAnchor,
+    });
+    if (shares <= 0) return { ok: false, sharesBought: 0, anchorSpent: 0 };
+  }
+  const actualCost = shares * executionPriceAnchor;
   const audit = batch?.audit ?? (await loadFloatAuditContext(db));
   const prepared = await prepareFundFloatTrade(db, {
     fund,
@@ -171,7 +192,7 @@ export async function executeFundShareBuys(
     }
   };
   const distinct = new Set(legs.map((leg) => leg.corp._id.toString())).size === legs.length;
-  if (!distinct || legs.length < 2) {
+  if (fund.mandate?.mode === "picked_stocks" || !distinct || legs.length < 2) {
     await sequential(legs);
     return { buys };
   }

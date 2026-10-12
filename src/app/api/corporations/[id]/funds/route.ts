@@ -1,16 +1,8 @@
 import { withNoStore } from "@/lib/api/withNoStore";
-import { NextResponse } from "next/server";
 import { getAuthUser } from "@/lib/auth";
-import { requireCorporationActionsEnabled } from "@/lib/api/requireCorporationActions";
-import { isIndexFundsEnabled } from "@/lib/indexFunds/featureFlag";
-import { validateCharter } from "@/lib/indexFunds/sponsorship/charterFund";
-import {
-  FUND_CHARTER_FEE_ANCHOR,
-  FUND_MIN_SEED_CAPITAL_ANCHOR,
-  MIN_EXPENSE_RATIO_ANNUAL,
-} from "@/lib/indexFunds/sponsorship/constants";
-import { getCorpFxRate, anchorToCorpLiquidCapital } from "@/lib/currency/corporationCapital";
-import type { GameConfig, CorporateSector } from "@/lib/db/types";
+import { fundCreationEligibility } from "@/lib/indexFunds/sponsorship/eligibility";
+import type { Corporation } from "@/lib/db/types";
+import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { handleRouteError } from "@/lib/api/errors";
 import { requireCeo, resolveCorporation } from "@/lib/api/corporations/resolveQuery";
@@ -20,7 +12,7 @@ interface RouteParams {
   params: Promise<{ id: string }>;
 }
 
-// GET /api/corporations/[id]/funds: Index funds this corporation sponsors.
+// GET /api/corporations/[id]/funds - Index funds this corporation sponsors.
 // Public listing (fund existence is public). Fixes ticket 1088: a chartered
 // fund was invisible to its owner after the charter session.
 // Errors: 404
@@ -31,50 +23,39 @@ export const GET = withNoStore(async function GET(_request: Request, { params }:
     const resolved = await resolveCorporation(db, id);
     if (!resolved.ok) return resolved.response;
 
-    const corporation = resolved.corporation;
     const auth = await getAuthUser();
-    let canCreate = false;
-    if (
-      auth &&
-      !requireCeo(corporation, auth.userId) &&
-      !(await requireCorporationActionsEnabled(db)) &&
-      (await isIndexFundsEnabled())
-    ) {
-      const config = await db
-        .collection<GameConfig>("gameConfig")
-        .findOne({ _id: "default" }, { projection: { playerFundSponsorshipEnabled: 1 } });
-      if (config?.playerFundSponsorshipEnabled && corporation.bankCharter?.status !== "active") {
-        const sectors = await db
-          .collection<CorporateSector>("corporateSectors")
-          .find({ corporationId: corporation._id })
-          .project<{ sectorType: CorporateSector["sectorType"] }>({ sectorType: 1 })
-          .toArray();
-        const invalid = validateCharter(
-          {
-            name: "Sample fund",
-            tickerSymbol: "SAMPLE",
-            scope: "global",
-            kind: "broad",
-            expenseRatioAnnual: MIN_EXPENSE_RATIO_ANNUAL,
-            seedCapitalAnchor: FUND_MIN_SEED_CAPITAL_ANCHOR,
-          },
-          sectors.map((sector) => sector.sectorType)
-        );
-        if (!invalid) {
-          const minimumCost = Math.round(
-            anchorToCorpLiquidCapital(
-              FUND_CHARTER_FEE_ANCHOR + FUND_MIN_SEED_CAPITAL_ANCHOR,
-              corporation,
-              await getCorpFxRate(db, corporation)
+    const sponsor = resolved.corporation;
+    const canCreate =
+      !!auth && !requireCeo(sponsor, auth.userId) && !(await fundCreationEligibility(db, sponsor));
+    const stockChoices =
+      canCreate && sponsor.bankCharter
+        ? await db
+            .collection<Corporation>("corporations")
+            .find(
+              {
+                countryId: sponsor.countryId,
+                isPrivate: { $ne: true },
+                hiddenFromExchange: { $ne: true },
+                isNationalized: { $ne: true },
+                countryOwnerId: { $exists: false },
+                sharePrice: { $gt: 0 },
+                totalShares: { $gt: 0 },
+                liquidCapital: { $gte: 0 },
+                userId: { $ne: sponsor.userId },
+                _id: { $ne: sponsor._id },
+              },
+              { projection: { name: 1, tickerSymbol: 1, sharePrice: 1 } }
             )
-          );
-          canCreate = corporation.liquidCapital >= minimumCost;
-        }
-      }
-    }
-    const funds = await listFundsBySponsor(db, corporation._id);
-    return NextResponse.json({
+            .sort({ name: 1 })
+            .toArray()
+        : [];
+    const funds = await listFundsBySponsor(db, resolved.corporation._id);
+    const response = NextResponse.json({
       canCreate,
+      countryId: sponsor.countryId ?? null,
+      stockChoices: stockChoices
+        .filter((c) => Number.isFinite(c.sharePrice))
+        .map((c) => ({ id: String(c._id), name: c.name, ticker: c.tickerSymbol })),
       funds: funds.map((f) => ({
         id: f._id.toString(),
         slug: f.slug,
@@ -86,6 +67,8 @@ export const GET = withNoStore(async function GET(_request: Request, { params }:
         countryId: f.countryId ?? null,
       })),
     });
+    response.headers.set("Cache-Control", "private, no-store");
+    return response;
   } catch (error) {
     return handleRouteError(error);
   }

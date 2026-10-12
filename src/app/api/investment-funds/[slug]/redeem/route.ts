@@ -1,3 +1,5 @@
+import { fundTradeCapabilities } from "@/lib/indexFunds/tradeCapabilities";
+import { runRequiredTransaction } from "@/lib/db/runRequiredTransaction";
 import { tradeCorporationFund } from "@/lib/indexFunds/corporationTrade";
 import { resumeFundCommandAudit } from "@/lib/indexFunds/playerCommandAudit";
 import {
@@ -49,12 +51,12 @@ const redeemSchema = z.object({
     .regex(/^[a-fA-F0-9]{24}$/)
     .optional(),
   operationId: z.string().uuid(),
-  units: z.number().int().min(1),
+  units: z.number().positive(),
 });
 
-// POST /api/investment-funds/[slug]/redeem — Redeem (sell) fund units
+// POST /api/investment-funds/[slug]/redeem - Redeem (sell) fund units
 // Auth: logged-in user with a character
-// Requires "full" mode — partial mode blocks player transactions.
+// Requires "full" mode - partial mode blocks player transactions.
 // Pays from fund cash, sells underlying shares to public float when needed,
 // then queues any remainder for the hourly fund cycle.
 export async function POST(request: Request, { params }: { params: Promise<{ slug: string }> }) {
@@ -98,10 +100,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
     });
     if (command.response) return command.response;
     const execute = async () => {
-      if (!(await isIndexFundsEnabled())) {
+      if (fund.mandate?.mode !== "picked_stocks" && !(await isIndexFundsEnabled())) {
         return errorResponse(403, INDEX_FUNDS_DISABLED_MESSAGE);
       }
-      if (!(await isIndexFundsFullMode())) {
+      if (fund.mandate?.mode !== "picked_stocks" && !(await isIndexFundsFullMode())) {
         return errorResponse(403, INDEX_FUNDS_PARTIAL_MESSAGE);
       }
 
@@ -112,6 +114,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
       }
 
       const position = await getPosition(db, fund._id, "character", { characterId });
+      if (
+        !(
+          await fundTradeCapabilities(db, fund, { hasCharacter: true, units: position?.units ?? 0 })
+        ).canRedeem
+      )
+        return errorResponse(403, "You cannot withdraw from this fund right now.");
+
       if (!position || position.units < units) {
         return errorResponse(400, `Insufficient units. You hold ${position?.units ?? 0} units.`);
       }
@@ -181,7 +190,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
         ) => {
           const s = sess ? { session: sess } : undefined;
           // Guarded debit: a concurrent redemption may have drained the position
-          // since the pre-check above — never pay out units that weren't debited.
+          // since the pre-check above - never pay out units that weren't debited.
           const debit = await debitFundPosition(
             db,
             fund._id,
@@ -191,7 +200,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
             s
           );
           if (!debit.ok) {
-            throw badRequest("Insufficient units — your position changed, please retry.");
+            throw badRequest("Insufficient units - your position changed, please retry.");
           }
           // On the standalone path there is no transaction to roll back, so the
           // exact pre-debit position is restored if a later leg throws.
@@ -270,6 +279,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
           let cashQuote = quoteCashOnlyRedemption({
             quotedNav: fundState.quotedNav,
             requestedUnits: units,
+            allowFractionalUnits: fundState.mandate?.mode === "picked_stocks",
             cashAnchor: Math.max(0, fundState.cashAnchor - existingQueuedLiabilityAnchor),
           });
 
@@ -399,6 +409,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
             const afterSellQuote = quoteCashOnlyRedemption({
               quotedNav: fundState.quotedNav,
               requestedUnits: cashQuote.queuedUnits,
+              allowFractionalUnits: fundState.mandate?.mode === "picked_stocks",
               cashAnchor: Math.max(0, fundState.cashAnchor - existingQueuedLiabilityAnchor),
             });
             await payRedeemableUnits(afterSellQuote);
@@ -435,7 +446,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
                 redeemFxRate: blendedRedeemFxRate,
                 // cashQuote.status is already "partial" when some units were paid
                 // immediately (or via the liquidity sale above) before the rest got
-                // queued — hardcoding "queued" here discarded that distinction, so
+                // queued - hardcoding "queued" here discarded that distinction, so
                 // support tooling couldn't tell a fresh request from a
                 // partially-paid one (both looked identically "queued"). Never
                 // "paid" here: that only happens when queuedUnits === 0, which
@@ -546,7 +557,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
           // No session (standalone Mongo, probed by the helper): without a
           // transaction to serialize concurrent redemptions, take the fund's
           // redemption lock, exactly like the code 20/263 path below.
-          const lockBusy = await runTransactionWithSessionRetry(
+          const transact: typeof runTransactionWithSessionRetry =
+            fund.mandate?.mode === "picked_stocks"
+              ? async (_getClient, run) => runRequiredTransaction(run, { client: db.client })
+              : runTransactionWithSessionRetry;
+          const lockBusy = await transact(
             async () => db.client,
             async (session) => {
               if (session) {

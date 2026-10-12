@@ -67,6 +67,71 @@ describe("fund purchase dialog", () => {
     });
     expect(screen.queryByRole("dialog")).toBeNull();
   });
+  it("hides every action refused by the server", () => {
+    render(
+      <FundActions
+        fundId="fund"
+        quotedNav={10}
+        anchorCurrencyCode="USD"
+        status="active"
+        myUnits={5}
+        myLegacyUnits={0}
+        canSubscribe={false}
+        canRedeem={false}
+        onSuccess={vi.fn()}
+        corporations={[
+          {
+            id: "corp",
+            name: "Corporation",
+            currencyCode: "USD",
+            liquidCapital: 100,
+            units: 5,
+            canSubscribe: false,
+            canRedeem: false,
+          },
+        ]}
+      />
+    );
+    expect(screen.queryByRole("button", { name: "Buy fund units" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Withdraw" })).toBeNull();
+  });
+  it("selects an actionable corporate account when personal investment is refused", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({ ok: true, json: async () => ({ character: { cashOnHand: 500 } }) }))
+    );
+    render(
+      <FundActions
+        fundId="fund"
+        quotedNav={10}
+        anchorCurrencyCode="USD"
+        status="active"
+        myUnits={0}
+        myLegacyUnits={0}
+        canSubscribe={false}
+        canRedeem={false}
+        nextTurnSubscriptions
+        onSuccess={vi.fn()}
+        corporations={[
+          {
+            id: "corp",
+            name: "Corporation",
+            currencyCode: "USD",
+            liquidCapital: 100,
+            units: 0,
+            canSubscribe: true,
+            canRedeem: false,
+          },
+        ]}
+      />
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Buy fund units" }));
+    expect(
+      (screen.getByRole("combobox", { name: "Investment account" }) as HTMLSelectElement).value
+    ).toBe("corp");
+    expect(screen.queryByRole("option", { name: "Personal cash" })).toBeNull();
+    expect(screen.getByText(/final unit count is set next turn/)).toBeTruthy();
+  });
   it("rejects fractional units without sending a trade", async () => {
     const fetch = vi.fn(async () => ({
       ok: true,
@@ -176,7 +241,7 @@ describe("sponsor redemption capability", () => {
         ]}
       />
     );
-    expect(screen.queryByRole("button", { name: "Redeem units" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Withdraw" })).toBeNull();
     expect(screen.getByRole("button", { name: "Buy fund units" })).toBeTruthy();
   });
   it("offers redemption through an eligible corporate account", () => {
@@ -195,6 +260,6 @@ describe("sponsor redemption capability", () => {
         ]}
       />
     );
-    expect(screen.getByRole("button", { name: "Redeem units" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Withdraw" })).toBeTruthy();
   });
 });

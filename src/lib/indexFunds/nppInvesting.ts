@@ -59,7 +59,7 @@ const TURNS_PER_YEAR = 48;
 //
 // The per-turn GDP accrual below is the ONLY structural income into NPP
 // personal wealth (nppInvestmentCashAnchor + the fund positions it buys), and
-// nothing ever consumes it — every other flow is an asset swap (bonds/shares/
+// nothing ever consumes it - every other flow is an asset swap (bonds/shares/
 // fund units) or an investment return. In autonomous/headless worlds that
 // made median NPP wealth a pure ramp (~₳666/turn for US = ₳2,664 per 4-turn
 // invest cycle; observed 12.5k → 168k over ~5 game-years, flat Gini because
@@ -68,19 +68,19 @@ const TURNS_PER_YEAR = 48;
 // Fix: damp the accrual linearly as wealth approaches a saturation target,
 // instead of adding an expense drain. Rationale: NPP personal wealth sits
 // entirely OUTSIDE the shadow-ledger perimeter (accounts.ts defines no NPP
-// account kind and this accrual emits no financialTxLog row — it is an
+// account kind and this accrual emits no financialTxLog row - it is an
 // uninstrumented modeled mint), so booking a drain as a `sink:` leg would
 // show up as unexplained money destruction with no matching instrumented
 // source. Minting less requires no ledger legs at all and can never debit,
-// so live-world NPPs above target simply stop accruing — no crash.
+// so live-world NPPs above target simply stop accruing - no crash.
 //
 // Equilibrium math: income i = GDPpc × investFraction(0.4) / 48 per turn;
 // damping d(W) = max(0, 1 − W / cap) with cap = NPP_WEALTH_SATURATION_YEARS ×
 // GDPpc. dW/dt = i·(1 − W/cap) ⇒ W(t) = cap·(1 − e^(−t/τ)), τ = cap/i =
 // (2 × 48) / 0.4 = 240 turns (5 game-years) in EVERY country. Steady state:
 // accrual → 0 at W = cap = 2 years of GDP-per-capita income (US ₳160k,
-// UK ₳92k, CN ₳25k, NG ₳4.4k) ≈ 2–3× median annual income (GDPpc runs above
-// the median), inside the intended 1–3× band. Above cap only genuine
+// UK ₳92k, CN ₳25k, NG ₳4.4k) ≈ 2-3× median annual income (GDPpc runs above
+// the median), inside the intended 1-3× band. Above cap only genuine
 // investment returns (dividends, coupons, NAV drift) move wealth, and those
 // are bounded by portfolio yield rather than compounding unbounded principal.
 
@@ -113,7 +113,7 @@ export function nppAccrualDampingMultiplier(
 }
 
 /**
- * NPP fund-investing runs every Nth turn rather than every turn — it's the
+ * NPP fund-investing runs every Nth turn rather than every turn - it's the
  * single biggest per-turn write-volume phase (one accrual + several position
  * writes for essentially every non-retired NPP). On the turns it runs, each
  * NPP invests N turns' worth of budget in one chunk (see the budgetMultiplier
@@ -219,7 +219,7 @@ function assertCompensationCount(
 }
 
 /**
- * Pure (no IO) fund selection for one NPP's budget — split out unchanged from
+ * Pure (no IO) fund selection for one NPP's budget - split out unchanged from
  * the original per-NPP loop so the batched rewrite below can call it without
  * touching the DB. Same domestic/global/sector allocation + deterministic
  * sector-selection-by-ID-hash logic as before, byte-identical output for the
@@ -287,12 +287,12 @@ function buildNppSubscriptions(
  *
  * Batched rewrite (2026-07): the original version did this per-NPP with an
  * awaited DB round-trip inside the loop (accrual, then per-subscription
- * debit+credit+fund-update+tx-insert) — ~5-10 sequential round-trips per NPP.
+ * debit+credit+fund-update+tx-insert) - ~5-10 sequential round-trips per NPP.
  * At 10k+ NPPs that's 50k-100k+ sequential awaits in one turn phase, found via
  * the headless sim harness to be THE dominant cost of a turn (turnLogs showed
  * ~97s of a ~108s turn with zero telemetry, traced to this exact function via
  * the indexFunds phase). Rewritten as: (1) compute every NPP's accrual +
- * subscriptions in memory (pure, no IO — extracted to buildNppSubscriptions),
+ * subscriptions in memory (pure, no IO - extracted to buildNppSubscriptions),
  * (2) one bulkWrite for all accruals, (3) one bulkWrite for all debits (same
  * $gte guard as before, preserved per-op), (4) fund-level unitSupply/
  * cashAnchor updates AGGREGATED per fund across every NPP first, so a fund
@@ -304,7 +304,7 @@ function buildNppSubscriptions(
  *
  * Correctness: subscription amounts are constructed as fractions of `budget`
  * that sum to at most `budget` by construction (domesticBudget + globalBudget
- * + sectorBudget === budget, and each per-fund split further floors down) —
+ * + sectorBudget === budget, and each per-fund split further floors down) -
  * so investedThisNPP can never exceed the budget just accrued in this same
  * synchronous pass, and the debit guard (kept, not just assumed) will always
  * match. A `investedThisNPP > budget` check is kept anyway as a canary: if
@@ -338,7 +338,7 @@ export async function processNPPFundInvestments(
   const errors: string[] = [];
   const currentTurn = options?.currentTurn ?? 0;
   // When the caller throttles this pass to run every Nth turn (a performance
-  // measure — it's the single biggest per-turn write-volume phase), it passes
+  // measure - it's the single biggest per-turn write-volume phase), it passes
   // budgetMultiplier=N so each NPP invests N turns' worth of accrued budget in
   // one chunk. Net investment over time is unchanged; only the write cadence
   // drops to 1/N. Defaults to 1 (every-turn behavior).
@@ -353,7 +353,9 @@ export async function processNPPFundInvestments(
     };
   }
 
-  const activeFunds = await listActiveFunds(db);
+  const activeFunds = (await listActiveFunds(db)).filter(
+    (f) => f.mandate?.mode !== "picked_stocks"
+  );
   if (activeFunds.length === 0) {
     return {
       nppsProcessed: 0,
@@ -383,7 +385,7 @@ export async function processNPPFundInvestments(
     .toArray();
 
   // Archetypes for the gated autonomous redemption pass (Step 6b). Computed
-  // once here from the roster already in hand — no extra NPP read.
+  // once here from the roster already in hand - no extra NPP read.
   const archetypesByNppId = new Map<string, NppRiskArchetype>();
   for (const npp of npps) {
     archetypesByNppId.set(String(npp._id), determineNPPRiskArchetype(npp as NPP));
@@ -415,7 +417,7 @@ export async function processNPPFundInvestments(
   // One batched pass over NPP fund positions, valued at the active funds'
   // quotedNav, so the damping below can see where the accrual actually ends up
   // (nearly all of each cycle's budget is immediately converted into fund
-  // units — cash alone would never bind). holderKind: "npp" keeps player
+  // units - cash alone would never bind). holderKind: "npp" keeps player
   // positions entirely out of this mechanism. Bond/share holdings are
   // deliberately excluded from the measure: they are bounded asset swaps out
   // of the same cash account (bond principal returns to cash at maturity and
@@ -436,7 +438,7 @@ export async function processNPPFundInvestments(
     }
   }
 
-  // ── Pass 1: pure in-memory planning — no DB calls in this loop. ──────────
+  // ── Pass 1: pure in-memory planning - no DB calls in this loop. ──────────
   const now = new Date();
   const accrualOps: AnyBulkWriteOperation<Document>[] = [];
   const debitOps: AnyBulkWriteOperation<Document>[] = [];
@@ -453,7 +455,7 @@ export async function processNPPFundInvestments(
       // same total over time (N turns' worth at once). Multiplier is 1 for the
       // every-turn default. Then damp by current personal wealth (investment
       // cash + fund-position value) so accrual tapers to zero at the
-      // saturation target instead of ramping forever — see the #3245 block
+      // saturation target instead of ramping forever - see the #3245 block
       // comment on NPP_WEALTH_SATURATION_YEARS. Saturated NPPs are skipped
       // entirely (no accrual, no subscriptions), never debited.
       const wealthAnchor =
@@ -521,7 +523,7 @@ export async function processNPPFundInvestments(
       const nppCurrency =
         COUNTRY_CURRENCY_MAP[npp.countryId as keyof typeof COUNTRY_CURRENCY_MAP] ?? "USD";
       for (const { fund, amount } of subscriptions) {
-        // Skip near-insolvent funds — below 1 unit of anchor currency, NPPs would
+        // Skip near-insolvent funds - below 1 unit of anchor currency, NPPs would
         // mint millions of units per turn from negligible cash, exploding unit supply.
         if (amount <= 0 || fund.quotedNav < 1) continue;
         const units = Math.floor(amount / fund.quotedNav);
@@ -533,7 +535,7 @@ export async function processNPPFundInvestments(
 
       if (investedThisNPP > budget) {
         // Should be mathematically impossible (subscriptions sum to <= budget
-        // by construction) — canary, not a real guard. Drop rather than risk
+        // by construction) - canary, not a real guard. Drop rather than risk
         // an over-debit if this ever fires.
         errors.push(
           `NPP ${npp._id}: planned investment ${investedThisNPP} exceeds budget ${budget}, skipping subscriptions this turn`
@@ -621,7 +623,7 @@ export async function processNPPFundInvestments(
     return { nppsProcessed, totalInvested: 0, errors, redemptionsQueued, unitsRedeemed };
   }
 
-  // ── Pass 3: fund-level unitSupply/cashAnchor — ONE op per distinct fund, ──
+  // ── Pass 3: fund-level unitSupply/cashAnchor - ONE op per distinct fund, ──
   // aggregated across every NPP that bought into it, not one op per purchase.
   const perFundTotals = new Map<string, { units: number; cashAnchor: number }>();
   for (const p of planned) {
@@ -654,7 +656,7 @@ export async function processNPPFundInvestments(
 
   // ── Pass 4: position credits. Existing positions get the SAME weighted- ──
   // avgNavAnchor aggregation-pipeline update creditFundPosition uses (just
-  // batched); brand-new positions are pre-detected and inserted directly —
+  // batched); brand-new positions are pre-detected and inserted directly -
   // no per-position round-trip either way.
   const distinctNppIds = [...new Set(planned.map((p) => String(p.nppId)))].map(
     (id) => new ObjectId(id)
@@ -707,7 +709,7 @@ export async function processNPPFundInvestments(
       });
     }
   }
-  // ── Pass 5: transaction log — pure inserts, no contention. ────────────────
+  // ── Pass 5: transaction log - pure inserts, no contention. ────────────────
   const txDocs: IndexFundTransaction[] = planned.map((p) => ({
     _id: new ObjectId(),
     fundId: p.fund._id,

@@ -6,6 +6,20 @@ import { ensureIndex } from "./helpers";
 // src/lib/indexFunds/fundQueries.ts.
 export async function seedIndexFundIndexes(db: Db, log: (msg: string) => void) {
   log("Index fund indexes:");
+  await ensureIndex(
+    db,
+    "indexFundCommands",
+    { "subscription.status": 1, "subscription.dueTurn": 1, "subscription.fundId": 1 },
+    { name: "indexFundCommands_due_subscriptions", background: true },
+    log
+  );
+  await ensureIndex(
+    db,
+    "indexFundCommands",
+    { "subscription.fundId": 1, "subscription.characterId": 1, "subscription.status": 1 },
+    { name: "indexFundCommands_viewer_subscriptions", background: true },
+    log
+  );
 
   // Fund detail pages and API routes look funds up by slug
   await ensureIndex(
@@ -82,7 +96,7 @@ export async function seedIndexFundIndexes(db: Db, log: (msg: string) => void) {
     log
   );
 
-  // Redemption queue drain — cron scans queued/partial entries per fund, FIFO
+  // Redemption queue drain - cron scans queued/partial entries per fund, FIFO
   await ensureIndex(
     db,
     "indexFundRedemptionQueue",

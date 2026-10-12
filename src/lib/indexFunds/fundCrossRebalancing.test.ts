@@ -72,6 +72,33 @@ describe("planFundCrossRebalancing", () => {
     expect(plans[0].valueAnchor).toBeCloseTo(75_000, 0);
   });
 
+  it("excludes picked-stock funds from crossing", () => {
+    const corp = makeCorp();
+    const seller = makeFund({
+      cashAnchor: 0,
+      holdings: [{ corporationId: corp._id, shares: 1000, avgCostPerShareAnchor: 100 }],
+    });
+    const buyer = makeFund({
+      mandate: {
+        version: 1,
+        mode: "picked_stocks",
+        scope: "country",
+        kind: "broad",
+        countryId: "US",
+        anchorCurrencyCode: "USD",
+        cashWeightBps: 2500,
+        issuerCapBps: 1500,
+        stocks: [{ corporationId: corp._id.toString(), weightBps: 1500 }],
+      },
+      targetConstituents: [
+        { corporationId: corp._id, targetWeight: 0.15, marketCapAnchor: 1000000 },
+      ],
+    });
+    expect(
+      planFundCrossRebalancing({ funds: [seller, buyer], corps: [corp], exchangeRates: {} })
+    ).toEqual([]);
+  });
+
   it("limits transfer by buyer cash", () => {
     const corp = makeCorp();
     const corpId = corp._id;

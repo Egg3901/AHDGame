@@ -1,3 +1,5 @@
+import { bankMayManageFunds } from "./sponsorship/rules/eligibility";
+import { pickedStockPurchaseShares } from "./rules/mandate";
 /**
  * Public float trades freeze the existing price, IPO split and cash counterparty.
  * prepareFundFloatTrade records cash, custody and read models for recovery.
@@ -51,6 +53,12 @@ type FloatCorp = Pick<
 > & { name?: string; shareBuybackMode?: string };
 type CorpSnapshot = Pick<
   Corporation,
+  | "isPrivate"
+  | "hiddenFromExchange"
+  | "isNationalized"
+  | "countryOwnerId"
+  | "countryId"
+  | "userId"
   | "_id"
   | "shareholders"
   | "publicFloat"
@@ -107,6 +115,7 @@ function custody(input: Input, snapshot: CorpSnapshot, ipoShares: number) {
   const updatedHolder = {
     ...own,
     fundId: input.fund._id,
+    ...(input.fund.mandate?.mode === "picked_stocks" ? { passiveIndexEligible: false } : {}),
     shares: quote.fundShares,
     ...(quote.average !== undefined ? { avgCostPerShare: quote.average } : {}),
   };
@@ -123,6 +132,17 @@ function custody(input: Input, snapshot: CorpSnapshot, ipoShares: number) {
     shareholders: originalField(snapshot, "shareholders"),
     publicFloat: originalField(snapshot, "publicFloat"),
   };
+  if (input.direction === "buy" && input.fund.mandate?.mode === "picked_stocks") {
+    for (const field of [
+      "countryId",
+      "userId",
+      "isPrivate",
+      "hiddenFromExchange",
+      "isNationalized",
+      "countryOwnerId",
+    ] as const)
+      guard[field] = originalField(snapshot, field);
+  }
   const set: Document = { shareholders: after, publicFloat: quote.publicFloat };
   const undo: Document = { shareholders: before, publicFloat: snapshot.publicFloat ?? 0 };
   const flow = input.direction === "buy" ? "orderFlowWindowBuyValue" : "orderFlowWindowSellValue";
@@ -514,6 +534,7 @@ export async function prepareFundFloatTrade(db: Db, input: Input) {
     {
       projection: {
         cashAnchor: 1,
+        mandate: 1,
         holdings: 1,
         floatSettlementPlan: 1,
         floatSettlementGeneration: 1,
@@ -525,6 +546,12 @@ export async function prepareFundFloatTrade(db: Db, input: Input) {
     {
       projection: {
         shareholders: 1,
+        countryId: 1,
+        userId: 1,
+        isPrivate: 1,
+        hiddenFromExchange: 1,
+        isNationalized: 1,
+        countryOwnerId: 1,
         publicFloat: 1,
         pendingShareIssuance: 1,
         shareEscrowBalance: 1,
@@ -539,6 +566,45 @@ export async function prepareFundFloatTrade(db: Db, input: Input) {
   if ((fundRow.floatSettlementGeneration ?? 0) !== expected) return undefined;
   const fund = { ...input.fund, ...fundRow };
   if (input.direction === "buy" && fund.cashAnchor < input.amountAnchor) return undefined;
+  if (input.direction === "buy" && fund.mandate?.mode === "picked_stocks") {
+    const manager = fund.sponsorCorporationId
+      ? await db
+          .collection<Corporation>("corporations")
+          .findOne(
+            { _id: fund.sponsorCorporationId },
+            { projection: { bankCharter: 1, userId: 1 } }
+          )
+      : null;
+    if (
+      !bankMayManageFunds(manager?.bankCharter) ||
+      snapshot.isPrivate ||
+      snapshot.hiddenFromExchange ||
+      snapshot.isNationalized ||
+      snapshot.countryOwnerId ||
+      snapshot.countryId !== fund.mandate.countryId ||
+      String(input.corp._id) === String(fund.sponsorCorporationId) ||
+      String(snapshot.userId) === String(manager?.userId)
+    )
+      return undefined;
+  }
+  if (
+    input.direction === "buy" &&
+    fund.mandate?.mode === "picked_stocks" &&
+    pickedStockPurchaseShares({
+      mandate: fund.mandate,
+      corporationId: String(input.corp._id),
+      cashAnchor: fund.cashAnchor,
+      holdings: fund.holdings.map((h) => ({
+        corporationId: String(h.corporationId),
+        shares: h.shares,
+        valueAnchor: h.lastValueAnchor ?? h.shares * (h.avgCostPerShareAnchor ?? 0),
+      })),
+      requestedShares: input.shares,
+      priceAnchor: input.priceAnchor,
+    }) < input.shares
+  )
+    return undefined;
+
   const currency = equityPoolCurrency(input.corp);
   const route = cashRouting(input, snapshot, currency);
   if (!Number.isFinite(route.amount) || route.amount <= 0 || route.sides.length === 0)
@@ -642,6 +708,7 @@ export async function openFundFloatBatch(
       {
         projection: {
           cashAnchor: 1,
+          mandate: 1,
           holdings: 1,
           floatSettlementPlan: 1,
           floatSettlementGeneration: 1,
@@ -653,7 +720,12 @@ export async function openFundFloatBatch(
       .find({ _id: { $in: ctx.corps.map((corp) => corp._id) } }, { projection: snapshotProjection })
       .toArray(),
   ]);
-  if (!fundRow || fundRow.floatSettlementPlan?.state === "pending") return undefined;
+  if (
+    !fundRow ||
+    fundRow.mandate?.mode === "picked_stocks" ||
+    fundRow.floatSettlementPlan?.state === "pending"
+  )
+    return undefined;
   const expected = ctx.expectedGeneration ?? ctx.fund.floatSettlementGeneration ?? 0;
   if ((fundRow.floatSettlementGeneration ?? 0) !== expected) return undefined;
   const snapshots = new Map(snapshotRows.map((row) => [row._id.toString(), row]));
