@@ -90,7 +90,11 @@ async function secedeRegionInTransaction(
   const oldRaces = await db
     .collection("elections")
     .find(
-      { countryId: fromCountryId, state: regionId, status: { $in: ["active", "upcoming"] } },
+      {
+        countryId: fromCountryId,
+        state: regionId,
+        status: { $in: ["active", "upcoming", "completed"] },
+      },
       { projection: { _id: 1 } }
     )
     .toArray();

@@ -79,6 +79,14 @@ describe("commodityPriceTurn", () => {
       productsEnabled?: boolean;
     } = {}
   ) {
+    mockCollection.mockReturnValueOnce({
+      find: vi.fn().mockReturnValue(
+        createChainableCursor([
+          { _id: "SCO", status: "active" },
+          { _id: "WAL", status: "active" },
+        ])
+      ),
+    });
     // Product maps are projected only after the existing gameConfig flag read.
     mockCollection.mockReturnValueOnce({
       findOne: vi.fn().mockResolvedValue({

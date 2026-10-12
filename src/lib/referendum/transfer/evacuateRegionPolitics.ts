@@ -278,7 +278,11 @@ export async function evacuateRegionPolitics(
   //     the target's election engine re-spawns the region's own races next turn.
   const regionElections = await db
     .collection<{ _id: ObjectId }>("elections")
-    .find({ countryId: fromCountryId, state: regionId, status: { $in: ["active", "upcoming"] } })
+    .find({
+      countryId: fromCountryId,
+      state: regionId,
+      status: { $in: ["active", "upcoming", "completed"] },
+    })
     .project({ _id: 1 })
     .toArray();
   const electionIds = regionElections.map((e) => e._id);

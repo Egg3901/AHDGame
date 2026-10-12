@@ -1,5 +1,5 @@
 import type { Db } from "mongodb";
-import { COUNTRY_CONFIGS, COUNTRY_ORDER } from "@/lib/constants/countries";
+import { COUNTRY_CONFIGS } from "@/lib/constants/countries";
 import { getRegisteredCountryIds } from "@/lib/country/registeredCountries";
 import { getCountryState, updateCountryState } from "@/lib/countryState";
 import { getNationalStateId } from "@/lib/policy/nationalStateId";
@@ -65,9 +65,9 @@ export async function processSocialAxisDrift(
   // drift for all of them concurrently instead of a serial walk. Registered
   // only: a dissolved country's state doc is kept as a historical record, and
   // drifting it every turn would keep mutating the record after death.
-  const registered = new Set(await getRegisteredCountryIds(db));
+  const registered = await getRegisteredCountryIds(db);
   await Promise.all(
-    COUNTRY_ORDER.filter((countryId) => registered.has(countryId)).map(async (countryId) => {
+    registered.map(async (countryId) => {
       // Isolate each country: a single country's read/write failure must not
       // abort drift for the others (mirrors getCountryState's defensive shape).
       try {

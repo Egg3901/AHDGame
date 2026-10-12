@@ -1,3 +1,5 @@
+import * as mongoConnection from "@/lib/mongodb";
+import { ensureSecededChamberElections } from "@/lib/turn/perpetualElections/shared";
 import { resetCorpFxRateCacheForTests } from "@/lib/currency/corporationCapital";
 import { processReferendumLifecycle } from "./processReferendumLifecycle";
 import { processIndependenceDesireDrift } from "@/lib/turn/independenceDesireDrift";
@@ -97,6 +99,36 @@ describe.runIf(REAL_MONGO_ENABLED)("atomic referendum lifecycle against owned Mo
     expect(
       (await db.collection("governorOfficeState").findOne({ stateId: "SCO" }))?.gubernatorialActions
     ).toBe(5 - REQUEST_AP_COST);
+  });
+  it("preserves NIR constitutional cooldown after a newer peace ballot", async () => {
+    await db
+      .collection("governorOfficeState")
+      .insertOne({ countryId: "UK", stateId: "NIR", gubernatorialActions: 5 });
+    await db
+      .collection<{ _id: string; independenceDesire: { value: number } }>("macroMetrics")
+      .insertOne({ _id: "NIR", independenceDesire: { value: 70 } });
+    await db.collection("referendums").insertMany([
+      {
+        countryId: "UK",
+        regionId: "NIR",
+        kind: "reunification",
+        status: "completed",
+        cooldownReadyAtTurn: 580,
+        updatedAt: new Date(0),
+      },
+      {
+        countryId: "UK",
+        regionId: "NIR",
+        kind: "peace_agreement",
+        status: "completed",
+        updatedAt: new Date(),
+      },
+    ]);
+    expect((await requestReferendum(db, { countryId: "UK", stateId: "NIR" })).status).toBe(400);
+    expect(
+      (await db.collection("governorOfficeState").findOne({ stateId: "NIR" }))?.gubernatorialActions
+    ).toBe(5);
+    expect(await db.collection("referendums").countDocuments()).toBe(2);
   });
   it("retains both paid ground-game effects under concurrent spending", async () => {
     const refId = new ObjectId();
@@ -343,12 +375,27 @@ describe.runIf(REAL_MONGO_ENABLED)("atomic referendum lifecycle against owned Mo
           seatsHeld: 10,
         },
       ]);
+      const staleRace = new ObjectId();
+      await db.collection("elections").insertOne({
+        _id: staleRace,
+        countryId: "UK",
+        state: countryId,
+        electionType: "commons",
+        status: "completed",
+      });
+      await db
+        .collection("electionCandidates")
+        .insertOne({ electionId: staleRace, characterId: other });
       const result = await secedeRegion(db, {
         regionId: countryId,
         fromCountryId: "UK",
         currentTurn: 100,
       });
       expect(result.ok).toBe(true);
+      expect(await db.collection("elections").findOne({ _id: staleRace })).toBeNull();
+      expect(
+        await db.collection("electionCandidates").countDocuments({ electionId: staleRace })
+      ).toBe(0);
       const regions = await db.collection("states").find({ countryId }).toArray();
       expect(regions.reduce((sum, row) => sum + row.gdp, 0)).toBeCloseTo(100);
       expect(regions.reduce((sum, row) => sum + row.population, 0)).toBe(5000000);
@@ -380,6 +427,41 @@ describe.runIf(REAL_MONGO_ENABLED)("atomic referendum lifecycle against owned Mo
           .collection<{ _id: string; treasuryBalance: number }>("federalBudget")
           .findOne({ _id: countryId })
       ).toMatchObject({ treasuryBalance: 100 });
+      // Replay the real scheduler against the converted database, including retries.
+      const connection = vi.spyOn(mongoConnection, "getDb").mockResolvedValue(db);
+      try {
+        const type = countryId === "SCO" ? "holyrood" : "senedd";
+        const now = new Date();
+        await ensureSecededChamberElections(countryId as "SCO" | "WAL", type, now, undefined, 101);
+        await ensureSecededChamberElections(countryId as "SCO" | "WAL", type, now, undefined, 101);
+        expect(await db.collection("elections").countDocuments({ countryId })).toBe(
+          regions.length * 3
+        );
+        await db.collection("elections").updateMany(
+          { countryId, electionType: `snap_${type}` },
+          {
+            $set: {
+              status: "resolved",
+              resolvedAtTurn: 148,
+              endTurn: 148,
+              updatedAt: new Date(0),
+            },
+          }
+        );
+        await ensureSecededChamberElections(countryId as "SCO" | "WAL", type, now, undefined, 149);
+        await ensureSecededChamberElections(countryId as "SCO" | "WAL", type, now, undefined, 149);
+        const regulars = await db
+          .collection("elections")
+          .find({ countryId, electionType: type })
+          .toArray();
+        expect(regulars).toHaveLength(regions.length);
+        expect(regulars.reduce((sum, race) => sum + race.totalSeats, 0)).toBe(
+          countryId === "SCO" ? 129 : 60
+        );
+        expect(regulars.every((race) => race.endTurn > 149)).toBe(true);
+      } finally {
+        connection.mockRestore();
+      }
     }
   );
   it("commits reunification with rescaled Dail mandates and one frozen public FX conversion", async () => {

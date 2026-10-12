@@ -28,7 +28,7 @@ const ACTIVE_STATUSES: ReferendumStatus[] = [
   "actuating",
 ];
 
-/** Terminal statuses whose most-recent row supplies the cooldown gate. */
+/** Terminal statuses whose longest constitutional cooldown supplies the gate. */
 const TERMINAL_STATUSES: ReferendumStatus[] = ["declined", "settled", "completed", "cancelled"];
 
 export interface RequestReferendumInput {
@@ -72,8 +72,12 @@ async function requestReferendumInTransaction(
     .updateOne({ countryId, stateId }, { $inc: { referendumRequestRevision: 1 } });
   const active = await refs.findOne({ regionId: stateId, status: { $in: ACTIVE_STATUSES } });
   const lastTerminal = await refs
-    .find({ regionId: stateId, status: { $in: TERMINAL_STATUSES } })
-    .sort({ updatedAt: -1 })
+    .find({
+      regionId: stateId,
+      kind: { $in: ["independence", "reunification"] },
+      status: { $in: TERMINAL_STATUSES },
+    })
+    .sort({ cooldownReadyAtTurn: -1, updatedAt: -1 })
     .limit(1)
     .toArray();
 

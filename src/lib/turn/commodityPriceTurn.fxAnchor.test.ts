@@ -102,7 +102,11 @@ describe("commodityPriceTurn sector currency anchoring", () => {
       updateOne: vi.fn().mockResolvedValue({}),
     };
     mockCollection.mockImplementation((name: string) =>
-      name === "gameConfig" ? ledgerConfig : dataCollection(name)
+      name === "gameConfig"
+        ? ledgerConfig
+        : name === "countryGameStates"
+          ? { find: () => createChainableCursor([]) }
+          : dataCollection(name)
     );
 
     await processCommodityPriceTurn(100);

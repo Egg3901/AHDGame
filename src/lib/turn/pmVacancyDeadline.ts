@@ -10,6 +10,7 @@
  * their deadline cleared before the watcher checks.
  */
 import type { Db } from "mongodb";
+import { getRegisteredCountryIds } from "@/lib/country/registeredCountries";
 import { getDb } from "@/lib/mongodb";
 import type { CountryId } from "@/lib/constants/countries";
 import { getCountryConfig, supportsSnapElections } from "@/lib/constants/countries";
@@ -32,7 +33,8 @@ export async function processPMVacancyDeadlines(
   const autoSnapsFired: CountryId[] = [];
   const preset = await getGameStatePreset(db);
 
-  for (const countryId of getParliamentaryCountryIds(preset)) {
+  const registered = new Set(await getRegisteredCountryIds(db));
+  for (const countryId of getParliamentaryCountryIds(preset).filter((id) => registered.has(id))) {
     const config = getCountryConfig(countryId, preset);
     if (!supportsSnapElections(config)) continue;
 

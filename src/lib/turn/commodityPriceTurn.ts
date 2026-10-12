@@ -67,7 +67,7 @@ import {
   activeExtractionContractFilter,
 } from "@/lib/db/collections/extractionContracts";
 import type { State } from "@/lib/db/types/state";
-import { COUNTRY_ORDER } from "@/lib/constants/countries";
+import { getRegisteredCountryIds } from "@/lib/country/registeredCountries";
 import type { CountryId } from "@/lib/constants/countries";
 import type { GameState } from "@/lib/db/types/gameState";
 import { clearAllCommodities } from "@/lib/trade/snapshot";
@@ -157,20 +157,23 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
   // those bonds age out — the 1-year window keeps demand stable across countries with
   // infrequent sovereign issuance (JP, CA, DE).
   const debtIssuanceWindowStart = Math.max(0, turn - 48);
-  const ledgerConfig = await db.collection<GameConfig>("gameConfig").findOne(
-    { _id: "default" },
-    {
-      projection: {
-        marketSystemMode: 1,
-        productLinesV2Enabled: 1,
-        commandEconomyEnabled: 1,
-        retailDemandTransitionStartTurn: 1,
-        retailDemandTransitionTurns: 1,
-        commodityNominalPriceIndex: 1,
-        commodityNominalPriceIndexTurn: 1,
-      },
-    }
-  );
+  const [countries, ledgerConfig] = await Promise.all([
+    getRegisteredCountryIds(db),
+    db.collection<GameConfig>("gameConfig").findOne(
+      { _id: "default" },
+      {
+        projection: {
+          marketSystemMode: 1,
+          productLinesV2Enabled: 1,
+          commandEconomyEnabled: 1,
+          retailDemandTransitionStartTurn: 1,
+          retailDemandTransitionTurns: 1,
+          commodityNominalPriceIndex: 1,
+          commodityNominalPriceIndexTurn: 1,
+        },
+      }
+    ),
+  ]);
   const marketSystemMode = await getMarketSystemMode(ledgerConfig);
   const plantsLedgerEnabled = marketAtLeast(marketSystemMode, "plants");
   const productsEnabled = ledgerConfig?.productLinesV2Enabled === true && plantsLedgerEnabled;
@@ -821,7 +824,7 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
     );
 
   const tradeClearing = clearAllCommodities(
-    COUNTRY_ORDER,
+    countries,
     byCountry,
     affinityFor,
     capUnitsFor,
@@ -835,13 +838,13 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
   // book the engine actually clears on rather than the global aggregate
   // (ticket #1077).
   const reachableBooks = buildReachableBooks({
-    countries: COUNTRY_ORDER,
+    countries,
     balances: byCountry,
     clearing: tradeClearing,
     commodities: COMMODITY_TYPES,
     affinity: affinityFor,
   });
-  applyTradeConvergence(COUNTRY_ORDER, byCountry, tradeClearing, TRADE_PRICE_CONVERGENCE_K);
+  applyTradeConvergence(countries, byCountry, tradeClearing, TRADE_PRICE_CONVERGENCE_K);
 
   // Build nudge map from the parallel-fetched nudge docs
   const nudgeMap = buildNudgeMap(nudgeDocs);
@@ -959,7 +962,7 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
       plantsUnitsByCommodity: plantsLedgerEnabled ? plantsUnitsByCommodity : undefined,
       tradeClearing,
       reachableBooks,
-      countries: COUNTRY_ORDER,
+      countries,
     },
     turn,
     now
