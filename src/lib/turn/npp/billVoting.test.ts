@@ -137,7 +137,7 @@ function makeCtx(db: Db, overrides: Partial<NPPContext> = {}): NPPContext {
 /** Create a simple mock db that tracks updateOne calls per collection.
  * Optional `governorAddresses` seeding lets agenda-bonus tests provide active
  * national-address rows that processBillVoting will pre-fetch. */
-function makeMockDb(opts: { governorAddresses?: unknown[] } = {}) {
+function makeMockDb(opts: { governorAddresses?: unknown[]; referendums?: unknown[] } = {}) {
   const calls: Record<string, unknown[][]> = {
     bills: [],
     speakerNominations: [],
@@ -166,7 +166,13 @@ function makeMockDb(opts: { governorAddresses?: unknown[] } = {}) {
       find: vi.fn(() => ({
         toArray: vi
           .fn()
-          .mockResolvedValue(name === "governorAddresses" ? (opts.governorAddresses ?? []) : []),
+          .mockResolvedValue(
+            name === "governorAddresses"
+              ? (opts.governorAddresses ?? [])
+              : name === "referendums"
+                ? (opts.referendums ?? [])
+                : []
+          ),
       })),
     })),
     _calls: calls,
@@ -1399,4 +1405,84 @@ it("votes on legacy UK national bills only through Commons", async () => {
   const update = db._calls.bills[0][1] as { $set: Record<string, unknown> };
   expect(Object.keys(update.$set)).toContain(`votes.npp_${uk._id}`);
   expect(Object.keys(update.$set)).not.toContain(`votes.npp_${us._id}`);
+});
+
+describe("referendum constitutional consent", () => {
+  it.each([
+    ["yes", "for"],
+    ["no", "against"],
+    ["none", "for"],
+  ] as const)("uses a %s declaration through the real voting pipeline", async (stance, verdict) => {
+    const npp = makeNPP({ countryId: "UK", homeState: "SCO" });
+    const bill = makeBill({
+      countryId: "UK",
+      originChamber: "commons",
+      currentChamber: "commons",
+      category: "independence",
+      provisions: [],
+      referendumConsent: {
+        regionId: "SCO",
+        yesShare: 65,
+        partyPositions: stance === "none" ? [] : [{ partyId: "1", side: stance }],
+      },
+    });
+    const db = makeMockDb();
+    const ctx = makeCtx(db, {
+      activeBills: [bill],
+      nppOfficials: [
+        makeOfficial(npp._id, "house", { countryId: "UK", officeType: "commons", state: "SCO" }),
+      ],
+      nppMap: new Map([[String(npp._id), npp]]),
+    });
+    const { processBillVoting } = await import("./billVoting");
+    expect(await processBillVoting(ctx)).toBe(1);
+    expect(db._calls.bills[0][1]).toMatchObject({ $set: { [`votes.npp_${npp._id}`]: verdict } });
+  });
+  it.each(["UK", "IE"] as const)(
+    "repairs legacy abstentions in %s without leaking UK party IDs",
+    async (countryId) => {
+      const npp = makeNPP({ countryId, homeState: "NIR" });
+      const bill = makeBill({
+        countryId,
+        currentChamber: countryId === "UK" ? "commons" : "dail",
+        category: "reunification",
+        provisions: [],
+        votes: { [`npp_${npp._id}`]: "abstain" },
+        votesAbstain: 7,
+      });
+      const db = makeMockDb({
+        referendums: [
+          {
+            countryId: "UK",
+            westminsterBillId: countryId === "UK" ? bill._id : new ObjectId(),
+            dailBillId: countryId === "IE" ? bill._id : null,
+            regionId: "NIR",
+            yesShare: 65,
+            partyPositions: [{ partyId: "1", side: "no" }],
+          },
+        ],
+      });
+      const ctx = makeCtx(db, {
+        activeBills: [bill],
+        nppOfficials: [
+          makeOfficial(npp._id, "house", {
+            countryId,
+            officeType: countryId === "UK" ? "commons" : "dail",
+            seatsHeld: 7,
+          }),
+        ],
+        nppMap: new Map([[String(npp._id), npp]]),
+      });
+      const { processBillVoting } = await import("./billVoting");
+      expect(await processBillVoting(ctx)).toBe(1);
+      expect(db._calls.bills[0][1]).toMatchObject({
+        $inc: {
+          votesAbstain: -7,
+          votesFor: countryId === "IE" ? 7 : 0,
+          votesAgainst: countryId === "UK" ? 7 : 0,
+        },
+        $set: { referendumConsent: { yesShare: 65 } },
+      });
+    }
+  );
 });

@@ -1,3 +1,4 @@
+import { withSessionDb } from "@/lib/db/sessionDb";
 /**
  * Preset-driven ground-game spend on a referendum. A spender picks a named
  * action card (the preset catalog) and a target — the whole electorate (the
@@ -40,16 +41,31 @@ export interface GroundGameResult {
 }
 
 export async function spendGroundGame(db: Db, input: GroundGameInput): Promise<GroundGameResult> {
+  return withSessionDb(db, (transactionDb) => spendGroundGameInTransaction(transactionDb, input));
+}
+
+async function spendGroundGameInTransaction(
+  db: Db,
+  input: GroundGameInput
+): Promise<GroundGameResult> {
   const preset = findGroundGamePreset(input.presetId);
   if (!preset) return { status: 400, body: { error: "Unknown campaign action." } };
 
+  if (!ObjectId.isValid(input.referendumId))
+    return { status: 400, body: { error: "Invalid referendum ID." } };
+  const currentTurn = await getCurrentTurn(db);
   const refs = getReferendumCollection(db);
   const ref = await refs.findOne({ _id: new ObjectId(input.referendumId) });
   if (!ref) return { status: 404, body: { error: "Referendum not found." } };
-  if (ref.status !== "campaigning") {
+  if (
+    ref.status !== "campaigning" ||
+    (ref.campaignCloseTurn != null && currentTurn >= ref.campaignCloseTurn)
+  ) {
     return { status: 400, body: { error: "No active campaign for this referendum." } };
   }
   const baseline = ref.cohortBaseline ?? [];
+  if (baseline.length === 0)
+    return { status: 400, body: { error: "Campaign electorate is still being prepared." } };
   const target = input.target;
   if (target !== "whole" && !baseline.some((c) => c.groupId === target.groupId)) {
     return { status: 400, body: { error: "Unknown target cohort." } };
@@ -123,7 +139,7 @@ export async function spendGroundGame(db: Db, input: GroundGameInput): Promise<G
   const priorYesShare = referendumYesShare(ref);
   const yesShare = referendumYesShare({ ...ref, cohortModifiers: mods });
   await refs.updateOne(
-    { _id: ref._id },
+    { _id: ref._id, status: "campaigning" },
     { $set: { cohortModifiers: mods, groundGameUnits: ledger, yesShare, updatedAt: new Date() } }
   );
 

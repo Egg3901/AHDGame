@@ -1,3 +1,4 @@
+import { withSessionDb, afterCommit, unboundDb } from "@/lib/db/sessionDb";
 /**
  * Atomic driver that stands a seceding UK region up as a sovereign country
  * (Scotland / Wales). Composes the SP2b + SP2c steps in dependency order,
@@ -69,6 +70,16 @@ function isSecedingCountryId(id: string): id is SecedingCountryId {
 }
 
 export async function secedeRegion(db: Db, args: SecedeRegionArgs): Promise<SecedeRegionResult> {
+  return withSessionDb(db, (transactionDb) =>
+    secedeRegionInTransaction(transactionDb, args, unboundDb(db))
+  );
+}
+
+async function secedeRegionInTransaction(
+  db: Db,
+  args: SecedeRegionArgs,
+  originalDb: Db
+): Promise<SecedeRegionResult> {
   const { regionId, fromCountryId, currentTurn } = args;
   if (!isSecedingCountryId(regionId)) return { ok: false, skipped: "unsupported-region" };
   const toCountryId = regionId;
@@ -96,19 +107,21 @@ export async function secedeRegion(db: Db, args: SecedeRegionArgs): Promise<Sece
   const split = await splitParties(db, regionId, fromCountryId, toCountryId);
   const carried = await carryOverOfficials(db, regionId, fromCountryId, toCountryId, split.idMap);
 
-  // 6. Stand up the devolved election slate (best-effort — the turn phases
-  // re-run each as a net next turn).
-  const standupNow = new Date();
-  for (const spawn of STANDUP_ELECTION_SPAWNERS[toCountryId]) {
-    await spawn(standupNow).catch((err) =>
-      console.error(`${regionId} standup election seed failed (retries next turn):`, err)
-    );
-  }
+  await afterCommit(db, async () => {
+    // 6. Stand up the devolved election slate (best-effort — the turn phases
+    // re-run each as a net next turn).
+    const standupNow = new Date();
+    for (const spawn of STANDUP_ELECTION_SPAWNERS[toCountryId]) {
+      await spawn(standupNow).catch((err) =>
+        console.error(`${regionId} standup election seed failed (retries next turn):`, err)
+      );
+    }
 
-  // 7. Recompute rump-UK + the new country's national figures.
-  await computeNationalMetrics(db).catch((err) =>
-    console.error(`${regionId} secession national-metrics recompute failed:`, err)
-  );
+    // 7. Recompute rump-UK + the new country's national figures.
+    await computeNationalMetrics(originalDb).catch((err) =>
+      console.error(`${regionId} secession national-metrics recompute failed:`, err)
+    );
+  });
 
   // 8. Country-history events for both sides.
   const details = { regionId, fromCountryId, toCountryId };

@@ -1,3 +1,12 @@
+vi.mock("./convertTransferredResidentsCurrency", () => ({
+  convertTransferredResidentsCurrency: vi.fn().mockResolvedValue(undefined),
+}));
+vi.mock("@/lib/db/sessionDb", () => ({
+  boundSession: () => undefined,
+  unboundDb: (db: unknown) => db,
+  withSessionDb: (_db: unknown, work: (db: unknown) => Promise<unknown>) => work(_db),
+  afterCommit: (_db: unknown, effect: () => Promise<unknown>) => effect(),
+}));
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { type Db } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";

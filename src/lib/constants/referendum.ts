@@ -24,9 +24,8 @@ export const DECLINE_DESIRE_BUMP = 5;
 export const SETTLED_COOLDOWN_TURNS = 480;
 /** A No vote dampens desire back to the unionist baseline. */
 export const SETTLED_DESIRE_TARGET = 30;
-/** Post-pass conversion window: a passed referendum sits in `actuating` for this
- *  many turns, during which an admin may resolve it early or block it. If
- *  neither happens, it auto-converts when the window closes. */
+/** Parliamentary consent voting period. Government-formation pauses and Royal
+ * Assent may finish later; conversion always requires enacted consent. */
 export const CONVERSION_WINDOW_TURNS = 24;
 
 /** `yesShare` must strictly EXCEED this to pass. */

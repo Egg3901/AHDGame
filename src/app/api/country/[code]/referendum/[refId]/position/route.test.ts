@@ -1,3 +1,8 @@
+// The route exercises the domain shell against an in-memory DB. Transaction
+// behavior is covered by the real-Mongo lifecycle suite.
+vi.mock("@/lib/db/sessionDb", () => ({
+  withSessionDb: (db: unknown, work: (db: unknown) => Promise<unknown>) => work(db),
+}));
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { ObjectId } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";

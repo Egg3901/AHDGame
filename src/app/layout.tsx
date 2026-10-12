@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import {
   isClientShellUserAgent,
   isInAppWebViewUserAgent,
+  isIosStoreAppUserAgent,
   isStoreAppUserAgent,
 } from "@/lib/displayMode";
 import { Fraunces, Geist, Geist_Mono, JetBrains_Mono, Lora } from "next/font/google";
@@ -229,6 +230,7 @@ export default async function RootLayout({
   const isNativeApp = isInAppWebViewUserAgent(userAgent);
   const isClientShell = isClientShellUserAgent(userAgent);
   const isStoreApp = isStoreAppUserAgent(userAgent);
+  const isIosStoreApp = isIosStoreAppUserAgent(userAgent);
   const host = requestHeaders.get("host");
   const pathname = requestHeaders.get("x-pathname") ?? "/";
   const displayMode = cookieStore.get("ahd-display-mode")?.value as
@@ -328,6 +330,7 @@ export default async function RootLayout({
     <html
       lang={locale}
       data-store-app={isStoreApp ? "true" : undefined}
+      data-store-os={isStoreApp ? (isIosStoreApp ? "ios" : "android") : undefined}
       data-interface={interfaceMode}
       className={`${geistSans.variable} ${geistMono.variable} ${lora.variable} ${fraunces.variable} ${jetbrainsMono.variable}`}
     >

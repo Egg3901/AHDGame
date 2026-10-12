@@ -29,6 +29,7 @@ async function createConsentBill(
     sponsorName: string;
     currentTurn: number;
     category?: string;
+    ref: Referendum;
   }
 ): Promise<ObjectId> {
   const now = new Date();
@@ -52,6 +53,17 @@ async function createConsentBill(
     votes: {},
     category: args.category ?? "reunification",
     provisions: [],
+    referendumConsent: {
+      regionId: args.ref.regionId,
+      yesShare: args.ref.result?.finalYesShare ?? args.ref.yesShare,
+      partyPositions: (args.countryId === args.ref.countryId
+        ? (args.ref.partyPositions ?? [])
+        : []
+      ).map(({ partyId, side }) => ({
+        partyId,
+        side,
+      })),
+    },
     proposedAt: now,
     votingStartedAt: now,
     votingEndsAt: new Date(now.getTime() + CONVERSION_WINDOW_TURNS * APPROX_TURN_MS),
@@ -72,6 +84,7 @@ export async function createReunificationConsentBills(
   const toCountry = (ref.targetCountryId ?? "IE") as CountryId; // IE (admitting)
 
   const westminsterBillId = await createConsentBill(db, {
+    ref,
     countryId: fromCountry,
     title: "Northern Ireland (Reunification) Bill",
     summary:
@@ -85,6 +98,7 @@ export async function createReunificationConsentBills(
   const irelandIsPlayerEnabled = await isCountryEnabledForPlayers(db, toCountry);
   const dailBillId = irelandIsPlayerEnabled
     ? await createConsentBill(db, {
+        ref,
         countryId: toCountry,
         title: "Reunification with Northern Ireland",
         summary:
@@ -110,6 +124,7 @@ export async function createIndependenceConsentBill(
 ): Promise<{ westminsterBillId: ObjectId }> {
   const regionName = getCountryConfig(ref.regionId as CountryId)?.name ?? ref.regionId;
   const westminsterBillId = await createConsentBill(db, {
+    ref,
     countryId: ref.countryId, // UK (releasing)
     title: `${regionName} (Independence) Bill`,
     summary:

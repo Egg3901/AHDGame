@@ -1,3 +1,9 @@
+vi.mock("@/lib/db/sessionDb", () => ({
+  boundSession: () => undefined,
+  unboundDb: (db: unknown) => db,
+  withSessionDb: (_db: unknown, work: (db: unknown) => Promise<unknown>) => work(_db),
+  afterCommit: (_db: unknown, effect: () => Promise<unknown>) => effect(),
+}));
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { type Db } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
@@ -73,7 +79,7 @@ describe("requestReferendum", () => {
     expect(insertArg.yesShare).toBe(70);
     expect(insertArg.campaignBaseYesShare).toBe(70);
 
-    const incArg = db.collectionMocks["governorOfficeState"].updateOne.mock.calls[0][1];
+    const incArg = db.collectionMocks["governorOfficeState"].updateOne.mock.calls.at(-1)![1];
     expect(incArg.$inc.gubernatorialActions).toBe(-REQUEST_AP_COST);
   });
 
@@ -162,6 +168,33 @@ describe("requestReferendum", () => {
     });
     expect(r.status).toBe(200);
     // AP not decremented on override.
-    expect(db.collectionMocks["governorOfficeState"].updateOne).not.toHaveBeenCalled();
+    expect(
+      db.collectionMocks["governorOfficeState"].updateOne.mock.calls.every(
+        (call) => call[1].$inc?.gubernatorialActions == null
+      )
+    ).toBe(true);
+  });
+  it("does not create a referendum when the conditional AP debit fails", async () => {
+    seed(db, { desire: 70, ap: 5 });
+    db.collection("governorOfficeState")
+      .updateOne.mockResolvedValueOnce({ modifiedCount: 1 })
+      .mockResolvedValueOnce({ modifiedCount: 0 });
+    const result = await requestReferendum(db as unknown as Db, {
+      countryId: "UK",
+      stateId: "SCO",
+    });
+    expect(result.status).toBe(400);
+    expect(db.collection("referendums").insertOne).not.toHaveBeenCalled();
+  });
+  it("never lets an admin create a second active referendum", async () => {
+    seed(db, { desire: 70, ap: 5 });
+    db.collection("referendums").findOne.mockResolvedValue({ status: "campaigning" });
+    const result = await requestReferendum(db as unknown as Db, {
+      countryId: "UK",
+      stateId: "SCO",
+      adminOverride: true,
+    });
+    expect(result.status).toBe(400);
+    expect(db.collection("referendums").insertOne).not.toHaveBeenCalled();
   });
 });

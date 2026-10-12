@@ -1,3 +1,9 @@
+vi.mock("@/lib/db/sessionDb", () => ({
+  boundSession: () => undefined,
+  unboundDb: (db: unknown) => db,
+  withSessionDb: (_db: unknown, work: (db: unknown) => Promise<unknown>) => work(_db),
+  afterCommit: (_db: unknown, effect: () => Promise<unknown>) => effect(),
+}));
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { type Db } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
@@ -167,5 +173,18 @@ it("does not recount a resolved peace ballot on retry", async () => {
     result: null,
   });
   expect(recordWireEvent).not.toHaveBeenCalled();
+  expect(db.collection("macroMetrics").updateOne).not.toHaveBeenCalled();
+});
+
+it("does not create consent bills on a stale territorial count", async () => {
+  const db = createMockDb();
+  db.collection("referendums").updateOne.mockResolvedValue({ modifiedCount: 0 });
+  await applyReferendumOutcome(
+    db as unknown as Db,
+    refDoc(),
+    { passed: true, finalYesShare: 60, turnout: 60 },
+    200
+  );
+  expect(db.collection("bills").insertOne).not.toHaveBeenCalled();
   expect(db.collection("macroMetrics").updateOne).not.toHaveBeenCalled();
 });

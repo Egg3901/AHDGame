@@ -1,3 +1,4 @@
+import { prepareManagedMongo } from "@/lib/singleplayer/prepareManagedMongo";
 import { MongoClient, Db } from "mongodb";
 import { getValidatedEnv } from "@/lib/env";
 import {
@@ -60,7 +61,11 @@ function getClientPromise(): Promise<MongoClient> {
     });
     // Instrument every query (breadcrumbs + slow-query/failure capture) centrally.
     attachMongoCommandMonitor(client);
-    global._mongoClientPromise = client.connect().catch((err) => {
+    global._mongoClientPromise = (async () => {
+      if (process.env.SINGLEPLAYER === "1" && process.env.SINGLEPLAYER_MANAGED_MONGO === "1")
+        await prepareManagedMongo(uri);
+      return client.connect();
+    })().catch((err) => {
       global._mongoClientPromise = undefined;
       throw err;
     });

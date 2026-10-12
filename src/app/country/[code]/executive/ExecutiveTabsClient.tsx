@@ -77,6 +77,7 @@ export function ExecutiveTabsClient({
 }: Props) {
   const t = useTranslations("nav.devolution");
   const canSeePrivateTabs = viewerIsLeader || viewerIsAdmin;
+  const canSeeDevolution = countryId === COUNTRY_CONFIGS.UK.id && canSeePrivateTabs;
   // Seeded from `?tab=`, so a link can open a specific tab. Follows the pattern
   // `CentralBankClient` and `CongressClient` already use. Initial state only: once
   // the page is open, clicking a tab keeps working exactly as before without
@@ -90,14 +91,12 @@ export function ExecutiveTabsClient({
   const [active, setActive] = useState<TabKey>(() => {
     const requested = searchParams.get("tab");
     if (!isTabKey(requested)) return "overview";
+    if (requested === "devolution") return canSeeDevolution ? requested : "overview";
     const openable =
       requested === "overview" ||
       requested === "endorsements" ||
-      (requested === "devolution" && countryId === COUNTRY_CONFIGS.UK.id) ||
       (requested === "admin" ? viewerIsAdmin : canSeePrivateTabs);
-    return openable && (requested !== "devolution" || countryId === COUNTRY_CONFIGS.UK.id)
-      ? requested
-      : "overview";
+    return openable ? requested : "overview";
   });
   const conflictsEnabled = useConflictsEnabled();
   const ordersLabel = getExecutiveOrderNamePlural(countryId);
@@ -130,7 +129,7 @@ export function ExecutiveTabsClient({
             Endorsements
           </TabButton>
         )}
-        {countryId === COUNTRY_CONFIGS.UK.id && (
+        {canSeeDevolution && (
           <TabButton active={active === "devolution"} onClick={() => setActive("devolution")}>
             {t("tab")}
           </TabButton>
@@ -168,9 +167,7 @@ export function ExecutiveTabsClient({
           />
         </div>
       )}
-      {active === "devolution" && countryId === COUNTRY_CONFIGS.UK.id && (
-        <WestminsterDevolutionTab />
-      )}
+      {active === "devolution" && canSeeDevolution && <WestminsterDevolutionTab />}
       {active === "address" && <WhiteHouseAddressTab countryId={countryId} />}
       {active === "orders" && <WhiteHouseOrdersTab countryId={countryId} />}
       {active === "endorsements" && <WhiteHouseEndorsementsTab countryId={countryId} />}

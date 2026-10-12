@@ -77,3 +77,56 @@ describe("bank console charter quotes", () => {
     }
   );
 });
+
+describe("bank console loan book", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("reads only the active charter's loans after a recharter", async () => {
+    const db = createMockDb();
+    const corporation = {
+      _id: new ObjectId(),
+      name: "Rechartered bank",
+      liquidCapital: 0,
+      liquidCurrencyCode: "USD",
+      countryId: "US",
+      bankCharter: {
+        type: "retail",
+        status: "active",
+        currency: "USD",
+        charteredTurn: 20,
+        postedCapital: 1000,
+        cashReserves: 1000,
+        totalLoans: 0,
+        depositOffset: 0,
+        lendingOffset: 0,
+        blacklist: {},
+      },
+    };
+    mocks.getDb.mockResolvedValue(db);
+    mocks.resolveCorporation.mockResolvedValue({ ok: true, corporation });
+    db.collection("gameState");
+    db.collectionMocks.gameState!.findOne.mockResolvedValue({
+      _id: "current",
+      preset: "2019-default",
+    });
+    db.collection("gameConfig");
+    db.collectionMocks.gameConfig!.findOne.mockResolvedValue({ privateBankingEnabled: true });
+    db.collection("corporateSectors");
+    db.collectionMocks.corporateSectors!.findOne.mockResolvedValue({ _id: new ObjectId() });
+
+    await GET(new Request("http://localhost/api/banking/corporation/1"), {
+      params: Promise.resolve({ id: "1" }),
+    });
+
+    db.collection("bankLoans");
+    const find = db.collectionMocks.bankLoans!.find;
+    expect(find).toHaveBeenCalled();
+    expect(find.mock.calls[0]![0]).toEqual({
+      bankCorporationId: corporation._id,
+      $or: [
+        { charteredTurn: 20 },
+        { charteredTurn: { $exists: false }, originatedTurn: { $gte: 20 } },
+      ],
+    });
+  });
+});

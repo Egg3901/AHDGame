@@ -1,3 +1,4 @@
+import { recenterLeans } from "./rules/cohorts";
 /**
  * Pure cohort engine for referendums. A region's electorate is split into
  * demographic cohorts; each has a Yes-lean re-centered to the region's desire
@@ -111,7 +112,6 @@ export function buildReferendumCohorts(
     }))
   );
   // Re-center: additive shift so the weighted aggregate == regionDesire.
-  const agg = aggregateYesShare(raw, [], 0);
-  const shift = regionDesire - agg;
-  return raw.map((c) => ({ ...c, yesLean: clamp(c.yesLean + shift, 0, 100) }));
+  const leans = recenterLeans(raw, regionDesire);
+  return raw.map((c, i) => ({ ...c, yesLean: leans[i] }));
 }

@@ -70,6 +70,12 @@ export const PRESERVED: CollectionEntry[] = [
   { name: "botApiRequestLog", category: "preserved" },
   { name: "userApiKeys", category: "preserved" },
   { name: "discordBotFunds", category: "preserved" },
+  {
+    name: "promoGrants",
+    category: "preserved",
+    notes:
+      "Once-per-player promotional grant records. Preserved so a world reset cannot make a campaign payable twice.",
+  },
   { name: "userSubscriptions", category: "preserved", notes: "Patreon tier records." },
   {
     name: "patreonReconcileUnmatched",
