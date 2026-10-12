@@ -22,7 +22,7 @@ import {
   RD_INNOVATION_SCORE_THRESHOLD,
 } from "@/lib/constants/corporations";
 import { calculateCorpStrengthProjection } from "@/lib/corporations/strengthProjection";
-import { getCorpFxRate } from "@/lib/currency/corporationCapital";
+import { anchorToCorpLiquidCapital, getCorpFxRate } from "@/lib/currency/corporationCapital";
 import { SECTOR_STRATEGIES, getOperatingSectorType } from "@/lib/constants/sectorStrategies";
 import {
   TECH_DECADES,
@@ -38,6 +38,7 @@ import {
   getSectorTechEffects,
   SLOT_PARENT,
   techNodeCashCost,
+  techNodeCashFloorAnchor,
   tierImageUrl,
   describeTechEffect,
   techEffectCategory,
@@ -110,6 +111,13 @@ export async function GET(_request: Request, { params }: RouteParams) {
       dailyGrossRevenue = pricing.dailyGrossRevenueLocal;
       capacityFloorApplied = pricing.capacityFloorApplied;
     }
+    // Era-scaled floor, same as the charge in unlockTechNode (ticket #1506).
+    const corpFxRate = await getCorpFxRate(db, corporation);
+    const cashFloorLocal = anchorToCorpLiquidCapital(
+      techNodeCashFloorAnchor(currentYear),
+      corporation,
+      corpFxRate
+    );
     const rdScore = redact ? null : Math.floor(corporation.rdScore ?? 0);
     const liquidCapital = redact ? null : Math.floor(corporation.liquidCapital ?? 0);
 
@@ -122,7 +130,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
       const isPastDecade = passedDecades.has(decadeId);
       return getDecadeLaneNodes(operatingSectorType, decadeId, lane).map((node) => {
         const owned = unlocked.has(node.id);
-        const cashCost = techNodeCashCost(node, dailyGrossRevenue ?? 0);
+        const cashCost = techNodeCashCost(node, dailyGrossRevenue ?? 0, cashFloorLocal);
         // Past decades have both lanes auto-granted — no lane commitment applies.
         const laneLocked = isPastDecade ? false : !!committed && committed !== lane;
         const prereqIds = getNodePrereqIds(node);
@@ -265,9 +273,6 @@ export async function GET(_request: Request, { params }: RouteParams) {
       rdDemandFactor =
         Math.round(Math.min(1.15, Math.max(0.85, 1 + (avg - 1) * 0.25)) * 1000) / 1000;
     }
-
-    // FX rate for anchor-normalizing the R&D budget in rdGainPerTurn below.
-    const corpFxRate = await getCorpFxRate(db, corporation);
 
     return NextResponse.json({
       enabled: true,

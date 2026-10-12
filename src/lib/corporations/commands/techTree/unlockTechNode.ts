@@ -5,7 +5,11 @@ import type { CurrencyCode } from "@/lib/constants/currencies";
 
 import { getOperatingSectorType } from "@/lib/constants/sectorStrategies";
 import { corpDailyGrossRevenueLocal } from "@/lib/corporations/dailyGrossRevenue";
-import { resolveCorpLiquidCurrencyCode } from "@/lib/currency/corporationCapital";
+import {
+  anchorToCorpLiquidCapital,
+  getCorpFxRate,
+  resolveCorpLiquidCurrencyCode,
+} from "@/lib/currency/corporationCapital";
 import { emitTxStrict } from "@/lib/financialTxLog/emit";
 import {
   buildTechUnlockRefundUpdate,
@@ -19,6 +23,7 @@ import {
   getNodePrereqIds,
   sumStrengthGrants,
   techNodeCashCost,
+  techNodeCashFloorAnchor,
   type CanUnlockResult,
   type UnlockBlockReason,
 } from "@/lib/constants/techTree";
@@ -94,7 +99,16 @@ export async function unlockTechNode(
   }
   const { node } = preCheck;
 
-  const cashCost = techNodeCashCost(node, await corpDailyGrossRevenueLocal(db, corporation));
+  const [dailyGross, corpFxRate] = await Promise.all([
+    corpDailyGrossRevenueLocal(db, corporation),
+    getCorpFxRate(db, corporation),
+  ]);
+  const cashFloorLocal = anchorToCorpLiquidCapital(
+    techNodeCashFloorAnchor(currentYear),
+    corporation,
+    corpFxRate
+  );
+  const cashCost = techNodeCashCost(node, dailyGross, cashFloorLocal);
   const check: CanUnlockResult = canUnlock(corpView, nodeId, currentYear, {
     rdScore,
     cashAvailable,

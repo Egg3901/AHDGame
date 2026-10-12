@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ObjectId } from "mongodb";
-import { autoGrantedNodeIds } from "@/lib/constants/techTree";
+import { autoGrantedNodeIds, techNodeCashFloorAnchor } from "@/lib/constants/techTree";
 import { CAPACITY_ANCHOR_YEAR } from "@/lib/constants/capacityEconomy";
 import { ceoArchetypeModifiers } from "@/lib/turn/ceoArchetype";
 import { maybePushNppTechUnlock, pickBestNppTechNode } from "./corpBehaviorConfig";
@@ -50,12 +50,12 @@ function sector(corporationId: ObjectId): CorporateSector {
 
 describe("NPP tech spending budget", () => {
   it("prices an autonomous unlock from daily revenue without multiplying it by turns", () => {
-    const corp = corporation();
+    const corp = { ...corporation(), liquidCapital: 20_000_000 };
     const corpUpdates: Parameters<typeof maybePushNppTechUnlock>[0]["corpUpdates"] = [];
 
     maybePushNppTechUnlock({
       corp,
-      dailyGrossRevenueLocal: 10_000_000,
+      dailyGrossRevenueLocal: 100_000_000,
       techCurrentYear: 2020,
       turn: 200,
       now: new Date("2026-09-15T12:00:00Z"),
@@ -63,11 +63,48 @@ describe("NPP tech spending budget", () => {
     });
 
     expect(corpUpdates).toHaveLength(1);
-    expect(corpUpdates[0].update.$inc?.liquidCapital).toBe(-1_500_000);
+    expect(corpUpdates[0].update.$inc?.liquidCapital).toBe(-15_000_000);
+  });
+
+  it("charges the era-scaled floor when revenue is too small (ticket #1506)", () => {
+    const corp = { ...corporation(), liquidCapital: 20_000_000 };
+    const corpUpdates: Parameters<typeof maybePushNppTechUnlock>[0]["corpUpdates"] = [];
+
+    maybePushNppTechUnlock({
+      corp,
+      dailyGrossRevenueLocal: 0,
+      techCurrentYear: 2020,
+      turn: 200,
+      now: new Date("2026-09-15T12:00:00Z"),
+      corpUpdates,
+      corpFxRate: 1,
+    });
+
+    expect(corpUpdates).toHaveLength(1);
+    expect(corpUpdates[0].update.$inc?.liquidCapital).toBe(
+      -Math.round(techNodeCashFloorAnchor(2020))
+    );
+  });
+
+  it("skips the unlock when cash cannot cover the floor", () => {
+    const corp = corporation(); // 3M cash, floor is about 5.2M in 2020
+    const corpUpdates: Parameters<typeof maybePushNppTechUnlock>[0]["corpUpdates"] = [];
+
+    maybePushNppTechUnlock({
+      corp,
+      dailyGrossRevenueLocal: 0,
+      techCurrentYear: 2020,
+      turn: 200,
+      now: new Date("2026-09-15T12:00:00Z"),
+      corpUpdates,
+      corpFxRate: 1,
+    });
+
+    expect(corpUpdates).toHaveLength(0);
   });
 
   it("does not spend the opening cash twice after capacity reinvestment", () => {
-    const corp = corporation();
+    const corp = { ...corporation(), liquidCapital: 6_000_000 };
     const decision = makeNppCorpDecision(
       {
         corp,

@@ -1,7 +1,12 @@
 import { describe, it, expect } from "vitest";
 import { getResearchableDecades, getDecadeForYear, TECH_DECADES } from "./decades";
 import { TECH_TREE, corpNodeId, sectorNodeId } from "./nodes";
-import { techNodeCashCost } from "./costs";
+import {
+  TECH_NODE_CASH_FLOOR_ANCHOR,
+  techNodeCashCost,
+  techNodeCashFloorAnchor,
+  techPriceLevelForYear,
+} from "./costs";
 import {
   canUnlock,
   getCommittedLane,
@@ -190,6 +195,36 @@ describe("cash cost", () => {
     const node = TECH_TREE.energy.find((n) => n.id === corpNodeId("2019", 1))!;
     expect(techNodeCashCost(node, 100_000)).toBe(15_000); // default 0.15
     expect(techNodeCashCost(node, 0)).toBe(0);
+  });
+
+  it("charges the larger of the revenue share and the floor (ticket #1506)", () => {
+    const node = TECH_TREE.energy.find((n) => n.id === corpNodeId("2019", 1))!;
+    // Zero-revenue corp pays the floor, not nothing.
+    expect(techNodeCashCost(node, 0, 5_000_000)).toBe(5_000_000);
+    // Small corp: 15% of 10M = 1.5M, below the floor.
+    expect(techNodeCashCost(node, 10_000_000, 5_000_000)).toBe(5_000_000);
+    // Large corp: revenue share wins, unchanged by the floor.
+    expect(techNodeCashCost(node, 550_000_000, 5_000_000)).toBe(82_500_000);
+    // Bad inputs never go negative or NaN.
+    expect(techNodeCashCost(node, Number.NaN, Number.NaN)).toBe(0);
+  });
+
+  it("scales the floor with the game year price level", () => {
+    expect(techPriceLevelForYear(2019)).toBe(1);
+    expect(techPriceLevelForYear(1953)).toBeCloseTo(0.03673);
+    expect(techPriceLevelForYear(1900)).toBeCloseTo(0.03673); // clamped
+    expect(techPriceLevelForYear(2100)).toBeCloseTo(1.28579); // clamped
+    // Midway between 2019 (1) and 2023 (1.14996).
+    expect(techPriceLevelForYear(2021)).toBeCloseTo(1.07498);
+    expect(techNodeCashFloorAnchor(2019)).toBe(TECH_NODE_CASH_FLOOR_ANCHOR);
+    expect(techNodeCashFloorAnchor(1953)).toBeCloseTo(183_650);
+    // Rises monotonically with the year.
+    let prev = 0;
+    for (let y = 1950; y <= 2030; y++) {
+      const v = techNodeCashFloorAnchor(y);
+      expect(v).toBeGreaterThanOrEqual(prev);
+      prev = v;
+    }
   });
 });
 

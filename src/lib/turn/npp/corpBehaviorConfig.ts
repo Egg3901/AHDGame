@@ -5,9 +5,13 @@ import {
   getTreeForType,
   sumStrengthGrants,
   techNodeCashCost,
+  techNodeCashFloorAnchor,
   type TechTreeNode,
 } from "@/lib/constants/techTree";
-import { resolveCorpLiquidCurrencyCode } from "@/lib/currency/corporationCapital";
+import {
+  anchorToCorpLiquidCapital,
+  resolveCorpLiquidCurrencyCode,
+} from "@/lib/currency/corporationCapital";
 import type { TechUnlockLedgerInput } from "@/lib/corporations/techTree/techUnlockLedger";
 import { getOperatingSectorType } from "@/lib/constants/sectorStrategies";
 
@@ -19,8 +23,13 @@ export function pickBestNppTechNode(
   corp: Corporation,
   currentYear: number,
   dailyGrossRevenue: number,
-  options: { cashReserve?: number } = {}
+  options: { cashReserve?: number; corpFxRate?: number } = {}
 ): { node: TechTreeNode; cashCost: number } | null {
+  const cashFloorLocal = anchorToCorpLiquidCapital(
+    techNodeCashFloorAnchor(currentYear),
+    corp,
+    options.corpFxRate ?? 1
+  );
   const rdScore = corp.rdScore ?? 0;
   const cashAvailable = Math.max(
     0,
@@ -33,7 +42,7 @@ export function pickBestNppTechNode(
       corp.mediaDiscriminator
     ) as Corporation["type"]
   )
-    .map((node) => ({ node, cashCost: techNodeCashCost(node, dailyGrossRevenue) }))
+    .map((node) => ({ node, cashCost: techNodeCashCost(node, dailyGrossRevenue, cashFloorLocal) }))
     .filter(
       ({ node, cashCost }) =>
         canUnlock(corp, node.id, currentYear, { rdScore, cashAvailable, cashCost }).ok
@@ -72,6 +81,8 @@ export function maybePushNppTechUnlock(args: {
   corpUpdates: NppTechCorpUpdate[];
   liquidCapitalDelta?: number;
   cashReserve?: number;
+  /** Corp currency per 1 ₳, for converting the era-scaled tech cash floor. */
+  corpFxRate?: number;
   /**
    * Ledger intents for `flushNppTechUnlockLedger` (ticket #1998). The cash
    * op above still owns the debit; this records what to verify and log
@@ -86,7 +97,7 @@ export function maybePushNppTechUnlock(args: {
     { ...corp, liquidCapital: cashAfterDecision },
     techCurrentYear,
     args.dailyGrossRevenueLocal,
-    { cashReserve: args.cashReserve }
+    { cashReserve: args.cashReserve, corpFxRate: args.corpFxRate }
   );
   if (!pick) return;
   const { node: techNode, cashCost } = pick;

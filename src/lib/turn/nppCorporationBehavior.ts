@@ -518,6 +518,7 @@ export async function processNppCorporationDecisions(
         corpUpdates,
         liquidCapitalDelta: decision.liquidCapitalDelta,
         cashReserve: decision.cashFloorLocal,
+        corpFxRate,
         techLedger,
       });
     }
