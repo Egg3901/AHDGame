@@ -75,7 +75,7 @@ export default function InputsOutputsPanel({
   const hasPerOutput = commodities.supplies.some((f) => f.soldFraction != null);
   // What the engine actually applied, floored at THROUGHPUT_MIN, the raw
   // availability ratio on the rows above is uncapped and is not the throttle.
-  const throttleApplied = commodities.throughput?.applied ?? commodities.throughput?.projected;
+  const throttleApplied = commodities.throughput?.applied ?? null;
   const inputBillSharePct =
     plants.pnl && plants.pnl.revenueAnchor > 0
       ? (plants.pnl.inputsAnchor / plants.pnl.revenueAnchor) * 100
@@ -196,26 +196,22 @@ export default function InputsOutputsPanel({
             </ul>
           )}
           {costliest && <InputOffersHint flow={costliest} />}
-          {commodities.throughput?.bindingInput && (
-            <p className="mt-2 rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-body-sm text-foreground">
-              Short supply of{" "}
-              <span className="font-semibold">
-                {COMMODITY_LABELS[commodities.throughput.bindingInput as CommodityType] ??
-                  commodities.throughput.bindingInput}
-              </span>{" "}
-              is holding your line back. That is the &quot;waiting on inputs&quot; slice in the run
-              meter above.
-              {throttleApplied != null && (
-                <>
-                  {" "}
-                  Your plants ran at{" "}
-                  <span className="font-semibold tabular-nums">{fmtPct(throttleApplied)}</span> of
-                  what they could have. A shortage never cuts you below {fmtPct(THROUGHPUT_MIN)}, so
-                  a worse world number than that does not bite any harder.
-                </>
-              )}
-            </p>
-          )}
+          {throttleApplied != null &&
+            throttleApplied < 0.999 &&
+            commodities.throughput?.bindingInput && (
+              <p className="mt-2 rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-body-sm text-foreground">
+                Last turn, short supply of{" "}
+                <span className="font-semibold">
+                  {COMMODITY_LABELS[commodities.throughput.bindingInput as CommodityType] ??
+                    commodities.throughput.bindingInput}
+                </span>{" "}
+                was the binding input. That was the &quot;waiting on inputs&quot; slice in the run
+                meter above. Your plants ran at{" "}
+                <span className="font-semibold tabular-nums">{fmtPct(throttleApplied)}</span> of
+                what they could have. A shortage never cuts you below {fmtPct(THROUGHPUT_MIN)}, so a
+                worse world number than that does not bite any harder.
+              </p>
+            )}
         </section>
 
         {/* Outputs ──────────────────────────────────────────────────────────*/}

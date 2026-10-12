@@ -179,9 +179,9 @@ export interface CommoditiesData {
   };
   /**
    * Throughput coupling (marketSystemMode >= "clearing"): input-availability
-   * throttle on realized output. `applied` is last turn's ramped factor;
-   * `projected` is the unramped Leontief minimum from current lagged
-   * balances. undefined when the mode is off.
+   * throttle on realized output. `applied` and `bindingInput` are last turn's
+   * recorded result; `projected` is the unramped Leontief minimum from current
+   * world balances. undefined when the mode is off.
    */
   throughput?: {
     applied: number | null;

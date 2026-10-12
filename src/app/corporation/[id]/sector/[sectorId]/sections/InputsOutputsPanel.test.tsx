@@ -65,6 +65,49 @@ const commodities: CommoditiesData = {
 const plants = { fillRate: 0.9 } as PlantsData;
 
 describe("InputsOutputsPanel layout", () => {
+  it("pairs an applied throttle with its recorded input, not the world projection", () => {
+    const throttled: CommoditiesData = {
+      ...commodities,
+      throughput: { bindingInput: "iron", applied: 0.85, projected: 0.5 },
+    };
+    render(
+      <InputsOutputsPanel
+        commodities={throttled}
+        plants={plants}
+        countryId="US"
+        isExtraction={false}
+        forexEnabled={false}
+        exchangeRates={{}}
+      />
+    );
+
+    const bindingInput = screen.getByText("Iron Ore");
+    const callout = bindingInput.closest("p");
+    expect(callout?.textContent).toContain(
+      "Last turn, short supply of Iron Ore was the binding input."
+    );
+    expect(callout?.textContent).toContain("85%");
+  });
+
+  it("does not call a projected shortage the cause of a throttle that has not been applied", () => {
+    const projected: CommoditiesData = {
+      ...commodities,
+      throughput: { bindingInput: "real_estate_services", applied: null, projected: 0.5 },
+    };
+    render(
+      <InputsOutputsPanel
+        commodities={projected}
+        plants={plants}
+        countryId="US"
+        isExtraction={false}
+        forexEnabled={false}
+        exchangeRates={{}}
+      />
+    );
+
+    expect(screen.queryByText(/waiting on inputs/i)).toBeNull();
+  });
+
   it("keeps buy and make columns from sharing a grid track", () => {
     const { container } = render(
       <InputsOutputsPanel
