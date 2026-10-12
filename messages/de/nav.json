@@ -31,6 +31,7 @@
       },
       "world": {
         "myCorporation": "Mein Unternehmen",
+        "subsidiaryGroup": "Unternehmensgruppe",
         "hallOfFame": "Ruhmeshalle",
         "nations": "Nationen & Weltkarte",
         "map": "Landeskarte",

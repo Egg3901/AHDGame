@@ -17,6 +17,10 @@
  */
 
 import type { Db } from "mongodb";
+import {
+  corporationWithReservedHoldings,
+  loadReservedCorporatePositionsByTarget,
+} from "@/lib/corporations/reservedCorporateHoldings";
 import type { Corporation } from "@/lib/db/types";
 import { getControllingCorporateParent } from "@/lib/corporations/corporateOwnership";
 
@@ -33,7 +37,10 @@ type GroupCorpRow = Pick<
 >;
 
 /** Resolve every corporate group in the world. */
-export async function resolveFormalizedGroups(db: Db): Promise<GroupMembership> {
+export async function resolveFormalizedGroups(
+  db: Db,
+  options: { includeReserved?: boolean } = {}
+): Promise<GroupMembership> {
   const corps = (await db
     .collection<Corporation>("corporations")
     .find(
@@ -49,12 +56,19 @@ export async function resolveFormalizedGroups(db: Db): Promise<GroupMembership> 
     )
     .toArray()) as GroupCorpRow[];
 
+  // Read surfaces must agree with parent authorization while a control block is listed for sale.
+  // Existing turn callers retain their established loading path; no extra reads when omitted.
+  const reserved = options.includeReserved
+    ? await loadReservedCorporatePositionsByTarget(db)
+    : null;
   const parentOf = new Map<string, string>();
   for (const corp of corps) {
     // Formalization is the gate. An unformalized corp that someone happens to
     // control is not part of anyone's tax group.
     if (corp.subsidiaryFormalizedAtTurn == null) continue;
-    const parent = getControllingCorporateParent(corp as Corporation);
+    const parent = getControllingCorporateParent(
+      corporationWithReservedHoldings(corp as Corporation, reserved?.get(corp._id.toString()) ?? [])
+    );
     if (!parent) continue;
     parentOf.set(corp._id.toString(), parent.corporationId.toString());
   }

@@ -8,6 +8,7 @@ import type { Corporation } from "@/lib/db/types";
 import { optimizeImage, IMAGE_PRESETS } from "@/lib/imageOptimize";
 import { isR2Enabled, uploadFile, deleteByPrefix } from "@/lib/r2";
 import { parseFormData } from "@/lib/api/validate";
+import { loadGroupManagement } from "@/lib/corporations/groups/management";
 import { resolveCorporation, requireCeo } from "@/lib/api/corporations/resolveQuery";
 
 const ALLOWED_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
@@ -72,6 +73,22 @@ export async function POST(request: Request) {
       return errorResponse(400, "You don't own a corporation");
     }
 
+    const target = formData.get("target");
+    if (target != null && target !== "group" && target !== "corporation") {
+      return errorResponse(400, "Invalid logo target.");
+    }
+    if (target === "group" && !(typeof corporationId === "string" && corporationId.length > 0)) {
+      return errorResponse(400, "Choose the parent corporation for the group logo.");
+    }
+    const groupTarget = target === "group";
+    if (groupTarget) {
+      const context = await loadGroupManagement(db, corporation, authUser.userId);
+      if (!context?.parent || !context.enabled || !context.root._id.equals(corporation._id)) {
+        return errorResponse(403, "Only the parent CEO can change the group logo.");
+      }
+    }
+    const storageKind = groupTarget ? "subsidiary-group-logos" : "corporation-logos";
+
     const rawBuffer = Buffer.from(await file.arrayBuffer());
     const { buffer: optimized, ext } = await optimizeImage(
       rawBuffer,
@@ -84,20 +101,20 @@ export async function POST(request: Request) {
 
     if (isR2Enabled()) {
       try {
-        await deleteByPrefix(`corporation-logos/${corporation._id.toString()}`);
+        await deleteByPrefix(`${storageKind}/${corporation._id.toString()}`);
       } catch {
         /* ignore delete errors */
       }
 
       url = await uploadFile(
-        `corporation-logos/${corporation._id.toString()}-${timestamp}.${ext}`,
+        `${storageKind}/${corporation._id.toString()}-${timestamp}.${ext}`,
         optimized
       );
     } else {
       const fs = await import("fs/promises");
       const path = await import("path");
 
-      const uploadsDir = path.join(process.cwd(), "uploads", "corporation-logos");
+      const uploadsDir = path.join(process.cwd(), "uploads", storageKind);
       await fs.mkdir(uploadsDir, { recursive: true });
 
       try {
@@ -113,13 +130,19 @@ export async function POST(request: Request) {
       const filePath = path.join(uploadsDir, filename);
       await fs.writeFile(filePath, optimized);
 
-      url = `/api/uploads/corporation-logos/${filename}`;
+      url = `/api/uploads/${storageKind}/${filename}`;
     }
 
     // Update corporation record
-    await db
-      .collection<Corporation>("corporations")
-      .updateOne({ _id: corporation._id }, { $set: { logoUrl: url, updatedAt: new Date() } });
+    await db.collection<Corporation>("corporations").updateOne(
+      { _id: corporation._id },
+      {
+        $set: {
+          [groupTarget ? "groupManagement.logoUrl" : "logoUrl"]: url,
+          updatedAt: new Date(),
+        },
+      }
+    );
 
     return NextResponse.json({ url });
   } catch (error) {

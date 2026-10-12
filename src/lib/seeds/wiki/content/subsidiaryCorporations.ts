@@ -42,6 +42,16 @@ The rebate is capped at what was actually paid in tax, so it can never turn into
 
 Weaker members of a group get pulled **up** toward the group's strongest Marketing Strength and Logistics Strength over time, never dragged down, so acquiring a struggling subsidiary never punishes an otherwise-strong parent. An ordinary member can be lifted to at most 60% of the group leader's strength; a corporation spun off from a current group member gets a more generous 85% ceiling for a limited window after the spin-off, reflecting inherited brand and process knowledge. The lift closes 5% of the remaining gap each turn, so it's a gradual convergence, not an instant boost.
 
+## Subsidiary Group hub
+
+Open the Subsidiary Group page from the link below My Corporation or from the group summary on a corporation page. Select members to compare their daily revenue, cash and operating footprint. Authorized CEOs can also inspect completed-turn results, valued using the exchange rate recorded in each snapshot. Combined figures include internal transactions; members still hold their own cash independently.
+
+The parent CEO can set a group name and logo and save subsidiary objectives. Player CEOs can acknowledge or decline their own suggestions. Automatic NPP objective execution is not active yet.
+
+The supply section saves Commercial independence or Group members first as the group's preference. Under Group members first, player CEOs can choose to receive group supplies. This is receiving-only and never commits their corporation's own output. Participation changes become effective next turn and remain bound to the same CEO and group. Under Commercial independence, Group receiving controls are hidden and the corporation's CEO Office setting is disabled with an explanation; the saved preference is retained.
+
+Internal supply coordination and policy forecasts are not connected to the turn engine yet. Saving these preferences does not move goods or cash. The intended supply rules use NPP-only automatic suppliers, 100% market benchmark pricing, existing contracts first, and limits on physical output, buyer need, funds and legal trade routes.
+
 ## Group balance sheet
 
 Your corporation page shows a read-only consolidated view of your group: total liquid capital, total sector revenue, sector count, and how many distinct industries and countries the group spans. This is a display aggregation only; each member still holds its own cash and shares independently.

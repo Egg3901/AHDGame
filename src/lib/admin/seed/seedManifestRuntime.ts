@@ -328,7 +328,12 @@ export const RUNTIME: CollectionEntry[] = [
   { name: "ukDevolution", category: "runtime" },
 
   // Corporations + markets
-  { name: "corporations", category: "runtime" },
+  {
+    name: "corporations",
+    category: "runtime",
+    notes:
+      "Group identity, objectives and CEO-bound receiving consent are embedded runtime state and reset with corporations.",
+  },
   { name: "corporationCeoVotes", category: "runtime" },
   { name: "corporationHistory", category: "runtime" },
   { name: "corporationPortfolioHistory", category: "runtime" },

@@ -2,6 +2,7 @@ import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
 import { ObjectId, type Db } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 
+vi.mock("@/lib/corporations/groups/management", () => ({ loadGroupManagement: vi.fn() }));
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 vi.mock("@/lib/api/requireAuth", () => ({ requireBasicAuth: vi.fn() }));
 vi.mock("@/lib/api/rateLimit", () => ({
@@ -152,5 +153,101 @@ describe("POST /api/upload/corporation-logo", () => {
       { _id: corpId },
       expect.objectContaining({ $set: expect.objectContaining({ logoUrl: expect.any(String) }) })
     );
+  });
+});
+
+describe("group logo upload target", () => {
+  it("uses separate storage and updates only the group logo", async () => {
+    const db = createMockDb(),
+      id = new ObjectId(),
+      userId = new ObjectId();
+    const { getDb } = await import("@/lib/mongodb");
+    vi.mocked(getDb).mockResolvedValue(db as unknown as Db);
+    const { requireBasicAuth } = await import("@/lib/api/requireAuth");
+    vi.mocked(requireBasicAuth).mockResolvedValue({
+      ok: true,
+      user: { userId: userId.toString() },
+    } as never);
+    const { resolveCorporation } = await import("@/lib/api/corporations/resolveQuery");
+    vi.mocked(resolveCorporation).mockResolvedValue({
+      ok: true,
+      corporation: { _id: id, userId },
+    } as never);
+    const { loadGroupManagement } = await import("@/lib/corporations/groups/management");
+    vi.mocked(loadGroupManagement).mockResolvedValue({
+      parent: true,
+      enabled: true,
+      root: { _id: id },
+    } as never);
+    const form = new FormData();
+    form.set("corporationId", id.toString());
+    form.set("target", "group");
+    form.set("file", new Blob(["raw"], { type: "image/png" }), "logo.png");
+    const { POST } = await import("./route");
+    expect(
+      (
+        await POST(
+          new Request("http://localhost/api/upload/corporation-logo", {
+            method: "POST",
+            body: form,
+          })
+        )
+      ).status
+    ).toBe(200);
+    const { uploadFile } = await import("@/lib/r2");
+    expect(uploadFile).toHaveBeenCalledWith(
+      expect.stringContaining("subsidiary-group-logos/"),
+      expect.any(Buffer)
+    );
+    expect(db.collectionMocks.corporations.updateOne).toHaveBeenCalledWith(
+      { _id: id },
+      {
+        $set: {
+          "groupManagement.logoUrl": expect.stringContaining("subsidiary-group-logos/"),
+          updatedAt: expect.any(Date),
+        },
+      }
+    );
+  });
+  it("rejects a group target when the CEO does not manage the root", async () => {
+    const db = createMockDb(),
+      id = new ObjectId(),
+      userId = new ObjectId();
+    const { getDb } = await import("@/lib/mongodb");
+    vi.mocked(getDb).mockResolvedValue(db as unknown as Db);
+    const { requireBasicAuth } = await import("@/lib/api/requireAuth");
+    vi.mocked(requireBasicAuth).mockResolvedValue({
+      ok: true,
+      user: { userId: userId.toString() },
+    } as never);
+    const { resolveCorporation } = await import("@/lib/api/corporations/resolveQuery");
+    vi.mocked(resolveCorporation).mockResolvedValue({
+      ok: true,
+      corporation: { _id: id, userId },
+    } as never);
+    const { loadGroupManagement } = await import("@/lib/corporations/groups/management");
+    vi.mocked(loadGroupManagement).mockResolvedValue({
+      parent: false,
+      enabled: true,
+      root: { _id: id },
+    } as never);
+    const form = new FormData();
+    form.set("corporationId", id.toString());
+    form.set("target", "group");
+    form.set("file", new Blob(["raw"], { type: "image/png" }), "logo.png");
+    const { POST } = await import("./route");
+    db.collection("corporations");
+    const count = db.collectionMocks.corporations.updateOne.mock.calls.length;
+    expect(
+      (
+        await POST(
+          new Request("http://localhost/api/upload/corporation-logo", {
+            method: "POST",
+            body: form,
+          })
+        )
+      ).status
+    ).toBe(403);
+    expect(db.collectionMocks.corporations.updateOne.mock.calls.length).toBe(count);
   });
 });

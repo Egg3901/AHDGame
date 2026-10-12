@@ -69,7 +69,7 @@ describe("buildWorldNavSections / looseWorldNavItems", () => {
       unionsEnabled: true,
     });
     const loose = looseWorldNavItems(items);
-    expect(loose.map((i) => i.id)).toEqual(["myCorporation", "myUnion"]);
+    expect(loose.map((i) => i.id)).toEqual(["myCorporation", "subsidiaryGroup", "myUnion"]);
 
     const groups = buildWorldNavSections(items);
     expect(groups.some((g) => g.items.some((i) => i.id === "myCorporation"))).toBe(false);
