@@ -169,6 +169,14 @@ export async function buildSectorCommoditySections(args: {
     sector.soldByCommodity && typeof sector.soldByCommodity === "object"
       ? sector.soldByCommodity
       : {};
+  // Each output's share of last turn's realized revenue (ticket 1507). Lets the
+  // page show a sale price per product on a multi-output sector instead of one
+  // blended average. Absent until the sector clears a turn with the field.
+  const revenueShareByCommodity: Partial<Record<string, number>> =
+    sector.revenueShareByCommodity && typeof sector.revenueShareByCommodity === "object"
+      ? sector.revenueShareByCommodity
+      : {};
+  const hasRevenueSplit = Object.keys(revenueShareByCommodity).length > 0;
 
   const supplies = supplyFlows.map((f) => {
     const dollarFlow = sectorRevenueAnchor * f.rate;
@@ -238,6 +246,9 @@ export async function buildSectorCommoditySections(args: {
       // a 2.7x shortage while oil, in glut, does not).
       ...(market.clearingEnabled && typeof soldByCommodity[f.commodity] === "number"
         ? { soldFraction: soldByCommodity[f.commodity] }
+        : {}),
+      ...(market.clearingEnabled && hasRevenueSplit
+        ? { revenueShare: revenueShareByCommodity[f.commodity] ?? 0 }
         : {}),
       capacityMultiplier,
     };
