@@ -1064,7 +1064,7 @@ function PrivateBankRow({
       <td className="px-4 py-3.5 text-right font-mono text-sm tabular-nums text-foreground">
         {formatBankMoney(bank.totalDeposits, bank.currency)}
       </td>
-      <td className="sticky right-0 z-10 border-l border-card-border bg-card px-4 py-3.5 transition-colors group-hover:bg-background/40">
+      <td className="sticky right-0 z-10 border-l border-card-border bg-card px-4 py-3.5 transition-colors group-hover:bg-card">
         <div className="flex items-center justify-end gap-2">
           {customerBank && hasCharacter ? (
             <>

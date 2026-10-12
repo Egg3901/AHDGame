@@ -56,6 +56,27 @@ export interface MarketContext {
   mediaEditorialEnabled?: boolean;
   /** Selected US media communications policy option, read only while gated on. */
   mediaRegulationPolicyOptionIndex?: number;
+  /** Explicit agreements claim these daily input units before an internal rebate. */
+  internalSupplyCommittedInputsBySectorId?: ReadonlyMap<string, ReadonlyMap<string, number>>;
+  internalSupplyTrades?: readonly (import("./internalSupply/rules").InternalSupplyTrade & {
+    commodity: import("@/lib/constants/commodities").CommodityType;
+    marketPrice: number;
+  })[];
+  internalSupplyReceiptsBySectorId?: ReadonlyMap<
+    string,
+    {
+      turn: number;
+      received: Partial<Record<import("@/lib/constants/commodities").CommodityType, number>>;
+      reserved: Partial<Record<import("@/lib/constants/commodities").CommodityType, number>>;
+    }
+  >;
+  /** Actual own-group reservations, replacing anonymous availability for touched inputs. */
+  internalInputAvailabilityBySectorId?: ReadonlyMap<
+    string,
+    ReadonlyMap<import("@/lib/constants/commodities").CommodityType, number>
+  >;
+  /** Equal-and-opposite per-turn discount cost, positive on suppliers, negative on buyers. */
+  internalSupplyDiscountCostBySectorId?: ReadonlyMap<string, number>;
   /**
    * Pre-pass clearing results per sector id (computed in the corp-phase entry
    * from lagged balances). Absent entries mean "no outputs" → factor 1.

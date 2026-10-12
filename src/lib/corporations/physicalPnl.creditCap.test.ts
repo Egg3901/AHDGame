@@ -178,3 +178,25 @@ describe("assemblePhysicalPnl policy-credit cap and net margin", () => {
     expect(pnl.netMarginPct).toBe(-50);
   });
 });
+
+it("books matching internal transfers without subsidy or residual caps swallowing one side", () => {
+  const base = {
+    hourlyRevenue: 1000,
+    inputsCost: 400,
+    laborCost: 100,
+    upkeep: 10,
+    complianceCost: 10,
+    otherOpex: -10000,
+    financialLegs: 0,
+    growthCost: 0,
+    policyCredit: 10000,
+  };
+  const before = assemblePhysicalPnl(base);
+  const buyer = assemblePhysicalPnl({ ...base, internalSupplyDiscountCost: -20 });
+  const seller = assemblePhysicalPnl({ ...base, internalSupplyDiscountCost: 20 });
+  expect(buyer.totalCost - before.totalCost).toBe(-20);
+  expect(seller.totalCost - before.totalCost).toBe(20);
+  expect(buyer.totalCost + seller.totalCost).toBe(2 * before.totalCost);
+  expect(buyer.policyCredit).toBe(before.policyCredit);
+  expect(buyer.otherOpex).toBe(before.otherOpex);
+});

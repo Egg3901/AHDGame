@@ -105,6 +105,7 @@ function panelIdentity(pnl: {
   complianceAnchor: number;
   policyAnchor: number;
   otherOperatingAnchor: number;
+  internalSupplyDiscountAnchor?: number;
   growthAndBuildAnchor: number;
 }) {
   return (
@@ -115,6 +116,7 @@ function panelIdentity(pnl: {
       pnl.complianceAnchor +
       -pnl.policyAnchor +
       pnl.otherOperatingAnchor +
+      (pnl.internalSupplyDiscountAnchor ?? 0) +
       pnl.growthAndBuildAnchor)
   );
 }
@@ -403,4 +405,34 @@ describe("buildPolicyStackRows", () => {
     expect(rows.find((r) => r.key === "typeSwitchModifier")!.anchor).toBeLessThan(0);
     expect(rows.find((r) => r.key === "techMarginBonus")!.anchor).toBeGreaterThan(0);
   });
+});
+
+it("names the consumed-input transfer separately without changing the displayed cost identity", () => {
+  const engine = enginePnl({
+    revenue: 1000,
+    inputs: 400,
+    labour: 100,
+    upkeep: 10,
+    compliance: 20,
+    otherOpex: 30,
+    financialLegs: -20,
+    policyCredit: 0,
+  });
+  const result = buildSectorPlantsSection({
+    ...BASE_ARGS,
+    sector: sectorFixture(),
+    money: {
+      realizedRevenueAnchor: engine.revenue,
+      maintenanceNetAnchor: 0,
+      labourAnchor: 0,
+      growthCostAnchor: 0,
+      profitAnchor: engine.profit,
+      inputsAnchor: 0,
+      enginePnl: { ...engine, internalSupplyDiscountAnchor: -20 },
+    },
+  });
+  expect(result.pnl.internalSupplyDiscountAnchor).toBe(-20);
+  expect(result.pnl.otherOperatingAnchor).toBe(30);
+  expect(result.pnl.financialEventsAnchor).toBe(0);
+  expect(panelIdentity(result.pnl)).toBe(engine.profit);
 });

@@ -8,6 +8,11 @@ import {
 } from "@/lib/corporations/groups/rules/marketCoordination";
 import type { SupplyMember } from "@/lib/corporations/groups/rules/supply";
 import { TURNS_PER_DAY } from "@/lib/constants/turnTime";
+import {
+  reserveInternalSupply,
+  finishInternalSupplyCommodity,
+  type InternalSupplyClearing,
+} from "./internalSupply/clearing";
 import { normalizedOfferShare } from "./rules/demandAllocation";
 import { capDeliveredMediaUnits, type MediaOwnershipMarket } from "@/lib/mediaRegulation/rules";
 import { COMMODITY_BASE_PRICES, type CommodityType } from "@/lib/constants/commodities";
@@ -482,6 +487,8 @@ export interface SectorClearingResult {
  */
 export function computeClearingFactors(args: {
   sectors: readonly SectorClearingInput[];
+  /** Optional own-group supply policy, inert when omitted. */
+  internalSupply?: InternalSupplyClearing;
   /** Enabled ownership laws constrain actual advertising fills before receipts. */
   mediaOwnership?: MediaOwnershipMarket;
   recordDelivery?: boolean;
@@ -1072,6 +1079,27 @@ export function computeClearingFactors(args: {
         }
         groupContext.receipts.push(...allocation.receipts);
       }
+      const internalReservations =
+        args.internalSupply && !args.groupSupply && args.sectorCorpId
+          ? reserveInternalSupply({
+              context: args.internalSupply,
+              commodity,
+              sellers: groupSellers,
+              corporationBySector: args.sectorCorpId,
+              committed: contractedUnitsById,
+              book: g,
+              bookForSector: (id) => bookKeyFor(commodity, id),
+              supply: Math.min(laggedSupply, offeredUnits),
+              demand: bal?.demand ?? 0,
+              reservationRoom: Math.max(
+                0,
+                demandForPass -
+                  [...(contractedUnitsById?.values() ?? [])].reduce((n, u) => n + u, 0)
+              ),
+              marketPrice:
+                basePrices[commodity] * realizedPriceFor(commodity, groupSellers[0]?.id ?? ""),
+            })
+          : undefined;
       const groupSold = clearCommodityMarket(
         Math.max(0, demandForPass - groupUnits),
         groupSellers.map((s) => ({
@@ -1079,7 +1107,7 @@ export function computeClearingFactors(args: {
           units: Math.max(0, s.units - (groupReserved.get(s.id) ?? 0)),
         })),
         loyaltyBySectorId,
-        contractedUnitsById
+        internalReservations ?? contractedUnitsById
       );
       for (const seller of groupSellers) {
         const reserved = groupReserved.get(seller.id) ?? 0;
@@ -1128,6 +1156,15 @@ export function computeClearingFactors(args: {
       }
       regulationBlockedByCommodityBySector.set(commodity, blocked);
     }
+    if (args.internalSupply && !args.groupSupply)
+      finishInternalSupplyCommodity(
+        args.internalSupply,
+        commodity,
+        sold,
+        sellers,
+        contractedShareBySector,
+        regulationBlockedByCommodityBySector.get(commodity)
+      );
     soldByCommodityBySector.set(commodity, sold);
     if (args.recordDelivery)
       deliveredByCommodityBySector.set(
@@ -1180,6 +1217,18 @@ export function computeClearingFactors(args: {
   }
 
   // 3) Weighted per-sector factor across outputs.
+  const internalUnitsByCommodity = new Map<CommodityType, Map<string, number>>();
+  for (const trade of (args.groupSupply ? [] : args.internalSupply?.tradesOut) ?? []) {
+    const units = internalUnitsByCommodity.get(trade.commodity) ?? new Map<string, number>();
+    units.set(trade.supplierSectorId, (units.get(trade.supplierSectorId) ?? 0) + trade.units);
+    internalUnitsByCommodity.set(trade.commodity, units);
+  }
+  const offeredUnitsByCommodity = new Map(
+    [...internalUnitsByCommodity.keys()].map((commodity) => [
+      commodity,
+      new Map((sellersByCommodity.get(commodity) ?? []).map((seller) => [seller.id, seller.units])),
+    ])
+  );
   const results = new Map<string, SectorClearingResult>();
   for (const s of sectors) {
     let rateSum = 0;
@@ -1242,11 +1291,16 @@ export function computeClearingFactors(args: {
         inputCostShare: s.inputCostShare,
         fixedCostShare: s.fixedCostShare,
       });
+      const internalUnits = internalUnitsByCommodity.get(commodity)?.get(s.sectorId) ?? 0;
+      const offeredUnits = offeredUnitsByCommodity.get(commodity)?.get(s.sectorId) ?? 0;
+      const internalSold =
+        offeredUnits > 0 ? Math.min(sold, (internalUnits / offeredUnits) * availability) : 0;
       // Group units realize exactly the benchmark, without posture, quality or cost-plus markup.
       const groupFraction =
         (groupFractionByCommodity.get(commodity)?.get(s.sectorId) ?? 0) * availability;
       const revenueFactor =
-        Math.max(0, sold - groupFraction) * offerFactor + groupFraction * priceLeg;
+        Math.max(0, sold - groupFraction - internalSold) * offerFactor +
+        (groupFraction + internalSold) * priceLeg;
       offerFactorByCommodity[commodity] = sold > 0 ? revenueFactor / sold : offerFactor;
       rateSum += weight;
       factorSum += weight * revenueFactor;

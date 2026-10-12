@@ -1,3 +1,4 @@
+import { resolveSupplyPolicies } from "./internalSupply/rules";
 import { describe, it, expect } from "vitest";
 import { computeClearingFactors } from "./clearing";
 import { COMMODITY_BASE_PRICES, eraScaledBasePrices } from "@/lib/constants/commodities";
@@ -105,4 +106,30 @@ describe("group supply in the actual clearing pass", () => {
     expect(basis.complete).toBe(false);
     expect(basis.books).toHaveLength(128);
   });
+});
+
+it("never combines Group allocations with the older internal priority reservations or discounts", () => {
+  const { args, context } = clearingFixture();
+  args.internalSupply = {
+    policies: resolveSupplyPolicies([
+      {
+        id: "s",
+        totalShares: 1,
+        holders: [{ shares: 1 }],
+        policy: { priority: "own", discount: 0.2 },
+      },
+    ]),
+    buyers: [{ sectorId: "ownBuyer", corporationId: "s", demand: new Map([["steel", 100]]) }],
+    availabilityOut: new Map(),
+    discountCostOut: new Map(),
+    tradesOut: [],
+  };
+  const expected = computeClearingFactors({ ...args, internalSupply: undefined });
+  context.receipts.length = 0;
+  context.availabilityBySector.clear();
+  context.inputAllocationsBySector?.clear();
+  expect(computeClearingFactors(args)).toEqual(expected);
+  expect(context.receipts).toHaveLength(1);
+  expect(args.internalSupply.tradesOut).toEqual([]);
+  expect(args.internalSupply.discountCostOut.size).toBe(0);
 });

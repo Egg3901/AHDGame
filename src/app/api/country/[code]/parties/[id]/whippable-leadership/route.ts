@@ -38,6 +38,7 @@ import { impeachmentStageChamberKey } from "@/lib/impeachment/impeachmentTally";
 import type { ScotusNomination } from "@/lib/db/types/scotus";
 import type { Impeachment } from "@/lib/db/types/impeachment";
 import { getGameTime } from "@/lib/time/gameTime";
+import { cabinetNominationLabel } from "@/lib/partyWhips/cabinetNominationLabel";
 import { getPartyMap } from "@/lib/db/partyMap";
 import { getHouseComposition } from "@/lib/congress/houseComposition";
 import { getSenateComposition } from "@/lib/congress/senateComposition";
@@ -591,7 +592,7 @@ export async function GET(request: Request, { params }: RouteParams) {
         result[cabinetChamberKey] = result[cabinetChamberKey] ?? [];
         result[cabinetChamberKey].push({
           id: nom._id.toString(),
-          type: `Cabinet: ${nom.nomineeCharacterName}`,
+          type: cabinetNominationLabel(countryId, nom),
           targetType: "cabinetNomination",
           chamber: cabinetChamberKey,
           endsAt: nom.votingEndsAt ?? new Date(now.getTime() + 24 * 3_600_000),

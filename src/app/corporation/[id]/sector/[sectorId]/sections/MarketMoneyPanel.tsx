@@ -61,6 +61,7 @@ export default function MarketMoneyPanel({
   outputCount,
 }: MarketMoneyPanelProps) {
   const t = useTranslations("corporations.sectorInvestment");
+  const supplyText = useTranslations("corporations.internalSupply");
   const sites = facilityPlural(sectorType);
   const { formatAmount, formatPrice, toInternalFrom } = useCurrency();
   const money = (anchor: number) => formatAmount(anchor);
@@ -152,6 +153,16 @@ export default function MarketMoneyPanel({
             label: "Freight charges",
             value: pnl.freightCostAnchor,
             help: "Shipping paid for inbound commodities, billed separately from plant operating costs.",
+          },
+        ]
+      : []),
+    ...(pnl.internalSupplyDiscountAnchor
+      ? [
+          {
+            key: "internal-supply",
+            label: supplyText(pnl.internalSupplyDiscountAnchor < 0 ? "plantCredit" : "plantCharge"),
+            value: pnl.internalSupplyDiscountAnchor,
+            help: supplyText("plantDiscountNote"),
           },
         ]
       : []),

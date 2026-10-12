@@ -1,4 +1,5 @@
 import { buildGroupSupplyContext } from "./groupSupplyContext";
+import { buildInternalSupplyContext, finishInternalSupplyContext } from "./internalSupply";
 import {
   computeClearingFactors,
   describeClearingBookBreach,
@@ -142,6 +143,12 @@ export function runClearingPrePass(input: ClearingPrePassInput): ClearingPrePass
     treasuryCashLedgerEnabled,
   } = input;
   let { contractedByCorpCommodity } = input;
+  const internalSupplyEnabled =
+    !market.groupSupplyEnabled &&
+    market.plantsEnabled &&
+    [...lookups.corpById.values()].some(
+      (c) => c.internalSupplyPolicy && c.internalSupplyPolicy.priority !== "market"
+    );
   let buyerDemandByCorpCommodity: Map<string, Map<string, number>> | undefined;
   let politicalMediaSettlementPlans: ClearingPrePassResult["politicalMediaSettlementPlans"] = [];
   // Brand loyalty (A2, shadow-safe): per-sector meta captured during the
@@ -168,7 +175,8 @@ export function runClearingPrePass(input: ClearingPrePassInput): ClearingPrePass
     // the book ~7× in aggregate and every seller's fill collapses (~0.13
     // corporate mean fill in a market whose flows cleared 88%).
     const clearingInputs: SectorClearingInput[] = [];
-    const supplyAgreementDemandSectors: SupplyAgreementDemandSector[] = [];
+    const supplyAgreementDemandSectors: Array<SupplyAgreementDemandSector & { sectorId: string }> =
+      [];
     // Market partition (era worlds): each sector clears in its HOME COUNTRY's
     // reachable book (lookups.countryClearingBooks), not the worldwide one.
     const clearingGroupBySector = lookups.countryClearingBooks
@@ -240,6 +248,8 @@ export function runClearingPrePass(input: ClearingPrePassInput): ClearingPrePass
     for (const [corpId, sectors] of lookups.sectorsByCorp) {
       const corp = lookups.corpById.get(corpId);
       for (const sector of sectors) {
+        // A cold plant cannot reserve or sell stale output from its prior turn.
+        if (market.plantsEnabled && sector.mothballed === true) continue;
         const baseRates = getEffectiveStrategyRatesForOperatingModel(
           sector.sectorType,
           sector.strategyId ?? "standard",
@@ -385,8 +395,9 @@ export function runClearingPrePass(input: ClearingPrePassInput): ClearingPrePass
         // anonymous advertising settlement that follows clearing.
         sectorCorpId.set(sectorId, corpId);
         sectorTypeBySectorId.set(sectorId, sector.sectorType);
-        if (supplyAgreementsEnabled) {
+        if (supplyAgreementsEnabled || internalSupplyEnabled) {
           supplyAgreementDemandSectors.push({
+            sectorId,
             corporationId: corpId,
             sectorType: sector.sectorType,
             revenueAnchor,
@@ -853,9 +864,20 @@ export function runClearingPrePass(input: ClearingPrePassInput): ClearingPrePass
     market.groupSupplyAvailabilityBySector = groupSupply?.availabilityBySector;
     market.groupSupplyReceipts = groupSupply?.receipts;
     market.groupSupplyInputsBySector = groupSupply?.inputAllocationsBySector;
+    const internalSupply = internalSupplyEnabled
+      ? buildInternalSupplyContext({
+          freightSettlementActive,
+          lookups,
+          market,
+          sectors: supplyAgreementDemandSectors,
+          agreements: supplyAgreementsEnabled ? (settleableAgreements ?? []) : [],
+          turn: turn ?? 0,
+        })
+      : undefined;
     market.clearingBySectorId = computeClearingFactors({
       groupSupply,
       sectors: clearingInputs,
+      internalSupply,
       mediaOwnership,
       recordDelivery:
         market.mediaRegulationEnabled === true || lookups.mediaProductSlatesEnabled === true,
@@ -887,7 +909,7 @@ export function runClearingPrePass(input: ClearingPrePassInput): ClearingPrePass
       basePrices: eraScaledBasePrices(lookups.eraUnitScale),
       loyaltySliceEnabled: brandLoyaltySliceEnabled,
       contractedByCorpCommodity: supplyAgreementsEnabled ? contractedByCorpCommodity : undefined,
-      sectorCorpId: supplyAgreementsEnabled ? sectorCorpId : undefined,
+      sectorCorpId,
       contractSettlementOut: supplyAgreementsEnabled ? contractSettlementByCorp : undefined,
       // The shortfall sink is no longer fed from the clearing offer, see the
       // PRODUCTION SINK note in the input loop above. Clearing's `s.units` is
@@ -905,6 +927,7 @@ export function runClearingPrePass(input: ClearingPrePassInput): ClearingPrePass
         }
       },
     });
+    finishInternalSupplyContext(internalSupply, market, turn ?? 0);
 
     // Marketing budgets are a real corporation cost, so filled advertising
     // must have a real recipient. Reproduce clearing's offer normalization for

@@ -642,6 +642,8 @@ export function assemblePhysicalPnl(args: {
   complianceCost: number;
   otherOpex: number;
   financialLegs: number;
+  /** Matched internal rebate after the existing subsidy and residual caps. */
+  internalSupplyDiscountCost?: number;
   growthCost: number;
   policyCredit: number;
 }): PhysicalPnl {
@@ -683,7 +685,11 @@ export function assemblePhysicalPnl(args: {
   // `policyCredit` sits inside operatingCost (as a credit) so the derived
   // margin keeps the same scope the old `effectiveMargin` had — the modifier
   // stack was part of that number, and margin readers expect it there.
-  const operatingCost = inputsCost + laborCost + otherOpex + financialLegs - policyCredit;
+  const internalSupplyDiscountCost = Number.isFinite(args.internalSupplyDiscountCost)
+    ? (args.internalSupplyDiscountCost ?? 0)
+    : 0;
+  const operatingCost =
+    inputsCost + laborCost + otherOpex + financialLegs - policyCredit + internalSupplyDiscountCost;
   const totalCost = operatingCost + upkeep + complianceCost + growthCost;
   const profit = hourlyRevenue - totalCost;
   const derivedMarginPct =
@@ -703,7 +709,7 @@ export function assemblePhysicalPnl(args: {
     upkeep,
     complianceCost,
     otherOpex,
-    financialLegs,
+    financialLegs: financialLegs + internalSupplyDiscountCost,
     growthCost,
     policyCredit,
     operatingCost,

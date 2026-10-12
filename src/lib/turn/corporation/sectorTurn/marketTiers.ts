@@ -117,16 +117,13 @@ export function computeMarketTiers(input: MarketTiersInput): MarketTiersResult {
   // deepen the shortage that throttled it within the same turn. Ramped in per
   // sector over the same 240-turn window as the capacity haircut.
   const coordinated = market.groupSupplyAvailabilityBySector?.get(sector._id.toString());
-  const localAvailability = coordinated
-    ? new Map(stateInputAvailabilityByState.get(stateId))
+  const priorityAvailability =
+    coordinated ?? market.internalInputAvailabilityBySectorId?.get(sector._id.toString());
+  const inputAvailability = priorityAvailability
+    ? new Map([...(stateInputAvailabilityByState.get(stateId) ?? []), ...priorityAvailability])
     : stateInputAvailabilityByState.get(stateId);
-  if (coordinated && localAvailability)
-    for (const [commodity, availability] of coordinated) {
-      // Coordination already conserves the verified local delivery pool.
-      (localAvailability as Map<CommodityType, number>).set(commodity, availability);
-    }
   const throughputRaw = market.throughputEnabled
-    ? computeThroughput(strategyDemand ?? {}, wideCommodityBalances, localAvailability)
+    ? computeThroughput(strategyDemand ?? {}, wideCommodityBalances, inputAvailability)
     : { throughput: 1, bindingInput: null };
   const throughputStartTurn =
     market.throughputEnabled && throughputRaw.throughput < 1

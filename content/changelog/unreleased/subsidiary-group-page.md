@@ -19,3 +19,5 @@ areas: [fullstack]
 - Qualified enabled worlds capture bounded private forecast inputs for participation-sensitive, fixed-output comparisons. Estimates show direct revenue and operating-profit effects, exclude existing contracts, and do not predict production response or taxes.
 - Economic activation remains gated pending integrated world and long-horizon qualification. Disabled worlds add no group ownership reads or forecast writes.
 - Group sector values now use the operating country's currency instead of the owner's currency for foreign operations.
+
+- When qualified Group coordination is enabled, it replaces the older internal-priority engine for that world. Saved internal-priority preferences remain inactive, preventing duplicate reservations or discounts. Worlds with Group coordination disabled retain existing internal-priority behavior.
