@@ -1,8 +1,8 @@
 ---
 date: 2026-10-12
-title: Bank totals stay clear on hover
+title: Bank row highlights stay even
 summary: >-
-  Bank totals no longer show through the pinned Deposit and Borrow buttons when you hover a row.
+  Hovering a bank row keeps its pinned action cell in step with the row and hides values underneath.
 tags: [banking, interface, fix]
 badges: [minor]
 areas: [frontend]
@@ -10,4 +10,4 @@ areas: [frontend]
 
 ## What changed
 
-- The pinned bank action column now stays opaque while you hover rows.
+- The pinned action column now uses an opaque version of the row's hover color, keeping the highlight even and hiding values underneath.

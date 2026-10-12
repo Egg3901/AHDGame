@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   computeCapitalUsage,
   perUnitAnchorAmount,
+  resolveThroughputBindingInput,
 } from "@/lib/corporations/queries/sectorDetailCommodities";
 
 describe("sector detail capital economics", () => {
@@ -34,5 +35,21 @@ describe("sector detail capital economics", () => {
       utilization: 0,
       capacityUsed: 0,
     });
+  });
+});
+
+describe("sector detail throughput attribution", () => {
+  it("uses the recorded bottleneck for the throttle that was actually applied", () => {
+    expect(resolveThroughputBindingInput(0.85, "iron", "real_estate_services")).toBe("iron");
+  });
+
+  it("does not substitute a projected bottleneck when applied telemetry has no binding input", () => {
+    expect(resolveThroughputBindingInput(0.85, null, "real_estate_services")).toBeNull();
+  });
+
+  it("uses the world projection before an applied throttle is recorded", () => {
+    expect(resolveThroughputBindingInput(null, undefined, "real_estate_services")).toBe(
+      "real_estate_services"
+    );
   });
 });
