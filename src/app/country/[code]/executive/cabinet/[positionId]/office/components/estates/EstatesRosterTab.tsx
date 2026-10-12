@@ -7,6 +7,8 @@ import { AggTile, EstateIcon, fmtMoneyM } from "./estatesUi";
 import { EstateCard } from "./EstateCard";
 import { OpenEstatePanel } from "./OpenEstatePanel";
 import { ActingLockNote, useActingLock } from "../ActingLock";
+import { InlineError } from "@/components/ui/InlineError";
+import { readApiError, toDisplayError, type DisplayError } from "@/lib/errors/client";
 
 export function EstatesRosterTab({
   countryCode,
@@ -39,6 +41,9 @@ export function EstatesRosterTab({
   const [archetypeId, setArchetypeId] = useState(catalog[0]?.id ?? "");
   const [opening, setOpening] = useState(false);
   const [busy, setBusy] = useState(false);
+  // A refused open/expand/fund (no actions left, acting lock, duplicate host)
+  // must say why; a silent no-op reads as a broken button.
+  const [actionError, setActionError] = useState<DisplayError | null>(null);
   const basePath = `/api/country/${countryCode}/executive/cabinet/${positionId}/estates`;
 
   const groupEstates = useMemo(
@@ -56,6 +61,7 @@ export function EstatesRosterTab({
   async function act(method: "POST" | "DELETE", path: string, body?: unknown) {
     if (busy) return;
     setBusy(true);
+    setActionError(null);
     try {
       const res = await fetch(path, {
         method,
@@ -63,6 +69,9 @@ export function EstatesRosterTab({
         body: body ? JSON.stringify(body) : undefined,
       });
       if (res.ok) onUpdate();
+      else setActionError(await readApiError(res));
+    } catch (err) {
+      setActionError(toDisplayError(err, "Could not reach the server. Please try again."));
     } finally {
       setBusy(false);
     }
@@ -136,6 +145,8 @@ export function EstatesRosterTab({
           Open estate
         </button>
       </div>
+
+      <InlineError error={actionError} className="text-[12px] text-error" />
 
       {opening && (
         <OpenEstatePanel
