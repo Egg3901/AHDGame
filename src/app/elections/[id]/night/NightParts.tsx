@@ -109,13 +109,15 @@ export function NightHeader({
       }}
     >
       <LiveBug settled={view.settled} />
-      <div style={{ minWidth: 0, flex: 1 }}>
+      {/* A real basis (not 0) lets the stats wrap onto their own row on narrow screens
+          instead of squeezing the title until it overflows underneath them. */}
+      <div style={{ minWidth: 0, flex: "1 1 14rem" }}>
         <div style={{ ...MONO_LABEL, letterSpacing: ".18em" }}>Election night</div>
         <h1 style={{ margin: 0, fontSize: 19, fontWeight: 600, letterSpacing: "-0.01em" }}>
           {title}
         </h1>
       </div>
-      <dl style={{ display: "flex", gap: 22, margin: 0 }}>
+      <dl style={{ display: "flex", flexWrap: "wrap", gap: "8px 22px", margin: 0 }}>
         <Stat label="States called" value={`${view.statesCalled} of ${view.totalStates}`} />
         {clock ? <Stat label="Election night clock" value={clock} /> : null}
       </dl>
