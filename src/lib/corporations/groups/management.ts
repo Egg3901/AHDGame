@@ -1,3 +1,4 @@
+import { clampGroupDiscount } from "./rules/discounts";
 import { estimateGroupSupply } from "./rules/forecast";
 /**
  * Subsidiary group management lets the parent set identity and strategy while player CEOs choose receiving participation.
@@ -22,6 +23,7 @@ export const defaultGroupManagement = (root: Corporation): GroupManagement => ({
   name: root.name,
   supplyPolicy: "independent",
   ...root.groupManagement,
+  supplyDiscount: clampGroupDiscount(root.groupManagement?.supplyDiscount),
 });
 export async function loadGroupManagement(db: Db, corporation: Corporation, userId: string) {
   const membership = await resolveFormalizedGroups(db, { includeReserved: true });
@@ -64,12 +66,16 @@ export async function loadGroupManagement(db: Db, corporation: Corporation, user
         { _id: "current" },
         { projection: { currentTurn: 1, subsidiaryCorporationsEnabled: 1 } }
       ),
-    db
-      .collection<GameConfig>("gameConfig")
-      .findOne(
-        { _id: "default" },
-        { projection: { groupSupplyCoordinationEnabled: 1, marketSystemMode: 1 } }
-      ),
+    db.collection<GameConfig>("gameConfig").findOne(
+      { _id: "default" },
+      {
+        projection: {
+          groupSupplyCoordinationEnabled: 1,
+          marketSystemMode: 1,
+          supplyAgreementsEnabled: 1,
+        },
+      }
+    ),
     db
       .collection<State>("states")
       .find({}, { projection: { name: 1, countryId: 1 } })
@@ -96,6 +102,7 @@ export async function loadGroupManagement(db: Db, corporation: Corporation, user
       config?.groupSupplyCoordinationEnabled === true &&
       config?.marketSystemMode === "plants" &&
       world?.subsidiaryCorporationsEnabled === true,
+    supplyAgreementsEnabled: config?.supplyAgreementsEnabled === true,
     enabled: world?.subsidiaryCorporationsEnabled === true,
   };
 }
@@ -152,6 +159,7 @@ export async function groupManagementView(db: Db, corporation: Corporation, user
           ctx.corps.map((c) => ({
             ...groupOperator(c, rootId),
             preference: c.groupReceiving,
+            supplyDiscount: ctx.root.groupManagement?.supplyDiscount,
             cashAvailableAnchor: basis.cashByMember[c._id.toString()] ?? 0,
           })),
           ctx.turn + 1
@@ -173,6 +181,7 @@ export async function groupManagementView(db: Db, corporation: Corporation, user
     managementEnabled: ctx.enabled,
     /** No economic activation is implied by saving a direction or participation preference. */
     supplyEngineEnabled: ctx.supplyEngineEnabled,
+    supplyAgreementsEnabled: ctx.supplyAgreementsEnabled,
     regions: ctx.regions.map((r) => ({ id: String(r._id), name: r.name, countryId: r.countryId })),
     members: ctx.corps.map((c) => {
       const own = !requireCeo(c, userId) && c.ceoType !== "npp" && !c.countryOwnerId;
@@ -318,7 +327,9 @@ export async function updateGroupManagement(
   const update =
     command.action === "identity"
       ? { "groupManagement.name": command.name }
-      : { "groupManagement.supplyPolicy": command.policy };
+      : command.action === "discount"
+        ? { "groupManagement.supplyDiscount": command.discount }
+        : { "groupManagement.supplyPolicy": command.policy };
   const result = await db.collection<Corporation>("corporations").updateOne(
     {
       _id: ctx.root._id,

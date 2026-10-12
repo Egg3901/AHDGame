@@ -8,12 +8,15 @@ import {
   resolveSectorHostCurrencyCode,
 } from "@/lib/currency/corporationCapital";
 import { settleConsumedInternalDiscounts } from "@/lib/market/internalSupply/rules";
+import { settleGroupDiscounts } from "@/lib/corporations/groups/rules/discounts";
 import { TURNS_PER_DAY } from "@/lib/constants/turnTime";
 
 export function prepareInternalSupplySectorResults(
   env: SectorTurnEnv
 ): Map<string, SectorTurnResult> | undefined {
-  if (!env.market.internalSupplyTrades?.length) return undefined;
+  const groupReceipts = env.market.groupSupplyReceipts ?? [];
+  if (!env.market.internalSupplyTrades?.length && !groupReceipts.some((r) => (r.discount ?? 0) > 0))
+    return undefined;
   const results = new Map<string, SectorTurnResult>();
   // The pre-pass is DB-free. Cache results, including their update collectors;
   // the normal corporation loop consumes them instead of running sectors again.
@@ -37,11 +40,21 @@ export function prepareInternalSupplySectorResults(
     [...results].map(([id, r]) => [id, r.internalSupplyInputUnits ?? new Map<string, number>()])
   );
   const costs = settleConsumedInternalDiscounts(
-    env.market.internalSupplyTrades,
+    env.market.internalSupplyTrades ?? [],
     consumption,
     TURNS_PER_DAY,
     env.market.internalSupplyCommittedInputsBySectorId
   );
+  for (const [id, cost] of settleGroupDiscounts(
+    groupReceipts,
+    consumption,
+    env.market.groupSupplyCommittedInputsBySector,
+    new Map(
+      [...results].map(([id, r]) => [id, r.groupSupplyOutputUnits ?? new Map<string, number>()])
+    ),
+    env.market.groupSupplyCommittedOutputsBySector
+  ))
+    costs.set(id, (costs.get(id) ?? 0) + cost);
   env.market.internalSupplyDiscountCostBySectorId = costs;
   for (const [id, cost] of costs)
     if (cost !== 0) results.get(id)?.applyInternalSupplyDiscount?.(cost);

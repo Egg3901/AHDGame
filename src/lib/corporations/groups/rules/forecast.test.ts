@@ -49,3 +49,27 @@ describe("participation-sensitive market estimates", () => {
     expect(estimateGroupSupply(basis, f.members.slice(0, 1), 11)).toBeNull();
   });
 });
+
+it("recalculates saved discounts without inventing group profit or changing gross sales", () => {
+  const f = coordinationFixture();
+  const basis: GroupForecastBasis = {
+    turn: 10,
+    rootId: "r",
+    memberIds: ["s", "b"],
+    cashByMember: {},
+    complete: true,
+    books: [{ ...f, sellers: f.sellers.map((s) => ({ ...s, openFill: 1, quoteFactor: 1 })) }],
+  };
+  const before = estimateGroupSupply(basis, f.members, 11)!;
+  f.members.forEach((m) => {
+    m.supplyDiscount = 0.35;
+  });
+  const after = estimateGroupSupply(basis, f.members, 11)!;
+  expect(after.total.operatingProfitDifference).toBeCloseTo(before.total.operatingProfitDifference);
+  expect(after.total.coordinatedRevenue).toBe(before.total.coordinatedRevenue);
+  expect(after.corporations.find((c) => c.id === "s")!.operatingProfitDifference).toBe(-70);
+  expect(after.corporations.find((c) => c.id === "b")!.operatingProfitDifference).toBe(70);
+  expect(after.total.internalTradingValue).toBe(130);
+  f.members[1].preference!.enabled = false;
+  expect(estimateGroupSupply(basis, f.members, 11)!.total.internalTradingValue).toBe(0);
+});

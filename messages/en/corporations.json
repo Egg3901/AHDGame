@@ -495,7 +495,7 @@
         "stability": "Strengthen financial stability"
       },
       "supplyTitle": "Coordinate the chain. Preserve autonomy.",
-      "marketPrice": "Internal supply uses 100% of the applicable market benchmark, without negotiated discounts or premiums.",
+      "marketPrice": "Automatic NPP group supply uses the applicable market benchmark with the selected Group Chain discount. Existing negotiated agreements keep their own prices.",
       "policies": {
         "independent": "Commercial independence",
         "members": "Group members first"
@@ -514,7 +514,7 @@
       "supplySafeguards": "Existing contracts take precedence. Only NPP operators automatically supply eligible group members. Output and demand are finite, trade restrictions still apply, and internal reservations carry no shortfall damages.",
       "estimates": "Estimated supply policy effects",
       "forecastBasis": "Market basis: turn {turn}. Participation preview: turn {effective}. Amounts per turn.",
-      "forecastAssumptions": "Estimates hold output and public market fill constant. Existing contracts are excluded. They compare commodity sales and input pricing at 100% market value, before tax, investment, production responses and future price changes. Participation changes recalculate the comparison immediately.",
+      "forecastAssumptions": "Estimates hold output and public market fill constant and assume allocated inputs are consumed. Existing contracts are excluded. Gross commodity sales stay at the benchmark; discounts are matching supplier operating charges and buyer credits. Group profit gains from a discount cancel before tax. Estimates exclude tax, investment, production responses and future price changes. Saved participation and discount changes recalculate the comparison immediately.",
       "independentSales": "Independent supply-linked revenue",
       "groupSales": "Group-first supply-linked revenue",
       "revenueDifference": "Revenue difference",
@@ -529,7 +529,14 @@
       "turnRevenue": "Revenue per turn",
       "turnCosts": "Costs per turn",
       "turnIncome": "Net income per turn",
-      "unavailable": "Unavailable"
+      "unavailable": "Unavailable",
+      "chainDiscount": "Automatic Group Chain discount",
+      "chainDiscountValue": "{percent}% discount ({price}% of market)",
+      "chainDiscountNote": "New allocations use this discount next turn. Only reserved inputs actually consumed receive a credit, with an equal charge to the NPP supplier. Full benchmark funds remain reserved until consumption. Commercial independence retains this setting without applying it. Player output is never automatically committed.",
+      "agreementsTitle": "Negotiated supply agreements",
+      "agreementsNote": "Existing agreements may price up to {percent}% below or above market. Manage agreements as your own corporation, subject to acceptance, capacity and trade rules. Related-party eligibility currently covers formalized parent-subsidiary pairs. These contracts take priority over automatic Group Chain allocations and remain available under Commercial independence.",
+      "agreementsCorporation": "Manage agreements as",
+      "agreementsCeoOnly": "Only a corporation’s own player CEO can manage its agreements."
     },
     "internalSupply": {
       "groupCoordinationActive": "Subsidiary Group coordination is active in this world. Manage receiving in the Group page. Internal priority preferences are retained and inactive.",

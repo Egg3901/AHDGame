@@ -1331,7 +1331,19 @@ export function processSector(
     stateId: sector.stateId,
     countryId: sectorCountryId,
   };
-  if (market.internalSupplyTrades?.length && physicalPnl) {
+  if ((market.internalSupplyTrades?.length || market.groupSupplyDiscountsEnabled) && physicalPnl) {
+    if (market.groupSupplyDiscountsEnabled)
+      result.groupSupplyOutputUnits = new Map(
+        Object.keys(strategyRates.supply ?? {}).map((commodity) => [
+          commodity,
+          Math.max(0, mothballed ? 0 : producedUnits) *
+            commodityMixWeight(
+              strategyRates.supply ?? {},
+              eraScaledBasePrices(lookups.eraUnitScale),
+              commodity as CommodityType
+            ),
+        ])
+      );
     result.internalSupplyInputUnits = new Map(
       [...inputUnitsByCommodity].map(([commodity, units]) => [
         commodity,

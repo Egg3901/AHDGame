@@ -81,3 +81,49 @@ it("aggregates finalized discounts once into real corporation income and persist
   expect(writes[1]?.plantsPnl?.internalSupplyDiscountCost).toBeLessThan(0);
   expect(turns[1].corpSnapshots[0].income).toBeCloseTo(turns[0].corpSnapshots[0].income, 8);
 });
+
+describe("automatic NPP Group Chain discount integration", () => {
+  it.each([0.05, 0.2, 0.35])(
+    "settles %s discounts on real consumed inputs with matching charges",
+    (discount) => {
+      const options = { group: true, coordinationDiscount: 0 };
+      const base = runInternalSupplyWorld({ priority: "market", discount: 0 }, options);
+      const discounted = runInternalSupplyWorld(
+        { priority: "market", discount: 0 },
+        { ...options, coordinationDiscount: discount }
+      );
+      expect(discounted.market.groupSupplyReceipts?.length).toBeGreaterThan(0);
+      const costs = discounted.market.internalSupplyDiscountCostBySectorId!;
+      expect(costs.size).toBe(2);
+      const supplierCharge = [...costs.values()].find((c) => c > 0)!;
+      expect(supplierCharge).toBeGreaterThan(0);
+      expect(discounted.seller.costs - base.seller.costs).toBeCloseTo(supplierCharge, 8);
+      expect(discounted.buyer.costs - base.buyer.costs).toBeCloseTo(-supplierCharge, 8);
+      expect(discounted.seller.hourlyRevenue).toBe(base.seller.hourlyRevenue);
+      expect([...costs.values()].reduce((a, b) => a + b, 0)).toBeCloseTo(0, 10);
+      expect(discounted.updates[0]?.plantsPnl?.internalSupplyDiscountCost).toBeGreaterThan(0);
+      expect(discounted.updates[1]?.plantsPnl?.internalSupplyDiscountCost).toBeLessThan(0);
+      expect(discounted.market.internalSupplyTrades).toBeUndefined();
+    }
+  );
+  it("cannot rebate a cold Group supplier", () => {
+    const world = runInternalSupplyWorld(
+      { priority: "market", discount: 0 },
+      { group: true, coordinationDiscount: 0.35, mothballed: true }
+    );
+    expect(world.market.groupSupplyReceipts).toEqual([]);
+    expect(world.updates.every((s) => !s.plantsPnl?.internalSupplyDiscountCost)).toBe(true);
+  });
+});
+
+it.each([0.01, 100])(
+  "preserves matched Group discount accounting at era unit scale %s",
+  (eraScale) => {
+    const options = { group: true, coordinationDiscount: 0.35, eraScale };
+    const r = runInternalSupplyWorld({ priority: "market", discount: 0 }, options);
+    const costs = [...(r.market.internalSupplyDiscountCostBySectorId?.values() ?? [])];
+    expect(costs.length).toBe(2);
+    expect(costs.some((c) => c > 0)).toBe(true);
+    expect(costs.reduce((a, b) => a + b, 0)).toBeCloseTo(0, 10);
+  }
+);

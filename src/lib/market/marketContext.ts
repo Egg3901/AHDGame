@@ -18,6 +18,9 @@ export interface MarketContext {
   /** Tier 1: realized revenue scaled by lagged output prices. */
   realizationEnabled: boolean;
   groupSupplyEnabled?: boolean;
+  groupSupplyDiscountsEnabled?: boolean;
+  groupSupplyCommittedOutputsBySector?: ReadonlyMap<string, ReadonlyMap<string, number>>;
+  groupSupplyCommittedInputsBySector?: ReadonlyMap<string, ReadonlyMap<string, number>>;
   groupSupplyInputsBySector?: ReadonlyMap<
     string,
     ReadonlyMap<

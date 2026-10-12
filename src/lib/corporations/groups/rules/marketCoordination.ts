@@ -1,9 +1,10 @@
 /**
  * Group members first redirects finite market output after existing agreements.
- * Buyers pay the same benchmark as the public market; residual buyers share only unreserved inputs.
+ * Buyers reserve the full public benchmark; consumed-input discounts settle separately. Residual buyers share only unreserved inputs.
  * The normal revenue and input-cost rails account for these goods exactly once.
  */
 import { allocateGroupSupply, groupSupplyLane, type SupplyMember } from "./supply";
+import { clampGroupDiscount } from "./discounts";
 import { canReceiveGroupSupply } from "./participation";
 export interface CoordinationBuyer {
   sectorId: string;
@@ -32,6 +33,8 @@ export interface GroupMarketReceipt {
   commodity: string;
   units: number;
   amountAnchor: number;
+  /** Gross benchmark is accounted once; rebate settles on actual consumption. */
+  discount?: number;
 }
 export interface CoordinationBook {
   commodity: string;
@@ -155,6 +158,7 @@ export function coordinateGroupBook(input: CoordinationBook) {
       commodity: input.commodity,
       units: r.units,
       amountAnchor: r.amountAnchor,
+      discount: clampGroupDiscount(members.get(seller.memberId)?.supplyDiscount),
     });
     reservedBySeller.set(seller.sectorId, (reservedBySeller.get(seller.sectorId) ?? 0) + r.units);
     spendByBuyer.set(buyer.memberId, (spendByBuyer.get(buyer.memberId) ?? 0) + r.amountAnchor);

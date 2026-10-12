@@ -69,9 +69,13 @@ export function estimateGroupSupply(
         units * book.unitPriceAnchor;
     }
     for (const receipt of result.receipts) {
-      rows.get(receipt.supplierId)!.supplyingValue += receipt.amountAnchor;
+      const rebate = receipt.amountAnchor * (receipt.discount ?? 0);
+      const supplier = rows.get(receipt.supplierId)!;
+      supplier.supplyingValue += receipt.amountAnchor - rebate;
+      supplier.operatingProfitDifference -= rebate;
       const buyer = rows.get(receipt.buyerId)!;
-      buyer.receivingValue += receipt.amountAnchor;
+      buyer.receivingValue += receipt.amountAnchor - rebate;
+      buyer.operatingProfitDifference += rebate;
       const publicFactor = book.buyers.find(
         (b) => b.sectorId === receipt.buyerSectorId
       )?.publicPriceFactor;

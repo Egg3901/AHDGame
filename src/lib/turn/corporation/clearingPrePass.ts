@@ -860,6 +860,21 @@ export function runClearingPrePass(input: ClearingPrePassInput): ClearingPrePass
           input.groupMembership
         )
       : undefined;
+    market.groupSupplyCommittedInputsBySector = groupSupply?.committedOutputBySector
+      ? new Map(
+          [...groupSupply.buyersByCommodity]
+            .flatMap(([commodity, buyers]) =>
+              buyers.map((b) => [b.sectorId, commodity, b.contractedUnits] as const)
+            )
+            .reduce((rows, [id, commodity, units]) => {
+              const inputs = rows.get(id) ?? new Map<string, number>();
+              inputs.set(commodity, (inputs.get(commodity) ?? 0) + units);
+              rows.set(id, inputs);
+              return rows;
+            }, new Map<string, Map<string, number>>())
+        )
+      : undefined;
+    market.groupSupplyCommittedOutputsBySector = groupSupply?.committedOutputBySector;
     market.groupSupplyForecastByRoot = groupSupply?.forecastByRoot;
     market.groupSupplyAvailabilityBySector = groupSupply?.availabilityBySector;
     market.groupSupplyReceipts = groupSupply?.receipts;
@@ -927,6 +942,8 @@ export function runClearingPrePass(input: ClearingPrePassInput): ClearingPrePass
         }
       },
     });
+    market.groupSupplyDiscountsEnabled =
+      groupSupply?.receipts.some((r) => (r.discount ?? 0) > 0) ?? false;
     finishInternalSupplyContext(internalSupply, market, turn ?? 0);
 
     // Marketing budgets are a real corporation cost, so filled advertising

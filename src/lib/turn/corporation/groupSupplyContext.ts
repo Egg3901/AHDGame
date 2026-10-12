@@ -76,6 +76,7 @@ export function buildGroupSupplyContext(
               : 0)
         ),
         preference: c.groupReceiving,
+        supplyDiscount: root.groupManagement?.supplyDiscount,
       },
     ];
   });
@@ -209,6 +210,11 @@ export function buildGroupSupplyContext(
     locationBySector,
     physicalBySectorCommodity,
     receipts: [],
+    committedOutputBySector: members.some(
+      (m) => activeRoots.has(m.rootId) && (m.supplyDiscount ?? 0) > 0
+    )
+      ? new Map()
+      : undefined,
     availabilityBySector: new Map(),
     inputAllocationsBySector: new Map(),
   };

@@ -7,6 +7,9 @@ vi.mock("@/contexts/CurrencyContext", () => ({
   useCurrency: () => ({ formatAmount: (n: number) => "A" + n }),
 }));
 vi.mock("./useGroupManagement", () => ({ useGroupManagement: vi.fn() }));
+vi.mock("../SupplyAgreementsSection", () => ({
+  default: ({ corpId }: { corpId: string }) => <div data-testid="agreements-panel">{corpId}</div>,
+}));
 vi.mock("../GroupOverviewCard", () => ({ GroupOverviewCard: () => null }));
 import { useGroupManagement, type GroupManagementView } from "./useGroupManagement";
 import { GroupSupplyOffice } from "./GroupSupplyOffice";
@@ -203,5 +206,62 @@ describe("corporation office suggestions and supply estimates", () => {
       response: "acknowledged",
       revision: "revision",
     });
+  });
+});
+
+describe("Group discounts and negotiated agreements", () => {
+  it("saves the selected discount using the shared agreement band", async () => {
+    window.history.replaceState(null, "", "#supply");
+    const data = structuredClone(base);
+    data.settings.supplyPolicy = "members";
+    mount(data);
+    const select = screen.getByRole("combobox", { name: "Automatic Group Chain discount" });
+    expect(
+      within(select).getByRole("option", { name: "35% discount (65% of market)" })
+    ).toBeTruthy();
+    fireEvent.change(select, { target: { value: "0.35" } });
+    expect(vi.mocked(useGroupManagement).mock.results.at(-1)!.value.save).toHaveBeenCalledWith({
+      action: "discount",
+      discount: 0.35,
+    });
+  });
+  it("hides automatic discounts under independence and preserves manual agreements", () => {
+    window.history.replaceState(null, "", "#supply");
+    const data = structuredClone(base);
+    data.supplyAgreementsEnabled = true;
+    mount(data);
+    expect(screen.queryByRole("combobox", { name: "Automatic Group Chain discount" })).toBeNull();
+    expect(screen.getByTestId("agreements-panel").textContent).toBe(root);
+    expect(
+      within(screen.getByRole("combobox", { name: "Manage agreements as" })).queryByRole("option", {
+        name: "Subsidiary",
+      })
+    ).toBeNull();
+  });
+  it("restricts discount changes to the parent and switches agreements only between own corporations", () => {
+    window.history.replaceState(null, "", "#supply");
+    const data = structuredClone(base);
+    data.settings.supplyPolicy = "members";
+    data.canManage = false;
+    data.supplyAgreementsEnabled = true;
+    data.members[1].canEdit = true;
+    data.members[1].operator = "player";
+    mount(data);
+    expect(
+      (
+        screen.getByRole("combobox", {
+          name: "Automatic Group Chain discount",
+        }) as HTMLSelectElement
+      ).disabled
+    ).toBe(true);
+    fireEvent.change(screen.getByRole("combobox", { name: "Manage agreements as" }), {
+      target: { value: child },
+    });
+    expect(screen.getByTestId("agreements-panel").textContent).toBe(child);
+  });
+  it("keeps agreements behind the existing feature flag", () => {
+    window.history.replaceState(null, "", "#supply");
+    mount();
+    expect(screen.queryByTestId("agreements-panel")).toBeNull();
   });
 });

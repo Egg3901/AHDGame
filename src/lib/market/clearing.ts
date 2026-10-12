@@ -505,6 +505,7 @@ export function computeClearingFactors(args: {
     locationBySector: ReadonlyMap<string, { countryId: string; stateId: string }>;
     physicalBySectorCommodity: ReadonlyMap<string, ReadonlyMap<CommodityType, number>>;
     receipts: GroupMarketReceipt[];
+    committedOutputBySector?: Map<string, Map<string, number>>;
     availabilityBySector: Map<string, Map<CommodityType, number>>;
     inputAllocationsBySector?: Map<
       string,
@@ -945,6 +946,14 @@ export function computeClearingFactors(args: {
           committedUnits: contractedUnitsById?.get(s.id) ?? 0,
           physicalUnits: groupContext.physicalBySectorCommodity.get(s.id)?.get(commodity) ?? 0,
         }));
+        if (groupContext.committedOutputBySector)
+          for (const seller of allSellers) {
+            const row =
+              groupContext.committedOutputBySector?.get(seller.sectorId) ??
+              new Map<string, number>();
+            row.set(commodity, seller.committedUnits);
+            groupContext.committedOutputBySector?.set(seller.sectorId, row);
+          }
         const baselineFill = groupContext.forecastByRoot
           ? clearCommodityMarket(
               demandForPass,

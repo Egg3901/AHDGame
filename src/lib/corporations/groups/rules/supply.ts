@@ -1,5 +1,5 @@
 /**
- * Group supply reserves finite NPP output for eligible members at 100% market value.
+ * Group supply reserves finite NPP output for eligible members at the full benchmark before consumed-input rebates.
  * Existing obligations, input needs, available cash and legal delivery lanes bound every reservation.
  */
 import { canReceiveGroupSupply, type GroupOperator } from "./participation";
@@ -8,6 +8,7 @@ export interface SupplyMember extends GroupOperator {
   /** Per-turn available cash after required commitments and reserve protection, in anchor currency. */
   cashAvailableAnchor: number;
   preference?: GroupReceivingPreference;
+  supplyDiscount?: number;
 }
 export interface SupplyOffer {
   memberId: string;

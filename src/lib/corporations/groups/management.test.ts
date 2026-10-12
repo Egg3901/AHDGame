@@ -363,3 +363,18 @@ describe("inactive corporation management", () => {
     ).toBe(false);
   });
 });
+
+it("restricts discount edits to the parent CEO and recalculates forecast settings", async () => {
+  const command = { action: "discount", discount: 0.35 } as const;
+  expect(
+    await updateGroupManagement(db, await doc(subId), playerUser.toString(), command)
+  ).toMatchObject({ ok: false, status: 403 });
+  expect(
+    await updateGroupManagement(db, await doc(rootId), parentUser.toString(), command)
+  ).toEqual({ ok: true });
+  expect((await doc(rootId)).groupManagement?.supplyDiscount).toBe(0.35);
+  expect(
+    (await groupManagementView(db, await doc(rootId), parentUser.toString()))?.settings
+      .supplyDiscount
+  ).toBe(0.35);
+});

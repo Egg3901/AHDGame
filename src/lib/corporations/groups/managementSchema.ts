@@ -1,7 +1,14 @@
 import { z } from "zod";
+import { SUPPLY_AGREEMENT_PRICE_BAND } from "@/lib/db/types/supplyAgreement";
 export const groupManagementSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("identity"), name: z.string().trim().min(2).max(60) }).strict(),
   z.object({ action: z.literal("policy"), policy: z.enum(["independent", "members"]) }).strict(),
+  z
+    .object({
+      action: z.literal("discount"),
+      discount: z.number().finite().min(0).max(SUPPLY_AGREEMENT_PRICE_BAND),
+    })
+    .strict(),
   z.object({ action: z.literal("participation"), enabled: z.boolean() }).strict(),
   z
     .object({

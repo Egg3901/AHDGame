@@ -6,6 +6,8 @@ export interface GroupManagement {
   name: string;
   logoUrl?: string;
   supplyPolicy: GroupSupplyPolicy;
+  /** Rebate on consumed NPP group inputs; omitted means zero. */
+  supplyDiscount?: number;
 }
 export interface GroupReceivingPreference {
   /** Changes when a recorded CEO tenure ends or a new one starts. */

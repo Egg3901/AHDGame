@@ -63,6 +63,9 @@ describe("group management API", () => {
   it.each([
     { action: "participation", enabled: "yes" },
     { action: "policy", policy: "discount" },
+    { action: "discount", discount: -0.01 },
+    { action: "discount", discount: 0.36 },
+    { action: "discount", discount: "0.1" },
     { action: "identity", name: "x" },
     { action: "identity", name: "Group", pricePremium: -0.35 },
   ])("validates request %o", async (body) => {
@@ -90,4 +93,14 @@ describe("group management API", () => {
       { action: "policy", policy: "members" }
     );
   });
+});
+
+it("passes a validated discount command through the authenticated route", async () => {
+  expect((await PATCH(request({ action: "discount", discount: 0.35 }), context)).status).toBe(200);
+  expect(updateGroupManagement).toHaveBeenCalledWith(
+    expect.anything(),
+    expect.anything(),
+    expect.any(String),
+    { action: "discount", discount: 0.35 }
+  );
 });
