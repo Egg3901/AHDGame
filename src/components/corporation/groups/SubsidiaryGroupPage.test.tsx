@@ -169,7 +169,7 @@ describe("corporation office suggestions and supply estimates", () => {
     fireEvent.click(screen.getByRole("button", { name: "Supply chain" }));
     expect(screen.getByText("Estimated supply policy effects")).toBeTruthy();
     expect(screen.getByText(/Estimates hold output/)).toBeTruthy();
-    expect(screen.getByText("Combined group total")).toBeTruthy();
+    expect(screen.getAllByText("Combined group total")).toHaveLength(2);
   });
   it("shows the corporation CEO the suggestion details and sends its revision", () => {
     const data = structuredClone(base);

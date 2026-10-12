@@ -12,3 +12,5 @@ areas: [fullstack]
 - Forecasts reflect saved discount and participation choices per corporation and for the group, before tax.
 - Player CEOs can manage their own negotiated agreements from the Group page, including under Commercial independence.
 - Automatic coordination remains disabled by default pending economic qualification.
+
+- Selected-policy estimates show per-corporation and combined sales and profit impact for Commercial independence or Group members first, with both-policy comparisons retained.

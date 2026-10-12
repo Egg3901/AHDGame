@@ -536,7 +536,12 @@
       "agreementsTitle": "Negotiated supply agreements",
       "agreementsNote": "Existing agreements may price up to {percent}% below or above market. Manage agreements as your own corporation, subject to acceptance, capacity and trade rules. Related-party eligibility currently covers formalized parent-subsidiary pairs. These contracts take priority over automatic Group Chain allocations and remain available under Commercial independence.",
       "agreementsCorporation": "Manage agreements as",
-      "agreementsCeoOnly": "Only a corporation’s own player CEO can manage its agreements."
+      "agreementsCeoOnly": "Only a corporation’s own player CEO can manage its agreements.",
+      "selectedEstimate": "Selected policy: {policy}",
+      "selectedEstimateNote": "These estimates follow the saved policy selection. Profit impact is relative to Commercial independence, so zero is the baseline, not a prediction of zero total profit. Sales are gross; supplier discount charges and buyer credits are included in the profit impact.",
+      "selectedSales": "Estimated commodity sales",
+      "selectedProfitImpact": "Profit impact vs independence",
+      "comparePolicies": "Compare both supply policies"
     },
     "internalSupply": {
       "groupCoordinationActive": "Subsidiary Group coordination is active in this world. Manage receiving in the Group page. Internal priority preferences are retained and inactive.",
