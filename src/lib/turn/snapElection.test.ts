@@ -620,6 +620,104 @@ describe("triggerSnapElection — VONC-active gate (Goal 2)", () => {
     ).resolves.toBeDefined();
   });
 
+  it.each([false, true])(
+    "blocks a UK PM during post-election confidence, including limit bypass=%s, without writes",
+    async (bypassLimits) => {
+      setupGateMocks({ activeVonc: null });
+      const confidenceVotes = db.collection("pmAppointmentVotes");
+      vi.mocked(confidenceVotes.findOne).mockResolvedValue({
+        _id: new ObjectId(),
+        countryId: "UK",
+        status: "active",
+        isConfidenceMotion: true,
+        // Elapsed time does not mean resolved: the turn must settle the vote.
+        closesOnTurn: 99,
+      });
+
+      await expect(
+        triggerSnapElection(db as unknown as Db, "UK", new Date(), {
+          reason: "pm-trigger",
+          bypassLimits,
+        })
+      ).rejects.toThrow("post-Commons election confidence vote is active");
+
+      expect(confidenceVotes.findOne).toHaveBeenCalledWith({
+        countryId: "UK",
+        status: "active",
+        isConfidenceMotion: true,
+      });
+      expect(db.collectionMocks.elections.updateMany).not.toHaveBeenCalled();
+      expect(db.collectionMocks.elections.insertMany).not.toHaveBeenCalled();
+      expect(db.collectionMocks.electionCandidates.updateMany).not.toHaveBeenCalled();
+      expect(db.collectionMocks.bills.updateMany).not.toHaveBeenCalled();
+      expect(db.collectionMocks.electedOfficials).toBeUndefined();
+      expect(db.collectionMocks.characters).toBeUndefined();
+      expect(db.collectionMocks.npps).toBeUndefined();
+      expect(db.collectionMocks.governmentFormations.updateOne).not.toHaveBeenCalled();
+    }
+  );
+
+  it.each([
+    { countryId: "UK", status: "passed", isConfidenceMotion: true },
+    { countryId: "UK", status: "failed", isConfidenceMotion: true },
+    { countryId: "UK", status: "cancelled", isConfidenceMotion: true },
+    { countryId: "UK", status: "active", isConfidenceMotion: false },
+    { countryId: "JP", status: "active", isConfidenceMotion: true },
+  ])("does not block a UK PM for an unrelated or settled vote: %j", async (vote) => {
+    setupGateMocks({ activeVonc: null });
+    const confidenceVotes = db.collection("pmAppointmentVotes");
+    vi.mocked(confidenceVotes.findOne).mockImplementation(
+      async (filter: Record<string, unknown>) =>
+        Object.entries(filter ?? {}).every(
+          ([key, value]) => vote[key as keyof typeof vote] === value
+        )
+          ? { _id: new ObjectId(), ...vote }
+          : null
+    );
+
+    await expect(
+      triggerSnapElection(db as unknown as Db, "UK", new Date(), { reason: "pm-trigger" })
+    ).resolves.toBeDefined();
+    expect(confidenceVotes.findOne).toHaveBeenCalledWith({
+      countryId: "UK",
+      status: "active",
+      isConfidenceMotion: true,
+    });
+  });
+
+  it.each(["admin", "auto-snap"] as const)(
+    "preserves the %s path during a UK confidence motion",
+    async (reason) => {
+      setupGateMocks({ activeVonc: null });
+      const confidenceVotes = db.collection("pmAppointmentVotes");
+      vi.mocked(confidenceVotes.findOne).mockResolvedValue({
+        _id: new ObjectId(),
+        countryId: "UK",
+        status: "active",
+        isConfidenceMotion: true,
+      });
+      await expect(
+        triggerSnapElection(db as unknown as Db, "UK", new Date(), { reason, bypassLimits: true })
+      ).resolves.toBeDefined();
+      expect(confidenceVotes.findOne).not.toHaveBeenCalled();
+    }
+  );
+
+  it("leaves non-UK PM-triggered snap elections unchanged", async () => {
+    setupGateMocks({ activeVonc: null });
+    const confidenceVotes = db.collection("pmAppointmentVotes");
+    vi.mocked(confidenceVotes.findOne).mockResolvedValue({
+      _id: new ObjectId(),
+      countryId: "JP",
+      status: "active",
+      isConfidenceMotion: true,
+    });
+    await expect(
+      triggerSnapElection(db as unknown as Db, "JP", new Date(), { reason: "pm-trigger" })
+    ).resolves.toBeDefined();
+    expect(confidenceVotes.findOne).not.toHaveBeenCalled();
+  });
+
   it("PM-triggered snap succeeds when VONC doc is in a non-active status", async () => {
     // Gate queries only status: "active" — this filter returns null.
     setupGateMocks({ activeVonc: null });
