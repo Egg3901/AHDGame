@@ -38,6 +38,8 @@ type EstateData = {
   portfolioKey: string;
   estates: EstateView[];
   estateSummary: EstateSummaryView;
+  /** Per-seat ministerial actions the estate routes actually spend. */
+  ministerialActions?: number;
 } | null;
 type EnergyData = { plants: PlantView[]; energySummary: EnergySummaryView } | null;
 type InfraData = { projects: ProjectView[]; infraSummary: InfraSummaryView } | null;
@@ -134,6 +136,7 @@ export function FlagshipRouter({
       portfolioKey={estates.portfolioKey}
       estates={estates.estates}
       estateSummary={estates.estateSummary}
+      ministerialActions={estates.ministerialActions}
       canAct={canAct}
       currencySymbol={currencySymbol}
       regions={regions}
