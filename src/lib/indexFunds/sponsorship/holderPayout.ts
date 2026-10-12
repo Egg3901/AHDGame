@@ -19,7 +19,7 @@ import {
 import type { Corporation } from "@/lib/db/types";
 import { ObjectId, type Db } from "mongodb";
 import type { IndexFund, IndexFundPosition, IndexFundTransaction } from "@/lib/db/types/indexFund";
-import { buildPersonalBalanceInc } from "@/lib/currency/characterFunds";
+import { buildPersonalBalanceInc, loadCharacterFxRate } from "@/lib/currency/characterFunds";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
 import { loadFundPayoutFxRate } from "@/lib/indexFunds/dividendPassThrough";
 
@@ -37,10 +37,16 @@ export async function payFundHolderCash(
   if (payoutAnchor <= 0) return false;
 
   const forexEnabled = await isForexEnabled();
-  const fundFxRate = await loadFundPayoutFxRate(db, fund.anchorCurrencyCode, forexEnabled);
+  let fundFxRate = await loadFundPayoutFxRate(db, fund.anchorCurrencyCode, forexEnabled);
+  if (forexEnabled && fund.seedAccounting === "paid_units") {
+    const quote = await loadCharacterFxRate(db, fund.anchorCurrencyCode);
+    if (!quote.ok || !Number.isFinite(quote.rate) || quote.rate <= 0)
+      throw new Error("Fund payout exchange rate unavailable");
+    fundFxRate = quote.rate;
+  }
 
   if (position.holderKind === "character" && position.characterId) {
-    await db.collection("characters").updateOne(
+    const credited = await db.collection("characters").updateOne(
       { _id: position.characterId },
       {
         $inc: buildPersonalBalanceInc(
@@ -51,8 +57,9 @@ export async function payFundHolderCash(
         $set: { updatedAt: now },
       }
     );
+    if (!credited.matchedCount) return false;
   } else if (position.holderKind === "imperial_character" && position.imperialCharacterId) {
-    await db.collection("imperialCharacters").updateOne(
+    const credited = await db.collection("imperialCharacters").updateOne(
       { _id: position.imperialCharacterId },
       {
         $inc: buildPersonalBalanceInc(
@@ -63,6 +70,7 @@ export async function payFundHolderCash(
         $set: { updatedAt: now },
       }
     );
+    if (!credited.matchedCount) return false;
   } else if (position.holderKind === "corporation" && position.corporationId) {
     const corp = await db
       .collection<Corporation>("corporations")
@@ -84,13 +92,22 @@ export async function payFundHolderCash(
     );
     if (!credited.matchedCount) return false;
   } else if (position.holderKind === "npp" && position.nppId) {
-    // NPP investment cash is denominated in ₳ already — no rate.
-    await db
+    // NPP investment cash is denominated in ₳ already - no rate.
+    const credited = await db
       .collection("npps")
       .updateOne(
         { _id: position.nppId },
         { $inc: { nppInvestmentCashAnchor: payoutAnchor }, $set: { updatedAt: now } }
       );
+    if (!credited.matchedCount) return false;
+  } else if (position.holderKind === "pension_scheme" && position.pensionSchemeId) {
+    const credited = await db
+      .collection("pensionSchemes")
+      .updateOne(
+        { _id: position.pensionSchemeId },
+        { $inc: { assetsAnchor: payoutAnchor }, $set: { updatedAt: now } }
+      );
+    if (!credited.matchedCount) return false;
   } else {
     return false;
   }
@@ -105,6 +122,7 @@ export async function payFundHolderCash(
     ...(position.characterId ? { characterId: position.characterId } : {}),
     ...(position.imperialCharacterId ? { imperialCharacterId: position.imperialCharacterId } : {}),
     ...(position.nppId ? { nppId: position.nppId } : {}),
+    ...(position.pensionSchemeId ? { pensionSchemeId: position.pensionSchemeId } : {}),
     units: position.units,
     amountAnchor: payoutAnchor,
     note: `Wind-up distribution from ${fund.name}`,

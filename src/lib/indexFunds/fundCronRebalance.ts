@@ -29,7 +29,7 @@ import {
 } from "@/lib/indexFunds/fundRedemptionLiquidity";
 import { computeHoldingsValueAnchor } from "@/lib/indexFunds/fundAllocation";
 import { sumFundBondHoldingsValueAnchor } from "@/lib/bonds/fundBondHoldings";
-import { getAllFundDefinitions } from "@/lib/indexFunds/fundDefinitions";
+import { resolveFundMandate } from "./mandate";
 import {
   holdingsNeedMarkToMarketRefresh,
   refreshFundHoldingsMarkToMarket,
@@ -394,7 +394,9 @@ export async function rebalanceConstituents(
   /** When given, the rebalance record is appended here for one bulk insert by the caller. */
   txSink?: Omit<IndexFundTransaction, "_id">[]
 ): Promise<RebalanceOutcome> {
-  const removed = findRemovedConstituentHoldings(fund, corps);
+  const definition = resolveFundMandate(fund);
+  if (definition.kind === "bond") return NO_REBALANCE;
+  const removed = findRemovedConstituentHoldings({ ...fund, ...definition }, corps);
   let writeOff = { writtenOffCount: 0, writtenOffValueAnchor: 0, unsellableCount: 0 };
   if (removed.length > 0) {
     const removalValue = computeHoldingsValueAnchor({ holdings: removed });
@@ -417,12 +419,9 @@ export async function rebalanceConstituents(
     if (wo.writtenOffCount > 0) fund = (await getFundById(db, fund._id)) ?? fund;
   }
 
-  const definition = getAllFundDefinitions().find((d) => d.slug === fund.slug);
-  if (!definition) return { ...NO_REBALANCE, ...writeOff };
-
   // A7 listing standards: an incumbent gets a grace period before it is sold,
   // so noise around the bar does not churn the position every turn. Incumbency
-  // is "targeted OR held" — a corp mid-purchase is already the fund's problem.
+  // is "targeted OR held" - a corp mid-purchase is already the fund's problem.
   const incumbentIds = new Set<string>([
     ...fund.targetConstituents.map((t) => t.corporationId.toString()),
     ...fund.holdings.filter((h) => h.shares > 0).map((h) => h.corporationId.toString()),
@@ -464,7 +463,14 @@ export async function rebalanceConstituents(
       failures: s.failures,
     }));
 
-  await updateFundConstituents(db, fund._id, targetConstituents, new Date(), listingFailureStreaks);
+  await updateFundConstituents(
+    db,
+    fund._id,
+    targetConstituents,
+    new Date(),
+    listingFailureStreaks,
+    definition
+  );
 
   // Divest what ran out of grace. `findRemovedConstituentHoldings` cannot see
   // these: a delisted corp is still mechanically eligible, so without this it

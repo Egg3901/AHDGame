@@ -13,6 +13,7 @@ import {
   findPendingPetition,
 } from "@/lib/indexFunds/petitions/service";
 import { requiredContributionAnchor } from "@/lib/indexFunds/petitions/rules";
+import { measurePetitioner } from "@/lib/indexFunds/petitions/service";
 
 /**
  * A7 part 2: the issuer's side of the index committee.
@@ -56,6 +57,20 @@ export async function GET(_request: Request, { params }: RouteParams) {
     ]);
 
     const marketCapAnchor = (corporation.sharePrice ?? 0) * (corporation.totalShares ?? 0);
+    const isCeo = corporation.ceoId?.equals(auth.user.character._id) ?? false;
+    // Only the CEO can act, so only the CEO's view pays for the measurement.
+    // A waiver is only worth asking for when the company misses a size or
+    // free-float bar and is not insolvent (solvency is never waivable).
+    const measured =
+      isCeo && authority
+        ? await measurePetitioner(db, {
+            countryId: corporation.countryId,
+            corporationId: corporation._id,
+          } as Parameters<typeof measurePetitioner>[1])
+        : null;
+    const needsWaiver = Boolean(
+      measured && measured.worstShortfallRatio !== null && !measured.hasUnwaivableFailure
+    );
 
     return NextResponse.json({
       committee: authority
@@ -67,7 +82,8 @@ export async function GET(_request: Request, { params }: RouteParams) {
             vacant: !authority.holderName,
           }
         : null,
-      isCeo: corporation.ceoId?.equals(auth.user.character._id) ?? false,
+      isCeo,
+      needsWaiver,
       // What an unanswered petition needs to clear the automatic rule. Stated
       // outright: a hidden bar is a bar nobody can aim at.
       suggestedContributionAnchor: requiredContributionAnchor(marketCapAnchor),

@@ -1,21 +1,4 @@
-/**
- * A5 — sponsored funds.
- *
- * Every fund in the game is seeded by the system: a broad fund per country, a
- * sector fund per industry, one global top-50. Players can buy units and that is
- * the whole of their relationship with the fund business.
- *
- * A sponsored fund is a fund a player's finance corporation charters, runs, and
- * earns from. The sponsor puts up seed capital that stays at risk until the fund
- * winds up, and takes an annual expense ratio off assets under management. That
- * fee is the entire business model: the sponsor does NOT get an investor's
- * upside on the fund's holdings, so the incentive is to attract and keep unit
- * holders rather than to trade against them.
- *
- * The fee is a real drag on NAV, which is why the cap is low and the number is
- * on the card. An index fund whose sponsor can quietly skim is not an index
- * fund, it is a tax.
- */
+/** Sponsored funds transfer fees from fund cash to the managing corporation. */
 
 import type { CorporationType } from "@/lib/constants/corporations";
 import { TURNS_PER_YEAR } from "@/lib/constants/turnTime";
@@ -30,9 +13,9 @@ export const FUND_SPONSOR_SECTOR: CorporationType = "financial";
 export const FUND_CHARTER_FEE_ANCHOR = 2_500_000;
 
 /**
- * Seed capital the sponsor must put into the fund at charter (₳). It backs the
- * fund's first units, stays at risk for the fund's whole life, and comes back
- * to the sponsor at wind-up only AFTER every unit holder has been paid.
+ * Seed cash required at charter (anchor units). New contracts buy ordinary
+ * sponsor units that share the portfolio's gains and losses. Legacy funds
+ * retain their original residual seed contract.
  */
 export const FUND_MIN_SEED_CAPITAL_ANCHOR = 10_000_000;
 

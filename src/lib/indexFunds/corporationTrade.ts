@@ -39,6 +39,8 @@ import { getQueuedRedemptionLiabilityAnchor } from "./fundValuation";
 import { getCurrentTurn } from "@/lib/turn/currentTurn";
 import { claimFundRedemptionLock } from "./redemptionLock";
 import { rejectDuringTurn } from "@/lib/api/rejectDuringTurn";
+import { canRedeemSponsorUnits } from "./sponsorship/sponsorUnits";
+import { runRequiredTransaction } from "@/lib/db/runRequiredTransaction";
 
 export async function tradeCorporationFund(
   db: Db,
@@ -114,7 +116,11 @@ export async function tradeCorporationFund(
   });
   try {
     let response: Record<string, unknown> = {};
-    await runTransactionWithSessionRetry(
+    const transact: typeof runTransactionWithSessionRetry =
+      fund.seedAccounting === "paid_units"
+        ? async (_getClient, run) => runRequiredTransaction(run, { client: db.client })
+        : runTransactionWithSessionRetry;
+    await transact(
       async () => db.client,
       async (session) => {
         const options = session ? { session } : undefined;
@@ -201,6 +207,14 @@ export async function tradeCorporationFund(
               balanceAfter,
             };
           } else {
+            const currentFund = await db
+              .collection<IndexFund>("indexFunds")
+              .findOne({ _id: fund._id }, options);
+            if (!currentFund) throw badRequest("Fund no longer exists");
+            if (!(await canRedeemSponsorUnits(db, currentFund, corporationId, options)))
+              throw badRequest(
+                "Sponsor units stay invested while other investors or withdrawals remain."
+              );
             const prior = await getPosition(
               db,
               fund._id,

@@ -2,6 +2,10 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { ObjectId, type Db } from "mongodb";
 import type { IndexFund, IndexFundPosition } from "@/lib/db/types/indexFund";
 
+vi.mock("@/lib/db/sessionDb", () => ({
+  withSessionDb: async (db: Db, work: (tx: Db) => Promise<unknown>) => work(db),
+  afterCommit: async (_db: Db, effect: () => Promise<unknown>) => effect(),
+}));
 vi.mock("@/lib/audit/recordAudit", () => ({ recordAudit: vi.fn() }));
 vi.mock("@/lib/financialTxLog/emit", () => ({ emitTx: vi.fn() }));
 vi.mock("@/lib/financialTxLog/atomicCashGuard", () => ({
@@ -66,6 +70,7 @@ function makeDb(opts: {
   windingDown?: IndexFund[];
   sponsorExists?: boolean;
   claimed?: boolean;
+  fund?: IndexFund;
 }) {
   const fundUpdate = vi.fn().mockResolvedValue({ modifiedCount: opts.claimed === false ? 0 : 1 });
   const positionsUpdateMany = vi.fn().mockResolvedValue({ modifiedCount: 1 });
@@ -75,6 +80,8 @@ function makeDb(opts: {
       if (name === "indexFunds")
         return {
           updateOne: fundUpdate,
+          findOne: async () =>
+            opts.fund ?? opts.windingDown?.[0] ?? makeFund({ status: "winding_down" }),
           find: () => ({ toArray: () => Promise.resolve(opts.windingDown ?? []) }),
         };
       if (name === "indexFundPositions")
@@ -91,7 +98,7 @@ function makeDb(opts: {
               opts.sponsorExists === false ? null : { _id: SPONSOR, name: "Sponsor Co" }
             ),
         };
-      return {};
+      return { countDocuments: vi.fn().mockResolvedValue(0) };
     }),
   } as unknown as Db;
   return { db, fundUpdate, positionsUpdateMany, txInsert };
@@ -129,8 +136,9 @@ describe("completeWindUp", () => {
     // for 80,000. Holders take that loss here; nobody covers an unfundable
     // quote.
     const positions = [{ _id: new ObjectId(), units: 1_000, holderKind: "character" as const }];
-    const { db } = makeDb({ positions });
-    await completeWindUp(db, makeFund({ cashAnchor: 80_000, quotedNav: 100 }), 200);
+    const fund = makeFund({ status: "winding_down", cashAnchor: 80_000, quotedNav: 100 });
+    const { db } = makeDb({ positions, fund });
+    await completeWindUp(db, fund, 200);
 
     const payout = vi.mocked(payFundHolderCash).mock.calls[0][3];
     expect(payout).toBe(80_000);
@@ -140,8 +148,9 @@ describe("completeWindUp", () => {
     const positions = [{ _id: new ObjectId(), units: 500, holderKind: "character" as const }];
     // 500 units against 100,000 cash → NAV 200, holders take 100,000, nothing
     // remains for the sponsor even though they seeded ₳10m.
-    const { db } = makeDb({ positions });
-    await completeWindUp(db, makeFund({ cashAnchor: 100_000, unitSupply: 500 }), 200);
+    const fund = makeFund({ status: "winding_down", cashAnchor: 100_000, unitSupply: 500 });
+    const { db } = makeDb({ positions, fund });
+    await completeWindUp(db, fund, 200);
     expect(vi.mocked(creditCorpLiquidCapital)).not.toHaveBeenCalled();
   });
 
@@ -152,22 +161,25 @@ describe("completeWindUp", () => {
       { _id: new ObjectId(), units: 500, holderKind: "character" as const },
       { _id: new ObjectId(), units: 500, holderKind: "fund_reserve" as const },
     ];
-    const { db } = makeDb({ positions });
-    await completeWindUp(db, makeFund({ cashAnchor: 100_000, unitSupply: 1_000 }), 200);
+    const fund = makeFund({ status: "winding_down", cashAnchor: 100_000, unitSupply: 1_000 });
+    const { db } = makeDb({ positions, fund });
+    await completeWindUp(db, fund, 200);
     // NAV = 100,000 / 1,000 = 100. The character takes 50,000; the reserve's
     // 50,000 falls through to the sponsor.
     expect(vi.mocked(creditCorpLiquidCapital)).toHaveBeenCalledWith(db, SPONSOR, 50_000);
   });
 
   it("returns the whole balance to the sponsor when no units are held", async () => {
-    const { db } = makeDb({ positions: [] });
-    await completeWindUp(db, makeFund({ cashAnchor: 250_000, unitSupply: 0 }), 200);
+    const fund = makeFund({ status: "winding_down", cashAnchor: 250_000, unitSupply: 0 });
+    const { db } = makeDb({ positions: [], fund });
+    await completeWindUp(db, fund, 200);
     expect(vi.mocked(creditCorpLiquidCapital)).toHaveBeenCalledWith(db, SPONSOR, 250_000);
   });
 
   it("delists the fund and zeroes its units", async () => {
-    const { db, fundUpdate, positionsUpdateMany } = makeDb({ positions: [] });
-    await completeWindUp(db, makeFund({ cashAnchor: 0, unitSupply: 0 }), 200);
+    const fund = makeFund({ status: "winding_down", cashAnchor: 0, unitSupply: 0 });
+    const { db, fundUpdate, positionsUpdateMany } = makeDb({ positions: [], fund });
+    await completeWindUp(db, fund, 200);
     const set = fundUpdate.mock.calls[0][1].$set;
     expect(set.status).toBe("delisted");
     expect(set.unitSupply).toBe(0);

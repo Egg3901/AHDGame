@@ -6,15 +6,9 @@
  *
  *   active → winding_down → (holdings sold, holders paid) → delisted
  *
- * While `winding_down` the fund stops absorbing float, stops rebalancing and
- * stops charging its expense fee, and the cron sells its holdings back into the
- * public float each pass. Once the portfolio is cash, every unit holder is paid
- * out at the final NAV, and only THEN does the sponsor's seed capital come
- * back. Seed capital is the sponsor's skin in the game: it is the last money
- * out, so a fund that lost value costs the sponsor before it costs anyone else.
- *
- * `delisted` was a declared status with no behaviour anywhere in the codebase.
- * This gives it one.
+ * While winding down the fund stops taking subscriptions and charging fees.
+ * Cash payouts, unit removal and completion commit together. New sponsors
+ * hold ordinary units; legacy funds keep their original residual seed rights.
  */
 
 import { ObjectId, type Db } from "mongodb";
@@ -31,6 +25,7 @@ import { emitTx } from "@/lib/financialTxLog/emit";
 import { sellFundHoldingsForRedemptionCash } from "@/lib/indexFunds/fundRedemptionLiquidity";
 import { payCorporateWindUpHolders } from "./corporateHolderPayout";
 import { payFundHolderCash } from "./holderPayout";
+import { withSessionDb, afterCommit } from "@/lib/db/sessionDb";
 import { recordAudit } from "@/lib/audit/recordAudit";
 
 const FUND_TX = "indexFundTransactions";
@@ -136,18 +131,39 @@ export async function advanceWindDowns(db: Db, currentTurn: number): Promise<Win
 }
 
 /**
- * Pay every holder out at the final NAV, return what is left of the seed
- * capital to the sponsor, and delist.
- *
- * The order is the whole point. Holders are paid from cash first; the sponsor
- * receives the REMAINDER, which may be less than the seed they put in and may
- * be nothing at all.
+ * Pay every holder at the final NAV and delist atomically. New sponsors
+ * receive only their ordinary unit payout. Legacy seed rights receive any
+ * remaining cash after holder distributions.
  */
 export async function completeWindUp(
   db: Db,
   fund: IndexFund,
   currentTurn: number
 ): Promise<number> {
+  return withSessionDb(db, async (tx) => {
+    const current = await tx
+      .collection<IndexFund>("indexFunds")
+      .findOne({ _id: fund._id }, { projection: { floatSettlementPlan: 0 } });
+    if (!current || current.status === "delisted") return 0;
+    if (current.status !== "winding_down") throw new Error("Fund is not winding down");
+    if (current.holdings.some((holding) => holding.shares > 0))
+      throw new Error("Fund still holds stocks");
+    const bonds = await tx
+      .collection("bonds")
+      .countDocuments({ holders: { $elemMatch: { fundId: fund._id, units: { $gt: 0 } } } });
+    const orders = await tx
+      .collection("shareOrders")
+      .countDocuments({ placerFundId: fund._id, status: "open" });
+    const withdrawals = await tx
+      .collection("indexFundRedemptionQueue")
+      .countDocuments({ fundId: fund._id, status: { $in: ["queued", "partial", "processing"] } });
+    if (bonds || orders || withdrawals)
+      throw new Error("Fund settlement must finish before wind-up");
+    return settleWindUp(tx, current, currentTurn);
+  });
+}
+
+async function settleWindUp(db: Db, fund: IndexFund, currentTurn: number): Promise<number> {
   const now = new Date();
   const positions = await db
     .collection<IndexFundPosition>(POSITIONS)
@@ -172,10 +188,16 @@ export async function completeWindUp(
   let distributedAnchor = corporatePayout.distributedAnchor;
   for (const position of positions) {
     if (position.holderKind === "corporation") continue;
-    const payoutAnchor = Math.floor(position.units * finalNav);
+    const payoutAnchor =
+      fund.seedAccounting === "paid_units"
+        ? position.units * finalNav
+        : Math.floor(position.units * finalNav);
     if (payoutAnchor <= 0) continue;
     const paid = await payFundHolderCash(db, fund, position, payoutAnchor, currentTurn, now);
-    if (!paid) continue;
+    if (!paid) {
+      if (position.holderKind !== "fund_reserve") throw new Error("Fund holder payout failed");
+      continue;
+    }
     distributedAnchor += payoutAnchor;
     holdersPaid += 1;
   }
@@ -190,12 +212,15 @@ export async function completeWindUp(
     const sponsor = await db
       .collection<Corporation>("corporations")
       .findOne({ _id: fund.sponsorCorporationId });
+    if (!sponsor) throw new Error("Fund sponsor payout failed");
     if (sponsor) {
       const fxRate = await getCorpFxRate(db, sponsor);
-      const localAmount = Math.round(anchorToCorpLiquidCapital(remainingAnchor, sponsor, fxRate));
+      if (!Number.isFinite(fxRate) || fxRate <= 0)
+        throw new Error("Sponsor exchange rate unavailable");
+      const localAmount = anchorToCorpLiquidCapital(remainingAnchor, sponsor, fxRate);
       if (localAmount > 0) {
         await creditCorpLiquidCapital(db, sponsor._id, localAmount);
-        await emitTx(db, {
+        const witness = await emitTx(db, {
           type: "corp_capital_seed",
           turn: currentTurn,
           createdAt: now,
@@ -216,6 +241,7 @@ export async function completeWindUp(
             returnedAnchor: remainingAnchor,
           },
         });
+        if (witness === "failed") throw new Error("Fund residual witness failed");
       }
     }
   }
@@ -245,22 +271,24 @@ export async function completeWindUp(
     }
   );
 
-  recordAudit({
-    source: "turn",
-    action: "indexFund.windUp.complete",
-    category: "money",
-    turn: currentTurn,
-    ts: now,
-    subject: { type: "fund", id: fund._id, name: fund.name },
-    outcome: "ok",
-    meta: {
-      tickerSymbol: fund.tickerSymbol,
-      finalNav,
-      holdersPaid,
-      distributedAnchor,
-      returnedToSponsorAnchor: remainingAnchor,
-      seedCapitalAnchor: fund.seedCapitalAnchor ?? 0,
-    },
+  await afterCommit(db, async () => {
+    recordAudit({
+      source: "turn",
+      action: "indexFund.windUp.complete",
+      category: "money",
+      turn: currentTurn,
+      ts: now,
+      subject: { type: "fund", id: fund._id, name: fund.name },
+      outcome: "ok",
+      meta: {
+        tickerSymbol: fund.tickerSymbol,
+        finalNav,
+        holdersPaid,
+        distributedAnchor,
+        returnedToSponsorAnchor: remainingAnchor,
+        seedCapitalAnchor: fund.seedCapitalAnchor ?? 0,
+      },
+    });
   });
 
   return holdersPaid;

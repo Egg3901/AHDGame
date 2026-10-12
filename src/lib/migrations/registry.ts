@@ -1,4 +1,5 @@
 import { migration as completeCabinetV2Accounts } from "./entries/2026-10-10-complete-cabinet-v2-accounts";
+import { migration as fundMandates } from "./entries/2026-10-12-fund-mandates";
 import { migration as corporateFundPositions } from "./entries/2026-10-09-corporate-fund-positions";
 import { migration as governmentAccountability } from "./entries/2026-10-04-government-accountability";
 import { migration as bankFailurePoliticsIndex } from "./entries/2026-10-04-bank-failure-politics-index";
@@ -123,14 +124,14 @@ import { migration as foldAutomobileEntertainmentTypes } from "./entries/2026-10
 import { migration as activateLiveDemographicsV2 } from "./entries/2026-10-07-activate-live-demographics-v2";
 
 export const MIGRATIONS: Migration[] = [
-  // v0.2.6 currency cutover (declarative — shipped via standalone scripts)
+  // v0.2.6 currency cutover (declarative - shipped via standalone scripts)
   bondCurrencyStamp,
   corpEconomyToLocalCurrency,
-  // Performance indexes — wraps scripts/migrations/add-perf-indexes.ts
+  // Performance indexes - wraps scripts/migrations/add-perf-indexes.ts
   addPerfIndexes,
-  // Index-funds foundation — collection/index contract for passive fund implementation
+  // Index-funds foundation - collection/index contract for passive fund implementation
   indexFundFoundation,
-  // Index-funds seed — upsert 20 fund definition documents
+  // Index-funds seed - upsert 20 fund definition documents
   indexFundSeed,
   indexFundRealBonds,
   routePerformanceIndexes,
@@ -138,18 +139,18 @@ export const MIGRATIONS: Migration[] = [
   crisisAidIndexes,
   unionIndexes,
   unionLeadershipIndexes,
-  // NGX (Nigeria) exchange enablement — re-upsert fund definitions for the two new NGX broad funds
+  // NGX (Nigeria) exchange enablement - re-upsert fund definitions for the two new NGX broad funds
   ngxIndexFundSeed,
-  // bonds (corporationId, matured, defaulted) — nationalization eligibility + bond payoff paths (#2817)
+  // bonds (corporationId, matured, defaulted) - nationalization eligibility + bond payoff paths (#2817)
   perfN1Indexes,
-  // orgRegLedger (countryId, stateId, partyId, metric, turn desc) — region-page
+  // orgRegLedger (countryId, stateId, partyId, metric, turn desc) - region-page
   // registration sparkline was a 1M-doc collscan (only the _id index existed)
   orgRegLedgerIndex,
-  // headroomUnits backfill (buildable-sectors P1) — derived field only,
+  // headroomUnits backfill (buildable-sectors P1) - derived field only,
   // no system reads it yet; see scripts/migrations/backfillUnownedHeadroomUnits.ts
   backfillUnownedHeadroomUnits,
   // Seed-sector currency denomination heal. Pairs with the writer fix in
-  // `spawnNppCorporation` — the two MUST ship together (see the "honest
+  // `spawnNppCorporation` - the two MUST ship together (see the "honest
   // limitations" block in the script: post-fix spawns are correct and are
   // indistinguishable from pre-fix ones by provenance alone, so a world that
   // takes the code fix and defers the heal will re-break its new corps).
@@ -171,7 +172,7 @@ export const MIGRATIONS: Migration[] = [
   // Repairs the active 1953 world as well as future resets: four-country
   // registration pools plus era-relative sovereign debt pricing.
   heal1953SeedBalance,
-  // Ticket #1014 — command-economy unowned double-seed (~50% SOE ownership +
+  // Ticket #1014 - command-economy unowned double-seed (~50% SOE ownership +
   // unreachable 0% remainder sectors). Also runs at end of seedUnownedSectors.
   reconcileCommandEconomyUnowned,
   // The USSR came up on iteration 4 with no SOEs at all and every producing
@@ -185,13 +186,13 @@ export const MIGRATIONS: Migration[] = [
   smoothLegacyBuildOrders,
   pensionSchemeFundPositions,
   ratificationBallotIndexes,
-  // Ticket #1032 — drop the foreignPolicy / culture party axes. Written by
+  // Ticket #1032 - drop the foreignPolicy / culture party axes. Written by
   // every seed and the shift UI, read by nothing.
   dropDeadPartyAxes,
   // Indexes for the banking money-movement claim records. The seed module
   // covers a fresh bootstrap; a world that is already running needs this.
   bankMoneyMoveIndexes,
-  // Strategic Operations v2 — migrate campaign investment levers from linear
+  // Strategic Operations v2 - migrate campaign investment levers from linear
   // levels to the starter + three-branch tree model. Player-friendly, idempotent.
   campaignOpsTrees,
   // Ticket #1106: live worlds never received legislation types added to the
@@ -227,7 +228,7 @@ export const MIGRATIONS: Migration[] = [
   dropOffRosterCommandCommanders,
   // The other half of the same gap: the rosters above are cleared, but the units
   // and postings those generals held are not, and a unit led by a foreign national
-  // can never be sent to a front. Runs AFTER the roster clear, on purpose — that
+  // can never be sent to a front. Runs AFTER the roster clear, on purpose - that
   // one shrinks the set of holders this has to sever.
   severEmigratedGenerals,
   // Issue #996: the new lifecycle registrations make these bills resolvable;
@@ -236,14 +237,14 @@ export const MIGRATIONS: Migration[] = [
   equityLiquidityIndexes,
   // Redistricting was unreachable: the authority law is orphaned from the v2
   // catalog, so every US state defaulted to bipartisan commission (canDraw
-  // false). Backfill to legislature-drawn — historically correct for the era
+  // false). Backfill to legislature-drawn - historically correct for the era
   // and what lets a trifecta redraw.
   redistrictingAuthorityLegislative,
   // UKR, BEL, and BLT were old RU regions. They now exist as separate country
   // region sets, but their obsolete RU metric rows survived the split.
   purgeRetiredRuMetricRegions,
   // New-generation `both` laws are proposable in a region but only ever seeded
-  // a NATIONAL statePolicies row, so a region bill rendered no current law —
+  // a NATIONAL statePolicies row, so a region bill rendered no current law -
   // and LawProvisionComparison drops the fiscal comparison and metric chips
   // with it. Backfill the level-0 regional default the engine already assumes.
   regionalDefaultLawsNewgen,
@@ -367,19 +368,20 @@ export const MIGRATIONS: Migration[] = [
   // Suggestion #363: spin-offs were created with no tech. Additive heal.
   backfillSpinOffTechBaselines,
   completeCabinetV2Accounts,
+  fundMandates,
 ];
 
-// D13 rollback drill — registered but deliberately OUTSIDE the normal chain.
+// D13 rollback drill - registered but deliberately OUTSIDE the normal chain.
 // `MIGRATIONS` is walked by the no-flag migration runner; a plants→capital rollback is
 // an explicit human act, not something a deploy should ever perform. Kept here
-// (and typed) so it cannot rot, and so `--only` can target it by id —
+// (and typed) so it cannot rot, and so `--only` can target it by id -
 // scripts/run-migrations.ts widens its candidate list to include this array
 // when, and only when, `--only` is passed. A no-flag `npm run migrate` walks
 // `MIGRATIONS` alone and can never reach anything here.
 // See scripts/migrations/restoreCapitalModeFromShadow.ts.
 export const ROLLBACK_MIGRATIONS: Migration[] = [restoreCapitalModeFromShadow];
 
-// HELD — written, tested, and deliberately OUTSIDE the auto-run chain because a
+// HELD - written, tested, and deliberately OUTSIDE the auto-run chain because a
 // product decision is still open. `MIGRATIONS` is what a no-flag
 // `npm run migrate` walks, so nothing here can run on a deploy; scripts/
 // run-migrations.ts widens its candidate list to include this array only when
@@ -411,5 +413,5 @@ export const HELD_MIGRATIONS: Migration[] = [
 //   - 2026-05-05-phase-11-live-bootstrap           (uses MONGODB_URI_LIVE; sub-section markers)
 //
 // Other schema-add and backfill scripts under scripts/migrations/ that already
-// follow the run<Name>(db, opts) shape can be wrapped incrementally — see
+// follow the run<Name>(db, opts) shape can be wrapped incrementally - see
 // scripts/migrations/README.md for the pattern.
