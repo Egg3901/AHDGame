@@ -107,7 +107,10 @@ export interface IsolatedMongod {
  * connected and ownership-verified. `prefix` namespaces the temp dbpath and
  * database name (e.g. "ahd-vote-race-").
  */
-export async function startIsolatedMongod(prefix: string): Promise<IsolatedMongod> {
+export async function startIsolatedMongod(
+  prefix: string,
+  options: { replicaSet?: string } = {}
+): Promise<IsolatedMongod> {
   const base = tmpdir();
   const freeBytes = statfsSync(base).bavail * statfsSync(base).bsize;
   if (freeBytes < MIN_FREE_BYTES) {
@@ -134,13 +137,14 @@ export async function startIsolatedMongod(prefix: string): Promise<IsolatedMongo
     const child = spawn(
       "mongod",
       [
+        ...(options.replicaSet ? ["--replSet", options.replicaSet] : []),
         "--port",
         String(port),
         "--dbpath",
         dbpath,
         "--bind_ip",
         "127.0.0.1",
-        "--nounixsocket",
+        ...(process.platform === "win32" ? [] : ["--nounixsocket"]),
         "--wiredTigerCacheSizeGB",
         "0.25",
       ],
@@ -154,7 +158,7 @@ export async function startIsolatedMongod(prefix: string): Promise<IsolatedMongo
     });
     proc = child;
     exited = false;
-    uri = `mongodb://127.0.0.1:${port}/${dbName}`;
+    uri = `mongodb://127.0.0.1:${port}/${dbName}${options.replicaSet ? "?directConnection=true" : ""}`;
     const deadline = Date.now() + STARTUP_DEADLINE_MS;
     let connected = false;
     while (Date.now() < deadline) {

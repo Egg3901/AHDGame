@@ -2,7 +2,10 @@ import { describe, expect, it } from "vitest";
 import { fileURLToPath } from "node:url";
 import { join, relative } from "node:path";
 import { discoverCollectionCalls } from "../../../../scripts/architecture/collectionDiscovery";
-import { LEGACY_DYNAMIC_COLLECTION_SITES } from "../../../../scripts/architecture/collectionDiscoveryExceptions";
+import {
+  LEGACY_DYNAMIC_COLLECTION_SITES,
+  SESSION_COLLECTION_FORWARDERS,
+} from "../../../../scripts/architecture/collectionDiscoveryExceptions";
 import { getCollectionCategory, SEED_MANIFEST } from "./seedManifest";
 
 type DiscoveryFixtureDb = {
@@ -129,12 +132,12 @@ describe("seed manifest source discovery", () => {
     const actual = [...counts]
       .map(([key, count]) => ({ key, count }))
       .sort((a, b) => a.key.localeCompare(b.key));
-    const expected = LEGACY_DYNAMIC_COLLECTION_SITES.map(
-      ({ file, owner, argument, scopeHash, count }) => ({
+    const expected = [...LEGACY_DYNAMIC_COLLECTION_SITES, ...SESSION_COLLECTION_FORWARDERS]
+      .map(({ file, owner, argument, scopeHash, count }) => ({
         key: JSON.stringify([file, owner, argument, scopeHash]),
         count,
-      })
-    ).sort((a, b) => a.key.localeCompare(b.key));
+      }))
+      .sort((a, b) => a.key.localeCompare(b.key));
     expect(actual).toEqual(expected);
   });
 

@@ -24,13 +24,16 @@ export async function convertTransferredResidentsCurrency(
   db: Db,
   regionId: string,
   fromCountryId: CountryId,
-  toCountryId: CountryId
+  toCountryId: CountryId,
+  strict = false
 ): Promise<void> {
   // The SHARED merge rate source (`loadFxScalePair`), so every pot of money
   // that crosses in one merge crosses at one price. This caller's missing-rate
   // policy is REFUSE (the region already moved; balances can be re-converted
   // later) — unlike the national merge, which fails open at 1.
   const pair = await loadFxScalePair(db, fromCountryId, toCountryId);
+  if (pair.kind === "missing-rate" && strict)
+    throw new Error("Currency conversion requires usable exchange rates.");
   if (pair.kind !== "convert") return;
   const { scale, oldCurrency, newCurrency, fxByCurrency } = pair;
   const now = new Date();
@@ -45,7 +48,8 @@ export async function convertTransferredResidentsCurrency(
   for (const corp of corps) {
     // Forex is enabled by construction here — a "convert" pair only exists
     // with the feature on.
-    await convertCorpCurrency(db, corp, newCurrency, fxByCurrency, now, true);
+    const result = await convertCorpCurrency(db, corp, newCurrency, fxByCurrency, now, true);
+    if (strict && result && !result.ok) throw new Error(result.error);
   }
 
   // Region party organisations that CARRIED with a dissolving source (the

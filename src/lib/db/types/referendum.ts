@@ -72,9 +72,11 @@ export interface Referendum {
    *  lean shift by `referendumYesShare` for any pre-cutover referendum. */
   campaignSpendUnits: { yes: number; no: number };
 
-  /** Turn the post-pass conversion window closes (auto-converts at/after this).
+  /** Turn the parliamentary consent voting period ends; assent delays may follow.
    *  Set when a referendum passes into `actuating`; null otherwise. */
   conversionDeadlineTurn: number | null;
+  /** Conversion/block serialization counter; runtime referendums reset together. */
+  conversionRevision?: number;
   /** Parliamentary consent for a territorial change. Westminster is always
    *  required. The Dáil bill is present only when Ireland was already open to
    *  players when a reunification referendum passed. */

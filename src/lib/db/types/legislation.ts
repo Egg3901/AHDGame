@@ -506,6 +506,13 @@ export interface Bill {
   otherChamberVotes?: Record<string, "for" | "against" | "abstain">;
   otherChamberWhippedFromVote?: WhippedFromVoteMap;
   category?: string;
+  /** Server-authored referendum mandate, optional on pre-feature consent bills.
+   * Runtime bills are wiped on reset. No backfill is required for other bills. */
+  referendumConsent?: {
+    regionId: string;
+    yesShare: number;
+    partyPositions: Array<{ partyId: string; side: "yes" | "no" }>;
+  };
   /** Country the bill was proposed in. Required for trade bills; set for all new bills. */
   countryId?: CountryId;
   /** Optional pseudo-state for country-scoped national bills (e.g. "uk_national"). */

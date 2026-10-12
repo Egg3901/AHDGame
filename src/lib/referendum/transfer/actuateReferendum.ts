@@ -1,3 +1,4 @@
+import { withSessionDb, afterCommit } from "@/lib/db/sessionDb";
 /**
  * Conversion-window resolution for a passed referendum.
  *
@@ -5,7 +6,7 @@
  * (`CONVERSION_WINDOW_TURNS`). During the window:
  *   - an admin may RESOLVE it early (run the transfer now), or
  *   - an admin may BLOCK it (the region does not transfer; `cancelled`).
- * If neither happens, the turn processor auto-resolves it at the deadline.
+ * The turn processor converts after all required consent bills are enacted.
  *
  * Both referendum kinds actuate here: reunification transfers the region to the
  * target country (NI → Ireland), and independence stands the region up as a new
@@ -60,9 +61,20 @@ export async function cancelReferendum(
   ref: Referendum,
   currentTurn: number,
   opts: { cooldown: boolean }
-): Promise<void> {
-  await getReferendumCollection(db).updateOne(
-    { _id: ref._id },
+): Promise<boolean> {
+  return withSessionDb(db, (transactionDb) =>
+    cancelReferendumInTransaction(transactionDb, ref, currentTurn, opts)
+  );
+}
+
+async function cancelReferendumInTransaction(
+  db: Db,
+  ref: Referendum,
+  currentTurn: number,
+  opts: { cooldown: boolean }
+): Promise<boolean> {
+  const cancelled = await getReferendumCollection(db).updateOne(
+    { _id: ref._id, status: "actuating" },
     {
       $set: {
         status: "cancelled",
@@ -71,6 +83,9 @@ export async function cancelReferendum(
       },
     }
   );
+  if (cancelled.modifiedCount === 0) return false;
+  await withdrawActiveConsentBills(db, ref);
+  return true;
 }
 
 /**
@@ -83,13 +98,29 @@ export async function runReferendumActuation(
   ref: Referendum,
   currentTurn: number
 ): Promise<{ ok: boolean; error?: string; report?: unknown }> {
+  return withSessionDb(db, (transactionDb) =>
+    runReferendumActuationInTransaction(transactionDb, ref, currentTurn)
+  );
+}
+
+async function runReferendumActuationInTransaction(
+  db: Db,
+  ref: Referendum,
+  currentTurn: number
+): Promise<{ ok: boolean; error?: string; report?: unknown }> {
+  const claim = await getReferendumCollection(db).updateOne(
+    { _id: ref._id, status: "actuating" },
+    { $inc: { conversionRevision: 1 } }
+  );
+  if (claim.modifiedCount === 0)
+    return { ok: false, error: "Referendum conversion is no longer pending." };
   // ── Independence: the region stands up as a new sovereign country ───────────
   if (ref.kind === "independence") {
     // Gate: the single Westminster consent bill must be signed for actuation.
     const bill = ref.westminsterBillId
       ? await db.collection<Bill>("bills").findOne({ _id: ref.westminsterBillId })
       : null;
-    if (bill?.status !== "signed") {
+    if (bill == null || (bill.status !== "signed" && bill.enactedAt == null)) {
       return { ok: false, error: "Westminster consent bill is not signed." };
     }
     const res = await secedeRegion(db, {
@@ -97,8 +128,11 @@ export async function runReferendumActuation(
       fromCountryId: ref.countryId,
       currentTurn,
     });
-    if (!res.ok) {
-      return { ok: false, error: `Secession did not run (${res.skipped ?? "unknown"}).` };
+    if (!res.ok || res.skipped) {
+      return {
+        ok: false,
+        error: `Secession did not run (${res.skipped ?? "unknown"}). Existing map changes require review before completion.`,
+      };
     }
     await getReferendumCollection(db).updateOne(
       { _id: ref._id },
@@ -106,7 +140,7 @@ export async function runReferendumActuation(
     );
     // Force-resolved while the consent bill was still voting? Withdraw it (moot).
     await withdrawActiveConsentBills(db, ref);
-    await announceSecessionComplete(ref).catch(() => {});
+    await afterCommit(db, () => announceSecessionComplete(ref).catch(() => {}));
     await recordWireEvent(db, {
       referendumId: ref._id!,
       countryId: ref.countryId,
@@ -122,6 +156,20 @@ export async function runReferendumActuation(
   if (ref.kind !== "reunification" || !ref.targetCountryId) {
     return { ok: false, error: "Only reunification referendums can be actuated in this phase." };
   }
+  const consentIds = [ref.westminsterBillId, ref.dailBillId].filter(
+    (id): id is NonNullable<typeof id> => id != null
+  );
+  if (ref.westminsterBillId == null)
+    return { ok: false, error: "Westminster consent is required." };
+  const consentBills = await db
+    .collection<Bill>("bills")
+    .find({ _id: { $in: consentIds } })
+    .toArray();
+  if (
+    consentBills.length !== consentIds.length ||
+    consentBills.some((bill) => bill.status !== "signed" && bill.enactedAt == null)
+  )
+    return { ok: false, error: "All required consent bills must be enacted." };
   const targetWasPlayerEnabled = await isCountryEnabledForPlayers(db, ref.targetCountryId);
   const result = await transferRegion(db, {
     regionId: ref.regionId,
@@ -132,8 +180,11 @@ export async function runReferendumActuation(
     relocateToRegionId: NIR_RELOCATE_REGION,
     currentTurn,
   });
-  if (!result.ok) {
-    return { ok: false, error: `Transfer did not run (${result.skipped ?? "unknown"}).` };
+  if (!result.ok || result.skipped) {
+    return {
+      ok: false,
+      error: `Transfer did not run (${result.skipped ?? "unknown"}). Existing map changes require review before completion.`,
+    };
   }
   if (!targetWasPlayerEnabled) {
     await enterCountryForPlayers(db, ref.targetCountryId, {
@@ -148,7 +199,7 @@ export async function runReferendumActuation(
   // If an admin force-resolved while a consent bill was still voting, that bill
   // is now moot. A bill that passed is already `signed`.
   await withdrawActiveConsentBills(db, ref);
-  await announceReunificationComplete(ref).catch(() => {});
+  await afterCommit(db, () => announceReunificationComplete(ref).catch(() => {}));
   await recordWireEvent(db, {
     referendumId: ref._id!,
     countryId: ref.countryId,
@@ -169,9 +220,8 @@ export async function blockReferendumConversion(
   db: Db,
   ref: Referendum,
   currentTurn: number
-): Promise<void> {
-  await cancelReferendum(db, ref, currentTurn, { cooldown: true });
-  await withdrawActiveConsentBills(db, ref);
+): Promise<boolean> {
+  return cancelReferendum(db, ref, currentTurn, { cooldown: true });
 }
 
 export type ActuateAction = "resolve" | "block";
@@ -191,6 +241,8 @@ export async function actuateReferendumTransfer(
   db: Db,
   input: ActuateReferendumInput
 ): Promise<ActuateReferendumResult> {
+  if (!ObjectId.isValid(input.referendumId))
+    return { status: 400, body: { error: "Invalid referendum ID." } };
   const refs = getReferendumCollection(db);
   const ref = await refs.findOne({ _id: new ObjectId(input.referendumId) });
   if (!ref) return { status: 404, body: { error: "Referendum not found." } };
@@ -199,7 +251,9 @@ export async function actuateReferendumTransfer(
   }
 
   if (input.action === "block") {
-    await blockReferendumConversion(db, ref, input.currentTurn);
+    const blocked = await blockReferendumConversion(db, ref, input.currentTurn);
+    if (!blocked)
+      return { status: 409, body: { error: "Referendum conversion is no longer pending." } };
     return { status: 200, body: { ok: true, blocked: true, regionId: ref.regionId } };
   }
 

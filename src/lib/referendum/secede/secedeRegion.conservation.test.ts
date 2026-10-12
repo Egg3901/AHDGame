@@ -1,3 +1,9 @@
+vi.mock("@/lib/db/sessionDb", () => ({
+  boundSession: () => undefined,
+  unboundDb: (db: unknown) => db,
+  withSessionDb: (_db: unknown, work: (db: unknown) => Promise<unknown>) => work(_db),
+  afterCommit: (_db: unknown, effect: () => Promise<unknown>) => effect(),
+}));
 /**
  * SP2d cross-country conservation invariant: after a region secedes, the post
  * state (rump-UK + the new country) sums back to the pre-state totals for

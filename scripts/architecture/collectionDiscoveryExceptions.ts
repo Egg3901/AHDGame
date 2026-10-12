@@ -829,3 +829,21 @@ export const LEGACY_DYNAMIC_COLLECTION_SITES: readonly LegacyDynamicCollectionSi
     reason: "The world-transition operation iterates its explicit collection descriptors.",
   },
 ];
+
+/** Reviewed transport forwarding, separate from frozen legacy collection debt.
+ * sessionDb passes the caller's exact collection name through and only binds
+ * a Mongo session. It owns no collection or lifecycle. Literal collection
+ * callsites remain discoverable in their domain modules; the exact body hash
+ * forces re-review if this transparent transport behavior changes.
+ */
+export const SESSION_COLLECTION_FORWARDERS: readonly LegacyDynamicCollectionSite[] = [
+  {
+    file: "src/lib/db/sessionDb.ts",
+    owner: "<anonymous-function>",
+    argument: "name",
+    scopeHash: "7204a1d56c5a83d2d9b9564fabd702551db3460044ab7f5b0dfb9523c715cd85",
+    count: 1,
+    reason:
+      "Transparent session binding; names are supplied by already-scanned domain collection callsites, never generated here. No new collection, index or reset policy is introduced.",
+  },
+];

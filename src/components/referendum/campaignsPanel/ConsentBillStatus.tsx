@@ -32,9 +32,9 @@ export function ConsentBillStatus({
       ? "Westminster and the Dáil authorized this agreement. The public ballot decides whether it proceeds to implementation."
       : kind === "reunification"
         ? bills.length > 1
-          ? "Both consent bills must pass within the window for the union to take effect. If either fails or the window closes, the conversion is cancelled."
-          : "The Westminster consent bill must pass within the window for the union to take effect. If it fails or the window closes, the conversion is cancelled."
-        : "The Westminster consent bill must pass within the window for independence to take effect. If it fails or the window closes, the conversion is cancelled.";
+          ? "Both consent bills must pass and be enacted for the union to take effect. A failed bill cancels conversion. Government formation and Royal Assent may extend the process."
+          : "The Westminster consent bill must pass and be enacted for the union to take effect. A failed bill cancels conversion. Government formation and Royal Assent may extend the process."
+        : "The Westminster consent bill must pass and be enacted for independence to take effect. A failed bill cancels conversion. Government formation and Royal Assent may extend the process.";
 
   return (
     <div className="rounded-2xl border border-card-border bg-card p-6 shadow-card">
@@ -73,8 +73,8 @@ export function ConsentBillStatus({
       {deadlineTurn != null && (
         <p className="mt-4 border-t border-card-border/40 pt-3 text-xs text-muted">
           {turnsLeft != null && turnsLeft > 0
-            ? `Conversion window closes on turn ${deadlineTurn} (in ${turnsLeft} turns).`
-            : `Conversion window closes on turn ${deadlineTurn}.`}
+            ? `Consent voting is scheduled to close on turn ${deadlineTurn} (in ${turnsLeft} turns).`
+            : `Consent voting is scheduled to close on turn ${deadlineTurn}.`}
         </p>
       )}
     </div>

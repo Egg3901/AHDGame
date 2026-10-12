@@ -1,3 +1,9 @@
+vi.mock("@/lib/db/sessionDb", () => ({
+  boundSession: () => undefined,
+  unboundDb: (db: unknown) => db,
+  withSessionDb: (_db: unknown, work: (db: unknown) => Promise<unknown>) => work(_db),
+  afterCommit: (_db: unknown, effect: () => Promise<unknown>) => effect(),
+}));
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { type Db } from "mongodb";
 import { ObjectId } from "mongodb";
@@ -151,4 +157,23 @@ describe("spendGroundGame", () => {
       })
     );
   });
+});
+
+it("rejects spending at the closing turn before debiting resources", async () => {
+  const db = createMockDb();
+  setRef(db, { campaignCloseTurn: 140 });
+  psMock.mockClear();
+  const result = await spendGroundGame(db as unknown as Db, official);
+  expect(result.status).toBe(400);
+  expect(psMock).not.toHaveBeenCalled();
+  expect(db.collection("characters").updateOne).not.toHaveBeenCalled();
+});
+
+it("does not charge a legacy campaign before its electorate is prepared", async () => {
+  const db = createMockDb();
+  psMock.mockClear();
+  setRef(db, { cohortBaseline: [] });
+  expect((await spendGroundGame(db as unknown as Db, official)).status).toBe(400);
+  expect(psMock).not.toHaveBeenCalled();
+  expect(db.collection("characters").updateOne).not.toHaveBeenCalled();
 });
