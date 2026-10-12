@@ -92,6 +92,11 @@ export async function placeFundShareBuyOrder(
   input: PlaceFundShareBuyOrderInput
 ): Promise<PlaceFundShareBuyOrderResult> {
   const { fund, corp, shares, limitPriceLocal, fxRate } = input;
+  const current = await db
+    .collection<IndexFund>("indexFunds")
+    .findOne({ _id: fund._id }, { projection: { mandate: 1 } });
+  if (current?.mandate?.mode === "picked_stocks")
+    return { ok: false, reason: "This fund buys available shares during rebalancing." };
 
   if (!Number.isFinite(shares) || shares <= 0) {
     return { ok: false, reason: "Invalid share quantity" };
@@ -227,8 +232,8 @@ export async function placeFundQuotesBatch(
 } | null> {
   const current = await db
     .collection<IndexFund>("indexFunds")
-    .findOne({ _id: fund._id }, { projection: { cashAnchor: 1 } });
-  if (!current) return null;
+    .findOne({ _id: fund._id }, { projection: { cashAnchor: 1, mandate: 1 } });
+  if (!current || current.mandate?.mode === "picked_stocks") return null;
   let cash = current.cashAnchor;
   let totalEscrow = 0;
   const reserved = new Map(reservedSharesByCorp);
@@ -414,7 +419,7 @@ function fundSellOrderDoc(
  * and refunds the remaining `escrowAnchor` to the fund's `cashAnchor`.
  *
  * The matcher decrements `escrowAnchor` proportionally on each partial fill, so
- * the stored value is exactly the un-filled escrow at cancel time — refund it
+ * the stored value is exactly the un-filled escrow at cancel time - refund it
  * verbatim. No-op if the order is missing, not a fund order, or already closed.
  */
 export async function cancelFundShareOrder(
@@ -443,7 +448,7 @@ export async function cancelFundShareOrder(
 
   if (!claimed) return;
   if (!claimed.placerFundId) {
-    // Not a fund order — restore status; this helper only handles fund orders.
+    // Not a fund order - restore status; this helper only handles fund orders.
     await db
       .collection<ShareOrder>("shareOrders")
       .updateOne({ _id: orderId, status: "cancelled" }, { $set: { status: "open" } });

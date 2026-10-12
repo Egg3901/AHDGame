@@ -1,3 +1,4 @@
+import { bankFundAcceptsSubscriptions } from "./managerEligibility";
 import { loadFloatAuditContext, type FloatAuditContext } from "./fundFloatTradePlan";
 import { executeFundShareBuys, type FundShareBuyBatch } from "./fundFloatBuyExecution";
 import { ObjectId } from "mongodb";
@@ -237,6 +238,8 @@ export async function rebalanceFundToTarget(
   /** Pass-level reads shared by every fund, loaded once instead of once per fund. */
   shared?: { bondPrincipalAnchor?: number; audit?: FloatAuditContext }
 ): Promise<{ buys: number; sells: number; bidsPlaced: number; bidsCancelled: number }> {
+  if (fund.mandate?.mode === "picked_stocks" && !(await bankFundAcceptsSubscriptions(db, fund)))
+    return { buys: 0, sells: 0, bidsPlaced: 0, bidsCancelled: 0 };
   const bondPrincipalAnchor =
     shared?.bondPrincipalAnchor ?? (await sumFundBondHoldingsValueAnchor(db, fund, exchangeRates));
   const plan = planFundTargetRebalance({
@@ -340,7 +343,7 @@ export async function rebalanceFundToTarget(
   );
 
   const bidTxSink: Omit<IndexFundTransaction, "_id">[] = [];
-  for (const leg of plan.bids) {
+  for (const leg of fund.mandate?.mode === "picked_stocks" ? [] : plan.bids) {
     const corpIdStr = leg.corporationId.toString();
     // Never stack: skip if an open bid already exists for this (fund, corp).
     if (openBidCorpIds.has(corpIdStr)) continue;
@@ -395,6 +398,8 @@ export async function rebalanceConstituents(
   txSink?: Omit<IndexFundTransaction, "_id">[]
 ): Promise<RebalanceOutcome> {
   const definition = resolveFundMandate(fund);
+  if (definition.mode === "picked_stocks" && !(await bankFundAcceptsSubscriptions(db, fund)))
+    return NO_REBALANCE;
   if (definition.kind === "bond") return NO_REBALANCE;
   const removed = findRemovedConstituentHoldings({ ...fund, ...definition }, corps);
   let writeOff = { writtenOffCount: 0, writtenOffValueAnchor: 0, unsellableCount: 0 };
@@ -417,6 +422,28 @@ export async function rebalanceConstituents(
     const wo = await writeOffDeadConstituentHoldings(db, fund, removed);
     writeOff = wo;
     if (wo.writtenOffCount > 0) fund = (await getFundById(db, fund._id)) ?? fund;
+  }
+
+  if (definition.mode === "picked_stocks") {
+    const targets = definition.stocks.flatMap((stock) => {
+      const corp = corps.find(
+        (c) =>
+          String(c._id) === stock.corporationId &&
+          c.countryId === definition.countryId &&
+          (c.liquidCapital ?? 0) >= 0
+      );
+      return corp
+        ? [
+            {
+              corporationId: corp._id,
+              targetWeight: stock.weightBps / 10000,
+              marketCapAnchor: corp.sharePrice * corp.totalShares,
+            },
+          ]
+        : [];
+    });
+    await updateFundConstituents(db, fund._id, targets, new Date(), [], definition);
+    return { ...NO_REBALANCE, rebalanced: true };
   }
 
   // A7 listing standards: an incumbent gets a grace period before it is sold,

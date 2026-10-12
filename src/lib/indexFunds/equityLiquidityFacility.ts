@@ -105,7 +105,7 @@ export function planEquityLiquidityQuotes(input: {
     bidHeadroomByFundId: input.bidHeadroomByFundId,
     // Bond funds hold no equities and never quote on the equity book.
     funds: input.funds
-      .filter((fund) => fund.kind !== "bond")
+      .filter((fund) => fund.kind !== "bond" && fund.mandate?.mode !== "picked_stocks")
       .map((fund) => ({
         id: fund._id.toString(),
         scope: fund.scope,

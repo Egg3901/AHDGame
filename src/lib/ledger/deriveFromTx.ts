@@ -19,7 +19,7 @@ import type { FinancialTxLogEntry } from "@/lib/db/types/financialTxLog";
  *                    rows), otherwise a mint:/sink: bucket (single-sided rows).
  *
  * The contra leg is deliberately booked against `mint:unattributed` /
- * `sink:unattributed` for single-sided rows — that bucket IS the Phase 3
+ * `sink:unattributed` for single-sided rows - that bucket IS the Phase 3
  * coverage backlog, ranked by anchor value in the reconciler report. Proper
  * per-reason attribution and true two-sided linkage is Phase 3 work; the shim
  * exists so the reconciler's per-entry conservation check (Invariant #1) runs
@@ -31,7 +31,7 @@ import type { FinancialTxLogEntry } from "@/lib/db/types/financialTxLog";
 const UNATTRIBUTED_REASON = "unattributed";
 
 /**
- * Phase 3 coverage sweep — semantic mint/sink reasons for single-sided rows.
+ * Phase 3 coverage sweep - semantic mint/sink reasons for single-sided rows.
  *
  * A single-entry tx row has no counterparty account, so the shim books its
  * balancing contra leg against a system `mint:`/`sink:` bucket. Phase 1/2 booked
@@ -48,7 +48,7 @@ const UNATTRIBUTED_REASON = "unattributed";
  *   - a corporation's `corp_tax_paid` (sink) pairs with the government's
  *     `gov_tax_revenue` receipt (mint) → `taxation`.
  * `corp_revenue` is a genuine one-directional inflow from the (unmodeled) demand
- * side of the sim, so it has no matching sink — it is honestly a `sector_revenue`
+ * side of the sim, so it has no matching sink - it is honestly a `sector_revenue`
  * mint rather than an attributed transfer.
  *
  * Everything not listed here keeps falling through to `unattributed`, which is
@@ -108,7 +108,7 @@ const REASON_BY_TX_TYPE: Partial<Record<FinancialTxLogEntry["type"], string>> = 
   // account id on the row.
   index_listing_lobbying: "index_listing_lobbying",
   // Resource prospecting + extraction contracts. These are single-sided from
-  // the payer's perspective — the survey cost / contract fee / royalty leaves
+  // the payer's perspective - the survey cost / contract fee / royalty leaves
   // the corp (or government treasury) into the state/national budget, which is
   // moved by creditTreasury / a stateBudgets $inc rather than a paired tx row.
   // Attribute the sink so the money-supply check reports them per-reason instead
@@ -131,7 +131,7 @@ const REASON_BY_TX_TYPE: Partial<Record<FinancialTxLogEntry["type"], string>> = 
   govt_royalty_receipt: "extraction_royalty",
   // Capacity builds (P3a). The contra side of a build debit is the sector's
   // capitalized construction-in-progress, which is an ASSET account the shadow
-  // ledger does not (yet) carry — it stock-checks money balances only. Both
+  // ledger does not (yet) carry - it stock-checks money balances only. Both
   // directions therefore share ONE reason so the money-supply reconciler nets a
   // build against its own refund per currency instead of reporting two
   // unrelated single-sided flows, and so the standing CIP balance shows up as a
@@ -177,7 +177,7 @@ const REASON_BY_TX_TYPE: Partial<Record<FinancialTxLogEntry["type"], string>> = 
   npp_investment_income: "npp_investment_income",
   // #992 tranche 3: the fund's retained dividend slice. Single-sided by
   // construction (the corp evidences net-of-dividend revenue), so this is an
-  // attributed mint completing earnings to gross — never `unattributed`.
+  // attributed mint completing earnings to gross - never `unattributed`.
   dividend_reinvest: "fund_dividend_retained",
   // #992 tranche 3: cross-fund moves mirror via meta, so the reason is only
   // the fail-closed fallback (cross-currency pair or missing meta).
@@ -191,13 +191,13 @@ const REASON_BY_TX_TYPE: Partial<Record<FinancialTxLogEntry["type"], string>> = 
   // the wind-up sponsor return are single-sided by construction (the debit
   // covers seed + fee while the fund receives the seed alone), and the
   // charter path now books the fund's seed receipt as its own fund-subject
-  // row under this same type — so both directions share ONE reason and the
+  // row under this same type - so both directions share ONE reason and the
   // money-supply check nets a seeding against its return per currency instead
   // of pooling both in `unattributed`. (The spin-off incorporation fee debit
   // shares the type; it is likewise a seeding flow.)
   corp_capital_seed: "seed_capital",
   // #992 tranche 4: order-book escrow. The debit is a reservation, not
-  // destruction — the standing escrow reads as a named sink bucket (same
+  // destruction - the standing escrow reads as a named sink bucket (same
   // convention as capacity_capex), and the refund shares the reason so a
   // placement nets against its own cancel per currency instead of pooling in
   // `unattributed`. Applies to character/corporation escrow rows as well as
@@ -259,7 +259,7 @@ const FUND_MIRROR_TX_TYPES: ReadonlySet<string> = new Set([
  * The fund cash account a holder row settles against, or null when the row
  * does not evidence the fund side. Fail-closed: the fund account key must
  * carry the fund's own anchor currency, and the row must be denominated in
- * exactly that currency — otherwise the mirror would book against a key the
+ * exactly that currency - otherwise the mirror would book against a key the
  * snapshot never holds (e.g. a GBP scheme buying a USD fund). The exception is
  * an anchor-backed NPP holder: its row states the ₳ value outright in both
  * fields, which is exactly the fund's credit, so it settles against the fund's
@@ -355,18 +355,26 @@ export function deriveLedgerEntry(
     return null;
   const anchor = tx.anchorAmount;
   // No anchor value → not derivable in ₳ terms; skip rather than guess a rate
-  // (deriving anchor from the live FX table causes historical drift — plan §5).
+  // (deriving anchor from the live FX table causes historical drift - plan §5).
   if (anchor === undefined || !Number.isFinite(anchor)) return null;
 
   // State-party rows have no ObjectId subjectId; their identity is the composite
   // statePartyKey stamped in `meta` at emit time (see nppFundGeneration.ts).
   const statePartyKey =
     typeof tx.meta?.statePartyKey === "string" ? tx.meta.statePartyKey : undefined;
-  const subject = subjectAccount(
-    tx.subjectType,
-    { subjectId: tx.subjectId?.toString(), countryId: tx.countryId, statePartyKey },
-    tx.currencyCode
-  );
+  const escrowKey =
+    tx.subjectType === "system" &&
+    (tx.type === "index_fund_subscribe" || tx.type === "index_fund_redeem") &&
+    typeof tx.meta?.subscriptionEscrowId === "string"
+      ? tx.meta.subscriptionEscrowId
+      : null;
+  const subject = escrowKey
+    ? `fund_subscription_escrow:${escrowKey}:${tx.currencyCode}`
+    : subjectAccount(
+        tx.subjectType,
+        { subjectId: tx.subjectId?.toString(), countryId: tx.countryId, statePartyKey },
+        tx.currencyCode
+      );
   if (!subject) return null;
 
   const primary: LedgerLeg = {
@@ -384,7 +392,7 @@ export function deriveLedgerEntry(
   );
   // A derivable counterparty always wins. Failing that, a linked transfer
   // account from the row's own meta (fund cash, transfer counterparty) wins
-  // over the mint/sink fallback — these are real transfers, not creation.
+  // over the mint/sink fallback - these are real transfers, not creation.
   const linked = counterparty ?? fundMirrorAccount(tx) ?? partyTransferContra(tx);
   const contraAccount =
     linked ?? mintSinkAccount(anchor, reasonForTxType(tx.type), tx.currencyCode);
@@ -430,7 +438,7 @@ function deriveFundMirrorEntry(
   holderAccount: string,
   emitSite = "financialTxLog/emit.ts:shim"
 ): LedgerEntryInput | null {
-  // Only mirror when the base entry actually routed its contra at the fund —
+  // Only mirror when the base entry actually routed its contra at the fund -
   // otherwise the row never evidenced the fund side (currency mismatch, no
   // fund meta) and a mirror would invent it.
   const fundAccount = fundMirrorAccount(tx);

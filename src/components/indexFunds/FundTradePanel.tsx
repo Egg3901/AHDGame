@@ -38,6 +38,9 @@ export function FundTradePanel({
   defaultMode = "subscribe",
   corporation,
   onPendingChange,
+  canSubscribe: subscribeCapability,
+  canRedeem: redeemCapability,
+  nextTurnSubscriptions = false,
 }: {
   fundId: string;
   quotedNav: number;
@@ -53,6 +56,9 @@ export function FundTradePanel({
   myLegacyUnits: number;
   onSuccess: () => void;
   defaultMode?: Mode;
+  canSubscribe?: boolean;
+  canRedeem?: boolean;
+  nextTurnSubscriptions?: boolean;
   onPendingChange?: (pending: boolean) => void;
   corporation?: {
     id: string;
@@ -99,26 +105,43 @@ export function FundTradePanel({
     onPendingChange?.(!!pendingOrder);
   }, [pendingOrder, onPendingChange]);
 
-  const loadWallet = useCallback(async () => {
+  const fetchWallet = useCallback(async () => {
     try {
       const res = await fetch("/api/character/me", { cache: "no-store" });
-      if (!res.ok) return;
+      if (!res.ok) return null;
       const data = (await res.json()) as { character?: CharacterWallet };
-      if (!data.character) return;
-      setWallet(data.character);
-      if (data.character.autoConvertEnabled !== undefined) {
-        setAutoConvertEnabled(data.character.autoConvertEnabled);
-      }
-      const home = (data.character.homeCurrency ?? fundCurrency) as CurrencyCode;
-      setSelectedPayCurrency(home);
+      return data.character ?? null;
     } catch {
-      // Non-fatal - subscribe still works for same-currency wallets.
+      // Non-fatal: same-currency subscriptions can still proceed.
+      return null;
     }
-  }, [fundCurrency]);
+  }, []);
+
+  const applyWallet = useCallback(
+    (character: CharacterWallet | null) => {
+      if (!character) return;
+      setWallet(character);
+      if (character.autoConvertEnabled !== undefined) {
+        setAutoConvertEnabled(character.autoConvertEnabled);
+      }
+      setSelectedPayCurrency(character.homeCurrency ?? fundCurrency);
+    },
+    [fundCurrency]
+  );
+
+  const loadWallet = useCallback(async () => {
+    applyWallet(await fetchWallet());
+  }, [fetchWallet, applyWallet]);
 
   useEffect(() => {
-    void loadWallet();
-  }, [loadWallet]);
+    let active = true;
+    void fetchWallet().then((character) => {
+      if (active) applyWallet(character);
+    });
+    return () => {
+      active = false;
+    };
+  }, [fetchWallet, applyWallet]);
 
   useEffect(() => {
     if (!currencyDropdownOpen) return;
@@ -129,8 +152,14 @@ export function FundTradePanel({
 
   const parsedUnits = useMemo(() => {
     const n = Number(units);
-    return Number.isInteger(n) && n >= 1 ? n : null;
-  }, [units]);
+    return mode === "redeem"
+      ? Number.isFinite(n) && n > 0
+        ? n
+        : null
+      : Number.isInteger(n) && n >= 1
+        ? n
+        : null;
+  }, [units, mode]);
 
   const subscribeEstimate = useMemo(() => {
     if (!parsedUnits || quotedNav <= 0) return null;
@@ -251,22 +280,38 @@ export function FundTradePanel({
         )
       : (wallet?.cashOnHand ?? 0);
 
-  const corpSpend = corporation
-    ? estimateCorpWalletSpend({
-        union: euroMonetaryUnion,
-        spreadStrengths: forexSpreadStrengths,
-        requiredAmount: corporation.currencyCode ? totalCostNative : totalCostAnchor,
-        availableBalance: corporation.liquidCapital,
-        fromCurrency: corporation.currencyCode,
-        toCurrency: fundCurrency,
-        rates: forexEnabled
-          ? (forexRates ?? {})
-          : {
-              [fundCurrency]: 1,
-              ...(corporation.currencyCode ? { [corporation.currencyCode]: 1 } : {}),
-            },
-      })
-    : null;
+  const corpSpend =
+    nextTurnSubscriptions && corporation
+      ? {
+          spendAmount:
+            totalCostAnchor *
+            (forexEnabled && corporation.currencyCode
+              ? (forexRates?.[corporation.currencyCode] ?? 0)
+              : 1),
+          canAfford:
+            corporation.liquidCapital >=
+            totalCostAnchor *
+              (forexEnabled && corporation.currencyCode
+                ? (forexRates?.[corporation.currencyCode] ?? Infinity)
+                : 1),
+          spreadFee: 0,
+        }
+      : corporation
+        ? estimateCorpWalletSpend({
+            union: euroMonetaryUnion,
+            spreadStrengths: forexSpreadStrengths,
+            requiredAmount: corporation.currencyCode ? totalCostNative : totalCostAnchor,
+            availableBalance: corporation.liquidCapital,
+            fromCurrency: corporation.currencyCode,
+            toCurrency: fundCurrency,
+            rates: forexEnabled
+              ? (forexRates ?? {})
+              : {
+                  [fundCurrency]: 1,
+                  ...(corporation.currencyCode ? { [corporation.currencyCode]: 1 } : {}),
+                },
+          })
+        : null;
   const corpFormat = (n: number) =>
     corporation?.currencyCode
       ? formatCurrencyFaceAmount(n, corporation.currencyCode)
@@ -356,8 +401,10 @@ export function FundTradePanel({
       ? (personalBalances?.[fundCurrency] ?? 0) < totalCostNative
       : selectedPayCurrency !== fundCurrency);
 
-  const canSubscribe = status === "active";
-  const canRedeem = status !== "delisted" && myUnits > 0 && corporation?.canRedeem !== false;
+  const canSubscribe = subscribeCapability ?? status === "active";
+  const canRedeem =
+    (redeemCapability ?? (status !== "delisted" && myUnits > 0)) &&
+    corporation?.canRedeem !== false;
 
   const handleAutoConvertToggle = () => {
     const newValue = !autoConvertEnabled;
@@ -429,6 +476,9 @@ export function FundTradePanel({
         status?: string;
         queuedUnits?: number;
         pending?: boolean;
+        queued?: boolean;
+        refunded?: boolean;
+        units?: number;
       };
 
       if (!res.ok) {
@@ -444,17 +494,23 @@ export function FundTradePanel({
       command.current = null;
       setPendingOrder(null);
       if (order.mode === "subscribe") {
-        setMessage(`Subscribed to ${order.units.toLocaleString("en-US")} unit(s).`);
+        setMessage(
+          data.refunded
+            ? "This investment was cancelled and refunded."
+            : data.queued
+              ? "Your cash is reserved. The final unit count is set next turn."
+              : `Subscribed to ${(data.units ?? order.units).toLocaleString("en-US")} units.`
+        );
         void loadWallet();
         requestCharacterStatsRefetch();
       } else if (data.status === "queued") {
         setMessage(
-          `Redemption queued for ${(data.queuedUnits ?? order.units).toLocaleString("en-US")} unit(s) - fund cash will pay out on the next cycle.`
+          `Your withdrawal of ${(data.queuedUnits ?? order.units).toLocaleString("en-US")} units is waiting for cash.`
         );
       } else if (data.status === "partial") {
-        setMessage("Partial redemption paid; remainder queued for liquidity.");
+        setMessage("Part of your withdrawal was paid. The rest waits for cash.");
       } else {
-        setMessage(`Redeemed ${order.units.toLocaleString("en-US")} unit(s).`);
+        setMessage(`Redeemed ${(data.units ?? order.units).toLocaleString("en-US")} units.`);
       }
       setUnits("1");
       onSuccess();
@@ -482,19 +538,27 @@ export function FundTradePanel({
           if it stays pending.
         </p>
       )}
+      {nextTurnSubscriptions && mode === "subscribe" && (
+        <p className="text-sm">
+          Your cash is reserved now. The final unit count is set next turn. You can cancel before it
+          settles.
+        </p>
+      )}
       <div className="flex items-center gap-2">
-        <button
-          type="button"
-          onClick={() => setMode("subscribe")}
-          disabled={!!pendingOrder}
-          className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${
-            mode === "subscribe"
-              ? "bg-primary/15 text-primary border border-primary/30"
-              : "text-muted hover:text-foreground border border-transparent"
-          }`}
-        >
-          Subscribe
-        </button>
+        {canSubscribe && (
+          <button
+            type="button"
+            onClick={() => setMode("subscribe")}
+            disabled={!!pendingOrder}
+            className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${
+              mode === "subscribe"
+                ? "bg-primary/15 text-primary border border-primary/30"
+                : "text-muted hover:text-foreground border border-transparent"
+            }`}
+          >
+            Subscribe
+          </button>
+        )}
         {canRedeem && (
           <button
             type="button"
@@ -506,7 +570,7 @@ export function FundTradePanel({
                 : "text-muted hover:text-foreground border border-transparent"
             }`}
           >
-            Redeem
+            Withdraw
           </button>
         )}
       </div>
@@ -592,13 +656,13 @@ export function FundTradePanel({
 
       <div>
         <label htmlFor={unitsInputId} className="text-body-sm font-medium text-muted">
-          Units (whole numbers)
+          {mode === "redeem" ? "Units to withdraw" : "Units (whole numbers)"}
         </label>
         <input
           id={unitsInputId}
           type="number"
-          min={1}
-          step={1}
+          min={mode === "redeem" ? 0 : 1}
+          step={mode === "redeem" ? "any" : 1}
           value={units}
           disabled={!!pendingOrder}
           onChange={(e) => setUnits(e.target.value)}
@@ -606,14 +670,22 @@ export function FundTradePanel({
         />
         {mode === "redeem" && myUnits > 0 && (
           <p className="mt-1 text-xs text-muted">
-            You hold {myUnits.toLocaleString("en-US")} units
+            You hold {myUnits.toLocaleString("en-US")} units.
+            <button
+              type="button"
+              disabled={!!pendingOrder}
+              onClick={() => setUnits(String(myUnits))}
+              className="ml-2 underline"
+            >
+              Withdraw all
+            </button>
           </p>
         )}
       </div>
 
       <div className="rounded-lg bg-card-elevated border border-card-border px-3 py-2 text-sm space-y-1">
         <div className="flex justify-between gap-2">
-          <span className="text-muted">NAV / unit</span>
+          <span className="text-muted">Value per unit</span>
           <span className="font-mono font-semibold tabular-nums">
             {/*
               Redeem mode shows the per-unit ₳ value at the SAME basis the
@@ -642,7 +714,7 @@ export function FundTradePanel({
             </div>
             {estimatedFxFeeAnchor > 0 && (
               <div className="flex justify-between gap-2">
-                <span className="text-muted">Est. FX fee</span>
+                <span className="text-muted">Estimated exchange fee</span>
                 <span className="font-mono tabular-nums text-warning">
                   {formatFull(estimatedFxFeeAnchor)}
                 </span>
@@ -690,8 +762,8 @@ export function FundTradePanel({
               </p>
             )}
             <p className="text-[10px] text-muted pt-1">
-              Payout uses fund cash first; illiquid redemptions may queue until the hourly fund
-              cycle.
+              Withdrawals use the cash available. If more cash is needed, the rest waits for a later
+              turn.
             </p>
           </>
         )}
@@ -714,7 +786,7 @@ export function FundTradePanel({
         disabled={submitDisabled}
         className="w-full rounded-lg bg-primary px-4 py-2.5 text-sm font-bold text-white hover:bg-primary/90 disabled:opacity-50 transition-colors"
       >
-        {loading ? "Processing…" : mode === "subscribe" ? "Subscribe" : "Redeem units"}
+        {loading ? "Processing…" : mode === "subscribe" ? "Subscribe" : "Withdraw"}
       </button>
     </div>
   );

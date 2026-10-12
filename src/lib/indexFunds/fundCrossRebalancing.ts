@@ -46,6 +46,7 @@ export type CrossRebalanceFund = Pick<
   | "holdings"
   | "targetConstituents"
   | "bondAllocations"
+  | "mandate"
 >;
 
 export type PlannedCrossTransfer = {
@@ -93,10 +94,10 @@ export function planFundCrossRebalancing(input: {
   // Fund-level resources are shared across every corp in this pass: a buyer
   // fund's cash and its equity-allocation headroom (cap on TOTAL equity) are
   // consumed cumulatively as it buys different corps' shares. Track them per
-  // fund — in anchor VALUE so they're comparable across corps priced
-  // differently — so the plan can't over-commit cash or breach
+  // fund - in anchor VALUE so they're comparable across corps priced
+  // differently - so the plan can't over-commit cash or breach
   // INDEX_FUND_MAX_EQUITY_ALLOCATION across the whole pass. (Sells are not
-  // credited back within a pass — that only keeps us more conservative.)
+  // credited back within a pass - that only keeps us more conservative.)
   const fundCashRemaining = new Map<string, number>();
   const fundEquityRemaining = new Map<string, number>();
 
@@ -198,7 +199,7 @@ function buildCorpParticipants(input: {
   const participants: RebalanceParticipant[] = [];
 
   for (const fund of funds) {
-    if (fund.status !== "active") continue;
+    if (fund.status !== "active" || fund.mandate?.mode === "picked_stocks") continue;
 
     const priceAnchor = convertLocalPriceToAnchor(
       executionPrice,
@@ -306,7 +307,13 @@ async function executeSingleTransfer(
 ): Promise<boolean> {
   const sellerFund = await loadFundState(db, plan.sellerFundId, fundState);
   const buyerFund = await loadFundState(db, plan.buyerFundId, fundState);
-  if (!sellerFund || !buyerFund) return false;
+  if (
+    !sellerFund ||
+    !buyerFund ||
+    sellerFund.mandate?.mode === "picked_stocks" ||
+    buyerFund.mandate?.mode === "picked_stocks"
+  )
+    return false;
 
   const corpKey = plan.corporationId.toString();
   let corp = corpState.get(corpKey);

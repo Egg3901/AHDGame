@@ -38,9 +38,14 @@ export default function FundDetailPage({
 
 function FundDetailPageInner({ params }: { params: Promise<{ country: string; slug: string }> }) {
   const { country, slug } = use(params);
+  return <FundDetailContent key={`${country}/${slug}`} country={country} slug={slug} />;
+}
+
+function FundDetailContent({ country, slug }: { country: string; slug: string }) {
   const { formatAmount, formatPrice, forexEnabled, forexRates } = useCurrency();
   const [data, setData] = useState<{
     fund: FundDetail;
+    pendingSubscriptions?: { operationId: string; amountAnchor: number; dueTurn: number }[];
     corporationAccounts?: FundCorporationAccount[];
     summary: { totalHolders: number; totalNonReserveUnits: number };
     myPosition: { units: number; legacyUnits: number; avgNavAnchor: number | null } | null;
@@ -59,9 +64,7 @@ function FundDetailPageInner({ params }: { params: Promise<{ country: string; sl
 
   const stockMarketHref = `/stockmarket/${country.toLowerCase()}?tab=funds`;
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError("");
+  const fetchFund = useCallback(async () => {
     try {
       const [fundRes, txData] = await Promise.all([
         fetch(`/api/investment-funds/${slug}`, { cache: "no-store" }),
@@ -72,29 +75,41 @@ function FundDetailPageInner({ params }: { params: Promise<{ country: string; sl
       ]);
 
       if (fundRes.status === 403) {
-        setError("Index funds are not enabled.");
-        return;
+        return { error: "Index funds are not enabled." };
       }
       if (!fundRes.ok) {
         const body = (await fundRes.json()) as { error?: string };
-        setError(apiErrorText(body, "Fund not found"));
-        return;
+        return { error: apiErrorText(body, "Fund not found") };
       }
-      setData(await fundRes.json());
-
-      if (txData) {
-        setFinancials(txData);
-      }
+      const detail: NonNullable<typeof data> = await fundRes.json();
+      return { detail, financials: txData };
     } catch {
-      setError("Failed to load fund");
-    } finally {
-      setLoading(false);
+      return { error: "Failed to load fund" };
     }
   }, [slug]);
 
+  const applyFund = useCallback((result: Awaited<ReturnType<typeof fetchFund>>) => {
+    setError(result.error ?? "");
+    if (result.detail) setData(result.detail);
+    if (result.financials) setFinancials(result.financials);
+    setLoading(false);
+  }, []);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError("");
+    applyFund(await fetchFund());
+  }, [fetchFund, applyFund]);
+
   useEffect(() => {
-    void load();
-  }, [load]);
+    let active = true;
+    void fetchFund().then((result) => {
+      if (active) applyFund(result);
+    });
+    return () => {
+      active = false;
+    };
+  }, [fetchFund, applyFund]);
 
   if (loading) {
     return (
@@ -243,12 +258,44 @@ function FundDetailPageInner({ params }: { params: Promise<{ country: string; sl
           quotedNav={fund.quotedNav}
           anchorCurrencyCode={fund.anchorCurrencyCode}
           status={fund.status}
+          canSubscribe={fund.canSubscribe ?? false}
+          canRedeem={fund.canRedeem ?? false}
+          nextTurnSubscriptions={fund.nextTurnSubscriptions}
           myUnits={myPosition?.units ?? 0}
           myLegacyUnits={myPosition?.legacyUnits ?? myPosition?.units ?? 0}
           onSuccess={() => void load()}
         />
 
-        {/* Stat strip — open hairline (no nested cards) */}
+        {data.pendingSubscriptions?.map((order) => (
+          <div
+            key={order.operationId}
+            className="flex items-center justify-between gap-3 py-3 text-sm"
+          >
+            <span>
+              Your investment of {formatAmount(order.amountAnchor, ccy)} is waiting for turn{" "}
+              {order.dueTurn}.
+            </span>
+            <button
+              type="button"
+              className="underline"
+              onClick={() =>
+                void (async () => {
+                  const response = await fetch(
+                    `/api/investment-funds/subscriptions/${order.operationId}`,
+                    { method: "DELETE" }
+                  );
+                  if (response.ok) await load();
+                  else
+                    setError((await response.json()).error ?? "Could not cancel this investment.");
+                })()
+              }
+            >
+              Cancel investment
+            </button>
+          </div>
+        ))}
+
+        {/* Stat strip - open hairline (no nested cards) */}
         <div className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-4 border-b border-card-border py-3">
           {[
             { label: "AUM", value: formatAmount(fund.aumAnchor, ccy) },
@@ -256,7 +303,7 @@ function FundDetailPageInner({ params }: { params: Promise<{ country: string; sl
             { label: "Holders", value: summary.totalHolders.toLocaleString("en-US") },
             {
               label: "Backing ratio",
-              value: fund.backingRatio != null ? `${(fund.backingRatio * 100).toFixed(1)}%` : "—",
+              value: fund.backingRatio != null ? `${(fund.backingRatio * 100).toFixed(1)}%` : "-",
             },
           ].map((s) => (
             <div key={s.label} className="whitespace-nowrap">
@@ -432,7 +479,7 @@ function FundDetailPageInner({ params }: { params: Promise<{ country: string; sl
 /** Format the rebalance timestamp for the holdings tab. */
 function formatRebalanceDate(iso: string): string {
   const t = Date.parse(iso);
-  if (!Number.isFinite(t)) return "—";
+  if (!Number.isFinite(t)) return "-";
   const d = new Date(t);
   return d.toISOString().slice(0, 10);
 }
