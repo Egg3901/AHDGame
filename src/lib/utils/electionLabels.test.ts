@@ -154,3 +154,9 @@ describe("isByElectionType", () => {
     expect(isByElectionType("governor")).toBe(false);
   });
 });
+
+it("normalizes Scottish and Welsh snap offices for legislature membership", async () => {
+  const { officeKeyForElectionType } = await import("./electionLabels");
+  expect(officeKeyForElectionType("snap_holyrood", "SCO")).toBe("holyrood");
+  expect(officeKeyForElectionType("snap_senedd", "WAL")).toBe("senedd");
+});

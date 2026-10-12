@@ -27,6 +27,14 @@ export function expandLiveRegions(aggregate: State, seeds: State[]): State[] {
         : largestRemainderAllocate(aggregate[key]!, populations),
     ])
   );
+  // The game combines constituency/list representation into regional delegations.
+  // Apportion the full chamber by live population; never count list seats twice.
+  const seats = largestRemainderAllocate(
+    seeds.reduce((sum, seed) => sum + seed.houseDistricts, 0),
+    Object.fromEntries(
+      seeds.map((seed) => [seed._id, allocated.population![seed._id] / aggregate.population])
+    )
+  );
   return seeds.map((seed) => {
     const row: State = {
       ...structuredClone(seed),
@@ -36,7 +44,7 @@ export function expandLiveRegions(aggregate: State, seeds: State[]): State[] {
       regionType: seed.regionType,
       name: seed.name,
       region: seed.region,
-      houseDistricts: seed.houseDistricts,
+      houseDistricts: seats[seed._id],
       stateSenateSeats: seed.stateSenateSeats,
     };
     delete row.parentRegionId;

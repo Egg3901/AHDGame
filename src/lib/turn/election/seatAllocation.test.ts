@@ -941,3 +941,33 @@ describe("allocateSeats - Commons proportional correction", () => {
     expect(Object.values(first.seatsEstimate).reduce((sum, seats) => sum + seats, 0)).toBe(75);
   });
 });
+
+describe("sovereign Scottish and Welsh chamber elections", () => {
+  it.each([
+    ["SCO", "holyrood"],
+    ["SCO", "snap_holyrood"],
+    ["WAL", "senedd"],
+    ["WAL", "snap_senedd"],
+  ] as const)("allocates all seats in %s/%s", (country, type) => {
+    const method = getElectionMethod(country, type, "1991-default");
+    expect(method).toBe("ams");
+    const result = allocateSeats(
+      type,
+      "fixture",
+      10,
+      [
+        { id: "a", votes: 60, party: "a" },
+        { id: "b", votes: 40, party: "b" },
+      ],
+      100,
+      undefined,
+      undefined,
+      undefined,
+      country,
+      method
+    );
+    expect(result.isMultiSeat).toBe(true);
+    expect(result.seatsEstimate).toEqual({ a: 6, b: 4 });
+    expect(result.winners).toHaveLength(2);
+  });
+});

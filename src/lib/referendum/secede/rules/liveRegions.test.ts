@@ -26,6 +26,13 @@ describe("live independence regions", () => {
         },
       } as State;
       const regions = expandLiveRegions(source, SUB_REGION_SEEDS[country]);
+      expect(regions.reduce((sum, row) => sum + row.houseDistricts, 0)).toBe(
+        country === "SCO" ? 129 : 60
+      );
+      expect(
+        regions.every((row) => Number.isInteger(row.houseDistricts) && row.houseDistricts > 0)
+      ).toBe(true);
+      expect(expandLiveRegions(source, SUB_REGION_SEEDS[country])).toEqual(regions);
       for (const key of ["population", "votingEligiblePopulation", "gdp", "capitalStock"] as const)
         expect(regions.reduce((sum, row) => sum + row[key]!, 0)).toBeCloseTo(source[key]!, 7);
       expect(

@@ -133,7 +133,7 @@ describe("evacuateRegionPolitics", () => {
     expect(findCall[0]).toEqual({
       countryId: "UK",
       state: "NIR",
-      status: { $in: ["active", "upcoming"] },
+      status: { $in: ["active", "upcoming", "completed"] },
     });
     expect(db.collectionMocks["electionCandidates"].deleteMany).toHaveBeenCalledWith({
       electionId: { $in: [ELECTION] },

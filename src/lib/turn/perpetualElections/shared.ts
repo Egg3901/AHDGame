@@ -1,3 +1,4 @@
+import { successorCouncilSeats } from "@/lib/countries/ukSuccessorRegions";
 import { reconcileUKDevolution } from "@/lib/countries/uk/devolution/service";
 import {
   executiveCycleAnchor,
@@ -790,15 +791,17 @@ export async function ensureSecededChamberElections(
     }
   }
 
+  const chamber = electionType === "holyrood" || electionType === "senedd";
+  const types = chamber ? [electionType, `snap_${electionType}`] : [electionType];
   const liveElections = await db
     .collection<Election>("elections")
-    .find({ countryId, electionType, status: { $in: ["active", "upcoming"] } })
+    .find({ countryId, electionType: { $in: types }, status: { $in: ["active", "upcoming"] } })
     .toArray();
   const liveRegions = new Set(liveElections.map((e) => e.state));
 
   const completedElections = await db
     .collection<Election>("elections")
-    .find({ countryId, electionType, status: { $in: ["completed", "resolved"] } })
+    .find({ countryId, electionType: { $in: types }, status: { $in: ["completed", "resolved"] } })
     .sort({ updatedAt: -1 })
     .toArray();
   const lastCompleted = (regionId: string): Election | undefined =>
@@ -820,12 +823,40 @@ export async function ensureSecededChamberElections(
       ctx,
       freshStandup: true,
     });
+    if (doc && chamber) {
+      const plan = planNextLowerChamberCycle({
+        countryId,
+        electionType,
+        snapType: `snap_${electionType}`,
+        prev,
+        currentTurn,
+        ctx,
+        endTimeToTurn: (endTime) => endTimeToLarpTurn(endTime, now, currentTurn),
+      });
+      if (!plan) continue;
+      const duration = DEFAULT_DURATIONS[electionType];
+      const startTurn = plan.spawn.endTurn - duration.durationHours;
+      Object.assign(doc, {
+        cycle: plan.spawn.cycle,
+        electionYear: plan.electionYear,
+        startTurn,
+        startTime: turnToWallClock(startTurn, now, currentTurn),
+        primaryEndTurn: plan.spawn.primaryEndTurn,
+        primaryEndTime: turnToWallClock(plan.spawn.primaryEndTurn, now, currentTurn),
+        endTurn: plan.spawn.endTurn,
+        endTime: turnToWallClock(plan.spawn.endTurn, now, currentTurn),
+        status: startTurn <= currentTurn ? "active" : "upcoming",
+        ...(plan.shiftedScheduleEndTurn != null
+          ? { shiftedScheduleEndTurn: plan.shiftedScheduleEndTurn }
+          : {}),
+      });
+    }
     if (doc) toInsert.push(doc);
   }
   if (toInsert.length === 0) return;
 
   const orFilters = toInsert.map((e) => ({
-    electionType,
+    electionType: { $in: types },
     state: e.state,
     status: { $in: ["active", "upcoming"] as ElectionStatus[] },
   }));
@@ -851,24 +882,8 @@ export async function ensureSecededChamberElections(
  * grouped into each (Scotland's 32 / Wales's 22 principal areas), driving the
  * per-region regionalCouncil chamber size at standup.
  */
-export const SCO_REGIONAL_COUNCIL_SEATS: Record<string, number> = {
-  GLA: 6, // Glasgow City, East/West Dunbartonshire, Renfrewshire, East Renfrewshire, Inverclyde
-  LOT: 4, // Edinburgh, East/Mid/West Lothian
-  HIG: 6, // Highland, Argyll & Bute, Na h-Eileanan Siar, Orkney, Shetland, Moray
-  GRA: 2, // Aberdeen City, Aberdeenshire
-  TAY: 5, // Dundee, Angus, Perth & Kinross, Fife, Stirling
-  STH: 6, // Scottish Borders, Dumfries & Galloway, East/North/South Ayrshire, South Lanarkshire
-  CSC: 3, // North Lanarkshire, Falkirk, Clackmannanshire
-};
-
-export const WAL_REGIONAL_COUNCIL_SEATS: Record<string, number> = {
-  CDF: 4, // Cardiff, Vale of Glamorgan, Monmouthshire, Newport
-  SWA: 5, // Swansea, Carmarthenshire, Pembrokeshire, Bridgend, Neath Port Talbot
-  VAL: 5, // Rhondda Cynon Taf, Merthyr Tydfil, Caerphilly, Blaenau Gwent, Torfaen
-  MWA: 2, // Powys, Ceredigion
-  NWW: 4, // Isle of Anglesey, Gwynedd, Conwy, Denbighshire
-  NEW: 2, // Flintshire, Wrexham
-};
+export const SCO_REGIONAL_COUNCIL_SEATS = successorCouncilSeats("SCO");
+export const WAL_REGIONAL_COUNCIL_SEATS = successorCouncilSeats("WAL");
 
 /**
  * Per-region councillor seat allocation for the IE Local Council.
