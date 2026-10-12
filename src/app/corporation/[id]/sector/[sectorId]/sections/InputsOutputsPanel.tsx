@@ -14,6 +14,7 @@ import {
 import ShortageBadge from "../components/ShortageBadge";
 import InputOffersHint from "../components/InputOffersHint";
 import { costliestInput } from "../lib/costliestInput";
+import { perProductSalePrices } from "../lib/perProductSalePrice";
 import DetailsDisclosure from "../components/DetailsDisclosure";
 import type { CommoditiesData, CommodityFlow, ExtractionCapacityRow, PlantsData } from "../types";
 import { fmtUnits, fmtPct } from "../lib/plants";
@@ -104,6 +105,23 @@ export default function InputsOutputsPanel({
       : 1;
   const realizedOutputPrice =
     commodities.supplies.length === 1 ? (plants.pnl?.avgSalePriceAnchor ?? null) : null;
+  // Multi-output sector: split the blended average by each output's recorded
+  // share of revenue, so ordnance and chemicals each show what they sold for
+  // instead of one price that fits neither (ticket 1507). Empty until the
+  // sector has cleared a turn that recorded the split; rows then keep the
+  // market price.
+  const perProductPrice = perProductSalePrices({
+    supplies: commodities.supplies.map((f) => ({
+      commodity: f.commodity,
+      units: f.units,
+      soldFraction: f.soldFraction,
+      revenueShare: f.revenueShare,
+    })),
+    revenue: plants.pnl?.revenueAnchor,
+    soldUnits: plants.soldUnits,
+    fallbackSoldFraction: plants.fillRate,
+  });
+  const showsRealizedOutput = realizedOutputPrice != null || perProductPrice.size > 0;
 
   return (
     <div className="rounded-xl border border-card-border bg-card p-6 shadow-card">
@@ -112,7 +130,12 @@ export default function InputsOutputsPanel({
         Your plants buy the things on the left and make the things on the right. Amounts are what
         they bought and made last turn, per day. Prices are per unit, in {currencyCode}: what you
         were charged for inputs
-        {realizedOutputPrice != null ? " and what your sales averaged" : ""}.{" "}
+        {showsRealizedOutput
+          ? perProductPrice.size > 0
+            ? " and what each thing you make sold for"
+            : " and what your sales averaged"
+          : ""}
+        .{" "}
         {hasPerOutput && "Each thing you make sells at its own rate, the rows are not one number."}
       </p>
 
@@ -213,7 +236,9 @@ export default function InputsOutputsPanel({
                 <FlowRow
                   key={f.commodity}
                   flow={{ ...f, units: f.units * outputUnitScale }}
-                  priceText={price(realizedOutputPrice ?? f.marketPrice)}
+                  priceText={price(
+                    realizedOutputPrice ?? perProductPrice.get(f.commodity) ?? f.marketPrice
+                  )}
                   right={(() => {
                     const share = soldShareFor(f);
                     if (share == null) return null;

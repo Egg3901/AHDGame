@@ -26,6 +26,12 @@ interface MarketMoneyPanelProps {
   sectorType: OperatingSectorType;
   financials: Financials | null;
   corporation: CorporationRef;
+  /**
+   * How many different things the sector makes. Above one, the average sale
+   * price blends products that can be priced far apart, so it is labelled as
+   * covering all of them (ticket 1507).
+   */
+  outputCount?: number;
 }
 
 /**
@@ -52,6 +58,7 @@ export default function MarketMoneyPanel({
   sectorType,
   financials,
   corporation,
+  outputCount,
 }: MarketMoneyPanelProps) {
   const t = useTranslations("corporations.sectorInvestment");
   const sites = facilityPlural(sectorType);
@@ -306,11 +313,16 @@ export default function MarketMoneyPanel({
       )}
       {pnl.avgSalePriceAnchor != null && (
         <p className="mt-2 text-body-sm text-muted">
-          Each unit sold for{" "}
+          {outputCount != null && outputCount > 1
+            ? "Across everything you make, each unit sold for "
+            : "Each unit sold for "}
           <span className="font-semibold tabular-nums text-foreground">
             {unitMoney(pnl.avgSalePriceAnchor)}
           </span>{" "}
           on average.
+          {outputCount != null && outputCount > 1
+            ? " Your products sell at different prices, so this blends them. What each one sold for is listed next to it under things you make."
+            : ""}
         </p>
       )}
 

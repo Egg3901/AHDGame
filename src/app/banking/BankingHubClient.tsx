@@ -944,7 +944,10 @@ function PrivateBanksTable({
               onToggle={onToggle}
               align="right"
             />
-            <th scope="col" className="px-5 py-3 text-right font-semibold">
+            <th
+              scope="col"
+              className="sticky right-0 z-20 border-l border-card-border bg-card-elevated px-4 py-3 text-right font-semibold"
+            >
               <span className="sr-only">Actions</span>
             </th>
           </tr>
@@ -983,7 +986,7 @@ function PrivateBankRow({
   const estimatedRate = bank.lendingRatePercent + CHARACTER_LOAN_SPREAD_PP;
 
   return (
-    <tr className="transition-colors hover:bg-background/40">
+    <tr className="group transition-colors hover:bg-background/40">
       <td className="px-5 py-3.5">
         <Link
           href={bank.href}
@@ -1061,7 +1064,7 @@ function PrivateBankRow({
       <td className="px-4 py-3.5 text-right font-mono text-sm tabular-nums text-foreground">
         {formatBankMoney(bank.totalDeposits, bank.currency)}
       </td>
-      <td className="px-5 py-3.5">
+      <td className="sticky right-0 z-10 border-l border-card-border bg-card px-4 py-3.5 transition-colors group-hover:bg-background/40">
         <div className="flex items-center justify-end gap-2">
           {customerBank && hasCharacter ? (
             <>

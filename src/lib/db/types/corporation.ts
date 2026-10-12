@@ -1237,6 +1237,12 @@ export interface CorporateSector {
   soldByCommodity?: Partial<Record<string, number>>;
   /** Turn whose clearing pass produced soldFraction and soldByCommodity. */
   soldByCommodityTurn?: number;
+  /**
+   * Each output's share of realized revenue from the same clearing pass
+   * (sums to ~1). Lets the sector page show a sale price per product on a
+   * multi-output sector. Absent on sectors not cleared since it was added.
+   */
+  revenueShareByCommodity?: Partial<Record<string, number>>;
   /** Exact units from that clearing pass; absent for legacy or recording-off turns. */
   soldUnitsByCommodity?: Partial<Record<string, number>>;
   soldUnitsByCommodityTurn?: number;

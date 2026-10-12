@@ -39,6 +39,7 @@ import {
   statusBarRowClassName,
 } from "./statusbar/statusBarLayoutClasses";
 import { useStatusBarLayout, type StatusBarLayout } from "./statusbar/useStatusBarLayout";
+import { useStatusBarHeightVar } from "./statusbar/useStatusBarHeightVar";
 
 export type { StatusBarLayout };
 
@@ -292,6 +293,10 @@ export function StatusBar({
     return text;
   };
 
+  // Reserve the bar's real height under the page (it wraps taller on phones).
+  const barRef = useRef<HTMLDivElement>(null);
+  useStatusBarHeightVar(barRef, !isExcludedPath);
+
   // Don't render on excluded paths
   if (isExcludedPath) {
     return null;
@@ -349,6 +354,7 @@ export function StatusBar({
 
   return (
     <div
+      ref={barRef}
       data-statusbar
       className={`${STATUS_BAR_CONTAINER_CLASS} ${stats ? "opacity-100" : "pointer-events-none opacity-0"}`}
       role="complementary"

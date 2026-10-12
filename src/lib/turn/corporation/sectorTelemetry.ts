@@ -93,6 +93,14 @@ export function marketTelemetry(input: {
         .filter((entry): entry is [string, number] => Number.isFinite(entry[1]))
         .map(([commodity, sold]) => [commodity, Math.round(sold * 1000) / 1000])
     );
+    // Per-output revenue share, so the sector page can show a sale price per
+    // product instead of one blended average. Always overwritten (empty when
+    // nothing sold) so a stale split never outlives the turn that wrote it.
+    update.revenueShareByCommodity = Object.fromEntries(
+      Object.entries(clearing.revenueShareByCommodity ?? {})
+        .filter((entry): entry is [string, number] => Number.isFinite(entry[1]) && entry[1]! > 0)
+        .map(([commodity, share]) => [commodity, Math.round(share * 10000) / 10000])
+    );
     if (Number.isSafeInteger(currentTurn)) {
       update.soldByCommodityTurn = currentTurn;
       if (clearing.deliveredUnitsByCommodity) {

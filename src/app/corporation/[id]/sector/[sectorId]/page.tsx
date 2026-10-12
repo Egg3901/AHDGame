@@ -754,6 +754,7 @@ export default function SectorDetailPage() {
                     sectorType={sector.sectorType}
                     financials={financials}
                     corporation={corporation}
+                    outputCount={commodities?.supplies.length}
                   />
                 </>
               )}
