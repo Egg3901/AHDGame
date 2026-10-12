@@ -180,7 +180,8 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
       {
         projection: {
           marketSystemMode: 1,
-          marketSystemModeUpdatedTurn: 1,
+          marketGovernorGlideStartTurn: 1,
+          marketGovernorGlideTurns: 1,
           productLinesV2Enabled: 1,
           marketGovernorCap: 1,
           marketGovernorRampTurns: 1,
@@ -448,9 +449,9 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
   const market = buildMarketContext(marketSystemMode, {
     cap: marketGovernorConfig?.marketGovernorCap,
     rampTurns: marketGovernorConfig?.marketGovernorRampTurns,
-    // Absent stamp = this mode since the world was seeded (reset clears it,
-    // every flip writes it), so the ramp anchors at turn 0.
-    modeUpdatedTurn: marketGovernorConfig?.marketSystemModeUpdatedTurn ?? 0,
+    currentTurn: turn ?? gameState?.currentTurn ?? 0,
+    glideStartTurn: marketGovernorConfig?.marketGovernorGlideStartTurn,
+    glideTurns: marketGovernorConfig?.marketGovernorGlideTurns,
   });
   market.explicitPlantCostsEnabled = marketGovernorConfig?.explicitPlantCostsEnabled === true;
   market.mediaRegulationEnabled = mediaRegulationEnabled;
