@@ -70,7 +70,17 @@ export async function notifyAndRestoreClearedHolders(
     if (c.currentOffice?.type !== cabinetType) continue;
     const seat = seatByChar.get(c._id.toString());
     if (seat?.state) {
-      const restoreOffice = { type: seat.officeType, state: seat.state } as OfficeType;
+      // Keep a Commons seat's constituency so ex-ministers don't lose their label.
+      const restoreOffice = {
+        type: seat.officeType,
+        state: seat.state,
+        ...(seat.officeType === "commons" && seat.constituencyId
+          ? {
+              constituency: seat.constituency ?? seat.constituencyId,
+              constituencyId: seat.constituencyId,
+            }
+          : {}),
+      } as OfficeType;
       await db
         .collection<Character>("characters")
         .updateOne({ _id: c._id }, { $set: { currentOffice: restoreOffice, updatedAt: now } });
