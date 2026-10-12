@@ -8,6 +8,8 @@ import { EstateCard } from "./EstateCard";
 import { OpenEstatePanel } from "./OpenEstatePanel";
 import { ActingLockNote, useActingLock } from "../ActingLock";
 import { InlineError } from "@/components/ui/InlineError";
+import { MINISTERIAL_ACTION_CAP } from "@/lib/constants/cabinetMechanicsTypes";
+import { MINISTERIAL_ACTION_RESET_HINT } from "@/lib/cabinet/ministerialActionHint";
 import { readApiError, toDisplayError, type DisplayError } from "@/lib/errors/client";
 
 export function EstatesRosterTab({
@@ -15,6 +17,7 @@ export function EstatesRosterTab({
   positionId,
   portfolioKey,
   estates,
+  ministerialActions,
   canAct: canActProp,
   currencySymbol,
   isForeign,
@@ -26,6 +29,11 @@ export function EstatesRosterTab({
   positionId: string;
   portfolioKey: string;
   estates: EstateView[];
+  /**
+   * Opening and expanding spend the seat's daily ministerial actions, which can
+   * differ from the cabinet action charges shown in the office header.
+   */
+  ministerialActions?: number;
   canAct: boolean;
   currencySymbol: string;
   isForeign: boolean;
@@ -145,6 +153,13 @@ export function EstatesRosterTab({
           Open estate
         </button>
       </div>
+
+      {ministerialActions != null && (
+        <p className="text-[11px] text-muted" data-testid="estate-ministerial-actions">
+          Opening or expanding costs 1 ministerial action: {ministerialActions}/
+          {MINISTERIAL_ACTION_CAP} left today. {MINISTERIAL_ACTION_RESET_HINT}
+        </p>
+      )}
 
       <InlineError error={actionError} className="text-[12px] text-error" />
 

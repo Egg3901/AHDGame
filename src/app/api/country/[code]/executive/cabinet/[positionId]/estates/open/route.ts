@@ -14,6 +14,7 @@ import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { getEnabledCountryIds } from "@/lib/countryAccess";
 import { getCabinetMembersCollection } from "@/lib/db/collections/cabinetMembers";
 import {
+  MINISTERIAL_ACTION_RESET_HINT,
   refundMinisterialAction,
   resolveMinisterialRemaining,
   spendMinisterialAction,
@@ -101,7 +102,10 @@ export async function POST(request: Request, { params }: RouteParams) {
     // Shared UK pool: both offices of a dual holder spend one balance (issue #2049).
     const actions = await resolveMinisterialRemaining(db, countryId, member!);
     if (actions < 1) {
-      return errorResponse(400, "No ministerial actions remaining");
+      return errorResponse(
+        400,
+        `No ministerial actions remaining. ${MINISTERIAL_ACTION_RESET_HINT}`
+      );
     }
 
     const estatesCol = getCabinetEstatesCollection(db);
@@ -124,7 +128,10 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     const spend = await spendMinisterialAction(db, countryId, member!);
     if (!spend.ok) {
-      return errorResponse(409, "No ministerial actions remaining");
+      return errorResponse(
+        409,
+        `No ministerial actions remaining. ${MINISTERIAL_ACTION_RESET_HINT}`
+      );
     }
 
     try {
