@@ -267,31 +267,29 @@ export function compileCompensationDefect(spec: CompensationSpec): Defect {
     for (const c of credits) {
       // Marker and increment in ONE update, under a filter demanding the
       // marker's absence, so a concurrent or repeated run pays nobody twice.
-      const res = await db
-        .collection("corporations")
-        .updateOne(
-          {
-            _id: { $in: idCandidates(c.corporationId) },
-            [markerPath]: { $exists: false },
-          } as never,
-          {
-            ...(creditMode ? { $inc: { liquidCapital: c.amountLocal } } : {}),
-            $set: {
-              [markerPath]: {
-                mode: spec.mode,
-                ticket: spec.ticket ?? null,
-                amountLocal: c.amountLocal,
-                amountAnchor: c.amountAnchor,
-                currencyCode: c.currencyCode,
-                fxRate: c.fxRate,
-                recordedAt: ctx.now,
-                ...(creditMode ? {} : { movedAt: spec.movedAt, ledgerTurn: spec.ledgerTurn }),
-                runId: ctx.runId ?? null,
-              },
-              updatedAt: ctx.now,
+      const res = await db.collection("corporations").updateOne(
+        {
+          _id: { $in: idCandidates(c.corporationId) },
+          [markerPath]: { $exists: false },
+        } as never,
+        {
+          ...(creditMode ? { $inc: { liquidCapital: c.amountLocal } } : {}),
+          $set: {
+            [markerPath]: {
+              mode: spec.mode,
+              ticket: spec.ticket ?? null,
+              amountLocal: c.amountLocal,
+              amountAnchor: c.amountAnchor,
+              currencyCode: c.currencyCode,
+              fxRate: c.fxRate,
+              recordedAt: ctx.now,
+              ...(creditMode ? {} : { movedAt: spec.movedAt, ledgerTurn: spec.ledgerTurn }),
+              runId: ctx.runId ?? null,
             },
-          }
-        );
+            updatedAt: ctx.now,
+          },
+        }
+      );
       if (res.modifiedCount === 1) applied.push(c);
     }
 
