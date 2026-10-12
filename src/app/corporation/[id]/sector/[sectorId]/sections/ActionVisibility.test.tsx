@@ -11,7 +11,10 @@ vi.mock("next-intl", () => ({
   useTranslations: () => (key: string) => key,
 }));
 vi.mock("@/contexts/CurrencyContext", () => ({
-  useCurrency: () => ({ formatAmount: (value: number) => `M${value}` }),
+  useCurrency: () => ({
+    formatAmount: (value: number) => `M${value}`,
+    toInternalFrom: (value: number) => value,
+  }),
 }));
 vi.mock("@/components/InfoTooltip", () => ({
   InfoTooltip: ({ trigger }: { trigger: React.ReactNode }) => <>{trigger}</>,
@@ -202,13 +205,16 @@ describe("sector action visibility", () => {
   });
 
   it.each([
-    { eligible: false, hasFunds: true },
-    { eligible: true, hasFunds: false },
-  ])("hides an ineligible buyer's purchase panel: %j", (eligibility) => {
+    { eligible: false, hasFunds: true, blockReason: "merge_blocked" as const, text: "cannot be merged" },
+    { eligible: false, hasFunds: false, blockReason: "insufficient_funds" as const, text: "enough liquid capital" },
+    { eligible: false, hasFunds: true, blockReason: "not_ceo" as const, text: "Only the CEO" },
+    { eligible: true, hasFunds: false, blockReason: null, text: "enough liquid capital" },
+  ])("explains why an ineligible buyer can't purchase: $blockReason", ({ text, ...eligibility }) => {
     const { container } = render(
       <ForSalePanel {...saleProps} forSaleInfo={{ ...saleProps.forSaleInfo, ...eligibility }} />
     );
-    expect(container.textContent).toBe("");
+    expect(container.textContent).toContain("can't buy this sector");
+    expect(container.textContent).toContain(text);
     expect(screen.queryByRole("button")).toBeNull();
   });
 

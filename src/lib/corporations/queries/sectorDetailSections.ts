@@ -481,24 +481,46 @@ export async function buildSectorForSaleInfo(
     )
   );
   const hasFunds = (viewerCorporation.liquidCapital ?? 0) >= priceInViewerCapital;
+  const priceValid = Number.isFinite(listing.priceAnchor) && listing.priceAnchor > 0;
+  const mergeBlocked = !!conflict && (!!listing.pledged || hasProtectedConstructionProperty(conflict));
+  const constructionBlocked =
+    !!sector.constructionPropertyTransition ||
+    (hasProtectedConstructionProperty(sector) &&
+      !(
+        sector.constructionFinancing?.loanFunded === true &&
+        ["building", "released"].includes(sector.constructionFinancing.status)
+      ));
+  // First reason the purchase is unavailable, so the buyer panel can say why
+  // instead of disappearing. Null when eligible.
+  const blockReason: SectorPurchaseBlockReason | null = !priceValid
+    ? "invalid_price"
+    : !hasFunds
+      ? "insufficient_funds"
+      : mergeBlocked
+        ? "merge_blocked"
+        : constructionBlocked
+          ? "construction"
+          : null;
   return {
     viewerCorporationId: viewerCorporation._id.toString(),
     viewerLiquidCurrencyCode: resolveCorpLiquidCurrencyCode(viewerCorporation),
     priceInViewerCapital,
     viewerCapitalAnchor,
-    eligible:
-      hasFunds &&
-      Number.isFinite(listing.priceAnchor) &&
-      listing.priceAnchor > 0 &&
-      !(conflict && (listing.pledged || hasProtectedConstructionProperty(conflict))) &&
-      !sector.constructionPropertyTransition &&
-      (!hasProtectedConstructionProperty(sector) ||
-        (sector.constructionFinancing?.loanFunded === true &&
-          ["building", "released"].includes(sector.constructionFinancing.status))),
+    eligible: blockReason === null,
+    blockReason,
     conflict: !!conflict,
     hasFunds,
   };
 }
+
+export type SectorPurchaseBlockReason =
+  | "invalid_price"
+  | "insufficient_funds"
+  | "merge_blocked"
+  | "construction"
+  | "not_ceo"
+  | "actions_paused"
+  | "state_controlled";
 
 /** Tech-tree growth-cost reduction (%) shown on the financials panel. */
 export function computeTechGrowthCostReductionPct(args: {
