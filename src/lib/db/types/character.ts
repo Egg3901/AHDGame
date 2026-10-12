@@ -151,6 +151,8 @@ export interface CareerEvent {
 export interface Character {
   /** Temporary receipts retained until an expired FX order acknowledges its refund. */
   forexExpiryRefunds?: string[];
+  /** Promotional grant ids already credited, so a retried grant never pays twice. */
+  promoGrantReceipts?: string[];
   /** Regional ad exposure follows this character across candidacies. */
   targetedAds?: import("@/lib/campaignTargeting/rules").TargetedAd[];
   targetedAdsRevision?: number;
