@@ -234,6 +234,36 @@ describe("POST /api/country/jp/pm/snap-election", () => {
     expect(inserted[0].countryId).toBe("UK");
   });
 
+  it("UK route rejects dissolution during post-Commons confidence without side effects", async () => {
+    const { getDb } = await import("@/lib/mongodb");
+    installDb({
+      govByCountry: {
+        UK: { status: "formed", pmCharacterId: PM_CHAR_ID, snapElectionsUsed: 0 },
+      },
+      regions: { UK: ["SCO"] },
+    });
+    vi.mocked(getDb).mockResolvedValue(db as unknown as Db);
+    vi.mocked(db.collection("pmAppointmentVotes").findOne).mockResolvedValue({
+      _id: new ObjectId(),
+      countryId: "UK",
+      status: "active",
+      isConfidenceMotion: true,
+    });
+    await authAsSittingPM();
+    const { POST } = await import("./route");
+    const res = await POST(new Request("http://x/api/country/uk/pm/snap-election"), {
+      params: Promise.resolve({ code: "uk" }),
+    });
+
+    expect(res.status).toBe(400);
+    expect(JSON.stringify(await res.json())).toContain("post-Commons election confidence vote");
+    expect(db.collectionMocks.elections.updateMany).not.toHaveBeenCalled();
+    expect(db.collectionMocks.elections.insertMany).not.toHaveBeenCalled();
+    expect(db.collectionMocks.bills.updateMany).not.toHaveBeenCalled();
+    expect(db.collectionMocks.governmentFormations.updateOne).not.toHaveBeenCalled();
+    expect(db.collectionMocks.electedOfficials).toBeUndefined();
+  });
+
   it("DE route spawns snap_bundestag", async () => {
     const { getDb } = await import("@/lib/mongodb");
     installDb({
