@@ -11,6 +11,7 @@ export type FundCorporationAccount = {
   liquidCapital: number;
   currencyCode: CurrencyCode | null;
   units: number;
+  canRedeem?: boolean;
 };
 type Props = React.ComponentProps<typeof FundTradePanel> & {
   corporations?: FundCorporationAccount[];
@@ -18,34 +19,36 @@ type Props = React.ComponentProps<typeof FundTradePanel> & {
 
 export function FundActions({ corporations = [], ...props }: Props) {
   const [mode, setMode] = useState<"subscribe" | "redeem" | null>(null);
+  const redeemAccounts = corporations.filter(
+    (account) => account.units > 0 && account.canRedeem !== false
+  );
   return (
     <div className="flex flex-wrap items-center gap-3 border-y border-card-border py-3">
-      <button
-        type="button"
-        onClick={() => setMode("subscribe")}
-        disabled={props.status !== "active"}
-        className="rounded-lg bg-primary px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
-      >
-        Buy fund units
-      </button>
-      <button
-        type="button"
-        onClick={() => setMode("redeem")}
-        disabled={
-          props.status === "delisted" ||
-          (props.myUnits <= 0 && !corporations.some((c) => c.units > 0))
-        }
-        className="rounded-lg border border-card-border px-5 py-2.5 text-sm font-semibold disabled:opacity-50"
-      >
-        Redeem units
-      </button>
+      {props.status === "active" && (
+        <button
+          type="button"
+          onClick={() => setMode("subscribe")}
+          className="rounded-lg bg-primary px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
+        >
+          Buy fund units
+        </button>
+      )}
+      {props.status !== "delisted" && (props.myUnits > 0 || redeemAccounts.length > 0) && (
+        <button
+          type="button"
+          onClick={() => setMode("redeem")}
+          className="rounded-lg border border-card-border px-5 py-2.5 text-sm font-semibold disabled:opacity-50"
+        >
+          Redeem units
+        </button>
+      )}
       <span className="text-sm text-muted">
         Your position: {props.myUnits.toLocaleString("en-US")} units
       </span>
       {mode && (
         <FundTradeDialog
           {...props}
-          corporations={corporations}
+          corporations={mode === "redeem" ? redeemAccounts : corporations}
           defaultMode={mode}
           onClose={() => setMode(null)}
         />

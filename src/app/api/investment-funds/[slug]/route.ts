@@ -1,4 +1,5 @@
 import { resolveCorpLiquidCurrencyCode } from "@/lib/currency/corporationCapital";
+import { canRedeemSponsorUnits } from "@/lib/indexFunds/sponsorship/sponsorUnits";
 import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
@@ -27,7 +28,7 @@ type CorpSummary = {
   typeLabel?: string;
 };
 
-// GET /api/investment-funds/[slug] — Fund detail with holdings, positions summary, and NAV history
+// GET /api/investment-funds/[slug] - Fund detail with holdings, positions summary, and NAV history
 export async function GET(_request: Request, { params }: { params: Promise<{ slug: string }> }) {
   try {
     const db = await getDb();
@@ -154,18 +155,21 @@ export async function GET(_request: Request, { params }: { params: Promise<{ slu
           )
           .toArray()
       : [];
-    const corporationAccounts = corporations.map((corp) => {
-      const position = positions.find(
-        (p) => p.holderKind === "corporation" && p.corporationId?.equals(corp._id)
-      );
-      return {
-        id: corp._id.toHexString(),
-        name: corp.name,
-        liquidCapital: corp.liquidCapital,
-        currencyCode: resolveCorpLiquidCurrencyCode(corp) ?? null,
-        units: position?.units ?? 0,
-      };
-    });
+    const corporationAccounts = await Promise.all(
+      corporations.map(async (corp) => {
+        const position = positions.find(
+          (p) => p.holderKind === "corporation" && p.corporationId?.equals(corp._id)
+        );
+        return {
+          id: corp._id.toHexString(),
+          name: corp.name,
+          liquidCapital: corp.liquidCapital,
+          currencyCode: resolveCorpLiquidCurrencyCode(corp) ?? null,
+          units: position?.units ?? 0,
+          canRedeem: await canRedeemSponsorUnits(db, fund, corp._id),
+        };
+      })
+    );
     const response = NextResponse.json({
       corporationAccounts,
       fund: {
@@ -192,6 +196,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ slu
         sponsorName: fund.sponsorName ?? null,
         expenseRatioAnnual: fund.expenseRatioAnnual ?? null,
         seedCapitalAnchor: fund.seedCapitalAnchor ?? null,
+        seedAccounting: fund.seedAccounting ?? "legacy_residual",
         feesPaidToSponsorAnchor: fund.feesPaidToSponsorAnchor ?? null,
         charteredAtTurn: fund.charteredAtTurn ?? null,
         windDownStartedAtTurn: fund.windDownStartedAtTurn ?? null,

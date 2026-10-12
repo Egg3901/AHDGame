@@ -177,9 +177,9 @@ export default function SponsoredFundPanel({ corpId }: { corpId: string }) {
         Launch an index fund your corporation runs. You choose the scope and the fee; the index
         machinery picks and rebalances the constituents. Chartering costs a{" "}
         {fmt(FUND_CHARTER_FEE_ANCHOR)} fee paid to the treasury plus at least{" "}
-        {fmt(FUND_MIN_SEED_CAPITAL_ANCHOR)} of seed capital that stays at risk until the fund winds
-        up. Your return is the expense ratio ({minPct.toFixed(2)}% to {maxPct.toFixed(2)}% of assets
-        per year), not a stake in the holdings.
+        {fmt(FUND_MIN_SEED_CAPITAL_ANCHOR)} of seed capital that buys fund units. Your investment
+        can rise or fall. You also earn a management fee ({minPct.toFixed(2)}% to{" "}
+        {maxPct.toFixed(2)}% of assets per game year).
       </p>
 
       {chartered ? (
@@ -316,7 +316,8 @@ export default function SponsoredFundPanel({ corpId }: { corpId: string }) {
           </div>
           <p className="text-[11px] text-muted">
             Paid from corporate cash: the {fmt(FUND_CHARTER_FEE_ANCHOR)} fee is never refunded; the
-            seed capital comes back at wind-up only after every unit holder has been paid.
+            seed capital buys fund units. Sponsor units stay invested while other investors or
+            withdrawals remain.
           </p>
         </form>
       )}

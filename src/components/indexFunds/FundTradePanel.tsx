@@ -46,7 +46,7 @@ export function FundTradePanel({
   myUnits: number;
   /**
    * Units held that redeem rate-free (× 1) under the #857 grandfather. Callers
-   * pass `position.legacyUnits ?? position.units` — the same `?? units`
+   * pass `position.legacyUnits ?? position.units` - the same `?? units`
    * fail-safe the server redeem debit applies, so an un-stamped legacy position
    * quotes rate-free rather than over-promising. Post-fix positions pass 0.
    */
@@ -59,6 +59,7 @@ export function FundTradePanel({
     name: string;
     liquidCapital: number;
     currencyCode: CurrencyCode | null;
+    canRedeem?: boolean;
   };
 }) {
   const {
@@ -111,7 +112,7 @@ export function FundTradePanel({
       const home = (data.character.homeCurrency ?? fundCurrency) as CurrencyCode;
       setSelectedPayCurrency(home);
     } catch {
-      // Non-fatal — subscribe still works for same-currency wallets.
+      // Non-fatal - subscribe still works for same-currency wallets.
     }
   }, [fundCurrency]);
 
@@ -145,8 +146,8 @@ export function FundTradePanel({
     // Grandfather (#857): a redemption drains legacy units first. Legacy units
     // (bought before the currency-scale fix) pay out rate-free (× 1); post-fix
     // units pay at the fund's native rate. `legacyAdjustedDisplayUnits` is the
-    // display counterpart of the server's blendedRedeemFxRate — proven equal in
-    // unitAccounting.test — so this quote cannot drift from credited cash, and
+    // display counterpart of the server's blendedRedeemFxRate - proven equal in
+    // unitAccounting.test - so this quote cannot drift from credited cash, and
     // the ₳ figure can go through formatFull/formatPrice (wallet preference)
     // instead of stamping the fund's native symbol on a USD-scale face amount
     // (ticket #1072: Subscribe showed Marks, Redeem showed dollars).
@@ -182,7 +183,7 @@ export function FundTradePanel({
     showPaymentControls && autoConvertEnabled && selectedPayCurrency === homeCurrency;
 
   // `costAnchor` is denominated in ₳. The wallet legs (debit + affordability)
-  // happen in the fund's native currency, so the native cost is ₳ × rate — the
+  // happen in the fund's native currency, so the native cost is ₳ × rate - the
   // same conversion the subscribe route applies server-side. Comparisons
   // against ₳ balances (`personalCashAnchor`) use the raw ₳ value.
   const totalCostAnchor = subscribeEstimate?.costAnchor ?? 0;
@@ -356,7 +357,7 @@ export function FundTradePanel({
       : selectedPayCurrency !== fundCurrency);
 
   const canSubscribe = status === "active";
-  const canRedeem = status !== "delisted" && myUnits > 0;
+  const canRedeem = status !== "delisted" && myUnits > 0 && corporation?.canRedeem !== false;
 
   const handleAutoConvertToggle = () => {
     const newValue = !autoConvertEnabled;
@@ -448,7 +449,7 @@ export function FundTradePanel({
         requestCharacterStatsRefetch();
       } else if (data.status === "queued") {
         setMessage(
-          `Redemption queued for ${(data.queuedUnits ?? order.units).toLocaleString("en-US")} unit(s) — fund cash will pay out on the next cycle.`
+          `Redemption queued for ${(data.queuedUnits ?? order.units).toLocaleString("en-US")} unit(s) - fund cash will pay out on the next cycle.`
         );
       } else if (data.status === "partial") {
         setMessage("Partial redemption paid; remainder queued for liquidity.");
@@ -494,18 +495,20 @@ export function FundTradePanel({
         >
           Subscribe
         </button>
-        <button
-          type="button"
-          onClick={() => setMode("redeem")}
-          disabled={!!pendingOrder || !canRedeem}
-          className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors disabled:opacity-40 ${
-            mode === "redeem"
-              ? "bg-secondary/15 text-secondary border border-secondary/30"
-              : "text-muted hover:text-foreground border border-transparent"
-          }`}
-        >
-          Redeem
-        </button>
+        {canRedeem && (
+          <button
+            type="button"
+            onClick={() => setMode("redeem")}
+            disabled={!!pendingOrder}
+            className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors disabled:opacity-40 ${
+              mode === "redeem"
+                ? "bg-secondary/15 text-secondary border border-secondary/30"
+                : "text-muted hover:text-foreground border border-transparent"
+            }`}
+          >
+            Redeem
+          </button>
+        )}
       </div>
 
       {showPaymentControls && (
