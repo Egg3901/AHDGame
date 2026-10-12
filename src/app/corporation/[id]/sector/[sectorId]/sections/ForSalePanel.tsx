@@ -23,6 +23,17 @@ interface ForSalePanelProps {
 const DISCOUNT_PCT = Math.round((1 - SECTOR_FOR_SALE_PRICE_FRACTION) * 100);
 const PRICE_PCT = Math.round(SECTOR_FOR_SALE_PRICE_FRACTION * 100);
 
+const BLOCK_REASON_TEXT: Record<NonNullable<ForSaleInfo["blockReason"]>, string> = {
+  invalid_price: "The listing price is invalid. Ask the seller to relist it.",
+  insufficient_funds: "Your corporation does not have enough liquid capital for this price.",
+  merge_blocked:
+    "You already run this sector here, and one of the two sites has an unfinished secured construction loan, so they cannot be merged yet.",
+  construction: "This sector has secured construction in progress and cannot be acquired yet.",
+  not_ceo: "Only the CEO of a corporation can buy listed sectors.",
+  actions_paused: "Corporate actions are paused right now. Try again once they resume.",
+  state_controlled: "This market is state-controlled and closed to private acquisition.",
+};
+
 export default function ForSalePanel({
   sector,
   corporation,
@@ -36,7 +47,7 @@ export default function ForSalePanel({
   onUnlist,
   onBuy,
 }: ForSalePanelProps) {
-  const { formatAmount } = useCurrency();
+  const { formatAmount, toInternalFrom } = useCurrency();
   const [confirmList, setConfirmList] = useState(false);
   const [confirmBuy, setConfirmBuy] = useState(false);
   const sellerCurrency = (corporation.liquidCurrencyCode as CurrencyCode | undefined) ?? undefined;
@@ -151,6 +162,41 @@ export default function ForSalePanel({
             </button>
           )}
         </div>
+      </div>
+    );
+  }
+
+  // ── Blocked buyer: say why instead of showing nothing ─────────────────────
+  if (!isCeo && isListed && forSaleInfo) {
+    const reason = forSaleInfo.blockReason ?? (!forSaleInfo.hasFunds ? "insufficient_funds" : null);
+    const buyerCurrency =
+      (forSaleInfo.viewerLiquidCurrencyCode as CurrencyCode | undefined) ?? undefined;
+    return (
+      <div className="rounded-xl border border-border bg-surface p-6">
+        <div className="flex items-center gap-2">
+          <span className="inline-flex items-center rounded-full border border-border px-2 py-0.5 text-[11px] font-bold uppercase tracking-wider text-muted">
+            For sale
+          </span>
+          <h3 className="text-sm font-semibold text-foreground">
+            You can&apos;t buy this sector yet
+          </h3>
+        </div>
+        <p className="mt-2 text-xs text-muted">
+          {reason
+            ? BLOCK_REASON_TEXT[reason]
+            : "This listing is not available to your corporation."}
+        </p>
+        {reason === "insufficient_funds" && (
+          <p className="mt-2 text-xs text-muted tabular-nums">
+            Cost to you:{" "}
+            {formatAmount(
+              buyerCurrency
+                ? toInternalFrom(forSaleInfo.priceInViewerCapital, buyerCurrency)
+                : forSaleInfo.priceInViewerCapital,
+              buyerCurrency
+            )}
+          </p>
+        )}
       </div>
     );
   }

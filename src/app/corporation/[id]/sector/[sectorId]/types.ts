@@ -545,6 +545,16 @@ export interface ForSaleInfo {
   conflict: boolean;
   /** Buyer has enough liquid capital */
   hasFunds: boolean;
+  /** First reason the purchase is unavailable; null when eligible */
+  blockReason?:
+    | "invalid_price"
+    | "insufficient_funds"
+    | "merge_blocked"
+    | "construction"
+    | "not_ceo"
+    | "actions_paused"
+    | "state_controlled"
+    | null;
 }
 
 // ─── Plants tier (marketSystemMode >= "plants") ──────────────────────────────

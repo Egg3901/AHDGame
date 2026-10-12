@@ -1414,13 +1414,16 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
       sellerCurrency: resolveCorpLiquidCurrencyCode(corporation),
     });
     if (forSaleInfo) {
-      forSaleInfo.eligible =
-        forSaleInfo.eligible &&
-        !!user &&
-        !!viewerCorporation &&
-        requireCeo(viewerCorporation, user.userId) === null &&
-        !gameState?.corporationActionsPaused &&
-        !(await isPrivateEnterpriseBlocked(db, sectorCountryId));
+      const outerBlock =
+        !user || !viewerCorporation || requireCeo(viewerCorporation, user.userId) !== null
+          ? ("not_ceo" as const)
+          : gameState?.corporationActionsPaused
+            ? ("actions_paused" as const)
+            : (await isPrivateEnterpriseBlocked(db, sectorCountryId))
+              ? ("state_controlled" as const)
+              : null;
+      if (outerBlock && !forSaleInfo.blockReason) forSaleInfo.blockReason = outerBlock;
+      forSaleInfo.eligible = forSaleInfo.blockReason === null;
     }
 
     const payload: Record<string, unknown> = {
