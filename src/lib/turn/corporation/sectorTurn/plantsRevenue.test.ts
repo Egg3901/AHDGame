@@ -354,3 +354,42 @@ describe("governor anchor carries output-per-capacity gains (ticket 1498)", () =
     expect(r.marketHourlyRevenue).toBeCloseTo(r.plantsDerivedHourlyRevenue, 6);
   });
 });
+
+describe("player-built sectors skip the launch governor (ticket 1498)", () => {
+  // Two turns into its own ramp, in a market paying three times the nameplate:
+  // the governor holds an ordinary sector near its anchor, but a sector built
+  // under plants has nothing to smooth and earns the derived revenue.
+  // Anchor: 24,000 a day (1,000 an hour). Derived: 1,000 units x 100 / 24 an
+  // hour, about four times the anchor, as in a shortage.
+  const NEW_SECTOR_ANCHOR = 24_000;
+  const midRamp = {
+    plantsStartTurn: CURRENT_TURN - 2,
+    plantsMixPrice: 100,
+    preFlipNameplateRevenue: NEW_SECTOR_ANCHOR,
+    plantsNameplateRevenue: NEW_SECTOR_ANCHOR,
+  } as const;
+
+  it("holds a non-exempt new sector near the anchor mid-ramp", () => {
+    const r = resolvePlantsRevenue(input(midRamp));
+    expect(r.marketHourlyRevenue).toBeLessThan(r.plantsDerivedHourlyRevenue * 0.5);
+  });
+
+  it("pays an exempt sector its derived revenue from its first turn", () => {
+    const base = input(midRamp);
+    const r = resolvePlantsRevenue({
+      ...base,
+      sector: { ...base.sector, plantsGovernorExempt: true },
+    });
+    expect(r.marketHourlyRevenue).toBeCloseTo(r.plantsDerivedHourlyRevenue, 6);
+    expect(r.marketHourlyRevenue).toBeGreaterThan((NEW_SECTOR_ANCHOR / TURNS_PER_DAY) * 2);
+  });
+
+  it("still earns nothing when mothballed", () => {
+    const base = input({ ...midRamp, mothballed: true });
+    const r = resolvePlantsRevenue({
+      ...base,
+      sector: { ...base.sector, plantsGovernorExempt: true },
+    });
+    expect(r.marketHourlyRevenue).toBe(0);
+  });
+});
