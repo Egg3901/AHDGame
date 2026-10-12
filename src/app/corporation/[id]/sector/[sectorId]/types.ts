@@ -143,6 +143,12 @@ export interface CommodityFlow {
    */
   soldFraction?: number;
   /**
+   * Market clearing, supply rows only: this output's share of last turn's
+   * realized revenue (0-1, summing to ~1 across outputs). Splits the blended
+   * average sale price into a price per product on a multi-output sector.
+   */
+  revenueShare?: number;
+  /**
    * Extraction sectors only. Ratio of actual to theoretical output (0, 1).
    * 0 = no deposits in this state. undefined = not applicable or uncapped.
    */
