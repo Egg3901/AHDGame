@@ -210,6 +210,36 @@ export function governorAnchorTurn(
   return Math.min(sectorStartTurn, worldAnchorTurn);
 }
 
+/** Default length of the governor glide, in turns. */
+export const MARKET_GOVERNOR_GLIDE_TURNS = 24;
+
+/**
+ * World anchor that phases the governor out on a schedule.
+ *
+ * Unset `glideStartTurn` means no glide: returns null, so every sector ramps
+ * from its own stamp. Once set, the anchor slides back so that every sector's
+ * ramp share is at least `(currentTurn - glideStartTurn) / glideTurns`: 0 on
+ * the start turn (no change), 1 after `glideTurns` turns (governor inert for
+ * all). Sectors already further along keep their own, higher share. Moving the
+ * anchor to a fixed early turn instead (turn 0 on a world seeded under plants)
+ * jumps every young sector most of the way in a single turn.
+ */
+export function governorGlideAnchorTurn(
+  currentTurn: number,
+  glideStartTurn: number | null | undefined,
+  glideTurns: number | null | undefined,
+  rampTurns: number
+): number | null {
+  if (typeof glideStartTurn !== "number" || !Number.isFinite(glideStartTurn)) return null;
+  if (!Number.isFinite(currentTurn)) return null;
+  const turns =
+    typeof glideTurns === "number" && Number.isFinite(glideTurns) && glideTurns >= 1
+      ? glideTurns
+      : MARKET_GOVERNOR_GLIDE_TURNS;
+  const progress = Math.max(0, Math.min(1, (currentTurn - glideStartTurn) / turns));
+  return currentTurn - rampTurns * progress;
+}
+
 /**
  * Same governor, applied to a revenue AMOUNT rather than a factor.
  *
