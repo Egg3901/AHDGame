@@ -4,7 +4,7 @@ import type { Corporation } from "@/lib/db/types";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 
 import { getOperatingSectorType } from "@/lib/constants/sectorStrategies";
-import { corpDailyGrossRevenueLocal } from "@/lib/corporations/dailyGrossRevenue";
+import { corpDailyGrossRevenuePricingLocal } from "@/lib/corporations/dailyGrossRevenue";
 import { resolveCorpLiquidCurrencyCode } from "@/lib/currency/corporationCapital";
 import { emitTxStrict } from "@/lib/financialTxLog/emit";
 import {
@@ -94,7 +94,12 @@ export async function unlockTechNode(
   }
   const { node } = preCheck;
 
-  const cashCost = techNodeCashCost(node, await corpDailyGrossRevenueLocal(db, corporation));
+  const pricing = await corpDailyGrossRevenuePricingLocal(db, corporation);
+  const cashCost = techNodeCashCost(
+    node,
+    pricing.dailyGrossRevenueLocal,
+    pricing.techCashFloorLocal
+  );
   const check: CanUnlockResult = canUnlock(corpView, nodeId, currentYear, {
     rdScore,
     cashAvailable,

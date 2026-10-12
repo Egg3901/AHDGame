@@ -2,6 +2,7 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 import type { Db } from "mongodb";
 import { ObjectId } from "mongodb";
 import type { Corporation } from "@/lib/db/types";
+import type { CurrencyCode } from "@/lib/constants/currencies";
 
 vi.mock("@/lib/market/featureFlag", () => ({
   getMarketSystemModeForDb: vi.fn().mockResolvedValue("basic"),
@@ -87,5 +88,34 @@ describe("corpDailyGrossRevenueLocal (ticket #1118)", () => {
     ]);
 
     expect(await corpDailyGrossRevenueLocal(db, CORP)).toBeCloseTo(2_000_000, 0);
+  });
+});
+
+describe("corpTechCashFloorLocal (ticket #1506)", () => {
+  it("prices the era-scaled tech floor in the corp's own currency", async () => {
+    const { corpTechCashFloorLocal } = await import("./dailyGrossRevenue");
+    const fx: ReadonlyMap<CurrencyCode, number> = new Map<CurrencyCode, number>([
+      ["USD", USD_PER_ANCHOR],
+      ["JPY", JPY_PER_ANCHOR],
+    ]);
+    expect(corpTechCashFloorLocal(CORP, { eraUnitScale: 1, fxByCurrency: fx })).toBeCloseTo(
+      5_000_000
+    );
+    expect(
+      corpTechCashFloorLocal(
+        { countryId: "JP", liquidCurrencyCode: "JPY" } as Pick<
+          Corporation,
+          "countryId" | "liquidCurrencyCode"
+        >,
+        { eraUnitScale: 0.04, fxByCurrency: fx }
+      )
+    ).toBeCloseTo(200_000 * JPY_PER_ANCHOR);
+  });
+
+  it("is returned with the pricing basis even when the corp has no revenue", async () => {
+    const { corpDailyGrossRevenuePricingLocal } = await import("./dailyGrossRevenue");
+    const pricing = await corpDailyGrossRevenuePricingLocal(dbWithSectors([]), CORP);
+    expect(pricing.dailyGrossRevenueLocal).toBe(0);
+    expect(pricing.techCashFloorLocal).toBeCloseTo(5_000_000);
   });
 });

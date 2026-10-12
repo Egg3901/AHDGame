@@ -50,7 +50,7 @@ function mockDb(
   } = {}
 ) {
   const {
-    revenues = [2_000_000],
+    revenues = [100_000_000],
     modifiedCount = 1,
     failTxInserts = 0,
     postOwned = [],
@@ -95,7 +95,8 @@ function mockDb(
 }
 
 const NODE_1950_1 = corpNodeId("1950", 1); // Management by Objectives, rd cost 8
-const CASH_1950_1 = Math.round(2_000_000 * 0.15); // 300_000
+// Revenue sits well above the era tech cash floor (#1506), so the price is revenue-based.
+const CASH_1950_1 = Math.round(100_000_000 * 0.15); // 15_000_000
 
 beforeEach(() => {
   vi.clearAllMocks();
