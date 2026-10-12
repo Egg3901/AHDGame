@@ -21,7 +21,13 @@ function makeMockDb({
     userId?: ObjectId;
     currentOffice?: { type: string; positionId?: string; state?: string };
   }[],
-  seats = [] as { characterId: ObjectId; officeType: string; state: string }[],
+  seats = [] as {
+    characterId: ObjectId;
+    officeType: string;
+    state: string;
+    constituency?: string;
+    constituencyId?: string;
+  }[],
 } = {}) {
   const memberCol = {
     find: vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue(members) }),
@@ -286,6 +292,40 @@ describe("clearCabinetOnTransition", () => {
       { _id: charId },
       expect.objectContaining({
         $set: expect.objectContaining({ currentOffice: { type: "senate", state: "NY" } }),
+      })
+    );
+  });
+  it("keeps the Commons constituency when restoring a cleared UK minister's seat", async () => {
+    const charId = new ObjectId();
+    const { db, characterCol } = makeMockDb({
+      members: [{ positionId: "defence_secretary", characterId: charId }],
+      characters: [
+        { _id: charId, currentOffice: { type: "ukCabinet", positionId: "defence_secretary" } },
+      ],
+      seats: [
+        {
+          characterId: charId,
+          officeType: "commons",
+          state: "UK-SE",
+          constituency: "Reading Central",
+          constituencyId: "reading-central",
+        },
+      ],
+    });
+
+    await clearCabinetOnTransition(db as any, "UK");
+
+    expect(characterCol.updateOne).toHaveBeenCalledWith(
+      { _id: charId },
+      expect.objectContaining({
+        $set: expect.objectContaining({
+          currentOffice: {
+            type: "commons",
+            state: "UK-SE",
+            constituency: "Reading Central",
+            constituencyId: "reading-central",
+          },
+        }),
       })
     );
   });
