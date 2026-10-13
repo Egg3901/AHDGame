@@ -17,6 +17,7 @@ import { TURNS_PER_DAY } from "@/lib/constants/turnTime";
 
 export interface InternalSupplyClearing {
   deliveryStateBySector?: ReadonlyMap<string, string>;
+  ownRouteDeliveredByKey?: ReadonlyMap<string, number>;
   policies: ReadonlyMap<string, { root: string; policy: InternalSupplyPolicy }>;
   buyers: readonly {
     sectorId: string;
@@ -37,6 +38,18 @@ export interface InternalSupplyClearing {
     marketPrice: number;
     sellers: readonly { id: string; units: number }[];
   }>;
+}
+
+function ownRouteCapsFor(
+  byKey: ReadonlyMap<string, number> | undefined,
+  commodity: CommodityType
+): Map<string, number> | undefined {
+  if (!byKey?.size) return undefined;
+  const prefix = `${commodity}|`;
+  const caps = new Map<string, number>();
+  for (const [key, units] of byKey)
+    if (key.startsWith(prefix) && units > 0) caps.set(key.slice(prefix.length), units);
+  return caps.size ? caps : undefined;
 }
 
 export function reserveInternalSupply(args: {
@@ -74,6 +87,9 @@ export function reserveInternalSupply(args: {
     policies: args.context.policies,
     deliveryStateBySector: FREIGHT_CLASS_BY_COMMODITY[args.commodity]
       ? args.context.deliveryStateBySector
+      : undefined,
+    ownRouteCaps: FREIGHT_CLASS_BY_COMMODITY[args.commodity]
+      ? ownRouteCapsFor(args.context.ownRouteDeliveredByKey, args.commodity)
       : undefined,
     supply: args.supply,
     demand: args.demand,

@@ -238,6 +238,8 @@ export interface CorporationLookups {
   freightUnitPriceByDestState?: Map<string, Map<CommodityType, number>>;
   /** Full freight supply from the same sourcing snapshot as haul revenue. */
   freightSupplyByOriginState?: Map<string, number>;
+  ownRouteDeliveredByKey?: Map<string, number>;
+  ownRouteFreightByCorp?: Map<string, Map<string, Map<CommodityType, number>>>;
   /**
    * The transfer's other half: per origin state, LAST turn's haul revenue its
    * freight network earned. Same gate and source as
