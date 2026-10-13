@@ -3,7 +3,7 @@ import { getDb } from "@/lib/mongodb";
 import { handleRouteError } from "@/lib/api/errors";
 import { resolveCorporation } from "@/lib/api/corporations/resolveQuery";
 import { getAuthUser } from "@/lib/auth";
-import { shouldRedactCorporation } from "@/lib/corporations/redaction";
+import { shouldRedactCorporationForViewer } from "@/lib/corporations/reservedCorporateHoldings";
 import { getRoundedPublicMarketCap } from "@/lib/corporations/marketQuote";
 import { loadCorporationHistoryComparePoints } from "@/lib/corporations/queries/corporationHistoryCompare";
 
@@ -34,7 +34,8 @@ export async function GET(request: Request, { params }: RouteParams) {
       authUser?.isModerator === true &&
       new URL(request.url).searchParams.get("modView") === "1";
     if (
-      shouldRedactCorporation(
+      await shouldRedactCorporationForViewer(
+        db,
         corporation,
         authUser?.userId,
         authUser?.isAdmin === true,
@@ -45,7 +46,9 @@ export async function GET(request: Request, { params }: RouteParams) {
         { points: [], isPrivate: true },
         {
           headers: {
-            "Cache-Control": "public, s-maxage=120, stale-while-revalidate=300, no-transform",
+            "Cache-Control": corporation.isPrivate
+              ? "private, no-store, no-transform"
+              : "public, s-maxage=120, stale-while-revalidate=300, no-transform",
           },
         }
       );
@@ -70,7 +73,9 @@ export async function GET(request: Request, { params }: RouteParams) {
 
     return NextResponse.json(data, {
       headers: {
-        "Cache-Control": "public, s-maxage=120, stale-while-revalidate=300, no-transform",
+        "Cache-Control": corporation.isPrivate
+          ? "private, no-store, no-transform"
+          : "public, s-maxage=120, stale-while-revalidate=300, no-transform",
       },
     });
   } catch (error) {

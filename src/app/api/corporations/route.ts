@@ -47,6 +47,7 @@ import { getDefaultLegalStructureId } from "@/lib/corporations/legalStructure";
 import { readInvestorConfidence } from "@/lib/nationalization/investorConfidence";
 import { creditTreasuryProceeds } from "@/lib/nationalization/treasury";
 import { shouldRedactCorporation, redactPrivateCorporation } from "@/lib/corporations/redaction";
+import { parentCeoVisibleCorporationIds } from "@/lib/corporations/parentCeoVisibility";
 import { emitTx } from "@/lib/financialTxLog/emit";
 import { recordAudit } from "@/lib/audit/recordAudit";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
@@ -201,6 +202,11 @@ export async function GET(request: Request) {
     const viewerUserId = authUser?.userId;
     const viewerIsAdmin = authUser?.isAdmin === true;
 
+    const parentVisibleIds = await parentCeoVisibleCorporationIds(
+      db,
+      corporations.filter((corp) => shouldRedactCorporation(corp, viewerUserId, viewerIsAdmin)),
+      viewerUserId
+    );
     const result = corporations.map((corp) => {
       const ceo = corp.ceoId && !corp.ceoVacant ? ceoMap.get(corp.ceoId.toString()) : undefined;
       const sectorIncome = incomeByCorpId.get(corp._id.toString()) ?? 0;
@@ -249,14 +255,20 @@ export async function GET(request: Request) {
           : null,
         ceoIsInactive,
       };
-      if (shouldRedactCorporation(corp, viewerUserId, viewerIsAdmin)) {
+      if (
+        shouldRedactCorporation(corp, viewerUserId, viewerIsAdmin) &&
+        !parentVisibleIds.has(corp._id.toString())
+      ) {
         const redacted = redactPrivateCorporation(fullRow as Record<string, unknown>);
         return { ...redacted, isPrivate: true };
       }
       return fullRow;
     });
 
-    return NextResponse.json({ corporations: result });
+    return NextResponse.json(
+      { corporations: result },
+      { headers: { "Cache-Control": "private, no-store" } }
+    );
   } catch (error) {
     return handleRouteError(error, { request, route: "/api/corporations" });
   }

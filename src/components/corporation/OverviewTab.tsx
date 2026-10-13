@@ -452,7 +452,8 @@ export default function OverviewTab({
     ? corporation.shareholders.find((sh) => sh.characterId === myCharacterId)
     : undefined;
   const myShares = myHolding?.shares ?? 0;
-  const canSeeMarket = !corporation.isPrivate || isCeo;
+  const canTrade = !corporation.isPrivate || isCeo;
+  const canSeeMarket = canTrade || !!corporation.viewerIsControllingParentCeo;
 
   // Same destinations as the full shareholder register on the Shares tab.
   const holderHref = (sh: CorporationDetail["shareholders"][number]) =>
@@ -531,7 +532,9 @@ export default function OverviewTab({
                   <KVRow
                     label="Share price"
                     value={fmtPrice(corporation.sharePrice)}
-                    action={onTrade ? <RowLink onClick={onTrade}>Trade</RowLink> : undefined}
+                    action={
+                      onTrade && canTrade ? <RowLink onClick={onTrade}>Trade</RowLink> : undefined
+                    }
                   />
                 )}
                 {canSeeMarket &&
@@ -741,7 +744,7 @@ export default function OverviewTab({
       </div>
 
       <aside className="min-w-0 space-y-6">
-        {myCharacterId && canSeeMarket && !isCeo && (
+        {myCharacterId && canTrade && !isCeo && (
           <DenseSection
             title="Your position"
             actions={

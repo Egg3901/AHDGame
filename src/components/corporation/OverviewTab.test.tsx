@@ -137,6 +137,16 @@ describe("OverviewTab", () => {
     expect(onTrade).toHaveBeenCalled();
   });
 
+  it("shows subsidiary valuation to a parent CEO without exposing trade actions", () => {
+    renderOverview({
+      corporation: { ...corporation, isPrivate: true, viewerIsControllingParentCeo: true },
+    });
+    expect(screen.getByText("Share price")).toBeTruthy();
+    expect(screen.getByText("Market cap")).toBeTruthy();
+    expect(screen.queryByText("Trade")).toBeNull();
+    expect(screen.queryByText("Buy / sell")).toBeNull();
+  });
+
   it("switches the money period from the statistics header", () => {
     const { onPeriodViewChange } = renderOverview();
     fireEvent.click(screen.getByRole("radio", { name: "Daily" }));

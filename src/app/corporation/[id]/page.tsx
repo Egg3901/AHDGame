@@ -1338,7 +1338,9 @@ export default function CorporationDetailPage() {
                   <ChartsTab
                     corpId={id}
                     modViewEnabled={modViewEnabled}
-                    ownerView={isCeo || modViewEnabled}
+                    ownerView={
+                      isCeo || modViewEnabled || !!corporation.viewerIsControllingParentCeo
+                    }
                   />
                 )}
 
