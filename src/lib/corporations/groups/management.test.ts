@@ -50,6 +50,65 @@ async function doc(id: ObjectId) {
   return (await memory.collection("corporations").findOne({ _id: id })) as unknown as Corporation;
 }
 describe("group management authorization and persistence", () => {
+  it("protects outstanding debt and historical cash with the existing private-access rules", async () => {
+    memory.seed("bonds", [
+      { _id: new ObjectId(), corporationId: rootId, totalIssued: 100, matured: false },
+      { _id: new ObjectId(), corporationId: subId, totalIssued: 200, matured: false },
+      { _id: new ObjectId(), corporationId: subId, totalIssued: 900, matured: true },
+    ]);
+    memory.seed("corporationHistory", [
+      {
+        _id: new ObjectId(),
+        corporationId: subId,
+        turn: 40,
+        revenue: 200,
+        totalCosts: 120,
+        income: 80,
+        liquidCapital: 1000,
+        currencyCode: "GBP",
+        fxRateAtWrite: 2,
+      },
+    ]);
+    const owner = await groupManagementView(db, await doc(rootId), parentUser.toString());
+    expect(owner?.members.find((m) => m.id === subId.toString())).toMatchObject({
+      currentDebtAnchor: 200,
+      history: [{ cash: 500, revenue: 100 }],
+    });
+    const child = await groupManagementView(db, await doc(subId), playerUser.toString());
+    expect(child?.members.find((m) => m.id === rootId.toString())).toMatchObject({
+      currentDebtAnchor: null,
+      history: null,
+    });
+    const publicView = await groupManagementView(db, await doc(rootId), outsider.toString());
+    expect(
+      publicView?.members.every((m) => m.currentDebtAnchor === null && m.history === null)
+    ).toBe(true);
+  });
+
+  it("returns ticker and voting control including unsold reserved holdings", async () => {
+    await memory
+      .collection("corporations")
+      .updateOne(
+        { _id: subId },
+        { $set: { tickerSymbol: "SUB", shareholders: [{ corporationId: rootId, shares: 40 }] } }
+      );
+    memory.seed("shareOrders", [
+      {
+        _id: new ObjectId(),
+        corporationId: subId,
+        placerCorporationId: rootId,
+        type: "sell",
+        status: "open",
+        sharesRemaining: 35,
+      },
+    ]);
+    const view = await groupManagementView(db, await doc(rootId), parentUser.toString());
+    expect(view?.members.find((m) => m.id === subId.toString())).toMatchObject({
+      tickerSymbol: "SUB",
+      parentControl: { corporationId: rootId.toString(), votingPercent: 75 },
+    });
+  });
+
   it("requires fresh consent when the same CEO returns for another tenure", async () => {
     await updateGroupManagement(db, await doc(subId), playerUser.toString(), {
       action: "participation",
@@ -291,11 +350,84 @@ describe("private participation-sensitive forecasts", () => {
     expect(owner?.forecast?.total).not.toBeNull();
     const player = await groupManagementView(db, await doc(subId), playerUser.toString());
     expect(player?.forecast?.total).toBeNull();
+    expect(player?.forecast?.connections).toEqual([]);
+    expect(player?.forecast?.connectionCount).toBeNull();
     expect(player?.forecast?.corporations.map((r) => r.id)).toEqual([subId.toString()]);
     const other = await groupManagementView(db, await doc(subId), outsider.toString());
     expect(other?.forecast?.corporations).toEqual([]);
+    expect(other?.forecast?.connections).toEqual([]);
+    expect(other?.forecast?.connectionCount).toBeNull();
     expect(JSON.stringify(other)).not.toContain("cashByMember");
     expect(JSON.stringify(other)).not.toContain("books");
+  });
+  it("exposes real connection summaries to the parent only", async () => {
+    await seedForecast();
+    const nppId = new ObjectId();
+    memory.seed("corporations", [
+      { ...sub, _id: nppId, name: "NPP supplier", ceoType: "npp", userId: undefined },
+    ]);
+    const f = coordinationFixture();
+    await memory.collection("corporations").updateOne(
+      { _id: rootId },
+      {
+        $set: {
+          groupSupplyBasis: {
+            turn: 40,
+            rootId: rootId.toString(),
+            memberIds: [rootId.toString(), subId.toString(), nppId.toString()],
+            cashByMember: { [subId.toString()]: 1000 },
+            complete: true,
+            books: [
+              {
+                ...f,
+                sellers: f.sellers.map((r) => ({
+                  ...r,
+                  memberId: nppId.toString(),
+                  openFill: 1,
+                  quoteFactor: 1,
+                })),
+                buyers: f.buyers.slice(0, 1).map((r) => ({ ...r, memberId: subId.toString() })),
+              },
+            ],
+          },
+        },
+      }
+    );
+    await updateGroupManagement(db, await doc(subId), playerUser.toString(), {
+      action: "participation",
+      enabled: true,
+    });
+    const owner = await groupManagementView(db, await doc(rootId), parentUser.toString());
+    expect(owner?.forecast?.connections).toEqual([
+      {
+        supplierId: nppId.toString(),
+        buyerId: subId.toString(),
+        commodity: "steel",
+        commodityLabel: "Steel & Metals",
+        unit: "tons",
+        units: 100,
+        benchmarkValue: 200,
+        rebate: 0,
+        estimatedPayment: 200,
+      },
+    ]);
+    expect(owner?.forecast?.connectionCount).toBe(1);
+    await updateGroupManagement(db, await doc(rootId), parentUser.toString(), {
+      action: "discount",
+      discount: 0.35,
+    });
+    const discounted = await groupManagementView(db, await doc(rootId), parentUser.toString());
+    expect(discounted?.forecast?.connections[0]).toMatchObject({
+      benchmarkValue: 200,
+      rebate: 70,
+      estimatedPayment: 130,
+    });
+    expect(discounted?.forecast?.total?.internalTradingValue).toBe(130);
+    const player = await groupManagementView(db, await doc(subId), playerUser.toString());
+    expect(player?.forecast?.corporations[0].receivingValue).toBe(130);
+    expect(player?.forecast?.connections).toEqual([]);
+    expect(player?.forecast?.connectionCount).toBeNull();
+    expect(JSON.stringify(player?.forecast)).not.toContain(nppId.toString());
   });
   it("refuses disabled, stale, incomplete or changed-membership forecasts", async () => {
     await seedForecast();

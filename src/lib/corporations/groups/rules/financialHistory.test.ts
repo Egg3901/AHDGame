@@ -7,6 +7,13 @@ describe("group historical valuation", () => {
       groupHistoryInAnchor({ ...row, income: -80, currencyCode: "GBP", fxRateAtWrite: 2 })
     ).toEqual({ turn: 10, revenue: 100, costs: 60, income: -40 });
   });
+  it("converts optional historical cash using the recorded rate without fabricating missing balances", () => {
+    expect(
+      groupHistoryInAnchor({ ...row, currencyCode: "GBP", fxRateAtWrite: 2, liquidCapital: 1000 })
+        ?.cash
+    ).toBe(500);
+    expect(groupHistoryInAnchor(row)?.cash).toBeUndefined();
+  });
   it("keeps pre-forex anchor snapshots unchanged", () => {
     expect(groupHistoryInAnchor(row)?.revenue).toBe(200);
   });
