@@ -107,6 +107,17 @@ number.
   after the engine 6 stages are validated. Running worlds never change level on
   their own.
 
+## 6.10.0 (unreleased)
+
+Stage 2 (governing).
+
+- **Vote counts include the government whip (v6).** Since 6.5.0 a sponsor
+  counts votes before filing, and since 6.7.0 an NPP government whips its own
+  members on its goal bills. The count did not know about that whip, so it
+  could set aside a goal bill the whip would have carried. The count now
+  includes it, so the sponsor judges a goal bill the way it will actually be
+  voted.
+
 ## 6.9.0 (unreleased)
 
 Stage 1 (running for office).

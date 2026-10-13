@@ -75,6 +75,7 @@ import {
   WHIP_COUNT_MAX_CANDIDATES,
   type WhipCountInput,
 } from "@/lib/nppAutonomy/v6/rules/whipCount";
+import { nppGovernmentWhipFor } from "@/lib/nppAutonomy/v6/rules/governmentWhip";
 import { isLegislationTypeActive } from "@/lib/era/legislationCatalog";
 import { getMarketSystemMode, marketAtLeast } from "@/lib/market/featureFlag";
 import { isMediaOwnershipBillAvailable } from "@/lib/mediaRegulation/rules";
@@ -385,6 +386,8 @@ async function loadGovernmentDirectives(
   seatsByParty?: Record<string, number>;
   /** V5: the domains the government currently holds a persistent goal on. */
   goalDomains?: ReadonlySet<string>;
+  /** The head of government is an NPP and no player holds the post. */
+  nppLed?: boolean;
 }> {
   const gov = await getGovernmentFormationsCollection(db).findOne(
     { _id: countryId },
@@ -427,6 +430,7 @@ async function loadGovernmentDirectives(
         : undefined,
     seatsByParty,
     goalDomains: goalDomains && goalDomains.size > 0 ? goalDomains : undefined,
+    nppLed: !gov.pmCharacterId && !!(gov.pmNppId || gov.presidentNppId),
   };
 }
 
@@ -977,6 +981,9 @@ export async function processNppBillSponsorship(ctx: NPPContext): Promise<number
           directives.governingPartyId && directives.seatsByParty
             ? identifyOppositionParty(directives.seatsByParty, directives.governingPartyId)
             : null;
+        const governingParty = directives.governingPartyId
+          ? ctx.partyByCompositeKey.get(`${countryId}:${directives.governingPartyId}`)
+          : undefined;
         whipCount = {
           voters,
           playerSeatsByParty,
@@ -989,6 +996,12 @@ export async function processNppBillSponsorship(ctx: NPPContext): Promise<number
                 }
               : null,
           oppositionCoordination: behaviorPolicy.oppositionCoordination,
+          governmentWhip: nppGovernmentWhipFor({
+            governingPartyId: directives.governingPartyId,
+            nppLed: directives.nppLed === true,
+            partyPlayerLed: !!(governingParty?.chairId || governingParty?.viceChairId),
+            goalDomains: directives.goalDomains,
+          }),
         };
       }
 

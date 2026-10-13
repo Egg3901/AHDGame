@@ -15,9 +15,11 @@ import type { LegislationType, NPP, StateDemographics } from "@/lib/db/types";
 import {
   computeCrossPressureForces,
   computePartyLineForce,
+  computeWhipForce,
   verdictFromForces,
 } from "@/lib/turn/npp/crossPressure";
 import { computeOppositionVoteForce } from "@/lib/nppAutonomy/oppositionBehavior";
+import { governmentWhipApplies, type NppGovernmentWhip } from "./governmentWhip";
 
 /** How many bills a v6 sponsor checks before filing nothing this attempt. */
 export const WHIP_COUNT_MAX_CANDIDATES = 3;
@@ -35,6 +37,12 @@ export interface WhipCountInput {
   demographicsByState: ReadonlyMap<string, StateDemographics>;
   opposition: { governingPartyId: string; oppositionPartyId: string } | null;
   oppositionCoordination: number;
+  /**
+   * Engine 6.10: the government's own soft whip (6.7), so a goal bill is
+   * counted the way it will actually be voted. Null when the government may
+   * not whip.
+   */
+  governmentWhip?: NppGovernmentWhip | null;
 }
 
 export interface WhipCount {
@@ -51,7 +59,20 @@ export function projectChamberVote(input: WhipCountInput): WhipCount {
       homeStateDemographics: input.demographicsByState.get(npp.homeState) ?? null,
       whips: { partyWhip: null, caucusWhip: null },
     });
-    let ideology = forces.ideology + computePartyLineForce(npp, input.sponsorParty);
+    // A sponsored bill is NPP-sponsored by construction.
+    const whipped = governmentWhipApplies(
+      input.governmentWhip,
+      { nppSponsored: true, sponsorParty: input.sponsorParty },
+      npp.party,
+      input.legislationType?.policyDomain
+    );
+    if (whipped) {
+      forces.whip = computeWhipForce(npp, {
+        partyWhip: { direction: "for", mode: "soft" },
+        caucusWhip: null,
+      });
+    }
+    let ideology = forces.ideology + (whipped ? 0 : computePartyLineForce(npp, input.sponsorParty));
     if (input.opposition) {
       ideology += computeOppositionVoteForce(npp, {
         sponsorParty: input.sponsorParty,
