@@ -19,8 +19,8 @@ describe("depositors panel", () => {
           source: "accounts",
           total: 350,
           rows: [
-            { id: "one", type: "character", name: "First", sequentialId: 42, balance: 300 },
-            { id: "private-id", type: "character", name: null, sequentialId: null, balance: 50 },
+            { key: "one", type: "character", name: "First", sequentialId: 42, balance: 300 },
+            { key: "private-key", type: "character", name: null, sequentialId: null, balance: 50 },
           ],
         }}
       />
