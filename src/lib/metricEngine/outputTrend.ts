@@ -102,3 +102,38 @@ export function blendToMeasured(legacy: number, measured: number, weight: number
   if (w >= 1) return measured;
   return (1 - w) * finiteOr(legacy, measured) + w * measured;
 }
+
+/**
+ * GDP-weighted national output gap and the cutover weight for consumers that
+ * act on a whole country (inflation). Only regions that already carry a
+ * measured trend count; none → null, so the caller keeps its legacy path.
+ */
+export function nationalOutputGap(
+  regions: ReadonlyArray<{
+    gdp?: number;
+    outputGap?: number;
+    outputTrendGrowth?: number;
+    realOutputStartTurn?: number;
+  }>,
+  turn: number | undefined
+): { gap: number; weight: number } | null {
+  let weighted = 0;
+  let total = 0;
+  let startTurn: number | undefined;
+  for (const r of regions) {
+    if (typeof r.outputTrendGrowth !== "number" || !Number.isFinite(r.outputTrendGrowth)) continue;
+    const gap = r.outputGap;
+    const gdp = r.gdp;
+    if (typeof gap !== "number" || !Number.isFinite(gap)) continue;
+    if (typeof gdp !== "number" || !Number.isFinite(gdp) || gdp <= 0) continue;
+    weighted += gap * gdp;
+    total += gdp;
+    const start = r.realOutputStartTurn;
+    if (typeof start === "number" && Number.isFinite(start))
+      startTurn = startTurn === undefined ? start : Math.max(startTurn, start);
+  }
+  if (total <= 0) return null;
+  const weight =
+    typeof turn === "number" && Number.isFinite(turn) ? realOutputBlendWeight(turn, startTurn) : 1;
+  return { gap: weighted / total, weight };
+}

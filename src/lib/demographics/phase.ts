@@ -113,6 +113,7 @@ interface MetricsDoc {
     gdpGrowth?: { value?: number };
     unemploymentRate?: { value?: number };
     potentialGrowth?: { value?: number };
+    trendGrowth?: { value?: number };
     medianIncome?: { value?: number };
     costOfLiving?: { value?: number };
     labourWageIndex?: { value?: number };
@@ -218,6 +219,7 @@ export async function runDemographicFlows(
     "economic.gdpGrowth.value": 1,
     "economic.unemploymentRate.value": 1,
     "economic.potentialGrowth.value": 1,
+    "economic.trendGrowth.value": 1,
     "economic.medianIncome.value": 1,
     "economic.costOfLiving.value": 1,
     "economic.labourWageIndex.value": 1,
@@ -406,11 +408,12 @@ export async function runDemographicFlows(
     let econPull = economicPullFactor({
       gdpGrowth: gdpGrowthVal,
       unemployment: val(m?.economic?.unemploymentRate, ECON_PULL_NEUTRAL.unemployment),
-      // v0 fix: pull on the output gap (gdpGrowth − own potential), so a region at
-      // its potential is migration-neutral. If potentialGrowth is missing, fall back
-      // to THIS region's gdpGrowth → gap 0 → pull 1 (parity), not the legacy
-      // 2.5-anchored pull.
-      potential: val(m?.economic?.potentialGrowth, gdpGrowthVal),
+      // Pull on growth vs the region's own measured trend (metricEngine/
+      // outputTrend.ts; the engine writes it already blended from the legacy
+      // potential across the cutover), so steady growth is migration-neutral.
+      // Older docs without it use potential; with neither, THIS region's
+      // gdpGrowth → gap 0 → pull 1 (parity), not the legacy 2.5-anchored pull.
+      potential: val(m?.economic?.trendGrowth, val(m?.economic?.potentialGrowth, gdpGrowthVal)),
     });
     // v2 labour→macro (gated on labourSystemMode ≥ "macro"): a region whose labour
     // system pushed wages above baseline attracts more migrants; below, fewer.

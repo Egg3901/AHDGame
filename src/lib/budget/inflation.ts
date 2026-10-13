@@ -32,6 +32,8 @@ import { fractionalAlpha } from "@/lib/turn/subhour/stepFraction";
 import type { CentralBank } from "@/lib/db/types/centralBank";
 import type { GameConfig } from "@/lib/db/types/gameConfig";
 import type { GameState } from "@/lib/db/types/gameState";
+import type { State } from "@/lib/db/types/state";
+import { nationalOutputGap } from "@/lib/metricEngine/outputTrend";
 import type { StateMetrics } from "@/lib/db/types/stateMetrics";
 import type { Tariff } from "@/lib/db/types/tariff";
 import type { Corporation, CorporateSector } from "@/lib/db/types";
@@ -72,6 +74,14 @@ const UNEMPLOYMENT_COEFF_DOWN = 0.2; // slack labor → deflation (weaker)
 const GDP_GROWTH_COEFF_UP = 0.2; // hot economy → inflation
 const GDP_GROWTH_COEFF_DOWN = 0.15; // recession → deflation (weaker)
 const TREND_GDP_GROWTH = 2.0;
+/**
+ * Demand-pull per point of OUTPUT GAP (actual real output vs its measured trend,
+ * metricEngine/outputTrend.ts). Replaces the growth-vs-fixed-2% term once a
+ * country has a measured gap: growth itself is no longer read as heat, only
+ * output running above or below the economy's own trend.
+ */
+const OUTPUT_GAP_COEFF_UP = 0.25;
+const OUTPUT_GAP_COEFF_DOWN = 0.2;
 
 /** Monetary-policy coefficients: each 1 pp away from neutral rate → this much inflation change.
  *  Asymmetric: high rates (above neutral) suppress demand 3× harder than low rates stimulate. */
@@ -330,6 +340,16 @@ export interface InflationInputs {
   /** Previous year's inflation rate for inertia smoothing */
   previousInflation: number;
   /**
+   * GDP-weighted national output gap (%, actual vs measured trend). When finite
+   * it drives the demand-pull GDP term instead of growth vs a fixed trend.
+   */
+  outputGap?: number;
+  /**
+   * Weight of the output-gap term vs the legacy growth term (0..1) while a live
+   * world blends across the cutover. Defaults to 1 when `outputGap` is given.
+   */
+  outputGapWeight?: number;
+  /**
    * Discretionary monetary-policy stance pressure (pp), summed from the active
    * central-bank-governor stance + orders + emergency. Positive = easing
    * (inflationary), negative = tightening. Steady-state while active. Defaults to 0.
@@ -411,7 +431,7 @@ export interface InflationBreakdown {
   base: number;
   /** Demand-pull from unemployment gap vs NAIRU */
   unemployment: number;
-  /** Demand-pull from GDP growth gap vs trend */
+  /** Demand-pull from the output gap (legacy: GDP growth vs a fixed trend) */
   gdp: number;
   /** Monetary policy (prime rate vs neutral rate) */
   monetary: number;
@@ -469,7 +489,17 @@ export function calculateInflationWithBreakdown(inputs: InflationInputs): {
   const unemployment = uGap >= 0 ? uGap * UNEMPLOYMENT_COEFF_UP : uGap * UNEMPLOYMENT_COEFF_DOWN;
 
   const gGap = gdpGrowthInput - TREND_GDP_GROWTH; // positive = hot, negative = cold
-  const gdp = gGap >= 0 ? gGap * GDP_GROWTH_COEFF_UP : gGap * GDP_GROWTH_COEFF_DOWN;
+  const legacyGdp = gGap >= 0 ? gGap * GDP_GROWTH_COEFF_UP : gGap * GDP_GROWTH_COEFF_DOWN;
+  const outputGapInput = inputs.outputGap;
+  let gdp = legacyGdp;
+  if (typeof outputGapInput === "number" && Number.isFinite(outputGapInput)) {
+    const gapTerm =
+      outputGapInput >= 0
+        ? outputGapInput * OUTPUT_GAP_COEFF_UP
+        : outputGapInput * OUTPUT_GAP_COEFF_DOWN;
+    const w = Math.max(0, Math.min(1, finiteOr(inputs.outputGapWeight, 1)));
+    gdp = (1 - w) * legacyGdp + w * gapTerm;
+  }
 
   // 2. Monetary policy — trailing weighted average so rate changes take 12 turns to fully propagate
   const effectiveRate = computeEffectivePrimeRate(primeRateInput, primeRateHistoryInput);
@@ -732,7 +762,10 @@ export async function calculateCountryInflation(
   const [gameState, gc] = await Promise.all([
     db
       .collection<GameState>("gameState")
-      .findOne({ _id: "current" }, { projection: { currentYear: 1, startingYear: 1 } }),
+      .findOne(
+        { _id: "current" },
+        { projection: { currentYear: 1, startingYear: 1, currentTurn: 1 } }
+      ),
     // Command-economy CPI is administered (held at the era target), not market-driven.
     db
       .collection<GameConfig>("gameConfig")
@@ -760,25 +793,36 @@ export async function calculateCountryInflation(
   const nationalDocId = getNationalDocId(countryId);
   const hasMeasuredTariffRate =
     typeof tariffRateOverride === "number" && Number.isFinite(tariffRateOverride);
-  const [nationalMetrics, centralBank, tariffs, sectors, activeFtaPairs] = await Promise.all([
-    nationalDocId
-      ? db.collection<StateMetrics>("macroMetrics").findOne({ _id: nationalDocId })
-      : null,
-    db.collection<CentralBank>("centralBanks").findOne({ _id: getBankId(countryId) }),
-    hasMeasuredTariffRate
-      ? Promise.resolve([])
-      : db.collection<Tariff>("tariffs").find({ countryId }).toArray(),
-    hasMeasuredTariffRate
-      ? Promise.resolve([])
-      : db
-          .collection<CorporateSector>("corporateSectors")
-          .find(
-            { countryId },
-            { projection: { corporationId: 1, countryId: 1, sectorType: 1, revenue: 1 } }
-          )
-          .toArray(),
-    hasMeasuredTariffRate ? Promise.resolve(new Set<string>()) : loadActiveFtaPairs(db),
-  ]);
+  const [nationalMetrics, centralBank, tariffs, sectors, activeFtaPairs, gapStates] =
+    await Promise.all([
+      nationalDocId
+        ? db.collection<StateMetrics>("macroMetrics").findOne({ _id: nationalDocId })
+        : null,
+      db.collection<CentralBank>("centralBanks").findOne({ _id: getBankId(countryId) }),
+      hasMeasuredTariffRate
+        ? Promise.resolve([])
+        : db.collection<Tariff>("tariffs").find({ countryId }).toArray(),
+      hasMeasuredTariffRate
+        ? Promise.resolve([])
+        : db
+            .collection<CorporateSector>("corporateSectors")
+            .find(
+              { countryId },
+              { projection: { corporationId: 1, countryId: 1, sectorType: 1, revenue: 1 } }
+            )
+            .toArray(),
+      hasMeasuredTariffRate ? Promise.resolve(new Set<string>()) : loadActiveFtaPairs(db),
+      db
+        .collection<State>("states")
+        .find(
+          { countryId },
+          { projection: { gdp: 1, outputGap: 1, outputTrendGrowth: 1, realOutputStartTurn: 1 } }
+        )
+        .toArray(),
+    ]);
+  // Demand-pull reads the measured output gap once the country's regions carry
+  // one (metricEngine/outputTrend.ts); null keeps the legacy growth term.
+  const measuredGap = nationalOutputGap(gapStates ?? [], gameState?.currentTurn);
 
   const unemployment = finiteOr(nationalMetrics?.economic?.unemploymentRate?.value, 5.0);
   // Countries without a national metrics doc (layer-1) fall back to the
@@ -862,6 +906,7 @@ export async function calculateCountryInflation(
     centralBankScrutiny,
     housingCostPressure,
     previousInflation,
+    ...(measuredGap ? { outputGap: measuredGap.gap, outputGapWeight: measuredGap.weight } : {}),
     ...(stepFraction !== undefined ? { stepFraction } : {}),
   });
 

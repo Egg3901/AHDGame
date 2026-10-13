@@ -454,9 +454,12 @@ export function StateMetricsTab({ stateId, countryId }: StateMetricsTabProps) {
                   (metrics.economic as Record<string, { value?: number } | undefined>)?.gdpGrowth
                     ?.value ?? 0
                 }
-                potentialGrowth={
+                trendGrowth={
+                  (metrics.economic as Record<string, { value?: number } | undefined>)?.trendGrowth
+                    ?.value ??
                   (metrics.economic as Record<string, { value?: number } | undefined>)
-                    ?.potentialGrowth?.value ?? 0
+                    ?.potentialGrowth?.value ??
+                  0
                 }
                 outputGap={economyStock.outputGap}
                 laborForce={
@@ -502,16 +505,19 @@ export function StateMetricsTab({ stateId, countryId }: StateMetricsTabProps) {
 
           {/* Category Content */}
           <div className="space-y-6 rounded-xl border border-card-border bg-card p-6">
-            {/* P1d-3: GDP level + potential-vs-cyclical split. potentialGrowth/laborForce
+            {/* P1d-3: GDP level + trend-vs-cyclical split. trendGrowth/laborForce
                 are surfaced engine intermediates (not in metricDefinitions), so they
                 don't render as metric cards — this card reads them explicitly. */}
             {activeTab.id === "economic" && economyStock && (
               <GdpDecompositionCard
                 gdp={economyStock.gdp}
                 gdpGrowth={categoryMetrics?.gdpGrowth?.value ?? 0}
-                potentialGrowth={
+                trendGrowth={
+                  (metrics.economic as Record<string, { value?: number } | undefined>)?.trendGrowth
+                    ?.value ??
                   (metrics.economic as Record<string, { value?: number } | undefined>)
-                    ?.potentialGrowth?.value ?? 0
+                    ?.potentialGrowth?.value ??
+                  0
                 }
                 outputGap={economyStock.outputGap}
                 laborForce={
