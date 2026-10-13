@@ -852,9 +852,10 @@ export async function fileAcceptedSlateRows(ctx: NPPContext): Promise<SlateFilin
 /**
  * Withdraw one NPP candidacy from a race and clean up after it.
  *
- * Two callers: the filing pass, taking a slot from an auto-picked NPP so a
- * chair's pick can stand on a full race (#1181), and the trim pass, bringing a
- * race that is over the cap back inside it. Mirrors the slate-withdraw cleanup used by
+ * Three callers: the filing pass, taking a slot from an auto-picked NPP so a
+ * chair's pick can stand on a full race (#1181), the trim pass, bringing a
+ * race that is over the cap back inside it, and engine 6.4 primary
+ * consolidation (electionEntry.ts). Mirrors the slate-withdraw cleanup used by
  * `reconcileSlateMoves` and the slate DELETE route: mark the candidacy
  * withdrawn, scrub the vote tally, archive the campaign, and drop the NPP from
  * the turn's in-memory candidacy state so nothing re-files them.
@@ -863,7 +864,7 @@ export async function fileAcceptedSlateRows(ctx: NPPContext): Promise<SlateFilin
  * earlier in this turn receive their final `_id` before the batched upsert, so
  * the withdrawal can update that row directly instead of re-reading it first.
  */
-async function withdrawCandidacyFromRace(
+export async function withdrawCandidacyFromRace(
   ctx: NPPContext,
   election: Election,
   inMemoryCandidate: ElectionCandidate,

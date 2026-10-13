@@ -48,7 +48,11 @@ import {
   canFieldLegislativeCandidate,
 } from "@/lib/turn/onePartyConstraints";
 import type { NPPContext } from "./context";
-import { fileAcceptedSlateRows, trimOverCapSlates } from "./slateResponses";
+import {
+  fileAcceptedSlateRows,
+  trimOverCapSlates,
+  withdrawCandidacyFromRace,
+} from "./slateResponses";
 import {
   buildSlateOverrideMaps,
   reconcileSlateMoves,
@@ -66,6 +70,10 @@ import {
   compareStrongestFirst,
   placementOrder,
 } from "@/lib/nppAutonomy/v6/rules/candidatePlacement";
+import {
+  inConsolidationWindow,
+  trailingCandidatesToWithdraw,
+} from "@/lib/nppAutonomy/v6/rules/primaryConsolidation";
 import { logger } from "../../observability/logger";
 
 // Optional global salt so headless sim runs can vary this RNG across runs
@@ -609,6 +617,50 @@ export async function processElectionEntry(ctx: NPPContext): Promise<number> {
   }
   if (ctx.batchCandidateInserts) entered += await flushCandidateInserts();
 
+  // Phase 2.4 (engine 6.4, v6): consolidation. In the closing window of a
+  // primary with no player in it, a clearly trailing non-incumbent NPP
+  // withdraws. No endorsement (NPP endorsements stay manual-only), and a
+  // cooldown on that primary keeps generic fill from re-filing it.
+  let consolidated = 0;
+  for (const primary of openPrimaries) {
+    if (!engine6Countries.has(primary.countryId ?? "US")) continue;
+    if (!inConsolidationWindow(primary.primaryEndTurn, ctx.currentTurn)) continue;
+    const active = (candidatesByElection.get(primary._id.toString()) ?? []).filter(
+      (c) => c.status === "active"
+    );
+    if (active.length < 2) continue;
+    const entrants = active.map((c) => {
+      const npp = c.nppId ? ctx.nppMap.get(c.nppId.toString()) : undefined;
+      return {
+        candidateId: c._id.toString(),
+        party: c.party,
+        npp,
+        isIncumbent: npp ? isIncumbentFor(npp, primary) : false,
+      };
+    });
+    for (const candidateId of trailingCandidatesToWithdraw(entrants)) {
+      const candidate = active.find((c) => c._id.toString() === candidateId);
+      if (!candidate?.nppId) continue;
+      if (!(await withdrawCandidacyFromRace(ctx, primary, candidate))) continue;
+      consolidated++;
+      const until = primary.primaryEndTime ?? primary.endTime;
+      if (until) {
+        const untilIso = new Date(until).toISOString();
+        const field = `electionCooldowns.${primary._id.toString()}`;
+        await db
+          .collection<NPP>("npps")
+          .updateOne({ _id: candidate.nppId }, { $set: { [field]: untilIso } });
+        const npp = ctx.nppMap.get(candidate.nppId.toString());
+        if (npp) {
+          npp.electionCooldowns = { ...npp.electionCooldowns, [primary._id.toString()]: untilIso };
+        }
+      }
+    }
+  }
+  if (consolidated > 0) {
+    logger.info("Turn", `NPP consolidation: ${consolidated} trailing candidacy(ies) withdrawn`);
+  }
+
   // Phase 2.5 (v3): ambitious challengers. Design decision #4 above ("same NPP
   // always wins A SLOT") governs which NPP fills an empty slot — it does not
   // mean every primary stays a single-candidate walkover forever. For
@@ -655,6 +707,13 @@ export async function processElectionEntry(ctx: NPPContext): Promise<number> {
       if (presidential && !challengesPresidency(primary)) continue;
       if (presidential && playerCountryFlags.get(primaryCountryId)) continue;
       if (!v3ChallengerCountries.has(primaryCountryId)) continue;
+      // Engine 6.4 (v6): no new challenger inside the consolidation window.
+      if (
+        engine6Countries.has(primaryCountryId) &&
+        inConsolidationWindow(primary.primaryEndTurn, ctx.currentTurn)
+      ) {
+        continue;
+      }
 
       const candidates = candidatesByElection.get(primary._id.toString()) ?? [];
       const activeByParty = new Map<string, ElectionCandidate[]>();

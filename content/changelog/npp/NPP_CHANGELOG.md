@@ -46,8 +46,9 @@ number.
   race the NPP is running in, weighted toward close races, instead of raising
   general influence and favorability. (Rallies in the NPP's own race shipped in
   6.2.0.)
-- **Consolidation.** A trailing NPP withdraws before the primary and endorses
-  the same-party front-runner rather than splitting the vote.
+- **Consolidation.** A clearly trailing NPP withdraws before the primary
+  rather than splitting the vote. It does not endorse: NPP endorsements stay
+  something players request. (Shipped in 6.4.0.)
 - **Presidential challengers** in non-player countries, inside the existing
   limit on how often a player's race can be challenged. (Shipped in 6.3.0.)
 
@@ -95,6 +96,20 @@ number.
 - Autonomy v6 becomes the default for new singleplayer and simulation worlds,
   after the engine 6 stages are validated. Running worlds never change level on
   their own.
+
+## 6.4.0 (unreleased)
+
+Stage 1 (running for office).
+
+- **Trailing NPPs leave the primary (v6).** In the last 12 turns before a
+  primary closes, an NPP whose strength (political influence plus
+  favorability) is below 60% of its party's strongest candidate in that
+  primary withdraws. It does not endorse anyone; NPP endorsements stay
+  something players request. Incumbents defending their seat never withdraw,
+  and a primary with any player candidate is never touched. A withdrawn NPP
+  cannot re-file in that primary.
+- **No late challengers (v6).** NPP challengers no longer enter a primary in
+  those last 12 turns, so a field that has consolidated stays consolidated.
 
 ## 6.3.0 (unreleased)
 
