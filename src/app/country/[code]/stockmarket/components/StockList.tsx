@@ -398,6 +398,16 @@ export function StockList({
                   Sub
                 </span>
               )}
+              {listing.ceoType === "character" && (
+                <span className="px-1.5 py-0.5 rounded-md bg-blue-500/15 border border-blue-500/30 text-blue-400 uppercase text-[9px] tracking-wide font-semibold whitespace-nowrap">
+                  Player-run
+                </span>
+              )}
+              {listing.ceoType === "npp" && (
+                <span className="px-1.5 py-0.5 rounded-md bg-card-elevated border border-card-border text-muted uppercase text-[9px] tracking-wide font-semibold whitespace-nowrap">
+                  NPP-run
+                </span>
+              )}
               <span className="truncate">{listing.typeLabel}</span>
               {(() => {
                 const own =

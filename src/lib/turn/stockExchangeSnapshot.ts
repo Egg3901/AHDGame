@@ -978,6 +978,7 @@ export async function generateStockExchangeSnapshots(currentTurn: number, db?: D
           totalRevenueAnchor,
           incomeAnchor,
           isNpp,
+          ...(corp.ceoType ? { ceoType: corp.ceoType } : {}),
           ...(isNatcorp && corp.countryOwnerId ? { countryOwnerId: corp.countryOwnerId } : {}),
           priceChange1h,
           priceChange24h,

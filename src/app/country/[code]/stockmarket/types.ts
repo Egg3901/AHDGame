@@ -52,6 +52,8 @@ export interface StockListing {
   countryOwnerId?: string;
   /** True when the corp is NPP-run; hidden from the list by default (t834). */
   isNpp?: boolean;
+  /** Explicit CEO class; missing legacy values are intentionally unknown. */
+  ceoType?: "character" | "imperial" | "npp";
   isSubsidiary?: boolean;
   subsidiaryParentName?: string;
   ceo: {
