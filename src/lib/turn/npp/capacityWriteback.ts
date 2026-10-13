@@ -137,6 +137,7 @@ export function buildNppFoundedSectorInserts(args: {
       countryId: ns.countryId as CountryId,
       stateId: ns.stateId,
       sectorType: ns.sectorType,
+      nppFoundedTurn: args.turn,
       ...(ns.industryModel ? { industryModel: ns.industryModel } : {}),
       ...(ns.mediaDiscriminator ? { mediaDiscriminator: ns.mediaDiscriminator } : {}),
       targetGrowthRate: ns.starterOrder ? 0 : 2,

@@ -41,6 +41,27 @@ beforeEach(() => {
   vi.mocked(updateGroupManagement).mockResolvedValue({ ok: true });
 });
 describe("group management API", () => {
+  it("passes a validated primary-only mandate through the authenticated route", async () => {
+    const command = {
+      action: "direction",
+      memberId: new ObjectId().toString(),
+      objective: "balanced",
+      regions: [],
+      allowInvestment: true,
+      primaryIndustryOnly: true,
+    };
+    expect((await PATCH(request(command), context)).status).toBe(200);
+    expect(updateGroupManagement).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.any(String),
+      command
+    );
+    expect(
+      (await PATCH(request({ ...command, primaryIndustryOnly: "true" }), context)).status
+    ).toBe(400);
+  });
+
   it("requires authentication", async () => {
     vi.mocked(requireBasicAuth).mockResolvedValue({
       ok: false,

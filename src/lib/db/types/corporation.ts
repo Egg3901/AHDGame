@@ -1370,6 +1370,8 @@ export interface CorporateSector {
    * the sector first runs under plants (the flip turn), and never moved after.
    */
   plantsStartTurn?: number | null;
+  /** NPP greenfield birth turn for maturation protection in every market mode. */
+  nppFoundedTurn?: number;
   /**
    * Plants tier: true for a sector a player-run company built (or split off)
    * while plants was already on. The launch-safety governor exists to smooth a

@@ -53,6 +53,43 @@ async function doc(id: ObjectId) {
   return (await memory.collection("corporations").findOne({ _id: id })) as unknown as Corporation;
 }
 describe("group management authorization and persistence", () => {
+  it("persists a parent primary-industry mandate and denies outsiders", async () => {
+    await memory.collection("corporations").updateOne({ _id: subId }, { $set: { ceoType: "npp" } });
+    const command = {
+      action: "direction",
+      memberId: subId.toString(),
+      objective: "expansion",
+      regions: [],
+      allowInvestment: true,
+      primaryIndustryOnly: true,
+    } as const;
+    expect(
+      await updateGroupManagement(db, await doc(rootId), outsider.toString(), {
+        ...command,
+        regions: [],
+      })
+    ).toMatchObject({ ok: false, status: 403 });
+    expect(
+      await updateGroupManagement(db, await doc(rootId), parentUser.toString(), {
+        ...command,
+        regions: [],
+      })
+    ).toEqual({ ok: true });
+    expect((await doc(subId)).groupDirection?.primaryIndustryOnly).toBe(true);
+    const { primaryIndustryOnly: _primaryOnly, ...legacyCommand } = command;
+    expect(
+      await updateGroupManagement(db, await doc(rootId), parentUser.toString(), {
+        ...legacyCommand,
+        regions: [],
+      })
+    ).toEqual({ ok: true });
+    expect((await doc(subId)).groupDirection?.primaryIndustryOnly).toBe(true);
+    const view = await groupManagementView(db, await doc(rootId), parentUser.toString());
+    expect(
+      view?.members.find((m) => m.id === subId.toString())?.direction?.primaryIndustryOnly
+    ).toBe(true);
+  });
+
   it("activates NPP directions independently while preserving existing active supply routing", async () => {
     memory.seed("gameConfig", [
       { _id: "default", marketSystemMode: "plants", groupSupplyCoordinationEnabled: false },
