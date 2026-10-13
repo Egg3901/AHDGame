@@ -44,6 +44,7 @@ import { resolveWhipForNPP } from "./whipResolution";
 import {
   computeCrossPressureForces,
   computePartyLineForce,
+  computeWhipForce,
   verdictFromForces,
   type CrossPressureVerdict,
 } from "./crossPressure";
@@ -69,6 +70,13 @@ import {
 import { resolveBillVoteField, type BillVoteField } from "@/lib/congress/billVoteField";
 import { isVotingDeadlinePassed } from "@/lib/legislature/billVotingWindow";
 import { cabinetDisciplineForParty } from "@/lib/resetCabinet/loadDiscipline";
+import { NPP_ENGINE_LEVEL } from "@/lib/nppAutonomy/engineVersion";
+import { committedGoalDomains } from "@/lib/nppAutonomy/v5/rules/governingGoals";
+import {
+  governmentWhipApplies,
+  nppGovernmentWhipFor,
+  type NppGovernmentWhip,
+} from "@/lib/nppAutonomy/v6/rules/governmentWhip";
 
 export async function processBillVoting(ctx: NPPContext): Promise<number> {
   const {
@@ -201,6 +209,8 @@ export async function processBillVoting(ctx: NPPContext): Promise<number> {
     CountryId,
     { governingPartyId: string; oppositionPartyId: string }
   >();
+  // Engine 6.7 (v6): an NPP-led government's soft whip on its own goal bills.
+  const governmentWhipByCountry = new Map<CountryId, NppGovernmentWhip>();
   if (activeBills.length > 0) {
     const billCountries = Array.from(
       new Set(activeBills.map((bill) => (bill.countryId ?? "US") as CountryId))
@@ -210,6 +220,17 @@ export async function processBillVoting(ctx: NPPContext): Promise<number> {
       if (!(await nppAutonomyAtLeast(db, countryId, "v1"))) continue;
       const gov = await govCol.findOne({ _id: countryId });
       if (!gov || gov.status !== "formed" || !gov.governingPartyId) continue;
+      if (await nppAutonomyAtLeast(db, countryId, NPP_ENGINE_LEVEL)) {
+        const party = ctx.partyByCompositeKey.get(`${countryId}:${gov.governingPartyId}`);
+        const goals = gov.governingGoals?.goals;
+        const governmentWhip = nppGovernmentWhipFor({
+          governingPartyId: gov.governingPartyId,
+          nppLed: !gov.pmCharacterId && !!(gov.pmNppId || gov.presidentNppId),
+          partyPlayerLed: !!(party?.chairId || party?.viceChairId),
+          goalDomains: goals && goals.length > 0 ? committedGoalDomains(goals) : undefined,
+        });
+        if (governmentWhip) governmentWhipByCountry.set(countryId, governmentWhip);
+      }
       // Tallied live from electedOfficials rather than `gov.seatsByParty` — a
       // write-triggered cache refreshed only on specific turn events that can
       // drift arbitrarily far from the real chamber between them (measured:
@@ -475,9 +496,25 @@ export async function processBillVoting(ctx: NPPContext): Promise<number> {
       // lean FOR their own party's bills. Scaled by compliance so it can be
       // overridden by ideology or an opposition whip.
       if (!applicableWhip) {
-        const partyBias = computePartyLineForce(npp, bill.sponsorParty);
-        if (partyBias !== 0) {
-          forces.ideology = Math.max(-100, Math.min(100, forces.ideology + partyBias));
+        // Engine 6.7 (v6): the government's soft whip replaces the default
+        // party-line lean for its members on its own goal bills.
+        if (
+          governmentWhipApplies(
+            governmentWhipByCountry.get(billCountry),
+            bill,
+            npp.party,
+            legislationType?.policyDomain
+          )
+        ) {
+          forces.whip = computeWhipForce(npp, {
+            partyWhip: { direction: "for", mode: "soft" },
+            caucusWhip: null,
+          });
+        } else {
+          const partyBias = computePartyLineForce(npp, bill.sponsorParty);
+          if (partyBias !== 0) {
+            forces.ideology = Math.max(-100, Math.min(100, forces.ideology + partyBias));
+          }
         }
 
         // V1.7: the opposition bloc-votes against the governing party's bills.

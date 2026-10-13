@@ -58,8 +58,8 @@ number.
   does not introduce a bill that is short. (Shipped in 6.5.0, counting party,
   district, donor and opposition pressure; whips and caucuses come later.)
 - **Whipping its own program.** A governing party whips co-partisans on the
-  bills that serve its standing goals. Opposition coordinates against a bill
-  only when it has the votes to defeat it.
+  bills that serve its standing goals (shipped in 6.7.0). Opposition
+  coordinates against a bill only when it has the votes to defeat it.
 - **Ministers judged on their goal.** Cabinet posts already go to NPPs ranked
   on fit with the head of government, competence and the brief, and ministers
   whose briefs badly miss target are already reshuffled. The remaining step is
@@ -102,6 +102,21 @@ number.
 - Autonomy v6 becomes the default for new singleplayer and simulation worlds,
   after the engine 6 stages are validated. Running worlds never change level on
   their own.
+
+## 6.7.0 (unreleased)
+
+Stage 2 (governing).
+
+- **Governments whip their own program (v6).** An NPP government's members
+  used to back its bills only through the general lean toward their own
+  party's bills. Now, when an NPP heads the government, its members get a
+  soft whip on the bills the government sponsored to serve one of its standing
+  goals. Each member still weighs it against their own positions, home region
+  and donors, and loyal members follow it more than stubborn ones, as with any
+  whip.
+  - An existing whip always takes precedence.
+  - It is never applied in a party with a player as chair or vice-chair.
+  - It is never applied to members of other parties.
 
 ## 6.6.0 (unreleased)
 
