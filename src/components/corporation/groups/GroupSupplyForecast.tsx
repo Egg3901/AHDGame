@@ -1,4 +1,5 @@
 "use client";
+import styles from "./GroupPage.module.css";
 import { useTranslations } from "next-intl";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import type { GroupManagementView } from "./useGroupManagement";
@@ -14,7 +15,9 @@ export function GroupSupplyForecast({ data }: { data: GroupManagementView }) {
     name: data.members.find((m) => m.id === r.id)?.name ?? r.id,
   }));
   return (
-    <section className="rounded border border-border p-4 space-y-3">
+    <section
+      className={`${styles.page} rounded-xl border border-card-border bg-card p-5 space-y-3`}
+    >
       <h3 className="font-semibold">{t("estimates")}</h3>
       <p className="text-xs text-muted">
         {t("forecastBasis", { turn: forecast.basisTurn, effective: forecast.appliesTurn })}
@@ -38,7 +41,7 @@ export function GroupSupplyForecast({ data }: { data: GroupManagementView }) {
           </thead>
           <tbody>
             {rows.map((r) => (
-              <tr key={r.id} className="border-t border-border">
+              <tr key={r.id} className="border-t border-card-border">
                 <td className="p-2">{r.name}</td>
                 <td>{formatAmount(coordinated ? r.coordinatedRevenue : r.independentRevenue)}</td>
                 <td>{formatAmount(coordinated ? r.operatingProfitDifference : 0)}</td>
@@ -48,7 +51,7 @@ export function GroupSupplyForecast({ data }: { data: GroupManagementView }) {
           </tbody>
           {forecast.total && (
             <tfoot>
-              <tr className="border-t border-border font-semibold">
+              <tr className="border-t border-card-border font-semibold">
                 <td className="p-2">{t("groupTotal")}</td>
                 <td>
                   {formatAmount(
@@ -86,7 +89,7 @@ export function GroupSupplyForecast({ data }: { data: GroupManagementView }) {
             </thead>
             <tbody>
               {rows.map((r) => (
-                <tr className="border-t border-border" key={r.id}>
+                <tr className="border-t border-card-border" key={r.id}>
                   <td className="p-2">{r.name}</td>
                   <td>{formatAmount(r.independentRevenue)}</td>
                   <td>{formatAmount(r.coordinatedRevenue)}</td>
@@ -98,7 +101,7 @@ export function GroupSupplyForecast({ data }: { data: GroupManagementView }) {
             </tbody>
             {forecast.total && (
               <tfoot>
-                <tr className="border-t border-border font-semibold">
+                <tr className="border-t border-card-border font-semibold">
                   <td className="p-2">{t("groupTotal")}</td>
                   <td>{formatAmount(forecast.total.independentRevenue)}</td>
                   <td>{formatAmount(forecast.total.coordinatedRevenue)}</td>

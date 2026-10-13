@@ -34,9 +34,15 @@ vi.mock("@/lib/currency/featureFlag", () => ({
   isForexEnabled: vi.fn(async () => true),
 }));
 
+vi.mock("@/lib/navigation/resolveMySubsidiaryGroupNav", () => ({
+  resolveMySubsidiaryGroupNav: vi.fn(async () => false),
+}));
+import { resolveMySubsidiaryGroupNav } from "@/lib/navigation/resolveMySubsidiaryGroupNav";
+
 describe("GET /api/client-nav", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(resolveMySubsidiaryGroupNav).mockResolvedValue(false);
   });
 
   it("returns guest data and clears the cookie when the session is revoked", async () => {
@@ -73,15 +79,23 @@ describe("GET /api/client-nav", () => {
     const json = await response.json();
     expect(json.user).toBeNull();
     expect(json.hasCharacter).toBe(false);
+    expect(json.myCorporationHasGroup).toBe(false);
+    expect(resolveMySubsidiaryGroupNav).not.toHaveBeenCalled();
     const { clearAuthCookie } = await import("@/lib/auth");
     expect(clearAuthCookie).toHaveBeenCalledWith(expect.stringContaining("client_nav:"));
     expect(electionFindOne).toHaveBeenCalledTimes(1);
     expect(gameStateFindOne).toHaveBeenCalledTimes(1);
   });
 
-  it.each([false, true])(
-    "includes country links and singleplayer identity (local=%s)",
-    async (singleplayer) => {
+  it.each([
+    { singleplayer: false, enabled: true, hasGroup: true },
+    { singleplayer: true, enabled: true, hasGroup: true },
+    { singleplayer: false, enabled: true, hasGroup: false },
+    { singleplayer: false, enabled: false, hasGroup: false },
+  ])(
+    "includes country links and Group visibility ($singleplayer, $enabled, $hasGroup)",
+    async ({ singleplayer, enabled, hasGroup }) => {
+      vi.mocked(resolveMySubsidiaryGroupNav).mockResolvedValue(hasGroup);
       vi.stubEnv("SINGLEPLAYER", singleplayer ? "1" : "0");
       vi.stubEnv("MONGODB_URI", "mongodb://127.0.0.1:27099/test");
       vi.stubEnv("NEXT_PUBLIC_BASE_URL", "http://127.0.0.1:3111");
@@ -156,6 +170,14 @@ describe("GET /api/client-nav", () => {
             };
           }
 
+          if (name === "corporations") {
+            return {
+              findOne: vi.fn().mockResolvedValue({
+                _id: new ObjectId("100000000000000000000001"),
+                sequentialId: 42,
+              }),
+            };
+          }
           if (name === "states") {
             return {
               findOne: vi.fn().mockResolvedValue({ _id: "WMI", name: "West Midlands" }),
@@ -202,7 +224,11 @@ describe("GET /api/client-nav", () => {
       const { getGameStateCollection } = await import("@/lib/db/collections");
       vi.mocked(getGameStateCollection).mockResolvedValue({
         // rpgStatsEnabled gates needsStatAllocation — on here so the flag surfaces.
-        findOne: vi.fn().mockResolvedValue({ wikiDisabled: false, rpgStatsEnabled: true }),
+        findOne: vi.fn().mockResolvedValue({
+          wikiDisabled: false,
+          rpgStatsEnabled: true,
+          subsidiaryCorporationsEnabled: enabled,
+        }),
       } as never);
 
       const { GET } = await import("./route");
@@ -220,6 +246,13 @@ describe("GET /api/client-nav", () => {
         name: "West Midlands",
         countryId: "UK",
       });
+      expect(json.myCorporationHasGroup).toBe(hasGroup);
+      expect(json.myCorporationId).toBe(42);
+      expect(resolveMySubsidiaryGroupNav).toHaveBeenCalledWith(
+        db,
+        new ObjectId("100000000000000000000001"),
+        enabled
+      );
       expect(json.myCorporationType).toBeNull();
       expect(json.myCorporationCountryId).toBeNull();
       expect(json.user.forexEnabled).toBe(true);
@@ -369,6 +402,7 @@ describe("GET /api/client-nav", () => {
     expect(json.characterCountryId).toBe("JP");
     expect(json.characterName).toBe("Aurelia");
     expect(json.myCorporationId).toBe(777);
+    expect(json.myCorporationHasGroup).toBe(false);
     expect(json.myUnionId).toBeNull();
     expect(json.myCorporationType).toBeNull();
     expect(json.myCorporationCountryId).toBeNull();

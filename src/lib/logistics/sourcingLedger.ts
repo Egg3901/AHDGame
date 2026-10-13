@@ -67,6 +67,7 @@ export interface CommoditySourcingDoc {
 
 export interface SourcingNetworkDoc {
   turn: number;
+  ownRouteDelivered?: import("./ownRoutes").SourcingOwnRoute[];
   /** Per-state freight consumed this turn, by class — network load for the UI. */
   freightTeuByState: Record<string, Record<FreightClass, number>>;
   /**

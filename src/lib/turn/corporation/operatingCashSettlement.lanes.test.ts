@@ -185,7 +185,9 @@ describe("corporate operating cash settlement lanes", () => {
     // Same work, not less of it: the gain is overlap, not skipped receipts.
     expect(laned.stats.commands).toBe(sequential.stats.commands);
     expect(laned.stats.maxInFlight).toBeGreaterThan(1);
-    expect(laneMs).toBeLessThan(sequentialMs / 2);
+    // Overlap is proven by maxInFlight above; wall time is only a loose sanity
+    // check because shared CI runners can stall a lane by tens of ms.
+    expect(laneMs).toBeLessThan(sequentialMs * 0.75);
     // Every taxed corporation pays its Treasury exactly once.
     const taxed = laneWorld.snapshots.filter((s) => (s.federalTaxByCountryAnchor?.size ?? 0) > 0);
     const totalTreasury = laneWorld.db

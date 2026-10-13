@@ -21,11 +21,12 @@ export function GroupParticipation({
   const disabled = busy || !member.canEdit || independent;
   const pending = member.effectiveTurn !== null && member.effectiveTurn > data.currentTurn;
   return (
-    <section className="rounded border border-border bg-panel p-4 space-y-3">
+    <section className="rounded-xl border border-card-border bg-card p-5 space-y-3">
       <h3 className="font-semibold">{member.name}</h3>
       {independent && <p className="text-sm text-muted">{t("participationUnavailable")}</p>}
       <label className="flex items-center gap-3 text-sm">
         <input
+          className="h-4 w-4 accent-primary"
           type="checkbox"
           disabled={disabled}
           checked={member.requested === true}

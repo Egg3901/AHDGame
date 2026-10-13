@@ -83,6 +83,9 @@ export function buildInternalSupplyContext(args: {
     deliveryStateBySector: args.freightSettlementActive
       ? new Map(args.sectors.filter((s) => !!s.stateId).map((s) => [s.sectorId, s.stateId!]))
       : undefined,
+    ownRouteDeliveredByKey: args.freightSettlementActive
+      ? args.lookups.ownRouteDeliveredByKey
+      : undefined,
   };
 }
 

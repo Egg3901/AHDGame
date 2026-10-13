@@ -26,6 +26,8 @@ export interface ClientNavBootstrap {
   unreadCount: number;
   unreadMailCount: number;
   myCorporationId: number | null;
+  /** True only for a parent or member of a current formalized Group. */
+  myCorporationHasGroup?: boolean;
   myCorporationType: string | null;
   myCorporationCountryId: string | null;
   /** Union the viewer leads, or else the one they organize in. Null if neither. */
