@@ -22,6 +22,22 @@ describe("acting cabinet authority", () => {
     }
   });
 
+  it("does not relock capabilities from a stale briefing payload", () => {
+    const scopes: CabinetLeverScope[] = [
+      "stance",
+      "personnel",
+      "doctrine",
+      "procurement",
+      "treasury",
+      "assets",
+    ];
+    for (const scope of scopes) {
+      expect(actingLock({ acting: true, barredScopes: scopes }, scope)).toBeNull();
+      expect(actingLock({ acting: true }, scope)).toBeNull();
+      expect(actingLock(null, scope)).toBeNull();
+    }
+  });
+
   it("shows remaining tenure and full authority", () => {
     render(<ActingOfficeNotice turnsRemaining={12} />);
     expect(screen.getByRole("note").textContent).toContain("12 turns remain");

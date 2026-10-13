@@ -11,6 +11,8 @@ vi.mock("@/lib/gameState", () => ({
 
 let db: MockDb;
 const holderId = new ObjectId();
+const generalId = new ObjectId().toString();
+const plantId = new ObjectId();
 
 beforeEach(async () => {
   db = createMockDb();
@@ -22,32 +24,44 @@ beforeEach(async () => {
     "energyPlants",
     "characterGenerals",
     "nationalDoctrine",
+    "characters",
   ]) {
     db.collection(name);
   }
-
-  // Conflicts on, so the defence routes reach their holder check.
-  db.collectionMocks["gameState"]!.findOne.mockResolvedValue({
+  db.collectionMocks.gameState.findOne.mockResolvedValue({
     _id: "current",
     conflictsEnabled: true,
     currentTurn: 400,
     currentYear: 1953,
     startingYear: 1953,
   });
-
+  db.collectionMocks.characters.findOne.mockResolvedValue({ _id: new ObjectId(generalId) });
+  db.collectionMocks.characterGenerals.findOne.mockResolvedValue({
+    characterId: generalId,
+    commissioned: true,
+    general: null,
+  });
+  db.collectionMocks.nationalDoctrine.findOne.mockResolvedValue({
+    countryId: "US",
+    adopted: {},
+    points: 12,
+    incomeThroughYear: 1953,
+  });
   const { getDb } = await import("@/lib/mongodb");
   vi.mocked(getDb).mockResolvedValue(db as never);
+  await authenticate(holderId);
+});
 
+async function authenticate(characterId: ObjectId, isAdmin = false) {
   const { requireAuth } = await import("@/lib/api/requireAuth");
   vi.mocked(requireAuth).mockResolvedValue({
     ok: true,
-    user: { userId: new ObjectId().toString(), isAdmin: false, character: { _id: holderId } },
+    user: { userId: new ObjectId().toString(), isAdmin, character: { _id: characterId } },
   } as never);
-});
+}
 
-/** Seat the caller in the given position, flagged acting or confirmed. */
 function seat(positionId: string, acting: boolean) {
-  db.collectionMocks["cabinetMembers"]!.findOne.mockResolvedValue({
+  db.collectionMocks.cabinetMembers.findOne.mockResolvedValue({
     _id: new ObjectId(),
     countryId: "US",
     positionId,
@@ -65,104 +79,112 @@ function json(body: unknown) {
   });
 }
 
-describe("acting scope gate: policyStance", () => {
-  const params = { params: Promise.resolve({ code: "us", positionId: "secretary_of_treasury" }) };
+const capabilities = [
+  {
+    name: "policy settings",
+    positionId: "secretary_of_treasury",
+    collection: "cabinetSettings",
+    write: "updateOne" as const,
+    invoke: async () => {
+      const { POST } = await import("./setting/route");
+      return POST(json({ tierSetting: "expansionary" }), {
+        params: Promise.resolve({ code: "us", positionId: "secretary_of_treasury" }),
+      });
+    },
+    verify: () =>
+      expect(db.collectionMocks.cabinetSettings.updateOne).toHaveBeenCalledWith(
+        { _id: "US_secretary_of_treasury" },
+        { $set: expect.objectContaining({ tierSetting: "expansionary", lastChangedTurn: 400 }) },
+        { upsert: true }
+      ),
+  },
+  {
+    name: "general dismissal",
+    positionId: "secretary_of_defense",
+    collection: "characterGenerals",
+    write: "updateOne" as const,
+    invoke: async () => {
+      const { DELETE } = await import("./generals/[characterId]/route");
+      return DELETE(new Request("http://localhost", { method: "DELETE" }), {
+        params: Promise.resolve({
+          code: "us",
+          positionId: "secretary_of_defense",
+          characterId: generalId,
+        }),
+      });
+    },
+    verify: () =>
+      expect(db.collectionMocks.characterGenerals.updateOne).toHaveBeenCalledWith(
+        { characterId: generalId },
+        { $set: { commissioned: false, dismissedTurn: 400 } }
+      ),
+  },
+  {
+    name: "doctrine adoption",
+    positionId: "secretary_of_defense",
+    collection: "nationalDoctrine",
+    write: "updateOne" as const,
+    invoke: async () => {
+      const { POST } = await import("./doctrine/adopt/route");
+      return POST(json({ key: "maneuver-0" }), {
+        params: Promise.resolve({ code: "us", positionId: "secretary_of_defense" }),
+      });
+    },
+    verify: () =>
+      expect(db.collectionMocks.nationalDoctrine.updateOne).toHaveBeenCalledWith(
+        { countryId: "US" },
+        { $set: { adopted: { "maneuver-0": 1 }, points: 11 }, $setOnInsert: { countryId: "US" } },
+        { upsert: true }
+      ),
+  },
+  {
+    name: "plant retirement",
+    positionId: "secretary_of_energy",
+    collection: "energyPlants",
+    write: "deleteOne" as const,
+    invoke: async () => {
+      const { DELETE } = await import("./energy/[plantId]/route");
+      return DELETE(new Request("http://localhost", { method: "DELETE" }), {
+        params: Promise.resolve({
+          code: "us",
+          positionId: "secretary_of_energy",
+          plantId: plantId.toString(),
+        }),
+      });
+    },
+    verify: () =>
+      expect(db.collectionMocks.energyPlants.deleteOne).toHaveBeenCalledWith({
+        _id: plantId,
+        countryId: "US",
+        positionId: "secretary_of_energy",
+      }),
+  },
+];
 
-  it("allows an acting holder to change settings", async () => {
-    seat("secretary_of_treasury", true);
-    const { POST } = await import("./setting/route");
-    const res = await POST(json({ tierSetting: "expanded" }), params);
-    expect(res.status).not.toBe(403);
+describe.each(capabilities)("cabinet authority: $name", (capability) => {
+  it.each([true, false])("succeeds and persists the action when acting=%s", async (acting) => {
+    seat(capability.positionId, acting);
+    expect((await capability.invoke()).status).toBe(200);
+    capability.verify();
   });
 
-  it("lets a confirmed holder past the acting gate", async () => {
-    seat("secretary_of_treasury", false);
-    const { POST } = await import("./setting/route");
-    const res = await POST(json({ tierSetting: "expanded" }), params);
-    expect(res.status).not.toBe(403);
+  it("still refuses a non-holder on an acting-held seat without writing", async () => {
+    seat(capability.positionId, true);
+    await authenticate(new ObjectId());
+    expect((await capability.invoke()).status).toBe(403);
+    expect(db.collectionMocks[capability.collection][capability.write]).not.toHaveBeenCalled();
   });
 
-  it("exempts an admin acting on an acting-held seat", async () => {
-    // Admins reach these routes without holding the seat, so the caretaker
-    // limit must not attach to them via the seat's holder.
-    seat("secretary_of_treasury", true);
-    const { requireAuth } = await import("@/lib/api/requireAuth");
-    vi.mocked(requireAuth).mockResolvedValue({
-      ok: true,
-      user: {
-        userId: new ObjectId().toString(),
-        isAdmin: true,
-        character: { _id: new ObjectId() },
-      },
-    } as never);
-    const { POST } = await import("./setting/route");
-    const res = await POST(json({ tierSetting: "expanded" }), params);
-    expect(res.status).not.toBe(403);
-  });
-});
-
-describe("acting scope gate: personnel", () => {
-  const params = {
-    params: Promise.resolve({
-      code: "us",
-      positionId: "secretary_of_defense",
-      characterId: new ObjectId().toString(),
-    }),
-  };
-
-  it("allows an acting holder to dismiss generals", async () => {
-    seat("secretary_of_defense", true);
-    const { DELETE } = await import("./generals/[characterId]/route");
-    const res = await DELETE(new Request("http://localhost", { method: "DELETE" }), params);
-    expect(res.status).not.toBe(403);
+  it("still refuses a vacant seat without writing", async () => {
+    db.collectionMocks.cabinetMembers.findOne.mockResolvedValue(null);
+    expect((await capability.invoke()).status).toBe(403);
+    expect(db.collectionMocks[capability.collection][capability.write]).not.toHaveBeenCalled();
   });
 
-  it("lets a confirmed holder past the acting gate", async () => {
-    seat("secretary_of_defense", false);
-    const { DELETE } = await import("./generals/[characterId]/route");
-    const res = await DELETE(new Request("http://localhost", { method: "DELETE" }), params);
-    expect(res.status).not.toBe(403);
-  });
-});
-
-describe("acting scope gate: strategicCommitment", () => {
-  const params = { params: Promise.resolve({ code: "us", positionId: "secretary_of_defense" }) };
-
-  it("allows an acting holder to adopt doctrine", async () => {
-    seat("secretary_of_defense", true);
-    const { POST } = await import("./doctrine/adopt/route");
-    const res = await POST(json({ key: "nuclear-deterrence" }), params);
-    expect(res.status).not.toBe(403);
-  });
-
-  it("lets a confirmed holder past the acting gate", async () => {
-    seat("secretary_of_defense", false);
-    const { POST } = await import("./doctrine/adopt/route");
-    const res = await POST(json({ key: "nuclear-deterrence" }), params);
-    expect(res.status).not.toBe(403);
-  });
-});
-
-describe("acting scope gate: capitalProject", () => {
-  const params = {
-    params: Promise.resolve({
-      code: "us",
-      positionId: "secretary_of_energy",
-      plantId: new ObjectId().toString(),
-    }),
-  };
-
-  it("allows an acting holder to retire plants", async () => {
-    seat("secretary_of_energy", true);
-    const { DELETE } = await import("./energy/[plantId]/route");
-    const res = await DELETE(new Request("http://localhost", { method: "DELETE" }), params);
-    expect(res.status).not.toBe(403);
-  });
-
-  it("lets a confirmed holder past the acting gate", async () => {
-    seat("secretary_of_energy", false);
-    const { DELETE } = await import("./energy/[plantId]/route");
-    const res = await DELETE(new Request("http://localhost", { method: "DELETE" }), params);
-    expect(res.status).not.toBe(403);
+  it("preserves admin access to an acting-held seat", async () => {
+    seat(capability.positionId, true);
+    await authenticate(new ObjectId(), true);
+    expect((await capability.invoke()).status).toBe(200);
+    capability.verify();
   });
 });

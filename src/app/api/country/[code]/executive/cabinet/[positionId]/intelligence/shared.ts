@@ -96,9 +96,8 @@ export async function requireIntelligenceHolder(
     } as const;
   }
 
-  // An acting director reads the service but does not set its direction. Every
-  // mutation funnels through `intent: "manage"`, so the whole console is covered
-  // here once rather than in each route.
+  // Mutations consult the shared authority policy once for the whole console.
+  // Acting and confirmed directors have the same powers; read visibility is separate.
   if (intent === "manage") {
     const denied = requireConfirmedSecretary(member, "stance", !!auth.user.isAdmin);
     if (denied) return { error: denied } as const;

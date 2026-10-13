@@ -66,7 +66,7 @@ export function CovertPanel({
   onSetFunding: (funding: CovertFunding) => Promise<boolean>;
   onBreakout: () => Promise<boolean>;
 }) {
-  // An acting secretary reads this surface but does not move it.
+  // Compatibility hook; the current acting policy leaves this capability open.
   const actingLockReason = useActingLock("doctrine");
   const canAct = canActProp && !actingLockReason;
 
