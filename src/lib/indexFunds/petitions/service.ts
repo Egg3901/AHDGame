@@ -23,6 +23,11 @@ import {
   refundCorpLiquidCapital,
 } from "@/lib/financialTxLog/atomicCashGuard";
 import { creditTreasuryProceedsFromAnchor } from "@/lib/nationalization/treasury";
+import { loadTreasuryCashContext } from "@/lib/nationalization/treasuryLedger";
+import { settleTransition } from "@/lib/banking/settlementJournal";
+import type { BankingTransition } from "@/lib/banking/rules/boundary";
+import { treasuryAnchorValuation } from "@/lib/budget/rules/treasuryAccrual";
+import { insufficientCapitalMessage } from "@/lib/currency/insufficientCapitalMessage";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
 import { anchorToCorpLiquidCapital, getCorpFxRate } from "@/lib/currency/corporationCapital";
 import { COUNTRY_CURRENCY_MAP, type CurrencyCode } from "@/lib/constants/currencies";
@@ -134,11 +139,21 @@ export async function fileListingPetition(opts: {
   // The contribution is set in anchor terms, so every corporation pays the same
   // value: charge it in the corporation's own currency at its rate.
   const feeCurrency = (corporation.liquidCurrencyCode ?? "USD") as CurrencyCode;
-  const feeLocal = Math.round(
-    anchorToCorpLiquidCapital(contributionAnchor, corporation, await getCorpFxRate(db, corporation))
-  );
-  const debit = await atomicallyDebitCorpLiquidCapital(db, corporation._id, feeLocal);
-  if (!debit.ok) return { ok: false, error: debit.error, status: 400 };
+  const corpFx = await getCorpFxRate(db, corporation);
+  const feeLocal = Math.round(anchorToCorpLiquidCapital(contributionAnchor, corporation, corpFx));
+  // With the Treasury cash ledger on, a positive Treasury credit must be one
+  // half of a paired transition. Paying a vacant seat's contribution through
+  // the plain credit threw after the corporation was already charged, so the
+  // money left the corporation and never reached the Treasury. That branch
+  // now debits and credits in one settlement instead of debiting up front.
+  const treasuryCash = authority.holderCharacterId
+    ? null
+    : await loadTreasuryCashContext(db, currentTurn);
+  const fundedTreasury = !!treasuryCash?.treasuryCashLedgerEnabled;
+  if (!fundedTreasury) {
+    const debit = await atomicallyDebitCorpLiquidCapital(db, corporation._id, feeLocal);
+    if (!debit.ok) return { ok: false, error: debit.error, status: 400 };
+  }
 
   const now = new Date();
   const petition: IndexListingPetition = {
@@ -164,7 +179,7 @@ export async function fileListingPetition(opts: {
   } catch (e) {
     // The debit already happened, so put it back rather than leaving the corp
     // out of pocket for a petition that does not exist.
-    await refundCorpLiquidCapital(db, corporation._id, feeLocal);
+    if (!fundedTreasury) await refundCorpLiquidCapital(db, corporation._id, feeLocal);
     throw e;
   }
 
@@ -181,6 +196,88 @@ export async function fileListingPetition(opts: {
       feeLocal,
       await isForexEnabled()
     );
+  } else if (fundedTreasury && treasuryCash) {
+    const countryId = corporation.countryId as CountryId;
+    const treasuryCurrency =
+      treasuryCash.treasuryCurrencies.get(countryId) ??
+      (COUNTRY_CURRENCY_MAP[countryId] as CurrencyCode | undefined) ??
+      "USD";
+    const treasuryRate = treasuryAnchorValuation({
+      countryId,
+      currencyCode: treasuryCurrency,
+      preset: treasuryCash.preset,
+      observedRate: treasuryCash.rates.get(treasuryCurrency),
+    }).anchorRate;
+    const treasuryLocal = Math.round((feeLocal / corpFx) * treasuryRate);
+    const transition: BankingTransition = {
+      key: `index-listing-petition:${petition._id.toString()}`,
+      kind: "index_listing_lobbying",
+      turn: currentTurn,
+      currency: feeCurrency,
+      legs: [
+        {
+          kind: "debit",
+          amount: feeLocal,
+          valuation: { currencyCode: feeCurrency, localPerAnchor: corpFx },
+          collection: "corporations",
+          filter: { _id: corporation._id, liquidCapital: { $gte: feeLocal } },
+          path: "liquidCapital",
+          note: "Pay the listing petition contribution from the corporation",
+        },
+        {
+          kind: "credit",
+          amount: treasuryLocal,
+          valuation: { currencyCode: treasuryCurrency, localPerAnchor: treasuryRate },
+          collection: "federalBudget",
+          filter: { countryId },
+          path: "treasuryCashLocal",
+          note: "Deliver a vacant seat's petition contribution into national Treasury cash",
+        },
+      ],
+      projections: [
+        {
+          collection: "federalBudget",
+          filter: { countryId },
+          update: { $inc: { treasuryBalance: treasuryLocal }, $set: { updatedAt: now } },
+          note: "Record the funded petition contribution in signed fiscal-position analytics",
+        },
+      ],
+      event: {
+        kind: "monetary.executed",
+        command: "indexFunds.petition.contribution",
+        subjectType: "corporation",
+        subjectId: corporation._id.toString(),
+        amount: feeLocal,
+        meta: {
+          petitionId: petition._id.toString(),
+          sourceCurrency: feeCurrency,
+          destinationCurrency: treasuryCurrency,
+          sourceLocalPerAnchor: corpFx,
+          destinationLocalPerAnchor: treasuryRate,
+        },
+      },
+    };
+    const settled = await settleTransition(db, transition);
+    if (settled.status !== "applied" && settled.status !== "replayed") {
+      // Nothing was charged when the settlement refused, so the petition goes too.
+      if (settled.status === "rejected") {
+        await db
+          .collection<IndexListingPetition>(INDEX_LISTING_PETITIONS)
+          .deleteOne({ _id: petition._id });
+        return {
+          ok: false,
+          status: 400,
+          error: insufficientCapitalMessage(
+            "The contribution",
+            feeLocal,
+            corporation.liquidCapital ?? 0,
+            feeCurrency
+          ),
+        };
+      }
+      throw new Error(settled.error ?? "Funded petition contribution is incomplete");
+    }
+    treasuryCredit = { amount: treasuryLocal, currencyCode: treasuryCurrency };
   } else {
     // `contributionAnchor` is in ₳; `creditTreasuryProceeds` expects the
     // country's own units, so crediting it raw banked an unconverted figure
