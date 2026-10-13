@@ -14,3 +14,5 @@ areas: [fullstack]
 - Automatic coordination remains disabled by default pending economic qualification.
 
 - Selected-policy estimates show per-corporation and combined sales and profit impact for Commercial independence or Group members first, with both-policy comparisons retained.
+
+- Subsidiary Group screens now use game theme surfaces, active navigation, styled policy cards and clearer financial tables.
