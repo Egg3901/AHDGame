@@ -557,6 +557,38 @@ describe("calculateInflation", () => {
   });
 });
 
+describe("output-gap demand pull", () => {
+  it("reads the output gap, not growth, once a measured gap is given", () => {
+    // 9% growth at a zero gap is a fast economy on its trend, not overheating.
+    const fastOnTrend = calculateInflationWithBreakdown({
+      ...baseline,
+      gdpGrowth: 9,
+      outputGap: 0,
+    });
+    expect(fastOnTrend.breakdown.gdp).toBe(0);
+    const hot = calculateInflationWithBreakdown({ ...baseline, gdpGrowth: 2, outputGap: 2 });
+    expect(hot.breakdown.gdp).toBeCloseTo(0.5, 10);
+    const slack = calculateInflationWithBreakdown({ ...baseline, gdpGrowth: 2, outputGap: -2 });
+    expect(slack.breakdown.gdp).toBeCloseTo(-0.4, 10);
+  });
+
+  it("blends from the legacy growth term across the cutover", () => {
+    const legacy = calculateInflationWithBreakdown({ ...baseline, gdpGrowth: 4 }).breakdown.gdp;
+    const half = calculateInflationWithBreakdown({
+      ...baseline,
+      gdpGrowth: 4,
+      outputGap: 0,
+      outputGapWeight: 0.5,
+    }).breakdown.gdp;
+    expect(half).toBeCloseTo(legacy / 2, 10);
+  });
+
+  it("keeps the legacy growth term when no gap is given", () => {
+    const { breakdown } = calculateInflationWithBreakdown({ ...baseline, gdpGrowth: 4 });
+    expect(breakdown.gdp).toBeCloseTo(0.4, 10);
+  });
+});
+
 describe("policy stance pressure", () => {
   it("adds a positive policy term to the rate and breakdown", () => {
     const { rate, breakdown } = calculateInflationWithBreakdown({
