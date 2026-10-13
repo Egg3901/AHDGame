@@ -40,6 +40,7 @@ import { buildBankOutlook } from "@/lib/banking/outlook";
 import { isDepositTakingCharter } from "@/lib/banking/charterKinds";
 import { getCurrentTurn } from "@/lib/currentTurn";
 import { loanCharterEpochFilter } from "@/lib/banking/loanEpoch";
+import { getBankDepositorBook } from "@/lib/banking/depositorBook";
 import { getBankTreasuryOverview } from "@/lib/banking/bankTreasury";
 import {
   CREDIT_BANDS,
@@ -256,6 +257,15 @@ async function handleGET(_request: Request, { params }: RouteParams) {
     if (auth.user.character && hasActiveCharter && charter) {
       isChair = await isChairOfCurrencyBank(db, auth.user.character._id, charter.currency);
     }
+
+    const depositorBook =
+      hasActiveCharter && charter && isDepositTakingCharter(charter)
+        ? await getBankDepositorBook(db, corporation._id, currency, policy, {
+            isCeo,
+            isAdmin,
+            isChair,
+          })
+        : null;
 
     let eligibilityReasons: string[] = [];
     const eligibleTypes: BankCharterType[] = [];
@@ -505,6 +515,7 @@ async function handleGET(_request: Request, { params }: RouteParams) {
         ? { propAssetOptions: allowedPropOpeningAssets(true, corporation.ceoType) }
         : {}),
       visible: true,
+      depositorBook,
       isCeo,
       isAdmin,
       isChair,
