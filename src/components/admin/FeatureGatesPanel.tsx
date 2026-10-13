@@ -5,8 +5,8 @@ import { useCallback, useEffect, useState } from "react";
 import { DEFAULT_GAME_STATE_FLAGS } from "@/lib/seeds/reference/featureFlagDefaults";
 import { gameConfig as gameConfigDefaults } from "@/lib/seeds/reference/gameConfig";
 import type { ResetSystem, ResetSystemVersion } from "@/lib/resetVersions/rules";
+import type { NppAutonomyLevel } from "@/lib/db/types/gameState";
 
-type NppAutonomyLevel = "off" | "v0" | "v1" | "v2" | "v3" | "v4" | "v5";
 type NppForeignPolicyMode = "off" | "shadow" | "active";
 type NppForeignPolicyStage = "votes" | "proposals" | "trade" | "support" | "war";
 type NppEntryViabilityMode = "off" | "observe" | "enforce";
