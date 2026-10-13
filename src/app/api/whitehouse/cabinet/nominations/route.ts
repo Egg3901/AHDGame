@@ -8,7 +8,7 @@ import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { parseJsonBody, schemas } from "@/lib/api/validate";
 import { z } from "zod";
-import { createNotification } from "@/lib/notifications";
+import { createNotifications, type NotificationInput } from "@/lib/notifications";
 import { CONGRESS_LIMITS, checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { isActiveCabinetNominationDuplicateKey } from "@/lib/elections/duplicateKey";
 import { getGameTime } from "@/lib/time/gameTime";
@@ -193,27 +193,25 @@ export async function POST(request: Request) {
       .find({ _id: { $in: senatorCharIds } }, { projection: { _id: 1, userId: 1 } })
       .toArray();
     const posName = positionDef.name;
-    for (const c of senatorChars) {
-      await createNotification({
-        userId: c.userId,
-        type: "system",
-        title: "Cabinet Nomination",
-        message: `President has nominated ${nomineeName} for ${posName}. Senate vote is open.`,
-        metadata: { nominationId: result.insertedId.toString(), type: "cabinet_nomination" },
-      });
-    }
+    const nominationId = result.insertedId.toString();
+    // One batched insert instead of one round-trip per senator (Sentry N+1).
+    const notifications: NotificationInput[] = senatorChars.map((c) => ({
+      userId: c.userId,
+      type: "system",
+      title: "Cabinet Nomination",
+      message: `President has nominated ${nomineeName} for ${posName}. Senate vote is open.`,
+      metadata: { nominationId, type: "cabinet_nomination" },
+    }));
     if (nomineeUserId) {
-      await createNotification({
+      notifications.push({
         userId: nomineeUserId,
         type: "system",
         title: "Cabinet Nomination",
         message: `You have been nominated for ${posName}. The Senate will vote on your confirmation.`,
-        metadata: {
-          nominationId: result.insertedId.toString(),
-          type: "cabinet_nomination_proposed",
-        },
+        metadata: { nominationId, type: "cabinet_nomination_proposed" },
       });
     }
+    await createNotifications(notifications);
 
     return NextResponse.json({
       success: true,
