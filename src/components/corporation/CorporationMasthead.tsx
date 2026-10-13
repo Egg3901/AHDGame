@@ -142,8 +142,9 @@ export function CorporationMasthead({
   const ticker = deriveTicker({ tickerSymbol: corporation.tickerSymbol, name: corporation.name });
 
   // A public corp's price is public knowledge; a private corp shows it only to
-  // its CEO (mirrors the financial fog rules on the API).
-  const priceVisible = !corporation.isPrivate || isCeo;
+  // its CEO or controlling parent CEO (mirrors the API insider rule).
+  const priceVisible =
+    !corporation.isPrivate || isCeo || !!corporation.viewerIsControllingParentCeo;
   const { series, dayChange } = useSharePriceHistory(corpId, priceVisible);
 
   const fogged = financialFogOfWar != null;

@@ -47,6 +47,7 @@ import { getDefaultLegalStructureId } from "@/lib/corporations/legalStructure";
 import { readInvestorConfidence } from "@/lib/nationalization/investorConfidence";
 import { creditTreasuryProceeds } from "@/lib/nationalization/treasury";
 import { shouldRedactCorporation, redactPrivateCorporation } from "@/lib/corporations/redaction";
+import { isSittingCeoOfControllingParent } from "@/lib/corporations/reservedCorporateHoldings";
 import { emitTx } from "@/lib/financialTxLog/emit";
 import { recordAudit } from "@/lib/audit/recordAudit";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
@@ -200,60 +201,65 @@ export async function GET(request: Request) {
     const viewerUserId = authUser?.userId;
     const viewerIsAdmin = authUser?.isAdmin === true;
 
-    const result = corporations.map((corp) => {
-      const ceo = corp.ceoId && !corp.ceoVacant ? ceoMap.get(corp.ceoId.toString()) : undefined;
-      const sectorIncome = incomeByCorpId.get(corp._id.toString()) ?? 0;
-      const income = sectorIncome - corp.marketingBudget - (corp.ceoSalary ?? 0);
+    const result = await Promise.all(
+      corporations.map(async (corp) => {
+        const ceo = corp.ceoId && !corp.ceoVacant ? ceoMap.get(corp.ceoId.toString()) : undefined;
+        const sectorIncome = incomeByCorpId.get(corp._id.toString()) ?? 0;
+        const income = sectorIncome - corp.marketingBudget - (corp.ceoSalary ?? 0);
 
-      let ceoIsInactive = false;
-      if (
-        corp.userId != null &&
-        corp.ceoVacant !== true &&
-        corp.ceoType !== "imperial" &&
-        corp.countryOwnerId == null &&
-        corp.isNationalized !== true
-      ) {
-        const u = ceoUserMap.get(corp.userId.toString());
-        const reference = u?.lastActivity ?? u?.createdAt;
-        if (reference && reference.getTime() < inactiveCutoffMs) {
-          ceoIsInactive = true;
+        let ceoIsInactive = false;
+        if (
+          corp.userId != null &&
+          corp.ceoVacant !== true &&
+          corp.ceoType !== "imperial" &&
+          corp.countryOwnerId == null &&
+          corp.isNationalized !== true
+        ) {
+          const u = ceoUserMap.get(corp.userId.toString());
+          const reference = u?.lastActivity ?? u?.createdAt;
+          if (reference && reference.getTime() < inactiveCutoffMs) {
+            ceoIsInactive = true;
+          }
         }
-      }
 
-      const fullRow = {
-        _id: corp._id,
-        sequentialId: corp.sequentialId,
-        name: corp.name,
-        description: corp.description,
-        type: corp.type,
-        industryModel: corp.industryModel ?? null,
-        typeLabel:
-          corp.type === "manufacturing" && corp.industryModel === "vehicles"
-            ? "Vehicle manufacturing"
-            : OPERATING_SECTOR_TYPE_LABELS[corp.type],
-        headquartersState: corp.headquartersState,
-        headquartersStateName: stateNameMap.get(corp.headquartersState) ?? corp.headquartersState,
-        liquidCapital: corp.liquidCapital,
-        // Every money field on this row (liquidCapital, sharePrice, income)
-        // renders in the corp's home currency — UI passes this to formatAmount
-        // so wallet preference still drives final display.
-        liquidCurrencyCode: corp.liquidCurrencyCode ?? null,
-        logoUrl: corp.logoUrl,
-        sharePrice: corp.sharePrice ?? DEFAULT_SHARE_PRICE,
-        totalShares: corp.totalShares ?? CEO_INITIAL_SHARES,
-        income: Math.round(income),
-        isPrivate: corp.isPrivate ?? false,
-        ceo: ceo
-          ? { name: ceo.name, avatarUrl: ceo.avatarUrl, sequentialId: ceo.sequentialId }
-          : null,
-        ceoIsInactive,
-      };
-      if (shouldRedactCorporation(corp, viewerUserId, viewerIsAdmin)) {
-        const redacted = redactPrivateCorporation(fullRow as Record<string, unknown>);
-        return { ...redacted, isPrivate: true };
-      }
-      return fullRow;
-    });
+        const fullRow = {
+          _id: corp._id,
+          sequentialId: corp.sequentialId,
+          name: corp.name,
+          description: corp.description,
+          type: corp.type,
+          industryModel: corp.industryModel ?? null,
+          typeLabel:
+            corp.type === "manufacturing" && corp.industryModel === "vehicles"
+              ? "Vehicle manufacturing"
+              : OPERATING_SECTOR_TYPE_LABELS[corp.type],
+          headquartersState: corp.headquartersState,
+          headquartersStateName: stateNameMap.get(corp.headquartersState) ?? corp.headquartersState,
+          liquidCapital: corp.liquidCapital,
+          // Every money field on this row (liquidCapital, sharePrice, income)
+          // renders in the corp's home currency — UI passes this to formatAmount
+          // so wallet preference still drives final display.
+          liquidCurrencyCode: corp.liquidCurrencyCode ?? null,
+          logoUrl: corp.logoUrl,
+          sharePrice: corp.sharePrice ?? DEFAULT_SHARE_PRICE,
+          totalShares: corp.totalShares ?? CEO_INITIAL_SHARES,
+          income: Math.round(income),
+          isPrivate: corp.isPrivate ?? false,
+          ceo: ceo
+            ? { name: ceo.name, avatarUrl: ceo.avatarUrl, sequentialId: ceo.sequentialId }
+            : null,
+          ceoIsInactive,
+        };
+        if (
+          shouldRedactCorporation(corp, viewerUserId, viewerIsAdmin) &&
+          !(await isSittingCeoOfControllingParent(db, corp, viewerUserId))
+        ) {
+          const redacted = redactPrivateCorporation(fullRow as Record<string, unknown>);
+          return { ...redacted, isPrivate: true };
+        }
+        return fullRow;
+      })
+    );
 
     return NextResponse.json({ corporations: result });
   } catch (error) {
