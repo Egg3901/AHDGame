@@ -26,6 +26,23 @@ import type { Election, ElectionCandidate, PoliticalParty } from "@/lib/db/types
 import type { NPP } from "@/lib/db/types/npp";
 import type { CountryId } from "@/lib/constants/countries";
 import { getGovernmentFormationsCollection } from "@/lib/db/collections/governmentFormation";
+import { isCampaignEligibleElection } from "@/lib/campaigns/isCampaignEligible";
+
+/**
+ * The race an NPP is currently running in, for engine 6.2 rallies (v6). Built
+ * from the same candidate and election reads as the other signals.
+ */
+export interface NppRaceSignal {
+  /** The NPP's own `electionCandidates` row. */
+  candidateRowId: ObjectId;
+  electionType: string;
+  /** Active, and a race family where players can hold rallies. */
+  rallyEligible: boolean;
+  /** Current candidate Support, 0 to 100 (50 when unset). */
+  support: number;
+  /** Turn of the last rally on this row, if any. */
+  lastRallyTurn: number | null;
+}
 
 /** World-state inputs to the v3+ action brain. All optional-safe. */
 export interface NppContextSignals {
@@ -50,6 +67,8 @@ export interface NppContextSignals {
    * money relative to the opposition, not against an absolute number.
    */
   partyTreasuryRatio: number | null;
+  /** The race this NPP is an active candidate in; null when not running. */
+  race?: NppRaceSignal | null;
 }
 
 export const NEUTRAL_SIGNALS: NppContextSignals = {
@@ -58,6 +77,7 @@ export const NEUTRAL_SIGNALS: NppContextSignals = {
   facesChallenger: false,
   inGovernment: false,
   partyTreasuryRatio: null,
+  race: null,
 };
 
 /** Resolves signals for individual NPPs from pre-loaded maps. */
@@ -93,14 +113,23 @@ export async function buildNppSignalLookup(
       .collection<Election>("elections")
       .find(
         { status: { $in: ["upcoming", "active"] }, ...countryFilter },
-        { projection: { countryId: 1, state: 1, startTurn: 1 } }
+        {
+          projection: {
+            countryId: 1,
+            state: 1,
+            startTurn: 1,
+            status: 1,
+            electionType: 1,
+            russianPresidentialRound: 1,
+          },
+        }
       )
       .toArray(),
     db
       .collection<ElectionCandidate>("electionCandidates")
       .find(
         { status: "active", nppId: { $exists: true } },
-        { projection: { nppId: 1, electionId: 1, party: 1 } }
+        { projection: { nppId: 1, electionId: 1, party: 1, support: 1, lastRallyTurn: 1 } }
       )
       .toArray(),
     getGovernmentFormationsCollection(db)
@@ -129,6 +158,8 @@ export async function buildNppSignalLookup(
 
   // Candidacy + contest state. `sameParty` counts per (election, party) so a
   // second same-party candidate reads as a primary challenge.
+  const electionsById = new Map(elections.map((e) => [e._id.toString(), e]));
+  const raceByNpp = new Map<string, NppRaceSignal>();
   const candidateElectionByNpp = new Map<string, string>();
   const candidatePartyByNpp = new Map<string, string>();
   const samePartyCounts = new Map<string, number>();
@@ -138,6 +169,18 @@ export async function buildNppSignalLookup(
     const electionId = candidate.electionId.toString();
     candidateElectionByNpp.set(nppId, electionId);
     candidatePartyByNpp.set(nppId, candidate.party);
+    const election = electionsById.get(electionId);
+    if (election?.electionType) {
+      raceByNpp.set(nppId, {
+        candidateRowId: candidate._id,
+        electionType: election.electionType,
+        rallyEligible: election.status === "active" && isCampaignEligibleElection(election),
+        support: Number.isFinite(candidate.support) ? (candidate.support as number) : 50,
+        lastRallyTurn: Number.isFinite(candidate.lastRallyTurn)
+          ? (candidate.lastRallyTurn as number)
+          : null,
+      });
+    }
     const key = `${electionId}:${candidate.party}`;
     samePartyCounts.set(key, (samePartyCounts.get(key) ?? 0) + 1);
   }
@@ -191,7 +234,14 @@ export async function buildNppSignalLookup(
       const partyTreasuryRatio =
         median != null && Number.isFinite(treasury) ? (treasury as number) / median : null;
 
-      return { turnsToElection, isCandidate, facesChallenger, inGovernment, partyTreasuryRatio };
+      return {
+        turnsToElection,
+        isCandidate,
+        facesChallenger,
+        inGovernment,
+        partyTreasuryRatio,
+        race: raceByNpp.get(nppId) ?? null,
+      };
     },
   };
 }
