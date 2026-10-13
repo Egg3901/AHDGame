@@ -22,7 +22,7 @@ export function DebtOperationPanel({
   m: MonetaryView;
   onUpdate: () => void;
 }) {
-  // An acting secretary reads this surface but does not move it.
+  // Compatibility hook; the current acting policy leaves this capability open.
   const actingLockReason = useActingLock("treasury");
   const canAct = canActProp && !actingLockReason;
 

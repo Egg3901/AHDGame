@@ -1,20 +1,10 @@
 "use client";
 
 /**
- * The office's read of what an acting secretary may not touch.
- *
- * The server decides. `member.barredScopes` arrives on the briefing payload and
- * this only reads it, so a control can never render live against a lever the API
- * is going to refuse. A payload served before acting scope shipped simply
- * carries no scopes, which reads as "no restriction" and leaves the page as it was.
- *
- * Distributed by context rather than by prop. The locked controls sit three and
- * four levels down (flagship → tab → panel → card), and threading a `lockReason`
- * through every intermediate would put a prop on components that have no interest
- * in it, which is how one of them ends up quietly forgetting to pass it on.
- *
- * Panels still accept an explicit `lockReason` prop and prefer it when given, so
- * a test can drive one panel without standing up a provider.
+ * Compatibility hooks for cabinet controls that accept acting-scope metadata.
+ * The current authority policy has no acting-only restrictions, including when
+ * a cached briefing still lists the former scopes. The provider and props stay
+ * compatible with existing office panels; holder permissions remain separate.
  */
 
 import { createContext, useContext } from "react";

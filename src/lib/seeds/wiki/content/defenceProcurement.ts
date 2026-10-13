@@ -4,7 +4,7 @@ Recruiting units and paying for equipment are two different systems. This page i
 
 ## Who awards contracts
 
-The defence seat holder writes procurement contracts against the national defence appropriation. A contract names a corporation with a defence-strategy plant as the supplier and commits the country to buying a run of "lots" of equipment from it. An **acting** secretary cannot award or cancel contracts: a contract obligates money across a procurement window that outlives a caretaker appointment, so it waits for a confirmed holder.
+The defence seat holder writes procurement contracts against the national defence appropriation. A contract names a corporation with a defence-strategy plant as the supplier and commits the country to buying a run of "lots" of equipment from it. An **acting** secretary can award and cancel contracts under the same rules as a confirmed holder.
 
 A country under a **demilitarisation** settlement (see [Peace, Indemnities & Truces](/wiki/peace-and-truces)) may award no new contracts, and no company may accept a new order from it, until the bar lapses. Live contracts keep delivering.
 

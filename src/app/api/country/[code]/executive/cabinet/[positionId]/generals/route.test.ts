@@ -64,11 +64,7 @@ describe("POST commission a general", () => {
     expect(update.$setOnInsert.general).not.toHaveProperty("spec");
   });
 
-  it("403s an acting secretary, and does not touch the corps", async () => {
-    // Suggestion #315: the general corps outlasts a caretaker appointment, so
-    // commissioning is closed until the Senate confirms. Asserted at the route
-    // rather than only on the guard, because the guard is only worth anything
-    // if it actually sits in this path.
+  it("commissions generals for an acting secretary", async () => {
     db.collectionMocks.cabinetMembers.findOne.mockResolvedValue({
       _id: "m1",
       characterId: "secdef",
@@ -76,8 +72,8 @@ describe("POST commission a general", () => {
     });
     const { POST } = await import(ROUTE);
     const res = await POST(req({ characterId: RECRUIT }), call);
-    expect(res.status).toBe(403);
-    expect(db.collectionMocks.characterGenerals.updateOne).not.toHaveBeenCalled();
+    expect(res.status).toBe(200);
+    expect(db.collectionMocks.characterGenerals.updateOne).toHaveBeenCalled();
   });
 
   it("still commissions for a confirmed secretary with no acting flag", async () => {

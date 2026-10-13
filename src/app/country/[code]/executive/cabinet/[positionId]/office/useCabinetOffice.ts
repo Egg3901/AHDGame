@@ -50,9 +50,8 @@ export interface CabinetOfficeData {
     /** True when the seat is held without legislative confirmation. */
     acting?: boolean;
     /**
-     * Lever scopes closed to this holder, straight from the server so a disabled
-     * control and the 403 behind it cannot disagree. Empty (or absent, on a
-     * payload served before acting scope shipped) means no restriction.
+     * Compatibility metadata for office panels. The current authority policy
+     * sends no barred scopes for acting or confirmed holders.
      */
     barredScopes?: CabinetLeverScope[];
     /** Turn the acting appointment lapses. Null on a confirmed holder. */

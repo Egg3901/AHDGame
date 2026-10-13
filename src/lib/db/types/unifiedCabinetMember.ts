@@ -49,8 +49,8 @@ export interface UnifiedCabinetMember extends IterationStampFields {
    * confirmed: the confirmation path inserts a fresh document rather than
    * clearing the flag, and every member predating acting appointments lacks it.
    *
-   * Costs national approval each turn (`governmentApproval`) and closes the
-   * lever scopes in `@/lib/cabinet/actingScope`.
+   * Costs national approval each turn (`governmentApproval`). Departmental
+   * authority matches confirmed holders; actingExpiresOnTurn still limits tenure.
    */
   acting?: boolean;
 

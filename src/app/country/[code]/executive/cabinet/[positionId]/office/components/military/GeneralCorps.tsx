@@ -58,9 +58,8 @@ export function GeneralCorps({
   countryCode: string;
   positionId: string;
   /**
-   * Set when an acting secretary may not commission or dismiss. The corps stays
-   * fully readable (a caretaker still needs to know who they have), and only
-   * the two writes close.
+   * Optional explicit lock reason for existing panel callers. Acting status
+   * itself no longer restricts commissioning or dismissal.
    */
   lockReason?: string | null;
 }) {

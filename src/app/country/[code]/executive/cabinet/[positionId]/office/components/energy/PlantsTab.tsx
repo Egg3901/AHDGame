@@ -27,7 +27,7 @@ export function PlantsTab({
   siteName: Record<string, string>;
   onUpdate: () => void;
 }) {
-  // An acting secretary reads this surface but does not move it.
+  // Compatibility hook; the current acting policy leaves this capability open.
   const actingLockReason = useActingLock("assets");
   const canAct = canActProp && !actingLockReason;
 
