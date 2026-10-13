@@ -5,7 +5,7 @@
  */
 import { buildMarketContext } from "@/lib/market/marketContext";
 import { getMarketSystemMode } from "@/lib/market/featureFlag";
-import { computeThroughput, inputAvailability } from "@/lib/market/throughput";
+import { computeThroughput, inputAvailability, THROUGHPUT_MIN } from "@/lib/market/throughput";
 import { CAPITAL_DEPRECIATION_PER_TURN, impliedOutputUnits } from "@/lib/market/capital";
 import { computePriceRealization, priceRealizationFactor } from "@/lib/market/priceRealization";
 import type { CommodityPrice, CorporateSector, Corporation } from "@/lib/db/types";
@@ -62,6 +62,18 @@ export function resolveThroughputBindingInput(
 }
 
 /**
+ * The lowest throttle an input shortage can apply, matching the turn engine
+ * (sectorTurn/marketTiers): the raw Leontief factor floors at THROUGHPUT_MIN
+ * and the launch-safety governor then floors the applied factor at
+ * `1 - governorCap`. The page used to quote THROUGHPUT_MIN alone, telling a
+ * plant pinned at the governor floor that shortages could still cut it to 50%.
+ */
+export function appliedThroughputFloor(governorCap: number): number {
+  const cap = Number.isFinite(governorCap) ? Math.min(1, Math.max(0, governorCap)) : 1;
+  return Math.max(THROUGHPUT_MIN, 1 - cap);
+}
+
+/**
  * Build the supplies/demands rows and the price-realization, pricing,
  * capital, and throughput sections for a sector. Reads the market-system
  * mode (one gameConfig read) at the same point the inline code did.
@@ -91,6 +103,8 @@ export async function buildSectorCommoditySections(args: {
   effectiveRates: EffectiveStrategyRates;
   stateResources: Partial<Record<ExtractableResource, number>> | null | undefined;
   thisSectorMultipliers: Partial<Record<ExtractableResource, number>>;
+  /** gameConfig.marketGovernorCap, as the turn processor resolves it. */
+  governorCap?: number | null;
 }) {
   const {
     sector,
@@ -171,7 +185,7 @@ export async function buildSectorCommoditySections(args: {
 
   // Structural market rework: resolved once for the supply/demand rows +
   // panel summaries below. One gameConfig read; "off" (default) hides the UI.
-  const market = buildMarketContext(await getMarketSystemMode());
+  const market = buildMarketContext(await getMarketSystemMode(), { cap: args.governorCap });
   // Under clearing, the realization term lives inside the clearing factor —
   // the plain realization rows/footer would double-report the price leg.
   const marketRealizationEnabled = market.realizationEnabled && !market.clearingEnabled;
@@ -419,7 +433,8 @@ export async function buildSectorCommoditySections(args: {
   // input are the last turn's actual telemetry, which can include regional
   // delivery and internal supply.
   let throughput:
-    { applied: number | null; projected: number; bindingInput: string | null } | undefined;
+    | { applied: number | null; projected: number; bindingInput: string | null; floor: number }
+    | undefined;
   if (market.throughputEnabled) {
     const demandRatesMap: Partial<Record<CommodityType, number>> = {};
     for (const f of demandFlows) demandRatesMap[f.commodity] = f.rate;
@@ -433,6 +448,7 @@ export async function buildSectorCommoditySections(args: {
         sector.throughputBindingInput,
         t.bindingInput
       ),
+      floor: appliedThroughputFloor(market.governorCap),
     };
   }
 

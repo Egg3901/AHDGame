@@ -22,7 +22,7 @@ import type { Corporation, CorporateSector } from "@/lib/db/types";
 import type { OperatingSectorType } from "@/lib/constants/corporations";
 import {
   corpLiquidCapitalToAnchor,
-  loadFxRatesByCurrency,
+  loadValuationFxRates,
   fxRateForCorpFromMap,
   resolveSectorHostCurrencyCode,
   fxRateForSectorHostFromMap,
@@ -66,7 +66,7 @@ export async function loadGroupBalanceSheet(
   db: Db,
   corporationId: ObjectId
 ): Promise<GroupBalanceSheet | null> {
-  const membership = await resolveFormalizedGroups(db);
+  const membership = await resolveFormalizedGroups(db, { includeReserved: true });
   const rootId = membership.rootByCorpId.get(corporationId.toString());
   if (!rootId) return null;
   const memberIds = membership.membersByRootId.get(rootId);
@@ -88,14 +88,17 @@ export async function loadGroupBalanceSheet(
     db
       .collection<CorporateSector>("corporateSectors")
       .find({ corporationId: { $in: corps.map((c) => c._id) } })
-      .project<Pick<CorporateSector, "corporationId" | "sectorType" | "stateId" | "revenue">>({
+      .project<
+        Pick<CorporateSector, "corporationId" | "sectorType" | "stateId" | "countryId" | "revenue">
+      >({
         corporationId: 1,
         sectorType: 1,
         stateId: 1,
+        countryId: 1,
         revenue: 1,
       })
       .toArray(),
-    loadFxRatesByCurrency(db),
+    loadValuationFxRates(db),
   ]);
 
   const revenueByCorp = new Map<string, number>();
@@ -108,8 +111,8 @@ export async function loadGroupBalanceSheet(
     const owner = corpById.get(key);
     if (!owner) continue;
     // Sector revenue is stored in the HOST country's currency, not the owner's.
-    const hostCode = resolveSectorHostCurrencyCode({ countryId: owner.countryId }, null);
-    const hostRate = fxRateForSectorHostFromMap({ countryId: owner.countryId }, null, fxByCurrency);
+    const hostCode = resolveSectorHostCurrencyCode(sector, owner);
+    const hostRate = fxRateForSectorHostFromMap(sector, owner, fxByCurrency);
     const anchor = readCorpEconomicAnchor(sector.revenue ?? 0, hostCode, hostRate);
     revenueByCorp.set(key, (revenueByCorp.get(key) ?? 0) + anchor);
     sectorCountByCorp.set(key, (sectorCountByCorp.get(key) ?? 0) + 1);

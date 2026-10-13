@@ -814,6 +814,7 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
       effectiveRates,
       stateResources,
       thisSectorMultipliers,
+      governorCap: governorConfig?.marketGovernorCap,
     });
 
     // Dynamic crisis effects must feed the same effective margin used for

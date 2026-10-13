@@ -107,6 +107,10 @@ export function computeGrowthAndRegulatory(input: GrowthRegulatoryInput): Growth
 }
 
 export interface PhysicalCostsInput {
+  groupAllocations?: ReadonlyMap<
+    CommodityType,
+    import("@/lib/corporations/groups/rules/inputPricing").GroupInputAllocation
+  >;
   plantsEnabled: boolean;
   /** Matching supplier charge or buyer credit, applied after legacy calibration. */
   internalSupplyDiscountCost?: number;
@@ -304,6 +308,7 @@ export function decomposePhysicalCosts(input: PhysicalCostsInput): PhysicalCosts
         // Money wiring (step 5, phase A): empty map when the flag is off, so
         // this is a no-op until interstateMoneyWiringEnabled is flipped on.
         statePremiums: landedPremiumByState?.get(stateId),
+        groupAllocations: input.groupAllocations,
       })
     : { total: 0, lines: [] };
   const inputsCost = inputsCostResult.total;

@@ -111,7 +111,9 @@ export async function settleResetTreasuryCashTurn(input: {
     )
       throw new Error("V2 cash book identity does not match its world opening");
     if (opening.settledThroughTurn !== turn - 1 && opening.settledThroughTurn !== turn) {
-      throw new Error("V2 cash receipt skipped a turn");
+      throw new Error(
+        `V2 cash receipt skipped a turn: ${country} settled through ${opening.settledThroughTurn}, settling ${turn} (opened at ${opening.sourceTurn})`
+      );
     }
     const claims = buildResetAuthorityClaims(roster, reserve, turn);
     const flow = (values: Record<string, number> | undefined): number => {

@@ -104,3 +104,13 @@ it("can retry a failed load", async () => {
   fireEvent.click(screen.getByText("Retry"));
   await waitFor(() => expect(screen.getByText("Reserved supply, turn 12")).toBeTruthy());
 });
+
+it("explains why internal priority is disabled during Group coordination", async () => {
+  fetcher.mockResolvedValue({
+    ok: true,
+    json: async () => ({ ...view, available: false, groupCoordinationActive: true }),
+  });
+  show();
+  await screen.findByText(/Subsidiary Group coordination is active/);
+  expect(screen.getByLabelText("Supply priority")).toHaveProperty("disabled", true);
+});

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useTranslations } from "next-intl";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import { DenseSection, KVList, KVRow, TableScroll, Td, Th } from "./dense/DenseKit";
 
@@ -61,6 +62,7 @@ const labelize = (s: string) => s.replace(/_/g, " ").replace(/\b\w/g, (c) => c.t
  * is part of a formalized group of two or more members.
  */
 export function GroupOverviewCard({ corpId }: { corpId: string }) {
+  const t = useTranslations("corporations.group");
   const [data, setData] = useState<GroupPayload | null>(null);
   const { formatAmount } = useCurrency();
 
@@ -90,6 +92,12 @@ export function GroupOverviewCard({ corpId }: { corpId: string }) {
       meta={`corporate group, ${group.memberCount} members in ${group.countries.length} ${group.countries.length === 1 ? "country" : "countries"}`}
     >
       <div className="space-y-3 py-1">
+        <Link
+          href={"/corporation/" + group.rootCorporationId + "/group"}
+          className="text-sm underline"
+        >
+          {t("viewGroup")}
+        </Link>
         <p className="text-xs text-muted">
           Members of a formalized group file together for loss relief within each country and share
           brand and logistics strength, converging on the strongest member each turn.

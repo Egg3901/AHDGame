@@ -149,3 +149,16 @@ it("honors a fully owning parent and refuses ineffective subsidiary saves", asyn
     409
   );
 });
+
+it("disables internal priority while group coordination is active without deleting saved preferences", async () => {
+  db.collection("gameConfig");
+  db.collection("gameState");
+  db.collectionMocks.gameConfig.findOne.mockResolvedValue({ groupSupplyCoordinationEnabled: true });
+  db.collectionMocks.gameState.findOne.mockResolvedValue({ subsidiaryCorporationsEnabled: true });
+  const read = await GET(request("GET"), { params });
+  expect(await read.json()).toMatchObject({ available: false, groupCoordinationActive: true });
+  expect((await POST(request("POST", { priority: "own", discount: 0.1 }), { params })).status).toBe(
+    409
+  );
+  expect(db.collectionMocks.corporations.updateOne).not.toHaveBeenCalled();
+});

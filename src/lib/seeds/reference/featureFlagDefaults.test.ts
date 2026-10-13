@@ -70,7 +70,14 @@ describe("fresh-world flag policy", () => {
 
   it("turns every gameConfig gameplay flag on, at the top of every ladder", () => {
     for (const [key, value] of Object.entries(FRESH_WORLD_GAME_CONFIG_FLAGS)) {
-      expect([key, value]).toEqual([key, typeof value === "boolean" ? true : LADDER_TOPS[key]]);
+      // New economic routing remains opt-in until integrated world qualification is reviewed.
+      const expected =
+        key === "groupSupplyCoordinationEnabled"
+          ? false
+          : typeof value === "boolean"
+            ? true
+            : LADDER_TOPS[key];
+      expect([key, value]).toEqual([key, expected]);
     }
   });
 

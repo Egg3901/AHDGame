@@ -1,5 +1,6 @@
 "use client";
 
+import { GroupSupplyOffice } from "./groups/GroupSupplyOffice";
 import InternalSupplyPanel from "./InternalSupplyPanel";
 import { useCallback } from "react";
 import { isSprawlExemptSectorType, type OperatingSectorType } from "@/lib/constants/corporations";
@@ -212,6 +213,7 @@ export default function CeoOfficeTab({
 
   return (
     <div className="space-y-8">
+      <GroupSupplyOffice corpId={corpId} />
       <nav
         aria-label="CEO Office sections"
         className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted"
