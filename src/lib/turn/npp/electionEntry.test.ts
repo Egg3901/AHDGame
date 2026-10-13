@@ -1388,10 +1388,14 @@ describe("processElectionEntry — engine 6.4 primary consolidation (v6)", () =>
     await processElectionEntry(ctx);
 
     expect(withdrawnRows()).toEqual([trailerRow._id.toString()]);
-    const cooldownWrite = db.collectionMocks.npps.updateOne.mock.calls.find(
-      ([filter]) => filter._id.toString() === trailer._id.toString()
+    const [ops] = db.collectionMocks.npps.bulkWrite.mock.calls[0];
+    const cooldownWrite = ops.find(
+      (op: { updateOne: { filter: { _id: ObjectId } } }) =>
+        op.updateOne.filter._id.toString() === trailer._id.toString()
     );
-    expect(cooldownWrite?.[1].$set).toHaveProperty(`electionCooldowns.${trailerRow.electionId}`);
+    expect(cooldownWrite?.updateOne.update.$set).toHaveProperty(
+      `electionCooldowns.${trailerRow.electionId}`
+    );
   });
 
   it("does not consolidate below v6", async () => {

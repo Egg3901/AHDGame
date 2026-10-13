@@ -622,6 +622,7 @@ export async function processElectionEntry(ctx: NPPContext): Promise<number> {
   // withdraws. No endorsement (NPP endorsements stay manual-only), and a
   // cooldown on that primary keeps generic fill from re-filing it.
   let consolidated = 0;
+  const cooldownWrites: { updateOne: { filter: { _id: ObjectId }; update: object } }[] = [];
   for (const primary of openPrimaries) {
     if (!engine6Countries.has(primary.countryId ?? "US")) continue;
     if (!inConsolidationWindow(primary.primaryEndTurn, ctx.currentTurn)) continue;
@@ -647,15 +648,18 @@ export async function processElectionEntry(ctx: NPPContext): Promise<number> {
       if (until) {
         const untilIso = new Date(until).toISOString();
         const field = `electionCooldowns.${primary._id.toString()}`;
-        await db
-          .collection<NPP>("npps")
-          .updateOne({ _id: candidate.nppId }, { $set: { [field]: untilIso } });
+        cooldownWrites.push({
+          updateOne: { filter: { _id: candidate.nppId }, update: { $set: { [field]: untilIso } } },
+        });
         const npp = ctx.nppMap.get(candidate.nppId.toString());
         if (npp) {
           npp.electionCooldowns = { ...npp.electionCooldowns, [primary._id.toString()]: untilIso };
         }
       }
     }
+  }
+  if (cooldownWrites.length > 0) {
+    await db.collection<NPP>("npps").bulkWrite(cooldownWrites, { ordered: false });
   }
   if (consolidated > 0) {
     logger.info("Turn", `NPP consolidation: ${consolidated} trailing candidacy(ies) withdrawn`);
