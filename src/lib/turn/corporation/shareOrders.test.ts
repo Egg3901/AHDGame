@@ -334,7 +334,7 @@ describe("fillPendingShareOrders", () => {
     const pacingWrite = db
       .collection("corporations")
       .bulkWrite.mock.calls.flatMap((call: unknown[]) => call[0] as unknown[])
-      .find((op) => JSON.stringify(op).includes("poolSellAbsorbedLocal"));
+      .find((op: unknown) => JSON.stringify(op).includes("poolSellAbsorbedLocal"));
     expect(JSON.stringify(pacingWrite)).toContain('"poolSellAbsorbedTurn":258');
   });
 
