@@ -942,3 +942,71 @@ describe("European government decisions", () => {
       );
   });
 });
+
+// ── Tests: engine 6.5 whip count (v6) ────────────────────────────────────────
+
+describe("processNppBillSponsorship — engine 6.5 whip count (v6)", () => {
+  function shortOfVotes(level: string) {
+    const govNpp = makeNpp({ sequentialId: 1, party: "1", name: "Gov NPP" });
+    const oppNpp = makeNpp({
+      sequentialId: 2,
+      party: "2",
+      name: "Opp NPP",
+      policies: { economic: -3, social: 0 },
+    });
+    const nppMap = new Map([
+      [govNpp._id.toString(), govNpp],
+      [oppNpp._id.toString(), oppNpp],
+    ]);
+    const insertSpy = vi.fn(async () => ({ insertedId: new ObjectId() }));
+    const { db } = makeMockDb({
+      nppAutonomyEnabled: true,
+      nppAutonomyLevel: level,
+      enabledForPlayers: false,
+      legTypes: [makeLegType("eco", "economic_growth")],
+      insertSpy,
+      governmentFormation: {
+        _id: "US",
+        status: "formed",
+        governingPartyId: "1",
+        pmNppId: govNpp._id,
+      },
+      // NPPs hold 5 (gov) and 3 (opp) seats; players hold 50 more for party 2.
+      electedOfficials: [
+        { officeType: "house", countryId: "US", party: "1", seatsHeld: 5 },
+        { officeType: "house", countryId: "US", party: "2", seatsHeld: 53 },
+      ],
+    });
+    const ctx = makeCtx(
+      db,
+      [
+        makeOfficial(govNpp._id, "US", "house", "1", 5),
+        makeOfficial(oppNpp._id, "US", "house", "2", 3),
+      ],
+      nppMap
+    );
+    const sponsors = () =>
+      insertSpy.mock.calls.map((c) =>
+        ((c as unknown as [Record<string, unknown>])[0]["sponsorId"] as ObjectId).toString()
+      );
+    return { ctx, govNpp, oppNpp, sponsors };
+  }
+
+  it("sets aside a government bill the chamber will vote down at v6", async () => {
+    const { ctx, govNpp, oppNpp, sponsors } = shortOfVotes("v6");
+
+    await processNppBillSponsorship(ctx);
+
+    expect(sponsors()).not.toContain(govNpp._id.toString());
+    // The opposition, with the player seats behind it, still has the votes.
+    expect(sponsors()).toContain(oppNpp._id.toString());
+  });
+
+  it("files the government bill without a count below v6", async () => {
+    const { ctx, govNpp, sponsors } = shortOfVotes("v5");
+
+    await processNppBillSponsorship(ctx);
+
+    expect(sponsors()).toContain(govNpp._id.toString());
+  });
+});

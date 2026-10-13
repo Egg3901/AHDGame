@@ -48,7 +48,11 @@ import {
   canFieldLegislativeCandidate,
 } from "@/lib/turn/onePartyConstraints";
 import type { NPPContext } from "./context";
-import { fileAcceptedSlateRows, trimOverCapSlates } from "./slateResponses";
+import {
+  fileAcceptedSlateRows,
+  trimOverCapSlates,
+  withdrawCandidacyFromRace,
+} from "./slateResponses";
 import {
   buildSlateOverrideMaps,
   reconcileSlateMoves,
@@ -66,6 +70,10 @@ import {
   compareStrongestFirst,
   placementOrder,
 } from "@/lib/nppAutonomy/v6/rules/candidatePlacement";
+import {
+  inConsolidationWindow,
+  trailingCandidatesToWithdraw,
+} from "@/lib/nppAutonomy/v6/rules/primaryConsolidation";
 import { logger } from "../../observability/logger";
 
 // Optional global salt so headless sim runs can vary this RNG across runs
@@ -81,6 +89,9 @@ const CHALLENGER_BASE_PROBABILITY = 0.15;
 // first time and a chore the fifth, and in a player country the human is the
 // one absorbing it.
 const PLAYER_COUNTRY_CHALLENGER_MULT = 0.5;
+// Engine 6.3 (v6): presidential challengers come from the party's strongest
+// NPPs nationwide, not from one home state.
+const PRESIDENTIAL_CHALLENGER_POOL = 5;
 
 interface EnterPrimaryOptions {
   incumbentDefense?: boolean;
@@ -423,11 +434,12 @@ export async function processElectionEntry(ctx: NPPContext): Promise<number> {
     logger.error("Turn", "fileAcceptedSlateRows failed; continuing election entry", error);
   }
 
-  // Engine 6.1 (v6): place the strongest NPPs in the most senior races. Read
-  // once per country here; the level is served from the phase snapshot.
-  const placementCountries = new Set<string>();
+  // Countries running NPP engine 6 behavior (v6): 6.1 placement below and the
+  // 6.3 presidential challengers. Read once per country; the level is served
+  // from the phase snapshot.
+  const engine6Countries = new Set<string>();
   for (const cid of new Set(openPrimaries.map((p) => (p.countryId ?? "US") as CountryId))) {
-    if (await nppAutonomyAtLeast(db, cid, NPP_ENGINE_LEVEL)) placementCountries.add(cid);
+    if (await nppAutonomyAtLeast(db, cid, NPP_ENGINE_LEVEL)) engine6Countries.add(cid);
   }
 
   // Reserve nationwide executive candidates before the regional generic-fill
@@ -468,7 +480,7 @@ export async function processElectionEntry(ctx: NPPContext): Promise<number> {
         // Deterministic pick: lowest nppId string (sequentialId is not loaded
         // into the turn context). At v6, the strongest NPP, id as tie-break.
         .sort(
-          placementCountries.has(cid)
+          engine6Countries.has(cid)
             ? compareStrongestFirst
             : (a, b) => (a._id.toString() < b._id.toString() ? -1 : 1)
         );
@@ -548,7 +560,7 @@ export async function processElectionEntry(ctx: NPPContext): Promise<number> {
         return getRacePriority(a.electionType) - getRacePriority(b.electionType);
       });
 
-      if (placementCountries.has(primaryCountryId ?? "US")) {
+      if (engine6Countries.has(primaryCountryId ?? "US")) {
         // Same primaries as the loop below would fill, strongest NPP to the
         // most senior one. A failed filing (cooldown, presence gate) tries the
         // next NPP for that primary rather than moving the NPP down a race.
@@ -605,6 +617,54 @@ export async function processElectionEntry(ctx: NPPContext): Promise<number> {
   }
   if (ctx.batchCandidateInserts) entered += await flushCandidateInserts();
 
+  // Phase 2.4 (engine 6.4, v6): consolidation. In the closing window of a
+  // primary with no player in it, a clearly trailing non-incumbent NPP
+  // withdraws. No endorsement (NPP endorsements stay manual-only), and a
+  // cooldown on that primary keeps generic fill from re-filing it.
+  let consolidated = 0;
+  const cooldownWrites: { updateOne: { filter: { _id: ObjectId }; update: object } }[] = [];
+  for (const primary of openPrimaries) {
+    if (!engine6Countries.has(primary.countryId ?? "US")) continue;
+    if (!inConsolidationWindow(primary.primaryEndTurn, ctx.currentTurn)) continue;
+    const active = (candidatesByElection.get(primary._id.toString()) ?? []).filter(
+      (c) => c.status === "active"
+    );
+    if (active.length < 2) continue;
+    const entrants = active.map((c) => {
+      const npp = c.nppId ? ctx.nppMap.get(c.nppId.toString()) : undefined;
+      return {
+        candidateId: c._id.toString(),
+        party: c.party,
+        npp,
+        isIncumbent: npp ? isIncumbentFor(npp, primary) : false,
+      };
+    });
+    for (const candidateId of trailingCandidatesToWithdraw(entrants)) {
+      const candidate = active.find((c) => c._id.toString() === candidateId);
+      if (!candidate?.nppId) continue;
+      if (!(await withdrawCandidacyFromRace(ctx, primary, candidate))) continue;
+      consolidated++;
+      const until = primary.primaryEndTime ?? primary.endTime;
+      if (until) {
+        const untilIso = new Date(until).toISOString();
+        const field = `electionCooldowns.${primary._id.toString()}`;
+        cooldownWrites.push({
+          updateOne: { filter: { _id: candidate.nppId }, update: { $set: { [field]: untilIso } } },
+        });
+        const npp = ctx.nppMap.get(candidate.nppId.toString());
+        if (npp) {
+          npp.electionCooldowns = { ...npp.electionCooldowns, [primary._id.toString()]: untilIso };
+        }
+      }
+    }
+  }
+  if (cooldownWrites.length > 0) {
+    await db.collection<NPP>("npps").bulkWrite(cooldownWrites, { ordered: false });
+  }
+  if (consolidated > 0) {
+    logger.info("Turn", `NPP consolidation: ${consolidated} trailing candidacy(ies) withdrawn`);
+  }
+
   // Phase 2.5 (v3): ambitious challengers. Design decision #4 above ("same NPP
   // always wins A SLOT") governs which NPP fills an empty slot — it does not
   // mean every primary stays a single-candidate walkover forever. For
@@ -617,9 +677,13 @@ export async function processElectionEntry(ctx: NPPContext): Promise<number> {
   // already-filled slot. Capped at one extra challenger per party per primary
   // per cycle so primaries don't balloon into unbounded N-way races.
   // National (president) races are excluded — kept out of this pass for now.
+  // Engine 6.3 (v6): presidential primaries in countries with no players join
+  // the pass, with a nationwide pool. Below v6 they stay excluded.
+  const challengesPresidency = (primary: Election): boolean =>
+    engine6Countries.has(primary.countryId ?? "US");
   const challengerCountryIds = new Set<CountryId>(
     openPrimaries
-      .filter((p) => p.electionType !== "president")
+      .filter((p) => p.electionType !== "president" || challengesPresidency(p))
       .map((p) => (p.countryId ?? "US") as CountryId)
   );
   const v3ChallengerCountries = new Set<string>();
@@ -642,9 +706,18 @@ export async function processElectionEntry(ctx: NPPContext): Promise<number> {
     }
 
     for (const primary of openPrimaries) {
-      if (primary.electionType === "president") continue;
       const primaryCountryId = (primary.countryId ?? "US") as CountryId;
+      const presidential = primary.electionType === "president";
+      if (presidential && !challengesPresidency(primary)) continue;
+      if (presidential && playerCountryFlags.get(primaryCountryId)) continue;
       if (!v3ChallengerCountries.has(primaryCountryId)) continue;
+      // Engine 6.4 (v6): no new challenger inside the consolidation window.
+      if (
+        engine6Countries.has(primaryCountryId) &&
+        inConsolidationWindow(primary.primaryEndTurn, ctx.currentTurn)
+      ) {
+        continue;
+      }
 
       const candidates = candidatesByElection.get(primary._id.toString()) ?? [];
       const activeByParty = new Map<string, ElectionCandidate[]>();
@@ -675,9 +748,11 @@ export async function processElectionEntry(ctx: NPPContext): Promise<number> {
 
         // Index lookup (country/party/state guaranteed by the key) + residual
         // filters — replaces a full allNPPs scan per (primary, party).
-        const challengerBase =
-          nppsByCountryPartyState.get(`${primaryCountryId}:${party}:${primary.state ?? ""}`) ?? [];
-        const challengerPool = challengerBase.filter((npp) => {
+        const challengerBase = presidential
+          ? allNPPs.filter((n) => (n.countryId ?? "US") === primaryCountryId && n.party === party)
+          : (nppsByCountryPartyState.get(`${primaryCountryId}:${party}:${primary.state ?? ""}`) ??
+            []);
+        const eligiblePool = challengerBase.filter((npp) => {
           if (npp._id.toString() === existingNppId) return false;
           if (assignedThisTurn.has(npp._id.toString())) return false;
           if (!isPartyEligibleForNppEntry(npp, primary)) return false;
@@ -686,6 +761,9 @@ export async function processElectionEntry(ctx: NPPContext): Promise<number> {
           if (slateSuppressesAutoPick(npp, slateMaps)) return false;
           return isNPPAvailable(npp, nppCandidacies, now);
         });
+        const challengerPool = presidential
+          ? eligiblePool.sort(compareStrongestFirst).slice(0, PRESIDENTIAL_CHALLENGER_POOL)
+          : eligiblePool;
         if (challengerPool.length === 0) continue;
 
         // WHO challenges is now sampled, not frozen. Design decision #4

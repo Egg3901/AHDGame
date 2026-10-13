@@ -1221,3 +1221,200 @@ describe("processElectionEntry — engine 6.1 candidate placement (v6)", () => {
     expect(filed.has(governor._id.toString())).toBe(false);
   });
 });
+
+describe("processElectionEntry — engine 6.3 presidential challengers (v6)", () => {
+  let db: MockDb;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(makeSeededRng).mockReturnValue(() => 0); // every roll succeeds
+    db = createMockDb();
+    db.collection("slateCandidates");
+    db.collectionMocks.slateCandidates.find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([]),
+    });
+    db.collection("electionCandidates");
+    db.collection("countryGameStates");
+  });
+
+  function presidentialScenario(enabledForPlayers: boolean) {
+    db.collectionMocks.countryGameStates.findOne.mockResolvedValue({
+      _id: "US",
+      enabledForPlayers,
+    });
+    const primary = createTestElection({ electionType: "president", state: "US" });
+    const nominee = createTestNpp({ homeState: "CA", currentOffice: null });
+    const strongest = createTestNpp({
+      homeState: "TX",
+      currentOffice: null,
+      politicalInfluence: 90,
+      favorability: 90,
+    });
+    const others = Array.from({ length: 5 }, (_, i) =>
+      createTestNpp({
+        homeState: "NY",
+        currentOffice: null,
+        politicalInfluence: 20 + i,
+        favorability: 20,
+      })
+    );
+    const sitting = {
+      _id: new ObjectId(),
+      electionId: primary._id,
+      countryId: "US",
+      characterId: nominee._id,
+      characterName: nominee.name,
+      party: "democrat",
+      status: "active",
+      support: 50,
+      enteredAt: new Date(),
+      isNPP: true,
+      nppId: nominee._id,
+    } as ElectionCandidate;
+    const ctx = buildContext(db, primary, [nominee, ...others, strongest], [sitting]);
+    return { ctx, strongest };
+  }
+
+  const challengers = () =>
+    db.collectionMocks.electionCandidates.insertOne.mock.calls.map(([doc]) =>
+      doc.characterId.toString()
+    );
+
+  it("draws a nationwide challenger from the party's strongest NPPs at v6", async () => {
+    db.collection("gameState");
+    db.collectionMocks.gameState.findOne.mockResolvedValue({ nppAutonomyLevel: "v6" });
+    const { ctx, strongest } = presidentialScenario(false);
+
+    await processElectionEntry(ctx);
+
+    expect(challengers()).toEqual([strongest._id.toString()]);
+  });
+
+  it("leaves presidential primaries alone below v6", async () => {
+    db.collection("gameState");
+    db.collectionMocks.gameState.findOne.mockResolvedValue({ nppAutonomyLevel: "v5" });
+    const { ctx } = presidentialScenario(false);
+
+    await processElectionEntry(ctx);
+
+    expect(challengers()).toEqual([]);
+  });
+
+  it("never challenges a presidential primary in a player country", async () => {
+    db.collection("gameState");
+    db.collectionMocks.gameState.findOne.mockResolvedValue({ nppAutonomyLevel: "v6" });
+    const { ctx } = presidentialScenario(true);
+
+    await processElectionEntry(ctx);
+
+    expect(challengers()).toEqual([]);
+  });
+});
+
+describe("processElectionEntry — engine 6.4 primary consolidation (v6)", () => {
+  let db: MockDb;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(makeSeededRng).mockReturnValue(() => 0.99);
+    db = createMockDb();
+    db.collection("slateCandidates");
+    db.collectionMocks.slateCandidates.find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([]),
+    });
+    db.collection("electionCandidates");
+    db.collectionMocks.electionCandidates.updateOne.mockResolvedValue({
+      matchedCount: 1,
+      modifiedCount: 1,
+    });
+    db.collection("npps");
+  });
+
+  function consolidationScenario(options: { withPlayer?: boolean } = {}) {
+    const primary = createTestElection({
+      electionType: "house",
+      state: "CA",
+      primaryEndTurn: 50,
+    });
+    const leader = createTestNpp({ currentOffice: null, politicalInfluence: 80, favorability: 80 });
+    const trailer = createTestNpp({
+      currentOffice: null,
+      politicalInfluence: 10,
+      favorability: 10,
+    });
+    const row = (npp: NPP) =>
+      ({
+        _id: new ObjectId(),
+        electionId: primary._id,
+        countryId: "US",
+        characterId: npp._id,
+        characterName: npp.name,
+        party: "democrat",
+        status: "active",
+        support: 50,
+        enteredAt: new Date(),
+        isNPP: true,
+        nppId: npp._id,
+      }) as ElectionCandidate;
+    const rows = [row(leader), row(trailer)];
+    if (options.withPlayer) {
+      rows.push({
+        _id: new ObjectId(),
+        electionId: primary._id,
+        countryId: "US",
+        characterId: new ObjectId(),
+        characterName: "Player",
+        party: "republican",
+        status: "active",
+        support: 50,
+        enteredAt: new Date(),
+      } as ElectionCandidate);
+    }
+    const ctx = buildContext(db, primary, [leader, trailer], rows);
+    ctx.currentTurn = 45;
+    return { ctx, trailerRow: rows[1], trailer };
+  }
+
+  const withdrawnRows = () =>
+    db.collectionMocks.electionCandidates.updateOne.mock.calls
+      .filter(([, update]) => update?.$set?.status === "withdrawn")
+      .map(([filter]) => filter._id.toString());
+
+  it("withdraws a clearly trailing NPP late in an NPP-only primary at v6", async () => {
+    db.collection("gameState");
+    db.collectionMocks.gameState.findOne.mockResolvedValue({ nppAutonomyLevel: "v6" });
+    const { ctx, trailerRow, trailer } = consolidationScenario();
+
+    await processElectionEntry(ctx);
+
+    expect(withdrawnRows()).toEqual([trailerRow._id.toString()]);
+    const [ops] = db.collectionMocks.npps.bulkWrite.mock.calls[0];
+    const cooldownWrite = ops.find(
+      (op: { updateOne: { filter: { _id: ObjectId } } }) =>
+        op.updateOne.filter._id.toString() === trailer._id.toString()
+    );
+    expect(cooldownWrite?.updateOne.update.$set).toHaveProperty(
+      `electionCooldowns.${trailerRow.electionId}`
+    );
+  });
+
+  it("does not consolidate below v6", async () => {
+    db.collection("gameState");
+    db.collectionMocks.gameState.findOne.mockResolvedValue({ nppAutonomyLevel: "v5" });
+    const { ctx } = consolidationScenario();
+
+    await processElectionEntry(ctx);
+
+    expect(withdrawnRows()).toEqual([]);
+  });
+
+  it("leaves a primary with a player in it alone", async () => {
+    db.collection("gameState");
+    db.collectionMocks.gameState.findOne.mockResolvedValue({ nppAutonomyLevel: "v6" });
+    const { ctx } = consolidationScenario({ withPlayer: true });
+
+    await processElectionEntry(ctx);
+
+    expect(withdrawnRows()).toEqual([]);
+  });
+});

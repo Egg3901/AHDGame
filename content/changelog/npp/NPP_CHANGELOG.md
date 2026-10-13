@@ -46,20 +46,24 @@ number.
   race the NPP is running in, weighted toward close races, instead of raising
   general influence and favorability. (Rallies in the NPP's own race shipped in
   6.2.0.)
-- **Consolidation.** A trailing NPP withdraws before the primary and endorses
-  the same-party front-runner rather than splitting the vote.
+- **Consolidation.** A clearly trailing NPP withdraws before the primary
+  rather than splitting the vote. It does not endorse: NPP endorsements stay
+  something players request. (Shipped in 6.4.0.)
 - **Presidential challengers** in non-player countries, inside the existing
-  limit on how often a player's race can be challenged.
+  limit on how often a player's race can be challenged. (Shipped in 6.3.0.)
 
 ### Stage 2: governing
 
-- **Bills that can pass.** Before sponsoring, an NPP counts likely votes from
-  party, whips and caucuses, and does not introduce a bill that is short.
+- **Bills that can pass.** Before sponsoring, an NPP counts likely votes and
+  does not introduce a bill that is short. (Shipped in 6.5.0, counting party,
+  district, donor and opposition pressure; whips and caucuses come later.)
 - **Whipping its own program.** A governing party whips co-partisans on the
   bills that serve its standing goals. Opposition coordinates against a bill
   only when it has the votes to defeat it.
-- **Cabinet by fit.** Cabinet posts go to NPPs whose positions and record fit
-  the brief, and a minister failing a standing goal is replaced.
+- **Ministers judged on their goal.** Cabinet posts already go to NPPs ranked
+  on fit with the head of government, competence and the brief, and ministers
+  whose briefs badly miss target are already reshuffled. The remaining step is
+  judging a minister on the standing goal its brief serves.
 - **Fewer writes.** Ministerial orders and settings are written in batches
   per country.
 
@@ -95,6 +99,49 @@ number.
 - Autonomy v6 becomes the default for new singleplayer and simulation worlds,
   after the engine 6 stages are validated. Running worlds never change level on
   their own.
+
+## 6.5.0 (unreleased)
+
+The first stage 2 change (governing).
+
+- **Counting votes before sponsoring (v6).** An NPP sponsor used to file its
+  highest-scoring bill whether or not the chamber would pass it. Now it first
+  projects the vote in the chamber the bill starts in, using the same pressures
+  NPPs vote with when no whip is set: their own positions, their home region,
+  their donors, the pull toward their own party's bills, and the opposition
+  bloc against government bills. Player-held seats are counted as voting with
+  their party. A bill that does not project more votes for than against is set
+  aside and the sponsor tries its next-best bill, up to three. If none has the
+  votes, it files nothing that turn and keeps its slot. Tax-rate bills, whose
+  rate is set when they are filed, are not counted.
+
+## 6.4.0 (unreleased)
+
+Stage 1 (running for office).
+
+- **Trailing NPPs leave the primary (v6).** In the last 12 turns before a
+  primary closes, an NPP whose strength (political influence plus
+  favorability) is below 60% of its party's strongest candidate in that
+  primary withdraws. It does not endorse anyone; NPP endorsements stay
+  something players request. Incumbents defending their seat never withdraw,
+  and a primary with any player candidate is never touched. A withdrawn NPP
+  cannot re-file in that primary.
+- **No late challengers (v6).** NPP challengers no longer enter a primary in
+  those last 12 turns, so a field that has consolidated stays consolidated.
+
+## 6.3.0 (unreleased)
+
+Stage 1 (running for office).
+
+- **Presidential primary challengers (v6).** NPPs could already challenge a
+  same-party candidate in state and legislative primaries, but presidential
+  primaries were left out. Now, in countries with no players, a presidential
+  primary where a party has one candidate can draw a challenger from the same
+  party. The challenger is picked from the party's five strongest available
+  NPPs across the country, with ambitious NPPs more likely to run. The chance of
+  a challenge and the limit of two challengers per country per turn are the
+  same as in other primaries. Presidential primaries in countries with players
+  are not challenged.
 
 ## 6.2.0 (unreleased)
 
