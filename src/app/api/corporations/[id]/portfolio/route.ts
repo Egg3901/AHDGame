@@ -4,8 +4,10 @@ import { getDb } from "@/lib/mongodb";
 import { handleRouteError } from "@/lib/api/errors";
 import { resolveCorporation } from "@/lib/api/corporations/resolveQuery";
 import { getAuthUser } from "@/lib/auth";
-import { shouldRedactCorporation } from "@/lib/corporations/redaction";
-import { loadReservedPositionsPlacedBy } from "@/lib/corporations/reservedCorporateHoldings";
+import {
+  loadReservedPositionsPlacedBy,
+  shouldRedactCorporationForViewer,
+} from "@/lib/corporations/reservedCorporateHoldings";
 import type { Bond, Corporation, CorporationPortfolioHistory, Shareholder } from "@/lib/db/types";
 import { BOND_UNIT_FACE_VALUE, BOND_MATURITY_LABELS } from "@/lib/db/types/bond";
 import type { BondMaturityTurns } from "@/lib/db/types/bond";
@@ -51,7 +53,8 @@ export async function GET(request: Request, { params }: RouteParams) {
       authUser?.isModerator === true &&
       new URL(request.url).searchParams.get("modView") === "1";
     if (
-      shouldRedactCorporation(
+      await shouldRedactCorporationForViewer(
+        db,
         corporation,
         authUser?.userId,
         authUser?.isAdmin === true,
