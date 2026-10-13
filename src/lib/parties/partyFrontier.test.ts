@@ -7,7 +7,9 @@ import {
   getPartyFrontier,
   canCharacterJoinParty,
   getPartyFrontiers,
+  isolatedRegions,
 } from "@/lib/parties/partyFrontier";
+import { STATE_ADJACENCY } from "@/lib/constants/stateAdjacency";
 
 describe("expandFrontier", () => {
   it("includes the presence state itself plus its neighbours", () => {
@@ -24,12 +26,33 @@ describe("expandFrontier", () => {
     expect(f.has("TX")).toBe(false);
   });
 
-  it("keeps an isolated state that has no neighbours (HI)", () => {
+  it("keeps an isolated state (HI) without inventing land neighbours", () => {
     expect([...expandFrontier("US", ["HI"])]).toEqual(["HI"]);
   });
 
-  it("keeps a state absent from the adjacency map, with no expansion", () => {
-    expect([...expandFrontier("US", ["ZZ"])]).toEqual(["ZZ"]);
+  it("lets a party present anywhere reach an isolated region (HI from AK)", () => {
+    const f = expandFrontier("US", ["AK"]);
+    expect(f.has("WA")).toBe(true);
+    expect(f.has("HI")).toBe(true);
+    expect(f.has("CA")).toBe(false);
+  });
+
+  it("puts HI inside the frontier for a mainland-only party", () => {
+    const presence = new Set(["GA"]);
+    expect(isInFrontier(presence, expandFrontier("US", presence), "HI")).toBe(true);
+  });
+
+  it("applies to other deliberately disconnected regions (RU MOL)", () => {
+    const anyRu = Object.keys(STATE_ADJACENCY.RU).find((id) => id !== "MOL")!;
+    expect(expandFrontier("RU", [anyRu]).has("MOL")).toBe(true);
+  });
+
+  it("lists only explicitly isolated regions", () => {
+    expect(isolatedRegions("US")).toEqual(["HI"]);
+  });
+
+  it("keeps a state absent from the adjacency map, expanding only to isolated regions", () => {
+    expect([...expandFrontier("US", ["ZZ"])].sort()).toEqual(["HI", "ZZ"]);
   });
 
   it("returns an empty set for empty presence", () => {
