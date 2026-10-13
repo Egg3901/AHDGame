@@ -54,13 +54,16 @@ number.
 
 ### Stage 2: governing
 
-- **Bills that can pass.** Before sponsoring, an NPP counts likely votes from
-  party, whips and caucuses, and does not introduce a bill that is short.
+- **Bills that can pass.** Before sponsoring, an NPP counts likely votes and
+  does not introduce a bill that is short. (Shipped in 6.5.0, counting party,
+  district, donor and opposition pressure; whips and caucuses come later.)
 - **Whipping its own program.** A governing party whips co-partisans on the
   bills that serve its standing goals. Opposition coordinates against a bill
   only when it has the votes to defeat it.
-- **Cabinet by fit.** Cabinet posts go to NPPs whose positions and record fit
-  the brief, and a minister failing a standing goal is replaced.
+- **Ministers judged on their goal.** Cabinet posts already go to NPPs ranked
+  on fit with the head of government, competence and the brief, and ministers
+  whose briefs badly miss target are already reshuffled. The remaining step is
+  judging a minister on the standing goal its brief serves.
 - **Fewer writes.** Ministerial orders and settings are written in batches
   per country.
 
@@ -96,6 +99,21 @@ number.
 - Autonomy v6 becomes the default for new singleplayer and simulation worlds,
   after the engine 6 stages are validated. Running worlds never change level on
   their own.
+
+## 6.5.0 (unreleased)
+
+The first stage 2 change (governing).
+
+- **Counting votes before sponsoring (v6).** An NPP sponsor used to file its
+  highest-scoring bill whether or not the chamber would pass it. Now it first
+  projects the vote in the chamber the bill starts in, using the same pressures
+  NPPs vote with when no whip is set: their own positions, their home region,
+  their donors, the pull toward their own party's bills, and the opposition
+  bloc against government bills. Player-held seats are counted as voting with
+  their party. A bill that does not project more votes for than against is set
+  aside and the sponsor tries its next-best bill, up to three. If none has the
+  votes, it files nothing that turn and keeps its slot. Tax-rate bills, whose
+  rate is set when they are filed, are not counted.
 
 ## 6.4.0 (unreleased)
 
