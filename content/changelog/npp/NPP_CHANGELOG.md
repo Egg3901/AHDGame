@@ -52,6 +52,9 @@ number.
 - **Presidential challengers** in non-player countries, inside the existing
   limit on how often a player's race can be challenged. (Shipped in 6.3.0.)
 
+- **Career ladders.** Ambitious, strong incumbents step up to open senior
+  races (shipped in 6.9.0).
+
 ### Stage 2: governing
 
 - **Bills that can pass.** Before sponsoring, an NPP counts likely votes and
@@ -75,7 +78,8 @@ number.
 - **Investing on value.** NPP share and bond purchases compare price with
   fundamentals and sell on the same test, instead of fixed-probability rolls.
 - **CEO choice by record.** NPP-run companies choose CEOs from NPPs with a
-  track record running companies in the same sector.
+  track record running companies in the same sector. Needs a record of each
+  NPP's results as a CEO first; none is kept yet.
 - **Consequences across politics and business.** NPP officeholders who hold or
   run companies weigh those holdings in votes (shipped in 6.8.0) and
   sponsorship, and opponents and voters can see and react to the conflict.
@@ -102,6 +106,20 @@ number.
 - Autonomy v6 becomes the default for new singleplayer and simulation worlds,
   after the engine 6 stages are validated. Running worlds never change level on
   their own.
+
+## 6.9.0 (unreleased)
+
+Stage 1 (running for office).
+
+- **Career ladders (v6).** NPP incumbents used to re-file for the seat they
+  held every cycle, so senior offices were filled only by NPPs without a seat.
+  Now an ambitious incumbent with real standing can run for an open race for a
+  more senior office in its home region instead. An open race is one with no
+  candidate or defending incumbent from its party. This applies to an
+  incumbent with ambition of at least 70 and political influence plus
+  favorability of at least 100, holding a single seat. Its old seat is then
+  filled the ordinary way. A party chair's slate assignment still takes
+  precedence, and nationwide races are not part of the ladder.
 
 ## 6.8.0 (unreleased)
 

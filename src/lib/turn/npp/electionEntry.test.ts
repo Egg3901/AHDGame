@@ -1418,3 +1418,71 @@ describe("processElectionEntry — engine 6.4 primary consolidation (v6)", () =>
     expect(withdrawnRows()).toEqual([]);
   });
 });
+
+describe("processElectionEntry — engine 6.9 career ladder (v6)", () => {
+  let db: MockDb;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(makeSeededRng).mockReturnValue(() => 0.99);
+    db = createMockDb();
+    db.collection("slateCandidates");
+    db.collectionMocks.slateCandidates.find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([]),
+    });
+    db.collection("electionCandidates");
+  });
+
+  function ladderScenario(ambition: number) {
+    const house = createTestElection({ electionType: "house", state: "CA" });
+    const governor = createTestElection({ electionType: "governor", state: "CA" });
+    const incumbent = createTestNpp({
+      homeState: "CA",
+      politicalInfluence: 70,
+      favorability: 60,
+      personality: { loyalty: 50, ambition, stubbornness: 50 },
+    });
+    const ctx = buildContext(db, house, [incumbent], [], [incumbent._id.toString()]);
+    ctx.openPrimaries = [house, governor];
+    ctx.candidatesByElection = new Map([
+      [house._id.toString(), []],
+      [governor._id.toString(), []],
+    ]);
+    return { ctx, house, governor, incumbent };
+  }
+
+  const filedIn = () =>
+    db.collectionMocks.electionCandidates.insertOne.mock.calls.map(([doc]) =>
+      doc.electionId.toString()
+    );
+
+  it("an ambitious, strong incumbent runs for the open senior race at v6", async () => {
+    db.collection("gameState");
+    db.collectionMocks.gameState.findOne.mockResolvedValue({ nppAutonomyLevel: "v6" });
+    const { ctx, governor } = ladderScenario(85);
+
+    await processElectionEntry(ctx);
+
+    expect(filedIn()).toEqual([governor._id.toString()]);
+  });
+
+  it("defends the seat below v6", async () => {
+    db.collection("gameState");
+    db.collectionMocks.gameState.findOne.mockResolvedValue({ nppAutonomyLevel: "v5" });
+    const { ctx, house } = ladderScenario(85);
+
+    await processElectionEntry(ctx);
+
+    expect(filedIn()).toContain(house._id.toString());
+  });
+
+  it("a less ambitious incumbent defends at v6", async () => {
+    db.collection("gameState");
+    db.collectionMocks.gameState.findOne.mockResolvedValue({ nppAutonomyLevel: "v6" });
+    const { ctx, house } = ladderScenario(40);
+
+    await processElectionEntry(ctx);
+
+    expect(filedIn()).toContain(house._id.toString());
+  });
+});
