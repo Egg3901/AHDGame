@@ -89,6 +89,27 @@ describe("InputsOutputsPanel layout", () => {
     expect(callout?.textContent).toContain("85%");
   });
 
+  it("quotes the engine's applied floor instead of the raw 50% minimum", () => {
+    const pinned: CommoditiesData = {
+      ...commodities,
+      throughput: { bindingInput: "iron", applied: 0.85, projected: 0.5, floor: 0.85 },
+    };
+    render(
+      <InputsOutputsPanel
+        commodities={pinned}
+        plants={plants}
+        countryId="US"
+        isExtraction={false}
+        forexEnabled={false}
+        exchangeRates={{}}
+      />
+    );
+
+    const callout = screen.getByText("Iron Ore").closest("p");
+    expect(callout?.textContent).toContain("never cuts you below 85%");
+    expect(callout?.textContent).not.toContain("50%");
+  });
+
   it("does not call a projected shortage the cause of a throttle that has not been applied", () => {
     const projected: CommoditiesData = {
       ...commodities,

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { InfoTooltip } from "@/components/InfoTooltip";
 import ShortageBadge from "../components/ShortageBadge";
+import { THROUGHPUT_MIN } from "@/lib/market/throughput";
 import type { CountryId } from "@/lib/constants/countries";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import {
@@ -360,8 +361,8 @@ export default function CommoditiesPanel({
             <p className="text-muted text-xs">
               The value at right is a projection from the latest world-market balances. The throttle
               applied last turn can differ when regional deliveries or internal supply improve what
-              reaches your plant. The throttle phases in over 5 game years and never cuts you below
-              50%.
+              reaches your plant. The throttle phases in over 5 game years and never cuts you below{" "}
+              {Math.round((commodities.throughput.floor ?? THROUGHPUT_MIN) * 100)}%.
               {commodities.throughput.bindingInput && (
                 <>
                   {" "}
