@@ -8,7 +8,7 @@ The US Senate must confirm presidential nominations for Cabinet positions before
 - Supreme Court justices (see [Supreme Court](/wiki/scotus))
 - Federal Reserve chair and governors, voted on from the FOMC committee page (see [FOMC / Rate-Setting Board](/wiki/fomc))
 
-A President can bridge a cabinet vacancy with a 24-turn **acting** appointment, once per office per term, but an acting secretary is a caretaker with locked policy levers, and a confirmed nominee replaces them the moment the Senate votes. A nominee the Senate has rejected cannot be installed as acting for the same office.
+A President can bridge a cabinet vacancy with a 24-turn **acting** appointment, once per office per term, with full departmental authority until expiry. A confirmed nominee replaces them the moment the Senate votes. A nominee the Senate has rejected cannot be installed as acting for the same office.
 
 Parliamentary countries (UK, JP, DE) do not use Senate confirmation. Cabinet members there are appointed directly by the Prime Minister (UK, JP) or Chancellor (DE). See [Government Formation](/wiki/government-formation).
 

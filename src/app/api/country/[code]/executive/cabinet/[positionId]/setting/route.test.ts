@@ -39,10 +39,7 @@ describe("POST /api/country/[code]/executive/cabinet/[positionId]/setting", () =
     });
   });
 
-  it("403s an acting secretary changing the department stance, writing nothing", async () => {
-    // Suggestion #315's headline restriction. A stance IS the department's policy
-    // direction, which is the thing the Senate's confirmation vote decides, so an
-    // unconfirmed holder cannot move it.
+  it("allows an acting secretary to change the department stance", async () => {
     db.collectionMocks.cabinetMembers.findOne.mockResolvedValue({
       characterId: "char_1",
       acting: true,
@@ -63,8 +60,12 @@ describe("POST /api/country/[code]/executive/cabinet/[positionId]/setting", () =
       { params: Promise.resolve({ code: "us", positionId: "secretary_of_treasury" }) }
     );
 
-    expect(response.status).toBe(403);
-    expect(db.collectionMocks.cabinetSettings.updateOne).not.toHaveBeenCalled();
+    expect(response.status).toBe(200);
+    expect(db.collectionMocks.cabinetSettings.updateOne).toHaveBeenCalledWith(
+      { _id: "US_secretary_of_treasury" },
+      { $set: expect.objectContaining({ tierSetting: "expansionary", lastChangedTurn: 100 }) },
+      { upsert: true }
+    );
   });
 
   it("allows tier setting changes when only allocation was changed this turn", async () => {

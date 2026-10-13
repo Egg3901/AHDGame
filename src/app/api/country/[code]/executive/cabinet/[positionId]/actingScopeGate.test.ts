@@ -1,14 +1,7 @@
-/**
- * The caretaker rule, proven on one representative route per blocked
- * capability. An acting holder is refused with a 403; a confirmed holder in the
- * identical seat is not.
- */
+/** Acting and confirmed holders can exercise the same departmental capabilities. */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ObjectId } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
-// Asserted against the message source rather than a copied string, so the
-// refusal a route actually returns cannot drift from the one players are shown.
-import { barredScopeMessage } from "@/lib/cabinet/actingScope";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 vi.mock("@/lib/api/requireAuth", () => ({ requireAuth: vi.fn() }));
@@ -75,13 +68,11 @@ function json(body: unknown) {
 describe("acting scope gate: policyStance", () => {
   const params = { params: Promise.resolve({ code: "us", positionId: "secretary_of_treasury" }) };
 
-  it("refuses an acting holder a settings change", async () => {
+  it("allows an acting holder to change settings", async () => {
     seat("secretary_of_treasury", true);
     const { POST } = await import("./setting/route");
     const res = await POST(json({ tierSetting: "expanded" }), params);
-    expect(res.status).toBe(403);
-    const body = await res.json();
-    expect(body.error).toBe(barredScopeMessage("stance"));
+    expect(res.status).not.toBe(403);
   });
 
   it("lets a confirmed holder past the acting gate", async () => {
@@ -119,13 +110,11 @@ describe("acting scope gate: personnel", () => {
     }),
   };
 
-  it("refuses an acting holder a general dismissal", async () => {
+  it("allows an acting holder to dismiss generals", async () => {
     seat("secretary_of_defense", true);
     const { DELETE } = await import("./generals/[characterId]/route");
     const res = await DELETE(new Request("http://localhost", { method: "DELETE" }), params);
-    expect(res.status).toBe(403);
-    const body = await res.json();
-    expect(body.error).toBe(barredScopeMessage("personnel"));
+    expect(res.status).not.toBe(403);
   });
 
   it("lets a confirmed holder past the acting gate", async () => {
@@ -139,13 +128,11 @@ describe("acting scope gate: personnel", () => {
 describe("acting scope gate: strategicCommitment", () => {
   const params = { params: Promise.resolve({ code: "us", positionId: "secretary_of_defense" }) };
 
-  it("refuses an acting holder a doctrine adoption", async () => {
+  it("allows an acting holder to adopt doctrine", async () => {
     seat("secretary_of_defense", true);
     const { POST } = await import("./doctrine/adopt/route");
     const res = await POST(json({ key: "nuclear-deterrence" }), params);
-    expect(res.status).toBe(403);
-    const body = await res.json();
-    expect(body.error).toBe(barredScopeMessage("doctrine"));
+    expect(res.status).not.toBe(403);
   });
 
   it("lets a confirmed holder past the acting gate", async () => {
@@ -165,13 +152,11 @@ describe("acting scope gate: capitalProject", () => {
     }),
   };
 
-  it("refuses an acting holder a plant retirement", async () => {
+  it("allows an acting holder to retire plants", async () => {
     seat("secretary_of_energy", true);
     const { DELETE } = await import("./energy/[plantId]/route");
     const res = await DELETE(new Request("http://localhost", { method: "DELETE" }), params);
-    expect(res.status).toBe(403);
-    const body = await res.json();
-    expect(body.error).toBe(barredScopeMessage("assets"));
+    expect(res.status).not.toBe(403);
   });
 
   it("lets a confirmed holder past the acting gate", async () => {
