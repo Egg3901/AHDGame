@@ -27,6 +27,7 @@
 
 import type { CommodityType } from "@/lib/constants/commodities";
 import type { SourcingOwnRoute } from "./ownRoutes";
+import { ownRouteAvailable, reclaimedLocalUnits } from "./rules/ownPriority";
 import type { CountryId } from "@/lib/constants/countries";
 import {
   addPurchaseExposure,
@@ -947,7 +948,11 @@ export function runSourcingPass(inputs: SourcingInputs): SourcingResult {
         }
         const spare =
           cand.originType === "state"
-            ? spareByState.get(cand.originId)!
+            ? ownRouteAvailable(
+                spareByState.get(cand.originId) ?? 0,
+                localFillByState.get(cand.originId) ?? 0,
+                cand.ownRoute?.ownFirstAcrossStates === true
+              )
             : spareByCountry.get(cand.originId as CountryId)!;
         if (spare <= 0) continue;
 
@@ -1047,7 +1052,32 @@ export function runSourcingPass(inputs: SourcingInputs): SourcingResult {
         const tariffPaid = dispatch * cand.ask * (cand.tariffRatePct / 100);
         const deliveredTariffPaid = dispatch > 0 ? tariffPaid * (take / dispatch) : 0;
         if (cand.originType === "state") {
-          spareByState.set(cand.originId, spare - dispatch);
+          const marketSpare = spareByState.get(cand.originId) ?? 0;
+          const reclaimed = reclaimedLocalUnits(dispatch, marketSpare);
+          if (reclaimed > 0) {
+            // Do not take local buyers' fill until the capacity and price gates pass.
+            localFillByState.set(
+              cand.originId,
+              (localFillByState.get(cand.originId) ?? 0) - reclaimed
+            );
+            unmetByState.set(cand.originId, (unmetByState.get(cand.originId) ?? 0) + reclaimed);
+            summary.intraStateUnits -= reclaimed;
+            destinationFor(buyer.countryId).localUnits -= reclaimed;
+            const premium = landedPremiumByDestState.get(cand.originId)?.get(commodity);
+            if (premium) premium.metUnits -= reclaimed;
+            addPurchaseExposure(
+              ensurePurchaseExposure(cand.originId, commodity),
+              useSharesByState.get(cand.originId)!,
+              {
+                units: -reclaimed,
+                preDutyValue: -reclaimed * (statePrices[cand.originId] ?? basePrice),
+                tariffPaid: 0,
+                deliveredTariffPaid: 0,
+                imported: false,
+              }
+            );
+          }
+          spareByState.set(cand.originId, Math.max(0, marketSpare - dispatch));
           summary.interStateUnits += take;
         } else {
           spareByCountry.set(cand.originId as CountryId, spare - dispatch);

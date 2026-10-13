@@ -35,6 +35,7 @@ export type ConsolePayload = {
     charteredTurn: number;
   }>;
   propAssetOptions?: readonly import("@/lib/db/types/bank").PropPosition["asset"][];
+  depositorBook?: import("@/lib/banking/depositorBook").BankDepositorBook | null;
   visible: boolean;
   isCeo: boolean;
   isAdmin: boolean;

@@ -245,7 +245,18 @@
       "originationFees": "Origination fees",
       "originationFeesDetail": "Household fees in this pass; all loans since charter {lifetime}",
       "originationFeesTooltip": "Fees are withheld from newly funded principal. Repayment carries no new origination fee.",
-      "feeBottomLine": "Net interest plus household fees minus insurance and write-offs"
+      "feeBottomLine": "Net interest plus household fees minus insurance and write-offs",
+      "depositors": {
+        "title": "Depositors",
+        "description": "Current savings balances held at this bank, largest first. This is not a history of deposits or withdrawals.",
+        "legacy": "These savings are assigned to this bank under the legacy system and are not vault cash.",
+        "depositor": "Depositor",
+        "balance": "Balance",
+        "total": "Named savings total",
+        "unknown": "Unknown depositor",
+        "empty": "No named depositors currently hold a positive balance here.",
+        "households": "Household deposits: {amount}. These are recorded as a combined balance, without individual names."
+      }
     },
     "bulkWages": {
       "label": "Wage multiplier",
@@ -759,7 +770,11 @@
       "netCharge": "Net internal discount charge: ₳{amount} per day.",
       "retry": "Retry",
       "pricingHint": "Pricing posture changes open-market sales. Supplying your own plants first is a separate policy.",
-      "pricingLink": "Manage internal supply"
+      "pricingLink": "Manage internal supply",
+      "ownFirstAcrossStates": "Ship own surplus to out-of-state plants before local market buyers",
+      "ownFirstFreightWarning": "Off by default. Keeps supply for your own local plants first. Out-of-state shipping can leave other local buyers short. Freight is charged separately and can cost more than the internal discount saves; nearby purchases avoid this haul. New reservations use the previous turn's recorded deliveries.",
+      "ownHaulTurn": "Own cross-state hauls, turn {turn}",
+      "ownHaulCost": "{commodity}: {origin} to {destination}, {units} units; freight ₳{cost} per unit (anchor currency)."
     }
   }
 }
