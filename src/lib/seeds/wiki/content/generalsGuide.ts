@@ -8,7 +8,7 @@ This matters more than it sounds. **Generals are the only thing that makes your 
 
 ## Getting commissioned
 
-**You cannot commission yourself.** The **defence seat holder** appoints generals, from their office → **Commands** tab → *General Corps*. An acting secretary cannot: the general corps outlasts a caretaker appointment, so commissioning and dismissal wait for a confirmed holder.
+**You cannot commission yourself.** The **defence seat holder** appoints generals, from their office → **Commands** tab → *General Corps*. An acting secretary can commission and dismiss generals under the same rules as a confirmed holder.
 
 They pick a character from their country and commission them. That character's Military tab immediately gains a general at:
 

@@ -155,6 +155,24 @@ describe("NPP glut mothballing (plants section 2c)", () => {
     expect((sets[0].update.$set as Record<string, unknown>).mothballed).toBe(false);
   });
 
+  it("never restarts a mine mothballed on a dead deposit, however short its market", () => {
+    const deadMine = sector({
+      sectorType: "extraction",
+      mothballed: true,
+      capacityUtilization: 0,
+    } as Partial<CorporateSector>);
+    const liveMine = sector({
+      sectorType: "extraction",
+      mothballed: true,
+      capacityUtilization: 0.6,
+    } as Partial<CorporateSector>);
+    const shortPrices: CommodityPriceRatioFn = () => 2.5;
+    const dead = decide(corp({ type: "extraction" }), [deadMine], shortPrices, plantsCtx);
+    expect(mothballSets(dead)).toHaveLength(0);
+    const live = decide(corp({ type: "extraction" }), [liveMine], shortPrices, plantsCtx);
+    expect(mothballSets(live)).toHaveLength(1);
+  });
+
   it("does not restart while prices still read glut (hysteresis band)", () => {
     const cold = sector({ soldFraction: 0.03, mothballed: true } as Partial<CorporateSector>);
     const healthy = sector({ soldFraction: 0.9 });

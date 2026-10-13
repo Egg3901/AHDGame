@@ -38,9 +38,9 @@ describe("isActingMember", () => {
 });
 
 describe("actingScopeRefusal", () => {
-  it("refuses every barred scope for an acting holder", () => {
+  it("allows every departmental scope for an acting holder", () => {
     for (const scope of ALL_SCOPES) {
-      expect(actingScopeRefusal({ acting: true }, scope)).toBe(barredScopeMessage(scope));
+      expect(actingScopeRefusal({ acting: true }, scope)).toBeNull();
     }
   });
 
@@ -50,17 +50,11 @@ describe("actingScopeRefusal", () => {
       expect(actingScopeRefusal({}, scope)).toBeNull();
     }
   });
-
-  it("names the Senate as the unlock rather than only refusing", () => {
-    // The refusal is read by someone who was just handed the seat, so it has to
-    // say what changes it, not merely that they cannot.
-    expect(actingScopeRefusal({ acting: true }, "stance")).toMatch(/Senate confirms/);
-  });
 });
 
 describe("barredScopesFor", () => {
-  it("returns every scope for an acting holder", () => {
-    expect(barredScopesFor({ acting: true }).sort()).toEqual([...ALL_SCOPES].sort());
+  it("returns no barred scopes for an acting holder", () => {
+    expect(barredScopesFor({ acting: true })).toEqual([]);
   });
 
   it("returns nothing for a confirmed holder, which the client reads as unrestricted", () => {
@@ -82,13 +76,11 @@ describe("barredScopesFor", () => {
 describe("isScopeBarredWhenActing", () => {
   it("covers every declared scope", () => {
     for (const scope of ALL_SCOPES) {
-      expect(isScopeBarredWhenActing(scope)).toBe(true);
+      expect(isScopeBarredWhenActing(scope)).toBe(false);
     }
   });
 
-  it("gives every scope a distinct player-facing sentence", () => {
-    const messages = ALL_SCOPES.map(barredScopeMessage);
-    expect(new Set(messages).size).toBe(ALL_SCOPES.length);
-    for (const m of messages) expect(m.length).toBeGreaterThan(0);
+  it("has no obsolete refusal messages", () => {
+    for (const scope of ALL_SCOPES) expect(barredScopeMessage(scope)).toBeNull();
   });
 });

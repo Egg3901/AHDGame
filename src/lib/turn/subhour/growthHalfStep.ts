@@ -4,7 +4,6 @@ import type { StateMetrics } from "@/lib/db/types/stateMetrics";
 import type { FederalBudget } from "@/lib/db/types/budget";
 import { TURNS_PER_YEAR } from "@/lib/constants/turnTime";
 import { NATIONAL_SCOPE, NATIONAL_SCOPE_IDS } from "@/lib/constants/nationalScope";
-import { advanceOutputGap } from "@/lib/metricEngine/outputGap";
 import { compoundGdpLevel } from "@/lib/metricEngine/gdpLevel";
 import { gdpWeightedGrowth, resolvePipelineGdpGrowth } from "@/lib/country/nationalGdpGrowth";
 import { getRegisteredCountryIdSet } from "@/lib/country/registeredCountries";
@@ -30,8 +29,6 @@ interface GrowthMetrics {
   subhourBase?: StateMetrics["subhourBase"];
   economic?: {
     gdpGrowth?: { value?: number };
-    sectorGrowth?: { value?: number };
-    potentialGrowth?: { value?: number };
   };
 }
 
@@ -47,29 +44,21 @@ function roundNational(value: number): number {
 /**
  * The half step for one region, from the values the last turn settled.
  *
- * The hour's GDP step is: the output gap moves by (impulse - GAP_CLOSURE * gap)
- * / TURNS_PER_YEAR, growth is potential plus that move annualized, and the GDP
- * level compounds by (1 + growth)^(1 / TURNS_PER_YEAR). Taking it over half the
- * time (TURNS_PER_YEAR / fraction) moves the gap exactly half the hour's Euler
- * move, reports the same annualized growth, and compounds GDP by exactly the
- * square root of the hour's factor. The impulse (sector signal minus potential)
- * is only refreshed by the turn, so the half step uses the last turn's.
+ * Headline growth is the measured real output growth (metricEngine/
+ * outputTrend.ts); its sector signal and the output trend only refresh on the
+ * turn, so the half step reports the same annualized growth, leaves the output
+ * gap where the turn put it, and compounds the GDP level by exactly the square
+ * root of the hour's factor (TURNS_PER_YEAR / fraction steps a year).
  */
 export function growthHalfStepForRegion(
-  input: { gdp: number; outputGap: number; sectorGrowth: number; potentialGrowth: number },
+  input: { gdp: number; outputGap: number; gdpGrowth: number },
   fraction = HALF_TICK_FRACTION
 ): { gdp: number; outputGap: number; gdpGrowth: number } {
   const turnsPerStep = TURNS_PER_YEAR / fraction;
-  const step = advanceOutputGap(
-    input.outputGap,
-    input.sectorGrowth,
-    input.potentialGrowth,
-    turnsPerStep
-  );
   return {
-    gdp: compoundGdpLevel(input.gdp, step.gdpGrowth, turnsPerStep),
-    outputGap: step.gap,
-    gdpGrowth: step.gdpGrowth,
+    gdp: compoundGdpLevel(input.gdp, input.gdpGrowth, turnsPerStep),
+    outputGap: input.outputGap,
+    gdpGrowth: input.gdpGrowth,
   };
 }
 
@@ -110,8 +99,6 @@ export async function runGrowthHalfStep(
       .find({})
       .project<GrowthMetrics>({
         "economic.gdpGrowth.value": 1,
-        "economic.sectorGrowth.value": 1,
-        "economic.potentialGrowth.value": 1,
         subhourStep: 1,
         subhourBase: 1,
       })
@@ -144,16 +131,11 @@ export async function runGrowthHalfStep(
     regionsByCountry.set(state.countryId, rows);
 
     const done = activeSubhourBase(state.subhourStep, state.subhourBase?.growth, turn);
-    const sector = metric?.economic?.sectorGrowth?.value;
-    const potential = metric?.economic?.potentialGrowth?.value;
     if (done) {
       alreadyStepped++;
-    } else if (finite(gdp) && gdp > 0 && finite(growth) && finite(sector) && finite(potential)) {
+    } else if (finite(gdp) && gdp > 0 && finite(growth)) {
       const outputGap = finite(state.outputGap) ? state.outputGap : 0;
-      const next = growthHalfStepForRegion(
-        { gdp, outputGap, sectorGrowth: sector, potentialGrowth: potential },
-        fraction
-      );
+      const next = growthHalfStepForRegion({ gdp, outputGap, gdpGrowth: growth }, fraction);
       const stateBase: SubhourGrowthStateBase = {
         turn,
         gdp: { base: gdp, written: next.gdp },

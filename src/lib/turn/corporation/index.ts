@@ -3,6 +3,8 @@ import { configureGroupSupply, groupForecastWriteOps } from "./groupSupplyTurn";
  * Corporation turns settle operating results and distribute shareholder income.
  * processCorporationTurn shares monetary quotes across automatic dividend conversions.
  */
+import { resolveNoBuyerPhaseOutStartTurn } from "@/lib/extraction/noBuyerPhaseOutStart";
+import { CORPORATION_TURN_GAME_CONFIG_PROJECTION } from "./gameConfigProjection";
 import { applyCorporationCashWrites } from "@/lib/turn/npp/foundingCashLedger";
 import { loadConversionQuoteContext } from "@/lib/currency/euro/quotes";
 import { ObjectId } from "mongodb";
@@ -179,33 +181,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
     db.collection<GameConfig>("gameConfig").findOne(
       { _id: "default" },
       {
-        projection: {
-          marketSystemMode: 1,
-          marketGovernorGlideStartTurn: 1,
-          marketGovernorGlideTurns: 1,
-          productLinesV2Enabled: 1,
-          marketGovernorCap: 1,
-          marketGovernorRampTurns: 1,
-          brandLoyaltyEnabled: 1,
-          brandLoyaltySliceEnabled: 1,
-          sectorQualityEnabled: 1,
-          qualityPremiumPricingEnabled: 1,
-          politicalMediaMarketEnabled: 1,
-          explicitPlantCostsEnabled: 1,
-          supplyAgreementsEnabled: 1,
-          groupSupplyCoordinationEnabled: 1,
-          prospectingEnabled: 1,
-          commandEconomyEnabled: 1,
-          privateBankingEnabled: 1,
-          bankUnderwritingEnabled: 1,
-          interstateMoneyWiringEnabled: 1,
-          freightSettlementMode: 1,
-          canonicalFreightBillingEnabled: 1,
-          treasuryCashLedgerEnabled: 1,
-          mediaEditorialEnabled: 1,
-          mediaOperatingModelsEnabled: 1,
-          mediaRegulationEnabled: 1,
-        },
+        projection: CORPORATION_TURN_GAME_CONFIG_PROJECTION,
       }
     ),
     getGameState(),
@@ -286,6 +262,11 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
           )
       : Promise.resolve(null),
   ]);
+  lookups.extractionNoBuyerPhaseOutStartTurn = await resolveNoBuyerPhaseOutStartTurn(
+    db,
+    marketGovernorConfig,
+    turn ?? gameState?.currentTurn ?? 0
+  );
   if (
     mediaProductSlatesEnabled &&
     lookups.mediaProductProjectsByCorpId &&

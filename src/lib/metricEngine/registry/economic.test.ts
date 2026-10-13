@@ -224,37 +224,61 @@ describe("sectorGrowthNode (the cyclical signal — old gdpGrowth logic)", () =>
   });
 });
 
-describe("gdpGrowthNode (potential + output-gap integration, P1c-2)", () => {
-  it("integrates the sector signal toward potential via the gap (cold-start gap 0 → equals sector)", () => {
-    const sector = 6;
-    const potential = 2;
-    const out = evalNode(
-      gdpGrowthNode,
-      ctx({
-        current: {
-          "economic.sectorGrowth": sector,
-          "economic.potentialGrowth": potential,
-          "economic.outputGapPrev": 0,
-        },
-      }),
-      "s1"
-    );
-    expect(out.value).toBeCloseTo(advanceOutputGap(0, sector, potential, 48).gdpGrowth, 2);
-  });
+describe("gdpGrowthNode (measured real output growth)", () => {
+  const legacyCtx = (weight: number) =>
+    ctx({
+      current: {
+        "economic.sectorGrowth": 2,
+        "economic.potentialGrowth": 2,
+        "economic.outputGapPrev": 8,
+        "economic.realOutputBlendWeight": weight,
+      },
+    });
 
-  it("a positive prior gap with the sector back at potential dips gdpGrowth below potential (bust)", () => {
+  it("is exactly the sector signal, with no pull toward potential", () => {
     const out = evalNode(
       gdpGrowthNode,
       ctx({
         current: {
-          "economic.sectorGrowth": 2,
-          "economic.potentialGrowth": 2,
+          "economic.sectorGrowth": 6,
+          "economic.potentialGrowth": -3,
           "economic.outputGapPrev": 8,
         },
       }),
       "s1"
     );
+    expect(out.value).toBe(6);
+  });
+
+  it("holds a sustained growth rate instead of reverting it", () => {
+    // The legacy integration would sink 9% sector growth toward a 0% potential
+    // as the gap filled; the measured headline stays at 9 every turn.
+    for (let gap = 0; gap <= 6; gap += 2) {
+      const out = evalNode(
+        gdpGrowthNode,
+        ctx({
+          current: {
+            "economic.sectorGrowth": 9,
+            "economic.potentialGrowth": 0,
+            "economic.outputGapPrev": gap,
+          },
+        }),
+        "s1"
+      );
+      expect(out.value).toBe(9);
+    }
+  });
+
+  it("weight 0 reproduces the legacy potential + gap integration", () => {
+    const out = evalNode(gdpGrowthNode, legacyCtx(0), "s1");
+    expect(out.value).toBeCloseTo(advanceOutputGap(8, 2, 2, 48).gdpGrowth, 3);
     expect(out.value).toBeLessThan(2);
+  });
+
+  it("blends linearly from the legacy value to the sector signal", () => {
+    const legacy = advanceOutputGap(8, 2, 2, 48).gdpGrowth;
+    const out = evalNode(gdpGrowthNode, legacyCtx(0.25), "s1");
+    expect(out.value).toBeCloseTo(0.75 * legacy + 0.25 * 2, 3);
   });
 });
 
@@ -272,7 +296,24 @@ describe("unemploymentNode", () => {
     expect(out.value).toBe(4.44);
   });
 
-  it("keys Okun off the output gap (gdp − potential), not a fixed 2.0", () => {
+  it("keys Okun off growth vs the measured trend when the phase seeds one", () => {
+    // trend 7, potential 0, gdp 7 → no deviation → EMA(4.5, 4.5) = 4.5
+    const out = evalNode(
+      unemploymentNode,
+      ctx({
+        current: {
+          "economic.gdpGrowth": 7,
+          "economic.trendGrowth": 7,
+          "economic.potentialGrowth": 0,
+        },
+        prevSimBaseline: { "economic.unemploymentRate": 4.5 },
+      }),
+      "s1"
+    );
+    expect(out.value).toBe(4.5);
+  });
+
+  it("falls back to potential when no trend is seeded, not a fixed 2.0", () => {
     // potential 5, gdp 5 → gap 0 → no change ; EMA(4.5, 4.5) = 4.5
     const out = evalNode(
       unemploymentNode,

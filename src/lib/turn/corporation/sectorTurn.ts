@@ -53,6 +53,8 @@ import { advanceSectorInventory } from "@/lib/corporations/sectorInventory";
 import type { SectorTurnEnv, SectorTurnResult } from "./sectorTurnTypes";
 import { legacyRevenueShadowTelemetry, marketTelemetry } from "./sectorTelemetry";
 import { resolveSectorFreightBillingLegs } from "./freightBillingTurn";
+import { isExtractionStrategyZeroYield } from "@/lib/corporations/extractionStrategyAvailability";
+import { noBuyerPhaseOutProgress } from "@/lib/extraction/capacityHaircut";
 import { resolveSectorCapacityHaircut } from "./sectorCapacityHaircut";
 
 export { computeSectorOutputUnits } from "./sectorOutputUnits";
@@ -272,10 +274,23 @@ export function processSector(
     sector.mediaDiscriminator,
     lookups.preset
   );
+  // No-buyer phase-out: a mine whose recipe has no leg its state can extract
+  // put nothing on the clearing book, yet the deposit ramps kept crediting it
+  // with output. Those ramps close for such mines over 24 turns from the
+  // world's phase-out stamp. Every other sector reads 0 and is unchanged.
+  const noBuyerPhaseOut =
+    sector.sectorType === "extraction" &&
+    isExtractionStrategyZeroYield(
+      strategyRates,
+      lookups.stateResourceCapacityByState.get(sector.stateId)
+    )
+      ? noBuyerPhaseOutProgress(lookups.extractionNoBuyerPhaseOutStartTurn, currentTurn)
+      : 0;
   const { capacityUtil, capacityHaircutStartTurn, capacityHaircut } = resolveSectorCapacityHaircut(
     sector,
     lookups.extractionCapacityUtilBySector,
-    currentTurn
+    currentTurn,
+    noBuyerPhaseOut
   );
   // ─── Market-tier realization legs (clearing / throughput / capital) ──────
   // Pure computation in `sectorTurn/marketTiers.ts`; the orchestrator only
@@ -467,6 +482,7 @@ export function processSector(
     nameplateUnits,
     activeFraction,
     plantsRampLambda,
+    noBuyerPhaseOut,
     capacityUtil,
     capacityHaircut,
     capitalFactor,

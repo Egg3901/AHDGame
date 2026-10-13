@@ -75,10 +75,8 @@ export async function requireDefenceHolder(
     } as const;
   }
 
-  // An acting defence secretary reads the programme but does not move it. Every
-  // mutation route funnels through `intent: "manage"`, so the whole console is
-  // covered here rather than five times over; the GET surfaces take the read
-  // path above and stay open to them.
+  // Mutations consult the shared authority policy once for the whole console.
+  // Acting and confirmed holders have the same powers; read visibility is separate.
   if (intent === "manage") {
     const denied = requireConfirmedSecretary(member, "doctrine", !!auth.user.isAdmin);
     if (denied) return { error: denied } as const;
