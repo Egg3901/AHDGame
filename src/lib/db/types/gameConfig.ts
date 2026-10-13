@@ -323,6 +323,19 @@ export interface GameConfig {
   /** Length of the governor glide in turns (default 24). */
   marketGovernorGlideTurns?: number;
   /**
+   * "proportional": every governed sector closes the same fraction of its
+   * remaining gap to the market each turn of the glide, instead of only being
+   * lifted once the floor `(turn - start) / glideTurns` passes its own share.
+   * Unset = the floor glide. See `proportionalGlideAnchorTurn`.
+   */
+  marketGovernorGlideMode?: "floor" | "proportional";
+  /**
+   * Proportional glide only: the floor glide's share (0-1) frozen on the
+   * switch-over turn, so sectors the floor glide had already lifted start the
+   * proportional glide from there instead of falling back.
+   */
+  marketGovernorGlideFloor?: number;
+  /**
    * Turn the no-buyer extraction phase-out started. A mine whose recipe has no
    * leg its state can extract offers nothing to the market, yet the deposit
    * ramps (the 0.5 haircut floor below plants, the launch-governor ramp under

@@ -435,6 +435,8 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
     currentTurn: turn ?? gameState?.currentTurn ?? 0,
     glideStartTurn: marketGovernorConfig?.marketGovernorGlideStartTurn,
     glideTurns: marketGovernorConfig?.marketGovernorGlideTurns,
+    glideMode: marketGovernorConfig?.marketGovernorGlideMode,
+    glideFloor: marketGovernorConfig?.marketGovernorGlideFloor,
   });
   market.explicitPlantCostsEnabled = marketGovernorConfig?.explicitPlantCostsEnabled === true;
   market.mediaRegulationEnabled = mediaRegulationEnabled;

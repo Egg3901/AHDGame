@@ -372,3 +372,82 @@ describe("governorGlideAnchorTurn: phase the governor out on a schedule", () => 
     expect(a).toBeCloseTo(150 - RAMP * (10 / MARKET_GOVERNOR_GLIDE_TURNS), 12);
   });
 });
+
+import { proportionalGlideAnchorTurn, proportionalGovernorGlide } from "./capital";
+
+describe("proportional governor glide: every sector moves every turn", () => {
+  const RAMP = 240;
+  const lambdaAt = (
+    start: number,
+    glide: NonNullable<ReturnType<typeof proportionalGovernorGlide>>
+  ) => (glide.currentTurn - proportionalGlideAnchorTurn(start, glide)) / RAMP;
+
+  it("is inert when no start turn is configured", () => {
+    expect(proportionalGovernorGlide(180, null, 24, RAMP, 0.3)).toBeNull();
+    expect(proportionalGovernorGlide(180, undefined, 24, RAMP, 0.3)).toBeNull();
+  });
+
+  it("changes nothing on the switch-over turn (own share or frozen floor, whichever is higher)", () => {
+    const g = proportionalGovernorGlide(178, 178, 24, RAMP, 1 / 3)!;
+    // Seeded sector at turn 1: own share 177/240 = 0.7375, above the floor.
+    expect(lambdaAt(1, g)).toBeCloseTo(177 / 240, 9);
+    // Play-founded sector at turn 150: own 28/240, lifted by the frozen floor.
+    expect(lambdaAt(150, g)).toBeCloseTo(1 / 3, 9);
+  });
+
+  it("closes the same fraction of every sector's remaining gap each turn", () => {
+    const g = proportionalGovernorGlide(184, 178, 24, RAMP, 0)!; // progress 0.25
+    const seeded = lambdaAt(1, g); // own 183/240
+    const young = lambdaAt(170, g); // own 14/240
+    expect(1 - seeded).toBeCloseTo((1 - 183 / 240) * 0.75, 9);
+    expect(1 - young).toBeCloseTo((1 - 14 / 240) * 0.75, 9);
+  });
+
+  it("releases the governor for every sector at the end", () => {
+    const g = proportionalGovernorGlide(202, 178, 24, RAMP, 0.25)!;
+    expect(lambdaAt(1, g)).toBeCloseTo(1, 9);
+    expect(lambdaAt(200, g)).toBeCloseTo(1, 9);
+  });
+
+  it("never moves a sector backwards from one turn to the next", () => {
+    let prev = 0;
+    for (let t = 178; t <= 202; t++) {
+      const l = lambdaAt(160, proportionalGovernorGlide(t, 178, 24, RAMP, 1 / 3)!);
+      expect(l).toBeGreaterThanOrEqual(prev - 1e-12);
+      prev = l;
+    }
+  });
+
+  it("governorAnchorTurn routes to the proportional anchor when a glide is supplied", () => {
+    const g = proportionalGovernorGlide(184, 178, 24, RAMP, 0)!;
+    expect(governorAnchorTurn(1, null, g)).toBeCloseTo(proportionalGlideAnchorTurn(1, g), 9);
+    expect(governorAnchorTurn(null, null, g)).toBeNull();
+  });
+});
+
+import { buildMarketContext } from "./marketContext";
+
+describe("buildMarketContext glide mode", () => {
+  it("keeps the floor glide unless the mode says proportional", () => {
+    const floor = buildMarketContext("plants", {
+      currentTurn: 184,
+      glideStartTurn: 170,
+      glideTurns: 24,
+    });
+    expect(floor.governorGlide).toBeNull();
+    expect(floor.worldGovernorAnchorTurn).not.toBeNull();
+  });
+
+  it("switches to per-sector proportional anchors and drops the world anchor", () => {
+    const ctx = buildMarketContext("plants", {
+      currentTurn: 184,
+      glideStartTurn: 178,
+      glideTurns: 24,
+      glideMode: "proportional",
+      glideFloor: 1 / 3,
+    });
+    expect(ctx.worldGovernorAnchorTurn).toBeNull();
+    expect(ctx.governorGlide).toMatchObject({ currentTurn: 184, progress: 0.25, floor: 1 / 3 });
+    expect(ctx.governorGlideEndTurn).toBe(202);
+  });
+});

@@ -199,11 +199,13 @@ export function softenedMarketRealization(
  */
 export function governorAnchorTurn(
   sectorStartTurn: number | null | undefined,
-  worldAnchorTurn: number | null | undefined
+  worldAnchorTurn: number | null | undefined,
+  glide?: GovernorGlide | null
 ): number | null | undefined {
   if (typeof sectorStartTurn !== "number" || !Number.isFinite(sectorStartTurn)) {
     return sectorStartTurn;
   }
+  if (glide) return proportionalGlideAnchorTurn(sectorStartTurn, glide);
   if (typeof worldAnchorTurn !== "number" || !Number.isFinite(worldAnchorTurn)) {
     return sectorStartTurn;
   }
@@ -212,6 +214,67 @@ export function governorAnchorTurn(
 
 /** Default length of the governor glide, in turns. */
 export const MARKET_GOVERNOR_GLIDE_TURNS = 24;
+
+/**
+ * Proportional governor glide (gameConfig `marketGovernorGlideMode:
+ * "proportional"`).
+ *
+ * The floor glide below only lifts a sector once `progress` passes its own
+ * ramp share, so on the 1991 world (seeded sectors about 70% through their own
+ * 240-turn ramp) most of the economy did nothing for 17 turns and then moved in
+ * the last seven. The proportional glide moves EVERY sector the same fraction
+ * of its remaining gap each turn instead:
+ *
+ *   λ = 1 − (1 − max(ownλ, floor)) × (1 − progress)
+ *
+ * `floor` is the floor glide's share frozen at the switch-over turn, so a
+ * sector that the floor glide had already lifted does not fall back. On the
+ * start turn (progress 0) λ equals the sector's share under the old glide, so
+ * the switch-over is a no-op; after `glideTurns` turns λ is 1 for everyone.
+ */
+export interface GovernorGlide {
+  currentTurn: number;
+  rampTurns: number;
+  /** 0 on the glide's start turn, 1 once it is complete. */
+  progress: number;
+  /** Minimum ramp share every sector starts the glide from (0-1). */
+  floor: number;
+}
+
+function clamp01(value: number): number {
+  return Number.isFinite(value) ? Math.max(0, Math.min(1, value)) : 0;
+}
+
+/** The anchor turn that yields the proportional-glide ramp share for one sector. */
+export function proportionalGlideAnchorTurn(sectorStartTurn: number, glide: GovernorGlide): number {
+  const ramp = glide.rampTurns >= 1 ? glide.rampTurns : MARKET_REALIZATION_RAMP_TURNS;
+  const own = clamp01((glide.currentTurn - sectorStartTurn) / ramp);
+  const base = Math.max(own, clamp01(glide.floor));
+  const lambda = 1 - (1 - base) * (1 - clamp01(glide.progress));
+  return glide.currentTurn - ramp * lambda;
+}
+
+/** Proportional glide parameters for a turn, or null when that mode is not configured. */
+export function proportionalGovernorGlide(
+  currentTurn: number,
+  glideStartTurn: number | null | undefined,
+  glideTurns: number | null | undefined,
+  rampTurns: number,
+  floor: number | null | undefined
+): GovernorGlide | null {
+  if (typeof glideStartTurn !== "number" || !Number.isFinite(glideStartTurn)) return null;
+  if (!Number.isFinite(currentTurn)) return null;
+  const turns =
+    typeof glideTurns === "number" && Number.isFinite(glideTurns) && glideTurns >= 1
+      ? glideTurns
+      : MARKET_GOVERNOR_GLIDE_TURNS;
+  return {
+    currentTurn,
+    rampTurns,
+    progress: clamp01((currentTurn - glideStartTurn) / turns),
+    floor: clamp01(typeof floor === "number" ? floor : 0),
+  };
+}
 
 /**
  * World anchor that phases the governor out on a schedule.
