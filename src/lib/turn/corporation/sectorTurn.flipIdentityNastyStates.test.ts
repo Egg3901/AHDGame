@@ -320,9 +320,24 @@ describe("plants flip identity: composed nasty states", () => {
 });
 
 describe("recorded cost-plus operating basis", () => {
-  it("quotes the explicit turn's actual costs without inheriting a negative residual", () => {
+  it.each([
+    ["no disaster", []],
+    [
+      "a -8pp physical disaster",
+      [
+        {
+          value: -8,
+          startTurn: 995,
+          durationTurns: 10,
+          sectorType: null,
+          strategyId: null,
+          physicality: "physical",
+        },
+      ],
+    ],
+  ])("quotes every billed operating line (%s)", (_label, disasterEffects) => {
     const sector = makeSector({ capitalStock: STOCK, otherOpexPerUnitAnchor: -1000 });
-    const env = makeEnv("plants", 1000, makeLookups({}));
+    const env = makeEnv("plants", 1000, makeLookups({ disasterEffects }));
     env.currentYear = 1991;
     env.market.explicitPlantCostsEnabled = true;
     processSector(env, makeCorp(), sector, 1, undefined, 1);
@@ -338,8 +353,11 @@ describe("recorded cost-plus operating basis", () => {
       otherOpex: number;
       upkeep: number;
       compliance: number;
+      financialLegs: number;
+      policyCredit: number;
     };
     expect(basis.turn).toBe(1000);
+    if (disasterEffects.length > 0) expect(pnl.financialLegs).toBeGreaterThan(0);
     expect(pnl.otherOpex).toBeGreaterThan(0);
     const strategy = getEffectiveStrategyRates(
       "manufacturing",
@@ -358,7 +376,14 @@ describe("recorded cost-plus operating basis", () => {
     const quotedCost =
       costPlusPriceFactor(1, 0, basis.inputCostShare, basis.fixedCostShare) * nominalOutputPerTurn;
     expect(quotedCost).toBeCloseTo(
-      (pnl.inputs + pnl.labour + pnl.otherOpex + pnl.upkeep + pnl.compliance) / TURNS_PER_DAY,
+      (pnl.inputs +
+        pnl.labour +
+        pnl.otherOpex +
+        pnl.upkeep +
+        pnl.compliance +
+        pnl.financialLegs +
+        Math.max(0, -pnl.policyCredit)) /
+        TURNS_PER_DAY,
       0
     );
   });

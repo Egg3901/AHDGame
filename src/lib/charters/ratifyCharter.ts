@@ -350,29 +350,13 @@ export async function ratifyCharter(
     .collection<PoliticalParty>("politicalParties")
     .updateOne({ _id: newParty._id }, { $set: { memberCount: founderCharacters.length } });
 
-  // Open the party's first national leadership elections immediately so
-  // there is no window with neither leaders nor an open election. The
-  // creator is idempotent (only fills missing party+position pairs) and
-  // aligns endTurn to the shared default cycle. The hourly leadership-
-  // voting phase remains the safety net if this fails.
+  // Open the party's first national leadership elections immediately. The
+  // shared election sweep keeps the seated founder out of the chair race for
+  // this first cycle and opens the vice-chair and treasurer seats now. The
+  // hourly leadership-voting phase remains the safety net if this fails.
   try {
     const { createMissingNationalElections } = await import("@/lib/nationalPartyElections");
     await createMissingNationalElections(charterCurrentTurn, undefined, now, charter.countryId);
-    // #289 — the creator opens elections for every position lacking an active
-    // one, including chair. Since the proposer is now seated as chair for the
-    // first term, drop the freshly-created chair election for this party so the
-    // seat isn't immediately re-contested. Vice-chair and treasurer elections
-    // remain. Chair re-opens normally at the next cycle. Skipped when no chair
-    // was seated (anchor founder missing).
-    if (anchorFounder) {
-      await db.collection("nationalPartyElections").deleteOne({
-        partyId: partyIdStr,
-        countryId: charter.countryId,
-        position: "chair",
-        status: "voting",
-        winnerId: null,
-      });
-    }
   } catch {
     /* non-fatal — the hourly phase will create them */
   }

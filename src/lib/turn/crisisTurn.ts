@@ -456,8 +456,8 @@ async function applyMetricEffects(
       const def = getMetricDefinition(metricPath.category as MetricCategoryId, metricPath.field);
       const entry = deltas[path] ?? {
         delta: 0,
-        min: def?.minValue ?? 0,
-        max: def?.maxValue ?? 100,
+        min: metricPath.bounds?.[0] ?? def?.minValue ?? 0,
+        max: metricPath.bounds?.[1] ?? def?.maxValue ?? 100,
         recurring: false,
       };
       entry.delta += effect.value;

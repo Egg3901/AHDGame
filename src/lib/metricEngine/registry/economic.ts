@@ -118,6 +118,12 @@ export const sectorGrowthNode: RegistryNode = {
   bounds: [SECTOR_SIGNAL_MIN, SECTOR_SIGNAL_MAX],
   inertia: INERTIA,
   maxPolicyDelta: MAX_POLICY_DELTA,
+  // The only writer of this node's policy delta is the crisis path (GDP rate
+  // shocks reroute here). Without decay a shock was frozen at the cap for the
+  // rest of the world: a 24-turn tick crisis left a permanent -4 points of
+  // growth after it resolved. Same 10% per turn erosion as the other crisis
+  // targets; a running tick crisis still builds the delta toward the cap.
+  policyDeltaDecay: 0.9,
   decimals: 3,
   compute: (ctx) => {
     const p = ctx.providers["sectorRevenueTax"] as SectorRevenueTaxPayload | undefined;

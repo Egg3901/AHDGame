@@ -433,13 +433,9 @@ describe("ratifyCharter", () => {
     expect(party.treasurerId).toBeNull();
     expect(party.createdBy).toEqual(charter.foundersCharacterIds[0]);
 
-    // The auto-created chair election is dropped so the seat isn't
-    // immediately re-contested; vice-chair/treasurer elections remain.
-    expect(deletedNationalElections).toHaveLength(1);
-    expect(deletedNationalElections[0]).toMatchObject({
-      partyId: "77",
-      position: "chair",
-    });
+    // The founder's first-term chair election is suppressed by the shared
+    // election creator, so ratification has no chair election to delete.
+    expect(deletedNationalElections).toHaveLength(0);
   });
 
   it("opens cycle-aligned national elections immediately after ratification", async () => {
