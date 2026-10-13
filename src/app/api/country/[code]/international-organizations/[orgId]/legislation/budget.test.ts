@@ -70,20 +70,26 @@ function makeDb(
     const rows = (stores[name] ??= []);
     return {
       async findOne(filter: Row) {
-        return rows.find((r) => matches(r, filter)) ?? null;
+        const row = rows.find((r) => matches(r, filter));
+        return row ? { ...row } : null;
       },
       find(filter: Row) {
         return { toArray: async () => rows.filter((r) => matches(r, filter)) };
       },
-      async updateOne(filter: Row, update: { $set: Row }, opts?: { upsert?: boolean }) {
+      async updateOne(
+        filter: Row,
+        update: { $set?: Row; $setOnInsert?: Row },
+        opts?: { upsert?: boolean }
+      ) {
         let row = rows.find((r) => matches(r, filter));
         if (!row) {
-          if (!opts?.upsert) return { matchedCount: 0, modifiedCount: 0 };
-          row = { _id: new ObjectId(), ...filter };
+          if (!opts?.upsert) return { matchedCount: 0, modifiedCount: 0, upsertedCount: 0 };
+          row = { _id: new ObjectId(), ...filter, ...update.$setOnInsert, ...update.$set };
           rows.push(row);
+          return { matchedCount: 0, modifiedCount: 0, upsertedCount: 1 };
         }
-        Object.assign(row, update.$set);
-        return { matchedCount: 1, modifiedCount: 1 };
+        if (update.$set) Object.assign(row, update.$set);
+        return { matchedCount: 1, modifiedCount: update.$set ? 1 : 0, upsertedCount: 0 };
       },
     };
   };
