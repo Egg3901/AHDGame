@@ -45,6 +45,7 @@ import {
   NPP_CAPITAL_STATES,
 } from "@/lib/admin/spawnNppCorporation";
 import { loadPrivateEnterpriseBlockedCountries } from "@/lib/economy/queries/privateEnterpriseGate";
+import { ESSENTIAL_SHORTAGE_SCORE } from "@/lib/turn/npp/marketSignals";
 
 const NPC_CORPORATION_USER_ID = new ObjectId("000000000000000000000000");
 
@@ -159,6 +160,41 @@ export const EXTRACTION_AUTO_STRATEGY_SHORTAGE_SD = 0.6; // global S/D below thi
  */
 export const EXTRACTION_AUTO_STRATEGY_PLACEMENT_SHORTAGE_SD = 0.78;
 export const EXTRACTION_STATE_HEADROOM_FRACTION = 0.98; // state must sit below this × capacity
+/**
+ * Price gate shared with NPP foundings: a resource whose lagged world price is
+ * at or above this multiple of base is short for retool and placement purposes
+ * even when its S/D sits above the S/D gates. S/D alone missed rare earth at
+ * 0.67 S/D and 2.3x base, so no retool or placement ever answered it.
+ */
+export const EXTRACTION_AUTO_STRATEGY_SHORTAGE_PRICE_RATIO = ESSENTIAL_SHORTAGE_SCORE;
+/** Dead-deposit NPP mines with no viable recipe mothballed per run. */
+export const EXTRACTION_DEAD_DEPOSIT_MOTHBALL_MAX_PER_RUN = 3;
+
+/**
+ * Shortage weight for a resource: the larger of the S/D gap and the price gap
+ * (1 - 1/price ratio). Both read 0 at balance, so either signal alone ranks a
+ * resource and a well-supplied cheap resource ranks nowhere.
+ */
+export function extractionShortageWeight(sd: number, priceRatio: number | null): number {
+  const sdGap = Number.isFinite(sd) ? 1 - sd : 0;
+  const priceGap =
+    priceRatio != null && Number.isFinite(priceRatio) && priceRatio > 0 ? 1 - 1 / priceRatio : 0;
+  return Math.max(0, sdGap, priceGap);
+}
+
+/** True when a resource is short on S/D or priced at the shared shortage bar. */
+export function isExtractionShortage(
+  sd: number,
+  priceRatio: number | null,
+  sdThreshold: number
+): boolean {
+  return (
+    sd < sdThreshold ||
+    (priceRatio != null &&
+      Number.isFinite(priceRatio) &&
+      priceRatio >= EXTRACTION_AUTO_STRATEGY_SHORTAGE_PRICE_RATIO)
+  );
+}
 export const NPP_RESTRATEGIZE_MAX_PER_RUN = 3; // NPP expected-revenue switches per run
 export const EXTRACTION_PLACEMENT_MIN_COHORT_SIZE = 3;
 export const EXTRACTION_PLACEMENT_MIN_PROFITABLE_SHARE = 0.5;
@@ -245,6 +281,10 @@ export interface ExtractionAutoStrategyResult {
   /** NPP expected-revenue re-strategizations (second pass), by target strategy. */
   restrategized?: number;
   restrategizedByStrategy?: Record<string, number>;
+  /** Pass 2 switches that moved a mine off a deposit it could not extract. */
+  relocatedOffDeadDeposit?: number;
+  /** Dead-deposit NPP mines mothballed because no recipe can produce there. */
+  deadDepositMothballed?: number;
   /** Always 0. The generic pass was removed; 2e owns non-extraction retools. */
   genericRestrategized?: number;
   genericByStrategy?: Record<string, number>;
@@ -310,7 +350,7 @@ export async function processExtractionAutoStrategy(
   // Shortage resources (global S/D < threshold), with per-state supply for headroom.
   const shortage = new Map<
     ExtractableResource,
-    { sd: number; stateSupply: Record<string, number> }
+    { sd: number; weight: number; stateSupply: Record<string, number> }
   >();
   // Per-commodity docs for the NPP expected-revenue pass. Scoring reads the
   // sector host country's reachable book (national, then global fallback) so a
@@ -319,7 +359,7 @@ export async function processExtractionAutoStrategy(
   // Placement reads its own, looser shortage set (see the constant's comment).
   const placementShortage = new Map<
     ExtractableResource,
-    { sd: number; stateSupply: Record<string, number> }
+    { sd: number; weight: number; stateSupply: Record<string, number> }
   >();
   const stateSupplyByResource = new Map<ExtractableResource, Record<string, number>>();
   for (const cp of prices) {
@@ -327,11 +367,13 @@ export async function processExtractionAutoStrategy(
     const r = cp.commodity as ExtractableResource;
     if (!(EXTRACTABLE_RESOURCES as readonly string[]).includes(r)) continue;
     const sd = cp.globalDemand > 0 ? cp.globalSupply / cp.globalDemand : 1;
-    if (sd < EXTRACTION_AUTO_STRATEGY_SHORTAGE_SD) {
-      shortage.set(r, { sd, stateSupply: cp.stateSupply ?? {} });
+    const priceRatio = laggedPriceRatioForCountry(cp, undefined);
+    const weight = extractionShortageWeight(sd, priceRatio);
+    if (isExtractionShortage(sd, priceRatio, EXTRACTION_AUTO_STRATEGY_SHORTAGE_SD)) {
+      shortage.set(r, { sd, weight, stateSupply: cp.stateSupply ?? {} });
     }
-    if (sd < EXTRACTION_AUTO_STRATEGY_PLACEMENT_SHORTAGE_SD) {
-      placementShortage.set(r, { sd, stateSupply: cp.stateSupply ?? {} });
+    if (isExtractionShortage(sd, priceRatio, EXTRACTION_AUTO_STRATEGY_PLACEMENT_SHORTAGE_SD)) {
+      placementShortage.set(r, { sd, weight, stateSupply: cp.stateSupply ?? {} });
     }
     stateSupplyByResource.set(r, cp.stateSupply ?? {});
   }
@@ -427,7 +469,17 @@ export async function processExtractionAutoStrategy(
     score: number;
   };
   const picks: StrategyPick[] = [];
-  const occupiedExtractionStates = new Set(candidates.map((sector) => sector.stateId));
+  // A state is closed to placement for a resource only while some mine there
+  // already runs (or is retooling onto) that resource's focused recipe: that
+  // mine's reinvestment answers the deposit. Any other mine in the state does
+  // not. The old whole-state rule closed every rare earth deposit, because each
+  // already hosted an oil, iron or coal mine.
+  const focusedMineKey = (stateId: string, strategyId: string) => `${stateId}|${strategyId}`;
+  const focusedMines = new Set(
+    candidates
+      .filter((sector) => sector.strategyId != null && sector.strategyId !== "standard")
+      .map((sector) => focusedMineKey(sector.stateId, sector.strategyId!))
+  );
   for (const s of candidates) {
     // NPP-founded corps only. State mining enterprises carry no ceoType and are
     // deliberately OUT of scope here: they hold the largest idle deposits but
@@ -452,7 +504,7 @@ export async function processExtractionAutoStrategy(
       const strat = (SECTOR_STRATEGIES.extraction ?? []).find((x) => x.id === focus.id);
       if (!strat || isExtractionStrategyZeroYield(strat, stateRes)) continue;
       // Prioritise scarcest resource × most idle local deposit.
-      const score = (1 - info.sd) * Math.max(0, cap - stateSupplied);
+      const score = info.weight * Math.max(0, cap - stateSupplied);
       if (!best || score > best.score) best = { sector: s, resource, strategyId: focus.id, score };
     }
     if (best) picks.push(best);
@@ -488,7 +540,10 @@ export async function processExtractionAutoStrategy(
         },
       }))
     );
-    for (const p of chosen) byResource[p.resource] = (byResource[p.resource] ?? 0) + 1;
+    for (const p of chosen) {
+      byResource[p.resource] = (byResource[p.resource] ?? 0) + 1;
+      focusedMines.add(focusedMineKey(p.sector.stateId, p.strategyId));
+    }
   }
 
   // ── Pass 2: NPP expected-revenue re-strategize (t899 misallocation) ────────
@@ -499,6 +554,8 @@ export async function processExtractionAutoStrategy(
   // player-CEO sectors; rides the same flag/cadence as pass 1.
   const restrategizedByStrategy: Record<string, number> = {};
   let restrategized = 0;
+  let relocatedOffDeadDeposit = 0;
+  let deadDepositMothballed = 0;
   const nppCountryById = new Map(npcCorps.map((c) => [c._id.toString(), c.countryId]));
   if (npcCorps.length > 0) {
     const alreadyChosen = new Set(chosen.map((p) => p.sector._id.toString()));
@@ -523,6 +580,7 @@ export async function processExtractionAutoStrategy(
         sectorType: "extraction",
         corporationId: { $in: npcCorps.map((c) => c._id as ObjectId) },
         transitionFromStrategyId: { $in: [null, undefined] },
+        mothballed: { $ne: true },
       })
       .project<NppSector>({
         _id: 1,
@@ -555,8 +613,17 @@ export async function processExtractionAutoStrategy(
       };
     };
 
-    type Switch = { sector: NppSector; strategyId: string; improvement: number };
+    type Switch = {
+      sector: NppSector;
+      strategyId: string;
+      improvement: number;
+      deadDeposit: boolean;
+    };
     const switches: Switch[] = [];
+    // Dead-deposit mines no recipe can rescue: the state holds nothing any
+    // extraction recipe produces. Mothballing stops the input bill they pay
+    // for output that never reaches a buyer.
+    const deadDepositMothballs: NppSector[] = [];
     for (const s of nppSectors) {
       if (alreadyChosen.has(s._id.toString())) continue;
       if (s.transitionCooldownUntilTurn != null && currentTurn < s.transitionCooldownUntilTurn)
@@ -614,6 +681,12 @@ export async function processExtractionAutoStrategy(
         contributionContext = context;
       }
       const forecastContext = contributionContext;
+      const currentStrategy = strategies.find((x) => x.id === (s.strategyId ?? "standard"));
+      const stateRes = capByState.get(s.stateId);
+      const currentZeroYield =
+        stateRes !== undefined &&
+        currentStrategy !== undefined &&
+        isExtractionStrategyZeroYield(currentStrategy, stateRes);
       const decision = decideExtractionStrategySwitch({
         currentStrategyId: s.strategyId ?? "standard",
         strategies,
@@ -627,17 +700,25 @@ export async function processExtractionAutoStrategy(
                 forecastContext
               ).score
           : undefined,
+        currentZeroYield,
       });
       if (decision) {
         switches.push({
           sector: s,
           strategyId: decision.strategyId,
           improvement: decision.bestScore - decision.currentScore,
+          deadDeposit: currentZeroYield,
         });
+      } else if (currentZeroYield) {
+        deadDepositMothballs.push(s);
       }
     }
 
-    switches.sort((a, b) => b.improvement - a.improvement);
+    // A mine on a dead deposit moves before any mine that is merely improving:
+    // it produces nothing where it stands.
+    switches.sort(
+      (a, b) => Number(b.deadDeposit) - Number(a.deadDeposit) || b.improvement - a.improvement
+    );
     const chosenSwitches = switches.slice(0, NPP_RESTRATEGIZE_MAX_PER_RUN);
     if (chosenSwitches.length > 0) {
       const now = new Date();
@@ -670,9 +751,32 @@ export async function processExtractionAutoStrategy(
         }))
       );
       restrategized = chosenSwitches.length;
+      relocatedOffDeadDeposit = chosenSwitches.filter((p) => p.deadDeposit).length;
+      for (const p of chosenSwitches) {
+        focusedMines.add(focusedMineKey(p.sector.stateId, p.strategyId));
+      }
       for (const p of chosenSwitches) {
         restrategizedByStrategy[p.strategyId] = (restrategizedByStrategy[p.strategyId] ?? 0) + 1;
       }
+    }
+
+    // Largest dead mines first: they buy the most inputs for nothing. Capped per
+    // run so a fleet of them goes cold over several turns, not at once. A
+    // mothballed plant is cold on both sides and stays restartable.
+    const mothballs = deadDepositMothballs
+      .sort((a, b) => (b.capitalStock ?? 0) - (a.capitalStock ?? 0))
+      .slice(0, EXTRACTION_DEAD_DEPOSIT_MOTHBALL_MAX_PER_RUN);
+    if (mothballs.length > 0) {
+      const now = new Date();
+      await db.collection<CorporateSector>("corporateSectors").bulkWrite(
+        mothballs.map((sector) => ({
+          updateOne: {
+            filter: { _id: sector._id },
+            update: { $set: { mothballed: true, updatedAt: now } },
+          },
+        }))
+      );
+      deadDepositMothballed = mothballs.length;
     }
   }
 
@@ -698,9 +802,9 @@ export async function processExtractionAutoStrategy(
       if (cap <= 0) continue;
       const stateSupplied = info.stateSupply[capDoc.stateId] ?? 0;
       if (stateSupplied >= cap * EXTRACTION_STATE_HEADROOM_FRACTION) continue;
-      if (occupiedExtractionStates.has(capDoc.stateId)) continue;
       const focus = focusMap.get(resource);
       if (!focus) continue;
+      if (focusedMines.has(focusedMineKey(capDoc.stateId, focus.id))) continue;
       const cohortViability = placementViabilityByCountry.get(capDoc.countryId);
       if (placementViabilityMode !== "off" && cohortViability && !cohortViability.viable) {
         placementObservedNonviableCountries.add(capDoc.countryId);
@@ -714,7 +818,7 @@ export async function processExtractionAutoStrategy(
         countryId: capDoc.countryId,
         resource,
         strategyId: focus.id,
-        score: (1 - info.sd) * Math.max(0, cap - stateSupplied),
+        score: info.weight * Math.max(0, cap - stateSupplied),
       });
     }
   }
@@ -786,9 +890,14 @@ export async function processExtractionAutoStrategy(
     placementBlockedCountries: [...placementBlockedCountries].sort(),
     restrategized,
     restrategizedByStrategy,
+    relocatedOffDeadDeposit,
+    deadDepositMothballed,
     genericRestrategized: 0,
     genericByStrategy: {},
-    ...(shortage.size === 0 && chosen.length === 0 && restrategized === 0
+    ...(shortage.size === 0 &&
+    chosen.length === 0 &&
+    restrategized === 0 &&
+    deadDepositMothballed === 0
       ? { skippedReason: "no-shortage" }
       : {}),
   };
