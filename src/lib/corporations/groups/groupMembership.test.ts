@@ -33,6 +33,16 @@ describe("resolveFormalizedGroups", () => {
     );
   });
 
+  it("exposes voting control only when the read surface requests it", async () => {
+    const db = makeDb([corp(PARENT, null, 0, false), corp(CHILD, PARENT, 60, true)]);
+    expect((await resolveFormalizedGroups(db)).parentControlByCorpId.size).toBe(0);
+    expect(
+      (await resolveFormalizedGroups(db, { includeControl: true })).parentControlByCorpId.get(
+        CHILD.toString()
+      )
+    ).toEqual({ corporationId: PARENT.toString(), votingPercent: 60 });
+  });
+
   it("excludes a controlled subsidiary that was never formalized", async () => {
     // De facto control is not a tax group. This is the whole gate: relief is
     // bought with a declaration, not acquired by accident.

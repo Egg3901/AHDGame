@@ -1,9 +1,9 @@
 ---
 date: 2026-10-13
-title: Island regions are within every party's reach
+title: Isolated regions are within every party's reach
 summary: >-
-  Regions with no land neighbours, such as Hawaii, no longer show as out of
-  reach for parties that are established elsewhere.
+  Regions with no configured neighbours, such as MOL, are reachable by
+  parties established elsewhere in their country.
 tags: [parties, npps]
 badges: [patch]
 areas: [frontend, backend]
@@ -11,5 +11,6 @@ areas: [frontend, backend]
 
 ## What changed
 
-- Parties grow one neighbouring region at a time, but Hawaii has no neighbours, so a party without a foothold there could never recruit or relocate a politician into it. Island regions with no land neighbours now count as next to every region, so any party with presence somewhere can reach them.
-- Players homed in those regions can likewise join any party that is established somewhere in the country.
+- Established parties can recruit or relocate politicians into regions with no configured neighbours, subject to normal costs and limits.
+- Players homed in those isolated regions can join established parties in their country.
+- Hawaii retains its configured Pacific connections and the ordinary one-hop expansion rule.

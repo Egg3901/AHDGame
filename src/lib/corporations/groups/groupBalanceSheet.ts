@@ -28,6 +28,7 @@ import {
   fxRateForSectorHostFromMap,
 } from "@/lib/currency/corporationCapital";
 import { readCorpEconomicAnchor } from "@/lib/currency/corpEconomyFields";
+import { groupRegionFootprint } from "./rules/overview";
 import { resolveFormalizedGroups } from "./groupMembership";
 
 export interface GroupMemberSummary {
@@ -39,6 +40,7 @@ export interface GroupMemberSummary {
   liquidCapitalAnchor: number;
   revenueAnchor: number;
   sectorCount: number;
+  regionCount: number;
 }
 
 export interface GroupBalanceSheet {
@@ -51,6 +53,7 @@ export interface GroupBalanceSheet {
   /** Sum of every member's sector revenue, in ₳. */
   totalRevenueAnchor: number;
   totalSectorCount: number;
+  totalRegionCount: number;
   /** Industries the group operates in anywhere, deduplicated. */
   industries: OperatingSectorType[];
   /** Countries the group has sectors in. */
@@ -101,6 +104,13 @@ export async function loadGroupBalanceSheet(
     loadValuationFxRates(db),
   ]);
 
+  const footprint = groupRegionFootprint(
+    sectors.map((s) => ({
+      corporationId: s.corporationId.toString(),
+      countryId: s.countryId,
+      stateId: s.stateId,
+    }))
+  );
   const revenueByCorp = new Map<string, number>();
   const sectorCountByCorp = new Map<string, number>();
   const industries = new Set<OperatingSectorType>();
@@ -133,6 +143,7 @@ export async function loadGroupBalanceSheet(
       ),
       revenueAnchor: Math.round(revenueByCorp.get(key) ?? 0),
       sectorCount: sectorCountByCorp.get(key) ?? 0,
+      regionCount: footprint.byMember.get(key) ?? 0,
     };
   });
 
@@ -152,6 +163,7 @@ export async function loadGroupBalanceSheet(
     totalLiquidCapitalAnchor: members.reduce((sum, m) => sum + m.liquidCapitalAnchor, 0),
     totalRevenueAnchor: members.reduce((sum, m) => sum + m.revenueAnchor, 0),
     totalSectorCount: members.reduce((sum, m) => sum + m.sectorCount, 0),
+    totalRegionCount: footprint.total,
     industries: [...industries].sort(),
     countries: [...new Set(members.map((m) => m.countryId))].sort(),
   };

@@ -6,7 +6,7 @@
  * crossing = 1, and so on. BFS over `STATE_ADJACENCY`, which is static, so the
  * per-country all-pairs result is computed once per process and cached.
  *
- * Unreachable pairs (e.g. HI, which has no adjacencies) return `null` — the
+ * Unreachable pairs (regions in disconnected components) return `null` — the
  * sourcing pass treats those as sea-freight legs rather than infinite cost.
  */
 

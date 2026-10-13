@@ -26,20 +26,30 @@ describe("expandFrontier", () => {
     expect(f.has("TX")).toBe(false);
   });
 
-  it("keeps an isolated state (HI) without inventing land neighbours", () => {
-    expect([...expandFrontier("US", ["HI"])]).toEqual(["HI"]);
+  it("expands Hawaii's party frontier to exactly its Pacific neighbors", () => {
+    expect([...expandFrontier("US", ["HI"])].sort()).toEqual(["AK", "CA", "HI", "OR", "WA"]);
   });
 
-  it("lets a party present anywhere reach an isolated region (HI from AK)", () => {
+  it.each(["AK", "WA", "OR", "CA"])("allows a party in %s to expand into Hawaii", (state) => {
+    const presence = new Set([state]);
+    expect(isInFrontier(presence, expandFrontier("US", presence), "HI")).toBe(true);
+  });
+
+  it("does not expand Hawaii's party frontier through multiple hops", () => {
+    const presence = new Set(["HI"]);
+    expect(isInFrontier(presence, expandFrontier("US", presence), "NV")).toBe(false);
+  });
+
+  it("lets an Alaskan party reach Hawaii through its explicit Pacific edge", () => {
     const f = expandFrontier("US", ["AK"]);
     expect(f.has("WA")).toBe(true);
     expect(f.has("HI")).toBe(true);
     expect(f.has("CA")).toBe(false);
   });
 
-  it("puts HI inside the frontier for a mainland-only party", () => {
+  it("keeps Hawaii restricted to its explicit Pacific adjacency", () => {
     const presence = new Set(["GA"]);
-    expect(isInFrontier(presence, expandFrontier("US", presence), "HI")).toBe(true);
+    expect(isInFrontier(presence, expandFrontier("US", presence), "HI")).toBe(false);
   });
 
   it("applies to other deliberately disconnected regions (RU MOL)", () => {
@@ -48,11 +58,13 @@ describe("expandFrontier", () => {
   });
 
   it("lists only explicitly isolated regions", () => {
-    expect(isolatedRegions("US")).toEqual(["HI"]);
+    expect(isolatedRegions("US")).toEqual([]);
+    expect(isolatedRegions("RU")).toEqual(["MOL"]);
   });
 
   it("keeps a state absent from the adjacency map, expanding only to isolated regions", () => {
-    expect([...expandFrontier("US", ["ZZ"])].sort()).toEqual(["HI", "ZZ"]);
+    expect([...expandFrontier("US", ["ZZ"])].sort()).toEqual(["ZZ"]);
+    expect([...expandFrontier("RU", ["ZZ"])].sort()).toEqual(["MOL", "ZZ"]);
   });
 
   it("returns an empty set for empty presence", () => {

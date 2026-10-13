@@ -22,8 +22,8 @@ import type { Character, ElectedOfficial, NPP, PoliticalParty, State } from "@/l
 import type { CountryId } from "@/lib/constants/countries";
 
 /**
- * Regions the country's adjacency map lists with no neighbours at all (US
- * `HI`, RU `MOL`). Distinct from unknown regions, which have no entry.
+ * Regions the country's adjacency map lists with no neighbours at all (RU
+ * `MOL`). Distinct from unknown regions, which have no entry.
  */
 export function isolatedRegions(countryId: CountryId): string[] {
   const map = STATE_ADJACENCY[countryId];
@@ -37,7 +37,7 @@ export function isolatedRegions(countryId: CountryId): string[] {
  * A state absent from the country's adjacency map contributes only itself.
  *
  * Deliberately disconnected regions (an explicit empty neighbour list, such
- * as Hawaii) have no land or ferry edge, so one-hop growth could never reach
+ * as RU MOL) have no land or ferry edge, so one-hop growth could never reach
  * them: a party without a foothold there was locked out for good, and a
  * player homed there could only join parties already present there. Such a
  * region is treated as next to every region, so any party with presence
