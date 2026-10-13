@@ -989,7 +989,6 @@ describe("auto-downgrade on insolvency", () => {
 describe("endorsement filter", () => {
   it("uses only NPP endorsements for action calculation in non-presidential elections", async () => {
     const { getDb } = await import("@/lib/mongodb");
-    const { calculateCampaignActions } = await import("@/lib/campaigns/actions");
 
     const electionId = new ObjectId();
     const candidateId = new ObjectId();
@@ -1021,13 +1020,12 @@ describe("endorsement filter", () => {
     // Only the 4 NPP endorsements count: player endorsements are gated to
     // presidential races. Baseline defaults to 4 per turn (player base action
     // gain) when no gameConfig doc is present in the test.
-    const expectedActions = calculateCampaignActions(4, 4);
+    const expectedActions = 13; // Ten authored actions, increased 25% and rounded.
     expect(campaignOp.updateOne.update.$inc.actions).toBe(expectedActions);
   });
 
   it("uses both NPP and player endorsements for presidential elections", async () => {
     const { getDb } = await import("@/lib/mongodb");
-    const { calculateCampaignActions } = await import("@/lib/campaigns/actions");
 
     const electionId = new ObjectId();
     const candidateId = new ObjectId();
@@ -1058,7 +1056,7 @@ describe("endorsement filter", () => {
     const campaignOp = ops[0];
     // Both 4 NPP + 9 player = 13 total. Baseline 4 (player base action gain)
     // since no gameConfig doc exists in the test mock.
-    const expectedActions = calculateCampaignActions(13, 4);
+    const expectedActions = 18; // Fourteen authored actions, increased 25% and rounded.
     expect(campaignOp.updateOne.update.$inc.actions).toBe(expectedActions);
   });
 });

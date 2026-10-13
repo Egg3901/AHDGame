@@ -45,11 +45,11 @@ const baseProps = {
 };
 
 describe("CabinetOfficeLayout (dossier masthead)", () => {
-  it("shows position, department, minister and X/4 actions", () => {
+  it("shows position, department, minister and X/5 actions", () => {
     render(<CabinetOfficeLayout {...baseProps} onSelectTab={() => {}} />);
     expect(screen.getByText("Secretary of Defense")).toBeTruthy();
     expect(screen.getByText("Jane Doe")).toBeTruthy();
-    expect(screen.getByText(/3\/4/)).toBeTruthy();
+    expect(screen.getByText(/3\/5/)).toBeTruthy();
     expect(screen.getByTestId("strip")).toBeTruthy();
   });
 

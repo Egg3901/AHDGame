@@ -102,7 +102,7 @@ describe("EstatesFlagship", () => {
   it("shows the daily ministerial actions the estate routes spend", () => {
     renderFlagship([estate({})], true, vi.fn(), 0);
     const line = screen.getByTestId("estate-ministerial-actions");
-    expect(line.textContent).toContain("0/4 left today");
+    expect(line.textContent).toContain("0/5 left today");
     expect(line.textContent).toContain("midnight Eastern Time");
   });
 

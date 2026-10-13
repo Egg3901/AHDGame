@@ -2,8 +2,8 @@ import { describe, it, expect } from "vitest";
 import { MINISTERIAL_ACTION_CAP, MINISTERIAL_ACTION_REGEN_INTERVAL } from "./cabinetMechanicsTypes";
 
 describe("ministerial action economy", () => {
-  it("caps ministerial actions at 4", () => {
-    expect(MINISTERIAL_ACTION_CAP).toBe(4);
+  it("caps ministerial actions at 5", () => {
+    expect(MINISTERIAL_ACTION_CAP).toBe(5);
   });
 
   it("keeps the 24-turn regen interval", () => {

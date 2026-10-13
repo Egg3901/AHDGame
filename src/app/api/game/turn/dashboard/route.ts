@@ -202,22 +202,14 @@ async function handleGET() {
       character.currentOffice && CABINET_OFFICE_TYPES.has(character.currentOffice.type)
         ? db
             .collection<ElectedOfficial>("electedOfficials")
-            .find({ characterId: character._id }, { projection: { officeType: 1 } })
+            .find({ characterId: character._id }, { projection: { officeType: 1, countryId: 1 } })
             .toArray()
         : [],
     ]);
     const recoveredSeat = electedSeats.sort(
       (a, b) =>
-        resolveOfficeActionBonusForType(
-          b.officeType,
-          config?.officeActionBonus,
-          character.countryId
-        ) -
-        resolveOfficeActionBonusForType(
-          a.officeType,
-          config?.officeActionBonus,
-          character.countryId
-        )
+        resolveOfficeActionBonusForType(b.officeType, config?.officeActionBonus, b.countryId) -
+        resolveOfficeActionBonusForType(a.officeType, config?.officeActionBonus, a.countryId)
     )[0]?.officeType;
     const officeActionBonus = resolveOfficeActionBonus({
       currentOfficeType: character.currentOffice?.type,

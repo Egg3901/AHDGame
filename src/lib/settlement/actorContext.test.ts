@@ -88,9 +88,9 @@ describe("loadSettlementActorContext", () => {
       blockedReason: null,
     });
     expect(ctx?.seat?.budget).toEqual({
-      actionsPerTurn: 3,
+      actionsPerTurn: 3.75,
       actionsRemaining: 3,
-      actionsBankCap: 9,
+      actionsBankCap: 11.25,
       capital: 30,
     });
     // The switcher's whole premise: both budgets, independently.

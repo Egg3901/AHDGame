@@ -111,7 +111,7 @@ describe("executeForeignPolicyChoice", () => {
     });
     expect(db.collection("diplomaticActions").updateOne).toHaveBeenCalledWith(
       { countryId: "FR" },
-      expect.objectContaining({ $set: expect.objectContaining({ turn: 21, remaining: 3 }) }),
+      expect.objectContaining({ $set: expect.objectContaining({ turn: 21, remaining: 4 }) }),
       { upsert: true }
     );
   });

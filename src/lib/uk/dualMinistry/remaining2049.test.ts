@@ -214,7 +214,7 @@ describe("office action bonus is one per character", () => {
       officeActionBonus,
       countryId: "UK",
     });
-    expect(single).toBe(2);
+    expect(single).toBe(2.5);
     // isCabinetMember is a boolean: two rows cannot stack a second bonus
     expect(
       resolveOfficeActionBonus({

@@ -81,7 +81,7 @@ function seatCtx(over: Record<string, unknown> = {}) {
       id: "DD",
       role: "headOfGovernment",
       direction: 1,
-      budget: { actionsPerTurn: 3, actionsRemaining: 3, actionsBankCap: 9, capital: 30 },
+      budget: { actionsPerTurn: 3.75, actionsRemaining: 3, actionsBankCap: 11.25, capital: 30 },
       canAct: true,
       blockedReason: null,
       ...over,
@@ -494,8 +494,8 @@ describe("loadGermanQuestionDossier", () => {
       capital: 30,
       capitalLabel: "Party Capital",
       actionsRemaining: 3,
-      actionsPerTurn: 3,
-      actionsBankCap: 9,
+      actionsPerTurn: 3.75,
+      actionsBankCap: 11.25,
       canAct: true,
     });
     expect(view!.viewer.seat!.treasuryLabel).toBe("M310,000,000 treasury");

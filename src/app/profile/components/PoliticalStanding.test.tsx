@@ -129,7 +129,7 @@ describe("PoliticalStanding table", () => {
 
   it("flags hoarding as a penalty", () => {
     render(<PoliticalStanding {...baseProps} actionHoarding />);
-    const notes = within(rowFor("Actions")).getAllByText(/Hoarding: −4 per turn/);
+    const notes = within(rowFor("Actions")).getAllByText(/Hoarding: −5 per turn/);
     expect(notes.every((note) => note.className.includes("text-error"))).toBe(true);
   });
 
