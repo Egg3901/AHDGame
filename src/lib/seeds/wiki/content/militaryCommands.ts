@@ -26,7 +26,7 @@ Theater Commander  (one per conflict)
 
 ## Building a Command
 
-Defence office → **Commands** tab → *Create command*. A confirmed defence seat holder or an acting one may build and reorganise commands; only a confirmed holder may commission or dismiss the generals that fill them.
+Defence office → **Commands** tab → *Create command*. A confirmed or acting defence seat holder may build and reorganise commands and commission or dismiss the generals that fill them.
 
 A Command has:
 

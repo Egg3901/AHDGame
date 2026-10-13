@@ -9,15 +9,15 @@ describe("GdpDecompositionCard", () => {
   const base = {
     gdp: 850000,
     gdpGrowth: 3.2,
-    potentialGrowth: 2.4,
+    trendGrowth: 2.4,
     outputGap: 1.1,
     laborForce: 6500000,
     countryId: "US",
   };
 
-  it("shows the potential and cyclical split", () => {
+  it("shows the trend and cyclical split", () => {
     render(<GdpDecompositionCard {...base} />);
-    expect(screen.getByText(/Potential/i)).toBeTruthy();
+    expect(screen.getByText("Trend +2.4%")).toBeTruthy();
     expect(screen.getByText(/Cyclical/i)).toBeTruthy();
     // cyclical = 3.2 - 2.4 = +0.8
     expect(screen.getByText(/\+0\.8/)).toBeTruthy();
@@ -33,7 +33,7 @@ describe("GdpDecompositionCard", () => {
       <GdpDecompositionCard
         gdp={null}
         gdpGrowth={2.0}
-        potentialGrowth={2.0}
+        trendGrowth={2.0}
         outputGap={null}
         laborForce={null}
         countryId="US"

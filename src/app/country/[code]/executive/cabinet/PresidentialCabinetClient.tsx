@@ -200,8 +200,8 @@ export default function PresidentialCabinetClient({ countryId }: { countryId: Co
 
   /**
    * Install an acting secretary. Distinct from nominating: the seat is filled
-   * at once, without a Senate vote, but the caretaker is limited in what they
-   * may do and the appointment lapses on its own.
+   * at once, without a Senate vote, with full departmental authority.
+   * The appointment lapses on its own.
    */
   async function handleAppointActing() {
     if (!selectedPositionId || !selectedCharId) {
@@ -717,7 +717,7 @@ export default function PresidentialCabinetClient({ countryId }: { countryId: Co
         onCharChange={setSelectedCharId}
         onSubmit={handleAppointActing}
         title="Appoint an acting secretary"
-        description={`An acting secretary takes the seat at once, with no Senate vote. They may run the department day to day but cannot set policy, move personnel, or commit the nation to anything lasting. The appointment ends after ${data.actingTenureTurns ?? 24} turns, and you get only one per office per term.`}
+        description={`An acting secretary takes the seat at once, with no Senate vote. They have the same departmental powers as a confirmed secretary. The appointment ends after ${data.actingTenureTurns ?? 24} turns, and you get only one per office per term.`}
         submitLabel="Appoint"
         nomineeLabel="Appointee"
         pendingNominationLabel=" (confirmation pending)"

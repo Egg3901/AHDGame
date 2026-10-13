@@ -4,7 +4,6 @@ import { createMockDb } from "@/lib/test-utils/mockDb";
 import { createInMemoryDb } from "@/lib/test-utils/inMemoryDb";
 import { resetCorpFxRateCacheForTests } from "@/lib/currency/corporationCapital";
 import { TURNS_PER_YEAR } from "@/lib/constants/turnTime";
-import { advanceOutputGap } from "@/lib/metricEngine/outputGap";
 import { compoundGdpLevel } from "@/lib/metricEngine/gdpLevel";
 import { runMetricEngine } from "@/lib/metricEngine/phase";
 import { growthHalfStepForRegion, runGrowthHalfStep } from "./growthHalfStep";
@@ -138,19 +137,17 @@ function comparable(ops: CapturedOp[]) {
 }
 
 describe("growth split math", () => {
-  it("moves the gap half the hour's move, keeps the hour's rate, and compounds half the hour's GDP factor", () => {
-    const input = { gdp: 1000, outputGap: 4, sectorGrowth: 5, potentialGrowth: 2.5 };
-    const full = advanceOutputGap(4, 5, 2.5, TURNS_PER_YEAR);
+  it("keeps the turn's measured rate and gap, and compounds half the hour's GDP factor", () => {
+    const input = { gdp: 1000, outputGap: 4, gdpGrowth: 5 };
     const half = growthHalfStepForRegion(input, 0.5);
-    expect(half.outputGap - 4).toBeCloseTo((full.gap - 4) / 2, 12);
-    expect(half.gdpGrowth).toBeCloseTo(full.gdpGrowth, 9);
+    // Sector signal and output trend refresh only on the turn.
+    expect(half.gdpGrowth).toBe(5);
+    expect(half.outputGap).toBe(4);
     // Two half factors at the hour's rate make exactly one full factor.
-    const fullGdp = compoundGdpLevel(1000, full.gdpGrowth, TURNS_PER_YEAR);
+    const fullGdp = compoundGdpLevel(1000, 5, TURNS_PER_YEAR);
     expect((half.gdp * half.gdp) / 1000).toBeCloseTo(fullGdp, 9);
-    // Here the gap is closing, so growth is negative and the level falls.
-    expect(full.gdpGrowth).toBeLessThan(0);
-    expect(half.gdp).toBeLessThan(1000);
-    expect(half.gdp).toBeGreaterThan(fullGdp);
+    expect(half.gdp).toBeGreaterThan(1000);
+    expect(half.gdp).toBeLessThan(fullGdp);
   });
 });
 
@@ -166,12 +163,7 @@ describe("growth half step and the turn", () => {
     expect(stats).toMatchObject({ regions: 2, nationals: 1, budgets: 1, alreadyStepped: 0 });
 
     const s1 = await memory.collection("states").findOne({ _id: "s1" });
-    const s1Expected = growthHalfStepForRegion({
-      gdp: 1000,
-      outputGap: 4,
-      sectorGrowth: 5,
-      potentialGrowth: 2.5,
-    });
+    const s1Expected = growthHalfStepForRegion({ gdp: 1000, outputGap: 4, gdpGrowth: 3.1 });
     expect(s1?.gdp).toBe(s1Expected.gdp);
     expect(s1?.outputGap).toBe(s1Expected.outputGap);
     expect(s1?.subhourStep).toEqual({ turn: TURN, fraction: 0.5 });

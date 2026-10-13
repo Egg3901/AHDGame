@@ -7,11 +7,13 @@
 // Auth: defense holder or admin. Personnel remains manageable while Conflicts is off.
 // Errors: 400, 401, 403, 404.
 import { NextResponse } from "next/server";
+import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireAuth } from "@/lib/api/requireAuth";
 import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { requireConfirmedSecretary } from "@/lib/api/requireConfirmedSecretary";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
+import { getCharactersCollection } from "@/lib/db/collections/characters";
 import { getCabinetMembersCollection } from "@/lib/db/collections/cabinetMembers";
 import { getGameStateCollection } from "@/lib/db/collections/gameState";
 import {
@@ -56,6 +58,18 @@ export async function DELETE(request: Request, { params }: RouteParams) {
     // A dismissal cascades through the chain of command and cannot be cleanly undone.
     const actingDenied = requireConfirmedSecretary(member, "personnel", !!auth.user.isAdmin);
     if (actingDenied) return actingDenied;
+
+    if (!ObjectId.isValid(characterId)) {
+      return errorResponse(400, "Invalid character ID");
+    }
+    // Commissions are global, so scope the target through their current character
+    // before clearing the commission or changing any command assignments.
+    const character = await (
+      await getCharactersCollection(db)
+    ).findOne({ _id: new ObjectId(characterId), countryId }, { projection: { _id: 1 } });
+    if (!character) {
+      return errorResponse(404, "General not found in this country");
+    }
 
     const commission = await getCharacterCommission(db, characterId);
     if (!commission.commissioned) {

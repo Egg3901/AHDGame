@@ -39,6 +39,14 @@ import {
   NEUTRAL_LABOR_PARTICIPATION,
 } from "./potentialGrowth";
 import { advanceOutputGap } from "./outputGap";
+import {
+  advanceOutputTrend,
+  blendToMeasured,
+  realOutputBlendWeight,
+  resolveRealOutputStartTurn,
+  seedOutputTrend,
+  type OutputTrendState,
+} from "./outputTrend";
 import { applySectorBlend, convergenceBonus } from "./convergence";
 import {
   buildMacroGrowthInputs,
@@ -828,7 +836,24 @@ export async function runMetricEngine(db: Db, turn: number): Promise<number> {
     // unemployment, tax bases, and every downstream macro consumer.
     potential -= democraticHealthDragByCountry.get(countryId) ?? 0;
     potential -= crisisPotentialGrowthPenalty(crisisExposure);
-    const prevGap = state.outputGap ?? 0;
+    // Measured-growth cutover (outputTrend.ts). Before the region's first run
+    // on the measured headline, state.outputGap still holds the legacy
+    // potential-anchored gap; afterwards that series lives in legacyOutputGap
+    // only for as long as the blend needs it.
+    const hasTrend = typeof state.outputTrendGrowth === "number";
+    const realOutputStartTurn = resolveRealOutputStartTurn(
+      state.realOutputStartTurn,
+      typeof state.outputGap === "number" || typeof state.legacyOutputGap === "number",
+      turn
+    );
+    const blendWeight = realOutputBlendWeight(turn, realOutputStartTurn);
+    const prevGap = (hasTrend ? state.legacyOutputGap : state.outputGap) ?? 0;
+    const prevTrend: OutputTrendState = hasTrend
+      ? { gap: state.outputGap ?? 0, trendGrowth: state.outputTrendGrowth as number }
+      : seedOutputTrend(prevSectorValue.get(state._id) ?? potential);
+    // Okun's and migration's reference: the measured trend growth, blended
+    // from the legacy potential across the cutover so neither jumps.
+    const trendGrowthRef = blendToMeasured(potential, prevTrend.trendGrowth, blendWeight);
 
     // Prev feeds the SECTOR node's EMA + policy delta (P1c-2). `potential` and the
     // prior output gap are threaded to the gdpGrowth/unemployment nodes via
@@ -860,6 +885,8 @@ export async function runMetricEngine(db: Db, turn: number): Promise<number> {
     const seedCurrent: Record<NodeId, number> = {
       "economic.potentialGrowth": potential,
       "economic.outputGapPrev": prevGap,
+      "economic.realOutputBlendWeight": blendWeight,
+      "economic.trendGrowth": trendGrowthRef,
     };
     for (const n of GENERIC_NODES) {
       const v = readMetricPath(prevDoc, n.id, "value");
@@ -1001,16 +1028,20 @@ export async function runMetricEngine(db: Db, turn: number): Promise<number> {
 
     const sectorSignal = results["economic.sectorGrowth"].value;
     const integratedGdp = results["economic.gdpGrowth"].value;
-    // The gdpGrowth node returns the integrated RATE; recompute the gap STOCK from
-    // the same inputs (deterministic → consistent) to persist state.outputGap.
-    const gapStep = advanceOutputGap(prevGap, sectorSignal, potential, TURNS_PER_YEAR);
+    // The legacy gap only advances while the blend still reads it.
+    const legacyGapStep =
+      blendWeight < 1 ? advanceOutputGap(prevGap, sectorSignal, potential, TURNS_PER_YEAR) : null;
+    // The measured gap tracks the physical signal, not the blended headline, so
+    // the cutover itself opens no gap.
+    const trendStep = advanceOutputTrend(prevTrend, sectorSignal, TURNS_PER_YEAR);
 
-    // Integrated rate = potential + cyclical (output gap, P1c-2). gdpGrowth
-    // keeps its approval term + metricDefinitions entry; the sector signal
-    // is a surfaced intermediate (excluded from approval). potentialGrowth +
-    // laborForce surfaced (P1c-1), also approval-excluded.
+    // Headline = measured real output growth (blended across the cutover).
+    // gdpGrowth keeps its approval term + metricDefinitions entry; the sector
+    // signal, potentialGrowth, trendGrowth and laborForce are surfaced
+    // intermediates, all approval-excluded.
     const setFields: Record<string, number | Date> = {
       "economic.gdpGrowth.value": integratedGdp,
+      "economic.trendGrowth.value": trendGrowthRef,
       "economic.sectorGrowth.value": sectorSignal,
       "economic.sectorGrowth.simBaseline": results["economic.sectorGrowth"].simBaseline,
       "economic.unemploymentRate.value": results["economic.unemploymentRate"].value,
@@ -1113,7 +1144,10 @@ export async function runMetricEngine(db: Db, turn: number): Promise<number> {
             gdp: newGdp,
             capitalStock: capacityFold?.capitalStock ?? capStep.capital,
             ...(capacityFold ? { conflictCapacityApplied: capacityFold.applied } : {}),
-            outputGap: gapStep.gap,
+            outputGap: trendStep.gap,
+            outputTrendGrowth: trendStep.trendGrowth,
+            realOutputStartTurn,
+            ...(legacyGapStep ? { legacyOutputGap: legacyGapStep.gap } : {}),
             // P2/D7: snapshot THIS turn's realized owned-sector revenue as the
             // next turn's baseline. Written in every mode (not just plants) so a
             // flip to plants already has a one-turn-old baseline and does not

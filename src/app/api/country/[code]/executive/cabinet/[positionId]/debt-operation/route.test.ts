@@ -55,7 +55,17 @@ beforeEach(() => {
   opsUpdateOne.mockClear();
 });
 
-describe("POST debt-operation", () => {
+describe.each([true, false])("POST debt-operation (acting=%s)", (acting) => {
+  beforeEach(() => {
+    memberDoc.acting = acting;
+  });
+
+  it("refuses a non-holder without spending an action or launching an operation", async () => {
+    memberDoc.characterId = new ObjectId();
+    expect((await call()).status).toBe(403);
+    expect(updateOne).not.toHaveBeenCalled();
+    expect(opsUpdateOne).not.toHaveBeenCalled();
+  });
   it("404 for a non-finance seat", async () => {
     const res = await call("us", "secretary_of_energy");
     expect(res.status).toBe(404);
@@ -67,7 +77,19 @@ describe("POST debt-operation", () => {
     const json = await res.json();
     expect(json.actionsRemaining).toBe(1);
     expect(json.expiresTurn).toBe(212); // 200 + DEBT_OP_DURATION_TURNS(12)
-    expect(opsUpdateOne).toHaveBeenCalled();
+    expect(updateOne).toHaveBeenCalledWith(
+      { _id: memberDoc._id, ministerialActions: { $gte: 1 } },
+      { $inc: { ministerialActions: -1 } }
+    );
+    expect(opsUpdateOne).toHaveBeenCalledWith(
+      { _id: "US" },
+      expect.objectContaining({
+        $set: expect.objectContaining({
+          activeOp: expect.objectContaining({ launchedTurn: 200, expiresTurn: 212 }),
+        }),
+      }),
+      { upsert: true }
+    );
   });
 
   it("409 when an operation is already active", async () => {
