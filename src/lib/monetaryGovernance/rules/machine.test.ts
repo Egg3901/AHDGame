@@ -1122,3 +1122,116 @@ it.each([
     executionBlockedReason: reason,
   });
 });
+
+describe("player chair tables the motion", () => {
+  const chairActor: GovernanceActor = {
+    kind: "governor",
+    seatId: "seat-1",
+    characterId: "char-chair",
+    countryId: "US",
+  };
+  function setMotion(
+    state: JurisdictionState,
+    motion: "hike" | "cut" | "hold",
+    delta?: number,
+    actor: GovernanceActor = chairActor,
+    turn = 108
+  ) {
+    return decideGovernance(
+      state,
+      {
+        type: "set_motion",
+        seatId: "seat-1",
+        motion,
+        countryId: "US",
+        ...(delta != null ? { delta } : {}),
+      },
+      actor,
+      clock(turn)
+    );
+  }
+  const open = () => baseState({ activeMeeting: nppMajorityMeeting(108), lastMeetingTurn: 108 });
+
+  it("replaces the automatic motion and keeps direction ballots", () => {
+    const decision = setMotion(open(), "cut", 0.25);
+    expect(decision.allowed).toBe(true);
+    if (!decision.allowed) return;
+    expect(decision.next.activeMeeting?.motion).toBe("cut");
+    expect(decision.next.activeMeeting?.proposedDelta).toBe(-0.25);
+    expect(decision.next.activeMeeting?.ballots).toHaveLength(6);
+    expect(decision.transition.set.activeFomcMeeting).toEqual(decision.next.activeMeeting);
+    expect(decision.transition.events[0]?.command).toBe("monetary.meeting.set_motion");
+  });
+
+  it("lets the committee vote down a chair motion it disagrees with", () => {
+    const tabled = setMotion(open(), "hold");
+    expect(tabled.allowed).toBe(true);
+    if (!tabled.allowed) return;
+    const decision = turnStart(tabled.next, 109);
+    expect(decision.allowed).toBe(true);
+    if (!decision.allowed) return;
+    expect(readResolvedMeeting(decision.transition.set.meetingHistoryAppend)?.result).toBe(
+      "failed"
+    );
+    expect(decision.transition.set.primeRate).toBeUndefined();
+  });
+
+  it("applies a carried chair motion at its tabled size", () => {
+    const tabled = setMotion(open(), "hike", 0.25);
+    expect(tabled.allowed).toBe(true);
+    if (!tabled.allowed) return;
+    const decision = turnStart(tabled.next, 109);
+    expect(decision.allowed).toBe(true);
+    if (!decision.allowed) return;
+    expect(decision.next.primeRate).toBe(5.25);
+  });
+
+  it("defaults a move to one quarter point", () => {
+    const decision = setMotion(open(), "cut");
+    expect(decision.allowed && decision.next.activeMeeting?.proposedDelta).toBe(-0.25);
+  });
+
+  it("refuses NPP chairs, other governors and impostors", () => {
+    const nppChairBoard = usBoard().map((s) =>
+      s.isChair ? { ...s, occupantType: "npp" as const, characterId: null } : s
+    );
+    const npp = setMotion(
+      baseState({ board: nppChairBoard, activeMeeting: nppMajorityMeeting(108) }),
+      "cut"
+    );
+    expect(npp.allowed ? null : npp.reason).toBe("not-chair");
+    const impostor = setMotion(open(), "cut", 0.25, { ...chairActor, characterId: "someone-else" });
+    expect(impostor.allowed ? null : impostor.reason).toBe("not-chair");
+  });
+
+  it("refuses off-grid, oversized and blocked moves", () => {
+    const offGrid = setMotion(open(), "hike", 0.3);
+    expect(offGrid.allowed ? null : offGrid.reason).toBe("invalid-delta");
+    const huge = setMotion(open(), "cut", 10);
+    expect(huge.allowed ? null : huge.reason).toBe("delta-cut");
+    const capped = setMotion(
+      baseState({
+        activeMeeting: nppMajorityMeeting(108),
+        rateChangesThisTerm: RATE_CHANGES_PER_TERM,
+      }),
+      "hike",
+      0.25
+    );
+    expect(capped.allowed ? null : capped.reason).toBe("term-cap");
+    const hold = setMotion(
+      baseState({
+        activeMeeting: nppMajorityMeeting(108),
+        rateChangesThisTerm: RATE_CHANGES_PER_TERM,
+      }),
+      "hold"
+    );
+    expect(hold.allowed).toBe(true);
+  });
+
+  it("refuses without an open meeting or after the window", () => {
+    const none = setMotion(baseState(), "hold");
+    expect(none.allowed ? null : none.reason).toBe("no-meeting");
+    const late = setMotion(open(), "hold", undefined, chairActor, 200);
+    expect(late.allowed ? null : late.reason).toBe("deadline-passed");
+  });
+});
