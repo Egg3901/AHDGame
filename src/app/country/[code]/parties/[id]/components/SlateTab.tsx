@@ -727,6 +727,7 @@ function RaceSlatePanel({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [expanded, setExpanded] = useState(false);
 
   const fetchDetail = useCallback(async () => {
     setLoading(true);
@@ -748,10 +749,6 @@ function RaceSlatePanel({
     }
   }, [countryCode, partyId, item.electionId]);
 
-  useEffect(() => {
-    void fetchDetail();
-  }, [fetchDetail]);
-
   return (
     <div className="rounded-xl border border-card-border bg-card p-4 space-y-3">
       <div className="flex items-center justify-between flex-wrap gap-2">
@@ -771,163 +768,192 @@ function RaceSlatePanel({
               : ""}
           </p>
         </div>
-        {canManageSlate && (
+        <div className="flex items-center gap-2">
           <button
             type="button"
-            onClick={() => setPickerOpen((open) => !open)}
-            className="rounded-md border border-primary/40 bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary hover:bg-primary/20 transition-colors"
+            aria-expanded={expanded}
+            onClick={() => {
+              const shouldExpand = !expanded;
+              setExpanded(shouldExpand);
+              if (shouldExpand && !detail && !loading) void fetchDetail();
+            }}
+            className="rounded-md border border-card-border px-3 py-1.5 text-xs font-medium text-muted hover:text-foreground transition-colors"
           >
-            {pickerOpen ? "Cancel" : "Assign candidates"}
+            {expanded ? "Hide slate" : "Show slate"}
           </button>
-        )}
+          {expanded && canManageSlate && (
+            <button
+              type="button"
+              onClick={() => setPickerOpen((open) => !open)}
+              className="rounded-md border border-primary/40 bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary hover:bg-primary/20 transition-colors"
+            >
+              {pickerOpen ? "Cancel" : "Assign candidates"}
+            </button>
+          )}
+        </div>
       </div>
 
-      {pickerOpen && detail && (
-        <AssignmentPicker
-          countryCode={countryCode}
-          countryId={countryId}
-          partyId={partyId}
-          electionId={item.electionId}
-          state={item.state}
-          partyMembers={partyMembers}
-          assignment={detail.assignment}
-          assignedCandidateIds={detail.stateAssignedCandidateIds}
-          onDone={async () => {
-            setPickerOpen(false);
-            await fetchDetail();
-            await onMutate();
-          }}
-        />
-      )}
+      {expanded && (
+        <>
+          {pickerOpen && detail && (
+            <AssignmentPicker
+              countryCode={countryCode}
+              countryId={countryId}
+              partyId={partyId}
+              electionId={item.electionId}
+              state={item.state}
+              partyMembers={partyMembers}
+              assignment={detail.assignment}
+              assignedCandidateIds={detail.stateAssignedCandidateIds}
+              onDone={async () => {
+                setPickerOpen(false);
+                await fetchDetail();
+                await onMutate();
+              }}
+            />
+          )}
 
-      {loading && <p className="text-xs text-muted">Loading slate...</p>}
-      <InlineError error={error} className="text-xs text-error" />
+          {loading && <p className="text-xs text-muted">Loading slate...</p>}
+          <InlineError error={error} className="text-xs text-error" />
+          {error && (
+            <button
+              type="button"
+              onClick={() => void fetchDetail()}
+              className="rounded-md border border-card-border px-3 py-1.5 text-xs text-muted hover:text-foreground"
+            >
+              Retry slate
+            </button>
+          )}
 
-      {detail && detail.candidates.length === 0 && (
-        <p className="text-xs text-muted">
-          No one is assigned to this race yet. Party leaders can assign players or NPPs here; the
-          assignments will persist into future cycles until manually changed.
-        </p>
-      )}
+          {detail && detail.candidates.length === 0 && (
+            <p className="text-xs text-muted">
+              No one is assigned to this race yet. Party leaders can assign players or NPPs here;
+              the assignments will persist into future cycles until manually changed.
+            </p>
+          )}
 
-      {detail && detail.candidates.length > 0 && (
-        <ul className="space-y-2">
-          {detail.candidates.map((c) => {
-            const isPendingAssignment = isPreTurnSlateAssignment(c);
-            const isAwaitingTurnResponse =
-              c.status === "invited" && c.respondedAt === null && c.filedAt === null;
-            const isFilingFailure =
-              c.status === "withdrawn" && isSlateFilingFailure(c.refusalReason);
-            const statusLabel =
-              isPendingAssignment || isAwaitingTurnResponse
-                ? "Assigned"
-                : isFilingFailure
-                  ? "Not Filed"
-                  : formatSlateLabel(c.status);
-            const statusClass = isPendingAssignment
-              ? PENDING_ASSIGNMENT_STATUS_STYLE
-              : isAwaitingTurnResponse
-                ? PENDING_ASSIGNMENT_STATUS_STYLE
-                : STATUS_COLOR[c.status];
-            const acceptanceChip = getAcceptanceChip(c);
+          {detail && detail.candidates.length > 0 && (
+            <ul className="space-y-2">
+              {detail.candidates.map((c) => {
+                const isPendingAssignment = isPreTurnSlateAssignment(c);
+                const isAwaitingTurnResponse =
+                  c.status === "invited" && c.respondedAt === null && c.filedAt === null;
+                const isFilingFailure =
+                  c.status === "withdrawn" && isSlateFilingFailure(c.refusalReason);
+                const statusLabel =
+                  isPendingAssignment || isAwaitingTurnResponse
+                    ? "Assigned"
+                    : isFilingFailure
+                      ? "Not Filed"
+                      : formatSlateLabel(c.status);
+                const statusClass = isPendingAssignment
+                  ? PENDING_ASSIGNMENT_STATUS_STYLE
+                  : isAwaitingTurnResponse
+                    ? PENDING_ASSIGNMENT_STATUS_STYLE
+                    : STATUS_COLOR[c.status];
+                const acceptanceChip = getAcceptanceChip(c);
 
-            return (
-              <li
-                key={c.id}
-                className="flex items-center gap-3 rounded-lg border border-card-border bg-background px-3 py-2"
-              >
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <Link
-                      href={
-                        c.candidateType === "npp"
-                          ? `/politicians/npp/${c.candidateId}`
-                          : `/character/${c.candidateId}`
-                      }
-                      className="text-sm font-medium hover:text-primary truncate"
-                    >
-                      {c.candidateName}
-                    </Link>
-                    <span className="rounded-full border border-card-border px-1.5 py-0.5 text-body-sm text-muted">
-                      {c.candidateType === "npp" ? "NPP" : "Player"}
-                    </span>
-                    <span className="text-body-sm text-muted">
-                      {c.homeState.replace(/^.+_/, "")}
-                    </span>
-                    {c.autoFilled && (
-                      <span className="rounded-full border border-card-border px-1.5 py-0.5 text-body-sm text-muted">
-                        Auto
-                      </span>
-                    )}
-                  </div>
-                  <div className="text-body-sm text-muted flex flex-wrap items-center gap-2 mt-0.5">
+                return (
+                  <li
+                    key={c.id}
+                    className="flex items-center gap-3 rounded-lg border border-card-border bg-background px-3 py-2"
+                  >
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <Link
+                          href={
+                            c.candidateType === "npp"
+                              ? `/politicians/npp/${c.candidateId}`
+                              : `/character/${c.candidateId}`
+                          }
+                          className="text-sm font-medium hover:text-primary truncate"
+                        >
+                          {c.candidateName}
+                        </Link>
+                        <span className="rounded-full border border-card-border px-1.5 py-0.5 text-body-sm text-muted">
+                          {c.candidateType === "npp" ? "NPP" : "Player"}
+                        </span>
+                        <span className="text-body-sm text-muted">
+                          {c.homeState.replace(/^.+_/, "")}
+                        </span>
+                        {c.autoFilled && (
+                          <span className="rounded-full border border-card-border px-1.5 py-0.5 text-body-sm text-muted">
+                            Auto
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-body-sm text-muted flex flex-wrap items-center gap-2 mt-0.5">
+                        <span
+                          className={`rounded-full border px-2 py-0.5 text-body-sm font-semibold ${acceptanceChip.className}`}
+                        >
+                          {acceptanceChip.label}
+                        </span>
+                        {c.assignedByCharacterName && (
+                          <span>
+                            | Assigned by {c.assignedByCharacterName}
+                            {c.assignedByRoleLabel ? ` (${c.assignedByRoleLabel})` : ""}
+                          </span>
+                        )}
+                        {c.refusalReason && (
+                          <span className="text-red-300">
+                            - {SLATE_REFUSAL_LABEL[c.refusalReason]}
+                          </span>
+                        )}
+                        {c.invitationNote && <span>| &quot;{c.invitationNote}&quot;</span>}
+                      </div>
+                    </div>
                     <span
-                      className={`rounded-full border px-2 py-0.5 text-body-sm font-semibold ${acceptanceChip.className}`}
+                      className={`rounded-full border px-2 py-0.5 text-body-sm font-semibold ${statusClass}`}
                     >
-                      {acceptanceChip.label}
+                      {statusLabel}
                     </span>
-                    {c.assignedByCharacterName && (
-                      <span>
-                        | Assigned by {c.assignedByCharacterName}
-                        {c.assignedByRoleLabel ? ` (${c.assignedByRoleLabel})` : ""}
-                      </span>
-                    )}
-                    {c.refusalReason && (
-                      <span className="text-red-300">- {SLATE_REFUSAL_LABEL[c.refusalReason]}</span>
-                    )}
-                    {c.invitationNote && <span>| &quot;{c.invitationNote}&quot;</span>}
-                  </div>
-                </div>
-                <span
-                  className={`rounded-full border px-2 py-0.5 text-body-sm font-semibold ${statusClass}`}
-                >
-                  {statusLabel}
-                </span>
-                {/* A filing failure is visible but has no live candidacy; the
+                    {/* A filing failure is visible but has no live candidacy; the
                     chair still needs a way to clear the row off the slate. The
                     DELETE route nulls the reason, which hides it again. */}
-                {canManageSlate && (c.status !== "withdrawn" || isFilingFailure) && (
-                  <WithdrawButton
-                    countryCode={countryCode}
-                    partyId={partyId}
-                    electionId={item.electionId}
-                    candidateRowId={c.id}
-                    isFiled={c.status === "filed"}
-                    candidateName={c.candidateName}
-                    onDone={async () => {
-                      await fetchDetail();
-                      await onMutate();
-                    }}
-                  />
-                )}
-              </li>
-            );
-          })}
-        </ul>
-      )}
+                    {canManageSlate && (c.status !== "withdrawn" || isFilingFailure) && (
+                      <WithdrawButton
+                        countryCode={countryCode}
+                        partyId={partyId}
+                        electionId={item.electionId}
+                        candidateRowId={c.id}
+                        isFiled={c.status === "filed"}
+                        candidateName={c.candidateName}
+                        onDone={async () => {
+                          await fetchDetail();
+                          await onMutate();
+                        }}
+                      />
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
 
-      {detail?.assignment && (
-        <p
-          className={`text-body-sm ${
-            detail.assignment.remaining === 0 ? "text-amber-300" : "text-muted"
-          }`}
-        >
-          {formatSlateCapNote(detail.assignment)}
-        </p>
-      )}
+          {detail?.assignment && (
+            <p
+              className={`text-body-sm ${
+                detail.assignment.remaining === 0 ? "text-amber-300" : "text-muted"
+              }`}
+            >
+              {formatSlateCapNote(detail.assignment)}
+            </p>
+          )}
 
-      {detail && detail.candidates.some((c) => c.candidateType === "npp") && (
-        <p className="text-body-sm text-muted">
-          Compliant NPPs (loyal, not overly stubborn) file automatically on the next turn; others
-          decline. Assign through a State / Regional Chair for a small compliance bonus.
-        </p>
-      )}
+          {detail && detail.candidates.some((c) => c.candidateType === "npp") && (
+            <p className="text-body-sm text-muted">
+              Compliant NPPs (loyal, not overly stubborn) file automatically on the next turn;
+              others decline. Assign through a State / Regional Chair for a small compliance bonus.
+            </p>
+          )}
 
-      {detail?.election.phaseStatus && (
-        <ElectionPhaseStatusStrip phaseStatus={detail.election.phaseStatus} />
-      )}
+          {detail?.election.phaseStatus && (
+            <ElectionPhaseStatusStrip phaseStatus={detail.election.phaseStatus} />
+          )}
 
-      {detail?.electionDisplay && <SlateElectionResults election={detail.electionDisplay} />}
+          {detail?.electionDisplay && <SlateElectionResults election={detail.electionDisplay} />}
+        </>
+      )}
     </div>
   );
 }
