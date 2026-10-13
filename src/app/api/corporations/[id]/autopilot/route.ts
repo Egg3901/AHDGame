@@ -49,13 +49,20 @@ async function toggle(request: Request, { params }: RouteParams, enable: boolean
 
   const now = new Date();
   const corporations = db.collection<Corporation>("corporations");
+  // Re-assert the seat in the write: a CEO change between the read and this
+  // update must not let the previous owner flip the switch.
+  const seated = {
+    _id: corporation._id,
+    userId: corporation.userId,
+    ceoVacant: { $ne: true },
+  };
   const result = enable
     ? await corporations.updateOne(
-        { _id: corporation._id, autopilot: { $exists: false }, ceoType: { $ne: "npp" } },
+        { ...seated, autopilot: { $exists: false }, ceoType: { $ne: "npp" } },
         { $set: { autopilot: { enabledTurn: await getCurrentTurn(db) }, updatedAt: now } }
       )
     : await corporations.updateOne(
-        { _id: corporation._id, autopilot: { $exists: true } },
+        { ...seated, autopilot: { $exists: true } },
         { $unset: { autopilot: "" }, $set: { updatedAt: now } }
       );
   if (result.modifiedCount !== 1) {
