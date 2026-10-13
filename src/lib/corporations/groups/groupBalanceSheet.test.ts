@@ -49,6 +49,7 @@ describe("group balance sheet host currency", () => {
         corporationId: root,
         sectorType: "logistics",
         countryId: "UK",
+        stateId: "S",
         revenue: 100,
       },
       {
@@ -56,6 +57,7 @@ describe("group balance sheet host currency", () => {
         corporationId: sub,
         sectorType: "logistics",
         countryId: "US",
+        stateId: "S",
         revenue: 100,
       },
     ]);
@@ -63,5 +65,7 @@ describe("group balance sheet host currency", () => {
     expect(sheet?.members.find((m) => m.isRoot)?.revenueAnchor).toBe(50);
     expect(sheet?.members.find((m) => !m.isRoot)?.revenueAnchor).toBe(20);
     expect(sheet?.totalRevenueAnchor).toBe(70);
+    expect(sheet?.totalRegionCount).toBe(2);
+    expect(sheet?.members.map((m) => m.regionCount)).toEqual([1, 1]);
   });
 });

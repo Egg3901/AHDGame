@@ -36,8 +36,12 @@ export type GroupCorpRow = Pick<
 /** Resolve every corporate group in the world. */
 export async function resolveFormalizedGroups(
   db: Db,
-  options: { includeReserved?: boolean } = {}
-): Promise<GroupMembership> {
+  options: { includeReserved?: boolean; includeControl?: boolean } = {}
+): Promise<
+  GroupMembership & {
+    parentControlByCorpId: Map<string, { corporationId: string; votingPercent: number }>;
+  }
+> {
   const corps = (await db
     .collection<Corporation>("corporations")
     .find(
@@ -61,11 +65,19 @@ export async function resolveFormalizedGroups(
   const reserved = options.includeReserved
     ? await loadReservedCorporatePositionsByTarget(db)
     : null;
-  const groups = resolveGroupRows(
-    corps.map((corp) =>
-      corporationWithReservedHoldings(corp as Corporation, reserved?.get(corp._id.toString()) ?? [])
-    )
+  const effectiveCorps = corps.map((corp) =>
+    corporationWithReservedHoldings(corp as Corporation, reserved?.get(corp._id.toString()) ?? [])
   );
+  const groups = resolveGroupRows(effectiveCorps);
+  const parentControlByCorpId = new Map<string, { corporationId: string; votingPercent: number }>();
+  for (const corp of options.includeControl ? effectiveCorps : []) {
+    const parent = getControllingCorporateParent(corp);
+    if (parent)
+      parentControlByCorpId.set(corp._id.toString(), {
+        corporationId: parent.corporationId.toString(),
+        votingPercent: parent.ownershipPct,
+      });
+  }
   if (options.includeReserved) {
     groups.eligibleManagementRoots = new Set(
       corps
@@ -83,7 +95,7 @@ export async function resolveFormalizedGroups(
         .map((c) => c._id.toString())
     );
   }
-  return groups;
+  return { ...groups, parentControlByCorpId };
 }
 
 /** Adapt loaded Mongo identities to the portable membership rules. */

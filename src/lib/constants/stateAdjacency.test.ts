@@ -69,7 +69,6 @@ const COUNTRY_REGIONS: Readonly<Record<CountryId, readonly { _id: string }[]>> =
 const ALL_COUNTRIES = Object.keys(COUNTRY_REGIONS) as CountryId[];
 
 const DELIBERATE_DISCONNECTED_REGIONS: Partial<Record<CountryId, readonly string[]>> = {
-  US: ["HI"],
   RU: ["MOL"],
 };
 
@@ -146,7 +145,15 @@ function sharedBoundaryEdges(
 }
 
 const NON_SEGMENT_ADJACENCIES = {
-  US: [edgeKey("AK", "WA"), edgeKey("AZ", "CO"), edgeKey("NM", "UT")],
+  US: [
+    edgeKey("AK", "WA"),
+    edgeKey("AK", "HI"),
+    edgeKey("CA", "HI"),
+    edgeKey("OR", "HI"),
+    edgeKey("WA", "HI"),
+    edgeKey("AZ", "CO"),
+    edgeKey("NM", "UT"),
+  ],
   UK: [edgeKey("NIR", "NWE"), edgeKey("NIR", "SCO"), edgeKey("NIR", "WAL")],
   JP: [edgeKey("CGK", "KYU"), edgeKey("HOK", "TOH"), edgeKey("KNS", "SHI")],
 } as const;
@@ -266,8 +273,8 @@ describe("STATE_ADJACENCY", () => {
   });
 
   describe("known US adjacencies", () => {
-    it("CA borders AZ, NV, OR", () => {
-      expect([...adjacentStates("US", "CA")].sort()).toEqual(["AZ", "NV", "OR"]);
+    it("CA borders AZ, NV, OR and connects to HI by sea", () => {
+      expect([...adjacentStates("US", "CA")].sort()).toEqual(["AZ", "HI", "NV", "OR"]);
     });
     it("NY borders CT, MA, NJ, PA, VT", () => {
       expect([...adjacentStates("US", "NY")].sort()).toEqual(["CT", "MA", "NJ", "PA", "VT"]);
@@ -275,8 +282,11 @@ describe("STATE_ADJACENCY", () => {
     it("TX borders AR, LA, NM, OK", () => {
       expect([...adjacentStates("US", "TX")].sort()).toEqual(["AR", "LA", "NM", "OK"]);
     });
-    it("HI is standalone (no neighbors)", () => {
-      expect(adjacentStates("US", "HI")).toEqual([]);
+    it("HI connects to exactly AK, CA, OR, WA by Pacific sea links", () => {
+      expect([...adjacentStates("US", "HI")].sort()).toEqual(["AK", "CA", "OR", "WA"]);
+      for (const state of ["AK", "CA", "OR", "WA"]) {
+        expect(adjacentStates("US", state)).toContain("HI");
+      }
     });
     it("AK borders WA by sea-border convention", () => {
       expect(adjacentStates("US", "AK")).toContain("WA");
@@ -502,7 +512,7 @@ describe("STATE_ADJACENCY", () => {
 
   describe("pre-existing map regression", () => {
     const expectedHashes = {
-      US: "e3651f06d9a6dd0dbd46d3ce2451254238ff17d773ce7f4990a193eeec6da0fe",
+      US: "a55b76f6a7d6a306598eee674ce87e3c8023470475f1eff65d9f1a3993fb98e2",
       UK: "84d94ff76cbe19c26bff00acc2bb0a7e28235a8ca0650a79aa43a26a753aa7b5",
       DE: "b90125507666e35479502e98f1133036829ce08beb19118a3e61bdce26d3a057",
       JP: "e8fdc74be35036b2f81831fbe9c21dfc4122e949370b496350ee7ef1fc87cc3e",

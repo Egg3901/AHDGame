@@ -1,4 +1,5 @@
 "use client";
+import Link from "next/link";
 import { useTranslations } from "next-intl";
 import type { GroupManagementView } from "./useGroupManagement";
 type Member = GroupManagementView["members"][number];
@@ -22,6 +23,9 @@ export function GroupParticipation({
   const pending = member.effectiveTurn !== null && member.effectiveTurn > data.currentTurn;
   return (
     <section className="rounded-xl border border-card-border bg-card p-5 space-y-3">
+      <p className="text-xs uppercase tracking-wide text-muted">
+        {t(member.isRoot ? "supplyUI.roleParent" : "supplyUI.rolePlayer")}
+      </p>
       <h3 className="font-semibold">{member.name}</h3>
       {independent && <p className="text-sm text-muted">{t("participationUnavailable")}</p>}
       <label className="flex items-center gap-3 text-sm">
@@ -45,7 +49,23 @@ export function GroupParticipation({
                 ? t("participating")
                 : t("optedOut")}
       </p>
+      {pending && member.receiving !== null && !independent && (
+        <p className="text-xs text-muted">
+          {t("supplyUI.currentParticipation", {
+            status: t(member.receiving ? "participating" : "optedOut"),
+          })}
+        </p>
+      )}
       <p className="text-xs text-muted">{t("receivingOnly")}</p>
+      {member.canEdit && <p className="text-xs text-muted">{t("supplyUI.ownControl")}</p>}
+      {!office && (
+        <Link
+          className="inline-block text-sm text-info underline"
+          href={"/corporation/" + member.pathId + (member.canEdit ? "?tab=ceo" : "")}
+        >
+          {t(member.canEdit ? "supplyUI.ceoOffice" : "viewCorporation")}
+        </Link>
+      )}
       {!member.canEdit && <p className="text-xs text-muted">{t("ownCeoOnly")}</p>}
     </section>
   );

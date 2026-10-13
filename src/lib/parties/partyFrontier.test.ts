@@ -7,7 +7,9 @@ import {
   getPartyFrontier,
   canCharacterJoinParty,
   getPartyFrontiers,
+  isolatedRegions,
 } from "@/lib/parties/partyFrontier";
+import { STATE_ADJACENCY } from "@/lib/constants/stateAdjacency";
 
 describe("expandFrontier", () => {
   it("includes the presence state itself plus its neighbours", () => {
@@ -24,12 +26,45 @@ describe("expandFrontier", () => {
     expect(f.has("TX")).toBe(false);
   });
 
-  it("keeps an isolated state that has no neighbours (HI)", () => {
-    expect([...expandFrontier("US", ["HI"])]).toEqual(["HI"]);
+  it("expands Hawaii's party frontier to exactly its Pacific neighbors", () => {
+    expect([...expandFrontier("US", ["HI"])].sort()).toEqual(["AK", "CA", "HI", "OR", "WA"]);
   });
 
-  it("keeps a state absent from the adjacency map, with no expansion", () => {
-    expect([...expandFrontier("US", ["ZZ"])]).toEqual(["ZZ"]);
+  it.each(["AK", "WA", "OR", "CA"])("allows a party in %s to expand into Hawaii", (state) => {
+    const presence = new Set([state]);
+    expect(isInFrontier(presence, expandFrontier("US", presence), "HI")).toBe(true);
+  });
+
+  it("does not expand Hawaii's party frontier through multiple hops", () => {
+    const presence = new Set(["HI"]);
+    expect(isInFrontier(presence, expandFrontier("US", presence), "NV")).toBe(false);
+  });
+
+  it("lets an Alaskan party reach Hawaii through its explicit Pacific edge", () => {
+    const f = expandFrontier("US", ["AK"]);
+    expect(f.has("WA")).toBe(true);
+    expect(f.has("HI")).toBe(true);
+    expect(f.has("CA")).toBe(false);
+  });
+
+  it("keeps Hawaii restricted to its explicit Pacific adjacency", () => {
+    const presence = new Set(["GA"]);
+    expect(isInFrontier(presence, expandFrontier("US", presence), "HI")).toBe(false);
+  });
+
+  it("applies to other deliberately disconnected regions (RU MOL)", () => {
+    const anyRu = Object.keys(STATE_ADJACENCY.RU).find((id) => id !== "MOL")!;
+    expect(expandFrontier("RU", [anyRu]).has("MOL")).toBe(true);
+  });
+
+  it("lists only explicitly isolated regions", () => {
+    expect(isolatedRegions("US")).toEqual([]);
+    expect(isolatedRegions("RU")).toEqual(["MOL"]);
+  });
+
+  it("keeps a state absent from the adjacency map, expanding only to isolated regions", () => {
+    expect([...expandFrontier("US", ["ZZ"])].sort()).toEqual(["ZZ"]);
+    expect([...expandFrontier("RU", ["ZZ"])].sort()).toEqual(["MOL", "ZZ"]);
   });
 
   it("returns an empty set for empty presence", () => {
