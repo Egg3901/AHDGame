@@ -25,6 +25,7 @@ import { InterbankPanel } from "./InterbankPanel";
 import { RevokeCharterForm } from "./RevokeCharterForm";
 import { CharterSwitchForm } from "./CharterSwitchForm";
 import { CustomerBankPanel } from "./CustomerBankPanel";
+import { DepositorBookPanel } from "./DepositorBookPanel";
 import { BankTreasuryPanel } from "./BankTreasuryPanel";
 import { apiErrorText } from "@/lib/errors/catalog";
 
@@ -540,6 +541,13 @@ export function ActiveCharterPanel({
 
       {tab === "deposits" && (
         <div className="space-y-6">
+          {depositTaking && data.depositorBook && (
+            <DepositorBookPanel
+              book={data.depositorBook}
+              currency={charter.currency}
+              householdDeposits={charter.npcDeposits}
+            />
+          )}
           {depositTaking && data.corridors && (
             <RateOffsetEditor
               corporationId={data.corporation.id}

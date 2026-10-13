@@ -137,6 +137,11 @@ describe("bank console loan book", () => {
     const body = await response.json();
     expect(body.switchableTypes).toEqual(cooldown || !owner ? [] : ["investment", "universal"]);
     expect(body.canIssueCharter).toBe(false);
+    expect(body.depositorBook).toEqual(owner ? { source: "legacy", rows: [], total: 0 } : null);
+    if (!owner) {
+      expect(db.collectionMocks.characters?.find.mock.calls.length ?? 0).toBe(0);
+      expect(db.collectionMocks.savingsAccounts).toBeUndefined();
+    }
     db.collection("bankLoans");
     const find = db.collectionMocks.bankLoans!.find;
     expect(find).toHaveBeenCalled();

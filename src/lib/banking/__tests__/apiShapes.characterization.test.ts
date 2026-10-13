@@ -271,6 +271,7 @@ describe("GET /api/banking/corporation/[id]", () => {
         "currentTurn",
         "defaultBranchCapacityShare",
         "depositCeiling",
+        "depositorBook",
         "eligibilityReasons",
         "eligibleTypes",
         "householdBook",
@@ -291,6 +292,7 @@ describe("GET /api/banking/corporation/[id]", () => {
         "switchableTypes",
         "visible",
       ]);
+      expect(body.depositorBook).toEqual({ source: "legacy", rows: [], total: 0 });
       expect(body).toMatchObject({
         bankPropForexFeesEnabled: false,
         bankTreasury: null,
