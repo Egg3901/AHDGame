@@ -162,14 +162,10 @@ describe("processCentralBankChairTurn", () => {
     expect(bankUpdate.filter._id).toBe("US");
     expect(bankUpdate.update.$set.chairInfamy).toBeCloseTo(0, 2);
 
+    // An unpenalized chair gets no character write: the chair's national
+    // influence is the cabinet tier, granted by the action refresh.
     const charMock = getCollectionMock("characters");
-    expect(charMock.bulkWrite).toHaveBeenCalledTimes(1);
-    const [charOps] = charMock.bulkWrite.mock.calls[0] as [
-      Array<{ updateOne: { update: { $inc: { nationalInfluence: number; actions?: number } } } }>,
-    ];
-    const charUpdate = charOps[0].updateOne;
-    expect(charUpdate.update.$inc.nationalInfluence).toBe(0.5);
-    expect(charUpdate.update.$inc.actions).toBeUndefined();
+    expect(charMock.bulkWrite).not.toHaveBeenCalled();
   });
 
   it("pays resolve relief for the modern neutral rate at target CPI", async () => {
@@ -286,9 +282,9 @@ describe("processCentralBankChairTurn", () => {
     expect(bankOps[0].updateOne.update.$set.resolveStreak).toBe(2);
 
     const [charOps] = getCollectionMock("characters").bulkWrite.mock.calls[0] as [
-      Array<{ updateOne: { update: { $inc: { nationalInfluence: number; actions?: number } } } }>,
+      Array<{ updateOne: { update: { $inc: { actions?: number } } } }>,
     ];
-    expect(charOps[0].updateOne.update.$inc).toEqual({ nationalInfluence: 0.25, actions: -1.5 });
+    expect(charOps[0].updateOne.update.$inc).toEqual({ actions: -1.5 });
   });
 
   it("increases infamy with high inflation", async () => {
@@ -317,7 +313,7 @@ describe("processCentralBankChairTurn", () => {
     expect(bankOps[0].updateOne.update.$set.chairInfamy).toBeCloseTo(1.5, 1);
   });
 
-  it("halves bonuses when infamy > 25", async () => {
+  it("debits actions when infamy > 25", async () => {
     testBanks = [
       {
         _id: "US",
@@ -336,9 +332,9 @@ describe("processCentralBankChairTurn", () => {
 
     const charMock = getCollectionMock("characters");
     const [charOps] = charMock.bulkWrite.mock.calls[0] as [
-      Array<{ updateOne: { update: { $inc: { nationalInfluence: number; actions: number } } } }>,
+      Array<{ updateOne: { update: { $inc: { nationalInfluence?: number; actions: number } } } }>,
     ];
-    expect(charOps[0].updateOne.update.$inc.nationalInfluence).toBe(0.25);
+    expect(charOps[0].updateOne.update.$inc.nationalInfluence).toBeUndefined();
     expect(charOps[0].updateOne.update.$inc.actions).toBe(-1.5);
   });
 
@@ -581,9 +577,9 @@ describe("processCentralBankChairTurn", () => {
 
     await processCentralBankChairTurn(mockDb as never, 100);
 
-    // Existing character-chair path runs (characters.bulkWrite called once).
+    // Character-chair path runs; an unpenalized chair needs no character write.
     const charMock = getCollectionMock("characters");
-    expect(charMock.bulkWrite).toHaveBeenCalledTimes(1);
+    expect(charMock.bulkWrite).not.toHaveBeenCalled();
     // NPP auto-rate NOT invoked.
     expect(processNppChairAutoRateMock).not.toHaveBeenCalled();
   });
@@ -723,7 +719,7 @@ describe("processCentralBankChairTurn", () => {
     await processCentralBankChairTurn(mockDb as never, 100);
 
     const charMock = getCollectionMock("characters");
-    expect(charMock.bulkWrite).toHaveBeenCalledTimes(1);
+    expect(charMock.bulkWrite).not.toHaveBeenCalled();
     expect(processNppChairAutoRateMock).not.toHaveBeenCalled();
   });
 });

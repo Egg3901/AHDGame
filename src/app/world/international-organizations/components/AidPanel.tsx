@@ -7,6 +7,7 @@ import { type CountryId } from "@/lib/constants/countries";
 import { canTableResolutionType } from "@/lib/constants/orgCategory";
 import type { ProposalVote } from "@/lib/db/types/internationalOrganization";
 import type { OrgSummary, OrgViewerInfo } from "../orgTypes";
+import { orgProposingCountry } from "../orgTypes";
 import { VoteButtons } from "../VoteButtons";
 import { VoteRoster } from "../VoteRoster";
 import { useFundFormatter } from "./useFundFormatter";
@@ -35,6 +36,10 @@ interface Props {
 export function AidPanel({ org, viewer, currentTurn, votingWindowTurns, onChange }: Props) {
   const entityName = useEntityName();
   const viewerFmCountry = viewer?.foreignMinisterOf ?? viewer?.headOfGovernmentOf ?? null;
+  // Who tables resolutions: the FM/HoG country, or the member an org head sits
+  // for (agenda pool). Votes stay on viewerFmCountry.
+  const proposer = orgProposingCountry(viewer, org.id);
+  const proposerIsMember = proposer != null && org.members.some((m) => m.countryId === proposer);
   const viewerIsMember =
     viewerFmCountry != null && org.members.some((m) => m.countryId === viewerFmCountry);
   // Tabling only needs membership, but voting needs a ballot: the route enforces
@@ -55,7 +60,7 @@ export function AidPanel({ org, viewer, currentTurn, votingWindowTurns, onChange
   const [error, setError] = useState<string | null>(null);
 
   async function submit() {
-    if (!viewerFmCountry || !recipient) {
+    if (!proposer || !recipient) {
       setError("Choose a recipient.");
       return;
     }
@@ -68,7 +73,7 @@ export function AidPanel({ org, viewer, currentTurn, votingWindowTurns, onChange
     setError(null);
     try {
       const res = await fetch(
-        `/api/country/${viewerFmCountry}/international-organizations/${org.id}/legislation`,
+        `/api/country/${proposer}/international-organizations/${org.id}/legislation`,
         {
           method: "POST",
           headers: { "content-type": "application/json" },
@@ -128,7 +133,7 @@ export function AidPanel({ org, viewer, currentTurn, votingWindowTurns, onChange
             hold a vote.
           </p>
         </div>
-        {viewerIsMember && viewerFmCountry && canTable && (
+        {proposerIsMember && proposer && canTable && (
           <Button
             size="md"
             variant={showForm ? "ghost" : "primary"}
@@ -139,7 +144,7 @@ export function AidPanel({ org, viewer, currentTurn, votingWindowTurns, onChange
         )}
       </div>
 
-      {showForm && viewerIsMember && viewerFmCountry && canTable && (
+      {showForm && proposerIsMember && proposer && canTable && (
         <div className="rounded-xl border border-primary/30 bg-primary/5 p-5">
           <h4 className="text-sm font-semibold text-foreground">Table an aid package</h4>
           <p className="mt-1 text-xs text-muted">

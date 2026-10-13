@@ -1,7 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Db } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
-import { MINISTERIAL_ACTION_CAP } from "@/lib/constants/cabinetMechanicsTypes";
+import {
+  MINISTERIAL_ACTION_ACCRUAL_TURNS,
+  MINISTERIAL_ACTION_CAP,
+} from "@/lib/constants/cabinetMechanicsTypes";
 import { ALL_COUNTRY_IDS } from "@/lib/constants/countries";
 import { isPoliticalApprovalCountry } from "@/lib/politicalLegislation/politicalApprovalProvider";
 
@@ -200,47 +203,55 @@ describe("processMinisterialOrders tier effect resolution", () => {
     expect(db.collectionMocks.ministerialOrders!.updateMany).toHaveBeenCalledTimes(2);
   });
 
-  it("refills ministerial actions to cap on a new Eastern calendar day", async () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-06-03T14:00:00.000Z"));
-
+  function setupEmptyOrderWorld() {
     db.collection("ministerialOrders");
     db.collectionMocks.ministerialOrders!.updateMany.mockResolvedValue({ modifiedCount: 0 });
     db.collectionMocks.ministerialOrders!.find.mockReturnValue(cursorReturning([]));
     db.collection("cabinetSettings");
     db.collectionMocks.cabinetSettings!.find.mockReturnValue(cursorReturning([]));
     db.collection("cabinetMembers");
-    db.collectionMocks.cabinetMembers!.find.mockReturnValue(
-      cursorReturning([
-        {
-          _id: "member_1",
-          ministerialActions: 0,
-          lastMinisterialActionResetDay: "2026-06-02",
-        },
-      ])
-    );
+    db.collectionMocks.cabinetMembers!.find.mockReturnValue(cursorReturning([]));
     db.collection("centralBanks");
     db.collectionMocks.centralBanks!.find.mockReturnValue(cursorReturning([{ _id: "US" }]));
+  }
+
+  function rowAccrualCalls() {
+    return db.collectionMocks.cabinetMembers!.updateMany.mock.calls.filter(
+      ([, update]) => (update as { $inc?: Record<string, number> }).$inc?.ministerialActions === 1
+    );
+  }
+
+  it("accrues +1 ministerial action below cap on an accrual turn (every 6 turns)", async () => {
+    setupEmptyOrderWorld();
+    db.collectionMocks.cabinetMembers!.updateMany.mockResolvedValue({ modifiedCount: 3 });
 
     const { processMinisterialOrders } = await import("./ministerialOrderProcessing");
-    const result = await processMinisterialOrders(200);
+    const result = await processMinisterialOrders(MINISTERIAL_ACTION_ACCRUAL_TURNS * 40);
 
-    expect(result.actionsRegenerated).toBe(1);
-    expect(db.collectionMocks.cabinetMembers!.bulkWrite).toHaveBeenCalledWith([
-      {
-        updateOne: {
-          filter: { _id: "member_1" },
-          update: {
-            $set: {
-              ministerialActions: MINISTERIAL_ACTION_CAP,
-              lastMinisterialActionResetDay: "2026-06-03",
-            },
-          },
-        },
-      },
-    ]);
+    expect(result.actionsRegenerated).toBe(3);
+    const calls = rowAccrualCalls();
+    expect(calls).toHaveLength(1);
+    const [filter, update] = calls[0]!;
+    expect(filter).toEqual({
+      ministerialActions: { $lt: MINISTERIAL_ACTION_CAP },
+      lastMinisterialActionAccrualTurn: { $ne: MINISTERIAL_ACTION_ACCRUAL_TURNS * 40 },
+      $nor: [{ countryId: "UK", characterId: { $ne: null } }],
+    });
+    expect(update).toEqual({
+      $inc: { ministerialActions: 1 },
+      $set: { lastMinisterialActionAccrualTurn: MINISTERIAL_ACTION_ACCRUAL_TURNS * 40 },
+    });
+    expect(db.collectionMocks.cabinetMembers!.bulkWrite).not.toHaveBeenCalled();
+  });
 
-    vi.useRealTimers();
+  it("does not accrue ministerial actions between accrual turns", async () => {
+    setupEmptyOrderWorld();
+
+    const { processMinisterialOrders } = await import("./ministerialOrderProcessing");
+    const result = await processMinisterialOrders(MINISTERIAL_ACTION_ACCRUAL_TURNS * 40 + 1);
+
+    expect(result.actionsRegenerated).toBe(0);
+    expect(rowAccrualCalls()).toHaveLength(0);
   });
 });
 

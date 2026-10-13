@@ -343,6 +343,8 @@ function buildMockDb(opts: {
   runningMateTravelState?: string;
   /** Frozen ruleset stamp for the race (governs vpTravelPresenceWeight). */
   rulesetVersion?: number;
+  /** Banked campaign actions before the turn. */
+  actions?: number;
 }) {
   const {
     electionId,
@@ -357,6 +359,7 @@ function buildMockDb(opts: {
     travelState,
     runningMateTravelState,
     rulesetVersion,
+    actions = 0,
   } = opts;
 
   const campaign = {
@@ -366,7 +369,7 @@ function buildMockDb(opts: {
     candidateIsNPP: false,
     party: "democrat",
     funds: 50000,
-    actions: 0,
+    actions,
     fundraisingLevel: 0,
     groundGameLevel: 0,
     mediaSpendingLevel,
@@ -1212,5 +1215,48 @@ describe("primary state attacks", () => {
 
   it("stays out of it however many campaigns are in the pass", async () => {
     expect(await drainForTarget(6)).toBeNull();
+  });
+});
+
+describe("campaign action bank cap", () => {
+  async function runWithBalance(actions: number) {
+    const { getDb } = await import("@/lib/mongodb");
+    const { db, campaignBulkWrite } = buildMockDb({
+      electionId: new ObjectId(),
+      electionType: "senate",
+      endTime: new Date(Date.now() + 24 * 60 * 60 * 1000),
+      candidateId: new ObjectId(),
+      targetId: new ObjectId(),
+      mediaSpendingLevel: 0,
+      oppositionResearchLevel: 0,
+      nppEndorsementCount: 0,
+      playerEndorsementCount: 0,
+      actions,
+    });
+    vi.mocked(getDb).mockResolvedValue(db as never);
+    await processCampaignTurn(1);
+    const ops: {
+      updateOne: {
+        update: { $inc: { actions: number; totalActionsGenerated: number } };
+      };
+    }[] = campaignBulkWrite.mock.calls[0][0];
+    return ops[0].updateOne.update.$inc;
+  }
+
+  it("clamps income to the headroom under 48 turns of the campaign's own income", async () => {
+    const { calculateCampaignActions, CAMPAIGN_ACTION_BANK_TURNS } =
+      await import("@/lib/campaigns/actions");
+    // No endorsements and no gameConfig: income is the baseline of 4.
+    const income = calculateCampaignActions(0, 4);
+    const cap = income * CAMPAIGN_ACTION_BANK_TURNS;
+    const inc = await runWithBalance(cap - 1);
+    expect(inc.actions).toBe(1);
+    expect(inc.totalActionsGenerated).toBe(1);
+  });
+
+  it("pays nothing to a campaign already over the cap, without clawing back", async () => {
+    const inc = await runWithBalance(10_000);
+    expect(inc.actions).toBe(0);
+    expect(inc.totalActionsGenerated).toBe(0);
   });
 });

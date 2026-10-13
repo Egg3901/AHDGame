@@ -7,6 +7,7 @@ import type { ConflictAssignment } from "@/lib/military/assignments";
 import type { CorpsMember } from "@/lib/db/collections/characterGenerals";
 import type { CabinetLeverScope } from "@/lib/cabinet/actingScope";
 import type { ActionBlockReason } from "@/lib/resetCabinet/rules/actions";
+import type { OfficePoolTopUpStatus } from "@/lib/actions/officePoolTopUpRules";
 import type {
   DepartmentFinanceReadModel,
   DepartmentProgramReadModel,
@@ -124,6 +125,8 @@ export interface CabinetOfficeData {
     chancellorAllocationPercent: number | null;
   }>;
   canAct: boolean;
+  /** Holder-only state for buying +1 ministerial action with main AP. */
+  ministerialTopUp?: OfficePoolTopUpStatus | null;
   /**
    * Whether the viewer may read this office at all — the seated holder, their
    * country's head of government or head of state, or an admin.

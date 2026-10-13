@@ -181,7 +181,10 @@ async function handleGET() {
     );
 
     // --- Decay projections (what happens next turn) ---
-    const influenceProjection = projectInfluenceDecay(pi);
+    const influenceProjection = projectInfluenceDecay(
+      pi,
+      character.politicalInfluenceDecayMultiplier ?? 1
+    );
     const favorabilityProjection = projectFavorabilityDecay(fav);
     const infamy = character.infamy ?? 0;
     const infamyProjection = projectInfamyDecay(infamy);
@@ -201,6 +204,8 @@ async function handleGET() {
       .findOne({ chairCharacterId: character._id }, { projection: { _id: 1 } });
     const chairActionBonus = chairBankRow ? (config?.chairActionBonus ?? 3) : 0;
     const baseActionsPerTurn = Math.max(config?.baseActionsPerTurn ?? 0, MIN_BASE_ACTIONS_PER_TURN);
+    // Chamber leadership and Supreme Court AP, as granted at the last refresh.
+    const roleActionBonus = character.roleActionBonus ?? 0;
 
     return NextResponse.json({
       forexEnabled,
@@ -250,7 +255,8 @@ async function handleGET() {
         base: baseActionsPerTurn,
         officeBonus: officeActionBonus,
         chairBonus: chairActionBonus,
-        total: baseActionsPerTurn + officeActionBonus + chairActionBonus,
+        roleBonus: roleActionBonus,
+        total: baseActionsPerTurn + officeActionBonus + chairActionBonus + roleActionBonus,
       },
       decayProjections: {
         politicalInfluence: {

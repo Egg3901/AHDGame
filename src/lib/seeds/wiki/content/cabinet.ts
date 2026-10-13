@@ -67,11 +67,14 @@ Cabinet members have both structural roles and active executive mechanics:
 
 **Action economy:**
 - Cabinet members receive **cabinet actions** (or ministerial actions in parliamentary systems), capped at **4**.
-- Actions refill daily at midnight Eastern, not 1 every 24 turns.
+- You regain 1 action every 6 turns, banked up to the cap of 4.
+- Once per turn you can spend 10 AP to buy 1 extra action, up to the cap.
 - Orders and other active mechanics consume 1 action each.
 
 **Future / partially implemented:**
-- Department-specific influence actions and confirmed-cabinet NPI generation are planned.
+- Department-specific influence actions are planned.
+
+**National influence:** a confirmed cabinet member earns the +1.5 national influence tier each turn; an acting secretary earns +0.75. Position tiers do not stack, so you get your highest one. See [Elections Player Guide](/wiki/elections-player-guide).
 
 ## Cabinet vacancies
 

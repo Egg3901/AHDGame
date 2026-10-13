@@ -166,7 +166,10 @@ export interface MinisterialOrderConfig {
 /** Maximum ministerial actions a position can hold. */
 export const MINISTERIAL_ACTION_CAP = 4;
 
-/** @deprecated Turn-based regen replaced by daily midnight Eastern refill. */
+/** Turns between +1 ministerial action accruals (6 turns = 6 hours, 4 per day). */
+export const MINISTERIAL_ACTION_ACCRUAL_TURNS = 6;
+
+/** @deprecated Superseded by MINISTERIAL_ACTION_ACCRUAL_TURNS. */
 export const MINISTERIAL_ACTION_REGEN_INTERVAL = 24;
 
 /** Default order duration in turns (one game half-year). */

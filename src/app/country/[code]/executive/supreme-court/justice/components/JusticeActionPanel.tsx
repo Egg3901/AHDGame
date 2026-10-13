@@ -4,11 +4,17 @@ import { useState } from "react";
 import { Button } from "@/components/ui";
 import type { JusticeActionDef } from "@/lib/constants/justiceActions";
 import { apiErrorText } from "@/lib/errors/catalog";
+import type { OfficePoolTopUpStatus } from "@/lib/actions/officePoolTopUpRules";
+import { OfficePoolTopUpButton } from "@/components/officials/OfficePoolTopUpButton";
 
 interface JusticeActionPanelProps {
   actions: JusticeActionDef[];
   actionsRemaining: number;
   resetHint: string;
+  /** Pool cap; the top-up button only shows below it. */
+  actionCap?: number;
+  /** Holder-only state for buying +1 action with main AP. */
+  topUp?: OfficePoolTopUpStatus | null;
   canAct: boolean;
   seatNumber: number | null;
   countryCode: string;
@@ -18,13 +24,15 @@ interface JusticeActionPanelProps {
 /**
  * Justice self-serve actions (#3598 justiceActions.ts, #3605 UI). Mirrors
  * `VpActionPanel` (src/app/country/[code]/executive/vice-president/components)
- * exactly — a per-day action counter, one card per action, inline
+ * exactly: a banked action counter, one card per action, inline
  * success/error feedback — judicial-flavored instead of executive-flavored.
  */
 export function JusticeActionPanel({
   actions,
   actionsRemaining,
   resetHint,
+  actionCap = 2,
+  topUp = null,
   canAct,
   seatNumber,
   countryCode,
@@ -82,7 +90,18 @@ export function JusticeActionPanel({
           >
             {actionsRemaining} {actionsRemaining !== 1 ? "actions" : "action"} remaining
           </span>
-          {actionsRemaining < 2 && <p className="mt-1 text-xs text-muted">{resetHint}</p>}
+          {actionsRemaining < actionCap && <p className="mt-1 text-xs text-muted">{resetHint}</p>}
+          {canAct && seatNumber != null && (
+            <OfficePoolTopUpButton
+              className="mt-2"
+              countryCode={countryCode}
+              body={{ pool: "justice", seatNumber }}
+              remaining={actionsRemaining}
+              cap={actionCap}
+              topUp={topUp}
+              onUpdate={onUpdate}
+            />
+          )}
         </div>
       </div>
 

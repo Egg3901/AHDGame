@@ -17,7 +17,7 @@ import {
   resolveOfficeActionBonus,
 } from "@/lib/actions/officeActionBonus";
 import { getActionBreakdown } from "@/lib/actions/actionBreakdown";
-import { resolvePositionNiBonus } from "@/lib/actions/positionNiBonus";
+import { loadCharacterRoleBonuses } from "@/lib/actions/characterRoleBonuses";
 import { resolveProfilePositionLabels } from "@/lib/profilePositionLabels";
 import { getCabinetMembersCollection } from "@/lib/db/collections/cabinetMembers";
 import { fundraiseYieldLocal } from "@/lib/actions";
@@ -41,7 +41,7 @@ import { getAuthUserWithCharacter } from "@/lib/auth";
 import { getOfficeLabel } from "@/lib/utils/politics";
 import {
   calculateFavorabilityAboveThresholdPenalty,
-  calculateNationalInfluenceGain,
+  calculateNetNationalInfluencePerTurn,
   calculatePoliticalInfluenceDecay,
 } from "@shared/constants/formulas";
 import {
@@ -202,7 +202,10 @@ export default async function CharacterPage({ params }: PageProps) {
   const influence = character.politicalInfluence ?? 0;
   const nationalInfluence = character.nationalInfluence ?? 0;
   const infamy = character.infamy ?? 0;
-  const influenceDecay = calculatePoliticalInfluenceDecay(influence).toFixed(2);
+  const influenceDecay = calculatePoliticalInfluenceDecay(
+    influence,
+    character.politicalInfluenceDecayMultiplier ?? 1
+  ).toFixed(2);
   const infamyPenalty = infamy > 20 ? ((infamy - 20) * 0.05).toFixed(2) : null;
   const favAboveThresholdPenalty = calculateFavorabilityAboveThresholdPenalty(favorability);
   const favDecayDisplay = favAboveThresholdPenalty > 0 ? favAboveThresholdPenalty.toFixed(1) : null;
@@ -291,22 +294,20 @@ export default async function CharacterPage({ params }: PageProps) {
     countryId: (character.countryId ?? "US") as CountryId,
   });
   const chairActionBonus = chairBankRow ? (gameConfig?.chairActionBonus ?? 3) : 0;
-  const positionNiBonus = resolvePositionNiBonus({
-    currentOfficeType: character.currentOffice?.type,
-    countryId: (character.countryId ?? "US") as CountryId,
+  const roleBonuses = await loadCharacterRoleBonuses(apDb, {
+    character,
+    party: party ?? null,
     congressLeadershipRoles: congressLeadershipRows.map((row) => row.role),
-    isPartyChair: party?.chairId?.toString() === character._id.toString(),
-    isPartySubChair:
-      party?.viceChairId?.toString() === character._id.toString() ||
-      party?.treasurerId?.toString() === character._id.toString(),
     isSeatedJustice: justiceSeat != null,
-    cabinetCountryId: cabinetSeat
-      ? ((cabinetSeat.countryId ?? character.countryId ?? "US") as CountryId)
-      : undefined,
+    isCentralBankChair: chairBankRow != null,
+    cabinetSeats,
   });
-  const nationalGainPerTurn = (calculateNationalInfluenceGain(influence) + positionNiBonus).toFixed(
-    2
-  );
+  const nationalGainPerTurn = calculateNetNationalInfluencePerTurn(
+    character.nationalInfluence ?? 0,
+    influence,
+    roleBonuses.positionNiBonus
+  ).toFixed(2);
+
   const profileBaseOffice =
     character.currentOffice && CABINET_OFFICE_TYPES.has(character.currentOffice.type)
       ? electedSeat
@@ -332,7 +333,11 @@ export default async function CharacterPage({ params }: PageProps) {
     gameYear,
     enabledCabinetSeats,
   });
-  const totalActionsPerTurn = baseActionsPerTurn + officeActionBonus + chairActionBonus;
+  // Chamber leadership and the Court are positions too; the itemised
+  // breakdown below lists them separately.
+  const positionActionBonus =
+    officeActionBonus + roleBonuses.leadershipActionBonus + roleBonuses.justiceActionBonus;
+  const totalActionsPerTurn = baseActionsPerTurn + positionActionBonus + chairActionBonus;
   const actionHoarding = character.actions > ACTION_HOARDING_THRESHOLD;
 
   // Party influence per-turn stats (requires party data)
@@ -387,6 +392,8 @@ export default async function CharacterPage({ params }: PageProps) {
     officeActionBonus: gameConfig?.officeActionBonus,
     baseActionsPerTurn,
     chairActionBonus,
+    justiceActionBonus: roleBonuses.justiceActionBonus,
+    leadershipActionBonus: roleBonuses.leadershipActionBonus,
     bonusActionsFromParty: bonusActionsFromParty ?? 0,
   });
 
@@ -635,7 +642,7 @@ export default async function CharacterPage({ params }: PageProps) {
               infamyPenalty={infamyPenalty}
               maxNPI={maxNPI}
               baseActionsPerTurn={baseActionsPerTurn}
-              officeActionBonus={officeActionBonus}
+              officeActionBonus={positionActionBonus}
               chairActionBonus={chairActionBonus}
               actionBreakdown={actionBreakdown}
               totalActionsPerTurn={totalActionsPerTurn}

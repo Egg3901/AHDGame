@@ -9,6 +9,7 @@ import {
 } from "@/lib/macroMetrics/displayMerge";
 import { getDb } from "@/lib/mongodb";
 import { getAuthUserWithCharacter } from "@/lib/auth";
+import { officePoolTopUpStatus } from "@/lib/actions/officePoolTopUpRules";
 import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { getCabinetMechanics, getCabinetPositions } from "@/lib/constants/cabinetMechanics";
 import { resolveDepartment, resolveSeatName, isSeatActive } from "@/lib/cabinet/rosterEra";
@@ -204,6 +205,8 @@ export async function GET(_request: Request, { params }: RouteParams) {
                     borderKey: 1,
                     tintColor: 1,
                     sharedMinisterialActions: 1,
+                    sharedMinisterialActionTopUpTurn: 1,
+                    actions: 1,
                   },
                 }
               )
@@ -958,6 +961,20 @@ export async function GET(_request: Request, { params }: RouteParams) {
       debtPrincipal: budget?.debt?.principal ?? 0,
       sovereignBondsOutstanding: sovereignBonds.reduce((sum, b) => sum + (b.totalIssued ?? 0), 0),
       canAct,
+      // Holder-only: buy +1 ministerial action with main AP (office pool top-up).
+      // Legacy pool only; the v2 reset cabinet spends its own charges.
+      ministerialTopUp:
+        member?.characterId &&
+        user?.character?._id &&
+        member.characterId.toString() === user.character._id.toString()
+          ? officePoolTopUpStatus(
+              sharedRemaining != null
+                ? holderChar?.sharedMinisterialActionTopUpTurn
+                : member.lastMinisterialActionTopUpTurn,
+              currentTurn,
+              holderChar?.actions
+            )
+          : null,
       departmentProgram,
       departmentFinances,
       units,

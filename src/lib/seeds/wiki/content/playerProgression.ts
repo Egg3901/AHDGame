@@ -67,8 +67,10 @@ Bonuses (on top of 4 base AP):
 | Governor | +2 | ₳15k |
 | President / PM / Chancellor | +4 | President ₳50k |
 | Central Bank Chair | +3 (stacks) | (see country hub) |
+| Supreme Court justice | +2 (stacks) | none |
+| Chamber leadership (Speaker +3, leaders +2, whips +1) | stacks on the seat | none |
 
-Non-US offices grant the local equivalent. Country hubs have the exact table.
+Non-US offices grant the local equivalent. Ceremonial heads of state get +0. Country hubs have the exact table.
 
 ## Phase 6: go up
 
@@ -78,7 +80,7 @@ Typical US clicks: State Senate → House → Senate → Governor → President.
 
 Parliamentary: win a seat → party leadership → PM/Chancellor after the chamber result and confidence.
 
-Presidential races are NPI races. Build NPI for many cycles before you file.
+Presidential races are NPI races. NPI decays 1% per turn and settles at 100 times your per-turn gain, so build it from a national seat or party office over many cycles before you file.
 
 ## Your first week
 

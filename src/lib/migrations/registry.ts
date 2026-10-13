@@ -1,3 +1,4 @@
+import { migration as orgHeadAgendaIndex } from "./entries/2026-10-13-org-head-agenda-index";
 import { migration as bankFundSubscriptions } from "./entries/2026-10-12-bank-fund-subscriptions";
 import { migration as completeCabinetV2Accounts } from "./entries/2026-10-10-complete-cabinet-v2-accounts";
 import { migration as fundMandates } from "./entries/2026-10-12-fund-mandates";
@@ -371,6 +372,7 @@ export const MIGRATIONS: Migration[] = [
   completeCabinetV2Accounts,
   fundMandates,
   bankFundSubscriptions,
+  orgHeadAgendaIndex,
 ];
 
 // D13 rollback drill - registered but deliberately OUTSIDE the normal chain.

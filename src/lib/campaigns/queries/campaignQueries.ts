@@ -4,7 +4,7 @@ import {
   loadCampaignPriceLevel,
 } from "@/lib/campaigns/campaignCurrency";
 import type { AuthUserWithCharacter } from "@/lib/auth";
-import { campaignActionsPerTurn } from "@/lib/campaigns/actions";
+import { campaignActionBankCap, campaignActionsPerTurn } from "@/lib/campaigns/actions";
 import { calculateCampaignIncome } from "@/lib/campaigns/income";
 import { isCampaignEligibleElection } from "@/lib/campaigns/isCampaignEligible";
 import { calculateMaintenanceCosts } from "@/lib/campaigns/maintenance";
@@ -621,6 +621,7 @@ export async function getCampaignDetail(
 
   return {
     ...base,
+    ...(base.actions != null ? { actionsCap: campaignActionBankCap(grossActionsPerTurn) } : {}),
     ...(ownSupport ? { ownSupport } : {}),
     ...(briefing ? { briefing } : {}),
     ...(campaignSuspended

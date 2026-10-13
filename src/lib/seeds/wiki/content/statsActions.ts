@@ -9,7 +9,7 @@ The complete reference for every stat a character carries and every action they 
 - **Scale:** 0 to 100, per state
 - **Start:** 0
 - **Grows by:** Campaign action (+1 base per action, diminishing above 50, floored at +0.1)
-- **Decays by:** 0.75% of current value per turn (floor 0)
+- **Decays by:** 0.75% of current value per turn (floor 0). Members of the party holding the national executive (the president's party, or the head of government's party in parliamentary systems) decay faster, scaled by that government's approval: x2.0 at 0% approval, x1.5 at 50%, x1.0 at 100%
 - **Drives:** Vote reach in state races, primary scores in state races
 - **Scope:** Single value; home-state focus in current implementation
 
@@ -18,12 +18,15 @@ PI is the most important stat in the early game. Because decay is relative (not 
 ### National Political Influence (NPI)
 
 - **Scale:** Uncapped; starts at 0
-- **Grows by:** +state PI ÷ 100 per turn (automatic, no action required), **plus a position bonus** per turn depending on held office (President/PM/Chancellor +2.5, VP +2.0, other seated offices, Governor, Senator, Representative, cabinet, etc., +1.0, none +0)
+- **Decays by:** 1% of current value per turn, applied before this turn's gain (floor 0)
+- **Grows by:** a state PI term each turn (automatic, no action required): PI 0 → −0.5, PI 25 → 0, PI 50 → +0.5, PI 75 → +1.25, PI 100 → +2.0. Up to PI 50 it is \`PI / 50 − 0.5\`; above 50 it is \`0.5 + (PI − 50) × 0.03\`
+- **Plus a position bonus** from your single highest tier: national head of government or executive head of state +2.5; VP or deputy head of government, presiding officers, majority leaders, national party chair +2.0; confirmed cabinet, governor, Supreme Court justice, central bank chair, minority leaders, party vice chair or treasurer +1.5; national legislator or ceremonial head of state +1.0; acting cabinet +0.75; state legislator or state party chair +0.5; long-serving CEO of a large listed corporation +0.3 or +0.15. Leading an international organisation adds +1.0 on top. Full table: [Elections Player Guide](/wiki/elections-player-guide)
+- **Equilibrium:** NPI settles where gain equals decay, at 100 × your per-turn gain. At PI 30, a head of government settles near 260, a national legislator near 110, a state legislator near 60, and someone with no office near 10. After leaving office, NPI loses half the gap to its new level in about 69 turns
 - **Drives:** Presidential races **exclusively**: both reach and appeal
 - **General-election scaling:** Sqrt curve, capped at 1.0 once NPI reaches 100. NPI 25 → 0.5×; NPI 50 → ~0.71×; NPI 85 → ~0.92×; NPI 99 → ~0.995×; NPI ≥ 100 → 1.0× (cap)
 - **Presidential-primary scaling:** A separate diminishing-return curve, \`1 − exp(−NPI/45)\`, approaches 1.0 without a hard cap
 
-Above NPI=100 there is no further general-election reach bonus, although the presidential-primary curve continues to increase by progressively smaller amounts. NPI=99 vs NPI=85 is a meaningful general-election spread (~7 percentage points of reach), which it wasn't under the old log curve. NPI is still a long game; only serious presidential contenders should optimise for it. You build NPI by sustaining high state PI over many turns: it accumulates passively. Holding national office accelerates the build.
+Above NPI=100 there is no further general-election reach bonus, although the presidential-primary curve continues to increase by progressively smaller amounts. NPI=99 vs NPI=85 is a meaningful general-election spread (~7 percentage points of reach), which it wasn't under the old log curve. NPI is still a long game; only serious presidential contenders should optimise for it. You build NPI by holding office and keeping state PI above 25 over many turns. Keeping it high takes ongoing position, because NPI decays toward whatever your current gain supports.
 
 ### Favorability
 
@@ -96,7 +99,9 @@ Fund generation per turn:
 ### Actions
 
 - **Base per turn:** 4
-- **Office bonus:** House/State Sen +1 · Senate/VP +2 · Gov +2 · Pres +4 · Central Bank Chair +3
+- **Office bonus:** House/State Sen +1 · Senate/VP +2 · Gov +2 · Pres +4 (US values; each country's office table sets its own, and ceremonial heads of state get +0)
+- **Stacking bonuses:** Central Bank Chair +3 · Supreme Court justice +2 · chamber leadership (highest single role): presiding officers +3, majority and minority leaders and the Leader of the Opposition +2, President pro tempore, CPPCC chair, whips and shadow cabinet +1
+- **Office pool top-up:** once per turn per pool, spend 10 actions to buy 1 office action (ministerial, vice president, justice, gubernatorial), up to the pool's cap
 - **Party bonus:** variable per turn, distributed from party pool by your Party Influence × platform alignment
 - **Cap:** 200
 - **Hoarding penalty:** −4/turn above 100
@@ -190,13 +195,13 @@ At the top of each hour, in this order:
 
 1. Hoarding penalty applies if > 100 actions.
 2. Base 4 actions refresh.
-3. Office bonus actions refresh.
+3. Office, leadership, justice and central bank bonus actions refresh.
 4. Party bonus actions distribute from pool.
 5. Fund generation credits (base + donor + office).
-6. Political Influence decays 0.75%.
+6. Political Influence decays 0.75% (faster for the governing party when approval is below 100%).
 7. Infamy decays 5%.
 8. Favorability decays if above 60.
-9. NPI accrues +state PI / 100.
+9. NPI decays 1%, then gains the state PI term plus your position bonus.
 
 Then bills, NPP behavior, elections, and all other systems run.
 
