@@ -1,6 +1,6 @@
 import {
   calculateFavorabilityAboveThresholdPenalty,
-  calculateNationalInfluenceGain,
+  calculateNetNationalInfluencePerTurn,
   calculatePoliticalInfluenceDecay,
 } from "@shared/constants/formulas";
 
@@ -26,6 +26,9 @@ export interface WidgetPerTurnInput {
   /** Absent for imperial characters, who have no political standing. */
   character?: {
     politicalInfluence: number;
+    /** Political-influence decay multiplier (executive-party members decay faster). */
+    politicalInfluenceDecayMultiplier?: number;
+    nationalInfluence: number;
     favorability: number;
     /** Highest position-based national influence tier (resolvePositionNiBonus). */
     positionNiBonus: number;
@@ -57,11 +60,20 @@ export function buildWidgetPerTurn(input: WidgetPerTurnInput): WidgetPerTurn {
   return {
     funds: finiteOrNull(character?.fundsPerTurn),
     politicalInfluence: character
-      ? finiteOrNull(-calculatePoliticalInfluenceDecay(character.politicalInfluence))
+      ? finiteOrNull(
+          -calculatePoliticalInfluenceDecay(
+            character.politicalInfluence,
+            character.politicalInfluenceDecayMultiplier ?? 1
+          )
+        )
       : null,
     nationalInfluence: character
       ? finiteOrNull(
-          calculateNationalInfluenceGain(character.politicalInfluence) + character.positionNiBonus
+          calculateNetNationalInfluencePerTurn(
+            character.nationalInfluence,
+            character.politicalInfluence,
+            character.positionNiBonus
+          )
         )
       : null,
     favorability: character

@@ -32,14 +32,28 @@ const LIVE_CONFIG_MAP: Record<string, number> = {
 };
 
 describe("resolveOfficeActionBonusForType", () => {
-  it("prefers an explicit gameConfig entry over the country registry", () => {
-    // DD's registry entry for `governor` is 2; the config says 2 as well, but
-    // the point is the config is consulted first — prove it with an override.
-    expect(resolveOfficeActionBonusForType("governor", { governor: 9 }, "DD")).toBe(9);
+  it("prefers the holder's country registry over a bare config key", () => {
+    expect(resolveOfficeActionBonusForType("governor", { governor: 9 }, "DD")).toBe(2);
   });
 
-  it("keeps a configured zero rather than falling back to the registry", () => {
-    expect(resolveOfficeActionBonusForType("senate", { senate: 0 }, "US")).toBe(0);
+  it("does not give ceremonial presidents the US president's config bonus", () => {
+    expect(resolveOfficeActionBonusForType("president", LIVE_CONFIG_MAP, "IT")).toBe(0);
+    expect(resolveOfficeActionBonusForType("president", LIVE_CONFIG_MAP, "CN")).toBe(0);
+    expect(resolveOfficeActionBonusForType("president", LIVE_CONFIG_MAP, "US")).toBe(4);
+  });
+
+  it("does not give CN or RU premiers the Canadian premier's config bonus", () => {
+    expect(resolveOfficeActionBonusForType("premier", LIVE_CONFIG_MAP, "CN")).toBe(4);
+    expect(resolveOfficeActionBonusForType("premier", LIVE_CONFIG_MAP, "RU")).toBe(4);
+  });
+
+  it("honours a country-scoped admin override, including zero", () => {
+    expect(resolveOfficeActionBonusForType("governor", { "DD:governor": 9 }, "DD")).toBe(9);
+    expect(resolveOfficeActionBonusForType("senate", { "US:senate": 0 }, "US")).toBe(0);
+  });
+
+  it("uses a bare config key for offices the country registry does not define", () => {
+    expect(resolveOfficeActionBonusForType("usCabinet", LIVE_CONFIG_MAP, "US")).toBe(1);
   });
 
   it("grants a Volkskammer deputy their registry bonus (ticket #974)", () => {
@@ -80,22 +94,33 @@ describe("resolveOfficeActionBonusForType", () => {
 });
 
 describe("resolveOfficeNiBonus", () => {
-  it("keeps the tuned tier for offices in the override table", () => {
+  it("tiers US offices", () => {
     expect(resolveOfficeNiBonus("president", "US")).toBe(2.5);
     expect(resolveOfficeNiBonus("vicePresident", "US")).toBe(2.0);
     expect(resolveOfficeNiBonus("house", "US")).toBe(1.0);
-    expect(resolveOfficeNiBonus("governor", "US")).toBe(1.0);
+    expect(resolveOfficeNiBonus("senate", "US")).toBe(1.0);
+    expect(resolveOfficeNiBonus("governor", "US")).toBe(1.5);
+    expect(resolveOfficeNiBonus("stateSenate", "US")).toBe(0.5);
+    expect(resolveOfficeNiBonus("usCabinet", "US")).toBe(1.5);
+  });
+
+  it("gives a ceremonial head of state the ceremonial tier", () => {
+    expect(resolveOfficeNiBonus("president", "IT")).toBe(1.0);
+    expect(resolveOfficeNiBonus("uachtaran", "IE")).toBe(1.0);
+    expect(resolveOfficeNiBonus("president", "FR")).toBe(2.5);
   });
 
   it("gives non-US legislators the rank-and-file tier (ticket #974)", () => {
     expect(resolveOfficeNiBonus("volkskammerDeputy", "DD")).toBe(1.0);
-    expect(resolveOfficeNiBonus("landAssembly", "DD")).toBe(1.0);
+    expect(resolveOfficeNiBonus("landAssembly", "DD")).toBe(0.5);
     expect(resolveOfficeNiBonus("supremeSovietDeputy", "RU")).toBe(1.0);
     expect(resolveOfficeNiBonus("dail", "IE")).toBe(1.0);
   });
 
   it("gives a non-US national executive the executive-head tier", () => {
-    expect(resolveOfficeNiBonus("chairmanOfStateCouncil", "DD")).toBe(2.5);
+    expect(resolveOfficeNiBonus("generalSecretary", "DD")).toBe(2.5);
+    expect(resolveOfficeNiBonus("premier", "CN")).toBe(2.5);
+    expect(resolveOfficeNiBonus("ministerPresident", "DE")).toBe(1.5);
   });
 
   it("returns 0 for unknown or absent offices", () => {

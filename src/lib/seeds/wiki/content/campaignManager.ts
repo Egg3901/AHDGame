@@ -127,6 +127,8 @@ Your campaign generates its own per-turn action pool:
 
 Campaign actions are consumed by **upgrades only** (not regular actions like Campaign or Fundraise).
 
+A campaign can bank at most **48 turns of its own per-turn income** (for example, 480 actions at 10 per turn). At the cap the turn adds nothing until you spend below it. Actions already above the cap are kept, not taken away.
+
 ## Budget math
 
 Campaign funds flow:

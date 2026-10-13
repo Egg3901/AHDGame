@@ -18,6 +18,29 @@ vi.mock("@/lib/countryState", () => ({
   })),
 }));
 
+const roleFixtures = vi.hoisted(() => ({
+  oppositionLeaderIds: new Set<string>(),
+  shadowCabinetIds: new Set<string>(),
+  presidingOfficers: [] as { characterId: unknown; role: string }[],
+  statePartyChairIds: new Set<string>(),
+  orgHeadIds: new Set<string>(),
+  ceoCandidates: new Map<string, { corporationId: string; tier: "major" | "standard" }>(),
+}));
+vi.mock("./actionRefreshRoles", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./actionRefreshRoles")>();
+  return {
+    ...actual,
+    loadOppositionRoles: vi.fn(async () => ({
+      leaderIds: roleFixtures.oppositionLeaderIds,
+      shadowCabinetIds: roleFixtures.shadowCabinetIds,
+    })),
+    loadPresidingOfficerRoles: vi.fn(async () => roleFixtures.presidingOfficers),
+    loadStatePartyChairIds: vi.fn(async () => roleFixtures.statePartyChairIds),
+    loadOrgHeadIds: vi.fn(async () => roleFixtures.orgHeadIds),
+    loadCeoCandidates: vi.fn(async () => roleFixtures.ceoCandidates),
+  };
+});
+
 describe("processActionRefresh", () => {
   const mockBulkWrite = vi.fn();
   let chairRows: { chairCharacterId: unknown }[] = [];
@@ -45,6 +68,12 @@ describe("processActionRefresh", () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
+    roleFixtures.oppositionLeaderIds = new Set();
+    roleFixtures.shadowCabinetIds = new Set();
+    roleFixtures.presidingOfficers = [];
+    roleFixtures.statePartyChairIds = new Set();
+    roleFixtures.orgHeadIds = new Set();
+    roleFixtures.ceoCandidates = new Map();
     chairRows = [];
     cabinetRows = [];
     congressLeaderRows = [];
@@ -213,8 +242,9 @@ describe("processActionRefresh", () => {
     expect(update.actions).toBe(9); // 5 + 4 base
     // politicalInfluence starts at 10, decays by 10 * 0.0075 = 0.075
     expect(update.politicalInfluence).toBeCloseTo(9.925, 5);
-    // nationalInfluence starts at 0, gains state influence / 100 = 10/100 = 0.1
-    expect(update.nationalInfluence).toBeCloseTo(0.1, 5);
+    // State influence 10 earns 10/50 - 0.5 = -0.3 NI; national influence is
+    // floored at 0.
+    expect(update.nationalInfluence).toBe(0);
     expect(update.infamy).toBeDefined();
     expect(update.favorability).toBeDefined();
   });
@@ -473,9 +503,11 @@ describe("processActionRefresh", () => {
 
     const [ops] = mockBulkWrite.mock.calls[0];
     const update = ops[0].updateOne.update.$set as Record<string, unknown>;
-    // Senate's own OFFICE_NI_BONUS tier is 1.0; Justice's is 2.0 — the higher
-    // of the two wins (Math.max stacking, same as party-chair/leader tiers).
-    expect(update.nationalInfluence).toBeGreaterThanOrEqual(2.0);
+    // Senate tier 1.0, Justice tier 1.5: the higher wins (Math.max stacking,
+    // same as party-chair/leader tiers). State influence 0 costs 0.5.
+    expect(update.nationalInfluence).toBeCloseTo(1.0, 5);
+    // The Justice AP bonus stacks on the Senate seat: 4 base + 2 seat + 2.
+    expect(update.actions).toBe(8);
   });
 
   it("stacks the cabinet bonus on the legislative seat for a cabinet minister", async () => {
@@ -524,7 +556,7 @@ describe("processActionRefresh", () => {
     expect(update.actions).toBe(6);
   });
 
-  it("grants an acting cabinet member the cabinet NI tier without currentOffice", async () => {
+  it("grants an acting cabinet member the acting NI tier without currentOffice", async () => {
     const { processActionRefresh } = await import("./actionRefresh");
     cabinetRows = [
       {
@@ -543,7 +575,7 @@ describe("processActionRefresh", () => {
       actions: 0,
       funds: 0,
       favorability: 50,
-      politicalInfluence: 0,
+      politicalInfluence: 25,
       nationalInfluence: 0,
       donorBaseLevel: 0,
       infamy: 0,
@@ -559,7 +591,8 @@ describe("processActionRefresh", () => {
       string,
       number
     >;
-    expect(update.nationalInfluence).toBe(1);
+    // Acting tier 0.75; state influence 25 adds nothing.
+    expect(update.nationalInfluence).toBeCloseTo(0.75, 5);
   });
 
   it("uses the Speaker NI tier when the Speaker also holds an acting cabinet seat", async () => {
@@ -578,7 +611,7 @@ describe("processActionRefresh", () => {
       actions: 0,
       funds: 0,
       favorability: 50,
-      politicalInfluence: 0,
+      politicalInfluence: 25,
       nationalInfluence: 0,
       donorBaseLevel: 0,
       infamy: 0,
@@ -594,7 +627,9 @@ describe("processActionRefresh", () => {
       string,
       number
     >;
-    expect(update.nationalInfluence).toBe(2);
+    expect(update.nationalInfluence).toBeCloseTo(2, 5);
+    // Presiding officer AP: 4 base + 1 House seat + 3 Speaker.
+    expect(update.actions).toBe(8);
   });
 
   it("caps actions at 200", async () => {
@@ -882,7 +917,7 @@ describe("processActionRefresh", () => {
       actions: 5,
       funds: 0,
       favorability: 50,
-      politicalInfluence: 0,
+      politicalInfluence: 25,
       nationalInfluence: 0,
       donorBaseLevel: 0,
       infamy: 0,
@@ -916,5 +951,160 @@ describe("processActionRefresh", () => {
     // Rank-and-file legislator NI tier, also identical.
     expect(byId.ddDeputy.nationalInfluence).toBeCloseTo(1.0, 5);
     expect(byId.usRep.nationalInfluence).toBeCloseTo(1.0, 5);
+  });
+
+  describe("actions and national influence rework", () => {
+    const baseCharacter = (overrides: Partial<Character>): Character =>
+      ({
+        _id: "c1" as never,
+        userId: "u1" as never,
+        name: "Test",
+        countryId: "US",
+        homeState: "NY",
+        policies: { economic: 0, social: 0 },
+        actions: 0,
+        funds: 0,
+        favorability: 50,
+        politicalInfluence: 25,
+        nationalInfluence: 0,
+        donorBaseLevel: 0,
+        infamy: 0,
+        party: "independent",
+        currentOffice: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        ...overrides,
+      }) as Character;
+    const refreshOne = async (character: Character, config: GameConfig | null = null) => {
+      const { processActionRefresh } = await import("./actionRefresh");
+      await processActionRefresh([character], config, new Date());
+      return mockBulkWrite.mock.calls[0][0][0].updateOne.update.$set as Record<string, unknown>;
+    };
+
+    it("decays national influence 1% before adding the turn's gain", async () => {
+      const update = await refreshOne(
+        baseCharacter({ nationalInfluence: 200, currentOffice: { type: "house" } as never })
+      );
+      // 200 - 2 decay + 1.0 legislator tier + 0 (state influence 25).
+      expect(update.nationalInfluence).toBeCloseTo(199, 5);
+    });
+
+    it("scales the state influence term steeply at both ends", async () => {
+      expect(
+        (await refreshOne(baseCharacter({ politicalInfluence: 100, nationalInfluence: 10 })))
+          .nationalInfluence
+      ).toBeCloseTo(10 - 0.1 + 2, 5);
+    });
+
+    it("grants chamber leadership AP: Leader of the Opposition +2", async () => {
+      roleFixtures.oppositionLeaderIds = new Set(["c1"]);
+      const update = await refreshOne(baseCharacter({ actions: 0 }));
+      expect(update.actions).toBe(6);
+      expect(update.roleActionBonus).toBe(2);
+    });
+
+    it("grants a shadow cabinet member +1 AP", async () => {
+      roleFixtures.shadowCabinetIds = new Set(["c1"]);
+      expect((await refreshOne(baseCharacter({}))).actions).toBe(5);
+    });
+
+    it("takes only the highest leadership role", async () => {
+      congressLeaderRows = [
+        { characterId: { toString: () => "c1" }, role: "majority_whip_house" },
+        { characterId: { toString: () => "c1" }, role: "majority_leader_house" },
+      ];
+      roleFixtures.shadowCabinetIds = new Set(["c1"]);
+      expect((await refreshOne(baseCharacter({}))).actions).toBe(6);
+    });
+
+    it("maps Nigerian presiding officers onto the presiding tier", async () => {
+      roleFixtures.presidingOfficers = [
+        { characterId: { toString: () => "c1" }, role: "speaker_ng_reps" },
+      ];
+      const update = await refreshOne(baseCharacter({ countryId: "NG" as never }));
+      expect(update.actions).toBe(7);
+      expect(update.nationalInfluence).toBeCloseTo(2, 5);
+    });
+
+    it("adds international leadership NI on top of the domestic tier", async () => {
+      roleFixtures.orgHeadIds = new Set(["c1"]);
+      const update = await refreshOne(
+        baseCharacter({ currentOffice: { type: "senate" } as never })
+      );
+      expect(update.nationalInfluence).toBeCloseTo(2, 5);
+    });
+
+    it("gives a state party chair the 0.5 tier", async () => {
+      roleFixtures.statePartyChairIds = new Set(["c1"]);
+      expect((await refreshOne(baseCharacter({}))).nationalInfluence).toBeCloseTo(0.5, 5);
+    });
+
+    it("waits out the CEO tenure before granting CEO NI, then grants the tier", async () => {
+      roleFixtures.ceoCandidates = new Map([["c1", { corporationId: "corp1", tier: "major" }]]);
+      const first = await refreshOne(baseCharacter({}));
+      expect(first.nationalInfluence).toBe(0);
+      expect(first.ceoNiTier).toBeNull();
+      expect(first.ceoNiTenure).toEqual({ corporationId: "corp1", sinceTurn: 0 });
+
+      mockBulkWrite.mockClear();
+      const later = await refreshOne(
+        baseCharacter({ ceoNiTenure: { corporationId: "corp1", sinceTurn: -12 } })
+      );
+      expect(later.ceoNiTier).toBe("major");
+      expect(later.nationalInfluence).toBeCloseTo(0.3, 5);
+    });
+
+    it("restarts CEO tenure when the qualifying corporation changes", async () => {
+      roleFixtures.ceoCandidates = new Map([["c1", { corporationId: "corp2", tier: "standard" }]]);
+      const update = await refreshOne(
+        baseCharacter({ ceoNiTenure: { corporationId: "corp1", sinceTurn: -50 } })
+      );
+      expect(update.ceoNiTier).toBeNull();
+      expect(update.ceoNiTenure).toEqual({ corporationId: "corp2", sinceTurn: 0 });
+    });
+
+    it("decays the executive party's political influence faster, scaled by approval", async () => {
+      const pmNppId = "nppExecutive" as never;
+      nppRows = [
+        { _id: pmNppId, countryId: "DD", party: "sed", politicalInfluence: 10, favorability: 50 },
+      ];
+      governmentFormationRows = [
+        { _id: "DD", countryId: "DD", status: "formed", pmCharacterId: null, pmNppId },
+      ];
+      governmentApprovalRows = [{ _id: "DD", approvalRating: 20 }];
+      const { processActionRefresh } = await import("./actionRefresh");
+      await processActionRefresh(
+        [
+          baseCharacter({
+            _id: "member" as never,
+            countryId: "DD" as never,
+            party: "sed",
+            politicalInfluence: 40,
+          }),
+          baseCharacter({
+            _id: "rival" as never,
+            countryId: "DD" as never,
+            party: "ldpd",
+            politicalInfluence: 40,
+          }),
+        ],
+        null,
+        new Date()
+      );
+      const ops = mockBulkWrite.mock.calls.find((call) =>
+        (call[0] as { updateOne: { filter: { _id: string } } }[]).some(
+          (op) => op.updateOne.filter._id === "member"
+        )
+      )![0] as {
+        updateOne: { filter: { _id: string }; update: { $set: Record<string, number> } };
+      }[];
+      const byId = Object.fromEntries(
+        ops.map((op) => [op.updateOne.filter._id, op.updateOne.update.$set])
+      );
+      // 20% approval: 1.8x of the 0.75% decay.
+      expect(byId.member.politicalInfluence).toBeCloseTo(40 - 40 * 0.0075 * 1.8, 5);
+      expect(byId.member.politicalInfluenceDecayMultiplier).toBeCloseTo(1.8, 5);
+      expect(byId.rival.politicalInfluence).toBeCloseTo(40 - 40 * 0.0075, 5);
+    });
   });
 });

@@ -1,11 +1,15 @@
 import { ObjectId, type Db } from "mongodb";
-import { MINISTERIAL_ACTION_CAP } from "@/lib/constants/cabinetMechanicsTypes";
+import {
+  MINISTERIAL_ACTION_ACCRUAL_TURNS,
+  MINISTERIAL_ACTION_CAP,
+} from "@/lib/constants/cabinetMechanicsTypes";
 import { getCalendarDayInTimezone } from "@/lib/time/dailyReset";
 import { getCabinetMembersCollection } from "@/lib/db/collections/cabinetMembers";
 import type { UnifiedCabinetMember } from "@/lib/db/types/unifiedCabinetMember";
 import type { Character } from "@/lib/db/types";
 import type { CountryId } from "@/lib/constants/countries";
-import { isSharedPoolStale, sharedPoolFromRows } from "@/lib/uk/dualMinistry/rules";
+import { sharedPoolFromRows } from "@/lib/uk/dualMinistry/rules";
+import { isOfficePoolAccrualTurn } from "@/lib/actions/officePoolAccrual";
 
 export { MINISTERIAL_ACTION_RESET_HINT } from "./ministerialActionHint";
 
@@ -245,33 +249,54 @@ export async function reconcileUkSharedPool(
 }
 
 /**
- * UK holder character ids whose shared pool is missing or stale, from already
- * loaded member rows plus one projected character read. Lets the turn reset
- * refill shared pools without touching fat documents.
+ * Per-turn accrual for UK shared pools: every `MINISTERIAL_ACTION_ACCRUAL_TURNS`
+ * turns each UK player holder gains +1 shared action, banked up to the cap, and
+ * the new balance is mirrored to every row they hold. Missing pools initialize
+ * from the holder rows first (same as a read would). The per-character
+ * `sharedMinisterialActionAccrualTurn` stamp makes a re-run of the same turn a
+ * no-op. Bounded by the UK holder count.
  */
-export async function ukSharedPoolIdsNeedingReset(
+export async function accrueUkSharedPools(
   db: Db,
   rows: { characterId?: ObjectId | null; countryId?: string }[],
-  today: string
-): Promise<string[]> {
+  currentTurn: number,
+  now: Date = new Date()
+): Promise<number> {
+  if (!isMinisterialAccrualTurn(currentTurn)) return 0;
   const holderIds = [
     ...new Set(
       rows
         .filter((row) => row.countryId === "UK" && row.characterId != null)
         .map((row) => (row.characterId as ObjectId).toString())
     ),
-  ];
-  if (holderIds.length === 0) return [];
-  const objectIds = holderIds.map((id) => new ObjectId(id));
-  const characters = await db
-    .collection<Character>("characters")
-    .find({ _id: { $in: objectIds } } as never)
-    .project({ sharedMinisterialActions: 1, sharedMinisterialActionResetDay: 1 })
-    .toArray();
-  const poolById = new Map(characters.map((c) => [c._id.toString(), c]));
-  return holderIds.filter((id) => {
-    const pool = poolById.get(id);
-    if (pool?.sharedMinisterialActions == null) return true;
-    return isSharedPoolStale(pool.sharedMinisterialActionResetDay, today);
-  });
+  ].map((id) => new ObjectId(id));
+  let accrued = 0;
+  for (const characterId of holderIds) {
+    const pool = await ensureUkSharedPool(db, characterId, now);
+    if (pool.remaining >= MINISTERIAL_ACTION_CAP) continue;
+    const updated = await db.collection<Character>("characters").findOneAndUpdate(
+      {
+        _id: characterId,
+        sharedMinisterialActions: { $lt: MINISTERIAL_ACTION_CAP },
+        sharedMinisterialActionAccrualTurn: { $ne: currentTurn },
+      },
+      {
+        $inc: { sharedMinisterialActions: 1 },
+        $set: { sharedMinisterialActionAccrualTurn: currentTurn, updatedAt: now },
+      },
+      { returnDocument: "after", projection: { sharedMinisterialActions: 1 } }
+    );
+    if (updated?.sharedMinisterialActions == null) continue;
+    await getCabinetMembersCollection(db).updateMany(
+      { countryId: "UK" as never, characterId },
+      { $set: { ministerialActions: updated.sharedMinisterialActions, updatedAt: now } }
+    );
+    accrued++;
+  }
+  return accrued;
+}
+
+/** True on turns where ministerial pools gain their +1 accrual. */
+export function isMinisterialAccrualTurn(currentTurn: number): boolean {
+  return isOfficePoolAccrualTurn(currentTurn, MINISTERIAL_ACTION_ACCRUAL_TURNS);
 }

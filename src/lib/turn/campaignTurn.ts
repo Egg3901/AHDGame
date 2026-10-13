@@ -8,7 +8,7 @@ import { ObjectId } from "mongodb";
 import type { UpdateFilter } from "mongodb";
 import type { Campaign, ElectionCandidate } from "@/lib/db/types";
 import { calculateCampaignIncome } from "@/lib/campaigns/income";
-import { campaignActionsPerTurn } from "@/lib/campaigns/actions";
+import { campaignActionsPerTurn, cappedCampaignActionGrant } from "@/lib/campaigns/actions";
 import { diminishPassiveFavorabilityGain } from "@/lib/actions";
 import {
   calculateMaintenanceCosts,
@@ -540,7 +540,7 @@ export async function processCampaignTurn(turnNumber: number): Promise<CampaignT
              */
             // Also read further down for the in-state travel bonus.
             const isPresidential = electionData?.electionType === "president";
-            const actions = campaignActionsPerTurn({
+            const actionIncome = campaignActionsPerTurn({
               nppEndorsements: nppEndorsementMap.get(eKey) ?? 0,
               playerEndorsements: playerEndorsementMap.get(eKey) ?? 0,
               governorEndorsements: governorEndorsementMap.get(eKey) ?? 0,
@@ -549,6 +549,10 @@ export async function processCampaignTurn(turnNumber: number): Promise<CampaignT
               candidateIsNPP: campaign.candidateIsNPP === true,
               baseActionsPerTurn: rawBaseActionsPerTurn,
             });
+            // Banked actions are capped at CAMPAIGN_ACTION_BANK_TURNS of this
+            // campaign's own income. Read off the pre-turn balance: a spend
+            // racing this write only lowers it, so the cap still holds.
+            const actions = cappedCampaignActionGrant(campaign.actions ?? 0, actionIncome);
 
             // Calculate maintenance costs at the campaign's current (pre-downgrade)
             // levels. Passive favorability effects below still use these levels —

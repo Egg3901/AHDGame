@@ -99,11 +99,11 @@ describe("EstatesFlagship", () => {
     expect(screen.getByText("Portfolio discretionary budget")).toBeTruthy();
   });
 
-  it("shows the daily ministerial actions the estate routes spend", () => {
+  it("shows the ministerial actions the estate routes spend", () => {
     renderFlagship([estate({})], true, vi.fn(), 0);
     const line = screen.getByTestId("estate-ministerial-actions");
-    expect(line.textContent).toContain("0/4 left today");
-    expect(line.textContent).toContain("midnight Eastern Time");
+    expect(line.textContent).toContain("0/4 left.");
+    expect(line.textContent).toContain("Regains 1 action every 6 turns, up to 4.");
   });
 
   it("omits the ministerial action line when the balance is unknown", () => {

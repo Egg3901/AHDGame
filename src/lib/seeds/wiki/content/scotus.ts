@@ -22,6 +22,19 @@ Curated historical cases resolve against the sitting Court on the calendar year 
 
 **Surprise cases** can also fire: non-historical docket items that resolve the same turn they spawn. They still produce a ruling from the sitting majority.
 
+## What a seat gives you
+
+- **+2 actions per turn**, stacking on any other office you hold.
+- **National influence at the cabinet tier, +1.5 per turn.** Position tiers do not stack: if your other office pays more, you get that instead.
+- **Justice actions** from the justice office page, each spending one action from the justice pool:
+
+| Action | Effect |
+| --- | --- |
+| Write an Opinion | +0.5 national influence |
+| Public Address | +2 favorability |
+
+Once per turn you can spend 10 actions to buy 1 justice action, up to the pool's cap.
+
 ## Tenure
 
 Original historical occupants leave when their authored departure is reached, opening a live appointment. After that first appointment, a sitting justice (player or NPP) can leave mid-term; the President and occupant are notified when a seat opens. The Court does not keep a confirmed player forever.

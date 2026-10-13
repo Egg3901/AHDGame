@@ -33,13 +33,18 @@ Canvassing targets one state at a time. For most characters that state is your h
 
 Base actions: 4 per turn (your Energy stat can raise the cap and the banked amount). Actions increase by holding offices with action bonuses:
 
-- President / PM / Chancellor: +4
+- President / PM / Chancellor (executive): +4. Ceremonial heads of state get +0.
 - Vice President: +2
 - Senator (US): +2
 - Governor (US): +2
-- Federal Reserve Chair / Bank governor: +3
 - House Representative: +1
 - State Senator: +1
+
+Some roles stack on top of your office:
+
+- Federal Reserve Chair / Bank governor: +3
+- Supreme Court justice: +2
+- Chamber leadership (highest single role): Speaker and other presiding officers +3; Majority and Minority Leaders and the Leader of the Opposition +2; President pro tempore, whips and shadow cabinet members +1
 
 A Senator who is also Fed Chair gets 4 + 2 + 3 = 9 actions per turn. Party influence can also grant bonus actions.
 
@@ -157,7 +162,7 @@ Infamy increases when you take certain negative actions: attacking another polit
 
 **What is NPI (National Political Influence)?**
 
-NPI is your national-level reputation, distinct from state-level Political Influence (PI). NPI grows from holding high offices, national legislation, and accumulating state PI over time. NPI is the primary influence stat for presidential primary scoring and national vote accumulation in presidential races.
+NPI is your national-level reputation, distinct from state-level Political Influence (PI). Each turn NPI decays by 1%, then grows from your state PI and your highest office or party role, so it settles at 100 times your per-turn gain. See [Elections Player Guide](/wiki/elections-player-guide) for the tiers. NPI is the primary influence stat for presidential primary scoring and national vote accumulation in presidential races.
 
 ---
 

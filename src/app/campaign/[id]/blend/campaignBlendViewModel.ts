@@ -483,7 +483,10 @@ export function buildCampaignBlendViewModel(inp: CampaignBlendInput): CampaignBl
   if (campaign.actions != null) {
     vitals.push({
       label: "Actions",
-      value: String(campaign.actions),
+      value:
+        campaign.actionsCap != null
+          ? `${campaign.actions} / ${campaign.actionsCap}`
+          : String(campaign.actions),
       sub: campaign.budget ? `+${campaign.budget.actions.perTurn} / turn` : undefined,
       color: "#22d3ee",
     });

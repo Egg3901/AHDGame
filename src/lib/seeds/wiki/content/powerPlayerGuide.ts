@@ -34,7 +34,7 @@ Once chair, use GOTV strategically: concentrate budget on states where your cand
 
 Office stacking means holding an elected office alongside an appointed one. You hold **one elected office at a time**: winning a new seat vacates the old one, so a Senator who wins a governorship stops being a Senator. What stacks are the appointed posts that sit beside an elected seat: the central-bank chair, a Supreme Court seat (which does not occupy your current office), party leadership, and a general's commission.
 
-The highest-action combination in the US is **Senator + Federal Reserve Chair**: 4 (base) + 2 (Senate) + 3 (Fed Chair) = **9 actions per turn**. The Fed Chair role also gives you influence over interest rates, which flows into bond yields and currency strength.
+A strong US combination is **Senator + Federal Reserve Chair**: 4 (base) + 2 (Senate) + 3 (Fed Chair) = **9 actions per turn**. Chamber leadership and a Supreme Court seat also stack on top of your office: a Senate Majority Leader adds +2, a Speaker of the House +3, and a justice +2. The Fed Chair role also gives you influence over interest rates, which flows into bond yields and currency strength.
 
 In parliamentary countries the equivalent is the lower-chamber seat paired with the central-bank chair: **MP + Bank of England Governor** (UK), **Shūgiin member + Bank of Japan Governor** (JP), or **Member of Bundestag + ECB President** (DE).
 

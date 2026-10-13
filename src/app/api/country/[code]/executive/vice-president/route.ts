@@ -19,6 +19,8 @@ import {
   VP_ACTION_CAP,
   VP_ACTION_RESET_HINT,
 } from "@/lib/constants/vicePresidentActions";
+import { officePoolTopUpStatus } from "@/lib/actions/officePoolTopUpRules";
+import { getCurrentTurn } from "@/lib/currentTurn";
 
 export async function GET(_request: Request, { params }: { params: Promise<{ code: string }> }) {
   try {
@@ -64,6 +66,13 @@ export async function GET(_request: Request, { params }: { params: Promise<{ cod
       actionCap: VP_ACTION_CAP,
       resetHint: VP_ACTION_RESET_HINT,
       actions: VP_ACTIONS,
+      topUp: isVicePresident
+        ? officePoolTopUpStatus(
+            vicePresidentOfficial?.lastVpActionTopUpTurn,
+            await getCurrentTurn(db),
+            myCharacter?.actions
+          )
+        : null,
     });
   } catch (error) {
     return handleRouteError(error);

@@ -10,6 +10,8 @@ import {
 } from "@/lib/constants/governorOffice";
 import { IssueOrderModal } from "@/app/country/[code]/region/[id]/office/tabs/orders/IssueOrderModal";
 import { getNationalStateId } from "@/lib/policy/nationalStateId";
+import type { OfficePoolTopUpStatus } from "@/lib/actions/officePoolTopUpRules";
+import { OfficePoolTopUpButton } from "@/components/officials/OfficePoolTopUpButton";
 import {
   getExecutiveOrderName,
   getExecutiveOrderNamePlural,
@@ -45,6 +47,8 @@ interface OrdersResponse {
   legislationTypes: LegTypeOpt[];
   viewerIsLeader: boolean;
   viewerIsAdmin: boolean;
+  /** Leader-only state for buying +1 office AP with main AP. */
+  topUp?: OfficePoolTopUpStatus | null;
 }
 
 interface Props {
@@ -130,6 +134,17 @@ export function WhiteHouseOrdersTab({ countryId }: Props) {
           <div className="text-xs text-muted/70 mt-0.5">
             Regenerates by 1 every {GUBERNATORIAL_ACTION_REGEN_INTERVAL} turns
           </div>
+          {data.viewerIsLeader && (
+            <OfficePoolTopUpButton
+              className="mt-1 !items-start"
+              countryCode={countryId.toLowerCase()}
+              body={{ pool: "gubernatorial", stateId: getNationalStateId(countryId) }}
+              remaining={data.gubernatorialActions}
+              cap={GUBERNATORIAL_ACTION_CAP}
+              topUp={data.topUp}
+              onUpdate={() => void refresh()}
+            />
+          )}
         </div>
         <button
           onClick={() => setModalMode("normal")}

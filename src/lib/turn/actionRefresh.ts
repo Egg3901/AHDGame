@@ -5,10 +5,12 @@ import type { CentralBank } from "@/lib/db/types/centralBank";
 import type { CongressLeader, LeadershipRole } from "@/lib/db/types/leadership";
 import type { PoliticalParty } from "@/lib/db/types/party";
 import {
+  applyNationalInfluenceTurn,
   applyPoliticalInfluenceDecay,
   calculateFavorabilityAboveThresholdPenalty,
   calculateInfamyFavorabilityDrain,
   calculateNationalInfluenceGain,
+  executivePartyInfluenceDecayMultiplier,
   NPP_POLITICAL_INFLUENCE_FLOOR,
 } from "@shared/constants/formulas";
 import { energyActionLimits, applyTurnDrift } from "@/lib/stats/statDrift";
@@ -20,7 +22,11 @@ import {
   resolveOfficeActionBonus,
 } from "@/lib/actions/officeActionBonus";
 import { resolveOfficeActionBonusForType } from "@/lib/actions/officeBonusRegistry";
-import { resolvePositionNiBonus } from "@/lib/actions/positionNiBonus";
+import {
+  JUSTICE_ACTION_BONUS,
+  resolveLeadershipActionBonus,
+  resolvePositionNiBonus,
+} from "@/lib/actions/positionNiBonus";
 import type { CountryId } from "@/lib/constants/countries";
 import type { SupremeCourtSeat } from "@/lib/db/types/scotus";
 import { getCabinetMembersCollection } from "@/lib/db/collections/cabinetMembers";
@@ -29,7 +35,16 @@ import { logger } from "../observability/logger";
 import {
   observeGovernmentAccountability,
   memberAccountabilityDrain,
+  type NationalExecutiveParty,
 } from "@/lib/government/accountability";
+import {
+  loadCeoCandidates,
+  loadOppositionRoles,
+  loadOrgHeadIds,
+  loadPresidingOfficerRoles,
+  loadStatePartyChairIds,
+  resolveCeoNiTier,
+} from "./actionRefreshRoles";
 const MIN_BASE_ACTIONS_PER_TURN = 4;
 /*
  * Fallback if `gameConfig.chairActionBonus` is missing on legacy configs.
@@ -48,10 +63,12 @@ const ACTION_HOARD_PENALTY = 4;
 
 /**
  * Refresh actions and apply stat updates for all characters each turn.
- * - Actions: base + office bonus + chair bonus (stacked), capped at 200;
- *   hoarding penalty if > 100
- * - Political influence: decays at a lower 0.75% slope per turn (Campaign to maintain)
- * - National influence: passively accrues +state influence / 100 per turn (uncapped)
+ * - Actions: base + office bonus + chair, justice and chamber-leadership
+ *   bonuses (stacked), capped by Energy; hoarding penalty above the threshold
+ * - Political influence: decays 0.75% per turn (Campaign to maintain), faster
+ *   for the party holding the national executive, scaled by its approval
+ * - National influence: decays 1% per turn, then gains the state-influence
+ *   term plus the position tier, so each role settles at 100 x its gain
  * - Infamy: 5% decay per turn
  * - Favorability: above-threshold penalty (stable at 60% or below)
  */
@@ -61,7 +78,21 @@ export async function processActionRefresh(
   now: Date
 ): Promise<void> {
   const db = await getDb();
-  const accountability = await observeGovernmentAccountability(db);
+  const executives = new Map<CountryId, NationalExecutiveParty>();
+  const accountability = await observeGovernmentAccountability(db, executives);
+  const currentTurn =
+    (
+      await db
+        .collection<{ _id: string; currentTurn?: number }>("gameState")
+        .findOne({ _id: "current" }, { projection: { currentTurn: 1 } })
+    )?.currentTurn ?? 0;
+  /** Political-influence decay multiplier for a member of `party` in `countryId`. */
+  const influenceDecayMultiplier = (countryId: string | undefined, party: string | undefined) => {
+    const executive = countryId ? executives.get(countryId as CountryId) : undefined;
+    return executive && party && executive.party === party
+      ? executivePartyInfluenceDecayMultiplier(executive.approval)
+      : 1;
+  };
   const baseActionsPerTurn = Math.max(config?.baseActionsPerTurn ?? 0, MIN_BASE_ACTIONS_PER_TURN);
   const chairActionBonus = config?.chairActionBonus ?? DEFAULT_CHAIR_ACTION_BONUS;
 
@@ -86,8 +117,8 @@ export async function processActionRefresh(
   /*
    * Justice is a standalone role (#3598), stored on `supremeCourtSeats`, not
    * on `character.currentOffice` — same reasoning as the central bank chair
-   * above: it stacks on top of any elected office the character also holds.
-   * Only player-held seats (justiceCharacterId set) draw the NI bonus; NPP-
+   * above: its AP bonus stacks on top of any elected office the character also
+   * holds. Only player-held seats (justiceCharacterId set) draw the bonuses; NPP-
    * or historical-roster-held seats have no controlling player to benefit.
    */
   const justiceSeatRows = await db
@@ -102,16 +133,17 @@ export async function processActionRefresh(
   );
 
   // ── Position-based NI bonuses ────────────────────────────────────────────
-  // Tiers: 2.5 (executive head), 2.0 (VP / top leaders / party chair),
-  //        1.5 (deputy leaders / party vc/treasurer), 1.0 (rank-and-file legislators)
-  // Office tiers live in `resolveOfficeNiBonus`, which falls back to the
-  // per-country office registry so non-US legislators are not silently zeroed.
+  // Domestic tiers take the highest qualifying role: 2.5 executive head, 2.0
+  // deputy executive / presiding officers / majority leaders / party chair,
+  // 1.5 cabinet / governors / justices / central bank chair / minority
+  // leaders, 1.0 national legislators, 0.5 sub-national legislators and state
+  // party chairs, 0.3 / 0.15 CEOs. Office tiers live in `resolveOfficeNiBonus`.
   const congressLeaderRows = await db
     .collection<CongressLeader>("congressLeaders")
     .find({ characterId: { $ne: null } }, { projection: { characterId: 1, role: 1 } })
     .toArray();
   const leaderRolesByCharId = new Map<string, LeadershipRole[]>();
-  for (const row of congressLeaderRows) {
+  for (const row of [...congressLeaderRows, ...(await loadPresidingOfficerRoles(db))]) {
     if (!row.characterId) continue;
     const id = row.characterId.toString();
     const roles = leaderRolesByCharId.get(id) ?? [];
@@ -149,13 +181,28 @@ export async function processActionRefresh(
    * bank chair bonus stacks on top of an elected-office bonus.
    */
   const cabinetRows = await getCabinetMembersCollection(db)
-    .find({}, { projection: { characterId: 1, countryId: 1 } })
+    .find({}, { projection: { characterId: 1, countryId: 1, acting: 1 } })
     .toArray();
   const cabinetCountryByCharId = new Map<string, CountryId>();
+  // A character with any confirmed seat is not acting, even if they also hold
+  // an acting one.
+  const actingOnlyCabinetIds = new Set<string>();
+  const confirmedCabinetIds = new Set<string>();
   for (const m of cabinetRows) {
-    if (m.characterId)
-      cabinetCountryByCharId.set(m.characterId.toString(), m.countryId as CountryId);
+    if (!m.characterId) continue;
+    const id = m.characterId.toString();
+    cabinetCountryByCharId.set(id, m.countryId as CountryId);
+    if (m.acting) actingOnlyCabinetIds.add(id);
+    else confirmedCabinetIds.add(id);
   }
+  for (const id of confirmedCabinetIds) actingOnlyCabinetIds.delete(id);
+
+  const [opposition, statePartyChairIds, ceoCandidates, orgHeadIds] = await Promise.all([
+    loadOppositionRoles(db),
+    loadStatePartyChairIds(db),
+    loadCeoCandidates(db),
+    loadOrgHeadIds(db),
+  ]);
 
   // Recover the underlying legislative seat only for the cabinet ministers whose
   // currentOffice was overwritten to a cabinet key (others keep their real seat).
@@ -207,9 +254,17 @@ export async function processActionRefresh(
         officeActionBonus: config?.officeActionBonus,
         countryId: character.countryId,
       });
-    if (chairCharacterIds.has(character._id.toString())) {
+    if (chairCharacterIds.has(charIdStrForOffice)) {
       actionRefresh += chairActionBonus;
     }
+    const roleActionBonus =
+      (seatedJusticeCharacterIds.has(charIdStrForOffice) ? JUSTICE_ACTION_BONUS : 0) +
+      resolveLeadershipActionBonus({
+        congressLeadershipRoles: leaderRolesByCharId.get(charIdStrForOffice),
+        isOppositionLeader: opposition.leaderIds.has(charIdStrForOffice),
+        isShadowCabinetMember: opposition.shadowCabinetIds.has(charIdStrForOffice),
+      });
+    actionRefresh += roleActionBonus;
     if (typeof actionRefresh !== "number" || isNaN(actionRefresh)) {
       logger.error("Turn", `Invalid actionRefresh for character ${character._id}`);
       continue;
@@ -230,32 +285,45 @@ export async function processActionRefresh(
     /*
      * Political influence decays at 0.75% per turn, requiring
      * active campaigning to maintain. At equilibrium, continuous campaign actions
-     * offset this decay. A character who stops campaigning loses all influence
-     * more gradually than before, reducing pure maintenance tax.
+     * offset this decay. Members of the party holding the national executive
+     * decay faster, 1.0x to 2.0x depending on the government's approval.
      */
-    const newInfluence = applyPoliticalInfluenceDecay(currentInfluence);
+    const newInfluence = applyPoliticalInfluenceDecay(
+      currentInfluence,
+      0,
+      influenceDecayMultiplier(character.countryId, character.party)
+    );
 
     const currentNational = character.nationalInfluence ?? 0;
     /*
-     * National influence accrues passively at the same rate political influence
-     * decays (+state influence / 100 per turn). This models how state-level
-     * visibility slowly builds national name recognition — a high-influence
-     * politician in their home state gradually becomes known nationally.
-     * National influence is never decayed; it represents accumulated reputation.
+     * National influence decays 1% per turn and gains the state-influence term
+     * (negative below 25 state influence) plus the highest position tier, so
+     * every role settles where gain equals decay, at 100 x gain. Leaving office
+     * fades a reputation over roughly one House cycle.
      */
     const charIdStr = character._id.toString();
+    const ceo = resolveCeoNiTier(
+      ceoCandidates.get(charIdStr),
+      character.ceoNiTenure ?? undefined,
+      currentTurn
+    );
     const positionNiBonus = resolvePositionNiBonus({
       currentOfficeType: character.currentOffice?.type,
       countryId: character.countryId,
       congressLeadershipRoles: leaderRolesByCharId.get(charIdStr),
       isPartyChair: partyChairIds.has(charIdStr),
       isPartySubChair: partySubChairIds.has(charIdStr),
+      isStatePartyChair: statePartyChairIds.has(charIdStr),
       isSeatedJustice: seatedJusticeCharacterIds.has(charIdStr),
+      isCentralBankChair: chairCharacterIds.has(charIdStr),
       cabinetCountryId: cabinetCountry,
+      isActingCabinet: actingOnlyCabinetIds.has(charIdStr),
+      ceoTier: ceo.tier,
+      isOrgHead: orgHeadIds.has(charIdStr),
     });
 
     const nationalGain = calculateNationalInfluenceGain(currentInfluence) + positionNiBonus;
-    const newNational = currentNational + nationalGain;
+    const newNational = applyNationalInfluenceTurn(currentNational, nationalGain);
 
     const currentInfamy = character.infamy ?? 0;
     /*
@@ -293,6 +361,14 @@ export async function processActionRefresh(
       nationalInfluence: newNational,
       infamy: newInfamy,
       favorability: newFavorability,
+      ceoNiTenure: ceo.tenure,
+      ceoNiTier: ceo.tier,
+      roleActionBonus,
+      positionNiBonus,
+      politicalInfluenceDecayMultiplier: influenceDecayMultiplier(
+        character.countryId,
+        character.party
+      ),
       updatedAt: now,
     };
 
@@ -376,7 +452,8 @@ export async function processActionRefresh(
     // their weaker replenishment means the floor keeps them from bleeding to 0.
     const newInfluence = applyPoliticalInfluenceDecay(
       currentInfluence,
-      NPP_POLITICAL_INFLUENCE_FLOOR
+      NPP_POLITICAL_INFLUENCE_FLOOR,
+      influenceDecayMultiplier(npp.countryId ?? "US", npp.party)
     );
 
     const currentFavorability = npp.favorability ?? 50;

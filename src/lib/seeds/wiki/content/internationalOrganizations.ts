@@ -40,6 +40,11 @@ Each org has a **leadership office** with:
 
 Leadership elections are held when the term expires, and the office confers authority over the org's agenda and legislation.
 
+The head of an org (the holder of its leadership office) gets two personal benefits:
+
+- **+1.0 national influence per turn** while leading an organisation, whether elected or as a permanent leader (the head of government of the Commonwealth's, Warsaw Pact's or COMECON's leading country). This is added on top of your domestic position tier, not compared against it.
+- **A personal agenda pool:** +2 agenda actions per turn, banked up to 4. Agenda actions pay for resolutions you table inside the org you lead (free trade agreements, sanctions, directives, joint statements, aid packages, dues, posture and agency funding). They are spent before your country's diplomatic budget, so a head who is not their country's foreign minister can still table these. Joining, leaving, nominations and war resolutions stay on the country's diplomatic budget.
+
 ### Charter
 
 Each org has a **charter**: a text document describing its purpose, rules, and governance principles. The charter is set at creation and can be amended through org legislation.

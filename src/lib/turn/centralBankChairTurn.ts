@@ -61,8 +61,6 @@ const INFAMY_PENALTY_THRESHOLD = 25;
  */
 const POSITIVE_DAMPENING_SCALE = 150;
 
-/** Base NPI bonus for chairs per turn */
-const CHAIR_NPI_BONUS = 0.5;
 /** Action debit when infamy penalty is active (3 base - 1.5 = 1.5 net) */
 const INFAMY_ACTION_DEBIT = 1.5;
 const HIGH_SCRUTINY_DIAGNOSTIC_THRESHOLD = 90;
@@ -399,15 +397,10 @@ export async function processCentralBankChairTurn(
     const isPenalized = newInfamy > INFAMY_PENALTY_THRESHOLD;
     if (isPenalized) chairsPenalized++;
 
-    const npiBonus = isPenalized ? CHAIR_NPI_BONUS / 2 : CHAIR_NPI_BONUS;
-
-    const incFields: Record<string, number> = {
-      nationalInfluence: npiBonus,
-    };
-
-    if (isPenalized) {
-      incFields.actions = -INFAMY_ACTION_DEBIT;
-    }
+    // The chair's national influence is the cabinet tier, granted by the
+    // action refresh; only the infamy action debit is applied here.
+    if (!isPenalized) continue;
+    const incFields: Record<string, number> = { actions: -INFAMY_ACTION_DEBIT };
 
     charBulkOps.push({
       updateOne: {

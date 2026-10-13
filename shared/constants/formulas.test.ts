@@ -13,6 +13,9 @@ import {
   NPP_POLITICAL_INFLUENCE_FLOOR,
   POLITICAL_INFLUENCE_DECAY_RATE,
   UK_FEDERAL_MULTIPLIER,
+  applyNationalInfluenceTurn,
+  calculateNetNationalInfluencePerTurn,
+  executivePartyInfluenceDecayMultiplier,
 } from "./formulas";
 
 describe("calculateFavorabilityAboveThresholdPenalty", () => {
@@ -67,12 +70,42 @@ describe("political influence helpers", () => {
 
   it("caps overflowed political influence for decay and NPI gain", () => {
     expect(calculatePoliticalInfluenceDecay(140)).toBeCloseTo(0.75, 5);
-    expect(calculateNationalInfluenceGain(140)).toBeCloseTo(1.0, 5);
+    expect(calculateNationalInfluenceGain(140)).toBeCloseTo(2.0, 5);
   });
 
-  it("keeps national influence gain on the existing divisor", () => {
-    expect(calculateNationalInfluenceGain(100)).toBeCloseTo(1.0, 5);
-    expect(calculateNationalInfluenceGain(40)).toBeCloseTo(0.4, 5);
+  it("scales national influence gain steeply at both ends of state influence", () => {
+    expect(calculateNationalInfluenceGain(0)).toBeCloseTo(-0.5, 5);
+    expect(calculateNationalInfluenceGain(25)).toBeCloseTo(0, 5);
+    expect(calculateNationalInfluenceGain(50)).toBeCloseTo(0.5, 5);
+    expect(calculateNationalInfluenceGain(75)).toBeCloseTo(1.25, 5);
+    expect(calculateNationalInfluenceGain(100)).toBeCloseTo(2.0, 5);
+  });
+
+  it("scales executive-party decay by approval", () => {
+    expect(executivePartyInfluenceDecayMultiplier(0)).toBeCloseTo(2, 5);
+    expect(executivePartyInfluenceDecayMultiplier(50)).toBeCloseTo(1.5, 5);
+    expect(executivePartyInfluenceDecayMultiplier(100)).toBeCloseTo(1, 5);
+    expect(executivePartyInfluenceDecayMultiplier(150)).toBeCloseTo(1, 5);
+    expect(calculatePoliticalInfluenceDecay(40, 1.5)).toBeCloseTo(0.45, 5);
+  });
+});
+
+describe("national influence turn", () => {
+  it("decays 1% then adds the gain, floored at 0", () => {
+    expect(applyNationalInfluenceTurn(100, 1)).toBeCloseTo(100, 5);
+    expect(applyNationalInfluenceTurn(200, 1)).toBeCloseTo(199, 5);
+    expect(applyNationalInfluenceTurn(0.2, -0.5)).toBe(0);
+  });
+
+  it("settles at 100 x gain", () => {
+    let ni = 0;
+    for (let turn = 0; turn < 2000; turn++) ni = applyNationalInfluenceTurn(ni, 2.8);
+    expect(ni).toBeCloseTo(280, 1);
+  });
+
+  it("reports the net change for display", () => {
+    expect(calculateNetNationalInfluencePerTurn(200, 25, 1)).toBeCloseTo(-1, 5);
+    expect(calculateNetNationalInfluencePerTurn(0, 50, 1)).toBeCloseTo(1.5, 5);
   });
 });
 

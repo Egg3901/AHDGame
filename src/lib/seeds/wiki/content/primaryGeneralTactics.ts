@@ -68,7 +68,7 @@ General: **selective attacks**: if an opponent's Favorability is 65-75 and you c
 The formula itself differs from state primaries:
 
 - **Party Influence matters (20 pts).** Your own accumulated party influence, not a home-state org score.
-- **National Reach matters (15 pts).** Built from national political influence via a diminishing-returns curve: NPI accrues passively (+state PI / 100 per turn), so build across many cycles.
+- **National Reach matters (15 pts).** Built from national political influence via a diminishing-returns curve: NPI decays 1% per turn and settles at 100 times your per-turn gain, which comes from your state PI and your highest office or party role. Hold a national post across many cycles to keep it high.
 - **Favorability is 25 pts.** Repriced up from a 10-point floor so the primary selects for something close to what the general rewards.
 - **Alignment still 40 pts.** Still the biggest lever.
 

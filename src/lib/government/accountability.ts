@@ -18,7 +18,22 @@ import {
   continuingPartySinceTurn,
 } from "./rules/accountability";
 
-export async function observeGovernmentAccountability(db: Db): Promise<Map<string, number>> {
+/** The party holding a country's national executive, with that government's approval. */
+export interface NationalExecutiveParty {
+  party: string;
+  approval: number;
+}
+
+/**
+ * Observe government accountability for every country and return the
+ * per-party favorability drains. When `executives` is passed it is filled with
+ * each country's executive party and approval, for callers that scale other
+ * consequences by who holds power.
+ */
+export async function observeGovernmentAccountability(
+  db: Db,
+  executives?: Map<CountryId, NationalExecutiveParty>
+): Promise<Map<string, number>> {
   const [game, officials, formations, approvals, regionalApprovals, previous, states, runtimes] =
     await Promise.all([
       db
@@ -169,6 +184,11 @@ export async function observeGovernmentAccountability(db: Db): Promise<Map<strin
       : ((president?.characterId
           ? characterParty.get(String(president.characterId))
           : nppParty.get(String(president?.nppId))) ?? president?.party);
+    if (executives && executiveParty && executiveParty !== "independent")
+      executives.set(countryId, {
+        party: executiveParty,
+        approval: approvalByCountry.get(countryId) ?? 50,
+      });
     if (formation) {
       const fields: { governingPartyId?: string; formationType?: null } = {};
       if (executiveParty && formation.governingPartyId !== executiveParty)

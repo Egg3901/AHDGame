@@ -23,6 +23,22 @@ Two different eligibility rules cover the presiding officer roles in this page:
 
 This is a different (and looser) rule than [Majority/Minority Leader](/wiki/congress-leadership), which is explicitly party-gated: Majority Leader requires your party to hold the most seats, Minority Leader is open only to parties outside the majority bloc. Presiding officer elections under "any seated member" don't care about bloc or party at all, any member of any chamber party can run and vote.
 
+## What leadership pays
+
+Chamber leadership adds actions on top of the holder's seat, and it sets the holder's national influence tier.
+
+| Role | Extra actions per turn | National influence tier |
+| --- | ---: | ---: |
+| Speaker of the House, Bundestagspräsident, NPCSC Chairman, Nigerian Speaker and Senate President | +3 | +2.0 |
+| President pro tempore | +1 | +2.0 |
+| House and Senate Majority Leaders | +2 | +2.0 |
+| House and Senate Minority Leaders | +2 | +1.5 |
+| Leader of the Opposition | +2 | none from the role |
+| CPPCC Chairman | +1 | +1.5 |
+| Whips, shadow cabinet members | +1 | none from the role |
+
+A member holding several leadership roles takes the highest single action bonus, not the sum. The national influence tier competes with your other offices: you get your single highest tier. See [Elections Player Guide](/wiki/elections-player-guide) for the full tier table.
+
 ## United States: Speaker of the House
 
 The Speaker presides over the House, controls the legislative agenda, and sits second in the presidential line of succession. Any seated House member may declare candidacy and vote, regardless of party, though in practice the majority party's bloc size usually decides the outcome. The ballot runs 12 hours.
@@ -61,7 +77,7 @@ The Chairman of the Presidium is elected by a joint sitting of both Supreme Sovi
 
 | | Presiding officers above | Chairman of the Presidium |
 | --- | --- | --- |
-| Actions per turn | Varies by office | **+0** |
+| Actions per turn | +3 on top of the seat (CPPCC Chairman +1) | **+0** |
 | Party strength weight | Contributes | **0** |
 | Controls the agenda | Chairs its chamber | No |
 

@@ -6,7 +6,7 @@ import { ObjectId, type Db } from "mongodb";
 import { GET } from "./route";
 import {
   calculateFavorabilityAboveThresholdPenalty,
-  calculateNationalInfluenceGain,
+  calculateNetNationalInfluencePerTurn,
   calculatePoliticalInfluenceDecay,
 } from "@shared/constants/formulas";
 
@@ -349,6 +349,8 @@ describe("GET /api/client-status", () => {
             politicalInfluence: 40,
             favorability: 70,
             nationalInfluence: 12.5,
+            // Written by the last action refresh: the Speaker tier.
+            positionNiBonus: 2,
           },
         },
         corporations: {
@@ -398,7 +400,6 @@ describe("GET /api/client-status", () => {
             ],
           },
         },
-        congressLeaders: { find: [{ role: "speaker_of_the_house" }] },
       };
     };
 
@@ -411,10 +412,12 @@ describe("GET /api/client-status", () => {
       expect(perTurn.marketCap).toBe(2_000);
       expect(perTurn.liquidCapital).toBe(-100);
       expect(perTurn.voteShare).toBe(5);
-      // The profile page's rates: influence decay, gain plus the Speaker tier,
-      // favorability cooling above the threshold.
+      // The profile page's rates: influence decay, net national influence
+      // (gain plus the Speaker tier less 1% decay), favorability cooling.
       expect(perTurn.politicalInfluence).toBeCloseTo(-calculatePoliticalInfluenceDecay(40));
-      expect(perTurn.nationalInfluence).toBeCloseTo(calculateNationalInfluenceGain(40) + 2);
+      expect(perTurn.nationalInfluence).toBeCloseTo(
+        calculateNetNationalInfluencePerTurn(12.5, 40, 2)
+      );
       expect(perTurn.favorability).toBeCloseTo(-calculateFavorabilityAboveThresholdPenalty(70));
       expect(perTurn.funds).toBe(
         (body.campaignIncomeBreakdown as { netPerTurn: number }).netPerTurn

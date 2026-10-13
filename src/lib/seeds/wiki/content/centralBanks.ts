@@ -9,13 +9,13 @@ Fully command economies run a passive monobank instead: the automatic rate sette
 The Chair is the most economically powerful non-executive position in the game. Unlike elected offices, it is an **appointed** position with a 4-year term (192 turns).
 
 **Benefits of holding the Chair:**
-- +0.5 national political influence per turn
-- +3 actions per turn (the "chairActionBonus")
+- The cabinet tier of national political influence: +1.5 per turn (position tiers do not stack, so you get your highest one)
+- +3 actions per turn, stacking on any other office you hold
 - A platform to set monetary policy
 
 **Drawbacks:**
 - Chair infamy (scrutiny) rises when inflation or GDP growth deviate from targets
-- High infamy halves your NPI bonus and costs 1.5 actions per turn
+- High infamy costs 1.5 actions per turn
 - Poor monetary policy is politically visible: it affects your favorability
 
 ## How infamy works
@@ -38,7 +38,7 @@ dampener = max(0.1, 1 − chairInfamy / 150)
 
 At infamy 75, positive effects are cut in half. At infamy 150+, they are reduced to 10%. Once scrutiny climbs, it is hard to shed.
 
-**Infamy penalty threshold:** Above 25 infamy, chair bonuses are halved (+0.25 NPI instead of +0.5) and 1.5 actions are debited each turn.
+**Infamy penalty threshold:** Above 25 infamy, the Chair loses 1.5 actions each turn. National political influence is not affected.
 
 **Scrutiny gain is capped at 8 per turn.** One catastrophic print cannot take a clean bank to ruin. A bad record has to be earned over time, and you can see it coming.
 

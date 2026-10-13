@@ -1,7 +1,10 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { ObjectId, type Db } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
-import { MINISTERIAL_ACTION_CAP } from "@/lib/constants/cabinetMechanicsTypes";
+import {
+  MINISTERIAL_ACTION_ACCRUAL_TURNS,
+  MINISTERIAL_ACTION_CAP,
+} from "@/lib/constants/cabinetMechanicsTypes";
 import { getCalendarDayInTimezone } from "@/lib/time/dailyReset";
 import {
   ensureUkSharedPool,
@@ -9,7 +12,8 @@ import {
   refundMinisterialAction,
   resolveMinisterialRemaining,
   spendMinisterialAction,
-  ukSharedPoolIdsNeedingReset,
+  accrueUkSharedPools,
+  isMinisterialAccrualTurn,
   usesSharedMinisterialPool,
 } from "./ministerialActionPool";
 
@@ -26,6 +30,7 @@ interface CharDoc {
   _id: ObjectId;
   sharedMinisterialActions?: number;
   sharedMinisterialActionResetDay?: string;
+  sharedMinisterialActionAccrualTurn?: number;
 }
 
 const NOW = new Date("2026-09-17T14:00:00Z");
@@ -44,6 +49,7 @@ function setupStore(rows: RowDoc[], chars: CharDoc[]) {
       if (value != null && typeof value === "object" && !Array.isArray(value)) {
         const ops = value as Record<string, unknown>;
         if ("$gte" in ops) return (actual as number) >= (ops.$gte as number);
+        if ("$lt" in ops) return typeof actual === "number" && actual < (ops.$lt as number);
         if ("$in" in ops) {
           const list = ops.$in as unknown[];
           return list.some((entry) =>
@@ -133,18 +139,9 @@ function setupStore(rows: RowDoc[], chars: CharDoc[]) {
   );
   characters.findOneAndUpdate.mockImplementation(
     async (filter: Record<string, unknown>, update: Record<string, unknown>) => {
-      const found = [...charStore.values()].find((char) => {
-        if (
-          !matches(char as unknown as Record<string, unknown>, {
-            _id: (filter as Record<string, unknown>)._id,
-          })
-        ) {
-          return false;
-        }
-        const gate = (filter as Record<string, Record<string, number>>).sharedMinisterialActions;
-        if (gate?.$gte != null) return (char.sharedMinisterialActions ?? -1) >= gate.$gte;
-        return true;
-      });
+      const found = [...charStore.values()].find((char) =>
+        matches(char as unknown as Record<string, unknown>, filter)
+      );
       if (!found) return null;
       applyUpdate(found as unknown as Record<string, unknown>, update);
       return { ...found };
@@ -319,42 +316,81 @@ describe("reconcileUkSharedPool", () => {
   });
 });
 
-describe("ukSharedPoolIdsNeedingReset", () => {
-  it("lists missing and stale pools and skips fresh ones", async () => {
-    const freshId = new ObjectId();
-    const staleId = new ObjectId();
-    const missingId = new ObjectId();
-    const { db } = setupStore(
-      [],
+describe("accrueUkSharedPools", () => {
+  const ACCRUAL_TURN = MINISTERIAL_ACTION_ACCRUAL_TURNS * 10;
+
+  it("adds one shared action on an accrual turn and mirrors it to both rows", async () => {
+    const { db, rowStore, charStore } = setupStore(ukRows(holderId), [
+      { _id: holderId, sharedMinisterialActions: 2, sharedMinisterialActionResetDay: TODAY },
+    ]);
+    const rows = [...rowStore.values()];
+    await expect(accrueUkSharedPools(db as unknown as Db, rows, ACCRUAL_TURN, NOW)).resolves.toBe(
+      1
+    );
+    expect(charStore.get(holderId.toString())?.sharedMinisterialActions).toBe(3);
+    for (const row of rowStore.values()) {
+      expect(row.ministerialActions).toBe(3);
+    }
+  });
+
+  it("is idempotent when the same turn re-runs", async () => {
+    const { db, rowStore, charStore } = setupStore(ukRows(holderId), [
+      { _id: holderId, sharedMinisterialActions: 1, sharedMinisterialActionResetDay: TODAY },
+    ]);
+    const rows = [...rowStore.values()];
+    await accrueUkSharedPools(db as unknown as Db, rows, ACCRUAL_TURN, NOW);
+    await accrueUkSharedPools(db as unknown as Db, rows, ACCRUAL_TURN, NOW);
+    expect(charStore.get(holderId.toString())?.sharedMinisterialActions).toBe(2);
+  });
+
+  it("does nothing off an accrual turn or at cap", async () => {
+    const atCapId = new ObjectId();
+    const { db, rowStore, charStore } = setupStore(
+      [...ukRows(holderId), ...ukRows(atCapId)],
       [
-        { _id: freshId, sharedMinisterialActions: 1, sharedMinisterialActionResetDay: TODAY },
-        { _id: staleId, sharedMinisterialActions: 1, sharedMinisterialActionResetDay: YESTERDAY },
-        { _id: missingId },
+        { _id: holderId, sharedMinisterialActions: 1, sharedMinisterialActionResetDay: TODAY },
+        {
+          _id: atCapId,
+          sharedMinisterialActions: MINISTERIAL_ACTION_CAP,
+          sharedMinisterialActionResetDay: TODAY,
+        },
       ]
     );
-    const rows = [freshId, staleId, missingId].map((characterId) => ({
-      characterId,
-      countryId: "UK",
-    }));
-    await expect(ukSharedPoolIdsNeedingReset(db as unknown as Db, rows, TODAY)).resolves.toEqual(
-      expect.arrayContaining([staleId.toString(), missingId.toString()])
+    const rows = [...rowStore.values()];
+    await expect(
+      accrueUkSharedPools(db as unknown as Db, rows, ACCRUAL_TURN + 1, NOW)
+    ).resolves.toBe(0);
+    expect(charStore.get(holderId.toString())?.sharedMinisterialActions).toBe(1);
+    await expect(accrueUkSharedPools(db as unknown as Db, rows, ACCRUAL_TURN, NOW)).resolves.toBe(
+      1
     );
-    const ids = await ukSharedPoolIdsNeedingReset(db as unknown as Db, rows, TODAY);
-    expect(ids).not.toContain(freshId.toString());
+    expect(charStore.get(atCapId.toString())?.sharedMinisterialActions).toBe(
+      MINISTERIAL_ACTION_CAP
+    );
   });
 
   it("ignores non-UK rows and NPP seats", async () => {
     const { db } = setupStore([], []);
     await expect(
-      ukSharedPoolIdsNeedingReset(
+      accrueUkSharedPools(
         db as unknown as Db,
         [
           { characterId: new ObjectId(), countryId: "DE" },
           { characterId: null, countryId: "UK" },
         ],
-        TODAY
+        ACCRUAL_TURN,
+        NOW
       )
-    ).resolves.toEqual([]);
-    expect(db.collectionMocks.characters.find).not.toHaveBeenCalled();
+    ).resolves.toBe(0);
+    expect(db.collectionMocks.characters.findOneAndUpdate).not.toHaveBeenCalled();
+  });
+});
+
+describe("isMinisterialAccrualTurn", () => {
+  it("fires on multiples of the accrual interval only", () => {
+    expect(isMinisterialAccrualTurn(MINISTERIAL_ACTION_ACCRUAL_TURNS)).toBe(true);
+    expect(isMinisterialAccrualTurn(MINISTERIAL_ACTION_ACCRUAL_TURNS * 7)).toBe(true);
+    expect(isMinisterialAccrualTurn(MINISTERIAL_ACTION_ACCRUAL_TURNS + 1)).toBe(false);
+    expect(isMinisterialAccrualTurn(0)).toBe(false);
   });
 });

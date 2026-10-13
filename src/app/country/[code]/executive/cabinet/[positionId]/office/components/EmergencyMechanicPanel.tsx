@@ -175,7 +175,7 @@ export function EmergencyMechanicPanel({
 
       {!canDeclare && canAct && (
         <p className="mt-3 text-xs text-muted">
-          No {actionCopy.plural} remaining today. {MINISTERIAL_ACTION_RESET_HINT}
+          No {actionCopy.plural} remaining. {MINISTERIAL_ACTION_RESET_HINT}
         </p>
       )}
     </div>
