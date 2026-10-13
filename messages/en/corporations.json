@@ -471,9 +471,9 @@
       "sectors": "Sectors",
       "selectedTotal": "Selected total",
       "directionNote": "NPP directions must respect cash reserves, viable demand and legal limits. Player CEOs receive suggestions and keep operating autonomy.",
-      "directionsPending": "This world has not enabled group economic coordination. Objectives are saved and player suggestions remain voluntary. NPP directions take effect the next turn after activation.",
+      "directionsPending": "Subsidiary directions are unavailable while formalized subsidiaries are disabled in this world.",
       "nppDirection": "NPP direction",
-      "nppEffective": "When coordination is enabled, this direction applies from turn {turn}, subject to operating safeguards.",
+      "nppEffective": "This direction is eligible from turn {turn}, subject to operating safeguards.",
       "playerSuggestion": "Player suggestion",
       "objective": "Primary objective",
       "regions": "Target regions",
@@ -717,6 +717,15 @@
         "noAutomaticPlayerSupply": "Automatic suppliers are NPP corporations only. Opting out releases that buyer's allocation for other eligible members, then normal sales. Player corporations may still negotiate their own agreements.",
         "method": "Estimate methodology and safeguards",
         "applyFirst": "Apply Group members first before changing participation or the Group Chain discount."
+      },
+      "activeSupply": {
+        "title": "Corporation supply priority is active",
+        "note": "These corporation controls support market sales, own operations first or wholly owned group priority, using the existing eligibility, inheritance and discount rules. They are the same controls used in CEO Office.",
+        "corporation": "Supply policy corporation",
+        "office": "Corporation supply priority is active. Use the Internal supply controls in CEO Office, or open the Group Supply chain page. Strategic directions are independent of this supply policy.",
+        "unavailable": "Corporation supply priority requires the plants market system.",
+        "limits": "The active system follows full economic ownership and its existing inheritance rules. It does not use formalized Group Chain receiving opt-in or the separate Group Chain forecast. Last-turn receipts appear in the corporation controls. Negotiated agreements keep their existing terms.",
+        "officeTitle": "Group supply and strategy"
       }
     },
     "internalSupply": {
@@ -738,7 +747,7 @@
       "own": "Own plants first",
       "group": "Own plants, then wholly owned group",
       "discount": "Internal discount",
-      "discountValue": "{percent}% of market price",
+      "discountValue": "{percent}% below market",
       "save": "Save policy",
       "saving": "Saving...",
       "saved": "Policy saved. New reservations and discounts apply next turn.",

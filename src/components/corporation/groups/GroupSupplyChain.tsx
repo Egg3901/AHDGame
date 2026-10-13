@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { useTranslations } from "next-intl";
 import { Network } from "lucide-react";
+import InternalSupplyPanel from "../InternalSupplyPanel";
 import SupplyAgreementsSection from "../SupplyAgreementsSection";
 import { SUPPLY_AGREEMENT_PRICE_BAND } from "@/lib/db/types/supplyAgreement";
 import type { GroupSupplyPolicy } from "@/lib/corporations/groups/managementTypes";
@@ -31,6 +32,75 @@ export function GroupSupplyChain({
   const agreementMembers = data.members.filter((m) => m.canEdit);
   const agreementMember =
     agreementMembers.find((m) => m.id === agreementCorpId) ?? agreementMembers[0];
+  const agreements = (
+    <>
+      {data.supplyAgreementsEnabled && (
+        <section className="rounded-xl border border-card-border bg-card p-5 space-y-3">
+          <h3 className="font-semibold">{t("agreementsTitle")}</h3>
+          <p className="text-sm text-muted">
+            {t("agreementsNote", { percent: Math.round(SUPPLY_AGREEMENT_PRICE_BAND * 100) })}
+          </p>
+          {agreementMember ? (
+            <>
+              <label className="block text-sm">
+                {t("agreementsCorporation")}
+                <select
+                  className="block mt-2 rounded border border-card-border bg-card p-2"
+                  value={agreementMember.id}
+                  onChange={(e) => setAgreementCorpId(e.target.value)}
+                >
+                  {agreementMembers.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <SupplyAgreementsSection key={agreementMember.id} corpId={agreementMember.id} />
+            </>
+          ) : (
+            <p className="text-sm text-muted">{t("agreementsCeoOnly")}</p>
+          )}
+        </section>
+      )}
+    </>
+  );
+  if (!data.supplyEngineEnabled)
+    return (
+      <div className="space-y-5">
+        <h2 className="text-xl font-semibold">{t("supplyTitle")}</h2>
+        <aside className="rounded-lg border border-info/25 bg-info/5 p-4 text-sm">
+          <h3 className="font-semibold">
+            {t(data.internalSupplyEnabled ? "activeSupply.title" : "activeSupply.unavailable")}
+          </h3>
+          <p className="mt-1 text-muted">{t("activeSupply.note")}</p>
+        </aside>
+        {agreementMember ? (
+          <section className="rounded-xl border border-card-border bg-card p-5 space-y-4">
+            <label className="block text-sm">
+              {t("activeSupply.corporation")}
+              <select
+                aria-label={t("activeSupply.corporation")}
+                className="mt-2 block max-w-full rounded border border-card-border bg-background p-2"
+                value={agreementMember.id}
+                onChange={(e) => setAgreementCorpId(e.target.value)}
+              >
+                {agreementMembers.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <InternalSupplyPanel key={agreementMember.id} corpId={agreementMember.id} />
+          </section>
+        ) : (
+          <p className="text-sm text-muted">{t("ownCeoOnly")}</p>
+        )}
+        <p className="text-sm text-muted">{t("activeSupply.limits")}</p>
+        {agreements}
+      </div>
+    );
   return (
     <div className="space-y-5">
       <div className="space-y-3">
@@ -156,35 +226,7 @@ export function GroupSupplyChain({
         <p className="mt-2 text-sm text-muted">{t("forecastAssumptions")}</p>
         <p className="mt-2 text-xs text-muted">{t("supplyUI.noScenario")}</p>
       </section>
-      {data.supplyAgreementsEnabled && (
-        <section className="rounded-xl border border-card-border bg-card p-5 space-y-3">
-          <h3 className="font-semibold">{t("agreementsTitle")}</h3>
-          <p className="text-sm text-muted">
-            {t("agreementsNote", { percent: Math.round(SUPPLY_AGREEMENT_PRICE_BAND * 100) })}
-          </p>
-          {agreementMember ? (
-            <>
-              <label className="block text-sm">
-                {t("agreementsCorporation")}
-                <select
-                  className="block mt-2 rounded border border-card-border bg-card p-2"
-                  value={agreementMember.id}
-                  onChange={(e) => setAgreementCorpId(e.target.value)}
-                >
-                  {agreementMembers.map((m) => (
-                    <option key={m.id} value={m.id}>
-                      {m.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <SupplyAgreementsSection key={agreementMember.id} corpId={agreementMember.id} />
-            </>
-          ) : (
-            <p className="text-sm text-muted">{t("agreementsCeoOnly")}</p>
-          )}
-        </section>
-      )}
+      {agreements}
     </div>
   );
 }

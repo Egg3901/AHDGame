@@ -34,7 +34,7 @@ export function GroupDirections({ data, busy, save }: Props) {
         <h3 className="font-semibold">{t("directionUI.operatorNote")}</h3>
         <p className="mt-1 text-muted">{t("directionNote")}</p>
       </aside>
-      {!data.supplyEngineEnabled && (
+      {!data.directionsEnabled && (
         <p className="rounded-lg border border-gold/25 bg-gold/5 p-4 text-sm text-muted">
           {t("directionsPending")}
         </p>

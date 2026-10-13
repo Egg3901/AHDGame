@@ -9,6 +9,9 @@ vi.mock("@/lib/api/requireCorporationActions", () => ({
   requireCorporationActionsEnabled: vi.fn(async () => null),
 }));
 import { coordinationFixture } from "./rules/testFixtures";
+import { activeGroupDirection } from "./rules/direction";
+import { groupOperator } from "./operator";
+import { loadGroupDirectionMembership } from "@/lib/turn/npp/groupDirectionMembership";
 import { updateGroupManagement, groupManagementView } from "./management";
 const rootId = new ObjectId(),
   subId = new ObjectId(),
@@ -50,6 +53,42 @@ async function doc(id: ObjectId) {
   return (await memory.collection("corporations").findOne({ _id: id })) as unknown as Corporation;
 }
 describe("group management authorization and persistence", () => {
+  it("activates NPP directions independently while preserving existing active supply routing", async () => {
+    memory.seed("gameConfig", [
+      { _id: "default", marketSystemMode: "plants", groupSupplyCoordinationEnabled: false },
+    ]);
+    await memory.collection("corporations").updateOne({ _id: subId }, { $set: { ceoType: "npp" } });
+    expect(
+      await updateGroupManagement(db, await doc(rootId), parentUser.toString(), {
+        action: "direction",
+        memberId: subId.toString(),
+        objective: "profit",
+        regions: [],
+        allowInvestment: false,
+      })
+    ).toEqual({ ok: true });
+    const view = await groupManagementView(db, await doc(rootId), parentUser.toString());
+    expect(view).toMatchObject({
+      directionsEnabled: true,
+      internalSupplyEnabled: true,
+      supplyEngineEnabled: false,
+      forecast: null,
+    });
+    const child = await doc(subId),
+      groups = await loadGroupDirectionMembership(db, true, [child]);
+    const root = groups?.rootByCorpId.get(subId.toString());
+    expect(groups?.eligibleManagementRoots?.has(root!)).toBe(true);
+    expect(
+      activeGroupDirection(child.groupDirection, {
+        turn: 41,
+        ceoId: child.ceoId!.toString(),
+        ceoTenureKey: groupOperator(child, root!).ceoTenureKey,
+        rootId: root!,
+        isNpp: true,
+        caretaker: false,
+      })
+    ).toBe(child.groupDirection);
+  });
   it("protects outstanding debt and historical cash with the existing private-access rules", async () => {
     memory.seed("bonds", [
       { _id: new ObjectId(), corporationId: rootId, totalIssued: 100, matured: false },
