@@ -90,7 +90,8 @@ export function BannerAdComposer({ onClose }: BannerAdComposerProps) {
       <div className="py-6 text-center space-y-2">
         <p className="text-base font-semibold text-foreground">Banner ad submitted!</p>
         <p className="text-sm text-muted">
-          Your banner is now live and will display across eligible pages.
+          Your banner is awaiting admin approval. Once approved, it will rotate across eligible
+          pages.
         </p>
         {onClose && (
           <button
@@ -229,8 +230,8 @@ export function BannerAdComposer({ onClose }: BannerAdComposerProps) {
           className="mt-0.5 h-4 w-4 shrink-0 rounded border-card-border accent-primary"
         />
         <span className="text-xs text-muted leading-relaxed">
-          I confirm this image complies with content guidelines. Policy violations result in removal
-          without refund.
+          I confirm this image complies with content guidelines. New banners need admin approval
+          before they appear. Policy violations result in removal without refund.
         </span>
       </label>
 
