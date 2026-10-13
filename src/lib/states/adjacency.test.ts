@@ -26,9 +26,9 @@ describe("getActionCostMultiplier", () => {
   });
 
   it("handles Alaska and Hawaii (limited neighbors)", () => {
-    // HI standalone; AK only neighbors WA via the sea-border convention.
+    // Pacific sea links connect HI to AK and the west coast.
     expect(getActionCostMultiplier("AK", "CA")).toBe(1.5);
-    expect(getActionCostMultiplier("HI", "CA")).toBe(1.5);
+    expect(getActionCostMultiplier("HI", "CA")).toBe(1.25);
     expect(getActionCostMultiplier("CA", "AK")).toBe(1.5);
     // AK ↔ WA is NEIGHBORING per F4 sea-border policy.
     expect(getActionCostMultiplier("AK", "WA")).toBe(ACTION_COST_MULTIPLIERS.NEIGHBORING_STATE);
@@ -67,17 +67,22 @@ describe("areStatesNeighbors", () => {
 
   it("returns false for non-adjacent states", () => {
     expect(areStatesNeighbors("CA", "TX")).toBe(false);
-    expect(areStatesNeighbors("AK", "HI")).toBe(false);
+    expect(areStatesNeighbors("HI", "TX")).toBe(false);
   });
 
   it("returns false for same state", () => {
     expect(areStatesNeighbors("CA", "CA")).toBe(false);
   });
 
-  it("returns false when state has no neighbors beyond sea-border (HI)", () => {
-    // HI is standalone — no neighbors at all.
-    expect(areStatesNeighbors("HI", "CA")).toBe(false);
-    // AK only borders WA via the sea-border convention.
+  it.each(["AK", "WA", "OR", "CA"])("treats HI and %s as reciprocal neighbors", (state) => {
+    expect(areStatesNeighbors("HI", state)).toBe(true);
+    expect(areStatesNeighbors(state, "HI")).toBe(true);
+    expect(getActionCostMultiplier("HI", state)).toBe(1.25);
+    expect(getActionCostMultiplier(state, "HI")).toBe(1.25);
+    expect(calculateActionCost(5, "HI", state)).toBe(7);
+  });
+
+  it("preserves the other Alaska sea-border rules", () => {
     expect(areStatesNeighbors("AK", "CA")).toBe(false);
     expect(areStatesNeighbors("AK", "WA")).toBe(true);
   });

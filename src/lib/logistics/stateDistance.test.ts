@@ -24,9 +24,18 @@ describe("stateHops", () => {
     expect(stateHops("US", "FL", "WA")).toBe(stateHops("US", "WA", "FL"));
   });
 
-  it("returns null when no route exists (HI is standalone)", () => {
-    expect(stateHops("US", "HI", "CA")).toBeNull();
-    expect(stateHops("US", "CA", "HI")).toBeNull();
+  it.each(["AK", "WA", "OR", "CA"])("routes HI to %s in one hop in both directions", (state) => {
+    expect(stateHops("US", "HI", state)).toBe(1);
+    expect(stateHops("US", state, "HI")).toBe(1);
+  });
+
+  it("routes HI into the mainland without adding unrelated direct neighbors", () => {
+    expect(stateHops("US", "HI", "NV")).toBe(2);
+    expect(stateHops("US", "HI", "TX")).toBe(4);
+  });
+
+  it("returns null between disconnected regions", () => {
+    expect(stateHops("RU", "MOL", "CEN")).toBeNull();
   });
 
   it("returns null for unknown states", () => {
