@@ -86,6 +86,8 @@ export interface StockExchangeListing {
    * them below player corps and hides them by default behind a toggle (t834).
    */
   isNpp?: boolean;
+  /** Explicit CEO class for public-run labels; absent legacy rows stay unknown. */
+  ceoType?: "character" | "imperial" | "npp";
   /** True when another corporation holds over 50% of shares */
   isSubsidiary?: boolean;
   /** Present when isSubsidiary — controlling corporate parent name */
