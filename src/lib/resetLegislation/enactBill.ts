@@ -155,6 +155,26 @@ export async function applyResetLawBillEnactment(
         .collection<ResetLawProgramDocument>("resetLawPrograms")
         .replaceOne({ _id: program._id, worldId }, program, { upsert: true, session });
     }
+    // The current-law roster only counts a family on its enacted funder, and
+    // never on a national account once it is left to the states. Any demand
+    // still booked elsewhere (an earlier funder, rounding left by a boundary
+    // conversion, or opening residue) would block every later cash turn, so
+    // it follows the family to its funder or ends with the federal program.
+    let strandedAnnualDelta = 0;
+    for (const provision of frozen) {
+      const funder = provision.reviewedOption.fundingAccountId;
+      const leaving = provision.choice === "leave_to_states";
+      for (const account of accounts) {
+        const booked = account.familyAnnualDemand[provision.familyId];
+        if (booked === undefined) continue;
+        if (account._id === funder && !leaving) continue;
+        const projected = booked + (deltas.get(account._id)?.get(provision.familyId) ?? 0);
+        if (projected <= 0) continue;
+        addDelta(account._id, provision.familyId, -projected);
+        if (leaving) strandedAnnualDelta -= projected;
+        else addDelta(funder, provision.familyId, projected);
+      }
+    }
     let defenseAnnualDelta = 0;
     for (const [accountId, familyDeltas] of deltas) {
       const account = accountById.get(accountId);
@@ -206,9 +226,10 @@ export async function applyResetLawBillEnactment(
         throw new Error("V2 department authority changed concurrently");
       if (account.externallySettled && familyDeltas.has("L48")) defenseAnnualDelta += accountDelta;
     }
-    if (enactment.annualAllocationDelta !== 0 || defenseAnnualDelta !== 0) {
+    const totalSpendingDelta = enactment.annualAllocationDelta + strandedAnnualDelta;
+    if (totalSpendingDelta !== 0 || defenseAnnualDelta !== 0) {
       const spendingIncrement: Record<string, number> = {
-        "spending.total": enactment.annualAllocationDelta,
+        "spending.total": totalSpendingDelta,
       };
       if (defenseAnnualDelta !== 0) {
         spendingIncrement["spending.byCategory.defense"] = defenseAnnualDelta;
