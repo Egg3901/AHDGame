@@ -4,7 +4,7 @@ import { getOperatingSectorType } from "@/lib/constants/sectorStrategies";
 import { useGameEvents } from "@/hooks/useGameEvents";
 
 import { InlineError } from "@/components/ui/InlineError";
-import { apiErrorText, newRequestRef } from "@/lib/errors/catalog";
+import { apiErrorText, defaultMessageFor, newRequestRef } from "@/lib/errors/catalog";
 import { readApiError, toDisplayError } from "@/lib/errors/client";
 import { captureClientExceptionWithId } from "@/lib/observability/sentryClientLazy";
 import { useState, useEffect, useCallback, useRef } from "react";
@@ -91,6 +91,34 @@ import type {
   CorporationDefenceView,
   FinancialFogMeta,
 } from "@/components/corporation/CorporationPageTypes";
+
+type CorporationResponseError = Error & {
+  code: "CLIENT_ERROR";
+  status: number;
+  url: string;
+  contentType: string | null;
+  parseErrorName: string;
+  parseErrorMessage: string;
+};
+
+async function readCorporationResponse(res: Response, url: string) {
+  try {
+    return await res.json();
+  } catch (cause) {
+    if (cause instanceof Error && cause.name === "AbortError") throw cause;
+    const parseError = cause instanceof Error ? cause : new Error("Unknown JSON parse failure");
+    const error = new Error(defaultMessageFor("CLIENT_ERROR")) as CorporationResponseError;
+    error.name = "CorporationResponseError";
+    error.code = "CLIENT_ERROR";
+    error.status = res.status;
+    error.url = url;
+    error.contentType = res.headers.get("content-type");
+    error.parseErrorName = parseError.name;
+    error.parseErrorMessage = parseError.message;
+    Object.assign(error, { cause });
+    throw error;
+  }
+}
 
 export default function CorporationDetailPage() {
   const params = useParams();
@@ -210,11 +238,12 @@ export default function CorporationDetailPage() {
   }, []);
 
   const fetchCorporation = useCallback(async () => {
+    const url = makeCorpApiUrl();
     try {
       // Only show the full-page skeleton on the initial load; refreshes update data silently
       // so that local subtab state (e.g. CEO Office subtab) is not reset on save.
       if (!hasLoaded.current) setLoading(true);
-      const res = await fetch(makeCorpApiUrl());
+      const res = await fetch(url);
       if (!res.ok) {
         // A proxy error or deploy restart can return an empty or non-JSON body, so read
         // the error envelope leniently instead of letting res.json() throw.
@@ -230,7 +259,7 @@ export default function CorporationDetailPage() {
         }
         return;
       }
-      const data = await res.json();
+      const data = await readCorporationResponse(res, url);
       setError("");
       setErrorRef(null);
       setCorporation(data.corporation);
@@ -246,7 +275,16 @@ export default function CorporationDetailPage() {
       const ref =
         (await captureClientExceptionWithId(err, {
           tags: { feature: "corporation-detail", error_code: display.code },
-          extra: { url: makeCorpApiUrl() },
+          extra:
+            err instanceof Error && err.name === "CorporationResponseError"
+              ? {
+                  url,
+                  status: (err as CorporationResponseError).status,
+                  contentType: (err as CorporationResponseError).contentType,
+                  parseErrorName: (err as CorporationResponseError).parseErrorName,
+                  parseErrorMessage: (err as CorporationResponseError).parseErrorMessage,
+                }
+              : { url },
         })) ?? newRequestRef();
       const message = apiErrorText(
         { error: display.message, code: display.code, ref },
