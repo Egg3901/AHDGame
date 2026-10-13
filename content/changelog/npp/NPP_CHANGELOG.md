@@ -58,8 +58,8 @@ number.
   does not introduce a bill that is short. (Shipped in 6.5.0, counting party,
   district, donor and opposition pressure; whips and caucuses come later.)
 - **Whipping its own program.** A governing party whips co-partisans on the
-  bills that serve its standing goals. Opposition coordinates against a bill
-  only when it has the votes to defeat it.
+  bills that serve its standing goals (shipped in 6.7.0). Opposition
+  coordinates against a bill only when it has the votes to defeat it.
 - **Ministers judged on their goal.** Cabinet posts already go to NPPs ranked
   on fit with the head of government, competence and the brief, and ministers
   whose briefs badly miss target are already reshuffled. The remaining step is
@@ -77,8 +77,8 @@ number.
 - **CEO choice by record.** NPP-run companies choose CEOs from NPPs with a
   track record running companies in the same sector.
 - **Consequences across politics and business.** NPP officeholders who hold or
-  run companies weigh those holdings in votes and sponsorship, and opponents and
-  voters can see and react to the conflict.
+  run companies weigh those holdings in votes (shipped in 6.8.0) and
+  sponsorship, and opponents and voters can see and react to the conflict.
 - **Batched purchases.** The share-buying sweep is the largest single NPP cost
   in a turn (18.0 seconds and 1,465 database round trips on live turn 168); it
   moves to one batched settlement per country.
@@ -102,6 +102,38 @@ number.
 - Autonomy v6 becomes the default for new singleplayer and simulation worlds,
   after the engine 6 stages are validated. Running worlds never change level on
   their own.
+
+## 6.8.0 (unreleased)
+
+The first stage 3 change (corporations).
+
+- **Business interests shape votes (v6).** An NPP used to vote on a bill that
+  subsidises, protects or nationalises an industry as if it owned nothing. Now
+  an NPP that runs a company, or holds at least 1% of one, weighs what the bill
+  does to that company's sectors.
+  - It leans for subsidies and sector tariffs in its own sectors.
+  - It leans against ending those subsidies, tariffs aimed at its own company,
+    and nationalisation of its company or sector.
+  - Running the company counts twice as much as holding shares.
+  - The pull is capped below a hard party whip, so party discipline and the
+    NPP's own positions still matter.
+  - Players can use this: a sector bill can win over the NPPs invested in that
+    sector.
+
+## 6.7.0 (unreleased)
+
+Stage 2 (governing).
+
+- **Governments whip their own program (v6).** An NPP government's members
+  used to back its bills only through the general lean toward their own
+  party's bills. Now, when an NPP heads the government, its members get a
+  soft whip on the bills the government sponsored to serve one of its standing
+  goals. Each member still weighs it against their own positions, home region
+  and donors, and loyal members follow it more than stubborn ones, as with any
+  whip.
+  - An existing whip always takes precedence.
+  - It is never applied in a party with a player as chair or vice-chair.
+  - It is never applied to members of other parties.
 
 ## 6.6.0 (unreleased)
 
