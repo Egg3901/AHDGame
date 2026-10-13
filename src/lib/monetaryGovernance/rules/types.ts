@@ -106,6 +106,14 @@ export interface JurisdictionState {
 export type GovernanceCommand =
   | { type: "open_meeting"; countryId?: string; macro: MacroInputs }
   | { type: "cast_ballot"; seatId: string; vote: VoteDirection; countryId?: string }
+  | {
+      type: "set_motion";
+      seatId: string;
+      motion: VoteDirection;
+      /** Size of the move in points (positive); ignored for hold. Defaults to one grid step. */
+      delta?: number;
+      countryId?: string;
+    }
   | { type: "resolve_meeting"; countryId?: string; force?: boolean }
   | { type: "set_rate"; rate: number; countryId?: string }
   | { type: "vacate_seat"; seatId: string; countryId?: string }

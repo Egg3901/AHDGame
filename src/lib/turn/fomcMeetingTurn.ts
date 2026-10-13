@@ -222,6 +222,90 @@ export async function castFomcBallot(
   return { ok: true, resolved, motion: meeting.motion, moved };
 }
 
+export type SetMotionResult =
+  | { ok: false; reason: string; message: string }
+  | { ok: true; motion: FomcBallot["vote"]; proposedDelta: number };
+
+/**
+ * A player chair tables the active meeting's motion (raise, cut or hold and its
+ * size). The committee still carries or rejects it by majority; NPP chairs keep
+ * the automatic motion. All validation lives in the governance machine.
+ */
+export async function setFomcMotion(
+  db: Db,
+  bankId: string,
+  characterId: ObjectId,
+  motion: FomcBallot["vote"],
+  delta: number | undefined,
+  currentTurn: number,
+  now: Date,
+  currentYear: number | null = null
+): Promise<SetMotionResult> {
+  const bank = await db.collection<CentralBank>("centralBanks").findOne({ _id: bankId });
+  const meeting = bank?.activeFomcMeeting;
+  if (!bank || !meeting || meeting.status !== "voting") {
+    return { ok: false, reason: "no-meeting", message: "No meeting is currently taking votes." };
+  }
+  const seat = (bank.fomcBoard ?? []).find(
+    (s) => s.isChair && s.occupantType === "player" && s.characterId?.equals(characterId)
+  );
+  const jurisdiction = await resolveJurisdiction(db, bank.countryId);
+  const config = await db
+    .collection<{ _id: string; commandEconomyEnabled?: boolean }>("gameConfig")
+    .findOne({ _id: "default" }, { projection: { commandEconomyEnabled: 1 } });
+  const policies = await loadExecutionPolicies(
+    db,
+    [jurisdiction.anchorCountryId],
+    currentYear,
+    config?.commandEconomyEnabled === true
+  );
+  const state = bankToJurisdictionState(bank, {
+    jurisdiction,
+    governmentControlled: await isBankGovernmentControlledLive(bank, bank.countryId),
+    ...policies.get(jurisdiction.anchorCountryId)!,
+  });
+  const decision = decideGovernance(
+    state,
+    {
+      type: "set_motion",
+      seatId: seat?.seatId ?? "",
+      motion,
+      ...(delta != null ? { delta } : {}),
+      countryId: bank.countryId,
+    },
+    {
+      kind: "governor",
+      ...(seat ? { seatId: seat.seatId } : {}),
+      characterId: characterId.toString(),
+      countryId: bank.countryId,
+    },
+    { turn: currentTurn, now: now.getTime(), currentYear }
+  );
+  if (!decision.allowed) {
+    emitBankingAuditEvent(
+      {
+        kind: "meeting.transitioned",
+        command: "monetary.meeting.set_motion",
+        turn: currentTurn,
+        outcome: "rejected",
+        reason: decision.reason,
+        bankId,
+        subjectType: "meeting",
+        subjectId: meeting.meetingId,
+        meta: { motion, delta: delta ?? null },
+      },
+      db
+    );
+    return { ok: false, reason: decision.reason, message: decision.message };
+  }
+  const set = materializeTransitionSet(bank, decision.transition, now);
+  set.updatedAt = now;
+  await db.collection<CentralBank>("centralBanks").updateOne({ _id: bankId }, { $set: set });
+  for (const event of decision.transition.events) emitBankingAuditEvent(event, db);
+  const tabled = decision.next.activeMeeting!;
+  return { ok: true, motion: tabled.motion, proposedDelta: tabled.proposedDelta };
+}
+
 export interface FomcMeetingTurnResult {
   banksProcessed: number;
   meetingsOpened: number;
