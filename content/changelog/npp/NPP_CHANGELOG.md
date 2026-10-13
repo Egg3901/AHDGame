@@ -40,8 +40,8 @@ number.
 
 - **Race choice by chance of winning.** NPPs file where their home approval,
   party strength and incumbency give them a real chance, instead of filling the
-  first open primary in a fixed office order. A party fields its strongest
-  eligible NPP in each open primary.
+  first open primary in a fixed office order. (Placing the strongest NPPs in the
+  senior races shipped in 6.1.0.)
 - **Campaigning tied to a race.** Campaign and advertising actions spend on the
   race the NPP is running in, weighted toward close races, instead of raising
   general influence and favorability.
@@ -94,6 +94,21 @@ number.
 - Autonomy v6 becomes the default for new singleplayer and simulation worlds,
   after the engine 6 stages are validated. Running worlds never change level on
   their own.
+
+## 6.1.0 (unreleased)
+
+The first stage 1 change (running for office).
+
+- **Strongest candidates in the senior races (v6).** When a party fills a
+  state's open primaries with NPPs, it now runs its strongest available NPPs
+  for the most senior offices. Strength is the NPP's political influence plus
+  favorability. The same primaries are filled as before; only who runs where
+  changes. Before, NPPs were taken in load order and the lowest office was
+  filled first, so the first NPP loaded ran for state senate and the last for
+  governor.
+- **Nationwide executive slot (v6).** A party's nationwide executive primary
+  slot goes to its strongest available NPP instead of the NPP with the lowest
+  id.
 
 ## 6.0.0 (unreleased)
 

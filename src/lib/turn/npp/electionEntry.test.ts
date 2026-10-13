@@ -1141,3 +1141,83 @@ describe("processElectionEntry — UK regional party geography", () => {
     expect(ctx.nppCandidacies.has(npp._id.toString())).toBe(true);
   });
 });
+
+describe("processElectionEntry — engine 6.1 candidate placement (v6)", () => {
+  let db: MockDb;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    // Keep the v3 challenger pass from adding a second candidate.
+    vi.mocked(makeSeededRng).mockReturnValue(() => 0.99);
+    db = createMockDb();
+    db.collection("slateCandidates");
+    db.collectionMocks.slateCandidates.find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([]),
+    });
+    db.collection("electionCandidates");
+  });
+
+  function buildPlacementScenario(npps: NPP[]) {
+    const stateSenate = createTestElection({ electionType: "stateSenate", state: "CA" });
+    const governor = createTestElection({ electionType: "governor", state: "CA" });
+    const ctx = buildContext(db, stateSenate, npps, []);
+    ctx.openPrimaries = [stateSenate, governor];
+    ctx.candidatesByElection = new Map([
+      [stateSenate._id.toString(), []],
+      [governor._id.toString(), []],
+    ]);
+    return { ctx, stateSenate, governor };
+  }
+
+  const filedRaces = () =>
+    new Map(
+      db.collectionMocks.electionCandidates.insertOne.mock.calls.map(([doc]) => [
+        doc.electionId.toString(),
+        doc.characterId.toString(),
+      ])
+    );
+
+  const weak = () =>
+    createTestNpp({ currentOffice: null, politicalInfluence: 10, favorability: 10 });
+  const strong = () =>
+    createTestNpp({ currentOffice: null, politicalInfluence: 80, favorability: 80 });
+
+  it("runs the strongest NPP for the most senior race at v6", async () => {
+    db.collection("gameState");
+    db.collectionMocks.gameState.findOne.mockResolvedValue({ nppAutonomyLevel: "v6" });
+    const [w, s] = [weak(), strong()];
+    const { ctx, stateSenate, governor } = buildPlacementScenario([w, s]);
+
+    await processElectionEntry(ctx);
+
+    const filed = filedRaces();
+    expect(filed.get(governor._id.toString())).toBe(s._id.toString());
+    expect(filed.get(stateSenate._id.toString())).toBe(w._id.toString());
+  });
+
+  it("keeps load-order placement below v6", async () => {
+    db.collection("gameState");
+    db.collectionMocks.gameState.findOne.mockResolvedValue({ nppAutonomyLevel: "v5" });
+    const [w, s] = [weak(), strong()];
+    const { ctx, stateSenate, governor } = buildPlacementScenario([w, s]);
+
+    await processElectionEntry(ctx);
+
+    const filed = filedRaces();
+    expect(filed.get(stateSenate._id.toString())).toBe(w._id.toString());
+    expect(filed.get(governor._id.toString())).toBe(s._id.toString());
+  });
+
+  it("fills the same races as before when the pool is short, with the strongest NPP", async () => {
+    db.collection("gameState");
+    db.collectionMocks.gameState.findOne.mockResolvedValue({ nppAutonomyLevel: "v6" });
+    const s = strong();
+    const { ctx, stateSenate, governor } = buildPlacementScenario([s]);
+
+    await processElectionEntry(ctx);
+
+    const filed = filedRaces();
+    expect(filed.get(stateSenate._id.toString())).toBe(s._id.toString());
+    expect(filed.has(governor._id.toString())).toBe(false);
+  });
+});
