@@ -1,4 +1,5 @@
-import { ObjectId, type Db } from "mongodb";
+/** Ministerial pools share one guarded player balance across UK appointments. */
+import { ObjectId, type Db, type AnyBulkWriteOperation } from "mongodb";
 import {
   MINISTERIAL_ACTION_ACCRUAL_TURNS,
   MINISTERIAL_ACTION_CAP,
@@ -270,30 +271,72 @@ export async function accrueUkSharedPools(
         .map((row) => (row.characterId as ObjectId).toString())
     ),
   ].map((id) => new ObjectId(id));
-  let accrued = 0;
-  for (const characterId of holderIds) {
-    const pool = await ensureUkSharedPool(db, characterId, now);
-    if (pool.remaining >= MINISTERIAL_ACTION_CAP) continue;
-    const updated = await db.collection<Character>("characters").findOneAndUpdate(
-      {
-        _id: characterId,
-        sharedMinisterialActions: { $lt: MINISTERIAL_ACTION_CAP },
-        sharedMinisterialActionAccrualTurn: { $ne: currentTurn },
-      },
-      {
-        $inc: { sharedMinisterialActions: 1 },
-        $set: { sharedMinisterialActionAccrualTurn: currentTurn, updatedAt: now },
-      },
-      { returnDocument: "after", projection: { sharedMinisterialActions: 1 } }
+  if (!holderIds.length) return 0;
+  const characters = db.collection<Character>("characters");
+  const members = getCabinetMembersCollection(db);
+  const [holders, holderRows] = await Promise.all([
+    characters
+      .find({ _id: { $in: holderIds } })
+      .project({ sharedMinisterialActions: 1 })
+      .toArray(),
+    members
+      .find({ countryId: "UK" as never, characterId: { $in: holderIds } })
+      .project({ characterId: 1, ministerialActions: 1, lastMinisterialActionResetDay: 1 })
+      .toArray(),
+  ]);
+  const backfills: AnyBulkWriteOperation<Character>[] = holders
+    .filter((holder) => holder.sharedMinisterialActions == null)
+    .map((holder) => {
+      const shared = sharedPoolFromRows(
+        holderRows.filter((row) => row.characterId?.equals(holder._id)).map(toRowState),
+        MINISTERIAL_ACTION_CAP
+      );
+      return {
+        updateOne: {
+          filter: {
+            _id: holder._id,
+            $or: [
+              { sharedMinisterialActions: { $exists: false } },
+              { sharedMinisterialActions: { $type: "null" } },
+            ],
+          },
+          update: {
+            $set: {
+              sharedMinisterialActions: shared.remaining,
+              sharedMinisterialActionResetDay: shared.resetDay ?? getCalendarDayInTimezone(now),
+              updatedAt: now,
+            },
+          },
+        },
+      };
+    });
+  if (backfills.length) await characters.bulkWrite(backfills);
+  const result = await characters.updateMany(
+    {
+      _id: { $in: holderIds },
+      sharedMinisterialActions: { $lt: MINISTERIAL_ACTION_CAP },
+      sharedMinisterialActionAccrualTurn: { $ne: currentTurn },
+    },
+    {
+      $inc: { sharedMinisterialActions: 1 },
+      $set: { sharedMinisterialActionAccrualTurn: currentTurn, updatedAt: now },
+    }
+  );
+  // Read actual guarded results, including a previous run whose mirror failed.
+  const updated = await characters
+    .find({ _id: { $in: holderIds }, sharedMinisterialActionAccrualTurn: currentTurn })
+    .project({ sharedMinisterialActions: 1 })
+    .toArray();
+  if (updated.length)
+    await members.bulkWrite(
+      updated.map((holder) => ({
+        updateMany: {
+          filter: { countryId: "UK" as never, characterId: holder._id },
+          update: { $set: { ministerialActions: holder.sharedMinisterialActions, updatedAt: now } },
+        },
+      }))
     );
-    if (updated?.sharedMinisterialActions == null) continue;
-    await getCabinetMembersCollection(db).updateMany(
-      { countryId: "UK" as never, characterId },
-      { $set: { ministerialActions: updated.sharedMinisterialActions, updatedAt: now } }
-    );
-    accrued++;
-  }
-  return accrued;
+  return result.modifiedCount;
 }
 
 /** True on turns where ministerial pools gain their +1 accrual. */

@@ -178,8 +178,8 @@ export async function getOrgHeadAgendaRemaining(
 }
 
 /**
- * Spend one agenda action. Read-modify-write like `spendDiplomaticAction`: a
- * single head's pool sees no meaningful concurrency.
+ * Spend one agenda action with a version guard. Concurrent proposals cannot
+ * both spend the same snapshot; the identity index also guards first use.
  */
 export async function spendOrgHeadAgendaAction(
   db: Db,
@@ -192,14 +192,33 @@ export async function spendOrgHeadAgendaAction(
   const current = agendaRemainingFromRow(row, currentTurn);
   if (current < 1) return { ok: false, remaining: 0 };
   const remaining = current - 1;
-  await col.updateOne(
-    { organizationId, characterId },
-    {
-      $set: { organizationId, characterId, turn: currentTurn, remaining, updatedAt: new Date() },
-    },
-    { upsert: true }
-  );
-  return { ok: true, remaining };
+  const fields = {
+    organizationId,
+    characterId,
+    turn: currentTurn,
+    remaining,
+    updatedAt: new Date(),
+  };
+  try {
+    const result = row
+      ? await col.updateOne(
+          { _id: row._id, turn: row.turn, remaining: row.remaining },
+          { $set: fields }
+        )
+      : await col.updateOne(
+          { organizationId, characterId },
+          { $setOnInsert: fields },
+          { upsert: true }
+        );
+    if (result.modifiedCount === 1 || result.upsertedCount === 1) return { ok: true, remaining };
+  } catch (error) {
+    if (!error || typeof error !== "object" || !("code" in error) || error.code !== 11000)
+      throw error;
+  }
+  return {
+    ok: false,
+    remaining: await getOrgHeadAgendaRemaining(db, organizationId, characterId, currentTurn),
+  };
 }
 
 export type OrgProposalBudgetSource = "agenda" | "country";

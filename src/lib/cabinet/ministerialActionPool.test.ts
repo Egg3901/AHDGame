@@ -44,10 +44,14 @@ function setupStore(rows: RowDoc[], chars: CharDoc[]) {
 
   const matches = (doc: Record<string, unknown>, filter: Record<string, unknown>): boolean =>
     Object.entries(filter).every(([key, value]) => {
+      if (key === "$or")
+        return (value as Record<string, unknown>[]).some((entry) => matches(doc, entry));
       const actual = doc[key];
       if (value instanceof ObjectId && actual instanceof ObjectId) return value.equals(actual);
       if (value != null && typeof value === "object" && !Array.isArray(value)) {
         const ops = value as Record<string, unknown>;
+        if ("$exists" in ops) return (actual !== undefined) === ops.$exists;
+        if ("$type" in ops) return ops.$type === "null" && actual === null;
         if ("$gte" in ops) return (actual as number) >= (ops.$gte as number);
         if ("$lt" in ops) return typeof actual === "number" && actual < (ops.$lt as number);
         if ("$in" in ops) {
@@ -112,6 +116,23 @@ function setupStore(rows: RowDoc[], chars: CharDoc[]) {
       return { modifiedCount: count, matchedCount: count };
     }
   );
+  members.bulkWrite.mockImplementation(
+    async (
+      operations: {
+        updateMany: { filter: Record<string, unknown>; update: Record<string, unknown> };
+      }[]
+    ) => {
+      let modifiedCount = 0;
+      for (const { updateMany } of operations) {
+        for (const row of rowStore.values())
+          if (matches(row as unknown as Record<string, unknown>, updateMany.filter)) {
+            applyUpdate(row as unknown as Record<string, unknown>, updateMany.update);
+            modifiedCount++;
+          }
+      }
+      return { modifiedCount };
+    }
+  );
 
   const characters = db.collection("characters");
   characters.findOne.mockImplementation(async (filter: Record<string, unknown> = {}) => {
@@ -121,9 +142,8 @@ function setupStore(rows: RowDoc[], chars: CharDoc[]) {
     return found ? { ...found } : null;
   });
   characters.find.mockImplementation((filter: Record<string, unknown> = {}) => {
-    const idFilter = (filter._id ?? {}) as { $in?: ObjectId[] };
     const docs = [...charStore.values()].filter((char) =>
-      idFilter.$in ? idFilter.$in.some((id) => id.equals(char._id)) : true
+      matches(char as unknown as Record<string, unknown>, filter)
     );
     return { project: () => ({ toArray: async () => docs.map((doc) => ({ ...doc })) }) };
   });
@@ -145,6 +165,36 @@ function setupStore(rows: RowDoc[], chars: CharDoc[]) {
       if (!found) return null;
       applyUpdate(found as unknown as Record<string, unknown>, update);
       return { ...found };
+    }
+  );
+  characters.updateMany.mockImplementation(
+    async (filter: Record<string, unknown>, update: Record<string, unknown>) => {
+      let modifiedCount = 0;
+      for (const char of charStore.values())
+        if (matches(char as unknown as Record<string, unknown>, filter)) {
+          applyUpdate(char as unknown as Record<string, unknown>, update);
+          modifiedCount++;
+        }
+      return { modifiedCount };
+    }
+  );
+  characters.bulkWrite.mockImplementation(
+    async (
+      operations: {
+        updateOne: { filter: Record<string, unknown>; update: Record<string, unknown> };
+      }[]
+    ) => {
+      let modifiedCount = 0;
+      for (const { updateOne } of operations) {
+        const char = [...charStore.values()].find((item) =>
+          matches(item as unknown as Record<string, unknown>, updateOne.filter)
+        );
+        if (char) {
+          applyUpdate(char as unknown as Record<string, unknown>, updateOne.update);
+          modifiedCount++;
+        }
+      }
+      return { modifiedCount };
     }
   );
 
@@ -318,6 +368,31 @@ describe("reconcileUkSharedPool", () => {
 
 describe("accrueUkSharedPools", () => {
   const ACCRUAL_TURN = MINISTERIAL_ACTION_ACCRUAL_TURNS * 10;
+
+  it("initializes from the surviving dual-title balance before accruing", async () => {
+    const rows = ukRows(holderId);
+    rows[0].ministerialActions = 1;
+    const { db, rowStore, charStore } = setupStore(rows, [{ _id: holderId }]);
+    expect(await accrueUkSharedPools(db as unknown as Db, rows, ACCRUAL_TURN, NOW)).toBe(1);
+    expect(charStore.get(holderId.toString())?.sharedMinisterialActions).toBe(2);
+    for (const row of rowStore.values()) expect(row.ministerialActions).toBe(2);
+  });
+
+  it("repairs a failed row mirror on retry without granting twice", async () => {
+    const { db, rowStore, charStore } = setupStore(ukRows(holderId), [
+      { _id: holderId, sharedMinisterialActions: 1 },
+    ]);
+    db.collectionMocks.cabinetMembers.bulkWrite.mockRejectedValueOnce(
+      new Error("mirror interrupted")
+    );
+    const rows = [...rowStore.values()];
+    await expect(accrueUkSharedPools(db as unknown as Db, rows, ACCRUAL_TURN, NOW)).rejects.toThrow(
+      "mirror interrupted"
+    );
+    expect(await accrueUkSharedPools(db as unknown as Db, rows, ACCRUAL_TURN, NOW)).toBe(0);
+    expect(charStore.get(holderId.toString())?.sharedMinisterialActions).toBe(2);
+    for (const row of rowStore.values()) expect(row.ministerialActions).toBe(2);
+  });
 
   it("adds one shared action on an accrual turn and mirrors it to both rows", async () => {
     const { db, rowStore, charStore } = setupStore(ukRows(holderId), [
