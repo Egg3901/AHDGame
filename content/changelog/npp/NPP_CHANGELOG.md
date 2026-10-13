@@ -44,7 +44,8 @@ number.
   senior races shipped in 6.1.0.)
 - **Campaigning tied to a race.** Campaign and advertising actions spend on the
   race the NPP is running in, weighted toward close races, instead of raising
-  general influence and favorability.
+  general influence and favorability. (Rallies in the NPP's own race shipped in
+  6.2.0.)
 - **Consolidation.** A trailing NPP withdraws before the primary and endorses
   the same-party front-runner rather than splitting the vote.
 - **Presidential challengers** in non-player countries, inside the existing
@@ -94,6 +95,24 @@ number.
 - Autonomy v6 becomes the default for new singleplayer and simulation worlds,
   after the engine 6 stages are validated. Running worlds never change level on
   their own.
+
+## 6.2.0 (unreleased)
+
+Stage 1 (running for office).
+
+- **NPP candidates rally their own race (v6).** An NPP's campaign action used
+  to raise only its general political influence. NPPs have no campaign
+  organisation, so their candidate Support, the race-level momentum that
+  rallies move for players, stayed at the neutral 50. Now the first campaign
+  action of a cycle by an NPP that is running in a race where players can
+  rally becomes a rally for that race.
+  - It costs the same action points and funds as the campaign action, and
+    gives up that action's influence gain.
+  - It moves Support by the same amount a player rally in the same kind of
+    race does, with the same split between an immediate gain and a gain spread
+    over the next four turns.
+  - Players can rally once a turn. An NPP rallies at most once per action
+    cycle, which is once every four turns.
 
 ## 6.1.0 (unreleased)
 

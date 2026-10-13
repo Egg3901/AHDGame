@@ -20,6 +20,7 @@ import type {
   Bond,
   StatePartyOrg,
   CorporateSector,
+  ElectionCandidate,
 } from "@/lib/db/types";
 import type { CountryId } from "@/lib/constants/countries";
 import {
@@ -57,6 +58,7 @@ import {
 } from "@/lib/nppAutonomy/featureFlag";
 import { NPP_ENGINE_LEVEL } from "@/lib/nppAutonomy/engineVersion";
 import { NPP_ACTION_INTERVAL, nppActsThisTurn } from "@/lib/nppAutonomy/v6/rules/actionCadence";
+import { planNppRally, type NppRallyWrite } from "@/lib/turn/npp/nppRally";
 import { getAllCountryAccess } from "@/lib/countryAccess";
 import { careerArchetypeModifiersContinuous } from "@/lib/nppAutonomy/v3/careerArchetype";
 import { nppBuyBond } from "@/lib/nppAutonomy/v3/finance/nppBonds";
@@ -236,6 +238,8 @@ export interface NppActionProcessingResult {
   /** Funds-poor fallback fires (see actionAi.ts's FUNDRAISE_* constants). */
   fundraise: number;
   skipped: number;
+  /** Engine 6.2 (v6): campaign actions spent as a rally in the NPP's own race. */
+  rallies: number;
 }
 
 function zeroResult(): NppActionProcessingResult {
@@ -248,6 +252,7 @@ function zeroResult(): NppActionProcessingResult {
     partyDonation: 0,
     fundraise: 0,
     skipped: 0,
+    rallies: 0,
   };
 }
 
@@ -401,6 +406,9 @@ async function runNppActions(db: Db, currentTurn: number): Promise<NppActionProc
     };
   }[] = [];
 
+  // Engine 6.2 (v6): candidate rallies, flushed in one write after the loop.
+  const rallyOps: NppRallyWrite[] = [];
+
   for await (const npp of cursor) {
     if (actsThisTurn && !actsThisTurn(npp._id)) continue;
     result.nppsProcessed++;
@@ -467,6 +475,7 @@ async function runNppActions(db: Db, currentTurn: number): Promise<NppActionProc
     // Carried across the cycle so an NPP follows through on what they started
     // rather than re-rolling independently four times.
     let lastAction: "buildDonorBase" | "campaign" | "advertise" | "partyDonation" | undefined;
+    let rallied = false;
 
     while (actionsThisCycle < NPP_ACTIONS_PER_CYCLE) {
       const decision = decideNppAction(
@@ -534,11 +543,21 @@ async function runNppActions(db: Db, currentTurn: number): Promise<NppActionProc
           donorBaseLevel++; // next iteration's cost uses the new level
           result.buildDonorBase++;
           break;
-        case "campaign":
-          piAccrued = Math.min(100, piAccrued + campaignInfluenceGain(piAccrued));
+        case "campaign": {
+          // v6: the cycle's first campaign action by a running NPP rallies its
+          // race instead of raising general influence (turn/npp/nppRally.ts).
+          const rally = staggered && !rallied ? planNppRally(signals?.race, currentTurn) : null;
+          if (rally) {
+            rallyOps.push(rally);
+            rallied = true;
+            result.rallies++;
+          } else {
+            piAccrued = Math.min(100, piAccrued + campaignInfluenceGain(piAccrued));
+          }
           nCampaign++;
           result.campaign++;
           break;
+        }
         case "advertise":
           favAccrued = Math.min(100, favAccrued + advertiseFavorabilityGain(favAccrued));
           nAdvertise++;
@@ -609,6 +628,11 @@ async function runNppActions(db: Db, currentTurn: number): Promise<NppActionProc
   // Flush NPP updates
   if (nppOps.length > 0) {
     await db.collection<NPP>("npps").bulkWrite(nppOps);
+  }
+  if (rallyOps.length > 0) {
+    await db.collection<ElectionCandidate>("electionCandidates").bulkWrite(rallyOps, {
+      ordered: false,
+    });
   }
 
   // Update party treasuries. Keys are composite "countryId:sequentialId"
