@@ -1579,3 +1579,74 @@ describe("processBillVoting — engine 6.7 government whip (v6)", () => {
     expect(forces.whip).toBe(0);
   });
 });
+
+describe("processBillVoting — engine 6.8 business interest (v6)", () => {
+  async function donorsForceOn(engine6: boolean) {
+    atLeastMock.mockImplementation(async (_db: unknown, _c: unknown, level: string) =>
+      level === "v6" ? engine6 : true
+    );
+    const ceo = makeNPP({
+      countryId: "BR",
+      party: "1",
+      policies: { economic: 0, social: 0 },
+      donorBaseLevel: 0,
+    });
+    const official = makeOfficial(ceo._id, "house", {
+      countryId: "BR",
+      party: "1",
+      officeType: "chamber",
+    });
+    const corpId = new ObjectId();
+    const bill = makeBill({
+      countryId: "BR",
+      sponsorParty: "2",
+      currentChamber: "chamber",
+      status: "active",
+      provisions: [
+        { type: "subsidy", scopeType: "sector", targetSectorType: "steel", domesticOnly: true },
+      ] as never,
+    });
+    const predictions: unknown[][] = [];
+    const db = {
+      collection: vi.fn((name: string) => ({
+        updateOne: vi.fn(() => Promise.resolve({ modifiedCount: 1 })),
+        bulkWrite: vi.fn((...args: unknown[]) => {
+          if (name === "nppVotePredictions") predictions.push(args);
+          return Promise.resolve({ upsertedCount: 0, modifiedCount: 0 });
+        }),
+        findOne: vi.fn(() => Promise.resolve(null)),
+        find: vi.fn(() => ({
+          toArray: vi
+            .fn()
+            .mockResolvedValue(
+              name === "corporations"
+                ? [{ _id: corpId, ceoId: ceo._id, totalShares: 100, shareholders: [] }]
+                : name === "corporateSectors"
+                  ? [{ corporationId: corpId, sectorType: "steel" }]
+                  : []
+            ),
+        })),
+      })),
+    } as unknown as Db;
+    const ctx = makeCtx(db, {
+      activeBills: [bill],
+      nppOfficials: [official],
+      nppMap: new Map([[ceo._id.toString(), ceo]]),
+    });
+    const { processBillVoting } = await import("./billVoting");
+    await processBillVoting(ctx);
+    atLeastMock.mockReset().mockResolvedValue(true);
+    const ops = (
+      predictions[0] as [Array<{ updateOne: { update: { $set: { forces: { donors: number } } } } }>]
+    )[0];
+    return ops[0].updateOne.update.$set.forces.donors;
+  }
+
+  it("pulls a CEO toward a subsidy for its own sector at v6", async () => {
+    expect(await donorsForceOn(true)).toBe(40);
+  });
+
+  it("leaves the donors force alone below v6", async () => {
+    expect(await donorsForceOn(false)).toBe(0);
+  });
+});

@@ -77,8 +77,8 @@ number.
 - **CEO choice by record.** NPP-run companies choose CEOs from NPPs with a
   track record running companies in the same sector.
 - **Consequences across politics and business.** NPP officeholders who hold or
-  run companies weigh those holdings in votes and sponsorship, and opponents and
-  voters can see and react to the conflict.
+  run companies weigh those holdings in votes (shipped in 6.8.0) and
+  sponsorship, and opponents and voters can see and react to the conflict.
 - **Batched purchases.** The share-buying sweep is the largest single NPP cost
   in a turn (18.0 seconds and 1,465 database round trips on live turn 168); it
   moves to one batched settlement per country.
@@ -102,6 +102,23 @@ number.
 - Autonomy v6 becomes the default for new singleplayer and simulation worlds,
   after the engine 6 stages are validated. Running worlds never change level on
   their own.
+
+## 6.8.0 (unreleased)
+
+The first stage 3 change (corporations).
+
+- **Business interests shape votes (v6).** An NPP used to vote on a bill that
+  subsidises, protects or nationalises an industry as if it owned nothing. Now
+  an NPP that runs a company, or holds at least 1% of one, weighs what the bill
+  does to that company's sectors.
+  - It leans for subsidies and sector tariffs in its own sectors.
+  - It leans against ending those subsidies, tariffs aimed at its own company,
+    and nationalisation of its company or sector.
+  - Running the company counts twice as much as holding shares.
+  - The pull is capped below a hard party whip, so party discipline and the
+    NPP's own positions still matter.
+  - Players can use this: a sector bill can win over the NPPs invested in that
+    sector.
 
 ## 6.7.0 (unreleased)
 

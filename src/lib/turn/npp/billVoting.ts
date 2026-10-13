@@ -77,6 +77,14 @@ import {
   nppGovernmentWhipFor,
   type NppGovernmentWhip,
 } from "@/lib/nppAutonomy/v6/rules/governmentWhip";
+import {
+  buildNppBusinessStakes,
+  businessInterestForce,
+  hasBusinessProvision,
+  type NppBusinessStakes,
+} from "@/lib/nppAutonomy/v6/rules/businessInterest";
+import { getOperatingSectorType } from "@/lib/constants/sectorStrategies";
+import type { Corporation, CorporateSector } from "@/lib/db/types";
 
 export async function processBillVoting(ctx: NPPContext): Promise<number> {
   const {
@@ -245,6 +253,60 @@ export async function processBillVoting(ctx: NPPContext): Promise<number> {
         oppositionPartyId: opposition.partyId,
       });
     }
+  }
+
+  // Engine 6.8 (v6): the voters' own business stakes, loaded only when a bill
+  // in a v6 country carries a sector provision (two batched reads per pass).
+  const businessCountries = new Set<CountryId>();
+  for (const bill of activeBills) {
+    const countryId = (bill.countryId ?? "US") as CountryId;
+    if (businessCountries.has(countryId) || !hasBusinessProvision(bill.provisions)) continue;
+    if (await nppAutonomyAtLeast(db, countryId, NPP_ENGINE_LEVEL)) businessCountries.add(countryId);
+  }
+  let stakesByNpp = new Map<string, NppBusinessStakes>();
+  if (businessCountries.size > 0) {
+    const voterIds = ctx.nppOfficials
+      .map((o) => o.nppId)
+      .filter((id): id is NonNullable<typeof id> => !!id);
+    const corporations = await db
+      .collection<Corporation>("corporations")
+      .find(
+        { $or: [{ ceoId: { $in: voterIds } }, { "shareholders.nppId": { $in: voterIds } }] },
+        { projection: { ceoId: 1, totalShares: 1, shareholders: 1 } }
+      )
+      .toArray();
+    const sectors =
+      corporations.length > 0
+        ? await db
+            .collection<CorporateSector>("corporateSectors")
+            .find(
+              { corporationId: { $in: corporations.map((c) => c._id) } },
+              {
+                projection: {
+                  corporationId: 1,
+                  sectorType: 1,
+                  industryModel: 1,
+                  mediaDiscriminator: 1,
+                },
+              }
+            )
+            .toArray()
+        : [];
+    const sectorTypesByCorporation = new Map<string, string[]>();
+    for (const sector of sectors) {
+      const key = sector.corporationId.toString();
+      const list = sectorTypesByCorporation.get(key) ?? [];
+      list.push(
+        sector.sectorType,
+        getOperatingSectorType(sector.sectorType, sector.industryModel, sector.mediaDiscriminator)
+      );
+      sectorTypesByCorporation.set(key, list);
+    }
+    stakesByNpp = buildNppBusinessStakes(
+      corporations,
+      sectorTypesByCorporation,
+      new Set(voterIds.map(String))
+    );
   }
 
   for (const bill of activeBills) {
@@ -460,6 +522,14 @@ export async function processBillVoting(ctx: NPPContext): Promise<number> {
 
       if (bill.referendumConsent)
         forces.ideology = constitutionalConsentForce(bill.referendumConsent, npp.party);
+
+      // Engine 6.8 (v6): the NPP's own companies, folded into the donors bucket.
+      if (businessCountries.has(billCountry)) {
+        const interest = businessInterestForce(bill.provisions, stakesByNpp.get(nppIdStr));
+        if (interest !== 0) {
+          forces.donors = Math.max(-100, Math.min(100, forces.donors + interest));
+        }
+      }
 
       // War-entry bills carry a frozen national pressure snapshot. Fold it into
       // the ideology bucket so the existing prediction schema remains replayable:
