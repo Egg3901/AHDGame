@@ -1243,6 +1243,102 @@ describe("own-company priority routes", () => {
     expect(delivered(r, "A1")).toBeCloseTo(0);
   });
 
+  const localBuyers = (ownFirstAcrossStates?: boolean, freight = 1000) =>
+    threeStates({
+      byState: new Map([
+        ["A1", bal({ coal: { supply: 0, demand: 0 } })],
+        [
+          "A2",
+          bal({ coal: { supply: 100, demand: 100 }, freight: { supply: freight, demand: 0 } }),
+        ],
+        ["A3", bal({ coal: { supply: 0, demand: 60 } })],
+      ]),
+      byCountry: new Map([["US", bal({ coal: { supply: 100, demand: 160 } })]]),
+      demandUsesByState: new Map([
+        ["A2", new Map([["coal", { householdFinal: 40, productionInput: 60 }]])],
+      ]),
+      ownRoutes: [
+        {
+          ...route,
+          units: 60,
+          ...(ownFirstAcrossStates === undefined ? {} : { ownFirstAcrossStates }),
+        },
+      ],
+    });
+  it("keeps local buyers first in existing worlds without the setting, or when disabled", () => {
+    for (const flag of [undefined, false]) {
+      const r = runSourcingPass(localBuyers(flag));
+      expect(r.ownRouteDelivered).toEqual([]);
+      expect(r.summaries.find((s) => s.commodity === "coal")?.intraStateUnits).toBe(100);
+    }
+  });
+  it("reclaims only delivered own supply, preserving goods and freight accounting on the first switched turn", () => {
+    const r = runSourcingPass(localBuyers(true));
+    const summary = r.summaries.find((s) => s.commodity === "coal")!;
+    expect(r.ownRouteDelivered[0]?.units).toBeCloseTo(60);
+    expect(summary.intraStateUnits).toBeCloseTo(40);
+    expect(summary.interStateUnits).toBeCloseTo(60);
+    expect(summary.unmetUnits).toBeCloseTo(60);
+    expect(summary.intraStateUnits + summary.interStateUnits + summary.importUnits).toBeCloseTo(
+      100
+    );
+    expect(r.destinationAggregates.find((d) => d.commodity === "coal")?.localUnits).toBeCloseTo(40);
+    expect(
+      r.purchaseExposureByCountry?.get("US")?.get("coal")?.householdFinal.domesticUnits
+    ).toBeCloseTo(16);
+    const freight = r.ownRouteDelivered.reduce((n, row) => n + (row.freightCharge ?? 0), 0);
+    expect(freight).toBeGreaterThan(0);
+    expect(r.haulRevenueByOriginState.get("A2")).toBeCloseTo(freight);
+    expect(r.freightChargesByDestState.get("A3")?.get("coal") ?? 0).toBe(0);
+  });
+  it("lets displaced local buyers source replacement supply and keeps their landed premium accurate", () => {
+    const input = localBuyers(true);
+    input.byState = new Map([
+      ...input.byState,
+      [
+        "A1",
+        new Map([
+          ...input.byState.get("A1")!,
+          ["coal", { supply: 60, demand: 0 }],
+          ["freight", { supply: 1000, demand: 0 }],
+        ]),
+      ],
+    ]);
+    input.byCountry = new Map([
+      ...input.byCountry,
+      [
+        "US",
+        new Map([
+          ...input.byCountry.get("US" as CountryId)!,
+          ["coal", { supply: 160, demand: 160 }],
+        ]),
+      ],
+    ]);
+    const r = runSourcingPass(input);
+    const summary = r.summaries.find((s) => s.commodity === "coal")!;
+    expect(r.ownRouteDelivered[0]?.units).toBeCloseTo(60);
+    expect(delivered(r, "A2")).toBeCloseTo(60);
+    expect(summary.intraStateUnits + summary.interStateUnits + summary.importUnits).toBeCloseTo(
+      160
+    );
+    expect(summary.unmetUnits).toBe(0);
+    const charge = r.freightChargesByDestState.get("A2")?.get("coal") ?? 0;
+    expect(charge).toBeGreaterThan(0);
+    expect(r.landedPremiumByDestState.get("A2")?.get("coal")).toEqual({
+      metUnits: 100,
+      extraCost: charge,
+    });
+    const paid = [...r.haulRevenueByOriginState.values()].reduce((n, amount) => n + amount, 0);
+    expect(paid).toBeCloseTo(charge + (r.ownRouteDelivered[0]?.freightCharge ?? 0));
+  });
+
+  it("leaves local buyers supplied when an opted-in haul cannot run", () => {
+    const r = runSourcingPass(localBuyers(true, 0));
+    expect(r.ownRouteDelivered).toEqual([]);
+    expect(r.summaries.find((s) => s.commodity === "coal")?.intraStateUnits).toBe(100);
+    expect(r.summaries.find((s) => s.commodity === "coal")?.unmetUnits).toBe(60);
+  });
+
   it("ignores routes across countries or without a land route", () => {
     const r = runSourcingPass(
       threeStates({

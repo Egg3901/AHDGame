@@ -21,6 +21,14 @@ interface PolicyView {
   received: Record<string, number>;
   reserved: Record<string, number>;
   discountCostAnchor: number;
+  ownHaulTurn?: number | null;
+  ownHauls?: {
+    commodity: string;
+    originStateId: string;
+    destStateId: string;
+    units: number;
+    freightPerUnitAnchor: number;
+  }[];
 }
 
 export default function InternalSupplyPanel({ corpId }: { corpId: string }) {
@@ -76,7 +84,10 @@ export default function InternalSupplyPanel({ corpId }: { corpId: string }) {
   }
   const disabled = busy || !view?.available || view.inherited;
   const changed =
-    !!view && (draft.priority !== view.policy.priority || draft.discount !== view.policy.discount);
+    !!view &&
+    (draft.priority !== view.policy.priority ||
+      draft.discount !== view.policy.discount ||
+      !!draft.ownFirstAcrossStates !== !!view.policy.ownFirstAcrossStates);
   return (
     <DenseSection title={t("title")} meta={t("timing")}>
       <p className="py-2 text-sm text-muted">{t("intro")}</p>
@@ -150,6 +161,37 @@ export default function InternalSupplyPanel({ corpId }: { corpId: string }) {
               {busy ? t("saving") : t("save")}
             </button>
           </div>
+          <label className="flex items-center gap-2 py-2 text-sm">
+            <input
+              type="checkbox"
+              disabled={disabled || draft.priority === "market"}
+              checked={draft.ownFirstAcrossStates === true}
+              onChange={(e) => {
+                setDraft({ ...draft, ownFirstAcrossStates: e.target.checked });
+                setSaved(false);
+              }}
+            />
+            {t("ownFirstAcrossStates")}
+          </label>
+          <p className="pb-2 text-xs text-muted">{t("ownFirstFreightWarning")}</p>
+          {view.ownHauls && view.ownHauls.length > 0 && (
+            <div className="border-t border-card-border py-2 text-xs text-muted">
+              <p>{t("ownHaulTurn", { turn: view.ownHaulTurn ?? 0 })}</p>
+              {view.ownHauls.map((haul, i) => (
+                <p key={i}>
+                  {t("ownHaulCost", {
+                    commodity: haul.commodity.replaceAll("_", " "),
+                    origin: haul.originStateId,
+                    destination: haul.destStateId,
+                    units: haul.units.toLocaleString(undefined, { maximumFractionDigits: 1 }),
+                    cost: haul.freightPerUnitAnchor.toLocaleString(undefined, {
+                      maximumFractionDigits: 4,
+                    }),
+                  })}
+                </p>
+              ))}
+            </div>
+          )}
           {saved && (
             <p className="text-sm text-muted" role="status">
               {t("saved")}

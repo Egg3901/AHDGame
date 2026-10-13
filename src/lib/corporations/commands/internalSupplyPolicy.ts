@@ -15,12 +15,14 @@ import {
   DEFAULT_INTERNAL_SUPPLY_POLICY,
   resolveSupplyPolicies,
 } from "@/lib/market/internalSupply/rules";
+import type { SourcingNetworkDoc } from "@/lib/logistics/sourcingLedger";
 import type { Corporation, CorporateSector, GameConfig, GameState } from "@/lib/db/types";
 
 export const internalSupplyPolicySchema = z
   .object({
     priority: z.enum(["market", "own", "group"]),
     discount: z.number().finite().min(0).max(0.2),
+    ownFirstAcrossStates: z.boolean().optional(),
   })
   .strict();
 type Params = { params: Promise<{ id: string }> };
@@ -95,8 +97,22 @@ export async function internalSupplyPolicy(request: Request, { params }: Params)
           reserved[key] = (reserved[key] ?? 0) + (units ?? 0);
         discountCostAnchor += s.internalSupplyReceipt.discountCostAnchor ?? 0;
       }
+      const network = await db
+        .collection<SourcingNetworkDoc>("sourcingNetworkLoad")
+        .findOne({}, { sort: { turn: -1 }, projection: { turn: 1, ownRouteDelivered: 1 } });
+      const ownHauls = (network?.ownRouteDelivered ?? [])
+        .filter((r) => r.corporationId === corporation._id.toString() && r.units > 0)
+        .map((r) => ({
+          commodity: r.commodity,
+          originStateId: r.originStateId,
+          destStateId: r.destStateId,
+          units: r.units,
+          freightPerUnitAnchor: (r.freightCharge ?? 0) / r.units,
+        }));
       return NextResponse.json(
         {
+          ownHaulTurn: network?.turn ?? null,
+          ownHauls,
           policy: corporation.internalSupplyPolicy ?? DEFAULT_INTERNAL_SUPPLY_POLICY,
           effectivePolicy: effective?.policy ?? DEFAULT_INTERNAL_SUPPLY_POLICY,
           inherited,

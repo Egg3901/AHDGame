@@ -6,6 +6,8 @@
 export interface InternalSupplyPolicy {
   priority: "market" | "own" | "group";
   discount: number;
+  /** Opt in to shipping own surplus before the origin state's market buyers. */
+  ownFirstAcrossStates?: boolean;
 }
 export const DEFAULT_INTERNAL_SUPPLY_POLICY: InternalSupplyPolicy = {
   priority: "market",
