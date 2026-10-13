@@ -1,6 +1,8 @@
 "use client";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
+import { Building2, ChartNoAxesCombined, Compass, Network, ArrowUpRight } from "lucide-react";
+import styles from "./GroupPage.module.css";
 import { useTranslations } from "next-intl";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import { CorporationLogo } from "../CorporationLogo";
@@ -25,7 +27,9 @@ interface Sheet {
   totalLiquidCapitalAnchor: number;
   totalSectorCount: number;
 }
-const button = "rounded border border-border px-3 py-2 text-sm disabled:opacity-50 hover:bg-panel";
+const button =
+  "inline-flex items-center justify-center gap-2 rounded-lg border border-card-border bg-card px-3 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 enabled:hover:bg-card-elevated focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-info";
+const sectionIcons = [Building2, ChartNoAxesCombined, Compass, Network];
 const objectives: GroupObjective[] = [
   "balanced",
   "profit",
@@ -142,19 +146,23 @@ export function SubsidiaryGroupPage({ corpId }: { corpId: string }) {
     }
   }
   return (
-    <main className="mx-auto max-w-7xl p-4 sm:p-6 space-y-6">
+    <main className={`${styles.page} mx-auto max-w-7xl p-4 sm:p-6 space-y-6`}>
       <nav aria-label={t("breadcrumb")} className="text-sm text-muted">
         <Link href={"/corporation/" + data.rootId}>{t("parentCorporation")}</Link> / {t("title")}
       </nav>
-      <header className="flex items-center gap-4">
+      <header className="flex items-center gap-5 rounded-xl border border-card-border bg-card p-5 sm:p-7">
         <CorporationLogo
           logoUrl={data.settings.logoUrl}
           name={data.settings.name}
           size="h-16 w-16"
         />
         <div>
-          <p className="text-xs uppercase text-muted">{t("title")}</p>
-          <h1 className="text-2xl font-bold">{data.settings.name}</h1>
+          <p className="mb-1 text-[11px] font-semibold uppercase tracking-widest text-gold">
+            {t("title")}
+          </p>
+          <h1 className="break-words text-2xl font-bold tracking-tight sm:text-3xl">
+            {data.settings.name}
+          </h1>
           <p className="text-sm text-muted">{t("memberCount", { count: data.members.length })}</p>
         </div>
       </header>
@@ -165,18 +173,22 @@ export function SubsidiaryGroupPage({ corpId }: { corpId: string }) {
       )}
       <nav
         aria-label={t("sections")}
-        className="flex gap-2 overflow-x-auto border-b border-border pb-3"
+        className="flex gap-1 overflow-x-auto border-b border-card-border"
       >
-        {["overview", "financials", "directions", "supply"].map((key) => (
+        {["overview", "financials", "directions", "supply"].map((key, index) => (
           <button
             key={key}
-            className={button}
+            className={`inline-flex shrink-0 items-center gap-2 border-b-2 px-4 py-3 text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-info ${section === key ? "border-primary text-foreground bg-card" : "border-transparent text-muted hover:bg-card hover:text-foreground"}`}
             aria-pressed={section === key}
             onClick={() => {
               history.replaceState(null, "", "#" + key);
               window.dispatchEvent(new HashChangeEvent("hashchange"));
             }}
           >
+            {(() => {
+              const Icon = sectionIcons[index];
+              return <Icon size={16} aria-hidden="true" />;
+            })()}
             {t(key)}
           </button>
         ))}
@@ -184,10 +196,12 @@ export function SubsidiaryGroupPage({ corpId }: { corpId: string }) {
       {section === "overview" && (
         <>
           {data.canManage && (
-            <section className="rounded border border-border p-4 space-y-3">
-              <h2 className="font-semibold">{t("identity")}</h2>
+            <section className="rounded-xl border border-card-border bg-card p-5 space-y-3">
+              <h2 className="border-b border-card-border pb-3 text-sm font-semibold">
+                {t("identity")}
+              </h2>
               <form
-                className="flex flex-wrap gap-2"
+                className="flex flex-wrap items-end gap-3"
                 onSubmit={(e) => {
                   e.preventDefault();
                   void save({ action: "identity", name: name ?? data.settings.name }).then((ok) => {
@@ -198,7 +212,7 @@ export function SubsidiaryGroupPage({ corpId }: { corpId: string }) {
                 <label className="text-sm">
                   {t("groupName")}
                   <input
-                    className="ml-2 rounded border border-border bg-panel p-2"
+                    className="mt-2 block w-full rounded-lg border border-card-border bg-background px-3 py-2 sm:min-w-80"
                     value={name ?? data.settings.name}
                     maxLength={60}
                     minLength={2}
@@ -213,7 +227,7 @@ export function SubsidiaryGroupPage({ corpId }: { corpId: string }) {
               <label className="block text-sm">
                 {t("groupLogo")}
                 <input
-                  className="block mt-2 text-xs"
+                  className="mt-2 block max-w-full text-xs text-muted file:mr-3 file:rounded-lg file:border-0 file:bg-card-elevated file:px-3 file:py-2 file:text-sm file:font-medium file:text-foreground"
                   type="file"
                   accept="image/png,image/jpeg,image/webp,image/gif"
                   disabled={uploading || busy}
@@ -224,14 +238,21 @@ export function SubsidiaryGroupPage({ corpId }: { corpId: string }) {
           )}
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {data.members.map((m) => (
-              <article className="rounded border border-border p-4 space-y-2" key={m.id}>
+              <article
+                className="min-w-0 rounded-xl border border-card-border bg-card p-5 space-y-3"
+                key={m.id}
+              >
                 <CorporationLogo logoUrl={m.logoUrl} name={m.name} />
-                <h2 className="font-semibold">{m.name}</h2>
+                <h2 className="break-words font-semibold">{m.name}</h2>
                 <p className="text-xs text-muted">
                   {m.operator === "npp" ? t("npp") : t("player")}
                 </p>
-                <Link className="text-sm underline" href={"/corporation/" + m.pathId}>
-                  {t("viewCorporation")}
+                <Link
+                  className="text-sm font-medium text-info hover:underline"
+                  href={"/corporation/" + m.pathId}
+                >
+                  {t("viewCorporation")}{" "}
+                  <ArrowUpRight className="ml-1 inline" size={14} aria-hidden="true" />
                 </Link>
               </article>
             ))}
@@ -289,7 +310,7 @@ export function SubsidiaryGroupPage({ corpId }: { corpId: string }) {
                     .map((m) => {
                       const latest = m.history?.[0];
                       return (
-                        <tr key={m.id} className="border-t border-border">
+                        <tr key={m.id} className="border-t border-card-border">
                           <td className="p-3">{m.name}</td>
                           <td>{latest?.turn ?? t("unavailable")}</td>
                           <td>
@@ -307,7 +328,7 @@ export function SubsidiaryGroupPage({ corpId }: { corpId: string }) {
                 </tbody>
                 {completed && (
                   <tfoot>
-                    <tr className="border-t border-border font-semibold">
+                    <tr className="border-t border-card-border font-semibold">
                       <td className="p-3">{t("selectedTotal")}</td>
                       <td>{completed.turn}</td>
                       <td>{formatAmount(completed.revenue)}</td>
@@ -332,7 +353,7 @@ export function SubsidiaryGroupPage({ corpId }: { corpId: string }) {
               </thead>
               <tbody>
                 {rows.map((m) => (
-                  <tr key={m.corporationId} className="border-t border-border">
+                  <tr key={m.corporationId} className="border-t border-card-border">
                     <td className="p-3">{m.name}</td>
                     <td>{formatAmount(m.revenueAnchor)}</td>
                     <td>{formatAmount(m.liquidCapitalAnchor)}</td>
@@ -341,7 +362,7 @@ export function SubsidiaryGroupPage({ corpId }: { corpId: string }) {
                 ))}
               </tbody>
               <tfoot>
-                <tr className="border-t border-border font-semibold">
+                <tr className="border-t border-card-border font-semibold">
                   <td className="p-3">{t("selectedTotal")}</td>
                   <td>{formatAmount(totals.revenue)}</td>
                   <td>{formatAmount(totals.cash)}</td>
@@ -356,7 +377,7 @@ export function SubsidiaryGroupPage({ corpId }: { corpId: string }) {
         <>
           <p className="text-sm text-muted">{t("directionNote")}</p>
           {!data.supplyEngineEnabled && (
-            <p className="rounded border border-border p-3 text-sm text-muted">
+            <p className="rounded-lg border border-info/25 bg-info/5 p-4 text-sm text-muted">
               {t("directionsPending")}
             </p>
           )}
@@ -364,8 +385,11 @@ export function SubsidiaryGroupPage({ corpId }: { corpId: string }) {
             {data.members
               .filter((m) => !m.isRoot && (data.canManage || m.canEdit))
               .map((m) => (
-                <section key={m.id} className="rounded border border-border p-4 space-y-3">
-                  <h2 className="font-semibold">{m.name}</h2>
+                <section
+                  key={m.id}
+                  className="rounded-xl border border-card-border bg-card p-5 space-y-3"
+                >
+                  <h2 className="break-words font-semibold">{m.name}</h2>
                   <p className="text-xs text-muted">
                     {m.operator === "npp" ? t("nppDirection") : t("playerSuggestion")}
                   </p>
@@ -388,7 +412,7 @@ export function SubsidiaryGroupPage({ corpId }: { corpId: string }) {
                       <label className="block text-sm">
                         {t("objective")}
                         <select
-                          className="block mt-1 rounded bg-panel border border-border p-2 w-full"
+                          className="block mt-1 rounded bg-card border border-card-border p-2 w-full"
                           name="objective"
                           defaultValue={m.direction?.objective ?? "balanced"}
                         >
@@ -403,7 +427,7 @@ export function SubsidiaryGroupPage({ corpId }: { corpId: string }) {
                         {t("regions")}
                         <select
                           multiple
-                          className="block mt-1 rounded bg-panel border border-border p-2 w-full"
+                          className="block mt-1 rounded bg-card border border-card-border p-2 w-full"
                           name="regions"
                           defaultValue={m.direction?.regions ?? []}
                         >
@@ -467,32 +491,37 @@ export function SubsidiaryGroupPage({ corpId }: { corpId: string }) {
           <div className="space-y-3">
             <h2 className="text-xl font-semibold">{t("supplyTitle")}</h2>
             <p className="text-sm text-muted">{t("marketPrice")}</p>
-            <div className="flex flex-wrap gap-3">
+            <div className="grid gap-3 sm:grid-cols-2">
               {(["independent", "members"] as const).map((policy) => (
                 <button
-                  className={button}
+                  className={`flex items-center gap-3 rounded-xl border p-5 text-left font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-2 focus-visible:outline-info ${data.settings.supplyPolicy === policy ? "border-gold bg-gold/5 text-foreground" : "border-card-border bg-card text-muted enabled:hover:bg-card-elevated"}`}
                   key={policy}
                   disabled={busy || !data.canManage}
                   aria-pressed={data.settings.supplyPolicy === policy}
                   onClick={() => void save({ action: "policy", policy })}
                 >
+                  <Network
+                    size={20}
+                    className={data.settings.supplyPolicy === policy ? "text-gold" : "text-muted"}
+                    aria-hidden="true"
+                  />
                   {t("policies." + policy)}
                 </button>
               ))}
             </div>
           </div>
           {!data.supplyEngineEnabled && (
-            <p className="rounded border border-border p-3 text-sm text-muted">
+            <p className="rounded-lg border border-info/25 bg-info/5 p-4 text-sm text-muted">
               {t("enginePending")}
             </p>
           )}
           {data.settings.supplyPolicy === "members" && (
             <>
-              <section className="rounded border border-border p-4 space-y-3">
+              <section className="rounded-xl border border-card-border bg-card p-5 space-y-3">
                 <label className="block text-sm">
                   {t("chainDiscount")}
                   <select
-                    className="block mt-2 rounded border border-border bg-panel p-2"
+                    className="block mt-2 rounded border border-card-border bg-card p-2"
                     value={data.settings.supplyDiscount ?? 0}
                     disabled={busy || !data.canManage}
                     onChange={(e) =>
@@ -540,7 +569,7 @@ export function SubsidiaryGroupPage({ corpId }: { corpId: string }) {
           <p className="text-sm text-muted">{t("supplySafeguards")}</p>
           <GroupSupplyForecast data={data} />
           {data.supplyAgreementsEnabled && (
-            <section className="rounded border border-border p-4 space-y-3">
+            <section className="rounded-xl border border-card-border bg-card p-5 space-y-3">
               <h3 className="font-semibold">{t("agreementsTitle")}</h3>
               <p className="text-sm text-muted">
                 {t("agreementsNote", { percent: Math.round(SUPPLY_AGREEMENT_PRICE_BAND * 100) })}
@@ -550,7 +579,7 @@ export function SubsidiaryGroupPage({ corpId }: { corpId: string }) {
                   <label className="block text-sm">
                     {t("agreementsCorporation")}
                     <select
-                      className="block mt-2 rounded border border-border bg-panel p-2"
+                      className="block mt-2 rounded border border-card-border bg-card p-2"
                       value={agreementMember.id}
                       onChange={(e) => setAgreementCorpId(e.target.value)}
                     >

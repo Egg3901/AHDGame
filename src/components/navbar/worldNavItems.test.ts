@@ -35,6 +35,28 @@ describe("buildWorldNavItems", () => {
     expect(corp?.primary).toBe(true);
   });
 
+  it.each([undefined, false])(
+    "hides the Group link without confirmed membership (%s)",
+    (membership) => {
+      const items = visibleWorldNavItems({
+        myCorporationId: 42,
+        myCorporationHasGroup: membership,
+      });
+      expect(items.map((i) => i.id)).toContain("myCorporation");
+      expect(items.map((i) => i.id)).not.toContain("subsidiaryGroup");
+    }
+  );
+  it("shows the Group link for a confirmed member, but never without a corporation", () => {
+    expect(
+      visibleWorldNavItems({ myCorporationId: 42, myCorporationHasGroup: true }).find(
+        (i) => i.id === "subsidiaryGroup"
+      )?.href
+    ).toBe("/corporation/42/group");
+    expect(visibleWorldNavItems({ myCorporationHasGroup: true }).map((i) => i.id)).not.toContain(
+      "subsidiaryGroup"
+    );
+  });
+
   it("shows the player's union shortcut only while unions are enabled", () => {
     const off = visibleWorldNavItems({ myUnionId: "u1", unionsEnabled: false });
     expect(off.map((i) => i.id)).not.toContain("myUnion");
@@ -65,6 +87,7 @@ describe("buildWorldNavSections / looseWorldNavItems", () => {
   it("puts personal organization shortcuts in the loose list, not any group", () => {
     const items = visibleWorldNavItems({
       myCorporationId: 42,
+      myCorporationHasGroup: true,
       myUnionId: "u1",
       unionsEnabled: true,
     });

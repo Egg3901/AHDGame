@@ -98,6 +98,7 @@ export interface ExperimentalNavbarProps {
   isImperialMode?: boolean;
   wikiDisabled?: boolean;
   myCorporationId?: number | null;
+  myCorporationHasGroup?: boolean;
   myUnionId?: string | null;
   adminCharacters?: AdminCharacter[];
   imperialCharacter?: ImperialCharacterNav;
@@ -127,6 +128,7 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
   isImperialMode = false,
   wikiDisabled = false,
   myCorporationId,
+  myCorporationHasGroup = false,
   myUnionId,
   adminCharacters,
   imperialCharacter,
@@ -356,6 +358,7 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
   });
 
   const worldSubItems = visibleWorldNavItems({
+    myCorporationHasGroup,
     countryId: pageCountry,
     myCorporationId,
     conflictsEnabled,
