@@ -685,7 +685,7 @@ function SelectedStatePane({
     <div className="space-y-3">
       {items.map((item) => (
         <RaceSlatePanel
-          key={item.electionId}
+          key={`${countryCode}:${partyId}:${state}:${item.electionId}`}
           countryCode={countryCode}
           countryId={countryId}
           partyId={partyId}

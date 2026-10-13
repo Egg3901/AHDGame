@@ -162,4 +162,55 @@ describe("SlateTab race details", () => {
     await waitFor(() => expect(screen.queryByRole("button", { name: "Retry slate" })).toBeNull());
     expect(fetchMock.mock.calls.filter(([url]) => String(url).includes("/slate/"))).toHaveLength(2);
   });
+
+  it("resets cached and in-flight details when the party changes", async () => {
+    let resolveFirstDetail: ((value: ReturnType<typeof response>) => void) | undefined;
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/slate"))
+        return Promise.resolve(response({ items: races.slice(0, 1), stateAggregates: [] }));
+      if (url.includes("/slate/")) {
+        if (url.includes("/parties/1/")) {
+          return new Promise<ReturnType<typeof response>>((resolve) => {
+            resolveFirstDetail = resolve;
+          });
+        }
+        return Promise.resolve(response(detailResponse(raceA)));
+      }
+      return Promise.resolve(response({ isActive: true, pausedAt: null, lastTurnProcessed: null }));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const props = {
+      countryCode: "uk",
+      countryId: "UK",
+      partyId: "1",
+      partyColor: "#123456",
+      canManageSlate: false,
+      partyMembers: [],
+      scopeState: "NEE",
+    };
+    const view = render(<SlateTab {...props} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Show slate" }));
+
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(`/api/country/uk/parties/1/slate/${raceA}`, {
+        cache: "no-store",
+      })
+    );
+    view.rerender(<SlateTab {...props} partyId="2" />);
+
+    await screen.findByRole("button", { name: "Show slate" });
+    resolveFirstDetail?.(response(detailResponse(raceA)));
+    await waitFor(() =>
+      expect(screen.queryByText("No one is assigned to this race yet.")).toBeNull()
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Show slate" }));
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(`/api/country/uk/parties/2/slate/${raceA}`, {
+        cache: "no-store",
+      })
+    );
+  });
 });
