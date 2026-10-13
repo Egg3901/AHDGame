@@ -215,6 +215,12 @@ const NPP_LEVELS: { value: NppAutonomyLevel; label: string; blurb: string }[] = 
     blurb:
       "Same activities as v4, pursued with follow-through: a government keeps up to five standing goals across agenda recomputes, grades each one, and lets the verdicts steer the next agenda instead of starting over. Adds no new power and no new lever. Beta: validated in singleplayer and worldsim, not yet for live multiplayer worlds.",
   },
+  {
+    value: "v6",
+    label: "v6 (NPP engine 6, in development)",
+    blurb:
+      "Same activities and the same resources as v5, run by NPP engine 6. Engine 6 changes how well autonomous politicians pursue those activities and what they cost each turn. It adds no stat bonus. In development: see the NPP changelog for what each engine version changed.",
+  },
 ];
 
 /**

@@ -5,6 +5,9 @@ export const CHANGELOG_ROOT = path.join(process.cwd(), "content", "changelog");
 export const LEGACY_PUBLIC_PATH = path.join(CHANGELOG_ROOT, "legacy", "PUBLIC_CHANGELOG.md");
 export const LEGACY_DEV_PATH = path.join(CHANGELOG_ROOT, "legacy", "CHANGELOG.md");
 
+/** The NPP engine's own changelog and roadmap, rendered at /changelog/npp. */
+export const NPP_CHANGELOG_PATH = path.join(CHANGELOG_ROOT, "npp", "NPP_CHANGELOG.md");
+
 export const PUBLIC_POSTS_DIR = path.join(CHANGELOG_ROOT, "public");
 export const DEV_POSTS_DIR = path.join(CHANGELOG_ROOT, "dev");
 

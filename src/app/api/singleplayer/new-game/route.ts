@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { NPP_AUTONOMY_LEVELS } from "@/lib/nppAutonomy/levels";
 import { getDb } from "@/lib/mongodb";
 import { requireSingleplayer } from "@/lib/api/requireSingleplayer";
 import { handleRouteError, errorResponse } from "@/lib/api/errors";
@@ -8,7 +9,7 @@ import { resetAndBootstrapGameWorld } from "@/lib/admin/resetAndBootstrapGameWor
 import { isKnownPreset } from "@/lib/seeds/presetSelector";
 import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
 import { ensureSingleplayerUser, setSingleplayerConfig } from "@/lib/singleplayerServer";
-import type { NppAutonomyLevel, SingleplayerDifficulty, SingleplayerMode } from "@/lib/db/types";
+import type { SingleplayerDifficulty, SingleplayerMode } from "@/lib/db/types";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 600;
@@ -29,10 +30,7 @@ const bodySchema = z.object({
     ])
     .default("normal"),
   autonomyLevel: z
-    .enum(["off", "v0", "v1", "v2", "v3", "v4", "v5"] satisfies [
-      NppAutonomyLevel,
-      ...NppAutonomyLevel[],
-    ])
+    .enum(NPP_AUTONOMY_LEVELS)
     // A request that omits the level gets v4, the shipped default. V5 is opt-in
     // until the local-world default moves, so an older client cannot land a
     // world on a tier it has no UI for.
