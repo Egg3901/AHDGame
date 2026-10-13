@@ -95,7 +95,7 @@ describe("sectorGrowthNode (the cyclical signal — old gdpGrowth logic)", () =>
     expect(out.value).toBe(2.167);
   });
 
-  it("preserves a capped policy delta (MAX_POLICY_DELTA=4)", () => {
+  it("caps the policy delta (MAX_POLICY_DELTA=4) and erodes it 10% per turn", () => {
     const out = evalNode(
       sectorGrowthNode,
       ctx({
@@ -110,8 +110,31 @@ describe("sectorGrowthNode (the cyclical signal — old gdpGrowth logic)", () =>
       }),
       "s1"
     );
-    // base 2 + capped policy delta 4 (MAX_POLICY_DELTA, lowered from 8 in v0 #2)
-    expect(out.value).toBe(6);
+    // base 2 + capped policy delta 4 (MAX_POLICY_DELTA, lowered from 8 in v0 #2),
+    // decayed by policyDeltaDecay 0.9 → 2 + 3.6
+    expect(out.value).toBe(5.6);
+  });
+
+  it("heals a resolved crisis shock instead of freezing it at the cap", () => {
+    const owned = { owned: [{ revenue: 1000, currentGrowthRate: 2 }], unowned: [] };
+    let value = 2 - 4;
+    let baseline = 2;
+    for (let turn = 0; turn < 24; turn++) {
+      const out = evalNode(
+        sectorGrowthNode,
+        ctx({
+          providers: { sectorRevenueTax: payload(owned) },
+          policyValue: value,
+          prevSimBaseline: { "economic.sectorGrowth": baseline },
+        }),
+        "s1"
+      );
+      value = out.value;
+      baseline = out.simBaseline;
+    }
+    // -4 * 0.9^24 ≈ -0.32: the shock fades once nothing re-applies it.
+    expect(value - baseline).toBeGreaterThan(-0.4);
+    expect(value - baseline).toBeLessThan(0);
   });
 
   it("clamps to the declared [-10,15] bounds", () => {
