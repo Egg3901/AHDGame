@@ -210,6 +210,14 @@ describe("v2 treasury and paid Cabinet turn integration", () => {
     await expect(run()).rejects.toThrow("Missing seeded");
     expect(mock.collectionMocks.resetNationalTreasuries!.bulkWrite).not.toHaveBeenCalled();
   });
+  it("names the lagging country and turns when a cash receipt skips a turn", async () => {
+    const { mock, treasuries, run } = fixture();
+    treasuries[0]!.settledThroughTurn = treasuries[0]!.settledThroughTurn - 1;
+    await expect(run()).rejects.toThrow(
+      /skipped a turn: [A-Z]+ settled through \d+, settling \d+ \(opened at \d+\)/
+    );
+    expect(mock.collectionMocks.resetNationalTreasuries!.bulkWrite).not.toHaveBeenCalled();
+  });
   it("rejects unpaid department authority that does not match the sovereign receipt", async () => {
     const { mock, accounts, run } = fixture();
     accounts[0]!.unpaidAuthority = 1;

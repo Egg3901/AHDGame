@@ -187,6 +187,8 @@ export interface CommoditiesData {
     applied: number | null;
     projected: number;
     bindingInput: string | null;
+    /** Lowest throttle a shortage can apply (engine governor floor). */
+    floor?: number;
   };
 }
 
