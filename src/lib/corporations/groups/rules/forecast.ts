@@ -4,6 +4,8 @@ import {
   type CoordinationBook,
   type CoordinationSeller,
 } from "./marketCoordination";
+import { summarizeSupplyConnections } from "./supplyPresentation";
+import type { GroupMarketReceipt } from "./marketCoordination";
 import type { SupplyMember } from "./supply";
 export interface ForecastSeller extends CoordinationSeller {
   openFill: number;
@@ -46,6 +48,7 @@ export function estimateGroupSupply(
       },
     ])
   );
+  const receipts: GroupMarketReceipt[] = [];
   const cash = new Map(members.map((m) => [m.id, m.cashAvailableAnchor]));
   for (const book of basis.books) {
     const result = coordinateGroupBook({
@@ -53,6 +56,7 @@ export function estimateGroupSupply(
       turn,
       members: members.map((m) => ({ ...m, cashAvailableAnchor: cash.get(m.id) ?? 0 })),
     });
+    receipts.push(...result.receipts);
     for (const [id, spent] of result.spendByBuyer)
       cash.set(id, Math.max(0, (cash.get(id) ?? 0) - spent));
     for (const seller of book.sellers) {
@@ -112,5 +116,11 @@ export function estimateGroupSupply(
     )
   )
     return null;
-  return { basisTurn: basis.turn, appliesTurn: turn, corporations, total };
+  return {
+    basisTurn: basis.turn,
+    appliesTurn: turn,
+    corporations,
+    total,
+    ...summarizeSupplyConnections(receipts),
+  };
 }

@@ -107,13 +107,39 @@ describe("Subsidiary Group page", () => {
     expect(within(nav).queryByRole("button", { name: "CEO Office" })).toBeNull();
     expect(screen.getByRole("heading", { name: "Harbor Group" })).toBeTruthy();
   });
+  it("keeps identity editing collapsed until the parent opens it", () => {
+    mount();
+    expect(screen.queryByRole("textbox", { name: "Group name" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Edit group identity" }));
+    expect(screen.getByRole("textbox", { name: "Group name" })).toBeTruthy();
+  });
+  it("opens identity editing from another tab even after a previous edit was open", () => {
+    mount();
+    fireEvent.click(screen.getByRole("button", { name: "Edit group identity" }));
+    fireEvent.click(screen.getByRole("button", { name: "Financials & comparison" }));
+    expect(
+      screen.getByRole("button", { name: "Edit group identity" }).getAttribute("aria-expanded")
+    ).toBe("false");
+    fireEvent.click(screen.getByRole("button", { name: "Edit group identity" }));
+    expect(screen.getByRole("textbox", { name: "Group name" })).toBeTruthy();
+  });
   it("compares selected members and allows clearing selection", async () => {
     mount();
     fireEvent.click(screen.getByRole("button", { name: "Financials & comparison" }));
     await waitFor(() => expect(screen.getAllByText("A300").length).toBeTruthy());
-    expect(screen.getByText("A140")).toBeTruthy();
+    expect(screen.getAllByText("A140").length).toBeGreaterThan(0);
     fireEvent.click(screen.getByRole("button", { name: "Clear selection" }));
     await waitFor(() => expect(screen.queryAllByText("A300").length).toBe(0));
+  });
+  it("retains comparison selection when navigating between Group tabs", () => {
+    mount();
+    fireEvent.click(screen.getByRole("button", { name: "Financials & comparison" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Subsidiary" }));
+    fireEvent.click(screen.getByRole("button", { name: "Overview" }));
+    fireEvent.click(screen.getByRole("button", { name: "Financials & comparison" }));
+    expect((screen.getByRole("checkbox", { name: "Subsidiary" }) as HTMLInputElement).checked).toBe(
+      false
+    );
   });
   it("hides receiving controls under commercial independence", async () => {
     window.history.replaceState(null, "", "#supply");
@@ -142,6 +168,8 @@ describe("corporation office suggestions and supply estimates", () => {
   it("renders policy comparisons and identifies the fixed-output assumptions", async () => {
     const data = structuredClone(base);
     data.forecast = {
+      connections: [],
+      connectionCount: 0,
       basisTurn: 19,
       appliesTurn: 21,
       corporations: [
@@ -169,7 +197,7 @@ describe("corporation office suggestions and supply estimates", () => {
     fireEvent.click(screen.getByRole("button", { name: "Supply chain" }));
     expect(screen.getByText("Estimated supply policy effects")).toBeTruthy();
     expect(screen.getByText(/Estimates hold output/)).toBeTruthy();
-    expect(screen.getAllByText("Combined group total")).toHaveLength(2);
+    expect(screen.getAllByText("Combined group total")).toHaveLength(3);
   });
   it("shows the corporation CEO the suggestion details and sends its revision", () => {
     const data = structuredClone(base);

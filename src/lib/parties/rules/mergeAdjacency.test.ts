@@ -12,12 +12,18 @@ describe("merger adjacency", () => {
     [[], ["CA"], false],
     [["CA"], [], false],
     [[], [], false],
-    [["HI"], ["CA"], false],
+    [["HI"], ["CA"], true],
+    [["HI"], ["TX"], false],
     [["HI"], ["HI"], true],
   ] as [string[], string[], boolean][])("%j and %j -> %s", (a, b, expected) => {
     expect(hasMergeAdjacency(new Set(a), new Set(b), STATE_ADJACENCY.US)).toBe(expected);
   });
   it("uses the game's sea adjacency", () => {
     expect(hasMergeAdjacency(new Set(["NIR"]), new Set(["NWE"]), STATE_ADJACENCY.UK)).toBe(true);
+  });
+
+  it.each(["AK", "WA", "OR", "CA"])("allows reciprocal Hawaii mergers with %s", (state) => {
+    expect(hasMergeAdjacency(new Set(["HI"]), new Set([state]), STATE_ADJACENCY.US)).toBe(true);
+    expect(hasMergeAdjacency(new Set([state]), new Set(["HI"]), STATE_ADJACENCY.US)).toBe(true);
   });
 });

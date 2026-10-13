@@ -1,6 +1,6 @@
 /** @vitest-environment happy-dom */
 import { afterEach, expect, it, vi } from "vitest";
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { cleanup, render, screen, within, fireEvent } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import messages from "../../../../messages/en/corporations.json";
 import { GroupSupplyForecast } from "./GroupSupplyForecast";
@@ -8,7 +8,11 @@ import type { GroupManagementView } from "./useGroupManagement";
 vi.mock("@/contexts/CurrencyContext", () => ({
   useCurrency: () => ({ formatAmount: (n: number) => "A" + n }),
 }));
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+});
 const data = {
   settings: { supplyPolicy: "independent" },
   members: [
@@ -85,4 +89,45 @@ it("preserves private totals and does not fabricate a missing forecast", () => {
   rerender(view({ ...data, forecast: null }));
   expect(screen.queryByRole("table")).toBeNull();
   expect(screen.getByText(/Estimates become available/)).toBeTruthy();
+});
+
+it("exports only authorized rows and omits private totals", async () => {
+  let blob: Blob | undefined;
+  const create = vi.fn((value: Blob) => {
+    blob = value;
+    return "blob:test";
+  });
+  const ActualURL = URL;
+  vi.stubGlobal(
+    "URL",
+    class extends ActualURL {
+      static createObjectURL = create;
+      static revokeObjectURL = vi.fn();
+    }
+  );
+  vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+  render(
+    view({
+      ...data,
+      forecast: {
+        ...data.forecast!,
+        total: null,
+        corporations: data.forecast!.corporations.slice(1),
+      },
+    })
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Export estimates (anchor CSV)" }));
+  const csv = await blob!.text();
+  expect(csv).toContain('"Buyer"');
+  expect(csv).not.toContain('"Supplier"');
+  expect(csv).not.toContain('"Combined group total"');
+  expect(csv).toContain("Anchor currency per turn");
+  expect(csv).toContain("Commercial independence");
+});
+it("disables exporting when no private corporations are visible", () => {
+  render(view({ ...data, forecast: { ...data.forecast!, corporations: [], total: null } }));
+  expect(
+    (screen.getByRole("button", { name: "Export estimates (anchor CSV)" }) as HTMLButtonElement)
+      .disabled
+  ).toBe(true);
 });

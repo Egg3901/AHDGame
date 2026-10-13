@@ -24,8 +24,18 @@ describe("expandFrontier", () => {
     expect(f.has("TX")).toBe(false);
   });
 
-  it("keeps an isolated state that has no neighbours (HI)", () => {
-    expect([...expandFrontier("US", ["HI"])]).toEqual(["HI"]);
+  it("expands Hawaii's party frontier to exactly its Pacific neighbors", () => {
+    expect([...expandFrontier("US", ["HI"])].sort()).toEqual(["AK", "CA", "HI", "OR", "WA"]);
+  });
+
+  it.each(["AK", "WA", "OR", "CA"])("allows a party in %s to expand into Hawaii", (state) => {
+    const presence = new Set([state]);
+    expect(isInFrontier(presence, expandFrontier("US", presence), "HI")).toBe(true);
+  });
+
+  it("does not expand Hawaii's party frontier through multiple hops", () => {
+    const presence = new Set(["HI"]);
+    expect(isInFrontier(presence, expandFrontier("US", presence), "NV")).toBe(false);
   });
 
   it("keeps a state absent from the adjacency map, with no expansion", () => {
