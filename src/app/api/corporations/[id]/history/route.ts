@@ -3,7 +3,7 @@ import { getDb } from "@/lib/mongodb";
 import { handleRouteError } from "@/lib/api/errors";
 import { resolveCorporation } from "@/lib/api/corporations/resolveQuery";
 import { getAuthUser } from "@/lib/auth";
-import { shouldRedactCorporation } from "@/lib/corporations/redaction";
+import { shouldRedactCorporationForViewer } from "@/lib/corporations/reservedCorporateHoldings";
 import { getRoundedPublicMarketCap } from "@/lib/corporations/marketQuote";
 import type { CorporationHistory } from "@/lib/db/types";
 
@@ -69,7 +69,8 @@ export async function GET(request: Request, { params }: RouteParams) {
       authUser?.isModerator === true &&
       new URL(request.url).searchParams.get("modView") === "1";
     if (
-      shouldRedactCorporation(
+      await shouldRedactCorporationForViewer(
+        db,
         corporation,
         authUser?.userId,
         authUser?.isAdmin === true,

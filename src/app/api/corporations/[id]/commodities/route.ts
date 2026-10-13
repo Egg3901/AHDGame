@@ -3,7 +3,10 @@ import { getDb } from "@/lib/mongodb";
 import { handleRouteError } from "@/lib/api/errors";
 import { resolveCorporation } from "@/lib/api/corporations/resolveQuery";
 import { getAuthUser } from "@/lib/auth";
-import { shouldRedactCorporation } from "@/lib/corporations/redaction";
+import {
+  isSittingCeoOfControllingParent,
+  shouldRedactCorporationForViewer,
+} from "@/lib/corporations/reservedCorporateHoldings";
 import { computeCorpCommodityFlows } from "@/lib/corporations/corpCommodityFlows";
 import { computeCorpMarketShare } from "@/lib/corporations/corpMarketShare";
 import { getMarketSystemMode, marketAtLeast } from "@/lib/market/featureFlag";
@@ -73,9 +76,12 @@ export async function GET(request: Request, { params }: RouteParams) {
     const canViewPrivateSupply =
       authUser?.isAdmin === true ||
       modViewEnabled ||
-      (!!authUser?.userId && corporation.userId?.toString() === authUser.userId);
+      (!!authUser?.userId && corporation.userId?.toString() === authUser.userId) ||
+      (corporation.isPrivate === true &&
+        (await isSittingCeoOfControllingParent(db, corporation, authUser?.userId)));
     if (
-      shouldRedactCorporation(
+      await shouldRedactCorporationForViewer(
+        db,
         corporation,
         authUser?.userId,
         authUser?.isAdmin === true,

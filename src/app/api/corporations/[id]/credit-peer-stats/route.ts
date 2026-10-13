@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { handleRouteError } from "@/lib/api/errors";
 import { getAuthUser } from "@/lib/auth";
-import { shouldRedactCorporation } from "@/lib/corporations/redaction";
+import { shouldRedactCorporationForViewer } from "@/lib/corporations/reservedCorporateHoldings";
 import { resolveCorporation } from "@/lib/api/corporations/resolveQuery";
 import type { Corporation } from "@/lib/db/types";
 import { getBondCouponRate } from "@/lib/constants/bonds";
@@ -81,7 +81,8 @@ export async function GET(_request: Request, { params }: RouteParams) {
     // returned it verbatim to anonymous callers and folded private corps into
     // the peer averages. `you` only answers for an insider; aggregates count
     // public corps only.
-    const redact = shouldRedactCorporation(
+    const redact = await shouldRedactCorporationForViewer(
+      db,
       corporation,
       authUser?.userId ?? undefined,
       authUser?.isAdmin === true

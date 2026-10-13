@@ -100,6 +100,48 @@ beforeEach(async () => {
 });
 
 describe("GET /api/corporations/[id]/commodities private supply", () => {
+  it.each([
+    { shares: 80, allowed: true },
+    { shares: 50, allowed: false },
+  ])("keeps parent access bounded to control ($shares shares)", async ({ shares, allowed }) => {
+    const parentId = new ObjectId();
+    const { resolveCorporation } = await import("@/lib/api/corporations/resolveQuery");
+    vi.mocked(resolveCorporation).mockResolvedValue({
+      ok: true,
+      corporation: {
+        _id: buyerId,
+        name: "Private subsidiary",
+        countryId: "US",
+        isPrivate: true,
+        userId: new ObjectId(),
+        totalShares: 100,
+        shareholders: [{ corporationId: parentId, shares }],
+      },
+    } as never);
+    db.collection("corporations");
+    db.collectionMocks.corporations.findOne.mockResolvedValue({
+      _id: parentId,
+      userId: buyerUserId,
+      ceoVacant: false,
+    });
+    const { GET } = await import("./route");
+    const response = await GET(new Request("http://localhost/api/corporations/buyer/commodities"), {
+      params: Promise.resolve({ id: "buyer" }),
+    });
+    const data = await response.json();
+    expect(response.status).toBe(200);
+    expect(response.headers.get("Cache-Control")).toContain("private");
+    if (allowed) {
+      const energy = data.commodities.find(
+        (row: { commodity: string }) => row.commodity === "energy"
+      );
+      expect(energy.privateSupply.deliveredUnits).toBe(60);
+    } else {
+      expect(data.isPrivate).toBe(true);
+      expect(data.commodities).toEqual([]);
+    }
+  });
+
   it("returns the latest delivered agreement quantities on the buyer's commodity row", async () => {
     const { GET } = await import("./route");
     const response = await GET(new Request("http://localhost/api/corporations/buyer/commodities"), {

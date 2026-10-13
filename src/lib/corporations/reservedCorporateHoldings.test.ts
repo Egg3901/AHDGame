@@ -7,6 +7,7 @@ import {
   corporationWithReservedHoldings,
   isSittingCeoOfControllingParent,
   loadReservedCorporatePositions,
+  shouldRedactCorporationForViewer,
   reservedCorporatePositions,
   resolveControllingCorporateParent,
 } from "./reservedCorporateHoldings";
@@ -223,5 +224,81 @@ describe("loadReservedCorporatePositions", () => {
     const reserved = await loadReservedCorporatePositions(db as never, childId);
     expect(reserved).toHaveLength(1);
     expect(reserved[0].shares).toBe(50);
+  });
+});
+
+describe("shouldRedactCorporationForViewer", () => {
+  let db: MockDb;
+  const parentCeoUserId = new ObjectId();
+  const subsidiaryCeoUserId = new ObjectId();
+
+  function privateChild(): Corporation {
+    return {
+      ...child([{ corporationId: parentId, shares: 80 }]),
+      isPrivate: true,
+      userId: subsidiaryCeoUserId,
+    } as Corporation;
+  }
+
+  beforeEach(() => {
+    db = createMockDb();
+    db.collection("shareOrders");
+    db.collection("shareListings");
+    db.collection("corporations");
+    db.collectionMocks["corporations"]!.findOne.mockResolvedValue({
+      _id: parentId,
+      userId: parentCeoUserId,
+      ceoVacant: false,
+    });
+  });
+
+  it("does not redact a public corporation", async () => {
+    const corp = { ...privateChild(), isPrivate: false } as Corporation;
+    expect(await shouldRedactCorporationForViewer(db as never, corp, undefined, false)).toBe(false);
+  });
+
+  it("does not redact for the subsidiary's own CEO", async () => {
+    expect(
+      await shouldRedactCorporationForViewer(
+        db as never,
+        privateChild(),
+        subsidiaryCeoUserId.toString(),
+        false
+      )
+    ).toBe(false);
+  });
+
+  it("does not redact for the sitting CEO of the controlling parent", async () => {
+    expect(
+      await shouldRedactCorporationForViewer(
+        db as never,
+        privateChild(),
+        parentCeoUserId.toString(),
+        false
+      )
+    ).toBe(false);
+  });
+
+  it("redacts for an unrelated viewer and for anonymous viewers", async () => {
+    expect(
+      await shouldRedactCorporationForViewer(
+        db as never,
+        privateChild(),
+        new ObjectId().toString(),
+        false
+      )
+    ).toBe(true);
+    expect(
+      await shouldRedactCorporationForViewer(db as never, privateChild(), undefined, false)
+    ).toBe(true);
+  });
+
+  it("does not redact for admins or moderators in mod view", async () => {
+    expect(
+      await shouldRedactCorporationForViewer(db as never, privateChild(), undefined, true)
+    ).toBe(false);
+    expect(
+      await shouldRedactCorporationForViewer(db as never, privateChild(), undefined, false, true)
+    ).toBe(false);
   });
 });
