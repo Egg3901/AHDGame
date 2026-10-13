@@ -1,0 +1,50 @@
+.page {
+  min-width: 0;
+}
+.page table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.page th {
+  padding: 0.75rem;
+  background: var(--card-muted);
+  color: var(--muted);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-align: left;
+}
+.page td {
+  padding: 0.75rem;
+  border-bottom: 1px solid var(--card-border);
+  font-variant-numeric: tabular-nums;
+}
+.page td:not(:first-child),
+.page th:not(:first-child) {
+  text-align: right;
+}
+.page tbody tr:hover {
+  background: var(--card-elevated);
+}
+.page tfoot {
+  background: var(--card-muted);
+}
+.page input:not([type="checkbox"]):not([type="file"]),
+.page select {
+  max-width: 100%;
+  background: var(--background);
+  border-color: var(--card-border);
+  border-radius: 0.5rem;
+}
+.page input:focus-visible,
+.page select:focus-visible,
+.page summary:focus-visible,
+.page a:focus-visible {
+  outline: 2px solid var(--info);
+  outline-offset: 3px;
+}
+.page input[type="checkbox"] {
+  accent-color: var(--primary);
+}
+.page header > div {
+  min-width: 0;
+}

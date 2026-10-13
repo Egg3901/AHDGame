@@ -77,6 +77,7 @@ interface NavbarWrapperState {
   activePresidentElectionSeatId: string | null;
   unreadCount: number;
   myCorporationId: number | null;
+  myCorporationHasGroup: boolean;
   myUnionId: string | null;
   isLoading: boolean;
   adminCharacters: AdminCharacter[] | null;
@@ -95,6 +96,7 @@ type NavbarWrapperAction =
       hasCharacter: boolean;
       unreadCount: number;
       myCorporationId: number | null;
+      myCorporationHasGroup: boolean;
       myUnionId: string | null;
       homeState: NavbarWrapperState["homeState"];
       currentParty: NavbarWrapperState["currentParty"];
@@ -133,6 +135,7 @@ const initialState: NavbarWrapperState = {
   activePresidentElectionSeatId: null,
   unreadCount: 0,
   myCorporationId: null,
+  myCorporationHasGroup: false,
   myUnionId: null,
   isLoading: true,
   adminCharacters: null,
@@ -156,6 +159,7 @@ function navbarWrapperReducer(
         hasCharacter: action.hasCharacter,
         unreadCount: action.unreadCount,
         myCorporationId: action.myCorporationId,
+        myCorporationHasGroup: action.myCorporationHasGroup,
         myUnionId: action.myUnionId,
         homeState: action.homeState,
         currentParty: action.currentParty,
@@ -197,6 +201,7 @@ function navbarWrapperReducer(
         activePresidentElectionSeatId: null,
         unreadCount: 0,
         myCorporationId: null,
+        myCorporationHasGroup: false,
         myUnionId: null,
         adminCharacters: null,
         imperialCharacter: null,
@@ -417,6 +422,7 @@ export function NavbarWrapper({
         hasCharacter: navData.hasCharacter,
         unreadCount: navData.unreadCount ?? 0,
         myCorporationId: navData.myCorporationId ?? null,
+        myCorporationHasGroup: navData.myCorporationHasGroup === true,
         myUnionId: navData.myUnionId ?? null,
         homeState: navData.homeState ?? null,
         currentParty: navData.currentParty ?? null,
@@ -626,6 +632,7 @@ export function NavbarWrapper({
               isImperialMode={state.isImperialMode}
               wikiDisabled={state.wikiDisabled}
               myCorporationId={state.myCorporationId ?? undefined}
+              myCorporationHasGroup={state.myCorporationHasGroup}
               myUnionId={state.myUnionId ?? undefined}
               adminCharacters={state.adminCharacters ?? undefined}
               imperialCharacter={state.imperialCharacter ?? undefined}
@@ -662,6 +669,7 @@ export function NavbarWrapper({
               feedbackCapturing={state.capturingFeedback}
               adminCharacters={useLightweightNav ? undefined : (state.adminCharacters ?? undefined)}
               myCorporationId={useLightweightNav ? undefined : (state.myCorporationId ?? undefined)}
+              myCorporationHasGroup={!useLightweightNav && state.myCorporationHasGroup}
               myUnionId={useLightweightNav ? undefined : (state.myUnionId ?? undefined)}
               imperialCharacter={
                 useLightweightNav ? undefined : (state.imperialCharacter ?? undefined)

@@ -1969,6 +1969,11 @@ export interface GdpGrowthData {
  * When stateGdpMap is provided, building materials macro demand is generated
  * proportional to each state's GDP (construction/infrastructure spending).
  */
+export interface SectorUnitsOut {
+  supplyBySector: Map<string, Map<CommodityType, number>>;
+  inputDemandBySector: Map<string, Map<CommodityType, number>>;
+}
+
 export function computeRawSupplyDemand(
   sectors: {
     sectorType: string;
@@ -2147,7 +2152,8 @@ export function computeRawSupplyDemand(
    * producers can never sell out. Absent means 1 for every commodity.
    */
   demandCalibration?: (commodity: CommodityType) => number,
-  preset?: string
+  preset?: string,
+  sectorUnitsOut?: SectorUnitsOut
 ): {
   global: Map<CommodityType, { supply: number; demand: number }>;
   byState: Map<string, Map<CommodityType, { supply: number; demand: number }>>;
@@ -2167,6 +2173,22 @@ export function computeRawSupplyDemand(
   const byState = new Map<string, Map<CommodityType, { supply: number; demand: number }>>();
   const supplyByCorporation = new Map<string, Map<CommodityType, number>>();
   const productionInputDemandByState = new Map<string, Map<CommodityType, number>>();
+  const supplyBySector = sectorUnitsOut?.supplyBySector ?? new Map();
+  const inputDemandBySector = sectorUnitsOut?.inputDemandBySector ?? new Map();
+  const recordSectorUnits = (
+    target: Map<string, Map<CommodityType, number>>,
+    sectorId: string | undefined,
+    commodity: CommodityType,
+    units: number
+  ): void => {
+    if (!sectorId || !Number.isFinite(units) || units <= 0) return;
+    let bySector = target.get(sectorId);
+    if (!bySector) {
+      bySector = new Map<CommodityType, number>();
+      target.set(sectorId, bySector);
+    }
+    bySector.set(commodity, (bySector.get(commodity) ?? 0) + units);
+  };
   const demandTruncated = new Map<CommodityType, number>();
   const recordCorporationSupply = (
     corporationId: string | { toString(): string } | undefined,
@@ -2362,6 +2384,7 @@ export function computeRawSupplyDemand(
           global.get(commodity)!.supply += units;
           stateMap.get(commodity)!.supply += units;
           recordCorporationSupply(sector.corporationId, commodity, units);
+          recordSectorUnits(supplyBySector, sector.sectorId, commodity, units);
           recordOutputDemandDelta(sector, st, commodity, units);
         }
         continue;
@@ -2384,6 +2407,7 @@ export function computeRawSupplyDemand(
           global.get(commodity)!.supply += units;
           stateMap.get(commodity)!.supply += units;
           recordCorporationSupply(sector.corporationId, commodity, units);
+          recordSectorUnits(supplyBySector, sector.sectorId, commodity, units);
           recordOutputDemandDelta(sector, st, commodity, units);
         }
         continue;
@@ -2429,6 +2453,7 @@ export function computeRawSupplyDemand(
       const s = stateMap.get(commodity)!;
       s.supply += units;
       recordCorporationSupply(sector.corporationId, commodity, units);
+      recordSectorUnits(supplyBySector, sector.sectorId, commodity, units);
       recordOutputDemandDelta(sector, st, commodity, units);
     }
 
@@ -2494,6 +2519,7 @@ export function computeRawSupplyDemand(
           productionInputDemandByState.set(sector.stateId, stateInput);
         }
         stateInput.set(commodity, (stateInput.get(commodity) ?? 0) + units);
+        recordSectorUnits(inputDemandBySector, sector.sectorId, commodity, units);
       }
     }
   }

@@ -15,6 +15,7 @@ import {
 import { AUTH_COOKIE_NAME } from "@/lib/authCookieName";
 import { handleRouteError } from "@/lib/api/errors";
 import { resolveCabinetOfficeNavEntry } from "@/lib/navigation/cabinetOfficeNavEntry";
+import { resolveMySubsidiaryGroupNav } from "@/lib/navigation/resolveMySubsidiaryGroupNav";
 import { resolveMyUnionNav } from "@/lib/navigation/resolveMyUnionNav";
 import { formatElectionTypeLabel } from "@/lib/utils/electionLabels";
 import type { CountryId } from "@/lib/constants/countries";
@@ -136,6 +137,7 @@ export async function GET() {
         {
           projection: {
             wikiDisabled: 1,
+            subsidiaryCorporationsEnabled: 1,
             singleplayerConfig: 1,
             rpgStatsEnabled: 1,
             conflictsEnabled: 1,
@@ -164,6 +166,7 @@ export async function GET() {
           unreadCount: 0,
           unreadMailCount: 0,
           myCorporationId: null,
+          myCorporationHasGroup: false,
           myUnionId: null,
           homeState: null,
           currentParty: null,
@@ -244,6 +247,7 @@ export async function GET() {
           unreadCount: 0,
           unreadMailCount: 0,
           myCorporationId: null,
+          myCorporationHasGroup: false,
           myUnionId: null,
           homeState: null,
           currentParty: null,
@@ -303,6 +307,7 @@ export async function GET() {
       null;
     let governorOffice: { stateId: string; stateName: string; countryCode: string } | null = null;
     let myCorporationId: number | null = null;
+    let myCorporationObjectId: ObjectId | null = null;
     let myCorporationType: string | null = null;
     let myCorporationCountryId: string | null = null;
     let myUnionId: string | null = null;
@@ -381,6 +386,7 @@ export async function GET() {
       unreadCount = unread;
       unreadMailCount = unreadMail;
       myCorporationId = myCorporation?.sequentialId ?? null;
+      myCorporationObjectId = myCorporation?._id ?? null;
       myCorporationType = myCorporation?.type ?? null;
       myCorporationCountryId = myCorporation?.countryId ?? null;
 
@@ -535,7 +541,14 @@ export async function GET() {
         };
       }
       myCorporationId = imperialCorporation?.sequentialId ?? null;
+      myCorporationObjectId = imperialCorporation?._id ?? null;
     }
+
+    const myCorporationHasGroup = await resolveMySubsidiaryGroupNav(
+      db,
+      myCorporationId != null ? myCorporationObjectId : null,
+      gameState?.subsidiaryCorporationsEnabled === true
+    );
 
     // Admin: character switcher + imperial mode
     let adminCharacters = null;
@@ -722,6 +735,7 @@ export async function GET() {
         unreadCount,
         unreadMailCount: user?.notificationPreferences?.muteMail ? 0 : unreadMailCount,
         myCorporationId,
+        myCorporationHasGroup,
         myCorporationType,
         myCorporationCountryId,
         myUnionId,

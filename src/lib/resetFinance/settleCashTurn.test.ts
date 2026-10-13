@@ -50,6 +50,29 @@ const flow = {
   sovereignDebtFaceRetiredByCountry: {},
 } as BondTurnResult;
 
+const strayUsProgram = {
+  country: "US",
+  scope: "national",
+  familyId: "L18",
+  choice: "leave_to_states",
+  fundingAccountId: null,
+};
+
+function expectOnlyUsHeld(
+  treasuries: ResetNationalTreasurySnapshot[],
+  accounts: ResetDepartmentAccountSnapshot[]
+) {
+  expect(treasuries[0]!.settledThroughTurn).toBe(1);
+  expect(accounts[0]!.accruedThroughTurn).toBe(1);
+  expect(accounts[0]!.lastAuthorityPaid).toBe(0);
+  expect(treasuries.slice(1).every((treasury) => treasury.settledThroughTurn === 2)).toBe(true);
+  expect(
+    accounts
+      .slice(1)
+      .every((account) => account.accruedThroughTurn === 2 && account.lastAuthorityPaid === 10)
+  ).toBe(true);
+}
+
 function fixture() {
   const mock = createMockDb();
   const treasuries = openingNationalTreasurySnapshots("world", 1, {
@@ -198,31 +221,80 @@ describe("v2 treasury and paid Cabinet turn integration", () => {
     expect(mock.collectionMocks.resetNationalTreasuries!.bulkWrite).not.toHaveBeenCalled();
     expect(mock.collectionMocks.resetDepartmentAccounts!.bulkWrite).not.toHaveBeenCalled();
   });
-  it("rejects a wrong-world account before mutation", async () => {
-    const { mock, accounts, run } = fixture();
+  it("holds a wrong-world account's country and settles the others", async () => {
+    const { accounts, treasuries, run } = fixture();
     accounts[0]!.worldId = "old-world";
-    await expect(run()).rejects.toThrow("identity");
-    expect(mock.collectionMocks.resetNationalTreasuries!.bulkWrite).not.toHaveBeenCalled();
+    await expect(run()).rejects.toThrow(/held US \(2 of 3 settled\): US: .*identity/);
+    expectOnlyUsHeld(treasuries, accounts);
   });
   it("cannot silently drop a seeded account even when it has no arrears", async () => {
-    const { mock, treasuries, run } = fixture();
+    const { accounts, treasuries, run } = fixture();
     treasuries[0]!.departmentAccountIds!.push("US:education");
-    await expect(run()).rejects.toThrow("Missing seeded");
-    expect(mock.collectionMocks.resetNationalTreasuries!.bulkWrite).not.toHaveBeenCalled();
+    await expect(run()).rejects.toThrow(/held US .*Missing seeded/);
+    expectOnlyUsHeld(treasuries, accounts);
   });
   it("names the lagging country and turns when a cash receipt skips a turn", async () => {
-    const { mock, treasuries, run } = fixture();
+    const { accounts, treasuries, run } = fixture();
     treasuries[0]!.settledThroughTurn = treasuries[0]!.settledThroughTurn - 1;
     await expect(run()).rejects.toThrow(
-      /skipped a turn: [A-Z]+ settled through \d+, settling \d+ \(opened at \d+\)/
+      /skipped a turn: US settled through \d+, settling \d+ \(opened at \d+\)/
     );
-    expect(mock.collectionMocks.resetNationalTreasuries!.bulkWrite).not.toHaveBeenCalled();
+    expect(treasuries[0]!.settledThroughTurn).toBe(0);
+    expect(accounts[0]!.accruedThroughTurn).toBe(1);
+    expect(treasuries.slice(1).every((treasury) => treasury.settledThroughTurn === 2)).toBe(true);
   });
   it("rejects unpaid department authority that does not match the sovereign receipt", async () => {
-    const { mock, accounts, run } = fixture();
+    const { accounts, treasuries, run } = fixture();
     accounts[0]!.unpaidAuthority = 1;
-    await expect(run()).rejects.toThrow("reconcile");
+    await expect(run()).rejects.toThrow(/held US .*reconcile/);
+    expectOnlyUsHeld(treasuries, accounts);
+  });
+  // Turn 126 in production: a law left a stray education line in one country
+  // and the single throw froze cash for every v2 country for 28 turns.
+  it("holds only the country with a stray inactive Cabinet line", async () => {
+    const { mock, accounts, treasuries, run } = fixture();
+    mock.collection("resetLawPrograms").find.mockReturnValue({
+      toArray: vi.fn(async () => [strayUsProgram]),
+    });
+    await expect(run()).rejects.toThrow(
+      "V2 cash settlement held US (2 of 3 settled): US: Inactive Cabinet family retains authority L18"
+    );
+    expectOnlyUsHeld(treasuries, accounts);
+  });
+  it("settles a repaired country on retry without paying the others twice", async () => {
+    const { mock, accounts, treasuries, run } = fixture();
+    const programs = mock.collection("resetLawPrograms");
+    programs.find.mockReturnValue({ toArray: vi.fn(async () => [strayUsProgram]) });
+    await expect(run()).rejects.toThrow("held US");
+    const settled = structuredClone(treasuries.slice(1));
+    programs.find.mockReturnValue({ toArray: vi.fn(async () => []) });
+    expect(await run()).toEqual({ countries: 3, accounts: 3, advanced: 1, replayed: 2 });
+    expect(treasuries.slice(1)).toEqual(settled);
+    expect(treasuries[0]!.settledThroughTurn).toBe(2);
+    expect(accounts.every((account) => account.lastAuthorityPaid === 10)).toBe(true);
+    const writes = mock.collectionMocks.resetNationalTreasuries!.bulkWrite.mock.calls;
+    expect(writes).toHaveLength(2);
+    expect(writes[1]![0]).toHaveLength(1);
+  });
+  it("keeps settling healthy countries on later turns while one stays held", async () => {
+    const { mock, accounts, treasuries, run } = fixture();
+    mock.collection("resetLawPrograms").find.mockReturnValue({
+      toArray: vi.fn(async () => [strayUsProgram]),
+    });
+    await expect(run()).rejects.toThrow("held US");
+    mock.collection("resetLawPrograms").find.mockReturnValue({ toArray: vi.fn(async () => []) });
+    await expect(run({ gameState: { ...state, currentTurn: 2 }, turn: 3 })).rejects.toThrow(
+      /held US \(2 of 3 settled\): US: V2 cash receipt skipped a turn: US settled through 1, settling 3/
+    );
+    expect(treasuries.map((treasury) => treasury.settledThroughTurn)).toEqual([1, 3, 3]);
+    expect(accounts.map((account) => account.accruedThroughTurn)).toEqual([1, 3, 3]);
+  });
+  it("writes nothing when every country is behind, as in a world already frozen", async () => {
+    const { mock, treasuries, run } = fixture();
+    for (const treasury of treasuries) treasury.settledThroughTurn -= 1;
+    await expect(run()).rejects.toThrow("held US, UK, JP (0 of 3 settled)");
     expect(mock.collectionMocks.resetNationalTreasuries!.bulkWrite).not.toHaveBeenCalled();
+    expect(mock.collectionMocks.resetDepartmentAccounts!.bulkWrite).not.toHaveBeenCalled();
   });
   it("records a bond emergency while still paying enacted authority", async () => {
     const { accounts, treasuries, run } = fixture();

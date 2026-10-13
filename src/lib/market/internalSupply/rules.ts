@@ -84,6 +84,15 @@ export interface InternalSupplyTrade {
   discount: number;
 }
 
+export function ownRouteKey(
+  commodity: string,
+  corporationId: string,
+  originStateId: string,
+  destStateId: string
+): string {
+  return `${commodity}|${corporationId}|${originStateId}|${destStateId}`;
+}
+
 const positive = (n: number | undefined) =>
   typeof n === "number" && Number.isFinite(n) ? Math.max(0, n) : 0;
 /** Pure allocation within ONE reachable commodity book. Never crosses a book. */
@@ -96,6 +105,7 @@ export function allocateInternalSupply(args: {
   reservationRoom: number;
   /** Active freight cannot invent a cross-state route reservation. */
   deliveryStateBySector?: ReadonlyMap<string, string>;
+  ownRouteCaps?: ReadonlyMap<string, number>;
 }): { trades: InternalSupplyTrade[]; availabilityBySector: Map<string, number> } {
   const trades: InternalSupplyTrade[] = [];
   const sellers = [...args.sellers].sort((a, b) => a.sectorId.localeCompare(b.sectorId));
@@ -108,6 +118,12 @@ export function allocateInternalSupply(args: {
     sellers.map((s) => [s.sectorId, Math.max(0, positive(s.units) - positive(s.committed))])
   );
   let room = Math.min(positive(args.reservationRoom), positive(args.supply), positive(args.demand));
+  const routeLeft = new Map(args.ownRouteCaps ?? []);
+  const routeFor = (s: InternalSupplySeller, b: InternalSupplyBuyer) => {
+    const origin = args.deliveryStateBySector?.get(s.sectorId);
+    const dest = args.deliveryStateBySector?.get(b.sectorId);
+    return origin && dest && origin !== dest ? `${s.corporationId}|${origin}|${dest}` : undefined;
+  };
   // Own plants go first across ALL suppliers. Group plants follow, with
   // proportional allocation so array order never gives one buyer a monopoly.
   for (const ownOnly of [true, false]) {
@@ -119,6 +135,9 @@ export function allocateInternalSupply(args: {
         (!ownOnly && setting.policy.priority !== "group")
       )
         continue;
+      const sameCorpOk = (b: InternalSupplyBuyer) =>
+        !(ownOnly ? b.corporationId !== s.corporationId : b.corporationId === s.corporationId) &&
+        (ownOnly || args.policies.get(b.corporationId)?.root === setting.root);
       const eligible = buyers.filter((b) => {
         if (
           args.deliveryStateBySector &&
@@ -127,29 +146,60 @@ export function allocateInternalSupply(args: {
               args.deliveryStateBySector.get(b.sectorId))
         )
           return false;
-        if (ownOnly ? b.corporationId !== s.corporationId : b.corporationId === s.corporationId)
-          return false;
-        return ownOnly || args.policies.get(b.corporationId)?.root === setting.root;
+        return sameCorpOk(b);
       });
-      const need = eligible.reduce((n, b) => n + (remaining.get(b.sectorId) ?? 0), 0);
-      const take = Math.min(room, offers.get(s.sectorId) ?? 0, need);
-      if (!(take > 0)) continue;
-      for (const b of eligible) {
-        const units = (take * (remaining.get(b.sectorId) ?? 0)) / need;
-        if (!(units > 0)) continue;
-        trades.push({
-          supplierSectorId: s.sectorId,
-          buyerSectorId: b.sectorId,
-          supplierCorpId: s.corporationId,
-          buyerCorpId: b.corporationId,
-          units,
-          discount: Math.min(0.2, positive(setting.policy.discount)),
+      const crossState =
+        ownOnly && args.deliveryStateBySector && routeLeft.size
+          ? buyers.filter((b) => {
+              const key = routeFor(s, b);
+              return !!key && (routeLeft.get(key) ?? 0) > 0 && sameCorpOk(b);
+            })
+          : [];
+      const allocate = (group: InternalSupplyBuyer[], capped: boolean) => {
+        const needOf = (b: InternalSupplyBuyer) => {
+          const left = remaining.get(b.sectorId) ?? 0;
+          return capped ? Math.min(left, routeLeft.get(routeFor(s, b)!) ?? 0) : left;
+        };
+        const needs = group.map(needOf);
+        const routeNeed = new Map<string, number>();
+        if (capped)
+          group.forEach((b, i) => {
+            const key = routeFor(s, b)!;
+            routeNeed.set(key, (routeNeed.get(key) ?? 0) + needs[i]!);
+          });
+        group.forEach((b, i) => {
+          if (!capped) return;
+          const key = routeFor(s, b)!;
+          const total = routeNeed.get(key) ?? 0;
+          const cap = routeLeft.get(key) ?? 0;
+          if (total > cap && total > 0) needs[i] = (needs[i]! * cap) / total;
         });
-        remaining.set(b.sectorId, Math.max(0, (remaining.get(b.sectorId) ?? 0) - units));
-        supplied.set(b.sectorId, (supplied.get(b.sectorId) ?? 0) + units);
-      }
-      room -= take;
-      offers.set(s.sectorId, Math.max(0, (offers.get(s.sectorId) ?? 0) - take));
+        const need = needs.reduce((n, u) => n + u, 0);
+        const take = Math.min(room, offers.get(s.sectorId) ?? 0, need);
+        if (!(take > 0)) return;
+        group.forEach((b, i) => {
+          const units = (take * needs[i]!) / need;
+          if (!(units > 0)) return;
+          if (capped) {
+            const key = routeFor(s, b)!;
+            routeLeft.set(key, Math.max(0, (routeLeft.get(key) ?? 0) - units));
+          }
+          trades.push({
+            supplierSectorId: s.sectorId,
+            buyerSectorId: b.sectorId,
+            supplierCorpId: s.corporationId,
+            buyerCorpId: b.corporationId,
+            units,
+            discount: Math.min(0.2, positive(setting.policy.discount)),
+          });
+          remaining.set(b.sectorId, Math.max(0, (remaining.get(b.sectorId) ?? 0) - units));
+          supplied.set(b.sectorId, (supplied.get(b.sectorId) ?? 0) + units);
+        });
+        room -= take;
+        offers.set(s.sectorId, Math.max(0, (offers.get(s.sectorId) ?? 0) - take));
+      };
+      allocate(eligible, false);
+      if (crossState.length) allocate(crossState, true);
     }
   }
   const availabilityBySector = internalSupplyAvailability(buyers, trades, args.supply, args.demand);

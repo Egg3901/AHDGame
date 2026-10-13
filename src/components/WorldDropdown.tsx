@@ -14,6 +14,7 @@ export function WorldDropdown({
   isUKContext: _isUKContext = false,
   countryId = "US",
   myCorporationId = null,
+  myCorporationHasGroup = false,
   myUnionId = null,
   conflictsEnabled = false,
   unionsEnabled = false,
@@ -47,6 +48,7 @@ export function WorldDropdown({
   const items = visibleWorldNavItems({
     countryId,
     myCorporationId,
+    myCorporationHasGroup,
     myUnionId,
     conflictsEnabled,
     unionsEnabled,
