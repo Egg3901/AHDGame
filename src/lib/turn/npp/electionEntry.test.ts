@@ -1221,3 +1221,92 @@ describe("processElectionEntry — engine 6.1 candidate placement (v6)", () => {
     expect(filed.has(governor._id.toString())).toBe(false);
   });
 });
+
+describe("processElectionEntry — engine 6.3 presidential challengers (v6)", () => {
+  let db: MockDb;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(makeSeededRng).mockReturnValue(() => 0); // every roll succeeds
+    db = createMockDb();
+    db.collection("slateCandidates");
+    db.collectionMocks.slateCandidates.find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([]),
+    });
+    db.collection("electionCandidates");
+    db.collection("countryGameStates");
+  });
+
+  function presidentialScenario(enabledForPlayers: boolean) {
+    db.collectionMocks.countryGameStates.findOne.mockResolvedValue({
+      _id: "US",
+      enabledForPlayers,
+    });
+    const primary = createTestElection({ electionType: "president", state: "US" });
+    const nominee = createTestNpp({ homeState: "CA", currentOffice: null });
+    const strongest = createTestNpp({
+      homeState: "TX",
+      currentOffice: null,
+      politicalInfluence: 90,
+      favorability: 90,
+    });
+    const others = Array.from({ length: 5 }, (_, i) =>
+      createTestNpp({
+        homeState: "NY",
+        currentOffice: null,
+        politicalInfluence: 20 + i,
+        favorability: 20,
+      })
+    );
+    const sitting = {
+      _id: new ObjectId(),
+      electionId: primary._id,
+      countryId: "US",
+      characterId: nominee._id,
+      characterName: nominee.name,
+      party: "democrat",
+      status: "active",
+      support: 50,
+      enteredAt: new Date(),
+      isNPP: true,
+      nppId: nominee._id,
+    } as ElectionCandidate;
+    const ctx = buildContext(db, primary, [nominee, ...others, strongest], [sitting]);
+    return { ctx, strongest };
+  }
+
+  const challengers = () =>
+    db.collectionMocks.electionCandidates.insertOne.mock.calls.map(([doc]) =>
+      doc.characterId.toString()
+    );
+
+  it("draws a nationwide challenger from the party's strongest NPPs at v6", async () => {
+    db.collection("gameState");
+    db.collectionMocks.gameState.findOne.mockResolvedValue({ nppAutonomyLevel: "v6" });
+    const { ctx, strongest } = presidentialScenario(false);
+
+    await processElectionEntry(ctx);
+
+    expect(challengers()).toEqual([strongest._id.toString()]);
+  });
+
+  it("leaves presidential primaries alone below v6", async () => {
+    db.collection("gameState");
+    db.collectionMocks.gameState.findOne.mockResolvedValue({ nppAutonomyLevel: "v5" });
+    const { ctx } = presidentialScenario(false);
+
+    await processElectionEntry(ctx);
+
+    expect(challengers()).toEqual([]);
+  });
+
+  it("never challenges a presidential primary in a player country", async () => {
+    db.collection("gameState");
+    db.collectionMocks.gameState.findOne.mockResolvedValue({ nppAutonomyLevel: "v6" });
+    const { ctx } = presidentialScenario(true);
+
+    await processElectionEntry(ctx);
+
+    expect(challengers()).toEqual([]);
+  });
+});

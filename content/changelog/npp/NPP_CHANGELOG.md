@@ -49,7 +49,7 @@ number.
 - **Consolidation.** A trailing NPP withdraws before the primary and endorses
   the same-party front-runner rather than splitting the vote.
 - **Presidential challengers** in non-player countries, inside the existing
-  limit on how often a player's race can be challenged.
+  limit on how often a player's race can be challenged. (Shipped in 6.3.0.)
 
 ### Stage 2: governing
 
@@ -95,6 +95,20 @@ number.
 - Autonomy v6 becomes the default for new singleplayer and simulation worlds,
   after the engine 6 stages are validated. Running worlds never change level on
   their own.
+
+## 6.3.0 (unreleased)
+
+Stage 1 (running for office).
+
+- **Presidential primary challengers (v6).** NPPs could already challenge a
+  same-party candidate in state and legislative primaries, but presidential
+  primaries were left out. Now, in countries with no players, a presidential
+  primary where a party has one candidate can draw a challenger from the same
+  party. The challenger is picked from the party's five strongest available
+  NPPs across the country, with ambitious NPPs more likely to run. The chance of
+  a challenge and the limit of two challengers per country per turn are the
+  same as in other primaries. Presidential primaries in countries with players
+  are not challenged.
 
 ## 6.2.0 (unreleased)
 
