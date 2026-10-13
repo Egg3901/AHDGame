@@ -1182,11 +1182,19 @@ export function processSector(
   if (explicitPlantCostsEnabled && physicalPnl && supportsCostPlusPricing(sector.sectorType)) {
     const basis = recordCostPlusBasis({
       inputsCost: physicalPnl.inputsCost,
+      // Every operating line the P&L bills, so zero markup breaks even on a
+      // full fill. Disaster legs and a net policy penalty are charged per
+      // revenue; leaving them out quoted a 5% markup that netted a loss. The
+      // internal supply discount rides `financialLegs` but settles between
+      // sibling sectors, so it stays out of the quote.
       fixedCost:
         physicalPnl.laborCost +
         physicalPnl.otherOpex +
         physicalPnl.upkeep +
-        physicalPnl.complianceCost,
+        physicalPnl.complianceCost +
+        physicalPnl.financialLegs -
+        (market.internalSupplyDiscountCostBySectorId?.get(sector._id.toString()) ?? 0) +
+        Math.max(0, -physicalPnl.policyCredit),
       nominalProducedRevenue:
         plantsCapacity > 0
           ? ((plantsNameplateRevenue / TURNS_PER_DAY) * producedUnits) / plantsCapacity
