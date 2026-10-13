@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { NPP_AUTONOMY_LEVELS } from "@/lib/nppAutonomy/levels";
 import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { requireSingleplayer } from "@/lib/api/requireSingleplayer";
 import { parseJsonBody } from "@/lib/api/validate";
@@ -26,7 +27,7 @@ const featureFlagsSchema = z
 const schema = z
   .object({
     difficulty: z.enum(["easy", "normal", "hard"]).optional(),
-    autonomyLevel: z.enum(["off", "v0", "v1", "v2", "v3", "v4", "v5"]).optional(),
+    autonomyLevel: z.enum(NPP_AUTONOMY_LEVELS).optional(),
     featureFlags: featureFlagsSchema.optional(),
   })
   .strict()

@@ -31,8 +31,8 @@ export function preparedConfigurationHash(document: Document): string {
     .digest("hex");
 }
 
-export function preservedAutonomyLevel(level: unknown): "v3" | "v4" | "v5" {
-  if (level === "v3" || level === "v4" || level === "v5") return level;
+export function preservedAutonomyLevel(level: unknown): "v3" | "v4" | "v5" | "v6" {
+  if (level === "v3" || level === "v4" || level === "v5" || level === "v6") return level;
   throw new Error("Preserved sandbox must declare its actual autonomy level");
 }
 

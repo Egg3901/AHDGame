@@ -1,6 +1,8 @@
 export const nppAutonomyContent = `# NPP Autonomy
 
-**NPP autonomy** is the graduated system that makes Non-Player Politicians act more like full political actors: sponsoring bills, forming governments, staffing ministries, and running campaigns without waiting for player nudges. It replaces the old binary on/off flag with levels **off → v0 → v1 → v2 → v3 → v4**. The game's seeded default is **v4**.
+**NPP autonomy** is the graduated system that makes Non-Player Politicians act more like full political actors: sponsoring bills, forming governments, staffing ministries, and running campaigns without waiting for player nudges. It replaces the old binary on/off flag with levels **off → v0 → v1 → v2 → v3 → v4 → v5 → v6**. The game's seeded default is **v4**.
+
+The level says which activities NPPs may perform in a world. How the shipped code performs them is the **NPP engine version**, recorded with every change in the [NPP changelog](/changelog/npp) along with the roadmap.
 
 For baseline NPP behavior (bill cross-pressure, elections, influence actions), see [NPPs Overview](/wiki/npps-overview), [NPP Behavior](/wiki/npp-behavior), and [NPP Elections](/wiki/npp-elections).
 
@@ -14,14 +16,16 @@ For baseline NPP behavior (bill cross-pressure, elections, influence actions), s
 | **v2** | **Comingle tier**: caretaker ministers, caretaker CEOs for vacant corporations, and NPP corporate attacks. Also the floor at which autonomy acts at all in player-enabled countries |
 | **v3** | Economic and financial autonomy (savings, union bargaining, campaign finance) plus NPP entry into presidential primaries as challengers |
 | **v4** | Widest reach (the seeded default): global-scope economic actions and deeper autonomous bill sponsorship |
+| **v5** | Persistent governing goals: a government keeps up to five standing goals, grades them, and lets the results steer its next agenda. Singleplayer and worldsim beta |
+| **v6** | NPP engine 6: the same activities and resources as v5, with the engine 6 decision and cost changes listed in the NPP changelog. In development |
 
-Levels are cumulative: v2 includes everything in v0 and v1, and v4 includes everything below it.
+Levels are cumulative: v2 includes everything in v0 and v1, and v6 includes everything below it.
 
 ## Player vs non-player countries
 
 Autonomy applies differently by country type:
 
-- **Non-player countries**: the configured global level applies as-is (v0/v1/v2/v3/v4).
+- **Non-player countries**: the configured global level applies as-is (v0 to v6).
 - **Player-enabled countries**: autonomy **only activates at v2 and above** (the comingle tiers). Below v2 it resolves to off, so humans stay primary in countries people actually play.
 
 This rail prevents autonomous NPP governments from overriding player-led countries until admins enable the comingle tiers.
@@ -55,6 +59,20 @@ This rail prevents autonomous NPP governments from overriding player-led countri
 
 - Economic actions extend to global scope.
 - Deeper autonomous bill sponsorship. This is the level seeded in production.
+
+### v5: persistent goals (beta)
+
+- A government holds a bounded set of standing goals across agenda recomputes instead of starting over each time.
+- Each goal is graded as achieved, revised or failed. Failed domains lose weight in the next agenda; domains showing progress keep it.
+- Ministers hold a committed tier unless it stops advancing the goal. Bill sponsorship leans toward bills that serve an active goal.
+- NPPs age, retire and are replaced by successors.
+- Adds no new lever and no resources. Validated in singleplayer and worldsim, not yet in live multiplayer.
+
+### v6: NPP engine 6 (in development)
+
+- Changes how well NPPs pursue the v5 activities and what they cost to run each turn, never what they may do or how much money and action points they receive.
+- First change (engine 6.0): NPP action cycles are staggered. Each NPP still acts once every four turns, but a quarter of NPPs act each turn instead of all of them on the same turn.
+- Every engine version and the planned ones are listed in the [NPP changelog](/changelog/npp).
 
 ## Admin controls
 

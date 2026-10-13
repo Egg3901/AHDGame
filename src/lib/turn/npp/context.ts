@@ -348,7 +348,7 @@ export async function loadNPPContext(now: Date, options?: NPPContextOptions): Pr
   //
   // NPP projection: enumerated from grepping `npp\.<field>` across every NPP
   // behavior phase + nppBehavior.ts. Drops avatarUrl, gender, ethnicity,
-  // politicalInfluence, favorability, currentOffice, generatedAt, createdAt,
+  // currentOffice, generatedAt, createdAt,
   // updatedAt, influenceState, archetypeApprovals, sequentialId — none of
   // which are referenced by the behavior pipeline. archetypeApprovals on
   // NPPs is the biggest potential drop (Record<string, number> per NPP, can
@@ -387,6 +387,10 @@ export async function loadNPPContext(now: Date, options?: NPPContextOptions): Pr
             name: 1,
             party: 1,
             personality: 1,
+            // Candidate strength for engine 6.1 placement at v6
+            // (nppAutonomy/v6/rules/candidatePlacement.ts).
+            politicalInfluence: 1,
+            favorability: 1,
             // The ideology pair only. `policies.domainPositions` is a map of
             // ~950 legislation stances (30 KB of a 31 KB NPP document) and
             // only bill voting reads it, so it is hydrated below for the

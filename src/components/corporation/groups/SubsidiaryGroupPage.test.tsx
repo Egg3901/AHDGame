@@ -10,6 +10,11 @@ vi.mock("./useGroupManagement", () => ({ useGroupManagement: vi.fn() }));
 vi.mock("../SupplyAgreementsSection", () => ({
   default: ({ corpId }: { corpId: string }) => <div data-testid="agreements-panel">{corpId}</div>,
 }));
+vi.mock("../InternalSupplyPanel", () => ({
+  default: ({ corpId }: { corpId: string }) => (
+    <div data-testid="active-supply">Active supply {corpId}</div>
+  ),
+}));
 vi.mock("../GroupOverviewCard", () => ({ GroupOverviewCard: () => null }));
 import { useGroupManagement, type GroupManagementView } from "./useGroupManagement";
 import { GroupSupplyOffice } from "./GroupSupplyOffice";
@@ -23,6 +28,8 @@ const base = {
   canManage: true,
   managementEnabled: true,
   supplyEngineEnabled: false,
+  directionsEnabled: true,
+  internalSupplyEnabled: true,
   members: [
     {
       id: root,
@@ -145,12 +152,15 @@ describe("Subsidiary Group page", () => {
     window.history.replaceState(null, "", "#supply");
     mount();
     expect(screen.queryByRole("checkbox", { name: "Receive supply from group" })).toBeNull();
-    await waitFor(() => expect(screen.getByText(/Supply coordination is disabled/)).toBeTruthy());
+    await waitFor(() =>
+      expect(screen.getByText("Corporation supply priority is active")).toBeTruthy()
+    );
   });
   it("shows receiving controls under members first and keeps other players disabled", () => {
     window.history.replaceState(null, "", "#supply");
     const data = structuredClone(base);
     data.settings.supplyPolicy = "members";
+    data.supplyEngineEnabled = true;
     data.members[1].operator = "player";
     mount(data);
     const controls = screen.getAllByRole("checkbox", {
@@ -167,6 +177,7 @@ describe("Subsidiary Group page", () => {
 describe("corporation office suggestions and supply estimates", () => {
   it("renders policy comparisons and identifies the fixed-output assumptions", async () => {
     const data = structuredClone(base);
+    data.supplyEngineEnabled = true;
     data.forecast = {
       connections: [],
       connectionCount: 0,
@@ -227,7 +238,9 @@ describe("corporation office suggestions and supply estimates", () => {
       </NextIntlClientProvider>
     );
     expect(screen.getByText("Target regions: Pennsylvania")).toBeTruthy();
-    expect(screen.getByText("New capital investment is not authorized.")).toBeTruthy();
+    expect(screen.queryByText("New capital investment is not authorized.")).toBeNull();
+    expect(screen.getByText("Group supply and strategy")).toBeTruthy();
+    expect(screen.queryByRole("checkbox", { name: "Receive supply from group" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Acknowledge" }));
     expect(save).toHaveBeenCalledWith({
       action: "respond",
@@ -242,6 +255,7 @@ describe("Group discounts and negotiated agreements", () => {
     window.history.replaceState(null, "", "#supply");
     const data = structuredClone(base);
     data.settings.supplyPolicy = "members";
+    data.supplyEngineEnabled = true;
     mount(data);
     const select = screen.getByRole("combobox", { name: "Automatic Group Chain discount" });
     expect(
@@ -270,6 +284,7 @@ describe("Group discounts and negotiated agreements", () => {
     window.history.replaceState(null, "", "#supply");
     const data = structuredClone(base);
     data.settings.supplyPolicy = "members";
+    data.supplyEngineEnabled = true;
     data.canManage = false;
     data.supplyAgreementsEnabled = true;
     data.members[1].canEdit = true;

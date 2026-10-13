@@ -115,7 +115,11 @@ import { projectStrategyRevenuePerTurn } from "@/lib/corporations/strategyRevenu
 import type { SectorBuildOrder } from "@/lib/db/types";
 import { STRIKE_REVENUE_THROTTLE } from "@/lib/labour/strikes";
 import { calculatePlantSectorSplit } from "@/lib/corporations/plantSectorSplit";
-import { CAPITAL_DEPRECIATION_PER_TURN, governorAnchorTurn } from "@/lib/market/capital";
+import {
+  CAPITAL_DEPRECIATION_PER_TURN,
+  governorAnchorTurn,
+  type GovernorGlide,
+} from "@/lib/market/capital";
 import { isNppOwned } from "@/lib/corporations/nppOwned";
 import { SOLD_OUT_FILL } from "@/lib/turn/corporation/demandThrottle";
 import { plantsNetMarginPct } from "@/lib/corporations/rules/netMargin";
@@ -1185,6 +1189,7 @@ export function buildSectorPlantsSection(args: {
   /** World flip turn the governor ramp anchors to (see `MarketContext`). */
   worldGovernorAnchorTurn?: number | null;
   governorGlideEndTurn?: number | null;
+  governorGlide?: GovernorGlide | null;
   marketSharePercent: number;
   /** Corporation's aggregate share of the host country's sector market. */
   nationalMarketSharePercent?: number;
@@ -1412,7 +1417,11 @@ export function buildSectorPlantsSection(args: {
 
   // ─── Governor ("market support") ──────────────────────────────────────────
   const plantsStartTurn =
-    governorAnchorTurn(num(sector.plantsStartTurn), args.worldGovernorAnchorTurn) ?? null;
+    governorAnchorTurn(
+      num(sector.plantsStartTurn),
+      args.worldGovernorAnchorTurn,
+      args.governorGlide
+    ) ?? null;
   const ownTurnsRemaining =
     plantsStartTurn != null
       ? nonNeg(plantsStartTurn + governorRampTurns - currentTurn)

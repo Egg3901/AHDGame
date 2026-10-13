@@ -32,9 +32,14 @@ export type IterationType = "Alpha" | "Beta" | "Iteration";
  *          re-deciding every cycle. Adds no new lever: every V5 intent is
  *          executed through the same validation/execution paths v4 already
  *          uses. Singleplayer/Worldsim beta — see featureFlagDefaults.
+ *   - v6:  v5 + NPP engine 6 behavior (see `nppAutonomy/engineVersion.ts` and
+ *          content/changelog/npp/). Engine 6 changes how well NPPs pursue the
+ *          v5 activities and what they cost to run, never what they are
+ *          allowed to do or how many resources they get. Inert on hosted
+ *          worlds until an operator selects it.
  * See plans/2026-06-23-npp-autonomy-v1-v2-plan.md.
  */
-export type NppAutonomyLevel = "off" | "v0" | "v1" | "v2" | "v3" | "v4" | "v5";
+export type NppAutonomyLevel = "off" | "v0" | "v1" | "v2" | "v3" | "v4" | "v5" | "v6";
 export type NppForeignPolicyMode = "off" | "shadow" | "active";
 export type NppForeignPolicyStage = "votes" | "proposals" | "trade" | "support" | "war";
 
@@ -270,7 +275,7 @@ export interface GameState {
    */
   crisisSpawnChanceMultiplier?: number;
   /**
-   * Smarter-NPP autonomy tier (off / v0 / v1 / v2 / v3 / v4 / v5). Replaces the
+   * Smarter-NPP autonomy tier (off / v0 / v1 / v2 / v3 / v4 / v5 / v6). Replaces the
    * legacy `nppAutonomyEnabled` boolean — a legacy `true` reads as "v0" and an
    * absent field with no legacy boolean reads as "off", so an existing world is
    * never silently re-tiered. Fresh worlds seed v4; setup requests that omit the

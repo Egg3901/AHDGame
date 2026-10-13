@@ -83,6 +83,7 @@ import { completedMarketUpdateAt, completedTurnStatus } from "@/simulation/engin
 import { startTurnMemorySampler, type TurnMemoryPeak } from "@/lib/turn/turnMemory";
 import { captureTurnPosthog } from "@/lib/analytics/turnPosthog";
 import { currentTurnBuild } from "@/lib/turn/turnBuild";
+import { NPP_ENGINE_VERSION } from "@/lib/nppAutonomy/engineVersion";
 
 /** Read once per process: the deployment does not change under a running server. */
 const turnBuild = currentTurnBuild();
@@ -723,6 +724,7 @@ async function processTurnImpl(
       phaseStatuses,
       phases: context.phaseResults,
       ...(turnBuild ? { build: turnBuild } : {}),
+      nppEngineVersion: NPP_ENGINE_VERSION,
       createdAt: context.realNow,
     };
     if (!localSingleplayer) {

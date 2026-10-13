@@ -7,6 +7,7 @@ import {
   assertOwnedMongod,
   type IsolatedMongod,
 } from "@/lib/test-utils/realMongoFixture";
+import { loadGroupDirectionMembership } from "../npp/groupDirectionMembership";
 import { buildMarketContext } from "@/lib/market/marketContext";
 import { configureGroupSupply, groupForecastWriteOps } from "./groupSupplyTurn";
 import type { CorporationLookups } from "./types";
@@ -51,6 +52,40 @@ describe.skipIf(!REAL_MONGO_ENABLED)("isolated group turn ownership and persiste
   afterAll(async () => {
     await client?.close();
     await stopIsolatedMongod(fixture);
+  });
+  it("batches direction authority only when configured and reuses it without new reads", async () => {
+    const db = client.db(fixture.dbName);
+    const directed = {
+      _id: child,
+      ceoType: "npp",
+      groupDirection: { objective: "profit" },
+    } as unknown as Corporation;
+    commands = [];
+    replyBytes = 0;
+    expect(await loadGroupDirectionMembership(db, false, [directed])).toBeUndefined();
+    expect(
+      await loadGroupDirectionMembership(db, true, [{ ...directed, groupDirection: undefined }])
+    ).toBeUndefined();
+    expect(commands).toEqual([]);
+    const groups = await loadGroupDirectionMembership(db, true, [directed]);
+    expect(groups?.rootByCorpId.get(child.toString())).toBe(root.toString());
+    expect(commands).toEqual(["find", "find", "find"]);
+    const readBytes = replyBytes;
+    commands = [];
+    replyBytes = 0;
+    expect(await loadGroupDirectionMembership(db, true, Array(100).fill(directed), groups)).toBe(
+      groups
+    );
+    expect(commands).toEqual([]);
+    expect(replyBytes).toBe(0);
+    process.stdout.write(
+      JSON.stringify({
+        qualification: "NPP direction authority fixture",
+        unconfigured: { commands: 0, replyBytes: 0 },
+        configured: { commands: 3, replyBytes: readBytes },
+        preloaded: { commands: 0, replyBytes: 0 },
+      }) + "\n"
+    );
   });
   it("uses one bounded ownership snapshot and an existing bulk write, with no disabled-world I/O", async () => {
     const db = client.db(fixture.dbName);

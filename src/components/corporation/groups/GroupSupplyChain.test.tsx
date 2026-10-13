@@ -8,6 +8,11 @@ import type { GroupManagementView } from "./useGroupManagement";
 vi.mock("@/contexts/CurrencyContext", () => ({
   useCurrency: () => ({ formatAmount: (n: number) => "A" + n }),
 }));
+vi.mock("../InternalSupplyPanel", () => ({
+  default: ({ corpId }: { corpId: string }) => (
+    <div data-testid="active-supply">Active supply {corpId}</div>
+  ),
+}));
 vi.mock("../SupplyAgreementsSection", () => ({
   default: ({ corpId }: { corpId: string }) => <div>Agreement controls {corpId}</div>,
 }));
@@ -86,6 +91,15 @@ function mount(value = data, save = vi.fn().mockResolvedValue(true), busy = fals
 }
 afterEach(cleanup);
 describe("Supply chain", () => {
+  it("uses existing active corporation controls when formalized Group routing is off", () => {
+    mount({ ...data, supplyEngineEnabled: false, internalSupplyEnabled: true });
+    expect(screen.getByText("Corporation supply priority is active")).toBeTruthy();
+    expect(screen.getByTestId("active-supply").textContent).toBe("Active supply p");
+    expect(screen.queryByRole("checkbox")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Group members first" })).toBeNull();
+    expect(screen.queryByRole("table")).toBeNull();
+    expect(screen.getByText("Agreement controls p")).toBeTruthy();
+  });
   it("previews estimates without saving and applies only on explicit action", async () => {
     const save = mount();
     fireEvent.click(screen.getByRole("button", { name: /^Group members first/ }));

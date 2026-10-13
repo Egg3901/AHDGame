@@ -190,6 +190,7 @@ describe("nppActionProcessing", () => {
         partyDonation: 0,
         fundraise: 0,
         skipped: 0,
+        rallies: 0,
       });
     });
 
@@ -207,6 +208,7 @@ describe("nppActionProcessing", () => {
         partyDonation: 0,
         fundraise: 0,
         skipped: 0,
+        rallies: 0,
       });
     });
 
@@ -227,6 +229,7 @@ describe("nppActionProcessing", () => {
         partyDonation: 0,
         fundraise: 0,
         skipped: 0,
+        rallies: 0,
       });
     });
 
@@ -350,6 +353,124 @@ describe("nppActionProcessing", () => {
         { ceoId: { $in: [npp._id] }, ceoVacant: { $ne: true } },
         { projection: { ceoId: 1 } }
       );
+    });
+
+    describe("v6 candidate rallies (NPP engine 6.2)", () => {
+      function withRace(level: string) {
+        const npp = createNpp({ _id: new ObjectId("000000000000000000000000") });
+        const electionId = new ObjectId();
+        const candidateRowId = new ObjectId();
+        mockFindOne.mockResolvedValue({ nppEconomyEnabled: true, nppAutonomyLevel: level });
+        mockNppFind.mockImplementation(() => createAsyncCursor([npp]));
+        const base = mockDb.collection as unknown as (name: string) => unknown;
+        const candidateBulkWrite = vi.fn();
+        (mockDb as unknown as { collection: unknown }).collection = vi.fn((name: string) => {
+          if (name === "elections") {
+            return {
+              find: () => ({
+                toArray: async () => [
+                  {
+                    _id: electionId,
+                    countryId: "US",
+                    state: "CA",
+                    startTurn: 10,
+                    status: "active",
+                    electionType: "house",
+                  },
+                ],
+              }),
+            };
+          }
+          if (name === "electionCandidates") {
+            return {
+              find: () => ({
+                toArray: async () => [
+                  {
+                    _id: candidateRowId,
+                    nppId: npp._id,
+                    electionId,
+                    party: npp.party,
+                    support: 50,
+                  },
+                ],
+              }),
+              bulkWrite: candidateBulkWrite,
+            };
+          }
+          return base(name);
+        });
+        vi.mocked(decideNppAction)
+          .mockReturnValueOnce({ action: "campaign", reason: "test" })
+          .mockReturnValue({ action: "none", reason: "done" });
+        return { candidateRowId, candidateBulkWrite };
+      }
+
+      it("spends a running NPP's campaign action on a rally in its race at v6", async () => {
+        const { candidateRowId, candidateBulkWrite } = withRace("v6");
+
+        const result = await processNppActions(mockDb, 8);
+
+        expect(result.rallies).toBe(1);
+        expect(result.campaign).toBe(1);
+        const [ops] = candidateBulkWrite.mock.calls[0];
+        expect(ops).toHaveLength(1);
+        expect(ops[0].updateOne.filter._id).toEqual(candidateRowId);
+        expect(ops[0].updateOne.update.$set.lastRallyTurn).toBe(8);
+      });
+
+      it("keeps the influence campaign action below v6", async () => {
+        const { candidateBulkWrite } = withRace("v5");
+
+        const result = await processNppActions(mockDb, 8);
+
+        expect(result.rallies).toBe(0);
+        expect(result.campaign).toBe(1);
+        expect(candidateBulkWrite).not.toHaveBeenCalled();
+      });
+    });
+
+    describe("v6 staggered cycle (NPP engine 6.0)", () => {
+      // Lane is the ObjectId's low bytes mod 4, so these four sit in lanes 0-3.
+      const laned = () =>
+        [0, 1, 2, 3].map((lane) =>
+          createNpp({ _id: new ObjectId(`0000000000000000000000${String(lane).padStart(2, "0")}`) })
+        );
+
+      it("acts only the lane whose turn it is, off the shared cycle turn", async () => {
+        mockFindOne.mockResolvedValue({ nppEconomyEnabled: true, nppAutonomyLevel: "v6" });
+        mockNppFind.mockImplementation(() => createAsyncCursor(laned()));
+
+        const result = await processNppActions(mockDb, 5);
+
+        expect(result.nppsProcessed).toBe(1);
+      });
+
+      it("skips an NPP whose lane is not up", async () => {
+        mockFindOne.mockResolvedValue({ nppEconomyEnabled: true, nppAutonomyLevel: "v6" });
+        mockNppFind.mockImplementation(() => createAsyncCursor([laned()[1]]));
+
+        expect((await processNppActions(mockDb, 6)).nppsProcessed).toBe(0);
+        expect((await processNppActions(mockDb, 9)).nppsProcessed).toBe(1);
+      });
+
+      it("acts every NPP exactly once across one four-turn interval", async () => {
+        mockFindOne.mockResolvedValue({ nppEconomyEnabled: true, nppAutonomyLevel: "v6" });
+        mockNppFind.mockImplementation(() => createAsyncCursor(laned()));
+
+        let processed = 0;
+        for (const turn of [8, 9, 10, 11]) {
+          processed += (await processNppActions(mockDb, turn)).nppsProcessed;
+        }
+        expect(processed).toBe(4);
+      });
+
+      it("keeps every NPP on the shared cycle turn below v6", async () => {
+        mockFindOne.mockResolvedValue({ nppEconomyEnabled: true, nppAutonomyLevel: "v5" });
+        mockNppFind.mockImplementation(() => createAsyncCursor(laned()));
+
+        expect((await processNppActions(mockDb, 5)).nppsProcessed).toBe(0);
+        expect((await processNppActions(mockDb, 8)).nppsProcessed).toBe(4);
+      });
     });
 
     it("does NOT sweep to savings below v3 either (funds inc excludes savings)", async () => {
