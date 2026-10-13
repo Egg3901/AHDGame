@@ -6,7 +6,7 @@ import styles from "./GroupPage.module.css";
 import { GroupOverviewDashboard } from "./GroupOverviewDashboard";
 
 import { useTranslations } from "next-intl";
-import { useCurrency } from "@/contexts/CurrencyContext";
+
 import { CorporationLogo } from "../CorporationLogo";
 import { GroupOverviewCard, type GroupOverviewPayload } from "../GroupOverviewCard";
 import SupplyAgreementsSection from "../SupplyAgreementsSection";
@@ -14,7 +14,7 @@ import { SUPPLY_AGREEMENT_PRICE_BAND } from "@/lib/db/types/supplyAgreement";
 import { GroupSupplyForecast } from "./GroupSupplyForecast";
 import { GroupParticipation } from "./GroupParticipation";
 import { useGroupManagement } from "./useGroupManagement";
-import { combineGroupLatest } from "@/lib/corporations/groups/rules/financialHistory";
+import { GroupFinancialComparison } from "./GroupFinancialComparison";
 import type { GroupObjective } from "@/lib/corporations/groups/managementTypes";
 const button =
   "inline-flex items-center justify-center gap-2 rounded-lg border border-card-border bg-card px-3 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 enabled:hover:bg-card-elevated focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-info";
@@ -28,14 +28,12 @@ const objectives: GroupObjective[] = [
   "stability",
 ];
 export function SubsidiaryGroupPage({ corpId }: { corpId: string }) {
-  const t = useTranslations("corporations.group"),
-    { formatAmount } = useCurrency();
+  const t = useTranslations("corporations.group");
   const { data, loading, error, busy, save, refresh } = useGroupManagement(corpId);
   const section = useSyncExternalStore(subscribeSection, currentSection, () => "overview");
   const [groupPayload, setGroupPayload] = useState<GroupOverviewPayload | null>(null),
     [sheetError, setSheetError] = useState("");
-  const [selected, setSelected] = useState<string[] | null>(null),
-    [name, setName] = useState<string | null>(null),
+  const [name, setName] = useState<string | null>(null),
     [uploading, setUploading] = useState(false);
   const [editingIdentity, setEditingIdentity] = useState(false);
   const [agreementCorpId, setAgreementCorpId] = useState<string | null>(null);
@@ -68,55 +66,9 @@ export function SubsidiaryGroupPage({ corpId }: { corpId: string }) {
         <Link href={"/corporation/" + corpId}>{t("viewCorporation")}</Link>
       </main>
     );
-  const chosen = selected ?? data.members.map((m) => m.id),
-    rows = (sheet?.members ?? []).filter((m) => chosen.includes(m.corporationId));
-  const completed = combineGroupLatest(
-    data.members.filter((m) => chosen.includes(m.id)).map((m) => m.history?.[0])
-  );
-  const totals = rows.reduce(
-    (a, m) => ({
-      revenue: a.revenue + m.revenueAnchor,
-      cash: a.cash + m.liquidCapitalAnchor,
-      sectors: a.sectors + m.sectorCount,
-    }),
-    { revenue: 0, cash: 0, sectors: 0 }
-  );
   const agreementMembers = data.members.filter((m) => m.canEdit);
   const agreementMember =
     agreementMembers.find((m) => m.id === agreementCorpId) ?? agreementMembers[0];
-  function exportCsv() {
-    const lines = [
-      [t("member"), t("revenue"), t("cash"), t("sectors")],
-      ...rows.map((m) => [m.name, m.revenueAnchor, m.liquidCapitalAnchor, m.sectorCount]),
-    ];
-    const blob = new Blob(
-      [
-        "\uFEFF" +
-          lines
-            .map((row) =>
-              row
-                .map(
-                  (v) =>
-                    '"' +
-                    (typeof v === "string" && /^[=+@\-\t\r]/.test(v)
-                      ? String.fromCharCode(39) + v
-                      : String(v)
-                    ).replace(/"/g, '""') +
-                    '"'
-                )
-                .join(",")
-            )
-            .join("\r\n"),
-      ],
-      { type: "text/csv;charset=utf-8" }
-    );
-    const url = URL.createObjectURL(blob),
-      a = document.createElement("a");
-    a.href = url;
-    a.download = "subsidiary-group.csv";
-    a.click();
-    URL.revokeObjectURL(url);
-  }
   async function uploadLogo(file: File | undefined) {
     if (!file || !data) return;
     setUploading(true);
@@ -262,119 +214,10 @@ export function SubsidiaryGroupPage({ corpId }: { corpId: string }) {
           </details>
         </>
       )}
-      {section === "financials" && (
-        <>
-          <p className="text-sm text-muted">{t("combinedNote")}</p>
-          <div className="flex flex-wrap gap-3">
-            {data.members.map((m) => (
-              <label className="text-sm flex items-center gap-2" key={m.id}>
-                <input
-                  type="checkbox"
-                  checked={chosen.includes(m.id)}
-                  onChange={(e) =>
-                    setSelected(
-                      e.target.checked ? [...chosen, m.id] : chosen.filter((id) => id !== m.id)
-                    )
-                  }
-                />
-                {m.name}
-              </label>
-            ))}
-          </div>
-          <div className="flex gap-2">
-            <button className={button} onClick={() => setSelected(data.members.map((m) => m.id))}>
-              {t("selectAll")}
-            </button>
-            <button className={button} onClick={() => setSelected([])}>
-              {t("clear")}
-            </button>
-            <button className={button} disabled={!rows.length} onClick={exportCsv}>
-              {t("export")}
-            </button>
-          </div>
-          <section className="space-y-3">
-            <h2 className="font-semibold">{t("realized")}</h2>
-            <p className="text-xs text-muted">{t("historyNote")}</p>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr>
-                    {["member", "turn", "turnRevenue", "turnCosts", "turnIncome"].map((k) => (
-                      <th key={k} className="p-3 text-left">
-                        {t(k)}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.members
-                    .filter((m) => chosen.includes(m.id))
-                    .map((m) => {
-                      const latest = m.history?.[0];
-                      return (
-                        <tr key={m.id} className="border-t border-card-border">
-                          <td className="p-3">{m.name}</td>
-                          <td>{latest?.turn ?? t("unavailable")}</td>
-                          <td>
-                            {latest
-                              ? formatAmount(latest.revenue)
-                              : m.history === null
-                                ? t("private")
-                                : t("unavailable")}
-                          </td>
-                          <td>{latest ? formatAmount(latest.costs) : t("unavailable")}</td>
-                          <td>{latest ? formatAmount(latest.income) : t("unavailable")}</td>
-                        </tr>
-                      );
-                    })}
-                </tbody>
-                {completed && (
-                  <tfoot>
-                    <tr className="border-t border-card-border font-semibold">
-                      <td className="p-3">{t("selectedTotal")}</td>
-                      <td>{completed.turn}</td>
-                      <td>{formatAmount(completed.revenue)}</td>
-                      <td>{formatAmount(completed.costs)}</td>
-                      <td>{formatAmount(completed.income)}</td>
-                    </tr>
-                  </tfoot>
-                )}
-              </table>
-            </div>
-          </section>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr>
-                  {["member", "revenue", "cash", "sectors"].map((k) => (
-                    <th className="p-3 text-left" key={k}>
-                      {t(k)}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((m) => (
-                  <tr key={m.corporationId} className="border-t border-card-border">
-                    <td className="p-3">{m.name}</td>
-                    <td>{formatAmount(m.revenueAnchor)}</td>
-                    <td>{formatAmount(m.liquidCapitalAnchor)}</td>
-                    <td>{m.sectorCount}</td>
-                  </tr>
-                ))}
-              </tbody>
-              <tfoot>
-                <tr className="border-t border-card-border font-semibold">
-                  <td className="p-3">{t("selectedTotal")}</td>
-                  <td>{formatAmount(totals.revenue)}</td>
-                  <td>{formatAmount(totals.cash)}</td>
-                  <td>{totals.sectors}</td>
-                </tr>
-              </tfoot>
-            </table>
-          </div>
-        </>
-      )}
+      {/* Keep comparison choices while visiting another Group tab. */}
+      <div hidden={section !== "financials"}>
+        <GroupFinancialComparison data={data} sheet={sheet} />
+      </div>
       {section === "directions" && (
         <>
           <p className="text-sm text-muted">{t("directionNote")}</p>

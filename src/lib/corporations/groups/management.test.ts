@@ -50,6 +50,41 @@ async function doc(id: ObjectId) {
   return (await memory.collection("corporations").findOne({ _id: id })) as unknown as Corporation;
 }
 describe("group management authorization and persistence", () => {
+  it("protects outstanding debt and historical cash with the existing private-access rules", async () => {
+    memory.seed("bonds", [
+      { _id: new ObjectId(), corporationId: rootId, totalIssued: 100, matured: false },
+      { _id: new ObjectId(), corporationId: subId, totalIssued: 200, matured: false },
+      { _id: new ObjectId(), corporationId: subId, totalIssued: 900, matured: true },
+    ]);
+    memory.seed("corporationHistory", [
+      {
+        _id: new ObjectId(),
+        corporationId: subId,
+        turn: 40,
+        revenue: 200,
+        totalCosts: 120,
+        income: 80,
+        liquidCapital: 1000,
+        currencyCode: "GBP",
+        fxRateAtWrite: 2,
+      },
+    ]);
+    const owner = await groupManagementView(db, await doc(rootId), parentUser.toString());
+    expect(owner?.members.find((m) => m.id === subId.toString())).toMatchObject({
+      currentDebtAnchor: 200,
+      history: [{ cash: 500, revenue: 100 }],
+    });
+    const child = await groupManagementView(db, await doc(subId), playerUser.toString());
+    expect(child?.members.find((m) => m.id === rootId.toString())).toMatchObject({
+      currentDebtAnchor: null,
+      history: null,
+    });
+    const publicView = await groupManagementView(db, await doc(rootId), outsider.toString());
+    expect(
+      publicView?.members.every((m) => m.currentDebtAnchor === null && m.history === null)
+    ).toBe(true);
+  });
+
   it("returns ticker and voting control including unsold reserved holdings", async () => {
     await memory
       .collection("corporations")

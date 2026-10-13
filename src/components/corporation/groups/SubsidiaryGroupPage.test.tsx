@@ -127,9 +127,19 @@ describe("Subsidiary Group page", () => {
     mount();
     fireEvent.click(screen.getByRole("button", { name: "Financials & comparison" }));
     await waitFor(() => expect(screen.getAllByText("A300").length).toBeTruthy());
-    expect(screen.getByText("A140")).toBeTruthy();
+    expect(screen.getAllByText("A140").length).toBeGreaterThan(0);
     fireEvent.click(screen.getByRole("button", { name: "Clear selection" }));
     await waitFor(() => expect(screen.queryAllByText("A300").length).toBe(0));
+  });
+  it("retains comparison selection when navigating between Group tabs", () => {
+    mount();
+    fireEvent.click(screen.getByRole("button", { name: "Financials & comparison" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Subsidiary" }));
+    fireEvent.click(screen.getByRole("button", { name: "Overview" }));
+    fireEvent.click(screen.getByRole("button", { name: "Financials & comparison" }));
+    expect((screen.getByRole("checkbox", { name: "Subsidiary" }) as HTMLInputElement).checked).toBe(
+      false
+    );
   });
   it("hides receiving controls under commercial independence", async () => {
     window.history.replaceState(null, "", "#supply");
