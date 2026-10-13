@@ -42,6 +42,9 @@ export const STALE_PER_WORLD_GAME_CONFIG_UNSET: Readonly<Record<string, "">> = O
   marketGuardReferenceMcap: "",
   // Governor glide start: a turn on the old world's counter.
   marketGovernorGlideStartTurn: "",
+  // Proportional glide mode and its frozen floor belong to the dead world's glide.
+  marketGovernorGlideMode: "",
+  marketGovernorGlideFloor: "",
   // No-buyer extraction phase-out start, stamped by the corporation turn.
   extractionNoBuyerPhaseOutStartTurn: "",
   marketGuardReferenceFundamentalMcap: "",
