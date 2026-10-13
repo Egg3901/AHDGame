@@ -86,7 +86,7 @@ export async function forceFullAutonomy(
    * helper). Pass "v4" to exercise the global tier — the harness previously
    * hardcoded v3, which meant the one thing v4 changes (autonomy running inside
    * player-enabled countries) could not be simulated at all. Pass "v5" for the
-   * persistent-goal tier.
+   * persistent-goal tier, "v6" for NPP engine 6.
    *
    * Note that at v4 the `enabledForPlayers = false` sweep below stops being the
    * mechanism that makes autonomy apply everywhere — v4 applies everywhere by

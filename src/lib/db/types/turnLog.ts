@@ -32,6 +32,11 @@ export interface TurnLog {
   /** Deployed source the turn ran on; absent outside a hosted deployment. */
   build?: TurnBuild;
   /**
+   * NPP engine the turn ran (`NPP_ENGINE_VERSION`). Engine-6 behavior is live
+   * only where the world's `nppAutonomyLevel` is v6 or above. Absent before 6.0.0.
+   */
+  nppEngineVersion?: string;
+  /**
    * Anti-abuse scans run after the turn commits (#2694): financialSuspectScan,
    * auditAnomalyScan, suspiciousDetection. Absent on off-cadence turns.
    */

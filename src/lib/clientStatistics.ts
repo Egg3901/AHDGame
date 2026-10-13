@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { z } from "zod";
 import { DEFAULT_GAME_STATE_FLAGS } from "@/lib/seeds/reference/featureFlagDefaults";
 import { OPERATING_SECTOR_TYPES } from "@/lib/constants/corporations";
+import { NPP_AUTONOMY_LEVELS } from "@/lib/nppAutonomy/levels";
 
 /**
  * Anonymous aggregate telemetry ingress validation.
@@ -62,12 +63,12 @@ export const ALLOWED_MODES = ["normal", "head-of-state", "worldsim"] as const;
 export const ALLOWED_DIFFICULTIES = ["easy", "normal", "hard"] as const;
 
 /**
- * Autonomy allowlist. Mirrors `NppAutonomyLevel`, which now reaches v5. Kept in
- * step with the client's own `ALLOWED_AUTONOMY` (apps/desktop/src/
+ * Autonomy allowlist: every `NppAutonomyLevel`. Kept in step with the client's
+ * own `ALLOWED_AUTONOMY` (apps/desktop/src/
  * simulationStatistics.ts): a level accepted on only one side means a world at
  * that level either fails validation before upload or is rejected on arrival.
  */
-export const ALLOWED_AUTONOMY = ["off", "v0", "v1", "v2", "v3", "v4", "v5"] as const;
+export const ALLOWED_AUTONOMY = NPP_AUTONOMY_LEVELS;
 
 /**
  * Feature-flag allowlist. Exactly the flags the game reads from game state

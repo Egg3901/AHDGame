@@ -19,6 +19,7 @@ import {
   governorAnchorTurn,
   softenedMarketRealization,
   softenedMarketRealizationAmount,
+  type GovernorGlide,
 } from "@/lib/market/capital";
 import { computePriceRealization } from "@/lib/market/priceRealization";
 import { TRADE_EMBARGO_EXPORT_LOSS_SHARE } from "@/lib/trade/constants";
@@ -109,6 +110,8 @@ export interface PlantsRevenueInput {
   governorRampTurns: number;
   /** World flip turn (see `MarketContext.worldGovernorAnchorTurn`). */
   worldGovernorAnchorTurn?: number | null;
+  /** Proportional governor glide (see `MarketContext.governorGlide`). */
+  governorGlide?: GovernorGlide | null;
   privateBankingEnabled?: boolean;
   marketPlantsEnabled: boolean;
   contractProductionTargetBySectorId: MarketContext["contractProductionTargetBySectorId"];
@@ -212,6 +215,7 @@ export function resolvePlantsRevenue(input: PlantsRevenueInput): PlantsRevenueRe
     governorCap,
     governorRampTurns,
     worldGovernorAnchorTurn,
+    governorGlide,
     privateBankingEnabled,
     marketPlantsEnabled,
     contractProductionTargetBySectorId,
@@ -234,7 +238,7 @@ export function resolvePlantsRevenue(input: PlantsRevenueInput): PlantsRevenueRe
       : softenedMarketRealization(
           computePriceRealization(strategySupply ?? {}, priceRatioByCommodity),
           clearingFactor,
-          governorAnchorTurn(clearingStartTurn, worldGovernorAnchorTurn),
+          governorAnchorTurn(clearingStartTurn, worldGovernorAnchorTurn, governorGlide),
           currentTurn,
           governorCap,
           governorRampTurns
@@ -535,7 +539,7 @@ export function resolvePlantsRevenue(input: PlantsRevenueInput): PlantsRevenueRe
             softenedMarketRealizationAmount(
               baselineHourlyRevenue * activeFraction,
               plantsDerivedHourlyRevenue,
-              governorAnchorTurn(plantsStartTurn, worldGovernorAnchorTurn),
+              governorAnchorTurn(plantsStartTurn, worldGovernorAnchorTurn, governorGlide),
               currentTurn,
               governorCap,
               governorRampTurns

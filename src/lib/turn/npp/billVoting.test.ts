@@ -1486,3 +1486,167 @@ describe("referendum constitutional consent", () => {
     }
   );
 });
+
+describe("processBillVoting — engine 6.7 government whip (v6)", () => {
+  async function whipForceOn(options: { chairId?: ObjectId | null; pmNppId?: ObjectId | null }) {
+    const member = makeNPP({
+      countryId: "BR",
+      party: "1",
+      policies: { economic: 0, social: 0 },
+      personality: { loyalty: 80, ambition: 50, stubbornness: 20 },
+      donorBaseLevel: 0,
+    });
+    const official = makeOfficial(member._id, "house", {
+      countryId: "BR",
+      party: "1",
+      officeType: "chamber",
+    });
+    const bill = makeBill({
+      countryId: "BR",
+      sponsorParty: "1",
+      currentChamber: "chamber",
+      status: "active",
+      nppSponsored: true,
+      legislationTypeId: "br_health",
+    });
+    const predictions: unknown[][] = [];
+    const db = {
+      collection: vi.fn((name: string) => ({
+        updateOne: vi.fn(() => Promise.resolve({ modifiedCount: 1 })),
+        bulkWrite: vi.fn((...args: unknown[]) => {
+          if (name === "nppVotePredictions") predictions.push(args);
+          return Promise.resolve({ upsertedCount: 0, modifiedCount: 0 });
+        }),
+        findOne: vi.fn(() =>
+          Promise.resolve(
+            name === "governmentFormations"
+              ? {
+                  _id: "BR",
+                  status: "formed",
+                  governingPartyId: "1",
+                  pmNppId: options.pmNppId === undefined ? new ObjectId() : options.pmNppId,
+                  governingGoals: {
+                    goals: [{ domain: "healthcare", status: "active", direction: "raise" }],
+                  },
+                }
+              : null
+          )
+        ),
+        find: vi.fn(() => ({
+          toArray: vi
+            .fn()
+            .mockResolvedValue(
+              name === "electedOfficials"
+                ? [{ officeType: "chamber", countryId: "BR", party: "1", seatsHeld: 60 }]
+                : []
+            ),
+        })),
+      })),
+    } as unknown as Db;
+    const ctx = makeCtx(db, {
+      activeBills: [bill],
+      nppOfficials: [official],
+      nppMap: new Map([[member._id.toString(), member]]),
+      legislationTypeMap: new Map([
+        ["br_health", { _id: "br_health", policyDomain: "Healthcare" } as never],
+      ]),
+      partyByCompositeKey: new Map([
+        ["BR:1", { chairId: options.chairId ?? null, viceChairId: null } as never],
+      ]),
+    });
+    const { processBillVoting } = await import("./billVoting");
+    await processBillVoting(ctx);
+    const ops = (
+      predictions[0] as [
+        Array<{ updateOne: { update: { $set: { forces: { whip: number; ideology: number } } } } }>,
+      ]
+    )[0];
+    return ops[0].updateOne.update.$set.forces;
+  }
+
+  it("puts a soft whip on the government's own members for its goal bills", async () => {
+    const forces = await whipForceOn({});
+    expect(forces.whip).toBeGreaterThan(0);
+  });
+
+  it("does not whip in a party a player chairs", async () => {
+    const forces = await whipForceOn({ chairId: new ObjectId() });
+    expect(forces.whip).toBe(0);
+  });
+
+  it("does not whip when no NPP heads the government", async () => {
+    const forces = await whipForceOn({ pmNppId: null });
+    expect(forces.whip).toBe(0);
+  });
+});
+
+describe("processBillVoting — engine 6.8 business interest (v6)", () => {
+  async function donorsForceOn(engine6: boolean) {
+    atLeastMock.mockImplementation(async (_db: unknown, _c: unknown, level: string) =>
+      level === "v6" ? engine6 : true
+    );
+    const ceo = makeNPP({
+      countryId: "BR",
+      party: "1",
+      policies: { economic: 0, social: 0 },
+      donorBaseLevel: 0,
+    });
+    const official = makeOfficial(ceo._id, "house", {
+      countryId: "BR",
+      party: "1",
+      officeType: "chamber",
+    });
+    const corpId = new ObjectId();
+    const bill = makeBill({
+      countryId: "BR",
+      sponsorParty: "2",
+      currentChamber: "chamber",
+      status: "active",
+      provisions: [
+        { type: "subsidy", scopeType: "sector", targetSectorType: "steel", domesticOnly: true },
+      ] as never,
+    });
+    const predictions: unknown[][] = [];
+    const db = {
+      collection: vi.fn((name: string) => ({
+        updateOne: vi.fn(() => Promise.resolve({ modifiedCount: 1 })),
+        bulkWrite: vi.fn((...args: unknown[]) => {
+          if (name === "nppVotePredictions") predictions.push(args);
+          return Promise.resolve({ upsertedCount: 0, modifiedCount: 0 });
+        }),
+        findOne: vi.fn(() => Promise.resolve(null)),
+        find: vi.fn(() => ({
+          toArray: vi
+            .fn()
+            .mockResolvedValue(
+              name === "corporations"
+                ? [{ _id: corpId, ceoId: ceo._id, totalShares: 100, shareholders: [] }]
+                : name === "corporateSectors"
+                  ? [{ corporationId: corpId, sectorType: "steel" }]
+                  : []
+            ),
+        })),
+      })),
+    } as unknown as Db;
+    const ctx = makeCtx(db, {
+      activeBills: [bill],
+      nppOfficials: [official],
+      nppMap: new Map([[ceo._id.toString(), ceo]]),
+    });
+    const { processBillVoting } = await import("./billVoting");
+    await processBillVoting(ctx);
+    atLeastMock.mockReset().mockResolvedValue(true);
+    const ops = (
+      predictions[0] as [Array<{ updateOne: { update: { $set: { forces: { donors: number } } } } }>]
+    )[0];
+    return ops[0].updateOne.update.$set.forces.donors;
+  }
+
+  it("pulls a CEO toward a subsidy for its own sector at v6", async () => {
+    expect(await donorsForceOn(true)).toBe(40);
+  });
+
+  it("leaves the donors force alone below v6", async () => {
+    expect(await donorsForceOn(false)).toBe(0);
+  });
+});

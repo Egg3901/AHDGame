@@ -26,6 +26,14 @@ import { chairAlignmentPolicy, type ChairAlignment } from "@/lib/centralBank/cha
 import { computeNppChairRateTarget } from "@/lib/nppAutonomy/rules/chairRateTarget";
 export { computeNppChairRateTarget } from "@/lib/nppAutonomy/rules/chairRateTarget";
 import { isBankGovernmentControlled } from "@/lib/centralBank/governance";
+import type { ExchangeRate } from "@/lib/db/types/exchangeRate";
+import { NPP_ENGINE_LEVEL } from "@/lib/nppAutonomy/engineVersion";
+import { nppAutonomyAtLeast } from "@/lib/nppAutonomy/featureFlag";
+import {
+  FX_LOOKBACK_TURNS,
+  fxDepreciation,
+  fxRateAdjustment,
+} from "@/lib/nppAutonomy/v6/rules/fxRateResponse";
 
 /**
  * Bounded step toward the target: 0.5x the gap, clamped to [-1.75, +0.75].
@@ -166,13 +174,37 @@ export async function processNppChairAutoRate(
     commonIndicators?.neutralRate ??
     getEraMonetaryBaseline(countryId, currentYear)?.neutralPrimeRate ??
     COUNTRY_CONFIGS[countryId].centralBank.defaultPrimeRate;
-  const targetRate = computeNppChairRateTarget({
+  const taylorTarget = computeNppChairRateTarget({
     neutralRate,
     inflationRate,
     targetInflation,
     gdpGrowth,
     alignment: bank.chairAlignment,
   });
+  // Engine 6.6 (v6): a floating national currency's move over the lookback
+  // shifts the target (v6/rules/fxRateResponse.ts). A shared common policy,
+  // a peg or an admin hard peg has no national exchange rate to answer.
+  let fxShift = 0;
+  let fxMove: number | null = null;
+  if (!commonIndicators && (await nppAutonomyAtLeast(db, countryId, NPP_ENGINE_LEVEL))) {
+    const fx = await db.collection<ExchangeRate>("exchangeRates").findOne(
+      { _id: countryId },
+      {
+        projection: {
+          rate: 1,
+          hardPeg: 1,
+          fxRegime: 1,
+          rateHistory: { $slice: -(FX_LOOKBACK_TURNS * 2) },
+        },
+      }
+    );
+    const floating = fx && fx.hardPeg == null && (fx.fxRegime ?? "float") === "float";
+    if (floating) {
+      fxMove = fxDepreciation(fx.rateHistory, fx.rate, currentTurn);
+      fxShift = fxRateAdjustment(fxMove);
+    }
+  }
+  const targetRate = taylorTarget + fxShift;
   const step = computeNppChairRateStep({
     currentRate: bank.primeRate,
     targetRate,
@@ -206,7 +238,11 @@ export async function processNppChairAutoRate(
           .findOne({ _id: bank.chairNppId }, { projection: { name: 1 } })
       )?.name ?? null)
     : null;
-  const taylor = `Taylor rule: inflation ${inflationRate.toFixed(1)}%, growth ${gdpGrowth.toFixed(1)}%, neutral ${neutralRate.toFixed(2)}%`;
+  const fxNote =
+    fxShift !== 0 && fxMove != null
+      ? `, currency ${fxMove > 0 ? "down" : "up"} ${Math.abs(fxMove * 100).toFixed(0)}% over ${FX_LOOKBACK_TURNS} turns (${fxShift > 0 ? "+" : ""}${fxShift.toFixed(2)} pts)`
+      : "";
+  const taylor = `Taylor rule: inflation ${inflationRate.toFixed(1)}%, growth ${gdpGrowth.toFixed(1)}%, neutral ${neutralRate.toFixed(2)}%${fxNote}`;
   const record: RateChangeRecord = governmentControlled
     ? {
         previousRate: bank.primeRate,

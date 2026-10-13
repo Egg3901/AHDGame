@@ -83,7 +83,7 @@ describe("clientStatisticsReportSchema", () => {
       });
       expect(parsed.success).toBe(true);
     }
-    for (const autonomy of ["off", "v0", "v1", "v2", "v3", "v4", "v5"]) {
+    for (const autonomy of ["off", "v0", "v1", "v2", "v3", "v4", "v5", "v6"]) {
       const parsed = clientStatisticsReportSchema.safeParse({
         ...base,
         setup: { ...base.setup, autonomy },

@@ -41,6 +41,12 @@ it("loads the saved policy, explains physical limits quietly and displays actual
   expect(screen.getByText("How priority and pricing work").closest("details")?.open).toBe(false);
   expect(screen.getByText("Save policy")).toHaveProperty("disabled", true);
 });
+it("labels the discount as a reduction from market price", async () => {
+  show();
+  await screen.findByText("Reserved supply, turn 12");
+  expect(screen.getByRole("option", { name: "15% below market" })).toHaveProperty("value", "0.15");
+  expect(screen.getByRole("option", { name: "0% below market" })).toHaveProperty("value", "0");
+});
 it("sends the selected priority and discount then confirms next-turn timing", async () => {
   show();
   await screen.findByText("Reserved supply, turn 12");

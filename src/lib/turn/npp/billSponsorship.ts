@@ -68,6 +68,14 @@ import { NATIONAL_TERMINAL_STATUSES } from "@/lib/congress/billProposalLimits";
 import { isPolicyProvision, type BillStatus } from "@/lib/db/types/legislation";
 import { getLowerChamberOfficeType } from "@/lib/legislature/chamberOfficeType";
 import { getEraContext } from "@/lib/era/context";
+import { NPP_ENGINE_LEVEL } from "@/lib/nppAutonomy/engineVersion";
+import {
+  hasTheVotes,
+  projectChamberVote,
+  WHIP_COUNT_MAX_CANDIDATES,
+  type WhipCountInput,
+} from "@/lib/nppAutonomy/v6/rules/whipCount";
+import { nppGovernmentWhipFor } from "@/lib/nppAutonomy/v6/rules/governmentWhip";
 import { isLegislationTypeActive } from "@/lib/era/legislationCatalog";
 import { getMarketSystemMode, marketAtLeast } from "@/lib/market/featureFlag";
 import { isMediaOwnershipBillAvailable } from "@/lib/mediaRegulation/rules";
@@ -378,6 +386,8 @@ async function loadGovernmentDirectives(
   seatsByParty?: Record<string, number>;
   /** V5: the domains the government currently holds a persistent goal on. */
   goalDomains?: ReadonlySet<string>;
+  /** The head of government is an NPP and no player holds the post. */
+  nppLed?: boolean;
 }> {
   const gov = await getGovernmentFormationsCollection(db).findOne(
     { _id: countryId },
@@ -420,6 +430,7 @@ async function loadGovernmentDirectives(
         : undefined,
     seatsByParty,
     goalDomains: goalDomains && goalDomains.size > 0 ? goalDomains : undefined,
+    nppLed: !gov.pmCharacterId && !!(gov.pmNppId || gov.presidentNppId),
   };
 }
 
@@ -517,6 +528,11 @@ interface PartySponsorshipAttempt {
   policy: NppBehaviorPolicy;
   /** Log tag distinguishing the governing pass from the opposition pass. */
   tag: string;
+  /**
+   * Engine 6.5 (v6): the chamber the sponsor counts votes in. Absent below v6,
+   * where the highest-scoring bill is filed without a count.
+   */
+  whipCount?: Omit<WhipCountInput, "bill" | "legislationType" | "sponsorParty">;
   /**
    * v3 full-agency: when true, the deterministic sponsor's own
    * legislativeActivityMult scales their personal cooldown (higher activity →
@@ -654,23 +670,62 @@ async function attemptPartySponsorship(a: PartySponsorshipAttempt): Promise<numb
     party,
     currentTurn
   );
-  const selection = selectNppBill(
-    a.legTypes,
-    npp,
-    a.signal,
-    a.agenda,
-    a.fiscalStance,
-    a.currentPolicyOptionIds,
-    recentLegislationTypeIds,
-    {
-      goalDomains: a.goalDomains,
-      policy: a.policy,
-      // Country + party + turn: one slate per decision, a different one next
-      // decision, and identical on a replay of the same turn.
-      slateSalt: `${countryId}:${party}:${currentTurn}`,
-      activeProposalKeys: a.activeProposalKeys,
+  // Engine 6.5 (v6): a bill that does not have the votes is set aside and the
+  // next-best type is tried, up to WHIP_COUNT_MAX_CANDIDATES. Below v6 the
+  // first selection is filed, as before.
+  const excludedTypeIds = new Set(recentLegislationTypeIds);
+  const attempts = a.whipCount ? WHIP_COUNT_MAX_CANDIDATES : 1;
+  let selection: ReturnType<typeof selectNppBill> = null;
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    const candidate = selectNppBill(
+      a.legTypes,
+      npp,
+      a.signal,
+      a.agenda,
+      a.fiscalStance,
+      a.currentPolicyOptionIds,
+      excludedTypeIds,
+      {
+        goalDomains: a.goalDomains,
+        policy: a.policy,
+        // Country + party + turn: one slate per decision, a different one next
+        // decision, and identical on a replay of the same turn.
+        slateSalt: `${countryId}:${party}:${currentTurn}`,
+        activeProposalKeys: a.activeProposalKeys,
+      }
+    );
+    if (!candidate) break;
+    // Tax-slider bills carry only a direction until propose time resolves the
+    // rate, so there is no option vector to count against; they are filed.
+    if (!a.whipCount || candidate.taxSliderDirection) {
+      selection = candidate;
+      break;
     }
-  );
+    const count = projectChamberVote({
+      ...a.whipCount,
+      bill: {
+        provisions: [
+          {
+            legislationTypeId: candidate.legType._id,
+            policyOptionId: candidate.option.id,
+            effectDirection: candidate.option.effectDirection,
+            economic: candidate.option.economic,
+            social: candidate.option.social,
+          },
+        ],
+      },
+      legislationType: candidate.legType,
+      sponsorParty: party,
+    });
+    if (hasTheVotes(count)) {
+      selection = candidate;
+      break;
+    }
+    console.log(
+      `[nppBillSponsorship] ${countryId} (${tag}): set aside "${candidate.legType.name}" (projected ${count.forSeats} for, ${count.againstSeats} against)`
+    );
+    excludedTypeIds.add(candidate.legType._id);
+  }
   if (!selection) {
     console.log(`[nppBillSponsorship] ${countryId} (${tag}): no bill selected`);
     return 0;
@@ -903,7 +958,55 @@ export async function processNppBillSponsorship(ctx: NPPContext): Promise<number
         return true;
       });
 
+      // Engine 6.5 (v6): who votes in the lower chamber, for the sponsor's count.
+      // Player seats are the live chamber tally (directives) less NPP seats; with
+      // no formed government there is no tally and players count as zero.
+      let whipCount: PartySponsorshipAttempt["whipCount"];
+      if (await nppAutonomyAtLeast(db, countryId, NPP_ENGINE_LEVEL)) {
+        const voters: { npp: NPP; seats: number }[] = [];
+        const nppSeatsByParty: Record<string, number> = {};
+        for (const official of lowerOfficials) {
+          const voter = official.nppId ? nppMap.get(official.nppId.toString()) : undefined;
+          if (!voter) continue;
+          const seats = official.seatsHeld ?? 1;
+          voters.push({ npp: voter, seats });
+          nppSeatsByParty[voter.party] = (nppSeatsByParty[voter.party] ?? 0) + seats;
+        }
+        const playerSeatsByParty: Record<string, number> = {};
+        for (const [partyId, seats] of Object.entries(directives.seatsByParty ?? {})) {
+          const playerSeats = seats - (nppSeatsByParty[partyId] ?? 0);
+          if (playerSeats > 0) playerSeatsByParty[partyId] = playerSeats;
+        }
+        const opposition =
+          directives.governingPartyId && directives.seatsByParty
+            ? identifyOppositionParty(directives.seatsByParty, directives.governingPartyId)
+            : null;
+        const governingParty = directives.governingPartyId
+          ? ctx.partyByCompositeKey.get(`${countryId}:${directives.governingPartyId}`)
+          : undefined;
+        whipCount = {
+          voters,
+          playerSeatsByParty,
+          demographicsByState: ctx.stateDemographicsMap,
+          opposition:
+            opposition && directives.governingPartyId
+              ? {
+                  governingPartyId: directives.governingPartyId,
+                  oppositionPartyId: opposition.partyId,
+                }
+              : null,
+          oppositionCoordination: behaviorPolicy.oppositionCoordination,
+          governmentWhip: nppGovernmentWhipFor({
+            governingPartyId: directives.governingPartyId,
+            nppLed: directives.nppLed === true,
+            partyPlayerLed: !!(governingParty?.chairId || governingParty?.viceChairId),
+            goalDomains: directives.goalDomains,
+          }),
+        };
+      }
+
       const shared = {
+        whipCount,
         europeanContext,
         europeanGovernmentParty: directives.europeanGovernmentParty,
         euroState: cmdGameState,

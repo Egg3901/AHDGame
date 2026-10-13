@@ -493,3 +493,53 @@ describe("processNppChairAutoRate (independence and cooldown)", () => {
     expect(updateOne).not.toHaveBeenCalled();
   });
 });
+
+describe("processNppChairAutoRate — engine 6.6 currency response (v6)", () => {
+  function fxDb(level: string, fx: Record<string, unknown> | null) {
+    const updateOne = vi.fn(async () => ({ matchedCount: 1 }));
+    const db = {
+      collection: (name: string) => ({
+        updateOne,
+        findOne: async () => {
+          // Inflation and growth on target: the closed-economy Taylor rule alone
+          // leaves the US rate at its 3.0 neutral.
+          if (name === "federalBudget") return { economicFactors: { inflationRate: 2.0 } };
+          if (name === "gameState") return { nppAutonomyLevel: level };
+          if (name === "exchangeRates") return fx;
+          return null;
+        },
+      }),
+    } as any;
+    return { db, updateOne };
+  }
+  const bank = () =>
+    ({ _id: "b" as any, primeRate: 3.0, lastRateChangeTurn: null, chairMode: "npp" }) as any;
+  const falling = { rate: 1.2, rateHistory: [{ turn: 20, rate: 1.0 }] };
+
+  it("hikes against a 20% currency fall at v6 and says so in the record", async () => {
+    const { db, updateOne } = fxDb("v6", falling);
+
+    await processNppChairAutoRate(db, bank(), "US" as any, 50, null, false, 2019);
+
+    const op = updateOne.mock.calls[0] as unknown as [unknown, { $set: { primeRate: number } }];
+    // Target 3.0 + 1.5 (15 points past the band x 0.1); step 0.5 x 1.5 = 0.75.
+    expect(op[1].$set.primeRate).toBe(3.75);
+    expect(pushedRecord(updateOne)?.$each[0].reason).toContain("currency down 20%");
+  });
+
+  it("ignores the currency below v6", async () => {
+    const { db, updateOne } = fxDb("v5", falling);
+
+    await processNppChairAutoRate(db, bank(), "US" as any, 50, null, false, 2019);
+
+    expect(updateOne).not.toHaveBeenCalled();
+  });
+
+  it("leaves a pegged currency to the peg", async () => {
+    const { db, updateOne } = fxDb("v6", { ...falling, fxRegime: "peg" });
+
+    await processNppChairAutoRate(db, bank(), "US" as any, 50, null, false, 2019);
+
+    expect(updateOne).not.toHaveBeenCalled();
+  });
+});

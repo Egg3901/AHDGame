@@ -10,7 +10,7 @@
  * same depreciation factor the stock takes, so the per-unit basis stays flat
  * under depreciation. No reads or writes here, only the turn inputs.
  */
-import { governorAnchorTurn } from "@/lib/market/capital";
+import { governorAnchorTurn, type GovernorGlide } from "@/lib/market/capital";
 import { activeCapacityFraction } from "@/lib/corporations/investment/rules";
 import { getStrategyForOperatingModel } from "@/lib/constants/sectorStrategies";
 import { seedCapitalStock } from "@/lib/market/capital";
@@ -61,6 +61,8 @@ export interface PlantsCapacityInput {
   governorRampTurns: number;
   /** World flip turn (see `MarketContext.worldGovernorAnchorTurn`). */
   worldGovernorAnchorTurn?: number | null;
+  /** Proportional governor glide (see `MarketContext.governorGlide`). */
+  governorGlide?: GovernorGlide | null;
   embargoLegacyMothball: boolean;
 }
 
@@ -109,6 +111,7 @@ export function computePlantsCapacity(input: PlantsCapacityInput): PlantsCapacit
     currentTurn,
     governorRampTurns,
     worldGovernorAnchorTurn,
+    governorGlide,
     embargoLegacyMothball,
   } = input;
 
@@ -325,7 +328,11 @@ export function computePlantsCapacity(input: PlantsCapacityInput): PlantsCapacit
   // The stamp above is persisted as-is (it also marks the flip turn); the ramp
   // itself runs from the earlier of it and the world's flip, so a sector born
   // after the flip joins the world's ramp instead of restarting it.
-  const rampAnchorTurn = governorAnchorTurn(plantsStartTurn, worldGovernorAnchorTurn);
+  const rampAnchorTurn = governorAnchorTurn(
+    plantsStartTurn,
+    worldGovernorAnchorTurn,
+    governorGlide
+  );
   const plantsRampLambda =
     !plantsEnabled || rampAnchorTurn == null || governorRampTurns <= 0
       ? 1

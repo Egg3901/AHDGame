@@ -8,6 +8,8 @@ import {
   MARKET_REALIZATION_RAMP_TURNS,
   MARKET_GOVERNOR_GLIDE_TURNS,
   governorGlideAnchorTurn,
+  proportionalGovernorGlide,
+  type GovernorGlide,
 } from "@/lib/market/capital";
 
 /**
@@ -152,6 +154,12 @@ export interface MarketContext {
   worldGovernorAnchorTurn?: number | null;
   /** Turn the governor glide completes; null when no glide is configured. */
   governorGlideEndTurn?: number | null;
+  /**
+   * Proportional glide parameters (`marketGovernorGlideMode: "proportional"`).
+   * When set, `worldGovernorAnchorTurn` is null and every governor anchor is
+   * resolved per sector from this. See `proportionalGlideAnchorTurn`.
+   */
+  governorGlide?: GovernorGlide | null;
 }
 
 /** Baseline economy — every market-rework mechanic off. */
@@ -173,6 +181,10 @@ export function buildMarketContext(
     currentTurn?: number | null;
     glideStartTurn?: number | null;
     glideTurns?: number | null;
+    /** "proportional" switches the glide formula; anything else keeps the floor glide. */
+    glideMode?: string | null;
+    /** Proportional glide only: the floor glide's share frozen at switch-over. */
+    glideFloor?: number | null;
   }
 ): MarketContext {
   const cap =
@@ -183,6 +195,16 @@ export function buildMarketContext(
     typeof governor?.rampTurns === "number" && governor.rampTurns >= 1
       ? governor.rampTurns
       : MARKET_REALIZATION_RAMP_TURNS;
+  const proportional =
+    governor?.glideMode === "proportional" && typeof governor?.currentTurn === "number"
+      ? proportionalGovernorGlide(
+          governor.currentTurn,
+          governor.glideStartTurn,
+          governor.glideTurns,
+          rampTurns,
+          governor.glideFloor
+        )
+      : null;
   return {
     realizationEnabled: marketAtLeast(mode, "realization"),
     throughputEnabled: marketAtLeast(mode, "clearing"),
@@ -191,8 +213,9 @@ export function buildMarketContext(
     plantsEnabled: marketAtLeast(mode, "plants"),
     governorCap: cap,
     governorRampTurns: rampTurns,
+    governorGlide: proportional,
     worldGovernorAnchorTurn:
-      typeof governor?.currentTurn === "number"
+      !proportional && typeof governor?.currentTurn === "number"
         ? governorGlideAnchorTurn(
             governor.currentTurn,
             governor.glideStartTurn,
