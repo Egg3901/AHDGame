@@ -124,6 +124,9 @@ export function FomcCommitteeTab({ countryId }: { countryId: CountryId }) {
   const [nomAlignment, setNomAlignment] = useState<"hawk" | "dove">("hawk");
   const [nomMakeChair, setNomMakeChair] = useState(false);
   const [nomStatus, setNomStatus] = useState<string | null>(null);
+  const [motionChoice, setMotionChoice] = useState<"hike" | "cut" | "hold">("hold");
+  const [motionSize, setMotionSize] = useState<string>("0.25");
+  const [motionStatus, setMotionStatus] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -164,6 +167,34 @@ export function FomcCommitteeTab({ countryId }: { countryId: CountryId }) {
     },
     [code, load]
   );
+
+  const tableMotion = useCallback(async () => {
+    setVoting(true);
+    setError(null);
+    setMotionStatus(null);
+    try {
+      const size = Math.abs(Number(motionSize));
+      const body =
+        motionChoice === "hold"
+          ? { motion: motionChoice }
+          : { motion: motionChoice, delta: motionChoice === "hike" ? size : -size };
+      const res = await fetch(`/api/country/${code}/fomc/motion`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) {
+        const err = (await res.json().catch(() => null)) as { error?: string } | null;
+        throw new Error(apiErrorText(err, "Could not table the motion"));
+      }
+      setMotionStatus("Your motion is on the table.");
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not table the motion");
+    } finally {
+      setVoting(false);
+    }
+  }, [code, motionChoice, motionSize, load]);
 
   const confirmVote = useCallback(
     async (nominationId: string, vote: "for" | "against" | "abstain") => {
@@ -256,6 +287,15 @@ export function FomcCommitteeTab({ countryId }: { countryId: CountryId }) {
   const canVote = voteAction ? voteAction.allowed : (meeting?.viewerCanVote ?? false);
   const voteReason = voteAction && !voteAction.allowed ? voteAction.reason : null;
   const governanceDeadline = state.governance?.nextDeadline ?? null;
+  const motionAction = state.governance?.allowedActions.find((a) => a.action === "set_motion");
+  const canSetMotion = motionAction?.allowed === true;
+  const motionSizes = (() => {
+    const limits = state.governance?.rateLimits;
+    const max = limits ? (motionChoice === "cut" ? limits.maxCut : limits.maxHike) : 1;
+    const out: number[] = [];
+    for (let v = 0.25; v <= max + 1e-9; v += 0.25) out.push(Math.round(v * 100) / 100);
+    return out.length > 0 ? out : [0.25];
+  })();
 
   return (
     <div className="space-y-12 pb-16">
@@ -315,6 +355,54 @@ export function FomcCommitteeTab({ countryId }: { countryId: CountryId }) {
               abstain.
             </p>
 
+            {canSetMotion && (
+              <div className="mt-4 rounded-lg border border-card-border px-4 py-3">
+                <p className="text-body-sm font-semibold text-foreground">Table your motion</p>
+                <p className="mt-1 text-body-sm text-muted">
+                  As chair you can replace the staff motion before any governor votes. The committee
+                  still has to pass it.
+                </p>
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <select
+                    value={motionChoice}
+                    disabled={voting}
+                    onChange={(e) => setMotionChoice(e.target.value as "hike" | "cut" | "hold")}
+                    className="rounded-md border border-card-border bg-card px-2 py-1.5 text-body-sm text-foreground"
+                    aria-label="Motion"
+                  >
+                    {(["hike", "cut", "hold"] as const).map((v) => (
+                      <option key={v} value={v}>
+                        {MOTION_LABEL[v]}
+                      </option>
+                    ))}
+                  </select>
+                  {motionChoice !== "hold" && (
+                    <select
+                      value={motionSize}
+                      disabled={voting}
+                      onChange={(e) => setMotionSize(e.target.value)}
+                      className="rounded-md border border-card-border bg-card px-2 py-1.5 text-body-sm tabular-nums text-foreground"
+                      aria-label="Rate change"
+                    >
+                      {motionSizes.map((v) => (
+                        <option key={v} value={String(v)}>
+                          {motionChoice === "hike" ? "+" : "-"}
+                          {v.toFixed(2)}pp
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                  <button
+                    disabled={voting}
+                    onClick={() => void tableMotion()}
+                    className="rounded-md border border-card-border px-3 py-1.5 text-body-sm font-semibold text-foreground transition-colors hover:bg-card-elevated disabled:opacity-50"
+                  >
+                    Table motion
+                  </button>
+                </div>
+                {motionStatus && <p className="mt-2 text-body-sm text-muted">{motionStatus}</p>}
+              </div>
+            )}
             {state.viewerSeatId && (
               <div className="mt-4">
                 {meeting.viewerHasVoted ? (

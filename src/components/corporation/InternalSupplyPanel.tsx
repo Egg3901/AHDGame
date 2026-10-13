@@ -16,6 +16,7 @@ interface PolicyView {
   inherited: boolean;
   parentId: string | null;
   available: boolean;
+  groupCoordinationActive?: boolean;
   lastTurn: number | null;
   received: Record<string, number>;
   reserved: Record<string, number>;
@@ -86,7 +87,11 @@ export default function InternalSupplyPanel({ corpId }: { corpId: string }) {
       )}
       {view && (
         <>
-          {!view.available && <p className="text-sm text-muted">{t("unavailable")}</p>}
+          {!view.available && (
+            <p className="text-sm text-muted">
+              {t(view.groupCoordinationActive ? "groupCoordinationActive" : "unavailable")}
+            </p>
+          )}
           {view.inherited && (
             <p className="mb-2 text-sm text-muted">
               {t("inherited")}{" "}

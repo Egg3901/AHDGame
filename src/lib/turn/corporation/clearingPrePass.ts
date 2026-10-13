@@ -1,3 +1,4 @@
+import { buildGroupSupplyContext } from "./groupSupplyContext";
 import { buildInternalSupplyContext, finishInternalSupplyContext } from "./internalSupply";
 import {
   computeClearingFactors,
@@ -89,6 +90,7 @@ import { mediaProductOfferAvailability } from "@/lib/products/rules/mediaProduct
  * place, and returns the breach texts, loyalty updates, and contract maps.
  */
 export interface ClearingPrePassInput {
+  groupMembership?: import("@/lib/corporations/groups/groupMembership").GroupMembership;
   lookups: Awaited<ReturnType<typeof buildCorporationLookups>>;
   market: MarketContext;
   turn: number | undefined;
@@ -142,6 +144,7 @@ export function runClearingPrePass(input: ClearingPrePassInput): ClearingPrePass
   } = input;
   let { contractedByCorpCommodity } = input;
   const internalSupplyEnabled =
+    !market.groupSupplyEnabled &&
     market.plantsEnabled &&
     [...lookups.corpById.values()].some(
       (c) => c.internalSupplyPolicy && c.internalSupplyPolicy.priority !== "market"
@@ -848,6 +851,34 @@ export function runClearingPrePass(input: ClearingPrePassInput): ClearingPrePass
       market.deliveryLimitedBySectorId = deliveryLimitedBySectorId;
       market.deliveryLimitedClassBySectorId = deliveryLimitedClassBySectorId;
     }
+    const groupSupply = market.groupSupplyEnabled
+      ? buildGroupSupplyContext(
+          lookups,
+          turn ?? 0,
+          freightSettlementActive,
+          settleableAgreements,
+          input.groupMembership
+        )
+      : undefined;
+    market.groupSupplyCommittedInputsBySector = groupSupply?.committedOutputBySector
+      ? new Map(
+          [...groupSupply.buyersByCommodity]
+            .flatMap(([commodity, buyers]) =>
+              buyers.map((b) => [b.sectorId, commodity, b.contractedUnits] as const)
+            )
+            .reduce((rows, [id, commodity, units]) => {
+              const inputs = rows.get(id) ?? new Map<string, number>();
+              inputs.set(commodity, (inputs.get(commodity) ?? 0) + units);
+              rows.set(id, inputs);
+              return rows;
+            }, new Map<string, Map<string, number>>())
+        )
+      : undefined;
+    market.groupSupplyCommittedOutputsBySector = groupSupply?.committedOutputBySector;
+    market.groupSupplyForecastByRoot = groupSupply?.forecastByRoot;
+    market.groupSupplyAvailabilityBySector = groupSupply?.availabilityBySector;
+    market.groupSupplyReceipts = groupSupply?.receipts;
+    market.groupSupplyInputsBySector = groupSupply?.inputAllocationsBySector;
     const internalSupply = internalSupplyEnabled
       ? buildInternalSupplyContext({
           freightSettlementActive,
@@ -859,6 +890,7 @@ export function runClearingPrePass(input: ClearingPrePassInput): ClearingPrePass
         })
       : undefined;
     market.clearingBySectorId = computeClearingFactors({
+      groupSupply,
       sectors: clearingInputs,
       internalSupply,
       mediaOwnership,
@@ -910,6 +942,8 @@ export function runClearingPrePass(input: ClearingPrePassInput): ClearingPrePass
         }
       },
     });
+    market.groupSupplyDiscountsEnabled =
+      groupSupply?.receipts.some((r) => (r.discount ?? 0) > 0) ?? false;
     finishInternalSupplyContext(internalSupply, market, turn ?? 0);
 
     // Marketing budgets are a real corporation cost, so filled advertising

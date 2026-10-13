@@ -243,6 +243,7 @@ export async function buildCorporationLookups(
             // Money-move settlement history: most of each document's bytes,
             // read only by the settlement protocol under its own projection.
             ...SETTLEMENT_HISTORY_EXCLUDED,
+            groupSupplyBasis: 0,
             ...(options?.mediaEditorialEnabled === true ? {} : { editorialStance: 0 }),
             ...(options?.productLinesV2Enabled === true
               ? {}

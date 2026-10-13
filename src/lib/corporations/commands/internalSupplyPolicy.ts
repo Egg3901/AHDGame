@@ -15,7 +15,7 @@ import {
   DEFAULT_INTERNAL_SUPPLY_POLICY,
   resolveSupplyPolicies,
 } from "@/lib/market/internalSupply/rules";
-import type { Corporation, CorporateSector } from "@/lib/db/types";
+import type { Corporation, CorporateSector, GameConfig, GameState } from "@/lib/db/types";
 
 export const internalSupplyPolicySchema = z
   .object({
@@ -38,7 +38,19 @@ export async function internalSupplyPolicy(request: Request, { params }: Params)
     const denied = requireCeo(corporation, auth.user.userId);
     if (denied) return denied;
     const mode = await getMarketSystemMode();
-    const available = marketAtLeast(mode, "plants");
+    const [config, world] = await Promise.all([
+      db
+        .collection<GameConfig>("gameConfig")
+        .findOne({ _id: "default" }, { projection: { groupSupplyCoordinationEnabled: 1 } }),
+      db
+        .collection<GameState>("gameState")
+        .findOne({ _id: "current" }, { projection: { subsidiaryCorporationsEnabled: 1 } }),
+    ]);
+    const groupCoordinationActive =
+      mode === "plants" &&
+      config?.groupSupplyCoordinationEnabled === true &&
+      world?.subsidiaryCorporationsEnabled === true;
+    const available = marketAtLeast(mode, "plants") && !groupCoordinationActive;
     const owners = await db
       .collection<Corporation>("corporations")
       .find(
@@ -90,6 +102,7 @@ export async function internalSupplyPolicy(request: Request, { params }: Params)
           inherited,
           parentId: inherited ? effective?.root : null,
           available,
+          groupCoordinationActive,
           lastTurn: lastTurn || null,
           received,
           reserved,
@@ -98,6 +111,11 @@ export async function internalSupplyPolicy(request: Request, { params }: Params)
         { headers: { "Cache-Control": "private, no-store" } }
       );
     }
+    if (groupCoordinationActive)
+      return errorResponse(
+        409,
+        "Subsidiary Group coordination replaces internal priority in this world. Existing preferences are retained."
+      );
     if (!available) return errorResponse(400, "Internal supply requires physical plant clearing");
     if (inherited)
       return errorResponse(409, "The wholly owning parent sets this group's supply policy");

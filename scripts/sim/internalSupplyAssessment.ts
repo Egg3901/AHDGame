@@ -158,6 +158,43 @@ check(
   worlds[5]!.factoryReservedIron === 0 && worlds[5]!.buyerDiscountDaily === 0,
   "no phantom cold supply"
 );
+// User-approved Group Chain extension: retain benchmark cash budgets and
+// prove matched actual-consumption discounts through the real plant turn.
+const groupWorlds = [0, 0.05, 0.1, 0.2, 0.35].map((discount) => {
+  const r = runInternalSupplyWorld(
+    { priority: "market", discount: 0 },
+    { group: true, coordinationDiscount: discount }
+  );
+  const charge = r.updates[0]?.internalSupplyReceipt?.discountCostAnchor ?? 0;
+  const credit = r.updates[1]?.internalSupplyReceipt?.discountCostAnchor ?? 0;
+  check(Math.abs(charge + credit) < 1e-7, "Group consumed discounts conserve money");
+  check(discount === 0 || charge > 0, "Group discount reaches real operating accounts");
+  return {
+    discount,
+    sellerCostsPerTurn: r.seller.costs,
+    buyerCostsPerTurn: r.buyer.costs,
+    supplierChargeDaily: charge,
+    buyerCreditDaily: credit,
+    sellerRevenuePerTurn: r.seller.hourlyRevenue,
+    buyerProduced: r.updates[1]?.producedUnits ?? 0,
+  };
+});
+for (const w of groupWorlds) {
+  check(
+    Math.abs(
+      w.sellerCostsPerTurn +
+        w.buyerCostsPerTurn -
+        groupWorlds[0]!.sellerCostsPerTurn -
+        groupWorlds[0]!.buyerCostsPerTurn
+    ) < 1e-7,
+    "Group discount does not create operating profit at fixed output"
+  );
+  check(
+    w.sellerRevenuePerTurn === groupWorlds[0]!.sellerRevenuePerTurn &&
+      w.buyerProduced === groupWorlds[0]!.buyerProduced,
+    "Group discount does not bypass cash limits or change physical units"
+  );
+}
 const report = {
   sourceCommit: execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim(),
   generatedAt: new Date().toISOString(),
@@ -174,6 +211,7 @@ const report = {
     realized: priceRealizationFactor(ratio),
   })),
   worlds,
+  groupWorlds,
   verdict: "passed",
 };
 writeFileSync(outfile, JSON.stringify(report, null, 2) + "\n");

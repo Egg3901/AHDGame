@@ -657,6 +657,28 @@ describe("P3.5 — the physical disaster leg hands over on the plants ramp", () 
   });
 });
 
+describe("group supply uses the existing physical input bill", () => {
+  it("replaces only consumed input pricing without charging the market basket twice", () => {
+    const sector = makeSector({ capitalStock: STOCK, plantsStartTurn: 800 });
+    const common = (env: SectorTurnEnv) => {
+      env.market.explicitPlantCostsEnabled = true;
+      env.lookups.priceRatioByCommodity.set(INPUT_COMMODITY, 2);
+    };
+    const base = run("plants", sector, 1000, common);
+    const coordinated = run("plants", sector, 1000, (env) => {
+      common(env);
+      env.market.groupSupplyInputsBySector = new Map([
+        [SECTOR_ID.toString(), new Map([[INPUT_COMMODITY, { units: 1e12, marketFactor: 1 }]])],
+      ]);
+    });
+    const a = base.update.plantsPnl as NonNullable<CorporateSector["plantsPnl"]>;
+    const b = coordinated.update.plantsPnl as NonNullable<CorporateSector["plantsPnl"]>;
+    expect(b.inputs).toBeLessThan(a.inputs);
+    expect(b.revenue).toBe(a.revenue);
+    expect(b.profit - a.profit).toBeCloseTo(a.inputs - b.inputs, 6);
+    expect(b.inputs).toBeGreaterThan(0);
+  });
+});
 describe("internal supply discounts in the actual sector turn", () => {
   it("changes actual operating costs and persisted P&L by the exact matching amount", () => {
     const sector = makeSector({ capitalStock: STOCK, otherOpexPerUnitAnchor: 0 });

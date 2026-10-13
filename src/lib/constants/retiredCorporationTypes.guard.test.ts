@@ -110,5 +110,7 @@ describe("retired corporation types", () => {
       return offences(file, readFileSync(path, "utf8"));
     });
     expect(found).toEqual([]);
-  });
+    // Walks and reads every file under src; on a loaded CI shard this can exceed the
+    // default 15s, so give the scan its own budget.
+  }, 60_000);
 });

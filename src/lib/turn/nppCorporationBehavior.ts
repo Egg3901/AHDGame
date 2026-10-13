@@ -1,3 +1,4 @@
+import { resolveFormalizedGroups } from "@/lib/corporations/groups/groupMembership";
 /**
  * NPP corporation decisions use shared market and funding observations.
  * processNppCorporationDecisions loads them and prepares corporation and sector writes.
@@ -341,7 +342,7 @@ export async function processNppCorporationDecisions(
       fxByCurrency.set(rate.currencyCode, rate.rate);
     }
   }
-  const { labourMode, retailExpansionPaused, ledgerShadow, bankingPolicy } =
+  const { labourMode, retailExpansionPaused, ledgerShadow, bankingPolicy, groupManagementEnabled } =
     await loadNppBehaviorConfig(db, turn);
   const nppConstructionFinanceEnabled =
     plants?.enabled === true &&
@@ -372,12 +373,21 @@ export async function processNppCorporationDecisions(
   );
 
   // Cohort-wide kill switch, read once. Absent means ON.
-  const strategyGate = await db
-    .collection<GameState>("gameState")
-    .findOne(
-      { _id: "current" },
-      { projection: { nppCorpStrategyEnabled: 1, frontierEntryExperimentEnabled: 1 } }
-    );
+  const strategyGate = await db.collection<GameState>("gameState").findOne(
+    { _id: "current" },
+    {
+      projection: {
+        nppCorpStrategyEnabled: 1,
+        frontierEntryExperimentEnabled: 1,
+        subsidiaryCorporationsEnabled: 1,
+      },
+    }
+  );
+  const groupMembership =
+    groupManagementEnabled && strategyGate?.subsidiaryCorporationsEnabled === true
+      ? (preloaded?.groupMembership ??
+        (await resolveFormalizedGroups(db, { includeReserved: true })))
+      : undefined;
   const strategyLoopEnabled = strategyGate?.nppCorpStrategyEnabled !== false;
   // Frontier-entry experiment turn state (issue #991). See
   // createFrontierEntryTurnState: fail-closed, no new turn-path round trip.
@@ -396,6 +406,12 @@ export async function processNppCorporationDecisions(
     const entryCohortEligible = glutStaggerEligible(corp._id.toString(), turn);
     const decisionContext: NppCorpDecisionContext = {
       corp,
+      groupDirection: groupMembership?.eligibleManagementRoots?.has(
+        groupMembership.rootByCorpId.get(corp._id.toString()) ?? ""
+      )
+        ? corp.groupDirection
+        : undefined,
+      groupRootId: groupMembership?.rootByCorpId.get(corp._id.toString()),
       sectors,
       turn,
       now,

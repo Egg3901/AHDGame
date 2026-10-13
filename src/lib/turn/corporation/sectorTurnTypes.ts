@@ -44,6 +44,8 @@ export interface SectorTurnResult {
     import("@/lib/constants/commodities").CommodityType,
     number
   >;
+  /** Exact current-turn daily commodity output for Group discount ceilings. */
+  groupSupplyOutputUnits?: ReadonlyMap<string, number>;
   /** Finalize matching discounts before corporation accounting and taxes. */
   applyInternalSupplyDiscount?: (cost: number) => void;
 

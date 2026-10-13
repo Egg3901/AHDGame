@@ -3,6 +3,7 @@ import type { Bond, Corporation } from "@/lib/db/types";
 import { isCorporateIssuerBond } from "@/lib/bonds/corporateCredit";
 
 export interface NppCorporationDecisionPreload {
+  groupMembership?: import("@/lib/corporations/groups/groupMembership").GroupMembership;
   corporations: readonly Corporation[];
   issuerBondsByCorpId: ReadonlyMap<string, Bond[]>;
   heldBondsByCorpId: ReadonlyMap<string, { bond: Bond; units: number }[]>;

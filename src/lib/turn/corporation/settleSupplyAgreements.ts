@@ -39,21 +39,11 @@
  * learn a new ledger row.
  */
 
-import {
-  energyProductivityMultiplier,
-  plantUtilizationForInputs,
-} from "@/lib/corporations/rules/energyProductivityRamp";
 import { substepMarker } from "@/lib/observability/phaseSubsteps";
 import { ObjectId, type Db, type AnyBulkWriteOperation } from "mongodb";
 import type { Corporation } from "@/lib/db/types";
 import type { CommodityType } from "@/lib/constants/commodities";
-import {
-  COMMODITY_BASE_PRICES,
-  NATCORP_COMMODITY_MULTIPLIER,
-  dollarsToUnits,
-} from "@/lib/constants/commodities";
-import { getEffectiveStrategyRatesForOperatingModel } from "@/lib/constants/sectorStrategies";
-import { getInputMultiplier } from "@/lib/utils/productionPolicy";
+import { COMMODITY_BASE_PRICES } from "@/lib/constants/commodities";
 import { safeUnitScale } from "@/lib/constants/capacityEconomy";
 import { TURNS_PER_DAY } from "@/lib/constants/turnTime";
 import { priceRealizationFactor } from "@/lib/market/priceRealization";
@@ -62,10 +52,6 @@ import {
   CONTRACT_SHORTFALL_PENALTY,
   type SupplyAgreement,
 } from "@/lib/db/types/supplyAgreement";
-import {
-  supplyAgreementRequiresState,
-  supplyAgreementScopeKey,
-} from "@/lib/market/commodityMarketScope";
 import type { CorporationLookups } from "./types";
 import type { TxThresholds } from "@/lib/db/types/financialTxLog";
 import { emitTxBulk } from "@/lib/financialTxLog/emit";
@@ -91,7 +77,6 @@ import {
   type AchievableByCorpCommodity,
   type SupplyAgreementSettlements,
   type ByCorpScope,
-  type SupplyAgreementDemandSector,
 } from "./settleSupplyAgreementsAllocation";
 export {
   addCorpToCorpSettlement,
@@ -119,66 +104,7 @@ export type {
  * booked under `commodity@stateId`, which is the ceiling a state contract
  * delivers against.
  */
-export function computeSupplyAgreementBuyerDemand(args: {
-  preset?: string;
-  sectors: readonly SupplyAgreementDemandSector[];
-  currentTurn: number;
-  unitScale: number;
-  plantsEnabled: boolean;
-}): Map<string, Map<string, number>> {
-  const result = new Map<string, Map<string, number>>();
-  const unitScale = Number.isFinite(args.unitScale) && args.unitScale > 0 ? args.unitScale : 1;
-
-  for (const sector of args.sectors) {
-    if (args.plantsEnabled && sector.mothballed === true) continue;
-    const rates = getEffectiveStrategyRatesForOperatingModel(
-      sector.sectorType,
-      sector.strategyId ?? "standard",
-      sector.transitionFromStrategyId,
-      sector.transitionStartTurn,
-      args.currentTurn,
-      sector.industryModel,
-      sector.mediaDiscriminator,
-      args.preset
-    );
-    const utilization =
-      args.plantsEnabled &&
-      typeof sector.producedUnits === "number" &&
-      typeof sector.capacityUnits === "number" &&
-      sector.capacityUnits > 0
-        ? plantUtilizationForInputs(
-            sector.producedUnits,
-            sector.capacityUnits,
-            energyProductivityMultiplier(sector.sectorType, args.currentTurn, args.preset)
-          )
-        : 1;
-    const inputMultiplier = getInputMultiplier(sector.productionPolicyLevel ?? 0);
-    const natcorpMultiplier = sector.isNatcorp ? NATCORP_COMMODITY_MULTIPLIER : 1;
-    for (const [commodity, rate] of Object.entries(rates.demand ?? {}) as [
-      CommodityType,
-      number,
-    ][]) {
-      const basePrice = COMMODITY_BASE_PRICES[commodity];
-      if (!(rate > 0) || !(basePrice > 0)) continue;
-      const units =
-        dollarsToUnits(Math.max(0, sector.revenueAnchor) * rate, basePrice) *
-        unitScale *
-        inputMultiplier *
-        natcorpMultiplier *
-        utilization;
-      if (!(units > 0)) continue;
-      const byKey = result.get(sector.corporationId) ?? new Map<string, number>();
-      byKey.set(commodity, (byKey.get(commodity) ?? 0) + units);
-      if (sector.stateId && supplyAgreementRequiresState(commodity)) {
-        const stateKey = supplyAgreementScopeKey(commodity, sector.stateId);
-        byKey.set(stateKey, (byKey.get(stateKey) ?? 0) + units);
-      }
-      result.set(sector.corporationId, byKey);
-    }
-  }
-
-  return result;
-}
+export { computeSupplyAgreementBuyerDemand } from "@/lib/corporations/groups/rules/inputDemand";
 
 /**
  * Pure settlement computation — no I/O. Given the active agreements, the units

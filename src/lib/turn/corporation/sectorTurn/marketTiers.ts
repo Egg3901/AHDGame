@@ -116,9 +116,9 @@ export function computeMarketTiers(input: MarketTiersInput): MarketTiersResult {
   // and lagged global balances otherwise. A throttled sector therefore cannot
   // deepen the shortage that throttled it within the same turn. Ramped in per
   // sector over the same 240-turn window as the capacity haircut.
-  const priorityAvailability = market.internalInputAvailabilityBySectorId?.get(
-    sector._id.toString()
-  );
+  const coordinated = market.groupSupplyAvailabilityBySector?.get(sector._id.toString());
+  const priorityAvailability =
+    coordinated ?? market.internalInputAvailabilityBySectorId?.get(sector._id.toString());
   const inputAvailability = priorityAvailability
     ? new Map([...(stateInputAvailabilityByState.get(stateId) ?? []), ...priorityAvailability])
     : stateInputAvailabilityByState.get(stateId);

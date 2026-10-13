@@ -64,6 +64,15 @@ export function buildWorldNavItems({
       primary: true,
     },
     {
+      id: "subsidiaryGroup",
+      label: "Subsidiary Group",
+      labelKey: "menus.world.subsidiaryGroup",
+      href: "/corporation/" + myCorporationId + "/group",
+      section: "corporate",
+      show: myCorporationId != null,
+      parentId: "myCorporation",
+    },
+    {
       id: "myUnion",
       label: "My Union",
       labelKey: "menus.profile.myUnion",

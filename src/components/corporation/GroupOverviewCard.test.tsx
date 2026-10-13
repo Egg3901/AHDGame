@@ -3,6 +3,8 @@
  */
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { NextIntlClientProvider } from "next-intl";
+import messages from "../../../messages/en/corporations.json";
 import { GroupOverviewCard } from "./GroupOverviewCard";
 
 vi.mock("@/contexts/CurrencyContext", () => ({
@@ -59,7 +61,11 @@ describe("GroupOverviewCard", () => {
         })
       );
 
-      render(<GroupOverviewCard corpId="root-corp" />);
+      render(
+        <NextIntlClientProvider locale="en" messages={messages}>
+          <GroupOverviewCard corpId="root-corp" />
+        </NextIntlClientProvider>
+      );
 
       await waitFor(() => expect(screen.getByRole("heading", { name: rootName })).toBeTruthy());
       expect(screen.queryByRole("heading", { name: `${rootName} Group` })).toBeNull();

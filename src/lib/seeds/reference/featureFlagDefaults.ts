@@ -123,6 +123,7 @@ export const FRESH_WORLD_GAME_CONFIG_FLAGS = {
   brandLoyaltyEnabled: true,
   brandLoyaltySliceEnabled: true,
   supplyAgreementsEnabled: true,
+  groupSupplyCoordinationEnabled: false,
   explicitPlantCostsEnabled: true,
   householdConsumptionEnabled: true,
   productLinesV2Enabled: true,
