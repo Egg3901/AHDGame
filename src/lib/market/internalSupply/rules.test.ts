@@ -202,3 +202,53 @@ it("counts committed buyers only once in the remaining finite input pool", () =>
   expect(costs.get("mine")).toBe(2.5);
   expect(costs.get("own")).toBe(-2.5);
 });
+
+describe("own-company cross-state routes under active freight", () => {
+  const states = new Map([
+    ["mn-mine", "MN"],
+    ["mn-plant", "MN"],
+    ["ca-plant", "CA"],
+    ["ca-sub", "CA"],
+  ]);
+  const freightAllocate = (caps?: Map<string, number>, units = 60) =>
+    allocateInternalSupply({
+      sellers: [{ sectorId: "mn-mine", corporationId: "parent", units }],
+      buyers: [
+        { sectorId: "mn-plant", corporationId: "parent", demand: 10, availability: 0.5 },
+        { sectorId: "ca-plant", corporationId: "parent", demand: 40, availability: 0.5 },
+        { sectorId: "ca-sub", corporationId: "nested", demand: 40, availability: 0.5 },
+      ],
+      policies,
+      supply: units,
+      demand: 90,
+      reservationRoom: 100,
+      deliveryStateBySector: states,
+      ownRouteCaps: caps,
+    });
+  const unitsTo = (trades: { buyerSectorId: string; units: number }[], id: string) =>
+    trades.filter((t) => t.buyerSectorId === id).reduce((n, t) => n + t.units, 0);
+
+  it("keeps the same-state rule when nothing was hauled", () => {
+    const { trades } = freightAllocate();
+    expect(unitsTo(trades, "mn-plant")).toBeCloseTo(10);
+    expect(unitsTo(trades, "ca-plant")).toBe(0);
+    expect(unitsTo(trades, "ca-sub")).toBe(0);
+  });
+  it("serves own plants in another state within the hauled units, after same-state plants", () => {
+    const { trades } = freightAllocate(new Map([["parent|MN|CA", 25]]));
+    expect(unitsTo(trades, "mn-plant")).toBeCloseTo(10);
+    expect(unitsTo(trades, "ca-plant")).toBeCloseTo(25);
+    expect(unitsTo(trades, "ca-sub")).toBe(0);
+  });
+  it("never exceeds the seller's spare output or the buyer's need", () => {
+    const big = freightAllocate(new Map([["parent|MN|CA", 500]]));
+    expect(unitsTo(big.trades, "ca-plant")).toBeCloseTo(40);
+    const short = freightAllocate(new Map([["parent|MN|CA", 500]]), 30);
+    expect(unitsTo(short.trades, "mn-plant")).toBeCloseTo(10);
+    expect(unitsTo(short.trades, "ca-plant")).toBeCloseTo(20);
+  });
+  it("ignores a route hauled for a different company", () => {
+    const { trades } = freightAllocate(new Map([["other|MN|CA", 25]]));
+    expect(unitsTo(trades, "ca-plant")).toBe(0);
+  });
+});
