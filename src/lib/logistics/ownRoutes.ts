@@ -9,6 +9,7 @@ export interface SourcingOwnRoute {
   destStateId: string;
   units: number;
   freightCharge?: number;
+  ownFirstAcrossStates?: boolean;
 }
 
 export interface OwnRouteSector {
@@ -72,7 +73,16 @@ export function buildOwnRoutes(args: {
         const available = spare.get(o) ?? 0;
         const units = Math.min(available, remaining);
         if (!(units > ROUTE_FLOOR_UNITS)) continue;
-        routes.push({ commodity, corporationId, originStateId: o, destStateId, units });
+        routes.push({
+          commodity,
+          corporationId,
+          originStateId: o,
+          destStateId,
+          units,
+          ...(args.policies.get(corporationId)?.policy.ownFirstAcrossStates === true
+            ? { ownFirstAcrossStates: true }
+            : {}),
+        });
         spare.set(o, available - units);
         remaining -= units;
       }
