@@ -30,12 +30,13 @@ Engine 6 follows two fixed constraints:
 
 ## Roadmap
 
-Planned engine versions, in order. Each one ships behind autonomy v6 and is
-compared against v5 in seeded world simulations, with matched starts and more
-than one era, before it is listed as shipped. Version numbers can move; the
-order is the plan.
+Planned work in stages, in order. Each stage ships as one or more engine 6
+minor versions behind autonomy v6, and each version is compared against v5 in
+seeded world simulations, with matched starts and more than one era, before it
+is listed as shipped. A shipped version appears below the roadmap with its own
+number.
 
-### 6.1 Running for office
+### Stage 1: running for office
 
 - **Race choice by chance of winning.** NPPs file where their home approval,
   party strength and incumbency give them a real chance, instead of filling the
@@ -49,7 +50,7 @@ order is the plan.
 - **Presidential challengers** in non-player countries, inside the existing
   limit on how often a player's race can be challenged.
 
-### 6.2 Governing
+### Stage 2: governing
 
 - **Bills that can pass.** Before sponsoring, an NPP counts likely votes from
   party, whips and caucuses, and does not introduce a bill that is short.
@@ -61,7 +62,7 @@ order is the plan.
 - **Fewer writes.** Ministerial orders and settings are written in batches
   per country.
 
-### 6.3 Corporations
+### Stage 3: corporations
 
 - **Investing on value.** NPP share and bond purchases compare price with
   fundamentals and sell on the same test, instead of fixed-probability rolls.
@@ -74,24 +75,24 @@ order is the plan.
   in a turn (18.0 seconds and 1,465 database round trips on live turn 168); it
   moves to one batched settlement per country.
 
-### 6.4 Cost
+### Stage 4: cost
 
 - NPP governing passes run countries in bounded parallel lanes instead of one
   after another.
 - Every engine 6 phase gets a per-turn round-trip budget, reported with the
   turn.
 
-### 6.5 Strength accounting
+### Stage 5: strength accounting
 
 - Compare v5 and v6 worlds on NPP win rate against players, NPP wealth, and
   returns on NPP-run companies.
 - Step down the income NPPs receive without acting until those measures match
   engine 5. The election modifiers are not changed.
 
-### 7.0 Default
+### Engine 7: default
 
 - Autonomy v6 becomes the default for new singleplayer and simulation worlds,
-  after the 6.x versions are validated. Running worlds never change level on
+  after the engine 6 stages are validated. Running worlds never change level on
   their own.
 
 ## 6.0.0 (unreleased)
