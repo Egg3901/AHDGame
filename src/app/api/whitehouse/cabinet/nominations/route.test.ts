@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ObjectId } from "mongodb";
-import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
+import { createAsyncIterableCursor, createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 vi.mock("@/lib/time/gameTime", () => ({
@@ -15,6 +15,7 @@ vi.mock("@/lib/time/gameTime", () => ({
 vi.mock("@/lib/api/requireAuth", () => ({ requireBasicAuth: vi.fn() }));
 vi.mock("@/lib/notifications", () => ({
   createNotification: vi.fn().mockResolvedValue(undefined),
+  createNotifications: vi.fn().mockResolvedValue(undefined),
 }));
 vi.mock("@/lib/api/rateLimit", () => ({
   checkRateLimit: vi.fn().mockReturnValue({ ok: true }),
@@ -97,8 +98,9 @@ describe("POST /api/whitehouse/cabinet/nominations", () => {
       error: "An active nomination for this cabinet position already exists",
     });
 
-    const { createNotification } = await import("@/lib/notifications");
+    const { createNotification, createNotifications } = await import("@/lib/notifications");
     expect(createNotification).not.toHaveBeenCalled();
+    expect(createNotifications).not.toHaveBeenCalled();
   });
 
   async function postAsPresident(
@@ -166,6 +168,31 @@ describe("POST /api/whitehouse/cabinet/nominations", () => {
     expect((stored.nomineeNppId as ObjectId).toString()).toBe(nppId.toString());
     expect(stored.nomineeCharacterId).toBeNull();
     expect(stored.nomineeCharacterName).toBe("NPP Nominee");
+  });
+
+  it("notifies every senator in one batched insert", async () => {
+    const nppId = new ObjectId();
+    const senatorUsers = [new ObjectId(), new ObjectId(), new ObjectId()];
+    db.collectionMocks["cabinetNominations"]!.insertOne.mockResolvedValue({
+      acknowledged: true,
+      insertedId: new ObjectId(),
+    } as never);
+    db.collectionMocks["electedOfficials"]!.find.mockReturnValue(
+      createAsyncIterableCursor(senatorUsers.map(() => ({ characterId: new ObjectId() })))
+    );
+    db.collectionMocks["characters"]!.find.mockReturnValue(
+      createAsyncIterableCursor(senatorUsers.map((userId) => ({ _id: new ObjectId(), userId })))
+    );
+
+    const res = await postAsPresident({ nomineeNppId: nppId.toString() }, { kind: "npp" });
+
+    expect(res.status).toBe(200);
+    const { createNotification, createNotifications } = await import("@/lib/notifications");
+    expect(createNotification).not.toHaveBeenCalled();
+    expect(createNotifications).toHaveBeenCalledTimes(1);
+    const batch = vi.mocked(createNotifications).mock.calls[0][0];
+    expect(batch.map((n) => n.userId.toString())).toEqual(senatorUsers.map((u) => u.toString()));
+    expect(batch.every((n) => n.metadata?.type === "cabinet_nomination")).toBe(true);
   });
 
   it("rejects a body with both nominee ids", async () => {
