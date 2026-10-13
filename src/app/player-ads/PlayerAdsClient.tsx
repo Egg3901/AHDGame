@@ -199,8 +199,8 @@ export function PlayerAdsClient() {
           <div className="rounded-xl border border-card-border bg-card p-6 text-center">
             <p className="text-lg font-semibold text-foreground mb-1">Ad submitted!</p>
             <p className="text-sm text-muted">
-              Your banner is now live and will display on eligible pages alongside other ads. View
-              counts will equalise over time as it rotates in.
+              Your banner is awaiting admin approval. Once approved, it will rotate across eligible
+              pages alongside other ads.
             </p>
           </div>
         ) : (

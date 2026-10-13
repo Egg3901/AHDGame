@@ -176,6 +176,13 @@ export function resolveSourceLink(
     }
   }
 
+  if (type === "corp_autopilot_advisory") {
+    const corporationId = asString(m.corporationId);
+    if (corporationId) {
+      return { label: "Review autopilot", href: `/corporation/${corporationId}#autopilot` };
+    }
+  }
+
   // ── Supply agreement negotiation ─────────────────────────────────────────
   if (type === "corp_supply_agreement_offer" || type === "corp_supply_agreement_update") {
     const corporationId = asString(m.corporationId);

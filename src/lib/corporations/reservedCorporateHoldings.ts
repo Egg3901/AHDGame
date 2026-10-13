@@ -1,6 +1,7 @@
 import type { Db, ObjectId } from "mongodb";
 import type { Corporation, ShareListing, ShareOrder } from "@/lib/db/types";
 import { getControllingCorporateParent } from "@/lib/corporations/corporateOwnership";
+import { shouldRedactCorporation } from "@/lib/corporations/redaction";
 
 export interface ReservedCorporatePosition {
   corporationId: ObjectId;
@@ -97,12 +98,16 @@ export async function loadReservedCorporatePositions(
 
 /** Batch loader for turn cleanup: reserved positions keyed by target corp id. */
 export async function loadReservedCorporatePositionsByTarget(
-  db: Db
+  db: Db,
+  targetCorpIds?: readonly ObjectId[]
 ): Promise<Map<string, ReservedCorporatePosition[]>> {
+  if (targetCorpIds?.length === 0) return new Map();
+  const targetFilter = targetCorpIds ? { corporationId: { $in: [...targetCorpIds] } } : {};
   const [orders, listings] = await Promise.all([
     db
       .collection<ShareOrder>("shareOrders")
       .find({
+        ...targetFilter,
         type: "sell",
         status: "open",
         placerCorporationId: { $exists: true },
@@ -111,6 +116,7 @@ export async function loadReservedCorporatePositionsByTarget(
     db
       .collection<ShareListing>("shareListings")
       .find({
+        ...targetFilter,
         status: "open",
         sellerCorporationId: { $exists: true },
       })
@@ -201,4 +207,30 @@ export async function isSittingCeoOfControllingParent(
     .collection<Corporation>("corporations")
     .findOne({ _id: controllingParent.corporationId }, { projection: { userId: 1, ceoVacant: 1 } });
   return parent != null && parent.ceoVacant !== true && parent.userId?.toString() === viewerUserId;
+}
+
+/**
+ * Private-corp redaction for satellite routes, applying the same insider rule
+ * as GET /api/corporations/[id]: the corp's own CEO, admins, moderators in mod
+ * view, and the sitting CEO of the controlling parent corporation all see the
+ * books. Read access only; management actions keep their own CEO checks.
+ */
+export async function shouldRedactCorporationForViewer(
+  db: Db,
+  corporation: Corporation,
+  viewerUserId: string | undefined | null,
+  viewerIsAdmin: boolean,
+  viewerHasModeratorOverride = false
+): Promise<boolean> {
+  if (
+    !shouldRedactCorporation(
+      corporation,
+      viewerUserId ?? undefined,
+      viewerIsAdmin,
+      viewerHasModeratorOverride
+    )
+  ) {
+    return false;
+  }
+  return !(await isSittingCeoOfControllingParent(db, corporation, viewerUserId));
 }

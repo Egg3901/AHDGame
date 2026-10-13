@@ -64,6 +64,7 @@ import {
 } from "@/lib/corporations/shareEscrowSettlement";
 import { CURRENCY_SYMBOLS } from "@/lib/constants/currencies";
 import { emitTx } from "@/lib/financialTxLog/emit";
+import { loadPoolSellPacing, poolSellPacedMessage } from "@/lib/equities/blockPacing";
 import {
   isOrderFlowPriceEligible,
   isWithinShareExecutionBand,
@@ -189,6 +190,13 @@ export async function placeShareOrder(request: Request, { params }: RouteParams)
       }
       const settle = await settleFloatSellDebit(db, corporation, issuerBuyback);
       issuerBuybackSplit = settle.split;
+      if (settle.paced) {
+        const pacedShares =
+          executionPrice > 0 ? Math.floor((settle.pacedRemainingLocal ?? 0) / executionPrice) : 0;
+        return errorResponse(400, poolSellPacedMessage(pacedShares, corporation.name), {
+          extra: { marketPacedShares: pacedShares },
+        });
+      }
       if (!settle.ok) {
         const sym = CURRENCY_SYMBOLS[issuerCurrency] ?? "$";
         return errorResponse(
@@ -204,6 +212,15 @@ export async function placeShareOrder(request: Request, { params }: RouteParams)
         );
       }
       return null;
+    }
+
+    // A marketable sell larger than this turn's pool allowance for the company
+    // rests as an order instead of failing; the turn order book fills it a
+    // slice per turn at the market price (blockPacing.ts).
+    async function sellExceedsPoolAllowance(): Promise<boolean> {
+      if (type !== "sell" || !marketQuote.active) return false;
+      const pacing = await loadPoolSellPacing(db, corporation._id);
+      return issuerBuyback > pacing.remainingLocal + 0.01;
     }
 
     if (placeAsCorporation) {
@@ -526,7 +543,7 @@ export async function placeShareOrder(request: Request, { params }: RouteParams)
         if (available < shares) {
           return errorResponse(400, `Only ${available.toLocaleString()} shares available`);
         }
-        const fillsNow = executionPrice >= pricePerShare;
+        const fillsNow = executionPrice >= pricePerShare && !(await sellExceedsPoolAllowance());
         if (fillsNow) {
           const proceeds =
             Math.round(
@@ -968,7 +985,7 @@ export async function placeShareOrder(request: Request, { params }: RouteParams)
       }
 
       // Check if fills immediately (current price >= limit)
-      const fillsNow = executionPrice >= pricePerShare;
+      const fillsNow = executionPrice >= pricePerShare && !(await sellExceedsPoolAllowance());
 
       if (fillsNow) {
         // Immediate fill at current market price

@@ -1,3 +1,4 @@
+import { GOVERNMENT_DEMAND_SUPPLY_CAP } from "./rules/healthcareDemandCap";
 import { TURNS_PER_DAY } from "@/lib/constants/corporations";
 import type { Bond, Corporation, FederalBudget, StateBudget, StateMetrics } from "@/lib/db/types";
 import type { State } from "@/lib/db/types/state";
@@ -506,7 +507,11 @@ export interface GovernmentDemandInputs {
  * beyond the cap is destroyed (and recorded as truncated, so the shortage still
  * signals investment), not carried as price pressure.
  */
-export const GOVERNMENT_DEMAND_SUPPLY_CAP = 1.5;
+export {
+  GOVERNMENT_DEMAND_SUPPLY_CAP,
+  capHealthcareDemandToLocalSupply,
+  globalDemandCapSupply,
+} from "./rules/healthcareDemandCap";
 
 /**
  * Government spending -> commodity demand. National budgets add demand

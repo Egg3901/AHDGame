@@ -139,6 +139,53 @@ describe("shareEscrowSettlement", () => {
       );
     });
 
+    it("refuses a sale beyond the company's per-turn pool allowance without touching pool cash", async () => {
+      db.collection("corporations");
+      db.collection("gameState");
+      db.collectionMocks.gameState.findOne.mockResolvedValue({ _id: "current", currentTurn: 40 });
+      // $1bn company: 5% allowance is $50M; $45M already absorbed this turn.
+      db.collectionMocks.corporations.findOne.mockResolvedValue({
+        sharePrice: 10,
+        totalShares: 100_000_000,
+        poolSellAbsorbedTurn: 40,
+        poolSellAbsorbedLocal: 45_000_000,
+      });
+      db.collectionMocks.corporations.updateOne.mockResolvedValue({ modifiedCount: 0 });
+
+      const result = await settleFloatSellDebit(db as unknown as Db, INSTANT, 10_000_000);
+
+      expect(result).toEqual({ ok: false, paced: true, pacedRemainingLocal: 5_000_000 });
+      expect(db.collectionMocks.equityMarketPools.findOneAndUpdate).not.toHaveBeenCalled();
+    });
+
+    it("releases the pacing reservation when the pool cannot pay", async () => {
+      db.collection("corporations");
+      db.collection("gameState");
+      db.collectionMocks.gameState.findOne.mockResolvedValue({ _id: "current", currentTurn: 40 });
+      db.collectionMocks.corporations.findOne.mockResolvedValue({
+        sharePrice: 10,
+        totalShares: 100_000_000,
+      });
+      db.collectionMocks.corporations.updateOne.mockResolvedValue({ modifiedCount: 1 });
+      db.collectionMocks.equityMarketPools.findOneAndUpdate.mockResolvedValue(null);
+
+      const result = await settleFloatSellDebit(db as unknown as Db, INSTANT, 1_000);
+
+      expect(result).toEqual({ ok: false });
+      const writes = db.collectionMocks.corporations.updateOne.mock.calls;
+      expect(writes).toHaveLength(2);
+      expect(writes[1][0]).toEqual({ _id: INSTANT._id, poolSellAbsorbedTurn: 40 });
+    });
+
+    it("skips pacing when asked", async () => {
+      db.collectionMocks.equityMarketPools.findOneAndUpdate.mockResolvedValue({ cashLocal: 4_000 });
+      const result = await settleFloatSellDebit(db as unknown as Db, INSTANT, 1_000, {
+        skipPacing: true,
+      });
+      expect(result).toEqual({ ok: true });
+      expect(db.collectionMocks.corporations?.updateOne).toBeUndefined();
+    });
+
     it("refunds the pool and leaves legacy issuance accounting untouched", async () => {
       await reverseFloatSellDebit(db as unknown as Db, INSTANT, 1_000);
       await onFloatSellCommitted(db as unknown as Db, INSTANT, 1_000);
@@ -149,7 +196,13 @@ describe("shareEscrowSettlement", () => {
         }),
         undefined
       );
-      expect(db.collectionMocks.corporations?.updateOne).toBeUndefined();
+      // The only corporation write is releasing the block-pacing reservation;
+      // issuance proceeds are untouched.
+      const corpWrites = db.collectionMocks.corporations?.updateOne.mock.calls ?? [];
+      for (const [, update] of corpWrites) {
+        expect(JSON.stringify(update)).not.toContain("shareIssuanceProceeds");
+        expect(JSON.stringify(update)).toContain("poolSellAbsorbedLocal");
+      }
     });
   });
 

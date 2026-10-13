@@ -45,6 +45,7 @@ import type { CorporateSector, SectorBuildOrder } from "@/lib/db/types";
 import type { UnownedSector } from "@/lib/db/types/unownedSector";
 import { CAPITAL_DEPRECIATION_PER_TURN } from "@/lib/market/capital";
 import { isStateOwned } from "@/lib/nationalization/nationalCorporation";
+import { isAutopilotRun } from "@/lib/corporations/autopilot";
 import { bucketKey } from "@/lib/nationalization/stateControlledBuckets";
 import { NEUTRAL_STAT } from "@/lib/stats/statsConstants";
 import {
@@ -288,7 +289,7 @@ export function makeNppCorpDecision(
     // exact bug class this module keeps producing: the seeded-margin read,
     // the nominal-revenue read, the unconverted foreign revenue. The corp
     // document already knows.
-    isCaretaker: !!corp.caretakerCeo,
+    isCaretaker: !!corp.caretakerCeo || isAutopilotRun(corp),
   };
   // Absent reads as enabled: see `strategyLoopEnabled`. When off, the corp runs
   // the `expand` levers and no strategy state is written, so an operator can
@@ -388,6 +389,11 @@ export function makeNppCorpDecision(
       strandedDivests += 1;
     }
   }
+
+  // Autopilot never sheds a player's plant: a divest deletes the sector with no
+  // proceeds. It reports the losers to the owner instead.
+  const autopilot = isAutopilotRun(corp);
+  const autopilotLosers = autopilot ? divestedSectorIds.splice(0).length : 0;
 
   // Divest-leg flag (section 1): a completed shed; blocked-shed flags are set
   // inside the margin-divest loop above.
@@ -538,7 +544,8 @@ export function makeNppCorpDecision(
   // shift never target the same sector (a shift candidate is running and
   // selling; a mothball candidate is unfilled), and only one shift per corp
   // per turn keeps the cohort gradual. SOEs are exempt for 2c's reason.
-  if (!corp.countryOwnerId && glutStaggerEligible(corp._id.toString(), ctx.turn)) {
+  // Autopilot leaves retooling to the owner.
+  if (!corp.countryOwnerId && !autopilot && glutStaggerEligible(corp._id.toString(), ctx.turn)) {
     const retool = chooseNppStrategyRetool({
       corp,
       sectors,
@@ -1563,6 +1570,15 @@ export function makeNppCorpDecision(
     entryDiagnostic,
     strategy: strategyDecision?.state,
     capacityObservations,
+    ...(autopilot
+      ? {
+          autopilotSignals: {
+            chronicLowFill: situation.chronicLowFill,
+            debtDominant,
+            losingSectors: autopilotLosers,
+          },
+        }
+      : {}),
     operatorObservation: buildNppOperatorObservation({
       sectorType: operatingCorpType,
       cashNegative: cashLocal < 0,

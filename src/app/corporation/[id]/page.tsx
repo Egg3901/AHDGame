@@ -51,6 +51,7 @@ import {
   getPrivateCorpTabAccess,
 } from "@/components/corporation/privateCorpTabAccess";
 import FinancialsTab from "@/components/corporation/FinancialsTab";
+import { AutopilotCard } from "@/components/corporation/AutopilotCard";
 import {
   corpIncomeBasis,
   scaleToPeriod,
@@ -1149,6 +1150,14 @@ export default function CorporationDetailPage() {
               <div className="space-y-8">
                 {tab === "overview" && (
                   <div className="space-y-6">
+                    {isCeo && (
+                      <AutopilotCard
+                        corporation={corporation}
+                        corpId={id}
+                        onTabChange={setTab}
+                        onRefresh={fetchCorporation}
+                      />
+                    )}
                     <OverviewTab
                       corporation={corporation}
                       financials={financials}
@@ -1329,7 +1338,9 @@ export default function CorporationDetailPage() {
                   <ChartsTab
                     corpId={id}
                     modViewEnabled={modViewEnabled}
-                    ownerView={isCeo || modViewEnabled}
+                    ownerView={
+                      isCeo || modViewEnabled || !!corporation.viewerIsControllingParentCeo
+                    }
                   />
                 )}
 

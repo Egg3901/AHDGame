@@ -16,6 +16,11 @@ import { recordShareTrades } from "@/lib/corporations/shareTradeHistory";
 import type { ShareTradeParty } from "@/lib/db/types/shareTradeHistory";
 import { loadEquityPoolsByCurrency, loadEquityQuote } from "@/lib/equities/marketPool";
 import {
+  poolSellCapLocal,
+  poolSellRemainingLocal,
+  recordPoolSellAbsorbed,
+} from "@/lib/equities/blockPacing";
+import {
   allocateEquityPoolSellBudgets,
   type EquityPoolSellDemand,
 } from "@/lib/equities/equityPoolSellAllocation";
@@ -116,6 +121,8 @@ export async function fillPendingShareOrders(db: Db, now: Date, turn: number): P
           totalShares: 1,
           liquidCapital: 1,
           shareholders: 1,
+          poolSellAbsorbedTurn: 1,
+          poolSellAbsorbedLocal: 1,
         },
       }
     )
@@ -143,6 +150,8 @@ export async function fillPendingShareOrders(db: Db, now: Date, turn: number): P
   const corpTreasuryDeltas = new Map<string, number>(); // corpId -> liquidCapital delta (local)
   const poolCashRemaining = new Map<CurrencyCode, number>();
   const poolFlows = new Map<CurrencyCode, { purchasesIn: number; salesOut: number }>();
+  // corpId -> local value the pool bought from sellers this turn (block pacing)
+  const poolSellAbsorbed = new Map<string, number>();
   // ── Index-fund-owned buy orders ──────────────────────────────────────────
   // Fund share credits per corp (corp → fund → ShareDelta) applied after the
   // corp bulk writes via creditSharesToFund.
@@ -203,11 +212,26 @@ export async function fillPendingShareOrders(db: Db, now: Date, turn: number): P
       notionalLocal += shares * marketQuote.bidPriceLocal;
     }
 
-    if (Number.isFinite(notionalLocal) && notionalLocal > 0) {
+    // Block pacing: the pool buys at most this company's per-turn allowance,
+    // shared with any sales players made directly since the last turn.
+    const pacedNotionalLocal = Math.min(
+      notionalLocal,
+      poolSellRemainingLocal({
+        capLocal: poolSellCapLocal({
+          sharePriceLocal: corp.sharePrice ?? 0,
+          totalShares: corp.totalShares ?? 0,
+          localPerAnchor: fxRateForCorpFromMap(corp, fxByCurrency),
+        }),
+        turn,
+        absorbedTurn: corp.poolSellAbsorbedTurn,
+        absorbedLocal: corp.poolSellAbsorbedLocal,
+      })
+    );
+    if (Number.isFinite(pacedNotionalLocal) && pacedNotionalLocal > 0) {
       sellDemands.push({
         currency: marketQuote.currency,
         corporationId: corpIdStr,
-        notionalLocal,
+        notionalLocal: pacedNotionalLocal,
       });
     }
   }
@@ -444,6 +468,7 @@ export async function fillPendingShareOrders(db: Db, now: Date, turn: number): P
           const flow = poolFlows.get(marketQuote.currency) ?? { purchasesIn: 0, salesOut: 0 };
           flow.salesOut += proceedsLocal;
           poolFlows.set(marketQuote.currency, flow);
+          poolSellAbsorbed.set(corpIdStr, (poolSellAbsorbed.get(corpIdStr) ?? 0) + proceedsLocal);
         } else {
           // Compatibility fallback for worlds without a pool.
           if (treasuryRemaining < proceedsLocal) continue;
@@ -628,6 +653,7 @@ export async function fillPendingShareOrders(db: Db, now: Date, turn: number): P
   if (incOps.length > 0) {
     await db.collection("corporations").bulkWrite(incOps);
   }
+  await recordPoolSellAbsorbed(db, poolSellAbsorbed, turn, (id) => new ObjectId(id));
   // Phase 2: $push for new shareholder entries that didn't exist at read time.
   // Include avgCostPerShare so the pushed entry matches the shape /shares/buy
   // writes — otherwise portfolio PnL display shows "-" for these holdings.

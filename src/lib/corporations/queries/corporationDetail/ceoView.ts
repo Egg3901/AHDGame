@@ -72,7 +72,8 @@ export async function loadCeoViewFlags(
     corporation.ceoVacant !== true &&
     corporation.userId != null &&
     corporation.countryOwnerId == null &&
-    corporation.isNationalized !== true
+    corporation.isNationalized !== true &&
+    !corporation.autopilot
   ) {
     const ceoUser = await db
       .collection<User>("users")
