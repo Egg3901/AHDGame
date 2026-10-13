@@ -123,7 +123,8 @@ describe("extraction placement headroom", () => {
       [{ stateId, resources: { rare_earth: 200 } }],
       [extractionSector],
       27_000 / 387,
-      true
+      true,
+      (sector) => sector.revenue
     );
 
     // Standard extraction's 0.14 rate requests 24.42 of the state's 200
