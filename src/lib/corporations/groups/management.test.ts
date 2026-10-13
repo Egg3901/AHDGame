@@ -50,6 +50,30 @@ async function doc(id: ObjectId) {
   return (await memory.collection("corporations").findOne({ _id: id })) as unknown as Corporation;
 }
 describe("group management authorization and persistence", () => {
+  it("returns ticker and voting control including unsold reserved holdings", async () => {
+    await memory
+      .collection("corporations")
+      .updateOne(
+        { _id: subId },
+        { $set: { tickerSymbol: "SUB", shareholders: [{ corporationId: rootId, shares: 40 }] } }
+      );
+    memory.seed("shareOrders", [
+      {
+        _id: new ObjectId(),
+        corporationId: subId,
+        placerCorporationId: rootId,
+        type: "sell",
+        status: "open",
+        sharesRemaining: 35,
+      },
+    ]);
+    const view = await groupManagementView(db, await doc(rootId), parentUser.toString());
+    expect(view?.members.find((m) => m.id === subId.toString())).toMatchObject({
+      tickerSymbol: "SUB",
+      parentControl: { corporationId: rootId.toString(), votingPercent: 75 },
+    });
+  });
+
   it("requires fresh consent when the same CEO returns for another tenure", async () => {
     await updateGroupManagement(db, await doc(subId), playerUser.toString(), {
       action: "participation",

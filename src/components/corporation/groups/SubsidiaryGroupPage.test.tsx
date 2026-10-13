@@ -107,6 +107,22 @@ describe("Subsidiary Group page", () => {
     expect(within(nav).queryByRole("button", { name: "CEO Office" })).toBeNull();
     expect(screen.getByRole("heading", { name: "Harbor Group" })).toBeTruthy();
   });
+  it("keeps identity editing collapsed until the parent opens it", () => {
+    mount();
+    expect(screen.queryByRole("textbox", { name: "Group name" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Edit group identity" }));
+    expect(screen.getByRole("textbox", { name: "Group name" })).toBeTruthy();
+  });
+  it("opens identity editing from another tab even after a previous edit was open", () => {
+    mount();
+    fireEvent.click(screen.getByRole("button", { name: "Edit group identity" }));
+    fireEvent.click(screen.getByRole("button", { name: "Financials & comparison" }));
+    expect(
+      screen.getByRole("button", { name: "Edit group identity" }).getAttribute("aria-expanded")
+    ).toBe("false");
+    fireEvent.click(screen.getByRole("button", { name: "Edit group identity" }));
+    expect(screen.getByRole("textbox", { name: "Group name" })).toBeTruthy();
+  });
   it("compares selected members and allows clearing selection", async () => {
     mount();
     fireEvent.click(screen.getByRole("button", { name: "Financials & comparison" }));

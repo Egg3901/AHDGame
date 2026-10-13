@@ -26,7 +26,10 @@ export const defaultGroupManagement = (root: Corporation): GroupManagement => ({
   supplyDiscount: clampGroupDiscount(root.groupManagement?.supplyDiscount),
 });
 export async function loadGroupManagement(db: Db, corporation: Corporation, userId: string) {
-  const membership = await resolveFormalizedGroups(db, { includeReserved: true });
+  const membership = await resolveFormalizedGroups(db, {
+    includeReserved: true,
+    includeControl: true,
+  });
   const rootId = membership.rootByCorpId.get(corporation._id.toString());
   const ids = rootId ? membership.membersByRootId.get(rootId) : undefined;
   if (!rootId || !ids) return null;
@@ -38,6 +41,7 @@ export async function loadGroupManagement(db: Db, corporation: Corporation, user
         {
           projection: {
             name: 1,
+            tickerSymbol: 1,
             sequentialId: 1,
             ceoId: 1,
             ceoHistory: 1,
@@ -94,6 +98,7 @@ export async function loadGroupManagement(db: Db, corporation: Corporation, user
   const turn = world?.currentTurn ?? 0;
   return {
     root,
+    parentControlByCorpId: membership.parentControlByCorpId,
     corps,
     turn,
     parent,
@@ -203,6 +208,8 @@ export async function groupManagementView(db: Db, corporation: Corporation, user
         id: c._id.toString(),
         pathId: String(c.sequentialId ?? c._id),
         name: c.name,
+        tickerSymbol: c.tickerSymbol,
+        parentControl: ctx.parentControlByCorpId.get(c._id.toString()) ?? null,
         logoUrl: c.logoUrl,
         history: privateAccess ? (historyByCorp.get(c._id.toString()) ?? []) : null,
         operator: operator.operator,

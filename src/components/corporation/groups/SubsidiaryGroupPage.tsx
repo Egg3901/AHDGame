@@ -1,12 +1,14 @@
 "use client";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
-import { Building2, ChartNoAxesCombined, Compass, Network, ArrowUpRight } from "lucide-react";
+import { Building2, ChartNoAxesCombined, Compass, Network, Pencil } from "lucide-react";
 import styles from "./GroupPage.module.css";
+import { GroupOverviewDashboard } from "./GroupOverviewDashboard";
+
 import { useTranslations } from "next-intl";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import { CorporationLogo } from "../CorporationLogo";
-import { GroupOverviewCard } from "../GroupOverviewCard";
+import { GroupOverviewCard, type GroupOverviewPayload } from "../GroupOverviewCard";
 import SupplyAgreementsSection from "../SupplyAgreementsSection";
 import { SUPPLY_AGREEMENT_PRICE_BAND } from "@/lib/db/types/supplyAgreement";
 import { GroupSupplyForecast } from "./GroupSupplyForecast";
@@ -14,19 +16,6 @@ import { GroupParticipation } from "./GroupParticipation";
 import { useGroupManagement } from "./useGroupManagement";
 import { combineGroupLatest } from "@/lib/corporations/groups/rules/financialHistory";
 import type { GroupObjective } from "@/lib/corporations/groups/managementTypes";
-interface SheetMember {
-  corporationId: string;
-  name: string;
-  revenueAnchor: number;
-  liquidCapitalAnchor: number;
-  sectorCount: number;
-}
-interface Sheet {
-  members: SheetMember[];
-  totalRevenueAnchor: number;
-  totalLiquidCapitalAnchor: number;
-  totalSectorCount: number;
-}
 const button =
   "inline-flex items-center justify-center gap-2 rounded-lg border border-card-border bg-card px-3 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 enabled:hover:bg-card-elevated focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-info";
 const sectionIcons = [Building2, ChartNoAxesCombined, Compass, Network];
@@ -43,11 +32,12 @@ export function SubsidiaryGroupPage({ corpId }: { corpId: string }) {
     { formatAmount } = useCurrency();
   const { data, loading, error, busy, save, refresh } = useGroupManagement(corpId);
   const section = useSyncExternalStore(subscribeSection, currentSection, () => "overview");
-  const [sheet, setSheet] = useState<Sheet | null>(null),
+  const [groupPayload, setGroupPayload] = useState<GroupOverviewPayload | null>(null),
     [sheetError, setSheetError] = useState("");
   const [selected, setSelected] = useState<string[] | null>(null),
     [name, setName] = useState<string | null>(null),
     [uploading, setUploading] = useState(false);
+  const [editingIdentity, setEditingIdentity] = useState(false);
   const [agreementCorpId, setAgreementCorpId] = useState<string | null>(null);
   useEffect(() => {
     const controller = new AbortController();
@@ -56,13 +46,14 @@ export function SubsidiaryGroupPage({ corpId }: { corpId: string }) {
         if (!res.ok) throw new Error(t("loadFailed"));
         const payload = await res.json();
         setSheetError("");
-        setSheet(payload.group);
+        setGroupPayload(payload);
       })
       .catch((e) => {
         if (!controller.signal.aborted) setSheetError(e.message);
       });
     return () => controller.abort();
   }, [corpId, t]);
+  const sheet = groupPayload?.group ?? null;
   if (loading && !data)
     return (
       <main className="mx-auto max-w-7xl p-6">
@@ -150,13 +141,13 @@ export function SubsidiaryGroupPage({ corpId }: { corpId: string }) {
       <nav aria-label={t("breadcrumb")} className="text-sm text-muted">
         <Link href={"/corporation/" + data.rootId}>{t("parentCorporation")}</Link> / {t("title")}
       </nav>
-      <header className="flex items-center gap-5 rounded-xl border border-card-border bg-card p-5 sm:p-7">
+      <header className="flex flex-wrap items-center gap-5 rounded-xl border border-card-border bg-card p-5 sm:p-7">
         <CorporationLogo
           logoUrl={data.settings.logoUrl}
           name={data.settings.name}
           size="h-16 w-16"
         />
-        <div>
+        <div className="flex-1">
           <p className="mb-1 text-[11px] font-semibold uppercase tracking-widest text-gold">
             {t("title")}
           </p>
@@ -165,6 +156,24 @@ export function SubsidiaryGroupPage({ corpId }: { corpId: string }) {
           </h1>
           <p className="text-sm text-muted">{t("memberCount", { count: data.members.length })}</p>
         </div>
+        {data.canManage && (
+          <button
+            type="button"
+            className={`${button} w-full sm:w-auto`}
+            aria-expanded={section === "overview" && editingIdentity}
+            aria-controls="group-identity-editor"
+            onClick={() => {
+              setEditingIdentity(section !== "overview" || !editingIdentity);
+              if (section !== "overview") {
+                history.replaceState(null, "", "#overview");
+                window.dispatchEvent(new HashChangeEvent("hashchange"));
+              }
+            }}
+          >
+            <Pencil size={14} aria-hidden="true" />
+            {t("editIdentity")}
+          </button>
+        )}
       </header>
       {(error || sheetError) && (
         <p role="alert" className="text-sm text-red-400">
@@ -195,8 +204,11 @@ export function SubsidiaryGroupPage({ corpId }: { corpId: string }) {
       </nav>
       {section === "overview" && (
         <>
-          {data.canManage && (
-            <section className="rounded-xl border border-card-border bg-card p-5 space-y-3">
+          {data.canManage && editingIdentity && (
+            <section
+              id="group-identity-editor"
+              className="rounded-xl border border-card-border bg-card p-5 space-y-3"
+            >
               <h2 className="border-b border-card-border pb-3 text-sm font-semibold">
                 {t("identity")}
               </h2>
@@ -205,7 +217,10 @@ export function SubsidiaryGroupPage({ corpId }: { corpId: string }) {
                 onSubmit={(e) => {
                   e.preventDefault();
                   void save({ action: "identity", name: name ?? data.settings.name }).then((ok) => {
-                    if (ok) setName(null);
+                    if (ok) {
+                      setName(null);
+                      setEditingIdentity(false);
+                    }
                   });
                 }}
               >
@@ -236,28 +251,15 @@ export function SubsidiaryGroupPage({ corpId }: { corpId: string }) {
               </label>
             </section>
           )}
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {data.members.map((m) => (
-              <article
-                className="min-w-0 rounded-xl border border-card-border bg-card p-5 space-y-3"
-                key={m.id}
-              >
-                <CorporationLogo logoUrl={m.logoUrl} name={m.name} />
-                <h2 className="break-words font-semibold">{m.name}</h2>
-                <p className="text-xs text-muted">
-                  {m.operator === "npp" ? t("npp") : t("player")}
-                </p>
-                <Link
-                  className="text-sm font-medium text-info hover:underline"
-                  href={"/corporation/" + m.pathId}
-                >
-                  {t("viewCorporation")}{" "}
-                  <ArrowUpRight className="ml-1 inline" size={14} aria-hidden="true" />
-                </Link>
-              </article>
-            ))}
-          </div>
-          <GroupOverviewCard corpId={corpId} />
+          <GroupOverviewDashboard data={data} sheet={sheet} />
+          <details className="rounded-xl border border-card-border bg-card p-5">
+            <summary className="cursor-pointer text-sm font-semibold">
+              {t("groupTaxStructure")}
+            </summary>
+            {groupPayload && (
+              <GroupOverviewCard corpId={corpId} hideGroupLink payload={groupPayload} />
+            )}
+          </details>
         </>
       )}
       {section === "financials" && (
