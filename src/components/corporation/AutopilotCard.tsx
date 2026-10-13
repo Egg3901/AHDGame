@@ -62,7 +62,7 @@ export function AutopilotCard({
         <p className="text-xs text-muted">
           {on
             ? "Autopilot sets budgets and dividends each turn, grows plants that sell, pauses plants in a glut, and opens new plants when it has cash to spare. Budgets and dividends you change by hand are reset on the next turn while it is on. Everything else still works as normal."
-            : "Let the corporation run itself. Autopilot sets budgets and dividends, grows plants that sell, and opens new plants when it has cash to spare. It plays safe: it never borrows, picks research, retools, sells or closes plants, or buys rivals, and it tells you here when one of those is worth doing. You stay CEO."}
+            : "Let the corporation run itself. Autopilot sets budgets and dividends, grows plants that sell, and opens new plants when it has cash to spare. It plays safe: it never borrows, picks research, retools, sells or closes plants, or buys rivals, and it tells you here when one of those is worth doing. You stay CEO, but a top-10 corporation on autopilot earns the standard CEO influence, not the major tier."}
         </p>
         {on && autopilot.advisories.length === 0 && (
           <p className="text-xs text-muted">Nothing needs you right now.</p>
