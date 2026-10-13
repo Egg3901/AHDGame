@@ -165,6 +165,36 @@ export function FomcCommitteeTab({ countryId }: { countryId: CountryId }) {
     [code, load]
   );
 
+  const [motionChoice, setMotionChoice] = useState<"hike" | "cut" | "hold">("hold");
+  const [motionSize, setMotionSize] = useState("0.25");
+  const [motionStatus, setMotionStatus] = useState<string | null>(null);
+
+  const tableMotion = useCallback(async () => {
+    setVoting(true);
+    setError(null);
+    setMotionStatus(null);
+    try {
+      const size = Number(motionSize);
+      const res = await fetch(`/api/country/${code}/fomc/motion`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(
+          motionChoice === "hold" ? { motion: "hold" } : { motion: motionChoice, delta: size }
+        ),
+      });
+      if (!res.ok) {
+        const body = (await res.json().catch(() => null)) as { error?: string } | null;
+        throw new Error(apiErrorText(body, "Could not table the motion"));
+      }
+      setMotionStatus("Motion tabled. The committee votes on it.");
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not table the motion");
+    } finally {
+      setVoting(false);
+    }
+  }, [code, load, motionChoice, motionSize]);
+
   const confirmVote = useCallback(
     async (nominationId: string, vote: "for" | "against" | "abstain") => {
       setVoting(true);
@@ -315,6 +345,55 @@ export function FomcCommitteeTab({ countryId }: { countryId: CountryId }) {
               abstain.
             </p>
 
+            {state.viewerSeatId &&
+              state.board.some((b) => b.seatId === state.viewerSeatId && b.isChair) && (
+                <div className="mt-4 rounded-md border border-card-border p-3">
+                  <p className="text-body-sm font-semibold text-foreground">
+                    Chair: table the motion
+                  </p>
+                  <p className="mt-1 text-body-sm text-muted">
+                    As chair you choose what the committee votes on. It still needs {meeting.needed}{" "}
+                    votes to carry.
+                  </p>
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <select
+                      value={motionChoice}
+                      onChange={(e) => setMotionChoice(e.target.value as "hike" | "cut" | "hold")}
+                      disabled={voting}
+                      className="rounded-md border border-card-border bg-card px-2 py-1.5 text-body-sm text-foreground"
+                    >
+                      {(["hike", "cut", "hold"] as const).map((v) => (
+                        <option key={v} value={v}>
+                          {MOTION_LABEL[v]}
+                        </option>
+                      ))}
+                    </select>
+                    {motionChoice !== "hold" && (
+                      <label className="flex items-center gap-1 text-body-sm text-muted">
+                        by
+                        <input
+                          type="number"
+                          min={0.25}
+                          step={0.25}
+                          value={motionSize}
+                          onChange={(e) => setMotionSize(e.target.value)}
+                          disabled={voting}
+                          className="w-20 rounded-md border border-card-border bg-card px-2 py-1.5 text-body-sm tabular-nums text-foreground"
+                        />
+                        pp
+                      </label>
+                    )}
+                    <button
+                      onClick={() => void tableMotion()}
+                      disabled={voting}
+                      className="rounded-md border border-card-border px-3 py-1.5 text-body-sm font-semibold text-foreground transition-colors hover:bg-card-elevated disabled:opacity-50"
+                    >
+                      Table motion
+                    </button>
+                  </div>
+                  {motionStatus && <p className="mt-2 text-body-sm text-muted">{motionStatus}</p>}
+                </div>
+              )}
             {state.viewerSeatId && (
               <div className="mt-4">
                 {meeting.viewerHasVoted ? (
