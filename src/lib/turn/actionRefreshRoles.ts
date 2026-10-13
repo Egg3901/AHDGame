@@ -123,14 +123,25 @@ export interface CeoCandidate {
 /**
  * The best NI-qualifying corporation each player CEO runs. Only listed
  * (non-private) corporations with a character CEO count; ranking is by market
- * cap within the corporation's country.
+ * cap within the corporation's country. A corporation on autopilot earns at
+ * most the standard tier: the major tier is for running it yourself.
  */
 export async function loadCeoCandidates(db: Db): Promise<Map<string, CeoCandidate>> {
   const corps = await db
     .collection<Corporation>("corporations")
     .find(
       { isPrivate: { $ne: true }, imfInstitution: { $ne: true } },
-      { projection: { _id: 1, countryId: 1, ceoId: 1, ceoType: 1, sharePrice: 1, totalShares: 1 } }
+      {
+        projection: {
+          _id: 1,
+          countryId: 1,
+          ceoId: 1,
+          ceoType: 1,
+          sharePrice: 1,
+          totalShares: 1,
+          autopilot: 1,
+        },
+      }
     )
     .toArray();
   const byCountry = new Map<string, typeof corps>();
@@ -149,7 +160,7 @@ export async function loadCeoCandidates(db: Db): Promise<Map<string, CeoCandidat
     ranked.slice(0, qualifyingCount).forEach((corp, index) => {
       if (corp.ceoType && corp.ceoType !== "character") return;
       if (!corp.ceoId) return;
-      const tier: CeoNiTier = index < MAJOR_CEO_RANK ? "major" : "standard";
+      const tier: CeoNiTier = index < MAJOR_CEO_RANK && !corp.autopilot ? "major" : "standard";
       const ceoId = corp.ceoId.toString();
       const existing = best.get(ceoId);
       if (!existing || (existing.tier === "standard" && tier === "major")) {

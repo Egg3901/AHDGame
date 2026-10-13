@@ -150,7 +150,8 @@ export async function GET(request: Request) {
           c.ceoVacant !== true &&
           c.ceoType !== "imperial" &&
           c.countryOwnerId == null &&
-          c.isNationalized !== true
+          c.isNationalized !== true &&
+          !c.autopilot
       )
       .map((c) => c.userId as ObjectId);
     const ceoUsers =

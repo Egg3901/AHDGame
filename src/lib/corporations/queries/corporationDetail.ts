@@ -365,6 +365,14 @@ export async function loadCorporationDetailView(args: {
       caretakerUnderlyingCharacterId:
         corporation.caretakerCeo?.underlyingCharacterId?.toString() ?? null,
       caretakerMandate: corporation.caretakerCeo?.mandate ?? "active",
+      // Owner-only: advisories describe the corp's private finances.
+      autopilot:
+        viewerOwnsCorporation && corporation.autopilot
+          ? {
+              enabledTurn: corporation.autopilot.enabledTurn,
+              advisories: corporation.autopilot.advisories ?? [],
+            }
+          : null,
       // Turns left on the post-reclaim cooldown before a new caretaker may be installed.
       caretakerReappointCooldownTurnsRemaining: caretakerReappointCooldownRemaining(
         corporation,
