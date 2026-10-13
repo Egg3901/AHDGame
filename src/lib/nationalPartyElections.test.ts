@@ -1248,16 +1248,83 @@ describe("createMissingNationalElections", () => {
     };
   }
 
-  /** Routes nationalPartyElections.find by the query's status field. */
-  function electionFind(active: unknown[], deferred: unknown[]) {
-    return vi.fn().mockImplementation((q: { status?: string }) => ({
-      toArray: vi
-        .fn()
-        .mockResolvedValue(
-          q?.status === "voting" ? active : q?.status === "completed" ? deferred : []
-        ),
-    }));
+  /** Routes nationalPartyElections.find by the query shape. */
+  function electionFind(
+    active: unknown[],
+    deferred: unknown[],
+    completedFirstCycle: unknown[] = []
+  ) {
+    return vi
+      .fn()
+      .mockImplementation(
+        (q: {
+          status?: string;
+          position?: { $in?: string[] };
+          quorumAcceleratedAtTurn?: unknown;
+        }) => {
+          const isFirstCycleQuery = q?.position?.$in?.includes("viceChair");
+          const rows =
+            q?.status === "voting"
+              ? active
+              : q?.status === "completed" && q?.quorumAcceleratedAtTurn
+                ? deferred
+                : isFirstCycleQuery
+                  ? completedFirstCycle
+                  : [];
+          return { toArray: vi.fn().mockResolvedValue(rows) };
+        }
+      );
   }
+  it("keeps a charter founder's first chair term out of the initial election cycle", async () => {
+    const founderParty = { ...party, chairId: new ObjectId(), createdTurn: 100 };
+    const insertMany = vi.fn().mockResolvedValue({ insertedCount: 2 });
+    setMockCollection("nationalPartyElections", { find: electionFind([], []), insertMany });
+    setMockCollection("politicalParties", {
+      find: vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue([founderParty]) }),
+    });
+    setMockCollection("characters", {
+      find: vi.fn().mockReturnValue({
+        project: vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue([]) }),
+      }),
+    });
+
+    const { createMissingNationalElections } = await import("./nationalPartyElections");
+    const created = await createMissingNationalElections(100, 72, new Date(), undefined);
+
+    expect(created).toBe(2);
+    const positions = insertMany.mock.calls[0][0].map((e: { position: string }) => e.position);
+    expect(positions.sort()).toEqual(["treasurer", "viceChair"]);
+  });
+
+  it("opens the founder's chair election after the first leadership cycle completes", async () => {
+    const founderParty = { ...party, chairId: new ObjectId(), createdTurn: 100 };
+    const completedFirstCycle = (["viceChair", "treasurer"] as const).map((position) => ({
+      ...activeElection(position),
+      status: "completed" as const,
+      startTurn: 100,
+      endTurn: 150,
+    }));
+    const insertMany = vi.fn().mockResolvedValue({ insertedCount: 3 });
+    setMockCollection("nationalPartyElections", {
+      find: electionFind([], [], completedFirstCycle),
+      insertMany,
+    });
+    setMockCollection("politicalParties", {
+      find: vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue([founderParty]) }),
+    });
+    setMockCollection("characters", {
+      find: vi.fn().mockReturnValue({
+        project: vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue([]) }),
+      }),
+    });
+
+    const { createMissingNationalElections } = await import("./nationalPartyElections");
+    const created = await createMissingNationalElections(150, 72, new Date(), undefined);
+
+    expect(created).toBe(3);
+    const positions = insertMany.mock.calls[0][0].map((e: { position: string }) => e.position);
+    expect(positions.sort()).toEqual(["chair", "treasurer", "viceChair"]);
+  });
 
   it("does not recreate a chair election still inside its accelerated deferral window", async () => {
     // chair was accelerated and resolved early; its natural cycle end is turn 269.

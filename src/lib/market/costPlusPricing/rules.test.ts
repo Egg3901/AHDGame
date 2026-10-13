@@ -1,12 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { computeClearingFactors, costPlusPriceFactor } from "../clearing";
 import { inputBasketCostIndex, recordCostPlusBasis } from "./rules";
-import { COMMODITY_BASE_PRICES } from "@/lib/constants/commodities";
+import { computeInputsCost } from "@/lib/corporations/physicalPnl";
+import { COMMODITY_BASE_PRICES, type CommodityType } from "@/lib/constants/commodities";
 
 describe("cost-plus offers", () => {
   it("passes through material inflation only on the recipe's input share", () => {
     expect(costPlusPriceFactor(1.5, 0, 0.67, 0.238)).toBeCloseTo(1.243, 10);
-    expect(costPlusPriceFactor(100, 0, 0.67, 0.238)).toBeCloseTo(1.243, 10);
+    expect(costPlusPriceFactor(100, 0, 0.67, 0.238)).toBeCloseTo(0.238 + 0.67 * 2, 10);
     expect(costPlusPriceFactor(Number.NaN, 0.1, 0.67, 0.238)).toBeCloseTo(0.9988, 10);
     expect(
       inputBasketCostIndex(
@@ -94,5 +95,38 @@ describe("cost-plus offers", () => {
       plantsEnabled: true,
     });
     expect(result.get("indexed")?.factor).toBeCloseTo(1.32, 10);
+  });
+  it("quotes the same input inflation the bill charges, so a sold-out plant is not loss-making", () => {
+    // Defence-shaped recipe with scarce inputs: rare earth and steel both above
+    // 2.25x base, so the damped basket index sits above the old 1.5 quote cap.
+    const rates = { rare_earth: 0.3, steel: 0.25 };
+    const ratios = new Map<CommodityType, number>([
+      ["rare_earth", 3.2],
+      ["steel", 3.6],
+    ]);
+    const nominal = 100_000;
+    const bill = computeInputsCost({
+      nominalDailyRevenue: nominal,
+      rates,
+      basePrices: COMMODITY_BASE_PRICES,
+      priceRatios: ratios,
+      utilization: 1,
+      inputMultiplier: 1,
+      turnsPerDay: 1,
+    }).total;
+    const index = inputBasketCostIndex(rates, ratios);
+    expect(index).toBeGreaterThan(1.5);
+    const fixedCost = 30_000;
+    const basis = recordCostPlusBasis({
+      inputsCost: bill,
+      inputCostIndex: index,
+      fixedCost,
+      nominalProducedRevenue: nominal,
+      turn: 1,
+    })!;
+    const quote = (markup: number) =>
+      costPlusPriceFactor(index, markup, basis.inputCostShare, basis.fixedCostShare) * nominal;
+    expect(quote(0)).toBeCloseTo(bill + fixedCost, 6);
+    expect(quote(0.05) - (bill + fixedCost)).toBeCloseTo(0.05 * (bill + fixedCost), 6);
   });
 });

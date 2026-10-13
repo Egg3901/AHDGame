@@ -277,6 +277,41 @@ describe("processCrisisTurn", () => {
     expect(db.collectionMocks.macroMetrics.updateMany).toHaveBeenCalledTimes(1);
   });
 
+  it("lets a GDP rate shock push sectorGrowth below zero", async () => {
+    const crisis = makeCrisis({
+      scope: "region",
+      regionIds: ["CA"],
+      startTurn: 10,
+      durationTurns: 24,
+      effects: [
+        {
+          effectType: "flat",
+          targetType: "metric",
+          metricCategory: "economic",
+          metricField: "gdpGrowth",
+          sectorType: null,
+          strategyId: null,
+          value: -1,
+          label: "GDP rate shock",
+        },
+      ],
+    });
+    db.collectionMocks.crises.find.mockReturnValue({ toArray: async () => [crisis] });
+    db.collectionMocks.states.find.mockReturnValue({
+      toArray: async () => [{ _id: "CA", countryId: "US" }],
+    });
+
+    const { processCrisisTurn } = await import("./crisisTurn");
+    await processCrisisTurn(db as unknown as Db, 10);
+
+    const pipeline = db.collectionMocks.macroMetrics.updateMany.mock.calls[0][1] as Array<{
+      $set: Record<string, { $max: [number, { $min: [number, unknown] }] }>;
+    }>;
+    const clamp = pipeline[0].$set["economic.sectorGrowth.value"];
+    expect(clamp.$max[0]).toBe(-10);
+    expect(clamp.$max[1].$min[0]).toBe(15);
+  });
+
   it("tapers a GDP rate shock through sectorGrowth while leaving physical GDP loss separate", async () => {
     const crisis = makeCrisis({
       scope: "region",
