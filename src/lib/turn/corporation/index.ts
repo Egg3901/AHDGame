@@ -3,6 +3,7 @@ import { configureGroupSupply, groupForecastWriteOps } from "./groupSupplyTurn";
  * Corporation turns settle operating results and distribute shareholder income.
  * processCorporationTurn shares monetary quotes across automatic dividend conversions.
  */
+import { resolveNoBuyerPhaseOutStartTurn } from "@/lib/extraction/noBuyerPhaseOutStart";
 import { applyCorporationCashWrites } from "@/lib/turn/npp/foundingCashLedger";
 import { loadConversionQuoteContext } from "@/lib/currency/euro/quotes";
 import { ObjectId } from "mongodb";
@@ -183,6 +184,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
           marketSystemMode: 1,
           marketGovernorGlideStartTurn: 1,
           marketGovernorGlideTurns: 1,
+          extractionNoBuyerPhaseOutStartTurn: 1,
           productLinesV2Enabled: 1,
           marketGovernorCap: 1,
           marketGovernorRampTurns: 1,
@@ -286,6 +288,11 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
           )
       : Promise.resolve(null),
   ]);
+  lookups.extractionNoBuyerPhaseOutStartTurn = await resolveNoBuyerPhaseOutStartTurn(
+    db,
+    marketGovernorConfig,
+    turn ?? gameState?.currentTurn ?? 0
+  );
   if (
     mediaProductSlatesEnabled &&
     lookups.mediaProductProjectsByCorpId &&

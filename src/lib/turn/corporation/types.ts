@@ -299,6 +299,12 @@ export interface CorporationLookups {
   // that actually track capacity.
   stateResourceCapacityByState: Map<string, Partial<Record<ExtractableResource, number>>>;
   /**
+   * Turn the no-buyer extraction phase-out started (gameConfig stamp), set by
+   * the corporation turn after the lookup build. Absent = no phase-out, which
+   * is what every read-only caller of the lookups gets.
+   */
+  extractionNoBuyerPhaseOutStartTurn?: number;
+  /**
    * sectorId → revenue-weighted extraction capacity utilization (0..1) and the
    * most-binding resource, derived from computeExtractionCapacityMultipliers.
    * Drives the capacity revenue haircut in processSectors. Computed here (not in

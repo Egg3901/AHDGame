@@ -219,15 +219,44 @@ export function capacityHaircutFactor(
   utilization: number,
   startTurn: number | undefined | null,
   currentTurn: number | undefined | null,
-  floor: number = 0
+  floor: number = 0,
+  minRampProgress: number = 0
 ): number {
   if (utilization >= 1) return 1;
-  if (startTurn == null || currentTurn == null) return 1;
-  const since = currentTurn - startTurn;
-  if (since <= 0) return 1;
-  const rampProgress = Math.min(1, since / EXTRACTION_CAPACITY_HAIRCUT_TURNS);
+  const phaseOut = Math.max(0, Math.min(1, minRampProgress));
+  if ((startTurn == null || currentTurn == null) && phaseOut <= 0) return 1;
+  const since = startTurn == null || currentTurn == null ? 0 : currentTurn - startTurn;
+  if (since <= 0 && phaseOut <= 0) return 1;
+  // `minRampProgress` (no-buyer phase-out) can only speed the ramp up.
+  const rampProgress = Math.max(
+    phaseOut,
+    Math.min(1, Math.max(0, since) / EXTRACTION_CAPACITY_HAIRCUT_TURNS)
+  );
   const factor = 1 - rampProgress * (1 - utilization);
   // `floor` clamps the realized factor (extraction passes
   // EXTRACTION_CAPACITY_HAIRCUT_FLOOR); default 0 = unfloored for other callers.
   return floor > 0 ? Math.max(floor, factor) : factor;
+}
+
+/**
+ * No-buyer phase-out window. A mine whose recipe has no leg its state can
+ * extract offers nothing to the clearing book, so every unit the deposit ramps
+ * still credit it is output nobody bought. Those ramps close over this many
+ * turns from the world's phase-out start, so no mine loses its whole revenue
+ * in one turn.
+ */
+export const EXTRACTION_NO_BUYER_PHASE_OUT_TURNS = 24;
+
+/** Progress in [0, 1] through the no-buyer phase-out; 0 before it starts. */
+export function noBuyerPhaseOutProgress(
+  startTurn: number | undefined | null,
+  currentTurn: number | undefined | null
+): number {
+  if (startTurn == null || currentTurn == null) return 0;
+  return Math.max(0, Math.min(1, (currentTurn - startTurn) / EXTRACTION_NO_BUYER_PHASE_OUT_TURNS));
+}
+
+/** The haircut floor for a mine `progress` of the way through the phase-out. */
+export function noBuyerHaircutFloor(progress: number): number {
+  return EXTRACTION_CAPACITY_HAIRCUT_FLOOR * (1 - Math.max(0, Math.min(1, progress)));
 }

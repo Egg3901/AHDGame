@@ -68,6 +68,13 @@ export interface PlantsRevenueInput {
   nameplateUnits: number;
   activeFraction: number;
   plantsRampLambda: number;
+  /**
+   * No-buyer phase-out progress for an extraction sector whose recipe has no
+   * leg its state can extract (0 otherwise). Under plants the deposit ceiling
+   * otherwise rides the launch-governor ramp, so such a mine kept producing
+   * (1 - lambda) of capacity for a market that never took a unit.
+   */
+  noBuyerPhaseOut?: number;
   capacityUtil: { utilization: number; bindingResource: ExtractableResource | null };
   capacityHaircut: number;
   capitalFactor: number;
@@ -267,9 +274,13 @@ export function resolvePlantsRevenue(input: PlantsRevenueInput): PlantsRevenueRe
   // the factor is exactly 1 there. Non-extraction sectors have utilization 1 and
   // are unaffected; non-plants worlds keep `capacityHaircut` (floor + 240-turn
   // ramp) byte-identically.
+  const extractionRampLambda = Math.max(
+    plantsRampLambda,
+    Math.max(0, Math.min(1, input.noBuyerPhaseOut ?? 0))
+  );
   const plantsExtractionHardMin =
     plantsEnabled && sector.sectorType === "extraction"
-      ? 1 - plantsRampLambda * (1 - Math.max(0, Math.min(1, capacityUtil.utilization)))
+      ? 1 - extractionRampLambda * (1 - Math.max(0, Math.min(1, capacityUtil.utilization)))
       : 1;
   const activeExtractionHardMin = activeCapacityConstraintFactor(
     plantsExtractionHardMin,

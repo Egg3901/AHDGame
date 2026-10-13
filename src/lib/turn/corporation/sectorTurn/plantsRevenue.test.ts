@@ -80,6 +80,26 @@ describe("resolvePlantsRevenue — governor bounds + P3b legs (#588)", () => {
     expect(r.hourlyRevenue).toBe(0);
   });
 
+  it("closes a no-buyer mine's deposit ramp with the phase-out, not the launch ramp", () => {
+    const deadMine = (noBuyerPhaseOut: number) =>
+      resolvePlantsRevenue(
+        input({
+          sector: {
+            ...input().sector,
+            sectorType: "extraction",
+          } as PlantsRevenueInput["sector"],
+          plantsRampLambda: 0.68,
+          capacityUtil: { utilization: 0, bindingResource: "rare_earth" },
+          noBuyerPhaseOut,
+        })
+      );
+    // Mid launch ramp a zero-deposit mine still produced 32% of capacity.
+    expect(deadMine(0).producedUnits).toBeCloseTo(320);
+    expect(deadMine(0.84).producedUnits).toBeCloseTo(160);
+    expect(deadMine(1).producedUnits).toBe(0);
+    expect(deadMine(1).marketHourlyRevenue).toBe(0);
+  });
+
   it("returns the counterfactual baseline untouched when plants are off", () => {
     const r = resolvePlantsRevenue(input({ plantsEnabled: false }));
     expect(r.marketHourlyRevenue).toBe(BASELINE_HOURLY);
