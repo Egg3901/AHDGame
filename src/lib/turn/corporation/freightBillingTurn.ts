@@ -57,6 +57,7 @@ export function buildFreightBillingBySector(args: {
     | "freightDemandByDestState"
     | "freightUnitPriceByDestState"
     | "freightSupplyByOriginState"
+    | "ownRouteFreightByCorp"
   >;
   currentTurn: number;
   plantsEnabled: boolean;
@@ -66,9 +67,14 @@ export function buildFreightBillingBySector(args: {
   const { lookups, currentTurn, plantsEnabled, currentYear, commandEconomyEnabled } = args;
   const freightChargesByDestState = lookups.freightChargesByDestState ?? new Map();
   const haulRevenueByOriginState = lookups.freightHaulRevenueByOriginState ?? new Map();
+  const ownRouteFreightByCorp = lookups.ownRouteFreightByCorp ?? new Map();
 
   const sectors: FreightBillingSectorUnits[] = [];
-  if (freightChargesByDestState.size > 0 || haulRevenueByOriginState.size > 0) {
+  if (
+    freightChargesByDestState.size > 0 ||
+    haulRevenueByOriginState.size > 0 ||
+    ownRouteFreightByCorp.size > 0
+  ) {
     for (const [corpId, corpSectors] of lookups.sectorsByCorp) {
       const corp: Corporation | undefined = lookups.corpById.get(corpId);
       const isNatcorp = !!corp?.countryOwnerId;
@@ -78,7 +84,8 @@ export function buildFreightBillingBySector(args: {
         // this turn need their units derived.
         const stateCharges = freightChargesByDestState.get(sector.stateId);
         const stateRevenue = haulRevenueByOriginState.get(sector.stateId) ?? 0;
-        if (!stateCharges && !(stateRevenue > 0)) continue;
+        const ownRouteCharges = ownRouteFreightByCorp.get(corpId)?.get(sector.stateId);
+        if (!stateCharges && !(stateRevenue > 0) && !ownRouteCharges) continue;
         const hostCode = resolveSectorHostCurrencyCode(sector, corp);
         const hostRate = fxRateForSectorHostFromMap(sector, corp, lookups.exchangeRatesByCurrency);
         const units = computeSectorCommodityUnits(
@@ -107,6 +114,7 @@ export function buildFreightBillingBySector(args: {
           stateId: sector.stateId,
           demandUnitsByCommodity: units.demand,
           freightSupplyUnits: units.supply.get("freight") ?? 0,
+          corporationId: corpId,
         });
       }
     }
@@ -125,6 +133,7 @@ export function buildFreightBillingBySector(args: {
     ),
     freightSupplyUnitsByOriginState: lookups.freightSupplyByOriginState ?? new Map(),
     sectors,
+    directChargesByCorp: ownRouteFreightByCorp,
   });
 }
 

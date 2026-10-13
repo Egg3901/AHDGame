@@ -290,3 +290,75 @@ describe("apportionFreightBilling — haul revenue", () => {
     expect(r.creditBySectorId.get("hauler")).toBeCloseTo(50);
   });
 });
+
+describe("apportionFreightBilling — own-company route freight", () => {
+  const base = {
+    freightChargesByDestState: new Map<string, Map<CommodityType, number>>(),
+    haulRevenueByOriginState: new Map<string, number>(),
+    freightSupplyUnitsByOriginState: new Map<string, number>(),
+    demandUnitsByDestState: charges({ CA: { iron: 1_000 } }),
+  };
+  const sectors = [
+    sector({
+      sectorId: "own1",
+      stateId: "CA",
+      corporationId: "c1",
+      demandUnitsByCommodity: demand({ iron: 30 }),
+    }),
+    sector({
+      sectorId: "own2",
+      stateId: "CA",
+      corporationId: "c1",
+      demandUnitsByCommodity: demand({ iron: 10 }),
+    }),
+    sector({
+      sectorId: "rival",
+      stateId: "CA",
+      corporationId: "c2",
+      demandUnitsByCommodity: demand({ iron: 500 }),
+    }),
+    sector({
+      sectorId: "ownElsewhere",
+      stateId: "MN",
+      corporationId: "c1",
+      demandUnitsByCommodity: demand({ iron: 100 }),
+    }),
+  ];
+  const direct = (amount: number) =>
+    new Map([["c1", new Map([["CA", new Map<CommodityType, number>([["iron", amount]])]])]]);
+
+  it("bills only the routing company's sectors in the destination state, by their demand", () => {
+    const r = apportionFreightBilling({ ...base, sectors, directChargesByCorp: direct(400) });
+    expect(r.chargeBySectorId.get("own1")).toBeCloseTo(300);
+    expect(r.chargeBySectorId.get("own2")).toBeCloseTo(100);
+    expect(r.chargeBySectorId.has("rival")).toBe(false);
+    expect(r.chargeBySectorId.has("ownElsewhere")).toBe(false);
+    expect(r.unapportionedCharges).toBeCloseTo(0);
+  });
+
+  it("keeps an unbillable route charge as an unapportioned remainder", () => {
+    const r = apportionFreightBilling({
+      ...base,
+      sectors: sectors.filter((s) => s.corporationId !== "c1"),
+      directChargesByCorp: direct(400),
+    });
+    expect(r.chargeBySectorId.size).toBe(0);
+    expect(r.unapportionedCharges).toBeCloseTo(400);
+  });
+
+  it("shares the goods-value ceiling with the sector's shared state charge", () => {
+    const r = apportionFreightBilling({
+      ...base,
+      freightChargesByDestState: charges({ CA: { iron: 540 } }),
+      demandUnitsByDestState: charges({ CA: { iron: 540 } }),
+      unitPriceByDestState: charges({ CA: { iron: 100 } }),
+      sectors,
+      directChargesByCorp: direct(10_000),
+    });
+    expect(r.chargeBySectorId.get("own1")).toBeCloseTo(
+      30 * 100 * FREIGHT_BILL_MAX_SHARE_OF_GOODS_VALUE
+    );
+    const billed = [...r.chargeBySectorId.values()].reduce((a, b) => a + b, 0);
+    expect(billed + r.unapportionedCharges).toBeCloseTo(540 + 10_000);
+  });
+});

@@ -126,6 +126,7 @@ import {
   scarcityReliefCappedUtilization,
 } from "@/lib/extraction/capacityHaircut";
 import type { SourcingNetworkDoc } from "@/lib/logistics/sourcingLedger";
+import { ownRouteKey } from "@/lib/market/internalSupply/rules";
 import { SETTLEMENT_HISTORY_EXCLUDED } from "@/lib/banking/settlementHistory";
 import { latentDemandTopUp } from "@/lib/market/latentShortageSignal";
 
@@ -1393,7 +1394,13 @@ export async function buildCorporationLookups(
   const freightDemandByDestState = new Map<string, Map<CommodityType, number>>();
   const freightUnitPriceByDestState = new Map<string, Map<CommodityType, number>>();
   const freightSupplyByOriginState = new Map<string, number>();
-  if (options?.moneyWiringEnabled || options?.canonicalFreightBillingEnabled) {
+  const ownRouteDeliveredByKey = new Map<string, number>();
+  const ownRouteFreightByCorp = new Map<string, Map<string, Map<CommodityType, number>>>();
+  if (
+    options?.moneyWiringEnabled ||
+    options?.canonicalFreightBillingEnabled ||
+    options?.freightSettlementActive
+  ) {
     const networkDoc = await db
       .collection<SourcingNetworkDoc>("sourcingNetworkLoad")
       .find({ turn: { $lte: embargoTurn } })
@@ -1401,6 +1408,13 @@ export async function buildCorporationLookups(
       .limit(1)
       .toArray();
     const doc = networkDoc[0];
+    if (options?.freightSettlementActive) {
+      for (const r of doc?.ownRouteDelivered ?? []) {
+        if (!(typeof r.units === "number" && r.units > 0)) continue;
+        const key = ownRouteKey(r.commodity, r.corporationId, r.originStateId, r.destStateId);
+        ownRouteDeliveredByKey.set(key, (ownRouteDeliveredByKey.get(key) ?? 0) + r.units);
+      }
+    }
     if (options?.moneyWiringEnabled && doc?.landedPremiums) {
       for (const [stateId, byCommodity] of Object.entries(doc.landedPremiums)) {
         const m = new Map<CommodityType, number>();
@@ -1430,6 +1444,15 @@ export async function buildCorporationLookups(
       for (const [stateId, revenue] of Object.entries(doc?.freightHaulRevenue ?? {})) {
         if (typeof revenue === "number" && revenue > 0)
           freightHaulRevenueByOriginState.set(stateId, revenue);
+      }
+      for (const r of doc?.ownRouteDelivered ?? []) {
+        const charge = r.freightCharge;
+        if (!(typeof charge === "number" && Number.isFinite(charge) && charge > 0)) continue;
+        let byDest = ownRouteFreightByCorp.get(r.corporationId);
+        if (!byDest) ownRouteFreightByCorp.set(r.corporationId, (byDest = new Map()));
+        let byCommodity = byDest.get(r.destStateId);
+        if (!byCommodity) byDest.set(r.destStateId, (byCommodity = new Map()));
+        byCommodity.set(r.commodity, (byCommodity.get(r.commodity) ?? 0) + charge);
       }
       const billingSnapshot = readFreightBillingSnapshot(doc, commodityPrices);
       for (const [stateId, demand] of billingSnapshot.demandByDestState)
@@ -1510,6 +1533,8 @@ export async function buildCorporationLookups(
     freightDemandByDestState,
     freightUnitPriceByDestState,
     freightSupplyByOriginState,
+    ownRouteDeliveredByKey,
+    ownRouteFreightByCorp,
     freightHaulRevenueByOriginState,
     nationalCommodityBalancesByCountry,
     countryClearingBooks,
