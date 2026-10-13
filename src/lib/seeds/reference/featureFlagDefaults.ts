@@ -197,6 +197,8 @@ export const NON_GAMEPLAY_GAME_CONFIG_FIELDS: Readonly<Record<string, string>> =
     "era-derived: bootstrap sets it from the preset (on for 1953 and 1979 command regimes)",
   demographicsDemandEnabled:
     "superseded alternative to householdConsumptionEnabled; enabling both double-counts consumer demand",
+  marketGovernorGlideMode:
+    "operator transition control for one world's launch-governor glide, set with its start turn; fresh worlds have no glide",
 };
 
 /**
