@@ -143,6 +143,8 @@ export const NOTIFICATION_TYPES = [
   "corp_supply_agreement_offer",
   /** A supply agreement was accepted, taken from the board, cancelled, or expired. */
   "corp_supply_agreement_update",
+  /** Autopilot found a move worth making that it leaves to the owner. */
+  "corp_autopilot_advisory",
   /** A product in development needs the CEO to answer a decision. */
   "corp_product_event",
   /** A product finished development as a hit or a flop. */

@@ -27,9 +27,14 @@ const TURN_MS = 60 * 60 * 1000;
  * country-owned corps, and corps with no owning user.
  */
 export function isInactiveCeoPenaltyCandidate(
-  corp: Pick<Corporation, "countryOwnerId" | "ceoVacant" | "isNationalized" | "ceoType" | "userId">
+  corp: Pick<
+    Corporation,
+    "countryOwnerId" | "ceoVacant" | "isNationalized" | "ceoType" | "userId" | "autopilot"
+  >
 ): boolean {
   if (corp.ceoVacant === true) return false;
+  // An owner who switched on autopilot is managing the corp by choice.
+  if (corp.autopilot) return false;
   if (corp.ceoType === "imperial") return false;
   if (corp.ceoType === "npp") return false; // NPP corps are AI-run, never inactive
   if (corp.countryOwnerId != null) return false;

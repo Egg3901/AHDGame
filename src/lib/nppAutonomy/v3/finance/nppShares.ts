@@ -327,7 +327,12 @@ export async function nppSellShares(
   // matching the player sell route's ordering.
   const settled = await settleFloatSellDebit(db, corp, proceeds, { pools });
   if (!settled.ok) {
-    return { ok: false, reason: "The equity market does not have enough cash for this sale." };
+    return {
+      ok: false,
+      reason: settled.paced
+        ? "The equity market has bought as much of this company as it will this turn."
+        : "The equity market does not have enough cash for this sale.",
+    };
   }
 
   const shouldVacateCeo = corp.ceoId?.equals(npp._id) && ownedShares === shares;

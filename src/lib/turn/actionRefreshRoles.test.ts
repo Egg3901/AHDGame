@@ -61,6 +61,15 @@ describe("loadCeoCandidates", () => {
     expect(candidates.has("ceo15")).toBe(false);
   });
 
+  it("caps a top-10 corporation on autopilot at the standard tier", async () => {
+    const corps = Array.from({ length: 30 }, (_, i) =>
+      corp(i, `ceo${i}`, 1000 - i, i === 0 ? { autopilot: { enabledTurn: 1 } } : {})
+    );
+    const candidates = await loadCeoCandidates(dbWith({ corporations: corps }));
+    expect(candidates.get("ceo0")?.tier).toBe("standard");
+    expect(candidates.get("ceo1")?.tier).toBe("major");
+  });
+
   it("skips NPP-run corporations and keeps a CEO's best tier", async () => {
     const corps = [
       corp(0, "npp", 1000, { ceoType: "npp" }),

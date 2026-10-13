@@ -168,7 +168,8 @@ export async function appointCaretakerCeo(
         },
         updatedAt: now,
       },
-      $unset: { pendingCeoCharacterId: "" },
+      // A caretaker replaces autopilot; it must not silently resume on reclaim.
+      $unset: { pendingCeoCharacterId: "", autopilot: "" },
     }
   );
 

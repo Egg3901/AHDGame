@@ -13,6 +13,12 @@ import {
   type EscrowDebitSplit,
 } from "@/lib/financialTxLog/atomicCashGuard";
 import {
+  loadPoolSellPacing,
+  releasePoolSellAllowance,
+  reservePoolSellAllowance,
+} from "@/lib/equities/blockPacing";
+import { getCurrentTurn } from "@/lib/currentTurn";
+import {
   creditEquityPool,
   debitEquityPoolGated,
   equityPoolCurrency,
@@ -48,6 +54,11 @@ type EscrowSettlementOptions = {
    * EXISTENCE is decided from it; the credit itself is still an atomic $inc.
    */
   pools?: Map<CurrencyCode, EquityMarketPool>;
+  /**
+   * Skip per-company sell pacing (see blockPacing.ts). Only for flows the turn
+   * order book already paced, or that are not holder cash-outs.
+   */
+  skipPacing?: boolean;
 };
 
 /**
@@ -188,8 +199,17 @@ export async function applyFloatBuyCredit(
 /** Re-exported so callers can type the hoisted split without a second import. */
 export type { EscrowDebitSplit };
 
-/** Result of a float-sell settlement. `split` is present only in escrow mode. */
-export type FloatSellSettlement = { ok: boolean; split?: EscrowDebitSplit };
+/**
+ * Result of a float-sell settlement. `split` is present only in escrow mode.
+ * `paced` means the pool refused because this company's per-turn sell
+ * allowance is used up; `pacedRemainingLocal` is what it would still buy.
+ */
+export type FloatSellSettlement = {
+  ok: boolean;
+  split?: EscrowDebitSplit;
+  paced?: boolean;
+  pacedRemainingLocal?: number;
+};
 
 /**
  * Settle the issuer side of a float SELL.
@@ -213,6 +233,22 @@ export async function settleFloatSellDebit(
     liquidCurrencyCode: corp.liquidCurrencyCode ?? undefined,
   });
   if (options?.counterparty !== "issuer" && (await equityPoolExists(db, currency, options))) {
+    let pacedTurn: number | undefined;
+    if (!options?.skipPacing) {
+      const pacing = await loadPoolSellPacing(db, corp._id, options);
+      const reserved = await reservePoolSellAllowance(
+        db,
+        corp._id,
+        pacing.turn,
+        amountLocal,
+        pacing.capLocal,
+        options
+      );
+      if (!reserved) {
+        return { ok: false, paced: true, pacedRemainingLocal: pacing.remainingLocal };
+      }
+      pacedTurn = pacing.turn;
+    }
     const debit = await debitEquityPoolGated(
       db,
       currency,
@@ -221,6 +257,9 @@ export async function settleFloatSellDebit(
       new Date(),
       options
     );
+    if (!debit.ok && pacedTurn !== undefined) {
+      await releasePoolSellAllowance(db, corp._id, pacedTurn, amountLocal, options);
+    }
     return { ok: debit.ok };
   }
   if (getShareBuybackMode(corp) === "escrow") {
@@ -249,6 +288,9 @@ export async function reverseFloatSellDebit(
   });
   if (options?.counterparty !== "issuer" && (await readEquityPool(db, currency, options))) {
     await refundEquityPoolDebit(db, currency, amountLocal, "salesOut", new Date(), options);
+    if (!options?.skipPacing) {
+      await releasePoolSellAllowance(db, corp._id, await getCurrentTurn(db), amountLocal, options);
+    }
     return;
   }
   if (getShareBuybackMode(corp) === "escrow") {

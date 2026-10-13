@@ -150,7 +150,8 @@ export async function GET(request: Request) {
           c.ceoVacant !== true &&
           c.ceoType !== "imperial" &&
           c.countryOwnerId == null &&
-          c.isNationalized !== true
+          c.isNationalized !== true &&
+          !c.autopilot
       )
       .map((c) => c.userId as ObjectId);
     const ceoUsers =
@@ -562,7 +563,11 @@ export async function POST(request: Request) {
       ipoResult && foundingOffer
         ? await planEquityPrimaryPlacement(
             db,
-            { countryId: character.countryId, liquidCurrencyCode: corpHomeCurrency },
+            {
+              countryId: character.countryId,
+              liquidCurrencyCode: corpHomeCurrency,
+              totalShares: founderShares,
+            },
             ipoResult.newShares,
             initialSharePrice
           )
@@ -591,6 +596,7 @@ export async function POST(request: Request) {
             {
               countryId: character.countryId,
               liquidCurrencyCode: corpHomeCurrency,
+              totalShares: founderShares,
             },
             ipoResult.newShares,
             initialSharePrice,

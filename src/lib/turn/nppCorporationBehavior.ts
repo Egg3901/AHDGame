@@ -100,6 +100,16 @@ import {
 } from "@/lib/turn/npp/nppConstructionFinance";
 import { maybePushNppTechUnlock } from "@/lib/turn/npp/corpBehaviorConfig";
 import {
+  AUTOPILOT_ADVISORY_COPY,
+  AUTOPILOT_MODIFIERS,
+  advisoriesChanged,
+  deriveAutopilotAdvisories,
+  advisoriesToNotify,
+  isAutopilotRun,
+} from "@/lib/corporations/autopilot";
+import type { CorpAutopilotAdvisory } from "@/lib/db/types/corporation";
+import { createNotifications } from "@/lib/notifications";
+import {
   corpDailyGrossRevenueLocalFromSectors,
   corpTechCashFloorLocal,
 } from "@/lib/corporations/dailyGrossRevenue";
@@ -166,12 +176,22 @@ export async function processNppCorporationDecisions(
   constructionFinanceCandidateCount: number;
   constructionFinanceBacklogCount: number;
 }> {
+  // Player corps on autopilot ride the same brain; see isAutopilotRun.
   const nppCorps = preloaded
-    ? preloaded.corporations.filter((corp) => corp.ceoType === "npp" && corp.suspended !== true)
-    : await db
-        .collection<Corporation>("corporations")
-        .find({ ceoType: "npp", suspended: { $ne: true } })
-        .toArray();
+    ? preloaded.corporations.filter(
+        (corp) => (corp.ceoType === "npp" && corp.suspended !== true) || isAutopilotRun(corp)
+      )
+    : (
+        await db
+          .collection<Corporation>("corporations")
+          .find({
+            $or: [
+              { ceoType: "npp", suspended: { $ne: true } },
+              { autopilot: { $exists: true }, suspended: { $ne: true } },
+            ],
+          })
+          .toArray()
+      ).filter((corp) => corp.ceoType === "npp" || isAutopilotRun(corp));
 
   const corpUpdates: NppCorpUpdateOp[] = [];
   const allSectorUpdates: Array<{
@@ -397,8 +417,11 @@ export async function processNppCorporationDecisions(
 
   const labourWagesEnabled = isLabourSystemMode(labourMode) && labourAtLeast(labourMode, "wages");
 
+  const autopilotAlerts: Array<{ corp: Corporation; kinds: CorpAutopilotAdvisory[] }> = [];
+
   for (const corp of nppCorps) {
     const sectors = sectorsByCorp.get(corp._id.toString()) ?? [];
+    const autopilot = isAutopilotRun(corp);
     const archetype =
       (corp.ceoId && archetypeByNppId.get(corp.ceoId.toString())) || DEFAULT_ARCHETYPE;
     const corpCurrency = resolveCorpLiquidCurrencyCode(corp);
@@ -423,7 +446,8 @@ export async function processNppCorporationDecisions(
       strategy: corp.nppStrategy,
       strategyEligible: entryCohortEligible,
       ordinaryEntryEligible: entryCohortEligible,
-      shortageEntryEligible: entryCohortEligible,
+      // Autopilot never borrows: shortage entry draws market-entry credit.
+      shortageEntryEligible: entryCohortEligible && !autopilot,
       retailExpansionPaused,
       caretakerMandate: corp.caretakerCeo?.mandate ?? "active",
       strategyLoopEnabled,
@@ -435,11 +459,11 @@ export async function processNppCorporationDecisions(
         // enterprises, exactly as `perTurnBondDragOnNetIncome` does.
         isNationalEnterprise: !!corp.countryOwnerId,
       }),
-      modifiers: ceoArchetypeModifiers(archetype),
+      modifiers: autopilot ? AUTOPILOT_MODIFIERS : ceoArchetypeModifiers(archetype),
       labourWagesEnabled,
       currentYear: techCurrentYear > 0 ? techCurrentYear : undefined,
       techTreesEnabled,
-      frontierEntry: frontierEntryTurn,
+      frontierEntry: autopilot ? undefined : frontierEntryTurn,
     };
     let decision = makeNppCorpDecision(
       decisionContext,
@@ -468,7 +492,7 @@ export async function processNppCorporationDecisions(
           placementSignals
         ),
     });
-    if (nppConstructionFinanceEnabled && corpCurrency) {
+    if (nppConstructionFinanceEnabled && corpCurrency && !autopilot) {
       for (const intent of decision.constructionFinanceIntents ?? []) {
         constructionFinanceCandidates.push({
           ...intent,
@@ -523,6 +547,9 @@ export async function processNppCorporationDecisions(
     if (witness) foundingCashWitnesses.push(witness);
 
     // Budget tech from post-decision cash and preserve the same safety floor.
+    // Autopilot computes the same pick into scratch arrays and leaves it to the
+    // owner: a tech lane commitment is permanent, so it is the owner's call.
+    const techScratch: TechUnlockLedgerInput[] = [];
     if (techTreesEnabled && decisionContext.caretakerMandate !== "passive") {
       maybePushNppTechUnlock({
         corp,
@@ -538,11 +565,40 @@ export async function processNppCorporationDecisions(
         techCurrentYear,
         turn,
         now,
-        corpUpdates,
+        corpUpdates: autopilot ? [] : corpUpdates,
         liquidCapitalDelta: decision.liquidCapitalDelta,
         cashReserve: decision.cashFloorLocal,
-        techLedger,
+        techLedger: autopilot ? techScratch : techLedger,
       });
+    }
+
+    if (autopilot && corp.autopilot) {
+      const advisories = deriveAutopilotAdvisories(
+        {
+          chronicLowFill: decision.autopilotSignals?.chronicLowFill === true,
+          debtDominant: decision.autopilotSignals?.debtDominant === true,
+          losingSectors: decision.autopilotSignals?.losingSectors ?? 0,
+          distressed: corp.financialDistressSinceTurn != null,
+          affordableTech: techScratch[0]?.nodeName ?? null,
+        },
+        corp.autopilot.advisories,
+        turn
+      );
+      if (advisoriesChanged(corp.autopilot.advisories, advisories)) {
+        const notify = advisoriesToNotify(
+          corp.autopilot.advisories,
+          advisories,
+          corp.autopilot.notifiedTurn,
+          turn
+        );
+        const $set: Record<string, unknown> = {
+          "autopilot.advisories": advisories,
+          updatedAt: now,
+        };
+        for (const a of notify) $set[`autopilot.notifiedTurn.${a.kind}`] = turn;
+        corpUpdates.push({ filter: { _id: corp._id }, update: { $set } });
+        if (notify.length > 0) autopilotAlerts.push({ corp, kinds: notify });
+      }
     }
 
     // Accrual (the score memory) happens every turn inside the decision, but the
@@ -603,6 +659,23 @@ export async function processNppCorporationDecisions(
     capacityObservations,
     operatorObservations,
   });
+
+  await createNotifications(
+    autopilotAlerts.flatMap(({ corp, kinds }) =>
+      corp.userId
+        ? kinds.map((kind) => {
+            const copy = AUTOPILOT_ADVISORY_COPY[kind.kind];
+            return {
+              userId: corp.userId!,
+              type: "corp_autopilot_advisory" as const,
+              title: `${corp.name}: ${copy.title}`,
+              message: copy.body(kind.subject),
+              metadata: { corporationId: corp._id.toString(), advisory: kind.kind },
+            };
+          })
+        : []
+    )
+  );
 
   return {
     corpUpdates,
