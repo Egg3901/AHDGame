@@ -436,6 +436,60 @@ describe("stockExchangeSnapshot", () => {
       expect(lListing?.tickerSymbol).toBeUndefined();
     });
 
+    it("projects CEO type into public listings without adding CEO identities", async () => {
+      const player = createCorporation({
+        name: "Player Corp",
+        ceoType: "character",
+        autopilotEnabled: true,
+      });
+      const npp = createCorporation({ name: "NPP Corp", ceoType: "npp" });
+      const legacy = createCorporation({ name: "Legacy Corp" });
+      const imperial = createCorporation({ name: "Imperial Corp", ceoType: "imperial" });
+      const corporations = createMockChain([player, npp, legacy, imperial]);
+      corporations.aggregate.mockReturnValue(createMockChain([]));
+      const collections: Record<string, ReturnType<typeof createMockChain>> = {
+        corporations,
+        characters: createMockChain([
+          { _id: player.ceoId, name: "Public Character" },
+          { _id: legacy.ceoId, name: "Legacy Character" },
+        ]),
+        npps: createMockChain([{ _id: npp.ceoId, name: "Public NPP" }]),
+        imperialCharacters: createMockChain([{ _id: imperial.ceoId, name: "Public Imperial" }]),
+        corporateSectors: createMockChain([]),
+        corporationHistory: createMockChain([]),
+        stateMetrics: createMockChain([createStateMetrics()]),
+        states: createMockChain([createState()]),
+        exchangeRates: createMockChain([]),
+        corporateGroups: createMockChain([]),
+        stockExchangeSnapshots: Object.assign(createMockChain([]), { updateOne: mockUpdateOne }),
+        marketIndexIntraday: Object.assign(createMockChain([]), {
+          bulkWrite: intradayBulkWrite,
+        }),
+        marketCapTicks: Object.assign(createMockChain([]), { bulkWrite: intradayBulkWrite }),
+      };
+      mockCollection.mockImplementation((name: string) => collections[name] ?? createMockChain([]));
+
+      await generateStockExchangeSnapshots(100, mockDb);
+
+      const global = mockUpdateOne.mock.calls.find((call) => call[0]?._id === "global")![1].$set;
+      const listings = global.listings as Array<Record<string, any>>;
+      expect(listings.find((listing) => listing.name === "Player Corp")?.ceoType).toBe("character");
+      expect(listings.find((listing) => listing.name === "NPP Corp")?.ceoType).toBe("npp");
+      expect(listings.find((listing) => listing.name === "Legacy Corp")?.ceoType).toBeUndefined();
+      expect(listings.find((listing) => listing.name === "Imperial Corp")?.ceoType).toBe(
+        "imperial"
+      );
+      expect(listings.find((listing) => listing.name === "Player Corp")?.isNpp).toBe(false);
+      expect(listings.find((listing) => listing.name === "Player Corp")?.ceo).toEqual(
+        expect.objectContaining({ name: "Public Character" })
+      );
+      for (const listing of listings) {
+        expect(listing).not.toHaveProperty("ceoId");
+        expect(listing).not.toHaveProperty("userId");
+        expect(listing).not.toHaveProperty("autopilotEnabled");
+      }
+    });
+
     it("calculates price change 24h correctly", async () => {
       const corpId = new ObjectId();
       mockCollection
