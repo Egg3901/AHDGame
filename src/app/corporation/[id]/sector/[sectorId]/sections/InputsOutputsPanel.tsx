@@ -76,6 +76,7 @@ export default function InputsOutputsPanel({
   // What the engine actually applied, floored at THROUGHPUT_MIN, the raw
   // availability ratio on the rows above is uncapped and is not the throttle.
   const throttleApplied = commodities.throughput?.applied ?? null;
+  const throttleFloor = commodities.throughput?.floor ?? THROUGHPUT_MIN;
   const inputBillSharePct =
     plants.pnl && plants.pnl.revenueAnchor > 0
       ? (plants.pnl.inputsAnchor / plants.pnl.revenueAnchor) * 100
@@ -208,7 +209,7 @@ export default function InputsOutputsPanel({
                 was the binding input. That was the &quot;waiting on inputs&quot; slice in the run
                 meter above. Your plants ran at{" "}
                 <span className="font-semibold tabular-nums">{fmtPct(throttleApplied)}</span> of
-                what they could have. A shortage never cuts you below {fmtPct(THROUGHPUT_MIN)}, so a
+                what they could have. A shortage never cuts you below {fmtPct(throttleFloor)}, so a
                 worse world number than that does not bite any harder.
               </p>
             )}

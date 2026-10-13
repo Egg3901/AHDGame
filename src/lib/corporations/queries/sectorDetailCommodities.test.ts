@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  appliedThroughputFloor,
   computeCapitalUsage,
   perUnitAnchorAmount,
   resolveThroughputBindingInput,
@@ -35,6 +36,22 @@ describe("sector detail capital economics", () => {
       utilization: 0,
       capacityUsed: 0,
     });
+  });
+});
+
+describe("sector detail throughput floor", () => {
+  it("quotes the governor floor the engine applies, not the raw Leontief minimum", () => {
+    // Default governor cap 0.15: an input-starved plant is pinned at 85%.
+    expect(appliedThroughputFloor(0.15)).toBeCloseTo(0.85, 10);
+  });
+
+  it("falls back to the raw minimum when the governor allows deeper cuts", () => {
+    expect(appliedThroughputFloor(0.8)).toBe(0.5);
+    expect(appliedThroughputFloor(1)).toBe(0.5);
+  });
+
+  it("treats a malformed cap as no governor floor", () => {
+    expect(appliedThroughputFloor(Number.NaN)).toBe(0.5);
   });
 });
 
