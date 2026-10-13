@@ -4,6 +4,7 @@ import {
   capacityHaircutFactor,
   EXTRACTION_CAPACITY_HAIRCUT_FLOOR,
   EXTRACTION_CAPACITY_HAIRCUT_TURNS,
+  noBuyerHaircutFloor,
   RAMP_REANCHOR_DELTA,
 } from "@/lib/extraction/capacityHaircut";
 
@@ -13,7 +14,13 @@ export function resolveSectorCapacityHaircut(
     string,
     { utilization: number; bindingResource: ExtractableResource | null }
   >,
-  currentTurn: number
+  currentTurn: number,
+  /**
+   * Progress through the no-buyer phase-out for a mine whose recipe has no leg
+   * its state can extract, 0 for every other sector. Closes the deposit ramp
+   * and lowers the 0.5 floor to 0 together, over 24 turns.
+   */
+  noBuyerProgress: number = 0
 ): {
   capacityUtil: { utilization: number; bindingResource: ExtractableResource | null };
   capacityHaircutStartTurn: number | undefined;
@@ -55,7 +62,8 @@ export function resolveSectorCapacityHaircut(
     capacityUtil.utilization,
     capacityHaircutStartTurn,
     currentTurn,
-    EXTRACTION_CAPACITY_HAIRCUT_FLOOR
+    noBuyerProgress > 0 ? noBuyerHaircutFloor(noBuyerProgress) : EXTRACTION_CAPACITY_HAIRCUT_FLOOR,
+    noBuyerProgress
   );
 
   return { capacityUtil, capacityHaircutStartTurn, capacityHaircut };
