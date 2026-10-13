@@ -117,12 +117,14 @@ import {
 import { depletedCapacityDoc } from "@/lib/extraction/depletion";
 import { getEraUnitScale } from "@/lib/constants/sectorSeedEra";
 import { getExtractionOutputScaleEnabled } from "@/lib/market/featureFlag";
+import { extractionRevenueAnchorOf } from "@/lib/extraction/revenueAnchor";
 import {
   getExtractionContractsCollection,
   activeExtractionContractFilter,
 } from "@/lib/db/collections/extractionContracts";
 import {
   haircutScarcityRelief,
+  limitExtractionUtilizationRise,
   scarcityReliefCappedUtilization,
 } from "@/lib/extraction/capacityHaircut";
 import type { SourcingNetworkDoc } from "@/lib/logistics/sourcingLedger";
@@ -1140,6 +1142,11 @@ export async function buildCorporationLookups(
     // fraction of the sector's real desired output and never bound.
     const extractionOutputScaleEnabled = await getExtractionOutputScaleEnabled();
     const extractionBasePrices = eraScaledBasePrices(eraUnitScale);
+    // The ledger anchor-normalizes revenue before dividing by ₳ base prices
+    // (buildSectorRows); this clamp must too, or a non-USD miner's desired
+    // output is inflated by its exchange rate and it reads as far over its
+    // deposit (live: 46 mines, mostly yen, lira and peseta).
+    const extractionRevenueAnchor = extractionRevenueAnchorOf(corpById, exchangeRatesByCurrency);
     const extractionStateIds = [...new Set(extractionSectors.map((s) => s.stateId))];
     const activeContracts = await (
       await getExtractionContractsCollection(db)
@@ -1176,7 +1183,7 @@ export async function buildCorporationLookups(
           // follows the same config flag as the ledger, so modern worlds are
           // unchanged whenever the ledger is.
           revenueBasedOutput[resource] =
-            (sector.revenue *
+            (extractionRevenueAnchor(sector) *
               rate *
               extractionOutputScaleFor(resource, extractionOutputScaleEnabled)) /
             extractionBasePrices[resource];
@@ -1213,18 +1220,25 @@ export async function buildCorporationLookups(
       const relief = haircutScarcityRelief(bal?.supply, bal?.demand);
       if (relief > 0) reliefByResource[resource] = relief;
     }
+    const priorUtilizationBySector = new Map(
+      extractionSectors.map((sector) => [sector._id.toString(), sector.capacityUtilization])
+    );
     for (const [sectorId, rates] of ratesBySector) {
       // Relief is capped at the raw capacity ratio over the CORRECTED
       // desired-output units: a sector whose desired output exceeds its
       // state's deposit ceiling cannot have the haircut lifted past what
-      // those deposits can actually yield.
+      // those deposits can actually yield. A rise eases in from last turn's
+      // persisted reading; a fall applies at once.
       extractionCapacityUtilBySector.set(
         sectorId,
-        scarcityReliefCappedUtilization(
-          rates,
-          multipliers.get(sectorId),
-          reliefByResource,
-          outputUnitsBySector.get(sectorId)
+        limitExtractionUtilizationRise(
+          scarcityReliefCappedUtilization(
+            rates,
+            multipliers.get(sectorId),
+            reliefByResource,
+            outputUnitsBySector.get(sectorId)
+          ),
+          priorUtilizationBySector.get(sectorId)
         )
       );
     }

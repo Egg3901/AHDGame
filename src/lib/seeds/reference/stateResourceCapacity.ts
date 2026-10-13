@@ -78,7 +78,9 @@ export const STATE_RESOURCE_CAPACITY: Record<string, StateResourceCapacityEntry>
   "US:GA": { countryId: "US", resources: { timber: 67500 } },
   "US:WI": { countryId: "US", resources: { timber: 37500, iron: 18000 } },
   // Northeast — mostly timber, minor gas
-  "US:NY": { countryId: "US", resources: { timber: 45000, natural_gas: 22500 } },
+  // Gas raised 22,500 -> 40,000 (2026-10-13): live desired gas output ran 1.41x
+  // the deposit. Sized so desired output sits at ~80% of capacity.
+  "US:NY": { countryId: "US", resources: { timber: 45000, natural_gas: 40000 } },
   "US:MA": { countryId: "US", resources: { timber: 7500, natural_gas: 15000 } },
   "US:CT": { countryId: "US", resources: { timber: 3000 } },
   "US:VT": { countryId: "US", resources: { timber: 37500 } },
@@ -115,7 +117,9 @@ export const STATE_RESOURCE_CAPACITY: Record<string, StateResourceCapacityEntry>
   "UK:SWE": { countryId: "UK", resources: { rare_earth: 538, timber: 12000 } },
   "UK:SEE": { countryId: "UK", resources: { timber: 7500 } },
   "UK:NIR": { countryId: "UK", resources: { coal: 3000, timber: 6000 } },
-  "UK:LON": { countryId: "UK", resources: { timber: 750 } },
+  // Timber raised 750 -> 1,250 (2026-10-13): live desired timber output ran
+  // 1.33x the deposit. Sized so desired output sits at ~80% of capacity.
+  "UK:LON": { countryId: "UK", resources: { timber: 1250 } },
 
   // ── Germany ───────────────────────────────────────────────────────────
   "DE:NW": { countryId: "DE", resources: { coal: 90000, iron: 45000 } },
@@ -244,7 +248,9 @@ export const STATE_RESOURCE_CAPACITY: Record<string, StateResourceCapacityEntry>
   "IE:WEX": { countryId: "IE", resources: { timber: 6000 } },
   "IE:LIM": { countryId: "IE", resources: { natural_gas: 30000, timber: 7500 } },
   // Cork: Cork/Kerry historical copper (Allihies), some gas exploration
-  "IE:COR": { countryId: "IE", resources: { natural_gas: 7500, timber: 9000, rare_earth: 321 } },
+  // Gas raised 7,500 -> 11,500 (2026-10-13): live desired gas output ran 1.21x
+  // the deposit. Sized so desired output sits at ~80% of capacity.
+  "IE:COR": { countryId: "IE", resources: { natural_gas: 11500, timber: 9000, rare_earth: 321 } },
   // Galway: Corrib gas field (Mayo), Connacht forestry
   "IE:GAL": { countryId: "IE", resources: { natural_gas: 30000, timber: 9000 } },
   "IE:DON": { countryId: "IE", resources: { natural_gas: 7500, timber: 7500 } },

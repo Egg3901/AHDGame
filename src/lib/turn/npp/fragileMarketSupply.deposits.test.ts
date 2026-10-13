@@ -115,13 +115,19 @@ describe("per-resource extraction headroom", () => {
   ];
 
   it("reports each held resource separately and omits resources the state lacks", () => {
-    const byResource = computeExtractionHeadroomByStateResource(caps, [], 1, false);
+    const byResource = computeExtractionHeadroomByStateResource(
+      caps,
+      [],
+      1,
+      false,
+      (s) => s.revenue
+    );
     expect(byResource.get("A")).toEqual({ iron: 1, timber: 1 });
     expect(byResource.get("B")).toEqual({});
   });
 
   it("the aggregate signal is unchanged", () => {
-    const aggregate = computeExtractionHeadroomByState(caps, [], 1, false);
+    const aggregate = computeExtractionHeadroomByState(caps, [], 1, false, (s) => s.revenue);
     expect(aggregate.get("A")).toBe(1);
     expect(aggregate.get("B")).toBe(0);
   });
