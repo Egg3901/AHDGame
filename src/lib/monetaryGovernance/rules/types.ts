@@ -106,6 +106,8 @@ export interface JurisdictionState {
 export type GovernanceCommand =
   | { type: "open_meeting"; countryId?: string; macro: MacroInputs }
   | { type: "cast_ballot"; seatId: string; vote: VoteDirection; countryId?: string }
+  /** A player chair tables their own motion before any player ballot is cast. */
+  | { type: "set_motion"; motion: VoteDirection; delta?: number; countryId?: string }
   | { type: "resolve_meeting"; countryId?: string; force?: boolean }
   | { type: "set_rate"; rate: number; countryId?: string }
   | { type: "vacate_seat"; seatId: string; countryId?: string }
@@ -138,7 +140,7 @@ export interface GovernanceClock {
 }
 
 export interface AllowedAction {
-  action: "open_meeting" | "cast_ballot" | "resolve_meeting" | "set_rate";
+  action: "open_meeting" | "cast_ballot" | "set_motion" | "resolve_meeting" | "set_rate";
   allowed: boolean;
   reason?: string;
   deadlineTurn?: number;

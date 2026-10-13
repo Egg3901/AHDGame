@@ -149,6 +149,50 @@ function ballotAction(
   return base;
 }
 
+/**
+ * Whether the viewer may table their own motion: a player chair, while the
+ * meeting is voting and before any player governor has balloted. Size limits
+ * are checked when the motion is submitted.
+ */
+function motionAction(
+  state: JurisdictionState,
+  actor: GovernanceActor,
+  clock: GovernanceClock
+): AllowedAction {
+  const base: AllowedAction = { action: "set_motion", allowed: true };
+  if (!state.committeeBank) {
+    return { ...base, allowed: false, reason: "This bank has no committee." };
+  }
+  if (state.governmentControlled) {
+    return {
+      ...base,
+      allowed: false,
+      reason: "The committee is dormant while the government sets the rate.",
+    };
+  }
+  const meeting = state.activeMeeting;
+  if (!meeting || meeting.status !== "voting") {
+    return { ...base, allowed: false, reason: "No meeting is taking votes." };
+  }
+  base.deadlineTurn = meeting.resolvesOnTurn;
+  if (clock.turn > meeting.resolvesOnTurn || clock.now >= meeting.playerVoteDeadlineMs) {
+    return { ...base, allowed: false, reason: "The vote window closed." };
+  }
+  const chair = state.board.find((s) => s.isChair) ?? state.board[0];
+  if (
+    !chair ||
+    chair.occupantType !== "player" ||
+    !actor.characterId ||
+    chair.characterId !== actor.characterId
+  ) {
+    return { ...base, allowed: false, reason: "Only a player chair can table the motion." };
+  }
+  if (meeting.ballots.some((b) => !b.auto)) {
+    return { ...base, allowed: false, reason: "Governors have already voted on this motion." };
+  }
+  return base;
+}
+
 function resolveAction(state: JurisdictionState, clock: GovernanceClock): AllowedAction {
   const base: AllowedAction = { action: "resolve_meeting", allowed: true };
   if (!state.committeeBank) {
@@ -182,6 +226,7 @@ export function allowedActionsFor(
   const actions: AllowedAction[] = [
     openAction(state),
     ballotAction(state, actor, clock),
+    motionAction(state, actor, clock),
     resolveAction(state, clock),
     rateAction(state, actor, clock),
   ].map((a) =>
@@ -205,7 +250,7 @@ export function allowedActionsFor(
     nextDeadline = { turn: cadence, kind: "cadence" };
   }
   for (const a of actions) {
-    if (a.action === "cast_ballot" || a.action === "resolve_meeting") {
+    if (a.action === "cast_ballot" || a.action === "set_motion" || a.action === "resolve_meeting") {
       if (a.deadlineTurn == null && meetingDeadline != null) a.deadlineTurn = meetingDeadline;
     }
     if (a.nextDeadline == null && nextDeadline) a.nextDeadline = nextDeadline.turn;

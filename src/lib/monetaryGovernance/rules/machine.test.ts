@@ -990,7 +990,7 @@ describe("allowedActionsFor", () => {
       clock(109)
     );
     expect(view.actions.map((a) => a.action).sort()).toEqual(
-      ["cast_ballot", "open_meeting", "resolve_meeting", "set_rate"].sort()
+      ["cast_ballot", "open_meeting", "resolve_meeting", "set_motion", "set_rate"].sort()
     );
     const ballot = view.actions.find((a) => a.action === "cast_ballot");
     expect(ballot?.allowed).toBe(true);
@@ -1120,5 +1120,166 @@ it.each([
   expect(decision.transition.set.meetingHistoryAppend).toMatchObject({
     executionOutcome: "blocked",
     executionBlockedReason: reason,
+  });
+});
+
+describe("player chair sets the motion (ticket #1523)", () => {
+  const T = 120;
+  const open = (overrides: Partial<MeetingState> = {}) =>
+    baseState({ activeMeeting: { ...nppMajorityMeeting(T), ...overrides } });
+
+  it("replaces the automatic motion with the chair's cut and keeps NPP ballots", () => {
+    const d = decideGovernance(
+      open(),
+      { type: "set_motion", motion: "cut", delta: -0.5 },
+      CHAIR,
+      clock(T)
+    );
+    expect(d.allowed).toBe(true);
+    if (!d.allowed) return;
+    expect(d.next.activeMeeting?.motion).toBe("cut");
+    expect(d.next.activeMeeting?.proposedDelta).toBe(-0.5);
+    expect(d.next.activeMeeting?.ballots).toHaveLength(6);
+    expect(d.transition.set.activeFomcMeeting).toMatchObject({
+      motion: "cut",
+      proposedDelta: -0.5,
+    });
+  });
+
+  it("sets a hold with zero delta", () => {
+    const d = decideGovernance(open(), { type: "set_motion", motion: "hold" }, CHAIR, clock(T));
+    expect(d.allowed && d.next.activeMeeting?.proposedDelta).toBe(0);
+  });
+
+  it("refuses anyone but the player chair", () => {
+    const other: GovernanceActor = { kind: "governor", characterId: "char-x", countryId: "US" };
+    const d = decideGovernance(open(), { type: "set_motion", motion: "hold" }, other, clock(T));
+    expect(d.allowed).toBe(false);
+    if (!d.allowed) expect(d.reason).toBe("not-chair");
+  });
+
+  it("refuses an NPP chair board", () => {
+    const board = usBoard().map((s) =>
+      s.isChair ? { ...s, occupantType: "npp" as const, characterId: null } : s
+    );
+    const state = baseState({ board, activeMeeting: nppMajorityMeeting(T) });
+    const d = decideGovernance(state, { type: "set_motion", motion: "hold" }, CHAIR, clock(T));
+    expect(d.allowed).toBe(false);
+  });
+
+  it("refuses once a player has balloted", () => {
+    const m = nppMajorityMeeting(T);
+    const state = open({
+      ballots: [...m.ballots, { seatId: "seat-1", vote: "hike", auto: false }],
+    });
+    const d = decideGovernance(
+      state,
+      { type: "set_motion", motion: "cut", delta: -0.25 },
+      CHAIR,
+      clock(T)
+    );
+    expect(d.allowed).toBe(false);
+    if (!d.allowed) expect(d.reason).toBe("ballots-cast");
+  });
+
+  it("refuses a delta that is missing, off-grid, the wrong way or too large", () => {
+    const cases: Array<[string, number | undefined, string]> = [
+      ["hike", undefined, "invalid-rate"],
+      ["hike", 0.1, "off-grid"],
+      ["cut", 0.25, "wrong-direction"],
+      ["hike", 5, "delta-hike"],
+      ["cut", -10, "delta-cut"],
+    ];
+    for (const [motion, delta, reason] of cases) {
+      const d = decideGovernance(
+        open(),
+        {
+          type: "set_motion",
+          motion: motion as "hike" | "cut",
+          ...(delta !== undefined ? { delta } : {}),
+        },
+        CHAIR,
+        clock(T)
+      );
+      expect(d.allowed).toBe(false);
+      if (!d.allowed) expect(d.reason).toBe(reason);
+    }
+  });
+
+  it("only allows a hold during cooldown or past the term cap", () => {
+    const cooled = baseState({ activeMeeting: nppMajorityMeeting(T), lastRateChangeTurn: T - 1 });
+    const hike = decideGovernance(
+      cooled,
+      { type: "set_motion", motion: "hike", delta: 0.25 },
+      CHAIR,
+      clock(T)
+    );
+    expect(hike.allowed).toBe(false);
+    const capped = baseState({
+      activeMeeting: nppMajorityMeeting(T),
+      rateChangesThisTerm: RATE_CHANGES_PER_TERM,
+    });
+    expect(
+      decideGovernance(capped, { type: "set_motion", motion: "cut", delta: -0.25 }, CHAIR, clock(T))
+        .allowed
+    ).toBe(false);
+    expect(
+      decideGovernance(capped, { type: "set_motion", motion: "hold" }, CHAIR, clock(T)).allowed
+    ).toBe(true);
+  });
+
+  it("refuses without a voting meeting or after the window", () => {
+    expect(
+      decideGovernance(baseState(), { type: "set_motion", motion: "hold" }, CHAIR, clock(T)).allowed
+    ).toBe(false);
+    expect(
+      decideGovernance(open(), { type: "set_motion", motion: "hold" }, CHAIR, clock(T, NOW + DAY))
+        .allowed
+    ).toBe(false);
+  });
+
+  it("passes the chair's motion when NPP preferences match it", () => {
+    const set = decideGovernance(
+      open({ motion: "hold", proposedDelta: 0 }),
+      { type: "set_motion", motion: "hike", delta: 0.5 },
+      CHAIR,
+      clock(T)
+    );
+    expect(set.allowed).toBe(true);
+    if (!set.allowed) return;
+    const vote = decideGovernance(
+      set.next,
+      { type: "cast_ballot", seatId: "seat-1", vote: "hike" },
+      { kind: "governor", seatId: "seat-1", characterId: "char-chair", countryId: "US" },
+      clock(T + 1)
+    );
+    expect(vote.allowed).toBe(true);
+    if (vote.allowed)
+      expect(
+        vote.transition.events.some((e) => e.kind === "policy.rate_changed" && e.outcome === "ok")
+      ).toBe(true);
+  });
+
+  it("offers the chair the motion control until a player ballots", () => {
+    const actor: GovernanceActor = {
+      kind: "chair",
+      seatId: "seat-1",
+      characterId: "char-chair",
+      countryId: "US",
+    };
+    const motion = (state: JurisdictionState) =>
+      allowedActionsFor(state, actor, clock(T)).actions.find((a) => a.action === "set_motion");
+    expect(motion(open())?.allowed).toBe(true);
+    const m = nppMajorityMeeting(T);
+    expect(
+      motion(open({ ballots: [...m.ballots, { seatId: "seat-1", vote: "hike", auto: false }] }))
+        ?.allowed
+    ).toBe(false);
+    const other = allowedActionsFor(
+      open(),
+      { kind: "governor", seatId: "seat-2", characterId: "char-x", countryId: "US" },
+      clock(T)
+    );
+    expect(other.actions.find((a) => a.action === "set_motion")?.allowed).toBe(false);
   });
 });
