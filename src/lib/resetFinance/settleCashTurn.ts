@@ -82,7 +82,18 @@ export async function settleResetTreasuryCashTurn(input: {
       )
       .toArray(),
   ]);
-  const planned = countries.map((country) => {
+  // Bond capture is shared by every country, so a missing map is a whole-turn
+  // fault and stops the step before any write.
+  for (const values of [
+    bondFlows.sovereignCashProceedsByCountry,
+    bondFlows.sovereignDebtFaceIssuedByCountry,
+    bondFlows.sovereignMaturityCashPaidByCountry,
+    bondFlows.sovereignDebtFaceRetiredByCountry,
+    bondFlows.sovereignCouponPaidByCountry,
+  ]) {
+    if (!values) throw new Error("V2 cash needs actual bond flow capture");
+  }
+  const planCountry = (country: (typeof countries)[number]) => {
     const books = treasuries.filter((row) => row.countryId === country && row._id === country);
     const reserves = continuity.filter((row) => row.countryId === country && row._id === country);
     const sources = budgets.filter((row) => row.countryId === country);
@@ -165,7 +176,20 @@ export async function settleResetTreasuryCashTurn(input: {
         return { account, result };
       });
     return { opening, next, deliveries };
-  });
+  };
+  // Each country's books are independent. Bad Cabinet or treasury data in one
+  // country holds back only that country, so it cannot freeze every other v2
+  // treasury and department. Held countries keep their receipts untouched and
+  // the step still fails below, naming them, after the healthy ones settle.
+  const planned: ReturnType<typeof planCountry>[] = [];
+  const held: { country: string; reason: string }[] = [];
+  for (const country of countries) {
+    try {
+      planned.push(planCountry(country));
+    } catch (error) {
+      held.push({ country, reason: error instanceof Error ? error.message : String(error) });
+    }
+  }
   // Freeze cash payments first. If account persistence fails part way through,
   // the next attempt consumes the same receipt, not a new revenue or bond flow.
   const advancing = planned.filter(({ opening }) => opening.settledThroughTurn !== turn);
@@ -211,6 +235,13 @@ export async function settleResetTreasuryCashTurn(input: {
     );
     if (write.matchedCount !== pending.length)
       throw new Error("V2 delivery lost its compare-and-swap");
+  }
+  if (held.length) {
+    throw new Error(
+      `V2 cash settlement held ${held.map(({ country }) => country).join(", ")} ` +
+        `(${planned.length} of ${countries.length} settled): ` +
+        held.map(({ country, reason }) => `${country}: ${reason}`).join("; ")
+    );
   }
   return {
     countries: countries.length,
