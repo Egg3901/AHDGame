@@ -151,7 +151,8 @@ export const GDP_GROWTH_SCENARIOS: GoldenScenario[] = [
         },
       ]);
       setupCollection(db, "unownedSectors", []);
-      // prev value 15 vs baseline 2 → rawPolicyDelta 13, capped to 4 (v0 #2)
+      // prev value 15 vs baseline 2 → rawPolicyDelta 13, capped to 4 (v0 #2),
+      // then eroded by policyDeltaDecay 0.9 → 3.6
       setupCollection(db, "macroMetrics", [
         {
           _id: "s2",
@@ -169,7 +170,7 @@ export const GDP_GROWTH_SCENARIOS: GoldenScenario[] = [
       ]);
       setupCollection(db, "stateBudgets", [{ _id: "s2", taxRates: { salesTax: 6 } }]);
     },
-    expected: [{ _id: "s2", gdpGrowth: 6, sectorBaseline: 2, integratedGdp: 6 }],
+    expected: [{ _id: "s2", gdpGrowth: 5.6, sectorBaseline: 2, integratedGdp: 5.6 }],
   },
   {
     name: "nan-prev-rejected (NaN prev value → fresh)",
