@@ -2,12 +2,15 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { regionUrl } from "@/lib/urls";
 import { resolveRegionOfficeBannerImage } from "@/lib/constants/regionBanner";
 import { HeroImage } from "@/components/HeroImage";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { GUBERNATORIAL_ACTION_CAP } from "@/lib/constants/governorOffice";
+import type { OfficePoolTopUpStatus } from "@/lib/actions/officePoolTopUpRules";
+import { OfficePoolTopUpButton } from "@/components/officials/OfficePoolTopUpButton";
 import ImpeachmentPanel from "@/app/whitehouse/ImpeachmentPanel";
 import { OverviewTab } from "./tabs/OverviewTab";
 import {
@@ -53,6 +56,8 @@ interface Props {
   viewerCanManage: boolean;
   gubernatorialActions: number;
   lastActionGrantedTurn: number;
+  /** Holder-only state for buying +1 office action with main AP. */
+  topUp: OfficePoolTopUpStatus | null;
   awaitingAssentBills: AwaitingAssentBill[];
   activeOrders: ActiveOrder[];
   orderHistory: OrderHistoryEntry[];
@@ -96,6 +101,7 @@ export function GovernorOfficeClient(props: Props) {
     props.devolution != null;
   const tabs = buildTabs(showDevolution);
   const [active, setActive] = useState<TabKey>("overview");
+  const router = useRouter();
 
   // Some regional titles already encode the state name ("Mayor of London")
   // — skip the prefix to avoid "London Mayor of London's Office". Generic
@@ -189,6 +195,17 @@ export function GovernorOfficeClient(props: Props) {
               <span className="text-base font-bold tabular-nums">
                 {props.gubernatorialActions}/{GUBERNATORIAL_ACTION_CAP}
               </span>
+              {props.viewerIsHolder && (
+                <OfficePoolTopUpButton
+                  className="mt-1 !items-start"
+                  countryCode={props.countryId}
+                  body={{ pool: "gubernatorial", stateId: props.stateId }}
+                  remaining={props.gubernatorialActions}
+                  cap={GUBERNATORIAL_ACTION_CAP}
+                  topUp={props.topUp}
+                  onUpdate={() => router.refresh()}
+                />
+              )}
             </div>
             {props.viewerIsAdmin && !props.viewerIsHolder && (
               <div className="flex flex-col px-5 py-3">

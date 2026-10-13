@@ -38,19 +38,24 @@ Each lever amplifies the others. Office income funds party contributions; party 
 
 ### Action budget across levers
 
-Base actions per turn: 4. Office bonuses stack:
+Base actions per turn: 4. Your office adds its bonus, and some roles stack on top:
 
-| Office | Bonus actions |
+| Office or role | Bonus actions |
 |---|---|
-| President / PM / Chancellor | +4 |
+| President / PM / Chancellor (executive) | +4 |
+| Ceremonial head of state | +0 |
 | Vice President | +2 |
 | US Senator | +2 |
 | US Governor | +2 |
-| Federal Reserve Chair | +3 |
 | House Representative | +1 |
 | State Senator | +1 |
+| Federal Reserve Chair (stacks) | +3 |
+| Supreme Court justice (stacks) | +2 |
+| Speaker of the House (stacks on the seat) | +3 |
+| Majority or Minority Leader (stacks on the seat) | +2 |
+| Whip, President pro tempore (stacks on the seat) | +1 |
 
-A Senator who is also Fed Chair has 4 + 2 + 3 = 9 actions per turn, more than double the base. At 9 actions, you can Campaign (4), run ads (3), and still have 2 left for canvassing or party actions.
+Chamber leadership counts only your highest single role. A Senator who is also Fed Chair has 4 + 2 + 3 = 9 actions per turn, more than double the base. A Speaker of the House has 4 + 1 + 3 = 8. At 9 actions, you can Campaign (4), run ads (3), and still have 2 left for canvassing or party actions.
 
 ## Timing elections and legislation together
 

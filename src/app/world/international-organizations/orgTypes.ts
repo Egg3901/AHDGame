@@ -149,6 +149,38 @@ export interface OrgViewerInfo {
   diplomaticActionsPerTurn: number;
   /** The country the budget applies to (FM/HoG country), or null if none. */
   diplomaticActionsCountryId: CountryId | null;
+  /**
+   * Personal agenda pools for each organisation the viewer heads. Spent before
+   * the country budget on resolutions inside that organisation. Absent or empty
+   * when the viewer heads nothing.
+   */
+  orgHeadAgendas?: Array<{
+    organizationId: string;
+    /** The member the head tables resolutions for. */
+    countryId: CountryId;
+    title: string;
+    remaining: number;
+    cap: number;
+    perTurn: number;
+  }>;
+}
+
+/**
+ * The member a viewer tables resolutions in `orgId` for: their foreign-minister
+ * or head-of-government country, else, when they head `orgId`, the member they
+ * sit for (paid from the head's agenda pool). Voting stays on the FM/HoG
+ * country; this is for the propose path only.
+ */
+export function orgProposingCountry(
+  viewer: OrgViewerInfo | null | undefined,
+  orgId: string
+): CountryId | null {
+  return (
+    viewer?.foreignMinisterOf ??
+    viewer?.headOfGovernmentOf ??
+    viewer?.orgHeadAgendas?.find((a) => a.organizationId === orgId)?.countryId ??
+    null
+  );
 }
 
 export const VOTE_LABELS: Record<ProposalVote, string> = {

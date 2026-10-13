@@ -129,6 +129,64 @@ describe("OrgMasthead", () => {
     render(<OrgMasthead org={org} viewer={viewer} alignmentEnabled />);
     expect(screen.getByText("Influence")).toBeTruthy();
   });
+
+  it("shows the head's agenda pool beside the country budget", () => {
+    const head = {
+      ...viewer,
+      orgHeadAgendas: [
+        {
+          organizationId: org.def.id,
+          countryId: "US",
+          title: "Secretary-General",
+          remaining: 3,
+          cap: 4,
+          perTurn: 2,
+        },
+      ],
+    } as OrgViewerInfo;
+    render(<OrgMasthead org={org} viewer={head} />);
+    expect(screen.getByText("Agenda actions (as Secretary-General): 3 / 4")).toBeTruthy();
+    expect(screen.getByText(/3 \/ 4 diplomatic actions left/)).toBeTruthy();
+  });
+
+  it("shows only the agenda pool to a head who holds no foreign brief", () => {
+    const head = {
+      ...viewer,
+      foreignMinisterOf: null,
+      diplomaticActionsCountryId: null,
+      orgHeadAgendas: [
+        {
+          organizationId: org.def.id,
+          countryId: "US",
+          title: "Secretary-General",
+          remaining: 1,
+          cap: 4,
+          perTurn: 2,
+        },
+      ],
+    } as OrgViewerInfo;
+    render(<OrgMasthead org={org} viewer={head} />);
+    expect(screen.getByText("Agenda actions (as Secretary-General): 1 / 4")).toBeTruthy();
+    expect(screen.queryByText(/diplomatic actions left/)).toBeNull();
+  });
+
+  it("shows no agenda chip for another organisation's head", () => {
+    const head = {
+      ...viewer,
+      orgHeadAgendas: [
+        {
+          organizationId: "NATO",
+          countryId: "US",
+          title: "Secretary-General",
+          remaining: 2,
+          cap: 4,
+          perTurn: 2,
+        },
+      ],
+    } as OrgViewerInfo;
+    render(<OrgMasthead org={org} viewer={head} />);
+    expect(screen.queryByText(/Agenda actions/)).toBeNull();
+  });
 });
 
 describe("OrgMasthead fund income and the display-currency preference", () => {

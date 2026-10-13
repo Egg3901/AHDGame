@@ -9,6 +9,7 @@ import { CountryFlag } from "@/components/CountryFlag";
 import type { CountryId } from "@/lib/constants/countries";
 import type { ProposalVote } from "@/lib/db/types/internationalOrganization";
 import type { OrgSummary, OrgViewerInfo } from "./orgTypes";
+import { orgProposingCountry } from "./orgTypes";
 import { VoteButtons } from "./VoteButtons";
 import { VoteRoster } from "./VoteRoster";
 import {
@@ -32,6 +33,10 @@ interface Props {
  */
 export function LegislationPanel({ org, viewer, currentTurn, votingWindowTurns, onChange }: Props) {
   const viewerFmCountry = viewer?.foreignMinisterOf ?? viewer?.headOfGovernmentOf ?? null;
+  // Who tables resolutions: the FM/HoG country, or the member an org head sits
+  // for (agenda pool). Votes stay on viewerFmCountry.
+  const proposer = orgProposingCountry(viewer, org.id);
+  const proposerIsMember = proposer != null && org.members.some((m) => m.countryId === proposer);
   const viewerIsMember =
     viewerFmCountry != null && org.members.some((m) => m.countryId === viewerFmCountry);
   // This panel handles free-trade agreements only; other resolution types
@@ -69,9 +74,9 @@ export function LegislationPanel({ org, viewer, currentTurn, votingWindowTurns, 
   }
 
   async function submit() {
-    if (!viewerFmCountry) return;
+    if (!proposer) return;
     const partySet = new Set<string>(selected);
-    partySet.add(viewerFmCountry);
+    partySet.add(proposer);
     const parties = Array.from(partySet);
     if (parties.length < 2) {
       setError("Pick at least one other party.");
@@ -81,7 +86,7 @@ export function LegislationPanel({ org, viewer, currentTurn, votingWindowTurns, 
     setError(null);
     try {
       const res = await fetch(
-        `/api/country/${viewerFmCountry}/international-organizations/${org.id}/legislation`,
+        `/api/country/${proposer}/international-organizations/${org.id}/legislation`,
         {
           method: "POST",
           headers: { "content-type": "application/json" },
@@ -163,7 +168,7 @@ export function LegislationPanel({ org, viewer, currentTurn, votingWindowTurns, 
             Active FTAs zero out tariffs between every party in the agreement.
           </p>
         </div>
-        {viewerIsMember && viewerFmCountry && (
+        {proposerIsMember && proposer && (
           <Button
             size="md"
             variant={showForm ? "ghost" : "primary"}
@@ -174,16 +179,16 @@ export function LegislationPanel({ org, viewer, currentTurn, votingWindowTurns, 
         )}
       </div>
 
-      {showForm && viewerIsMember && viewerFmCountry && (
+      {showForm && proposerIsMember && proposer && (
         <div className="rounded-xl border border-primary/30 bg-primary/5 p-5">
           <h4 className="text-sm font-semibold text-foreground">Propose a free-trade agreement</h4>
           <p className="mt-1 text-xs text-muted">
-            {entityName(viewerFmCountry)} is automatically included. Select the other parties (must
-            all be {org.def.shortName} members).
+            {entityName(proposer)} is automatically included. Select the other parties (must all be{" "}
+            {org.def.shortName} members).
           </p>
           <div className="mt-3 flex flex-wrap gap-2">
             {org.members
-              .filter((m) => m.countryId !== viewerFmCountry)
+              .filter((m) => m.countryId !== proposer)
               .map((m) => {
                 const active = selected.has(m.countryId);
                 return (

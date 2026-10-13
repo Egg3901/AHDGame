@@ -86,7 +86,17 @@ Leadership positions are not purely honorary - they affect game mechanics:
 - **Majority/Minority Leaders:** Set the whip apparatus for their party's floor strategy.
 - **Committee Chairs:** Control committee assignments (future mechanic).
 
-Beyond game mechanics, leadership positions carry **prestige** - they are high-visibility offices that contribute to favorability and political influence generation in ways regular floor membership doesn't.
+Leadership also pays, on top of the holder's seat:
+
+| Role | Extra actions per turn | National influence tier |
+| --- | ---: | ---: |
+| Speaker of the House | +3 | +2.0 |
+| House and Senate Majority Leaders | +2 | +2.0 |
+| House and Senate Minority Leaders | +2 | +1.5 |
+| Senate President Pro Tempore | +1 | +2.0 |
+| Whips | +1 | none from the role |
+
+Only your highest single leadership action bonus counts. National influence tiers do not stack with your other offices: you get your highest one. See [Chamber Leadership](/wiki/chamber-leadership) for the presiding officers in other countries.
 
 ## Leadership election timeline
 

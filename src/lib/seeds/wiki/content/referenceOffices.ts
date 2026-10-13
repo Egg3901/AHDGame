@@ -42,7 +42,7 @@ The VP presides over the Senate and succeeds the President if the seat becomes v
 | Party strength weight | 0.8 |
 | Chamber | U.S. Senate (100 seats) |
 
-Senate seats are staggered across 3 classes, so only one class is up in any given election cycle. Senators serve 6-year terms; confirming Cabinet and judicial nominees requires a Senate majority. Leadership positions (Majority Leader, Minority Leader, Whip) are available to Senators.
+Senate seats are staggered across 3 classes, so only one class is up in any given election cycle. Senators serve 6-year terms; confirming Cabinet and judicial nominees requires a Senate majority. Leadership positions (Majority Leader, Minority Leader, Whip) are available to Senators and add actions on top of the seat: +2 for the Majority or Minority Leader, +1 for a Whip or the President pro tempore. See [Chamber Leadership](/wiki/chamber-leadership).
 
 ### US Representative (House)
 
@@ -54,7 +54,7 @@ Senate seats are staggered across 3 classes, so only one class is up in any give
 | Party strength weight | 0.9 |
 | Chamber | U.S. House of Representatives (435 seats) |
 
-The shortest term in the US system: House members are up for election every 2 game years. Revenue bills must originate in the House. The Speaker of the House is elected by House members.
+The shortest term in the US system: House members are up for election every 2 game years. Revenue bills must originate in the House. The Speaker of the House is elected by House members and gets +3 actions on top of the seat; Majority and Minority Leaders get +2 and Whips +1.
 
 ### Governor
 
@@ -93,7 +93,7 @@ The Fed Chair proposes US rate moves to the seven-seat FOMC, which affect bond y
 
 ### US Cabinet positions (15 offices)
 
-Cabinet members are nominated by the President and confirmed by the Senate. They hold no action bonus themselves: the value is influence and access. The 15 Cabinet positions in succession order:
+Cabinet members are nominated by the President and confirmed by the Senate. A Cabinet seat adds +1 action per turn and the 1.5 national influence tier (0.75 while acting). The 15 Cabinet positions in succession order:
 
 | # | Position |
 |---|---|

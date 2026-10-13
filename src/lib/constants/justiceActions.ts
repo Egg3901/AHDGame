@@ -6,37 +6,39 @@ import { getCalendarDayInTimezone } from "@/lib/time/dailyReset";
  * The Justice office is otherwise passive between Docket cases; this gives a
  * seated player-Justice a small, self-directed toolkit, judicial-flavored.
  * The pool mirrors the VP `vicePresidentActions.ts` model exactly (which
- * itself mirrors the cabinet `ministerialActions` model): a fixed daily cap,
- * refilled once per Eastern-time calendar day by the turn engine (see
- * `src/lib/turn/justiceActionReset.ts`), spent one-per-action by the justice
- * action endpoint. Reuses the same tier/cap machinery — not a new economy.
+ * itself mirrors the cabinet `ministerialActions` model): a small banked cap
+ * that regains one action every `JUSTICE_ACTION_ACCRUAL_TURNS` turns via the
+ * turn engine (see `src/lib/turn/justiceActionReset.ts`), spent one-per-action
+ * by the justice action endpoint. Reuses the same tier/cap machinery, not a
+ * new economy.
  */
 
-/** Max self-serve actions a seated Justice can take per Eastern-time day. Same cap as VP. */
+/** Max self-serve actions a seated Justice can bank. Same cap as VP. */
 export const JUSTICE_ACTION_CAP = 2;
+
+/** Turns between +1 Justice action accruals (12 turns = 12 hours, 2 per day). */
+export const JUSTICE_ACTION_ACCRUAL_TURNS = 12;
 
 /**
  * Passive National Influence accrued per turn by a seated (player-character)
- * Justice — same tier as VP's `OFFICE_NI_BONUS.vicePresident` in
- * `src/lib/turn/actionRefresh.ts`. Kept as its own constant (rather than added
- * to `OFFICE_NI_BONUS`, which is keyed off `character.currentOffice.type`)
- * because Justice is deliberately NOT stored on `currentOffice` — mirrors how
- * the central bank chair bonus is stacked via a separate `Set` lookup there.
+ * Justice: the cabinet tier. Kept as its own constant because Justice is
+ * deliberately NOT stored on `currentOffice`; the position resolver stacks it
+ * via a separate lookup, the same way it handles the central bank chair.
  */
-export const JUSTICE_NI_BONUS_PER_TURN = 2.0;
+export const JUSTICE_NI_BONUS_PER_TURN = 1.5;
 
 /**
- * Political influence the Justice gains from one Write an Opinion (clamped to
- * 100) — mirrors VP's `rally_base` exactly (self-targeting, boosts the
- * office-holder's own politicalInfluence), just judicial-flavored.
+ * National influence the Justice gains from one Write an Opinion. National,
+ * not political: a sitting Justice builds standing on the bench, not a
+ * home-state machine.
  */
-export const JUSTICE_OPINION_INFLUENCE_GAIN = 2;
+export const JUSTICE_OPINION_NATIONAL_INFLUENCE_GAIN = 0.5;
 
 /** Favorability the Justice gains from one Public Address (clamped to 100), self-targeting like rally_base. */
 export const JUSTICE_ADDRESS_FAVORABILITY_GAIN = 2;
 
 /** Reset-cadence hint shown next to the action counter. */
-export const JUSTICE_ACTION_RESET_HINT = "Resets daily at midnight Eastern Time.";
+export const JUSTICE_ACTION_RESET_HINT = `Regains 1 action every ${JUSTICE_ACTION_ACCRUAL_TURNS} turns, up to ${JUSTICE_ACTION_CAP}.`;
 
 export type JusticeActionId = "public_address" | "write_opinion";
 
@@ -56,7 +58,7 @@ export const JUSTICE_ACTIONS: readonly JusticeActionDef[] = [
   {
     id: "write_opinion",
     name: "Write an Opinion",
-    description: "Publish a legal opinion piece. You gain a small political influence boost.",
+    description: "Publish a legal opinion piece. You gain a small national influence boost.",
   },
 ] as const;
 

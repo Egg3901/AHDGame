@@ -47,6 +47,7 @@ import { GovernorOfficeClient } from "./GovernorOfficeClient";
 import { ADDRESS_COOLDOWN_TURNS } from "@/lib/constants/governorOffice";
 import { formatElectionTypeLabel } from "@/lib/utils/electionLabels";
 import { buildPartyIdResolver } from "@/lib/parties/partyMatch";
+import { officePoolTopUpStatus } from "@/lib/actions/officePoolTopUpRules";
 
 interface Props {
   params: Promise<{ code: string; id: string }>;
@@ -533,6 +534,15 @@ export default async function GovernorOfficePage({ params }: Props) {
         viewerCanManage={viewerCanManage}
         gubernatorialActions={officeState?.gubernatorialActions ?? 0}
         lastActionGrantedTurn={officeState?.lastActionGrantedTurn ?? 0}
+        topUp={
+          viewerIsHolder
+            ? officePoolTopUpStatus(
+                officeState?.lastGubernatorialActionTopUpTurn,
+                currentTurn,
+                auth.character.actions
+              )
+            : null
+        }
         awaitingAssentBills={awaitingAssentBills.map((b) => {
           const tally = resolveStateBillHeadlineTallies(b, chamberOfficials, voteScope);
           return {

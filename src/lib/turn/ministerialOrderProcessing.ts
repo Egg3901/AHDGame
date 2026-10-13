@@ -24,8 +24,7 @@ import {
 } from "@/lib/db/collections/cabinetSettings";
 import { getCabinetMechanics } from "@/lib/constants/cabinetMechanics";
 import { MINISTERIAL_ACTION_CAP } from "@/lib/constants/cabinetMechanicsTypes";
-import { getCalendarDayInTimezone, shouldApplyDailyReset } from "@/lib/time/dailyReset";
-import { ukSharedPoolIdsNeedingReset } from "@/lib/cabinet/ministerialActionPool";
+import { accrueUkSharedPools, isMinisterialAccrualTurn } from "@/lib/cabinet/ministerialActionPool";
 import { resolveMetricPath } from "@/lib/cabinet/resolveMetricPath";
 import { applyMilitaryForceEffects } from "./militaryForceEffects";
 import { resolveBattleDeclarations } from "./battleResolution";
@@ -135,7 +134,7 @@ function isInflationPressureKey(metric: string): boolean {
  * - Apply tier setting effects
  * - Apply regional target effects
  * - Apply advocacy bonuses
- * - Refill ministerial actions at midnight Eastern Time
+ * - Accrue ministerial actions (+1 every MINISTERIAL_ACTION_ACCRUAL_TURNS, up to cap)
  */
 export async function processMinisterialOrders(currentTurn: number): Promise<{
   ordersExpired: number;
@@ -742,66 +741,35 @@ export async function processMinisterialOrders(currentTurn: number): Promise<{
     );
   }
 
-  // 6. Refill ministerial actions to cap at midnight Eastern Time — all countries
+  // 6. Accrue ministerial actions: +1 every MINISTERIAL_ACTION_ACCRUAL_TURNS
+  // turns, banked up to the cap, all countries. UK player-held rows draw from
+  // the shared per-player pool (issue #2049) and are accrued through it below,
+  // so the per-row pass skips them. Rows below cap that already accrued this
+  // turn do not match, so a re-run of the phase is a no-op.
   let actionsRegenerated = 0;
-  const todayEastern = getCalendarDayInTimezone(new Date());
-  const allMembers = await membersCol
-    .find({})
-    .project<
-      Pick<
-        UnifiedCabinetMember,
-        "_id" | "ministerialActions" | "lastMinisterialActionResetDay" | "characterId" | "countryId"
-      >
-    >({
-      _id: 1,
-      ministerialActions: 1,
-      lastMinisterialActionResetDay: 1,
-      characterId: 1,
-      countryId: 1,
-    })
-    .toArray();
-  const membersBulkOps: AnyBulkWriteOperation<UnifiedCabinetMember>[] = [];
-
-  for (const member of allMembers) {
-    if (!shouldApplyDailyReset(member.lastMinisterialActionResetDay)) continue;
-    membersBulkOps.push({
-      updateOne: {
-        filter: { _id: member._id },
-        update: {
-          $set: {
-            ministerialActions: MINISTERIAL_ACTION_CAP,
-            lastMinisterialActionResetDay: todayEastern,
-          },
-        },
+  if (isMinisterialAccrualTurn(currentTurn)) {
+    const rowResult = await membersCol.updateMany(
+      {
+        ministerialActions: { $lt: MINISTERIAL_ACTION_CAP },
+        lastMinisterialActionAccrualTurn: { $ne: currentTurn },
+        $nor: [{ countryId: "UK" as never, characterId: { $ne: null } }],
       },
-    });
-    actionsRegenerated++;
-  }
-
-  if (membersBulkOps.length > 0) {
-    await membersCol.bulkWrite(membersBulkOps);
-  }
-
-  // 6b. Shared UK pools (issue #2049): refill the per-player pool wherever it
-  // is missing or stale, so both offices of a dual holder reset together at
-  // the existing cap. One projected read plus one bulk write, both bounded by
-  // the UK holder count.
-  const ukPoolResetIds = await ukSharedPoolIdsNeedingReset(db, allMembers, todayEastern);
-  if (ukPoolResetIds.length > 0) {
-    await db.collection<Character>("characters").bulkWrite(
-      ukPoolResetIds.map((id) => ({
-        updateOne: {
-          filter: { _id: new ObjectId(id) },
-          update: {
-            $set: {
-              sharedMinisterialActions: MINISTERIAL_ACTION_CAP,
-              sharedMinisterialActionResetDay: todayEastern,
-              updatedAt: new Date(),
-            },
-          },
-        },
-      }))
+      {
+        $inc: { ministerialActions: 1 },
+        $set: { lastMinisterialActionAccrualTurn: currentTurn },
+      }
     );
+    actionsRegenerated += rowResult.modifiedCount;
+
+    // 6b. Shared UK pools: +1 per holder, mirrored to both offices' rows.
+    const ukHolderRows = await membersCol
+      .find({ countryId: "UK" as never, characterId: { $ne: null } })
+      .project<Pick<UnifiedCabinetMember, "characterId" | "countryId">>({
+        characterId: 1,
+        countryId: 1,
+      })
+      .toArray();
+    actionsRegenerated += await accrueUkSharedPools(db, ukHolderRows, currentTurn);
   }
 
   return {

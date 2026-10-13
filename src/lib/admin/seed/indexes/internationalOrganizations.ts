@@ -8,6 +8,14 @@ export async function seedInternationalOrganizationIndexes(db: Db, log: (msg: st
 
   await ensureIndex(
     db,
+    "orgHeadAgendaActions",
+    { organizationId: 1, characterId: 1 },
+    { unique: true, name: "orgHeadAgendaActions_org_character" },
+    log
+  );
+
+  await ensureIndex(
+    db,
     "organizationMemberships",
     { organizationId: 1, countryId: 1 },
     { unique: true, name: "organizationMemberships_org_country" },

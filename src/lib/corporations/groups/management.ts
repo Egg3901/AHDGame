@@ -1,3 +1,5 @@
+import { COMMODITY_LABELS, COMMODITY_UNITS, type CommodityType } from "@/lib/constants/commodities";
+import { loadGroupBondDebt } from "./financialComparison";
 import { clampGroupDiscount } from "./rules/discounts";
 import { estimateGroupSupply } from "./rules/forecast";
 /**
@@ -26,7 +28,10 @@ export const defaultGroupManagement = (root: Corporation): GroupManagement => ({
   supplyDiscount: clampGroupDiscount(root.groupManagement?.supplyDiscount),
 });
 export async function loadGroupManagement(db: Db, corporation: Corporation, userId: string) {
-  const membership = await resolveFormalizedGroups(db, { includeReserved: true });
+  const membership = await resolveFormalizedGroups(db, {
+    includeReserved: true,
+    includeControl: true,
+  });
   const rootId = membership.rootByCorpId.get(corporation._id.toString());
   const ids = rootId ? membership.membersByRootId.get(rootId) : undefined;
   if (!rootId || !ids) return null;
@@ -38,6 +43,7 @@ export async function loadGroupManagement(db: Db, corporation: Corporation, user
         {
           projection: {
             name: 1,
+            tickerSymbol: 1,
             sequentialId: 1,
             ceoId: 1,
             ceoHistory: 1,
@@ -94,6 +100,7 @@ export async function loadGroupManagement(db: Db, corporation: Corporation, user
   const turn = world?.currentTurn ?? 0;
   return {
     root,
+    parentControlByCorpId: membership.parentControlByCorpId,
     corps,
     turn,
     parent,
@@ -115,30 +122,34 @@ export async function groupManagementView(db: Db, corporation: Corporation, user
       (c) => ctx.parent || (!requireCeo(c, userId) && c.ceoType !== "npp" && !c.countryOwnerId)
     )
     .map((c) => c._id);
-  const history = privateIds.length
-    ? await db
-        .collection<CorporationHistory>("corporationHistory")
-        .find(
-          {
-            corporationId: { $in: privateIds },
-            turn: { $gte: Math.max(0, ctx.turn - 48), $lte: ctx.turn },
-          },
-          {
-            projection: {
-              corporationId: 1,
-              turn: 1,
-              revenue: 1,
-              totalCosts: 1,
-              income: 1,
-              currencyCode: 1,
-              fxRateAtWrite: 1,
+  const [history, debtByCorp] = await Promise.all([
+    privateIds.length
+      ? db
+          .collection<CorporationHistory>("corporationHistory")
+          .find(
+            {
+              corporationId: { $in: privateIds },
+              turn: { $gte: Math.max(0, ctx.turn - 48), $lte: ctx.turn },
             },
-          }
-        )
-        .sort({ turn: -1 })
-        .limit(privateIds.length * 49)
-        .toArray()
-    : [];
+            {
+              projection: {
+                corporationId: 1,
+                turn: 1,
+                revenue: 1,
+                totalCosts: 1,
+                income: 1,
+                liquidCapital: 1,
+                currencyCode: 1,
+                fxRateAtWrite: 1,
+              },
+            }
+          )
+          .sort({ turn: -1 })
+          .limit(privateIds.length * 49)
+          .toArray()
+      : [],
+    loadGroupBondDebt(db, privateIds),
+  ]);
   const historyByCorp = new Map<string, NonNullable<ReturnType<typeof groupHistoryInAnchor>>[]>();
   for (const row of history) {
     const converted = groupHistoryInAnchor(row);
@@ -171,6 +182,14 @@ export async function groupManagementView(db: Db, corporation: Corporation, user
       ? {
           ...forecast,
           total: ctx.parent ? forecast.total : null,
+          connections: ctx.parent
+            ? forecast.connections.map((c) => ({
+                ...c,
+                commodityLabel: COMMODITY_LABELS[c.commodity as CommodityType] ?? c.commodity,
+                unit: COMMODITY_UNITS[c.commodity as CommodityType] ?? "",
+              }))
+            : [],
+          connectionCount: ctx.parent ? forecast.connectionCount : null,
           corporations: forecast.corporations.filter((c) => visibleIds.has(c.id)),
         }
       : null,
@@ -203,7 +222,10 @@ export async function groupManagementView(db: Db, corporation: Corporation, user
         id: c._id.toString(),
         pathId: String(c.sequentialId ?? c._id),
         name: c.name,
+        tickerSymbol: c.tickerSymbol,
+        parentControl: ctx.parentControlByCorpId.get(c._id.toString()) ?? null,
         logoUrl: c.logoUrl,
+        currentDebtAnchor: privateAccess ? (debtByCorp.get(c._id.toString()) ?? null) : null,
         history: privateAccess ? (historyByCorp.get(c._id.toString()) ?? []) : null,
         operator: operator.operator,
         isRoot: c._id.equals(ctx.root._id),

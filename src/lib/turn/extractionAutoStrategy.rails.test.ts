@@ -233,3 +233,118 @@ describe("processExtractionAutoStrategy rails", () => {
     });
   });
 });
+
+describe("dead-deposit mothball for system-run state companies", () => {
+  let db: MockDb;
+  const soeVacant = { _id: new ObjectId(), countryOwnerId: "RU", ceoVacant: true };
+  const soePlayerCeo = { _id: new ObjectId(), countryOwnerId: "DE", ceoVacant: false };
+
+  function seed(sectors: Array<Record<string, unknown>>) {
+    db = createMockDb();
+    for (const n of [
+      "commodityPrices",
+      "stateResourceCapacity",
+      "corporateSectors",
+      "gameState",
+      "corporations",
+      "gameConfig",
+    ])
+      db.collection(n);
+    db.collectionMocks.gameConfig.findOne.mockResolvedValue({ marketSystemMode: "capital" });
+    db.collectionMocks.commodityPrices.find.mockReturnValue(cursor([]));
+    db.collectionMocks.stateResourceCapacity.find.mockReturnValue(
+      cursor([
+        { stateId: "SU_UKR", countryId: "RU", resources: {} },
+        { stateId: "DD_SN", countryId: "DD", resources: {} },
+        { stateId: "FI_EAS", countryId: "RU", resources: { timber: 1_000_000 } },
+        { stateId: "SU_NOR", countryId: "RU", resources: { coal: 50_000 } },
+      ])
+    );
+    // Honour the query the way Mongo would: NPC corps for the npp query, only
+    // vacant-CEO state companies for the state-company query.
+    db.collectionMocks.corporations.find.mockImplementation((filter: Record<string, unknown>) =>
+      cursor(filter.ceoVacant === true ? [soeVacant, soePlayerCeo].filter((c) => c.ceoVacant) : [])
+    );
+    db.collectionMocks.corporateSectors.find.mockImplementation(
+      (filter: { corporationId?: { $in?: ObjectId[] } }) => {
+        const ids = filter.corporationId?.$in?.map(String);
+        return cursor(ids ? sectors.filter((s) => ids.includes(String(s.corporationId))) : sectors);
+      }
+    );
+  }
+
+  const mothballedIds = () =>
+    (db.collectionMocks.corporateSectors.bulkWrite.mock.calls.at(-1)?.[0] ?? []).map(
+      (op: { updateOne: { filter: { _id: ObjectId } } }) => String(op.updateOne.filter._id)
+    );
+
+  it("mothballs a vacant-CEO state company's mine on an empty deposit", async () => {
+    const dead = {
+      _id: new ObjectId(),
+      corporationId: soeVacant._id,
+      stateId: "SU_UKR",
+      capitalStock: 97_000,
+    };
+    seed([dead]);
+
+    const res = await processExtractionAutoStrategy(db as unknown as Db, 10, ENABLED);
+
+    expect(res.deadDepositMothballed).toBe(1);
+    expect(res.stateCompanyDeadDepositMothballed).toBe(1);
+    expect(mothballedIds()).toEqual([String(dead._id)]);
+  });
+
+  it("mothballs rather than retools a state company mine with a live alternative", async () => {
+    const dead = {
+      _id: new ObjectId(),
+      corporationId: soeVacant._id,
+      stateId: "FI_EAS",
+      strategyId: "rare_earth_mining",
+      capitalStock: 400,
+    };
+    seed([dead]);
+
+    const res = await processExtractionAutoStrategy(db as unknown as Db, 10, ENABLED);
+
+    expect(res.restrategized).toBe(0);
+    expect(res.stateCompanyDeadDepositMothballed).toBe(1);
+  });
+
+  it("leaves live state company mines and player-run state companies alone", async () => {
+    seed([
+      {
+        _id: new ObjectId(),
+        corporationId: soeVacant._id,
+        stateId: "SU_NOR",
+        capitalStock: 20_000,
+      },
+      {
+        _id: new ObjectId(),
+        corporationId: soePlayerCeo._id,
+        stateId: "DD_SN",
+        capitalStock: 9_000,
+      },
+    ]);
+
+    const res = await processExtractionAutoStrategy(db as unknown as Db, 10, ENABLED);
+
+    expect(res.deadDepositMothballed).toBe(0);
+    expect(db.collectionMocks.corporateSectors.bulkWrite).not.toHaveBeenCalled();
+  });
+
+  it("shares the per-run cap, largest dead mines first", async () => {
+    const mines = [5, 97, 25, 12, 19].map((k) => ({
+      _id: new ObjectId(),
+      corporationId: soeVacant._id,
+      stateId: "SU_UKR",
+      capitalStock: k * 1000,
+    }));
+    seed(mines);
+
+    const res = await processExtractionAutoStrategy(db as unknown as Db, 10, ENABLED);
+
+    expect(res.deadDepositMothballed).toBe(3);
+    const largest = [...mines].sort((a, b) => b.capitalStock - a.capitalStock).slice(0, 3);
+    expect(mothballedIds()).toEqual(largest.map((m) => String(m._id)));
+  });
+});

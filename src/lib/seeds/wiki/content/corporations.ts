@@ -241,6 +241,17 @@ Sectors that don't match your primary or secondary type receive a **-15% penalty
 
 ## CEO tools
 
+### National influence
+
+Running a large listed corporation builds a small national name. After you have been CEO of the same corporation for **12 turns**, you earn national influence each turn:
+
+| Corporation | National influence per turn |
+| --- | ---: |
+| One of the 10 largest listed corporations in its country by market cap | +0.3 |
+| Any other listed corporation in the top half of its country by market cap | +0.15 |
+
+Private corporations and listed ones in the bottom half earn nothing. This is a position tier, so it does not stack with an office: if you also hold a seat, you get the higher of the two. Being a CEO grants no extra actions.
+
 ### CEO salary
 
 Set a daily salary from zero up to 1.25x the corporation's daily gross sector

@@ -50,9 +50,15 @@ function findOfficeConfig(officeType: string, countryId?: CountryId): OfficeType
 /**
  * Per-turn action bonus for holding `officeType`.
  *
- * `gameConfig.officeActionBonus` is authoritative when it names the key; the
- * country office registry is the fallback. Returns 0 for keys neither source
- * knows (e.g. a retired office type still on an old character document).
+ * When the holder's country is known and its registry defines the office, the
+ * registry value wins. `gameConfig.officeActionBonus` is keyed by bare office
+ * name across every country, so letting it win gave the same key's value to
+ * unrelated offices: every ceremonial `president` drew the US president's +4,
+ * and CN/RU `premier` drew the Canadian premier's +2. The config map remains
+ * the source for keys the country registry does not define (cabinet keys,
+ * retired offices) and for callers that do not know the country. An admin
+ * override for one country's office uses a `"<countryId>:<officeKey>"` key,
+ * which wins over everything.
  */
 export function resolveOfficeActionBonusForType(
   officeType: string | undefined,
@@ -60,48 +66,56 @@ export function resolveOfficeActionBonusForType(
   countryId?: CountryId
 ): number {
   if (!officeType) return 0;
+  if (countryId) {
+    const scoped = officeActionBonus?.[`${countryId}:${officeType}`];
+    if (typeof scoped === "number") return scoped;
+    const exact = getOfficeTypeConfig(countryId, officeType);
+    if (exact) return exact.actionBonus;
+  }
   const configured = officeActionBonus?.[officeType];
   if (typeof configured === "number") return configured;
   return findOfficeConfig(officeType, countryId)?.actionBonus ?? 0;
 }
 
-/**
- * Per-turn national-influence bonus tiers by office. Explicit entries preserve
- * the hand-tuned values the turn engine has always used:
- * 2.5 (executive head), 2.0 (VP), 1.0 (rank-and-file legislators, governors,
- * cabinet members).
- */
+/** NI tier for a national head of government or executive head of state. */
+export const NATIONAL_EXECUTIVE_NI_BONUS = 2.5;
+/** NI tier for a deputy national executive (vice president, tánaiste). */
+export const DEPUTY_EXECUTIVE_NI_BONUS = 2.0;
+/** NI tier for a confirmed cabinet member or a sub-national executive. */
+export const CABINET_NI_BONUS = 1.5;
+/** NI tier for an acting cabinet member, who was never confirmed. */
+export const ACTING_CABINET_NI_BONUS = 0.75;
+/** NI tier for a ceremonial head of state. */
+export const CEREMONIAL_HEAD_OF_STATE_NI_BONUS = 1.0;
+/** NI tier for a national legislator. */
+export const NATIONAL_LEGISLATOR_NI_BONUS = 1.0;
+/** NI tier for a sub-national legislator. */
+export const SUBNATIONAL_LEGISLATOR_NI_BONUS = 0.5;
+
+/** Office keys that are not in any country registry but carry an NI tier. */
 const OFFICE_NI_BONUS_OVERRIDES: Partial<Record<string, number>> = {
-  president: 2.5,
-  primeMinister: 2.5,
-  chancellor: 2.5,
-  vicePresident: 2.0,
-  senate: 1.0,
-  house: 1.0,
-  stateSenate: 1.0,
-  governor: 1.0,
-  usCabinet: 1.0,
-  commons: 1.0,
-  regionalCouncil: 1.0,
-  ukCabinet: 1.0,
-  bundestag: 1.0,
-  ministerPresident: 1.0,
-  deCabinet: 1.0,
-  parliamentaryCabinet: 1.0,
+  vicePresident: DEPUTY_EXECUTIVE_NI_BONUS,
+  tanaiste: DEPUTY_EXECUTIVE_NI_BONUS,
+  usCabinet: CABINET_NI_BONUS,
+  ukCabinet: CABINET_NI_BONUS,
+  deCabinet: CABINET_NI_BONUS,
+  parliamentaryCabinet: CABINET_NI_BONUS,
 };
 
-/** NI tier for a national executive office not named in the override table. */
-const NATIONAL_EXECUTIVE_NI_BONUS = 2.5;
-/** NI tier for any other seated office (legislators, sub-national offices). */
-const SEATED_OFFICE_NI_BONUS = 1.0;
+/** Sub-national executive office keys (governors, ministers-president). */
+const SUBNATIONAL_EXECUTIVE_KEYS = new Set(["governor", "ministerPresident"]);
 
 /**
- * Per-turn national-influence bonus for holding `officeType`.
- *
- * Offices named in {@link OFFICE_NI_BONUS_OVERRIDES} keep their tuned tier. Any
- * other office known to the country registry falls into the generic tiers rather
- * than resolving to 0 — this is what a Volkskammer deputy, a Supreme Soviet
- * deputy or a Dáil TD was missing.
+ * Per-turn national-influence bonus for holding `officeType`, derived from the
+ * holder's country registry entry:
+ *   2.5 national head of government or executive head of state
+ *   2.0 deputy national executive
+ *   1.5 cabinet, sub-national executive
+ *   1.0 ceremonial head of state, national legislator
+ *   0.5 sub-national legislator
+ * A head of state whose registry action bonus is below an executive's (4) is
+ * ceremonial. Cabinet AP is resolved separately; acting cabinet members are
+ * downgraded by the position resolver.
  */
 export function resolveOfficeNiBonus(
   officeType: string | undefined,
@@ -112,6 +126,12 @@ export function resolveOfficeNiBonus(
   if (typeof override === "number") return override;
   const office = findOfficeConfig(officeType, countryId);
   if (!office) return 0;
-  if (office.isExecutive && !office.isSubNational) return NATIONAL_EXECUTIVE_NI_BONUS;
-  return SEATED_OFFICE_NI_BONUS;
+  if (office.isHeadOfState && office.actionBonus < 4) return CEREMONIAL_HEAD_OF_STATE_NI_BONUS;
+  if (office.isSubNational) {
+    return office.isExecutive || SUBNATIONAL_EXECUTIVE_KEYS.has(office.key)
+      ? CABINET_NI_BONUS
+      : SUBNATIONAL_LEGISLATOR_NI_BONUS;
+  }
+  if (office.isExecutive) return NATIONAL_EXECUTIVE_NI_BONUS;
+  return NATIONAL_LEGISLATOR_NI_BONUS;
 }

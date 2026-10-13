@@ -6,6 +6,7 @@ import { Button } from "@/components/ui";
 import { MAX_ORG_DUES_RATE_ANNUAL } from "@/lib/constants/internationalOrganizations";
 import type { ProposalVote } from "@/lib/db/types/internationalOrganization";
 import type { OrgSummary, OrgViewerInfo } from "../orgTypes";
+import { orgProposingCountry } from "../orgTypes";
 import { VoteButtons } from "../VoteButtons";
 import { VoteRoster } from "../VoteRoster";
 import { formatFundAmount } from "./fundCurrency";
@@ -34,6 +35,10 @@ const MAX_DUES_PCT = MAX_ORG_DUES_RATE_ANNUAL * 100;
  */
 export function DuesPanel({ org, viewer, currentTurn, votingWindowTurns, onChange }: Props) {
   const viewerFmCountry = viewer?.foreignMinisterOf ?? viewer?.headOfGovernmentOf ?? null;
+  // Who tables resolutions: the FM/HoG country, or the member an org head sits
+  // for (agenda pool). Votes stay on viewerFmCountry.
+  const proposer = orgProposingCountry(viewer, org.id);
+  const proposerIsMember = proposer != null && org.members.some((m) => m.countryId === proposer);
   const viewerIsMember =
     viewerFmCountry != null && org.members.some((m) => m.countryId === viewerFmCountry);
   // Tabling only needs membership, but voting needs a ballot: the route enforces
@@ -51,7 +56,7 @@ export function DuesPanel({ org, viewer, currentTurn, votingWindowTurns, onChang
   const [error, setError] = useState<string | null>(null);
 
   async function submit() {
-    if (!viewerFmCountry) return;
+    if (!proposer) return;
     const pctNum = Number(pct);
     if (!(pctNum >= 0) || pctNum > MAX_DUES_PCT) {
       setError(`Enter a rate between 0 and ${MAX_DUES_PCT}%.`);
@@ -61,7 +66,7 @@ export function DuesPanel({ org, viewer, currentTurn, votingWindowTurns, onChang
     setError(null);
     try {
       const res = await fetch(
-        `/api/country/${viewerFmCountry}/international-organizations/${org.id}/legislation`,
+        `/api/country/${proposer}/international-organizations/${org.id}/legislation`,
         {
           method: "POST",
           headers: { "content-type": "application/json" },
@@ -119,7 +124,7 @@ export function DuesPanel({ org, viewer, currentTurn, votingWindowTurns, onChang
             Changing the rate needs a majority of the members that hold a vote.
           </p>
         </div>
-        {viewerIsMember && viewerFmCountry && (
+        {proposerIsMember && proposer && (
           <Button
             size="md"
             variant={showForm ? "ghost" : "primary"}
@@ -130,7 +135,7 @@ export function DuesPanel({ org, viewer, currentTurn, votingWindowTurns, onChang
         )}
       </div>
 
-      {showForm && viewerIsMember && viewerFmCountry && (
+      {showForm && proposerIsMember && proposer && (
         <div className="rounded-xl border border-primary/30 bg-primary/5 p-5">
           <h4 className="text-sm font-semibold text-foreground">Propose a dues rate</h4>
           <div className="mt-3 max-w-xs">

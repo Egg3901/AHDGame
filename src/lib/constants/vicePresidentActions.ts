@@ -5,14 +5,17 @@ import { getCalendarDayInTimezone } from "@/lib/time/dailyReset";
  *
  * The VP office is otherwise passive between elections; this gives the seated
  * VP a small, self-directed toolkit. The pool mirrors the cabinet
- * `ministerialActions` model exactly: a fixed daily cap, refilled once per
- * Eastern-time calendar day by the turn engine (see
+ * `ministerialActions` model exactly: a small banked cap that regains one
+ * action every `VP_ACTION_ACCRUAL_TURNS` turns via the turn engine (see
  * `src/lib/turn/vicePresidentActionReset.ts`), and spent one-per-action by the
  * VP action endpoint.
  */
 
-/** Max self-serve actions a seated vice-president can take per Eastern-time day. */
+/** Max self-serve actions a seated vice-president can bank. */
 export const VP_ACTION_CAP = 2;
+
+/** Turns between +1 VP action accruals (12 turns = 12 hours, 2 per day). */
+export const VP_ACTION_ACCRUAL_TURNS = 12;
 
 /** Favorability the sitting president gains from one Surrogate Address (clamped to 100). */
 export const VP_SURROGATE_FAVORABILITY_GAIN = 2;
@@ -21,7 +24,7 @@ export const VP_SURROGATE_FAVORABILITY_GAIN = 2;
 export const VP_RALLY_INFLUENCE_GAIN = 2;
 
 /** Reset-cadence hint shown next to the action counter. */
-export const VP_ACTION_RESET_HINT = "Resets daily at midnight Eastern Time.";
+export const VP_ACTION_RESET_HINT = `Regains 1 action every ${VP_ACTION_ACCRUAL_TURNS} turns, up to ${VP_ACTION_CAP}.`;
 
 export type VpActionId = "surrogate_address" | "rally_base";
 

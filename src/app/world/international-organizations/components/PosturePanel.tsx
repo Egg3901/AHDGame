@@ -11,6 +11,7 @@ import {
 } from "@/lib/constants/orgPosture";
 import type { ProposalVote } from "@/lib/db/types/internationalOrganization";
 import type { OrgSummary, OrgViewerInfo } from "../orgTypes";
+import { orgProposingCountry } from "../orgTypes";
 import { VoteButtons } from "../VoteButtons";
 import { VoteRoster } from "../VoteRoster";
 import {
@@ -36,6 +37,10 @@ interface Props {
  */
 export function PosturePanel({ org, viewer, currentTurn, votingWindowTurns, onChange }: Props) {
   const viewerFmCountry = viewer?.foreignMinisterOf ?? viewer?.headOfGovernmentOf ?? null;
+  // Who tables resolutions: the FM/HoG country, or the member an org head sits
+  // for (agenda pool). Votes stay on viewerFmCountry.
+  const proposer = orgProposingCountry(viewer, org.id);
+  const proposerIsMember = proposer != null && org.members.some((m) => m.countryId === proposer);
   const viewerIsMember =
     viewerFmCountry != null && org.members.some((m) => m.countryId === viewerFmCountry);
   // Tabling only needs membership, but voting needs a ballot: the route enforces
@@ -54,12 +59,12 @@ export function PosturePanel({ org, viewer, currentTurn, votingWindowTurns, onCh
   const [error, setError] = useState<string | null>(null);
 
   async function submit() {
-    if (!viewerFmCountry) return;
+    if (!proposer) return;
     setSubmitting(true);
     setError(null);
     try {
       const res = await fetch(
-        `/api/country/${viewerFmCountry}/international-organizations/${org.id}/legislation`,
+        `/api/country/${proposer}/international-organizations/${org.id}/legislation`,
         {
           method: "POST",
           headers: { "content-type": "application/json" },
@@ -115,7 +120,7 @@ export function PosturePanel({ org, viewer, currentTurn, votingWindowTurns, onCh
             })}
           </p>
         </div>
-        {viewerIsMember && viewerFmCountry && (
+        {proposerIsMember && proposer && (
           <Button
             size="md"
             variant={showForm ? "ghost" : "primary"}
@@ -126,7 +131,7 @@ export function PosturePanel({ org, viewer, currentTurn, votingWindowTurns, onCh
         )}
       </div>
 
-      {showForm && viewerIsMember && viewerFmCountry && (
+      {showForm && proposerIsMember && proposer && (
         <div className="rounded-xl border border-primary/30 bg-primary/5 p-5">
           <h4 className="text-sm font-semibold text-foreground">Propose an alert posture</h4>
           <div className="mt-3 max-w-md">

@@ -12,7 +12,7 @@ import type { SupremeCourtSeat } from "@/lib/db/types/scotus";
 import {
   initialJusticeActionFields,
   JUSTICE_ADDRESS_FAVORABILITY_GAIN,
-  JUSTICE_OPINION_INFLUENCE_GAIN,
+  JUSTICE_OPINION_NATIONAL_INFLUENCE_GAIN,
 } from "@/lib/constants/justiceActions";
 import { z } from "zod";
 
@@ -93,16 +93,19 @@ export async function POST(request: Request, { params }: RouteParams) {
           message: `You spoke publicly on the Court's role. Your favorability is now ${next}.`,
         });
       }
-      // write_opinion
-      const next = clamp100((targetChar.politicalInfluence ?? 0) + JUSTICE_OPINION_INFLUENCE_GAIN);
+      // write_opinion: national standing, not a home-state machine
       await charactersCol.updateOne(
         { _id: targetChar._id },
-        { $set: { politicalInfluence: next, updatedAt: new Date() } }
+        {
+          $inc: { nationalInfluence: JUSTICE_OPINION_NATIONAL_INFLUENCE_GAIN },
+          $set: { updatedAt: new Date() },
+        }
       );
+      const next = (targetChar.nationalInfluence ?? 0) + JUSTICE_OPINION_NATIONAL_INFLUENCE_GAIN;
       return NextResponse.json({
         success: true,
         actionsRemaining: actionsRemaining - 1,
-        message: `You published a legal opinion. Your political influence is now ${next}.`,
+        message: `You published a legal opinion. Your national influence is now ${next.toFixed(1)}.`,
       });
     } catch (error) {
       await seatsCol.updateOne({ _id: seat!._id }, { $inc: { justiceActionsRemaining: 1 } });

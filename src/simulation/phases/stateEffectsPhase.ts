@@ -306,19 +306,19 @@ export const stateEffectsAndNationalAggregationPhase: TurnPhaseAdapter = {
       // Appended last (result intentionally not destructured): slowly drift NPP
       // stances toward their state's political lean (#101).
       runtime.runPhase("nppStanceDrift", () => processNppStanceDrift(db, newTurn)),
-      // Appended (result intentionally not destructured): refill the seated
-      // vice-president's self-serve action pool once per Eastern-time day (#67).
-      runtime.runPhase("vicePresidentActionReset", () => resetVicePresidentActions(db)),
+      // Appended (result intentionally not destructured): accrue the seated
+      // vice-president's self-serve action pool, +1 every VP_ACTION_ACCRUAL_TURNS (#67).
+      runtime.runPhase("vicePresidentActionReset", () => resetVicePresidentActions(db, newTurn)),
       // Appended (result intentionally not destructured): refill each active
       // presidential ticket's shared running-mate surrogate action pool once per
-      // Eastern-time day (mirrors vicePresidentActionReset above).
+      // Eastern-time day (the VP pool now accrues per turn; this one is unchanged).
       runtime.runPhase("runningMateSurrogateActionReset", () =>
         resetRunningMateSurrogateActions(db)
       ),
-      // Appended (result intentionally not destructured): refill seated
-      // Justices' self-serve action pool once per Eastern-time day (#3598,
-      // mirrors vicePresidentActionReset above).
-      runtime.runPhase("justiceActionReset", () => resetJusticeActions(db)),
+      // Appended (result intentionally not destructured): accrue seated
+      // Justices' self-serve action pool, +1 every JUSTICE_ACTION_ACCRUAL_TURNS
+      // (#3598, mirrors vicePresidentActionReset above).
+      runtime.runPhase("justiceActionReset", () => resetJusticeActions(db, newTurn)),
     ]);
     phaseResults.policyEffects = { statesProcessed: policyResult ?? 0 };
     phaseResults.demographicEffects = { statesProcessed: demoEffectResult ?? 0 };

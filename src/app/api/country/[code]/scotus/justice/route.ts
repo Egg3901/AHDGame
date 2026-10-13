@@ -21,6 +21,7 @@ import {
   JUSTICE_ACTION_RESET_HINT,
 } from "@/lib/constants/justiceActions";
 import { getGameState } from "@/lib/gameState";
+import { officePoolTopUpStatus } from "@/lib/actions/officePoolTopUpRules";
 import { divergentDeathChance } from "@/lib/scotus/tenure";
 
 export async function GET(_request: Request, { params }: { params: Promise<{ code: string }> }) {
@@ -41,6 +42,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ cod
         actionCap: JUSTICE_ACTION_CAP,
         resetHint: JUSTICE_ACTION_RESET_HINT,
         actions: JUSTICE_ACTIONS,
+        topUp: null,
       });
     }
 
@@ -86,6 +88,9 @@ export async function GET(_request: Request, { params }: { params: Promise<{ cod
       actionCap: JUSTICE_ACTION_CAP,
       resetHint: JUSTICE_ACTION_RESET_HINT,
       actions: JUSTICE_ACTIONS,
+      topUp: seat
+        ? officePoolTopUpStatus(seat.lastJusticeActionTopUpTurn, currentTurn, myCharacter?.actions)
+        : null,
     });
   } catch (error) {
     return handleRouteError(error);

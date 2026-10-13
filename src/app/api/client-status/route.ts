@@ -58,8 +58,6 @@ import { buildTurnBriefing } from "@/lib/client/turnBriefing";
 import { loadWidgetExtras } from "@/lib/client/widgetExtras";
 import { buildWidgetPerTurn, type WidgetPerTurn } from "@/lib/client/widgetFigures";
 import { getRoundedPublicMarketCap } from "@/lib/corporations/marketQuote";
-import { resolvePositionNiBonus } from "@/lib/actions/positionNiBonus";
-import type { CongressLeader } from "@/lib/db/types/leadership";
 
 // GET /api/client-status — Returns status bar enrichment data (funds, corp, election stats, income).
 // Auth: requireBasicAuth
@@ -445,18 +443,6 @@ export async function GET(request: Request) {
     // Position tier behind the national influence gain the profile shows. Only
     // the widgets read it; started here so it overlaps the main batch, and a
     // failure leaves that one change unknown instead of failing the poll.
-    const widgetPositionRows = includeWidgetExtras
-      ? Promise.all([
-          db
-            .collection<CongressLeader>("congressLeaders")
-            .find({ characterId: character._id }, { projection: { role: 1 } })
-            .toArray(),
-          db
-            .collection("supremeCourtSeats")
-            .findOne({ justiceCharacterId: character._id }, { projection: { _id: 1 } }),
-        ]).catch(() => null)
-      : Promise.resolve(null);
-
     const hasParty = Boolean(character.party && character.party !== "independent");
     const statePartyKey = `${character.homeState}_${character.party}`;
     const partySeqId =
@@ -877,16 +863,20 @@ export async function GET(request: Request) {
     // Mirror the floors that actionRefresh applies so the displayed numbers
     // exactly match what the turn processor grants.
     const baseActionsPerTurn = Math.max(gameConfigDoc?.baseActionsPerTurn ?? 0, 4);
-    const officeActionBonus = resolveOfficeActionBonus({
-      currentOfficeType: character.currentOffice?.type,
-      electedSeatOfficeType: currentOfficial?.officeType,
-      isCabinetMember: cabinetSeat != null,
-      cabinetOfficeType: cabinetSeat
-        ? cabinetOfficeTypeForCountry((cabinetSeat.countryId ?? character.countryId) as CountryId)
-        : undefined,
-      officeActionBonus: gameConfigDoc?.officeActionBonus,
-      countryId: (character.countryId ?? "US") as CountryId,
-    });
+    // Chamber leadership and Supreme Court AP ride with the office bonus here;
+    // the profile breakdown itemises them.
+    const officeActionBonus =
+      (character.roleActionBonus ?? 0) +
+      resolveOfficeActionBonus({
+        currentOfficeType: character.currentOffice?.type,
+        electedSeatOfficeType: currentOfficial?.officeType,
+        isCabinetMember: cabinetSeat != null,
+        cabinetOfficeType: cabinetSeat
+          ? cabinetOfficeTypeForCountry((cabinetSeat.countryId ?? character.countryId) as CountryId)
+          : undefined,
+        officeActionBonus: gameConfigDoc?.officeActionBonus,
+        countryId: (character.countryId ?? "US") as CountryId,
+      });
 
     // Bonus actions granted by party-influence share (mirrors profile/page.tsx).
     let bonusActionsFromParty = 0;
@@ -944,26 +934,14 @@ export async function GET(request: Request) {
 
     let widgetFigures: { nationalInfluence?: number; perTurn?: WidgetPerTurn } = {};
     if (includeWidgetExtras) {
-      const positionRows = await widgetPositionRows;
-      const characterId = character._id.toString();
-      const positionNiBonus = positionRows
-        ? resolvePositionNiBonus({
-            currentOfficeType: character.currentOffice?.type,
-            countryId: (character.countryId ?? "US") as CountryId,
-            congressLeadershipRoles: positionRows[0].map((row) => row.role),
-            isPartyChair: partyDoc?.chairId?.toString() === characterId,
-            isPartySubChair:
-              partyDoc?.viceChairId?.toString() === characterId ||
-              partyDoc?.treasurerId?.toString() === characterId,
-            isSeatedJustice: positionRows[1] != null,
-            cabinetCountryId: cabinetSeat
-              ? ((cabinetSeat.countryId ?? character.countryId ?? "US") as CountryId)
-              : undefined,
-          })
-        : null;
+      // The tier the last action refresh granted; absent until a character's
+      // first refresh, when the figure is unknown rather than zero.
+      const positionNiBonus = character.positionNiBonus ?? null;
       const perTurn = buildWidgetPerTurn({
         character: {
           politicalInfluence: character.politicalInfluence ?? 0,
+          politicalInfluenceDecayMultiplier: character.politicalInfluenceDecayMultiplier ?? 1,
+          nationalInfluence: character.nationalInfluence ?? 0,
           favorability: character.favorability ?? 50,
           positionNiBonus: positionNiBonus ?? 0,
           fundsPerTurn: campaignIncomeBreakdown.netPerTurn,

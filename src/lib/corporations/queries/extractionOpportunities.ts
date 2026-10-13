@@ -11,6 +11,7 @@
  * states by free headroom (capacity − total desired output across that state's
  * extraction sectors). No economy state is written or changed.
  */
+import { loadExtractionRevenueAnchorOf } from "@/lib/extraction/revenueAnchor";
 import type { Db } from "mongodb";
 import type { CorporateSector, GameConfig } from "@/lib/db/types";
 import type { StateResourceCapacity } from "@/lib/db/types/stateResourceCapacity";
@@ -56,7 +57,10 @@ export async function computeResourceOpportunities(
       .toArray(),
     db
       .collection<CorporateSector>("corporateSectors")
-      .find({ sectorType: "extraction" }, { projection: { stateId: 1, revenue: 1, strategyId: 1 } })
+      .find(
+        { sectorType: "extraction" },
+        { projection: { stateId: 1, revenue: 1, strategyId: 1, corporationId: 1, countryId: 1 } }
+      )
       .toArray(),
     db
       .collection<{ _id: string; countryId: string }>("states")
@@ -68,6 +72,7 @@ export async function computeResourceOpportunities(
       .findOne({ _id: "default" }, { projection: { extractionOutputScaleEnabled: 1 } }),
   ]);
   const extractionOutputScaleEnabled = await getExtractionOutputScaleEnabled(gameConfig);
+  const revenueAnchorOf = await loadExtractionRevenueAnchorOf(db, extractionSectors);
 
   const countryByState = new Map(states.map((s) => [s._id, s.countryId]));
 
@@ -84,7 +89,7 @@ export async function computeResourceOpportunities(
       const rate = supplyRates[resource] ?? 0;
       if (rate <= 0) continue;
       const output = extractionDesiredUnits(
-        sector.revenue,
+        revenueAnchorOf(sector),
         rate,
         resource,
         eraUnitScale,

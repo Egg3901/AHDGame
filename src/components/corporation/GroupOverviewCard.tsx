@@ -4,30 +4,8 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { useCurrency } from "@/contexts/CurrencyContext";
+import type { GroupBalanceSheet } from "@/lib/corporations/groups/groupBalanceSheet";
 import { DenseSection, KVList, KVRow, TableScroll, Td, Th } from "./dense/DenseKit";
-
-interface GroupMember {
-  corporationId: string;
-  name: string;
-  tickerSymbol?: string;
-  countryId: string;
-  isRoot: boolean;
-  liquidCapitalAnchor: number;
-  revenueAnchor: number;
-  sectorCount: number;
-}
-
-interface GroupSheet {
-  rootCorporationId: string;
-  rootName: string;
-  memberCount: number;
-  members: GroupMember[];
-  totalLiquidCapitalAnchor: number;
-  totalRevenueAnchor: number;
-  totalSectorCount: number;
-  industries: string[];
-  countries: string[];
-}
 
 interface LossRelief {
   turn: number;
@@ -49,8 +27,8 @@ interface TransferPricing {
   recentAudits: AuditOutcome[];
 }
 
-interface GroupPayload {
-  group: GroupSheet | null;
+export interface GroupOverviewPayload {
+  group: GroupBalanceSheet | null;
   lossRelief: LossRelief | null;
   transferPricing: TransferPricing | null;
 }
@@ -61,15 +39,25 @@ const labelize = (s: string) => s.replace(/_/g, " ").replace(/\b\w/g, (c) => c.t
  * Consolidated group view (C4). Renders nothing at all unless this corporation
  * is part of a formalized group of two or more members.
  */
-export function GroupOverviewCard({ corpId }: { corpId: string }) {
+export function GroupOverviewCard({
+  corpId,
+  hideGroupLink = false,
+  payload,
+}: {
+  corpId: string;
+  hideGroupLink?: boolean;
+  payload?: GroupOverviewPayload;
+}) {
   const t = useTranslations("corporations.group");
-  const [data, setData] = useState<GroupPayload | null>(null);
+  const [fetchedData, setData] = useState<GroupOverviewPayload | null>(null);
+  const data = payload ?? fetchedData;
   const { formatAmount } = useCurrency();
 
   useEffect(() => {
+    if (payload) return;
     let cancelled = false;
     fetch(`/api/corporations/${corpId}/group`)
-      .then((res) => (res.ok ? (res.json() as Promise<GroupPayload>) : null))
+      .then((res) => (res.ok ? (res.json() as Promise<GroupOverviewPayload>) : null))
       .then((payload) => {
         if (!cancelled && payload) setData(payload);
       })
@@ -77,7 +65,7 @@ export function GroupOverviewCard({ corpId }: { corpId: string }) {
     return () => {
       cancelled = true;
     };
-  }, [corpId]);
+  }, [corpId, payload]);
 
   const group = data?.group;
   if (!group) return null;
@@ -92,12 +80,14 @@ export function GroupOverviewCard({ corpId }: { corpId: string }) {
       meta={`corporate group, ${group.memberCount} members in ${group.countries.length} ${group.countries.length === 1 ? "country" : "countries"}`}
     >
       <div className="space-y-3 py-1">
-        <Link
-          href={"/corporation/" + group.rootCorporationId + "/group"}
-          className="text-sm underline"
-        >
-          {t("viewGroup")}
-        </Link>
+        {!hideGroupLink && (
+          <Link
+            href={"/corporation/" + group.rootCorporationId + "/group"}
+            className="text-sm underline"
+          >
+            {t("viewGroup")}
+          </Link>
+        )}
         <p className="text-xs text-muted">
           Members of a formalized group file together for loss relief within each country and share
           brand and logistics strength, converging on the strongest member each turn.

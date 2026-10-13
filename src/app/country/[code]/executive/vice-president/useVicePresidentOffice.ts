@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import type { VpActionDef } from "@/lib/constants/vicePresidentActions";
+import type { OfficePoolTopUpStatus } from "@/lib/actions/officePoolTopUpRules";
 
 export interface VpOfficeHolder {
   id: string;
@@ -25,6 +26,8 @@ export interface VicePresidentOfficeData {
   actionCap: number;
   resetHint: string;
   actions: VpActionDef[];
+  /** Holder-only: state for buying +1 action with main AP. */
+  topUp: OfficePoolTopUpStatus | null;
 }
 
 export function useVicePresidentOffice(countryCode: string) {

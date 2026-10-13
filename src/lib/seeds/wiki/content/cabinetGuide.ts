@@ -1,4 +1,8 @@
-import { MINISTERIAL_ACTION_CAP } from "@/lib/constants/cabinetMechanicsTypes";
+import {
+  MINISTERIAL_ACTION_ACCRUAL_TURNS,
+  MINISTERIAL_ACTION_CAP,
+} from "@/lib/constants/cabinetMechanicsTypes";
+import { OFFICE_POOL_TOP_UP_AP_COST } from "@/lib/actions/officePoolTopUpRules";
 
 /**
  * Cabinet Guide wiki page. The intro is short static markdown; the full
@@ -27,7 +31,7 @@ Each seat combines some of the following levers, all detailed per post in the re
 - **Bond profiles:** finance seats set the maturity split of sovereign debt issuance.
 - **Buildings:** most seats can build persistent assets in regions: portfolio estates (schools, hospitals, embassies, and more), power plants on the energy seat, or multi-turn infrastructure projects on the transport seat. See [Cabinet Projects & Buildings](/wiki/cabinet-projects).
 
-Active mechanics spend **ministerial actions** (cabinet actions in presidential systems). Actions refill daily and cap at ${MINISTERIAL_ACTION_CAP}.
+Active mechanics spend **ministerial actions** (cabinet actions in presidential systems). You regain 1 action every ${MINISTERIAL_ACTION_ACCRUAL_TURNS} turns, up to ${MINISTERIAL_ACTION_CAP}, and once per turn you can spend ${OFFICE_POOL_TOP_UP_AP_COST} AP to buy 1 more.
 
 ## Per-country reference
 

@@ -65,14 +65,18 @@ export interface ElectedOfficial {
   };
   /**
    * Vice-president self-serve action pool (player suggestion #67). Present only
-   * on the `vicePresident` office doc. Refilled to `VP_ACTION_CAP` once per
-   * Eastern-time day by the turn engine (see vicePresidentActionReset.ts) and
+   * on the `vicePresident` office doc. Gains +1 every `VP_ACTION_ACCRUAL_TURNS`
+   * turns up to `VP_ACTION_CAP` (see vicePresidentActionReset.ts) and is
    * spent one-per-action by the VP action endpoint. Absent on non-VP offices
    * and on legacy VP docs (backfilled lazily on first action).
    */
   vpActionsRemaining?: number;
-  /** Eastern-time calendar day (`YYYY-MM-DD`) the VP action pool last reset. */
+  /** Eastern-time calendar day (`YYYY-MM-DD`) the VP action pool was seeded. */
   lastVpActionResetDay?: string;
+  /** Turn the VP pool last gained its per-turn accrual (idempotency stamp). */
+  lastVpActionAccrualTurn?: number;
+  /** Turn the VP last bought +1 action with main AP (once per turn). */
+  lastVpActionTopUpTurn?: number;
   /**
    * Westminster whip withdrawal (issue #859). True while the MP sits suspended
    * from the parliamentary party: the whip is withdrawn, they sit as an

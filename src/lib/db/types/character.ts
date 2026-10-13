@@ -181,6 +181,22 @@ export interface Character {
   profileHeaderImageUrl?: string;
   politicalInfluence: number;
   nationalInfluence?: number;
+  /**
+   * Corporation whose CEO NI this character is waiting on or earning, and the
+   * turn they were first seen running it. Written by the action refresh.
+   */
+  ceoNiTenure?: { corporationId: string; sinceTurn: number } | null;
+  /** CEO NI tier granted at the last action refresh, null when none. */
+  ceoNiTier?: "major" | "standard" | null;
+  /**
+   * Political-influence decay multiplier applied at the last action refresh:
+   * above 1 for members of the party holding the national executive.
+   */
+  politicalInfluenceDecayMultiplier?: number;
+  /** Chamber leadership plus Supreme Court AP granted at the last action refresh. */
+  roleActionBonus?: number;
+  /** Position NI tier (plus international add-on) granted at the last action refresh. */
+  positionNiBonus?: number;
   /** Party influence — accumulates per turn based on policy alignment and leadership. Floored at 0. */
   partyInfluence?: number;
   favorability: number;
@@ -293,8 +309,12 @@ export interface Character {
    * so legacy characters without the migration still read.
    */
   sharedMinisterialActions?: number;
-  /** YYYY-MM-DD (`America/New_York`) for the last shared pool refill. Optional for legacy rows. */
+  /** YYYY-MM-DD (`America/New_York`) the shared pool was seeded. Optional for legacy rows. */
   sharedMinisterialActionResetDay?: string;
+  /** Turn the shared pool last gained its per-turn accrual (idempotency stamp). */
+  sharedMinisterialActionAccrualTurn?: number;
+  /** Turn the holder last bought +1 shared action with main AP (once per turn). */
+  sharedMinisterialActionTopUpTurn?: number;
   /**
    * Executive terms completed/assumed per country.
    * Stored explicitly so re-election + succession can both count toward limits

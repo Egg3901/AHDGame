@@ -7,6 +7,7 @@ export interface GroupHistoryInput {
   revenue: number;
   totalCosts: number;
   income: number;
+  liquidCapital?: number;
   currencyCode?: string;
   fxRateAtWrite?: number;
 }
@@ -19,6 +20,7 @@ export function groupHistoryInAnchor(row: GroupHistoryInput) {
     revenue: row.revenue / rate,
     costs: row.totalCosts / rate,
     income: row.income / rate,
+    ...(Number.isFinite(row.liquidCapital) ? { cash: row.liquidCapital! / rate } : {}),
   };
 }
 

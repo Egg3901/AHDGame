@@ -22,12 +22,12 @@ export const WIKI_GLOSSARY = {
   },
   PI: {
     definition:
-      "Political Influence. State-level reputation built with Campaign actions. It feeds primary scores and general-election reach, and decays 0.75% per turn.",
+      "Political Influence. State-level reputation built with Campaign actions. It feeds primary scores and general-election reach, and decays 0.75% per turn, faster for the governing party when its approval is low.",
     aliases: ["political influence"],
   },
   NPI: {
     definition:
-      "National Political Influence. National name recognition. It grows from local PI and high office, does not decay each turn, and matters most in presidential races.",
+      "National Political Influence. National name recognition. It decays 1% per turn, grows from local PI and your highest office, and matters most in presidential races.",
     aliases: ["national political influence", "national influence"],
   },
   NPP: {
@@ -143,7 +143,7 @@ export const WIKI_GLOSSARY = {
   },
   "ministerial actions": {
     definition:
-      "The daily action pool for a cabinet seat (cabinet actions in presidential systems). They refill at midnight Eastern and cap at 4.",
+      "The action pool for a cabinet seat (cabinet actions in presidential systems). You regain 1 every 6 turns, up to a cap of 4.",
     aliases: ["ministerial action", "cabinet actions", "cabinet action"],
   },
   SED: {

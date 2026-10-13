@@ -50,6 +50,8 @@ export function OrgMasthead({
   const yourInfluence = you
     ? (derived.members.find((m) => m.countryId === you)?.influenceIndex ?? 0)
     : 0;
+  // The viewer's agenda pool when they head this organisation.
+  const agenda = viewer?.orgHeadAgendas?.find((a) => a.organizationId === def.id) ?? null;
   const lead = org.leadership;
   const activeFtas = org.activeLegislation.filter((l) => l.type === "free_trade_agreement").length;
   const pendingCount =
@@ -162,24 +164,46 @@ export function OrgMasthead({
       </div>
 
       {/* acting chip */}
-      {viewer && you && (
-        <div className="flex items-center justify-between gap-2 border-t border-card-border bg-card px-4 py-2.5">
+      {viewer && (you || agenda) && (
+        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-card-border bg-card px-4 py-2.5">
           <span className="text-[12px] text-muted">
             Acting as{" "}
-            <span className="font-semibold text-foreground">
-              {yourMembership ? def.shortName : "non-member"}
-            </span>{" "}
-            delegation
+            {you ? (
+              <>
+                <span className="font-semibold text-foreground">
+                  {yourMembership ? def.shortName : "non-member"}
+                </span>{" "}
+                delegation
+              </>
+            ) : (
+              <span className="font-semibold text-foreground">{agenda?.title}</span>
+            )}
           </span>
-          <span
-            className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold"
-            style={{
-              borderColor: "color-mix(in srgb, var(--org) 40%, transparent)",
-              color: "var(--org-soft)",
-            }}
-          >
-            {viewer.diplomaticActionsRemaining} / {viewer.diplomaticActionsPerTurn} diplomatic
-            actions left
+          <span className="flex flex-wrap items-center gap-1.5">
+            {agenda && (
+              <span
+                className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold"
+                style={{
+                  borderColor: "color-mix(in srgb, var(--org) 40%, transparent)",
+                  color: "var(--org-soft)",
+                }}
+                title={`Spent first on resolutions in this organisation. +${agenda.perTurn} a turn.`}
+              >
+                Agenda actions (as {agenda.title}): {agenda.remaining} / {agenda.cap}
+              </span>
+            )}
+            {you && (
+              <span
+                className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold"
+                style={{
+                  borderColor: "color-mix(in srgb, var(--org) 40%, transparent)",
+                  color: "var(--org-soft)",
+                }}
+              >
+                {viewer.diplomaticActionsRemaining} / {viewer.diplomaticActionsPerTurn} diplomatic
+                actions left
+              </span>
+            )}
           </span>
         </div>
       )}

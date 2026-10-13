@@ -256,6 +256,17 @@ describe("vitals", () => {
     expect(cells.find((c) => c.label === "Actions")?.sub).toContain("9");
   });
 
+  it("shows the banked actions against the bank cap when the server sends one", () => {
+    const capped = buildCampaignBlendViewModel(
+      input({ campaign: campaignFixture({ actions: 120, actionsCap: 240 }) })
+    ).vitals;
+    expect(capped.find((c) => c.label === "Actions")?.value).toBe("120 / 240");
+    const legacy = buildCampaignBlendViewModel(
+      input({ campaign: campaignFixture({ actions: 120 }) })
+    ).vitals;
+    expect(legacy.find((c) => c.label === "Actions")?.value).toBe("120");
+  });
+
   it("reads support and its pending drip from ownSupport", () => {
     const cells = buildCampaignBlendViewModel(input()).vitals;
     const support = cells.find((c) => c.label === "Support");

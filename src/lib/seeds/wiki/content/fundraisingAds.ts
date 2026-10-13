@@ -105,8 +105,8 @@ When you run an ad, you choose a demographic group (or "broad" for untargeted). 
 
 The workhorse. Every character runs dozens of Campaign actions per week.
 
-- Political Influence decays at 0.75% of current value per turn. A single Campaign action per turn is more than enough to offset decay at low PI; at PI=80 you need +1 per turn to grow, which means ~1 Campaign action per turn just to maintain.
-- At PI=100 (max), you can stop Campaigning without much loss because decay of 0.75 rolls you back to ~99 and you barely notice.
+- Political Influence decays at 0.75% of current value per turn. If your party holds the national executive, that rate is multiplied by 2 - approval/100 (x2.0 at 0% approval, x1.5 at 50%, x1.0 at 100%). A single Campaign action per turn is more than enough to offset decay at low PI; at PI=80 you need +1 per turn to grow, which means ~1 Campaign action per turn just to maintain.
+- At PI=100 (max), you can stop Campaigning without much loss because decay of 0.75 (up to 1.5 if your party governs with low approval) rolls you back to ~99 and you barely notice.
 
 ## Party tax
 

@@ -34,7 +34,8 @@ describe("ticket 1066 player wiki guides", () => {
   });
 
   it("answers how NPI grows, is spent, and is refunded", () => {
-    expect(electionsPlayerGuideContent).toContain("min(100, local political influence) / 100");
+    expect(electionsPlayerGuideContent).toContain("1% of its current value every turn");
+    expect(electionsPlayerGuideContent).toContain("local political influence / 50 - 0.5");
     expect(electionsPlayerGuideContent).toContain("| 3 | 30 total |");
     expect(electionsPlayerGuideContent).toContain("refunds the recorded proposal NPI cost");
   });

@@ -33,7 +33,7 @@
       "stateInfluence": "State influence",
       "influenceTooltip": "Political foothold in home state. Spend actions to grow it; it decays each turn. Higher influence improves odds in state elections and unlocks local power.",
       "nationalInfluence": "National influence",
-      "nationalTooltip": "Standing on the national stage. Grows passively each turn based on state influence. The note shows your rank in the country and the leader's score.",
+      "nationalTooltip": "Standing on the national stage. Decays 1% each turn, then grows from your state influence and your highest office. The note shows your rank in the country and the leader's score.",
       "nationalRankTop": "#{rank} nationally, leader at {top}",
       "nationalTop": "Leader at {top}",
       "favorability": "Favorability",

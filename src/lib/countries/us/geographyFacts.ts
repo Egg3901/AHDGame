@@ -193,6 +193,7 @@ export const US_CORE5_NORMALS: Record<string, NormalAnchor[]> = {
 
 /**
  * Which regions border which.
+ * Hawaii connects to AK, WA, OR, and CA by Pacific sea-link convention.
  *
  * ⚠ KEYED BY REGION, AND FOR US THOSE KEYS ARE NOT COUNTRY CODES. In the
  * United States' map `CA`, `DE` and `IN` are California, Delaware and Indiana,
@@ -202,17 +203,17 @@ export const US_CORE5_NORMALS: Record<string, NormalAnchor[]> = {
  */
 export const US_ADJACENCY_MAP: AdjacencyMap = {
   AL: ["FL", "GA", "MS", "TN"],
-  AK: ["WA"],
+  AK: ["HI", "WA"],
   AZ: ["CA", "CO", "NM", "NV", "UT"],
   AR: ["LA", "MS", "MO", "OK", "TN", "TX"],
-  CA: ["AZ", "NV", "OR"],
+  CA: ["AZ", "HI", "NV", "OR"],
   CO: ["AZ", "KS", "NE", "NM", "OK", "UT", "WY"],
   CT: ["MA", "NY", "RI"],
   DE: ["MD", "NJ", "PA"],
   DC: ["MD", "VA"],
   FL: ["AL", "GA"],
   GA: ["AL", "FL", "NC", "SC", "TN"],
-  HI: [],
+  HI: ["AK", "CA", "OR", "WA"],
   ID: ["MT", "NV", "OR", "UT", "WA", "WY"],
   IL: ["IN", "IA", "KY", "MO", "WI"],
   IN: ["IL", "KY", "MI", "OH"],
@@ -238,7 +239,7 @@ export const US_ADJACENCY_MAP: AdjacencyMap = {
   ND: ["MN", "MT", "SD"],
   OH: ["IN", "KY", "MI", "PA", "WV"],
   OK: ["AR", "CO", "KS", "MO", "NM", "TX"],
-  OR: ["CA", "ID", "NV", "WA"],
+  OR: ["CA", "HI", "ID", "NV", "WA"],
   PA: ["DE", "MD", "NJ", "NY", "OH", "WV"],
   RI: ["CT", "MA"],
   SC: ["GA", "NC"],
@@ -248,7 +249,7 @@ export const US_ADJACENCY_MAP: AdjacencyMap = {
   UT: ["AZ", "CO", "ID", "NV", "NM", "WY"],
   VT: ["MA", "NH", "NY"],
   VA: ["DC", "KY", "MD", "NC", "TN", "WV"],
-  WA: ["AK", "ID", "OR"],
+  WA: ["AK", "HI", "ID", "OR"],
   WV: ["KY", "MD", "OH", "PA", "VA"],
   WI: ["IA", "IL", "MI", "MN"],
   WY: ["CO", "ID", "MT", "NE", "SD", "UT"],

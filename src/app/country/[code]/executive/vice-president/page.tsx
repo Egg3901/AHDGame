@@ -100,6 +100,8 @@ export default function VicePresidentOfficePage() {
           actions={data.actions}
           actionsRemaining={data.vpActionsRemaining}
           resetHint={data.resetHint}
+          actionCap={data.actionCap}
+          topUp={data.topUp}
           canAct={data.isVicePresident}
           hasPresident={!!data.president && !data.president.isNPP}
           countryCode={countryCode}

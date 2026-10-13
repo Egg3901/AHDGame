@@ -8,6 +8,7 @@ import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { getNationalStateId } from "@/lib/policy/nationalStateId";
 import { issueOrder } from "@/lib/governorOffice/orders/issueOrder";
 import { isSittingLeader } from "@/lib/governorOffice/isSittingLeader";
+import { officePoolTopUpStatus } from "@/lib/actions/officePoolTopUpRules";
 import type { GovernorOfficeState, GameState, LegislationType } from "@/lib/db/types";
 
 /**
@@ -176,6 +177,14 @@ export async function GET(request: Request, { params }: { params: Promise<{ code
       legislationTypes: legislationTypes.map((t) => ({ id: t._id, name: t.name })),
       viewerIsLeader: leader,
       viewerIsAdmin: isAdmin,
+      // Leader-only: buy +1 national office AP with main AP (office pool top-up).
+      topUp: leader
+        ? officePoolTopUpStatus(
+            officeState?.lastGubernatorialActionTopUpTurn,
+            gameStateDoc?.currentTurn,
+            auth.user.character?.actions
+          )
+        : null,
     });
   } catch (error) {
     return handleRouteError(error);

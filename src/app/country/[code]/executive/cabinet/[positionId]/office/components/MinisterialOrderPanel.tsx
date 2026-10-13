@@ -5,6 +5,9 @@ import { Button } from "@/components/ui";
 import { useGameClock } from "@/contexts/useGameClock";
 import { getCabinetActionCopy } from "./actionCopy";
 import { MINISTERIAL_ACTION_RESET_HINT } from "@/lib/cabinet/ministerialActionHint";
+import { MINISTERIAL_ACTION_CAP } from "@/lib/constants/cabinetMechanicsTypes";
+import type { OfficePoolTopUpStatus } from "@/lib/actions/officePoolTopUpRules";
+import { OfficePoolTopUpButton } from "@/components/officials/OfficePoolTopUpButton";
 import { apiErrorText } from "@/lib/errors/catalog";
 
 interface Order {
@@ -36,6 +39,8 @@ interface MinisterialOrderPanelProps {
   countryCode: string;
   singleRegionFocus: string | null;
   regionData: RegionRow[];
+  /** Holder-only state for buying +1 action with main AP; null hides the button. */
+  topUp?: OfficePoolTopUpStatus | null;
   onUpdate: () => void;
 }
 
@@ -48,6 +53,7 @@ export function MinisterialOrderPanel({
   countryCode,
   singleRegionFocus,
   regionData,
+  topUp = null,
   onUpdate,
 }: MinisterialOrderPanelProps) {
   const [regionSelections, setRegionSelections] = useState<Record<string, string>>({});
@@ -117,8 +123,19 @@ export function MinisterialOrderPanel({
             {actionsRemaining} {actionsRemaining !== 1 ? actionCopy.plural : actionCopy.singular}{" "}
             remaining
           </span>
-          {actionsRemaining < 2 && (
+          {actionsRemaining < MINISTERIAL_ACTION_CAP && (
             <p className="mt-1 text-xs text-muted">{MINISTERIAL_ACTION_RESET_HINT}</p>
+          )}
+          {canAct && (
+            <OfficePoolTopUpButton
+              className="mt-2"
+              countryCode={countryCode}
+              body={{ pool: "ministerial", positionId }}
+              remaining={actionsRemaining}
+              cap={MINISTERIAL_ACTION_CAP}
+              topUp={topUp}
+              onUpdate={onUpdate}
+            />
           )}
         </div>
       </div>

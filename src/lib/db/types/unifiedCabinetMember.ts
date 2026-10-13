@@ -54,10 +54,14 @@ export interface UnifiedCabinetMember extends IterationStampFields {
    */
   acting?: boolean;
 
-  /** Ministerial action pool (0-2, refills daily at midnight Eastern Time) */
+  /** Ministerial action pool (0 to MINISTERIAL_ACTION_CAP, +1 every MINISTERIAL_ACTION_ACCRUAL_TURNS turns) */
   ministerialActions: number;
-  /** YYYY-MM-DD (`America/New_York`) for the last daily action refill */
+  /** YYYY-MM-DD (`America/New_York`) the pool was seeded or backfilled */
   lastMinisterialActionResetDay?: string;
+  /** Turn the pool last gained its per-turn accrual (idempotency stamp). */
+  lastMinisterialActionAccrualTurn?: number;
+  /** Turn the holder last bought +1 action with main AP (once per turn). */
+  lastMinisterialActionTopUpTurn?: number;
   /**
    * Role slot for UK dual-ministry rules (issue #2049): one "departmental"
    * plus one "central" row per player. Absent on legacy rows and outside the

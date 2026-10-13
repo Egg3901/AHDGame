@@ -8,6 +8,10 @@ import { getCabinetMembersCollection } from "@/lib/db/collections/cabinetMembers
 import { findCountryHeadedBy } from "@/lib/api/headOfGovernment";
 import { getCurrentTurn } from "@/lib/turn/currentTurn";
 import { getDiplomaticActionsRemaining } from "@/lib/internationalOrganizations/diplomaticActions";
+import {
+  loadOrgHeadAgendasForCharacter,
+  type OrgHeadAgendaInfo,
+} from "@/lib/internationalOrganizations/orgHeadAgenda";
 
 export async function loadViewerOrganizationRoles(params: {
   db: Db;
@@ -23,6 +27,7 @@ export async function loadViewerOrganizationRoles(params: {
       diplomaticActionsRemaining: DIPLOMATIC_ACTIONS_PER_TURN,
       diplomaticActionsPerTurn: DIPLOMATIC_ACTIONS_PER_TURN,
       diplomaticActionsCountryId: null,
+      orgHeadAgendas: [] as OrgHeadAgendaInfo[],
     };
   }
 
@@ -55,6 +60,8 @@ export async function loadViewerOrganizationRoles(params: {
   const diplomaticActionsRemaining = actingCountry
     ? await getDiplomaticActionsRemaining(db, actingCountry, currentTurn)
     : DIPLOMATIC_ACTIONS_PER_TURN;
+  // Personal agenda pools for any organisation this character heads.
+  const orgHeadAgendas = await loadOrgHeadAgendasForCharacter(db, characterId, currentTurn);
 
   return {
     characterId: characterId.toString(),
@@ -68,5 +75,6 @@ export async function loadViewerOrganizationRoles(params: {
     diplomaticActionsRemaining,
     diplomaticActionsPerTurn: DIPLOMATIC_ACTIONS_PER_TURN,
     diplomaticActionsCountryId: actingCountry,
+    orgHeadAgendas,
   };
 }

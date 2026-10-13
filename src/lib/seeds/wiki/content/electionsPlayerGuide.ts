@@ -74,26 +74,49 @@ If the headline share and the persuasion bars seem different, remember that pers
 
 ## National political influence: why yours is low
 
-National political influence, usually shortened to **NPI**, is accumulated national name recognition. It does not decay each turn.
+National political influence, usually shortened to **NPI**, is accumulated national name recognition. It decays by **1% of its current value every turn**, then you gain this turn's NPI. It never falls below 0.
 
-Every turn you gain:
+Because decay is proportional, every role settles at a level where gain equals decay: **100 x your per-turn gain**. If you leave office, the position part of your gain stops and your NPI fades toward the new, lower level, losing half the gap in about 69 turns.
 
-\`min(100, local political influence) / 100\`
+Every turn your gain has two parts. The first comes from your local political influence:
 
-That means 40 local political influence adds 0.4 NPI per turn, while 100 or more adds 1.0. Keeping local influence high is the base path to national growth.
+| Local political influence | NPI per turn |
+| --- | ---: |
+| 0 | -0.5 |
+| 25 | 0 |
+| 50 | +0.5 |
+| 75 | +1.25 |
+| 100 | +2.0 |
+
+Up to 50 the term is \`local political influence / 50 - 0.5\`. Above 50 it is \`0.5 + (local political influence - 50) x 0.03\`. Letting your home base fall below 25 costs national standing every turn.
 
 You also receive the highest position bonus you qualify for:
 
 | Position tier | NPI per turn |
 | --- | ---: |
-| Seated legislature, governor, or ordinary cabinet role | +1.0 |
-| Deputy congressional leader, party vice chair, or party treasurer | +1.5 |
-| Vice president, top congressional leader, party chair, or seated justice | +2.0 |
-| National head of government or state | +2.5 |
+| National head of government or executive head of state | +2.5 |
+| Vice president or deputy head of government, presiding officer (Speaker of the House, Bundestag President, NPC Standing Committee chair, Nigerian Speaker and Senate President, President pro tempore), House or Senate majority leader, national party chair | +2.0 |
+| Confirmed cabinet member, governor or minister-president, Supreme Court justice, central bank chair, House or Senate minority leader, CPPCC chair, party vice chair or treasurer | +1.5 |
+| National legislator, ceremonial head of state | +1.0 |
+| Acting cabinet member | +0.75 |
+| State or regional legislator, state party chair | +0.5 |
+| CEO of one of the 10 largest listed corporations in its country by market cap | +0.3 |
+| CEO of any other listed corporation in the top half of its country by market cap | +0.15 |
 
-A central-bank chair also receives a separate NPI benefit while in office. High chair infamy reduces that office benefit.
+A CEO only qualifies after running the same corporation for 12 turns. Running a corporation grants no extra actions.
 
-Position bonuses do not all stack with each other. The action refresh uses your highest qualifying position tier, then adds the local-influence gain. Holding three ordinary seats is not +3 NPI per turn.
+Position bonuses do not stack with each other. You get your single highest tier, then the local-influence term is added. Holding a seat, a party chair and a cabinet post is not +4.5 NPI per turn.
+
+The one exception is international leadership. Holding an international organisation's leadership seat (Secretary-General or equivalent) adds **+1.0** on top of your domestic tier.
+
+Some equilibrium examples, with local political influence around 30 (+0.1 per turn):
+
+| Role | Gain per turn | NPI settles near |
+| --- | ---: | ---: |
+| National head of government | 2.6 | 260 |
+| National legislator | 1.1 | 110 |
+| State legislator | 0.6 | 60 |
+| No office | 0.1 | 10 |
 
 ## Where NPI goes
 

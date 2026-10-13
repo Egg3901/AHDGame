@@ -1,5 +1,6 @@
 // POST /api/country/[code]/international-organizations/[orgId]/legislation
-// Foreign minister of `code` tables an org-level resolution. Supports
+// Foreign minister of `code` (or the organisation's head, from their agenda
+// pool) tables an org-level resolution. Supports
 // `free_trade_agreement`, `sanctions`, `aid_package`, `set_dues`, `directive`,
 // `joint_statement`, `set_posture`, and `fund_agency` (each gated by the org's
 // category powers).
@@ -24,9 +25,9 @@ import {
 } from "@/lib/internationalOrganizations/commands/proposeLegislation";
 import { getCurrentTurn } from "@/lib/turn/currentTurn";
 import {
-  getDiplomaticActionsRemaining,
-  spendDiplomaticAction,
-} from "@/lib/internationalOrganizations/diplomaticActions";
+  resolveOrgProposalBudget,
+  spendOrgProposalBudget,
+} from "@/lib/internationalOrganizations/orgHeadAgenda";
 import { isSelectableWarGoal, type WarGoal } from "@/lib/military/warGoals";
 
 const ftaSchema = z.object({
@@ -292,7 +293,21 @@ export async function POST(
       auth.user.character.name,
       db
     );
-    if (!foreignMinister.ok) return foreignMinister.response;
+
+    // The organisation's head may table its business from a personal agenda
+    // pool even without holding their country's foreign brief. The pool is
+    // spent first; the country budget backs it when the actor holds that too.
+    const currentTurn = await getCurrentTurn(db);
+    const budget = await resolveOrgProposalBudget({
+      db,
+      organizationId: orgId,
+      countryId,
+      actorCharacterId: auth.user.character._id,
+      proposalType: validatedInput.type,
+      countryAuthorized: foreignMinister.ok,
+      currentTurn,
+    });
+    if (!foreignMinister.ok && !budget.isOrgHead) return foreignMinister.response;
 
     if (!(await isMember(db, orgId, countryId))) {
       return NextResponse.json(badRequest(`${countryId} is not a member of ${orgId}.`).toJson(), {
@@ -300,28 +315,35 @@ export async function POST(
       });
     }
 
-    const currentTurn = await getCurrentTurn(db);
-    if ((await getDiplomaticActionsRemaining(db, countryId, currentTurn)) < 1) {
-      return NextResponse.json(badRequest("No diplomatic actions remaining this turn.").toJson(), {
-        status: 400,
-      });
+    if (!budget.source) {
+      const message = foreignMinister.ok
+        ? "No diplomatic actions remaining this turn."
+        : "No agenda actions remaining.";
+      return NextResponse.json(badRequest(message).toJson(), { status: 400 });
     }
 
     const result = await proposeOrganizationLegislation({
       db,
       countryId,
       orgId,
-      actor: {
-        characterId: foreignMinister.auth.characterId,
-        characterName: foreignMinister.auth.characterName,
-      },
+      actor: foreignMinister.ok
+        ? {
+            characterId: foreignMinister.auth.characterId,
+            characterName: foreignMinister.auth.characterName,
+          }
+        : { characterId: auth.user.character._id, characterName: auth.user.character.name },
       input: validatedInput,
     });
     if (!result.ok) {
       return NextResponse.json(badRequest(result.error).toJson(), { status: result.status });
     }
 
-    await spendDiplomaticAction(db, countryId, currentTurn);
+    await spendOrgProposalBudget(db, budget.source, {
+      organizationId: orgId,
+      countryId,
+      characterId: auth.user.character._id,
+      currentTurn,
+    });
 
     return NextResponse.json({ ok: true, legislationId: result.legislationId });
   } catch (err) {
