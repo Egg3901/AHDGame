@@ -1,3 +1,9 @@
+/**
+ * Campaign actions pay for a campaign's own operations. campaignActionsPerTurn
+ * combines endorsements before the diminishing-return curve and grants player
+ * campaigns about 25% more actions; NPC campaign allowances retain their tuning.
+ */
+import { campaignActionAllowance } from "@/lib/actions/rules/allowances";
 import { GOVERNOR_ENDORSEMENT_CAMPAIGN_ACTIONS } from "@/lib/constants/governorOffice";
 
 /**
@@ -66,5 +72,6 @@ export function campaignActionsPerTurn(inputs: CampaignActionInputs): number {
   const weighted =
     (governor + inputs.executiveEndorsements) * GOVERNOR_ENDORSEMENT_CAMPAIGN_ACTIONS;
 
-  return calculateCampaignActions(inputs.nppEndorsements + player + weighted, baseline);
+  const allowance = calculateCampaignActions(inputs.nppEndorsements + player + weighted, baseline);
+  return campaignActionAllowance(allowance, inputs.candidateIsNPP);
 }

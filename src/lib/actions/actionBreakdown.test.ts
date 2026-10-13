@@ -22,15 +22,15 @@ describe("getActionBreakdown", () => {
       cabinetPositionId: "defense_minister",
       countryId: "DE",
       officeActionBonus: OAB,
-      baseActionsPerTurn: 4,
+      baseActionsPerTurn: 5,
       chairActionBonus: 0,
-      bonusActionsFromParty: 3,
+      bonusActionsFromParty: 3.75,
     });
     expect(lines).toEqual([
-      { label: "Base", amount: 4 },
-      { label: "Office (Member of Bundestag)", amount: 1 },
-      { label: "Cabinet (Federal Minister of Defence)", amount: 1 },
-      { label: "Party influence", amount: 3 },
+      { label: "Base", amount: 5 },
+      { label: "Office (Member of Bundestag)", amount: 1.25 },
+      { label: "Cabinet (Federal Minister of Defence)", amount: 1.25 },
+      { label: "Party influence", amount: 3.75 },
     ]);
   });
 
@@ -42,13 +42,13 @@ describe("getActionBreakdown", () => {
       cabinetPositionId: undefined,
       countryId: "DE",
       officeActionBonus: OAB,
-      baseActionsPerTurn: 4,
+      baseActionsPerTurn: 5,
       chairActionBonus: 0,
       bonusActionsFromParty: 0,
     });
     expect(lines).toEqual([
-      { label: "Base", amount: 4 },
-      { label: "Office (Member of Bundestag)", amount: 1 },
+      { label: "Base", amount: 5 },
+      { label: "Office (Member of Bundestag)", amount: 1.25 },
     ]);
   });
 
@@ -60,15 +60,15 @@ describe("getActionBreakdown", () => {
       cabinetPositionId: "environment_minister",
       countryId: "DE",
       officeActionBonus: OAB,
-      baseActionsPerTurn: 4,
-      chairActionBonus: 3,
+      baseActionsPerTurn: 5,
+      chairActionBonus: 3.75,
       bonusActionsFromParty: 0,
     });
     expect(lines).toEqual([
-      { label: "Base", amount: 4 },
-      { label: "Office (Minister-President)", amount: 2 },
-      { label: "Cabinet (Federal Minister for the Environment)", amount: 1 },
-      { label: "Central Bank Chair", amount: 3 },
+      { label: "Base", amount: 5 },
+      { label: "Office (Minister-President)", amount: 2.5 },
+      { label: "Cabinet (Federal Minister for the Environment)", amount: 1.25 },
+      { label: "Central Bank Chair", amount: 3.75 },
     ]);
   });
 
@@ -80,13 +80,13 @@ describe("getActionBreakdown", () => {
       cabinetPositionId: undefined,
       countryId: "DE",
       officeActionBonus: OAB,
-      baseActionsPerTurn: 4,
+      baseActionsPerTurn: 5,
       chairActionBonus: 0,
-      bonusActionsFromParty: 2,
+      bonusActionsFromParty: 2.5,
     });
     expect(lines).toEqual([
-      { label: "Base", amount: 4 },
-      { label: "Party influence", amount: 2 },
+      { label: "Base", amount: 5 },
+      { label: "Party influence", amount: 2.5 },
     ]);
   });
 });

@@ -4,9 +4,9 @@ Alphabetical definitions of terms used throughout A House Divided and its wiki.
 
 ---
 
-**Action**: The primary resource consumed by player activities. Base 4 per turn, refreshed every real hour, with office bonuses added. Unused actions carry forward up to the Energy-scaled cap (baseline 200). Above the hoard threshold (baseline 100), the pool loses 4 actions before each refresh.
+**Action**: The primary resource consumed by player activities. Base 5 per turn, refreshed every real hour, with office bonuses added. Unused actions carry forward up to the Energy-scaled cap (baseline 250). Above the hoard threshold (baseline 125), the pool loses 5 actions before each refresh.
 
-**Action bonus**: Additional actions per turn granted by holding a specific office. Example: Senator gets +2/turn; President gets +4/turn.
+**Action bonus**: Additional actions per turn granted by holding a specific office. Example: Senator gets +2.5/turn; President gets +5/turn.
 
 **Alignment**: The component of primary and general election scores based on how close a candidate's policy position (econ + social) is to the party platform or the voter demographic. Also used in canvassing: the closer your ideology to a demographic group's ideology, the more effective your canvassing.
 
@@ -82,7 +82,7 @@ Alphabetical definitions of terms used throughout A House Divided and its wiki.
 
 **Manhattan distance**: The sum of absolute differences on the econ axis and social axis. Used to calculate ideological alignment. Distance 0 is a perfect match. State primaries price each point at 1.25 against state lean and 0.75 against party position; the party-only fallback prices it at 2.
 
-**Ministerial actions**: The daily action pool for a cabinet seat (called cabinet actions in presidential systems). They refill at midnight Eastern and cap at 4. See [Cabinet Guide](/wiki/cabinet-guide).
+**Ministerial actions**: The daily action pool for a cabinet seat (called cabinet actions in presidential systems). They refill at midnight Eastern and cap at 5. See [Cabinet Guide](/wiki/cabinet-guide).
 
 **Media Spending**: A campaign branch tree (starter node plus Broadcast, Television, and Rapid Response branches) that passively boosts the candidate's favorability each turn. Doubles during campaign season.
 

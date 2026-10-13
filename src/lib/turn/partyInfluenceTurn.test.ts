@@ -249,19 +249,19 @@ describe("computeBonusActions", () => {
   it("distributes proportionally and floors result", async () => {
     const { computeBonusActions } = await import("./partyInfluenceTurn");
     // 10 players → pool=15; member has 20% of influence → rawShare=3; closeness=1.0 → floor(3)=3
-    expect(computeBonusActions(20, 100, 15, 1.0, 3)).toBe(3);
+    expect(computeBonusActions(20, 100, 15, 1.0, 3)).toBe(3.75);
   });
 
   it("caps at maxBonus", async () => {
     const { computeBonusActions } = await import("./partyInfluenceTurn");
     // 50% share of pool=15 → rawShare=7.5 → floor=7, but capped at 3
-    expect(computeBonusActions(50, 100, 15, 1.0, 3)).toBe(3);
+    expect(computeBonusActions(50, 100, 15, 1.0, 3)).toBe(3.75);
   });
 
   it("scales down by closeness scalar", async () => {
     const { computeBonusActions } = await import("./partyInfluenceTurn");
     // 100% share of pool=3 → rawShare=3; closeness=0.5 → floor(1.5)=1
-    expect(computeBonusActions(100, 100, 3, 0.5, 3)).toBe(1);
+    expect(computeBonusActions(100, 100, 3, 0.5, 3)).toBe(1.25);
   });
 
   it("returns 0 for member with zero influence", async () => {
@@ -403,10 +403,10 @@ describe("processPartyInfluenceTurn", () => {
     const up1 = op1.updateOne.update as unknown as { $set: Record<string, unknown> }[];
     const up2 = op2.updateOne.update as unknown as { $set: Record<string, unknown> }[];
     expect(up1[0].$set.actions).toEqual({
-      $min: [ACTION_CAP, { $add: [{ $ifNull: ["$actions", 0] }, 4] }],
+      $min: [ACTION_CAP, { $add: [{ $ifNull: ["$actions", 0] }, 5] }],
     });
     expect(up2[0].$set.actions).toEqual({
-      $min: [ACTION_CAP, { $add: [{ $ifNull: ["$actions", 0] }, 1] }],
+      $min: [ACTION_CAP, { $add: [{ $ifNull: ["$actions", 0] }, 1.25] }],
     });
   });
 
@@ -437,10 +437,10 @@ describe("processPartyInfluenceTurn", () => {
     const up2 = op2.updateOne.update as unknown as { $set: Record<string, unknown> }[];
     // Max-Energy member clamps at 250; unmigrated member stays at the 200 baseline.
     expect(up1[0].$set.actions).toEqual({
-      $min: [250, { $add: [{ $ifNull: ["$actions", 0] }, 4] }],
+      $min: [313, { $add: [{ $ifNull: ["$actions", 0] }, 5] }],
     });
     expect(up2[0].$set.actions).toEqual({
-      $min: [ACTION_CAP, { $add: [{ $ifNull: ["$actions", 0] }, 1] }],
+      $min: [ACTION_CAP, { $add: [{ $ifNull: ["$actions", 0] }, 1.25] }],
     });
   });
 

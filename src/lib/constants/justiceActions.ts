@@ -1,3 +1,9 @@
+/**
+ * Justices have a separate daily pool for their self-serve actions.
+ * JUSTICE_ACTION_CAP allows three actions per Eastern-time day; the definitions
+ * below set the effects of each judicial action.
+ */
+import { wholePlayerActionAllowance } from "@/lib/actions/rules/allowances";
 import { getCalendarDayInTimezone } from "@/lib/time/dailyReset";
 
 /**
@@ -13,7 +19,7 @@ import { getCalendarDayInTimezone } from "@/lib/time/dailyReset";
  */
 
 /** Max self-serve actions a seated Justice can take per Eastern-time day. Same cap as VP. */
-export const JUSTICE_ACTION_CAP = 2;
+export const JUSTICE_ACTION_CAP = wholePlayerActionAllowance(2);
 
 /**
  * Passive National Influence accrued per turn by a seated (player-character)

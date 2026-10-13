@@ -35,7 +35,7 @@ describe("resolveOfficeActionBonusForType", () => {
   it("prefers an explicit gameConfig entry over the country registry", () => {
     // DD's registry entry for `governor` is 2; the config says 2 as well, but
     // the point is the config is consulted first — prove it with an override.
-    expect(resolveOfficeActionBonusForType("governor", { governor: 9 }, "DD")).toBe(9);
+    expect(resolveOfficeActionBonusForType("governor", { governor: 9 }, "DD")).toBe(11.25);
   });
 
   it("keeps a configured zero rather than falling back to the registry", () => {
@@ -43,15 +43,15 @@ describe("resolveOfficeActionBonusForType", () => {
   });
 
   it("grants a Volkskammer deputy their registry bonus (ticket #974)", () => {
-    expect(resolveOfficeActionBonusForType("volkskammerDeputy", LIVE_CONFIG_MAP, "DD")).toBe(1);
+    expect(resolveOfficeActionBonusForType("volkskammerDeputy", LIVE_CONFIG_MAP, "DD")).toBe(1.25);
   });
 
   it("grants a DD Landtag deputy their registry bonus", () => {
-    expect(resolveOfficeActionBonusForType("landAssembly", LIVE_CONFIG_MAP, "DD")).toBe(1);
+    expect(resolveOfficeActionBonusForType("landAssembly", LIVE_CONFIG_MAP, "DD")).toBe(1.25);
   });
 
   it("resolves without a countryId by scanning every country", () => {
-    expect(resolveOfficeActionBonusForType("volkskammerDeputy", LIVE_CONFIG_MAP)).toBe(1);
+    expect(resolveOfficeActionBonusForType("volkskammerDeputy", LIVE_CONFIG_MAP)).toBe(1.25);
   });
 
   it("returns 0 for an office no source knows", () => {

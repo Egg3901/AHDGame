@@ -1,3 +1,4 @@
+import { processMinisterialOrders } from "./ministerialOrderProcessing";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Db } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
@@ -53,7 +54,6 @@ describe("processMinisterialOrders tier effect resolution", () => {
 
     // No active orders, no cabinet members (action regen no-op): defaults ([]) are fine.
 
-    const { processMinisterialOrders } = await import("./ministerialOrderProcessing");
     await processMinisterialOrders(100);
 
     // SP5: economic tier effects land on macroMetrics.
@@ -93,7 +93,6 @@ describe("processMinisterialOrders tier effect resolution", () => {
     db.collection("centralBanks");
     db.collectionMocks.centralBanks!.find.mockReturnValue(cursorReturning([{ _id: "CN" }]));
 
-    const { processMinisterialOrders } = await import("./ministerialOrderProcessing");
     await processMinisterialOrders(100);
 
     // Inflation pressure persisted to the central bank (tight = -0.4 pp).
@@ -157,7 +156,6 @@ describe("processMinisterialOrders tier effect resolution", () => {
     db.collection("centralBanks");
     db.collectionMocks.centralBanks!.find.mockReturnValue(cursorReturning([]));
 
-    const { processMinisterialOrders } = await import("./ministerialOrderProcessing");
     await processMinisterialOrders(100);
 
     const ops = db.collectionMocks.macroMetrics!.bulkWrite.mock.calls[0]![0] as Array<{
@@ -192,7 +190,6 @@ describe("processMinisterialOrders tier effect resolution", () => {
     db.collection("centralBanks");
     db.collectionMocks.centralBanks!.find.mockReturnValue(cursorReturning([{ _id: "CN" }]));
 
-    const { processMinisterialOrders } = await import("./ministerialOrderProcessing");
     const result = await processMinisterialOrders(124);
 
     expect(result.ordersExpired).toBe(1);
@@ -222,7 +219,6 @@ describe("processMinisterialOrders tier effect resolution", () => {
     db.collection("centralBanks");
     db.collectionMocks.centralBanks!.find.mockReturnValue(cursorReturning([{ _id: "US" }]));
 
-    const { processMinisterialOrders } = await import("./ministerialOrderProcessing");
     const result = await processMinisterialOrders(200);
 
     expect(result.actionsRegenerated).toBe(1);
@@ -272,7 +268,6 @@ describe("processMinisterialOrders political-metric contribution snapshot", () =
       ])
     );
 
-    const { processMinisterialOrders } = await import("./ministerialOrderProcessing");
     await processMinisterialOrders(100);
 
     const call = db.collectionMocks.politicalCabinetContribution!.updateOne.mock.calls[0];
@@ -315,7 +310,6 @@ describe("processMinisterialOrders political-metric contribution snapshot", () =
       }
     );
 
-    const { processMinisterialOrders } = await import("./ministerialOrderProcessing");
     await processMinisterialOrders(100);
 
     const usCall = db.collectionMocks.politicalCabinetContribution!.updateOne.mock.calls.find(
@@ -360,7 +354,6 @@ describe("processMinisterialOrders political-metric contribution snapshot", () =
       ])
     );
 
-    const { processMinisterialOrders } = await import("./ministerialOrderProcessing");
     await processMinisterialOrders(100);
 
     // Board countries are always in effectsByCountry via the military/estate/

@@ -38,7 +38,7 @@ Country-specific election phases (UK by-elections, JP Sangiin half-elections, DE
 
 Runs at the start of every turn, in parallel:
 
-- **Action refresh**: All player characters receive base 4 actions per turn (plus any office bonuses from game settings). NPP actions also refreshed.
+- **Action refresh**: All player characters receive base 5 actions per turn (plus any office bonuses from game settings). NPP actions also refreshed.
 - **Fund generation**: Player characters receive passive income from held offices (state taxes + national taxes). Party treasuries receive contributions.
 - **Corporation turn**: Sectors produce, clear, and settle freight and advertising; corporations pay dividends and income to character shareholders.
 - **Unions turn**: unionization drifts, strikes trigger and resolve, collective agreements run.

@@ -1,5 +1,6 @@
 "use client";
 
+import { PLAYER_BASE_ACTION_GAIN } from "@/lib/actions/rules/allowances";
 import { useState, useEffect, useCallback, useRef } from "react";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
@@ -306,9 +307,9 @@ export function StatusBar({
 
   // Actions breakdown — server-computed from gameConfig so the tooltip matches
   // exactly what actionRefresh.ts grants each turn. Falls back to the same
-  // floor (4 base, 0 office/chair/party) the turn processor uses when a value
+  // floor (5 base, 0 office/chair/party) the turn processor uses when a value
   // is missing from the API payload.
-  const baseGain = stats?.baseActionsPerTurn ?? 4;
+  const baseGain = stats?.baseActionsPerTurn ?? PLAYER_BASE_ACTION_GAIN;
   const officeBonus = stats?.officeActionBonus ?? 0;
   const chairBonus = stats?.isCentralBankChair ? (stats.chairActionBonus ?? 0) : 0;
   const partyBonus = stats?.bonusActionsFromParty ?? 0;

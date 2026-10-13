@@ -40,8 +40,8 @@ describe("resetRunningMateSurrogateActions", () => {
     const bulkArg = db.collectionMocks.campaigns.bulkWrite.mock.calls[0][0];
     const op = bulkArg[0].updateOne;
     expect(op.filter._id).toBe(campaignId);
-    // v3 vpSurrogateActionCap identity = 2.
-    expect(op.update.$set.runningMateSurrogateActionsRemaining).toBe(2);
+    // v3 receives the current three-action player allowance.
+    expect(op.update.$set.runningMateSurrogateActionsRemaining).toBe(3);
     expect(op.update.$set.runningMateSurrogateActionsResetDay).toBe(
       getCalendarDayInTimezone(new Date())
     );

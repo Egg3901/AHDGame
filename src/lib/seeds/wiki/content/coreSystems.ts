@@ -35,17 +35,17 @@ Actions are your activity budget. Everything you do (campaigning, voting, wiring
 
 Each turn you receive:
 
-- **4 base actions**: everyone gets this.
+- **5 base actions**: everyone gets this.
 - **Office bonus**: stacked on top of base:
-  - House / State Senate / Bundestag member / Sangiin member / MP: **+1**
-  - Senate / Vice President / state governor analogue: **+2**
-  - Governor: **+2**
-  - President: **+4**
-  - Central Bank Chair: **+3** (stacks on any office bonus you also hold)
+  - House / State Senate / Bundestag member / Sangiin member / MP: **+1.25**
+  - Senate / Vice President / state governor analogue: **+2.5**
+  - Governor: **+2.5**
+  - President: **+5**
+  - Central Bank Chair: **+3.75** (stacks on any office bonus you also hold)
 - **Party bonus**: a variable share of your party's action pool, allocated by Party Influence × platform-alignment closeness.
 - **Starting grant**: a one-time 25 actions at character creation.
 
-Actions accumulate up to a **cap of 200**. Above 100 you pay a **−4 hoarding penalty per turn** applied before the refresh. For characters with only the base 4 actions, this creates a soft cap around **100-104**; office holders with higher refresh still grow toward the hard cap, just slowed by 4 per turn.
+At Energy 1, actions accumulate up to **250**. Above 125, a **5-action hoarding penalty per turn** applies before the refresh. For characters with only the base 5 actions, this creates a soft cap around **125-130**. Energy 10 raises the cap to 313 and the threshold to 156. Office holders can grow toward their hard cap because their refresh exceeds the hoarding penalty. Fractional office and party grants carry forward until you can spend a whole action.
 
 ### Spending actions
 

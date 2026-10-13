@@ -17,7 +17,7 @@ export interface WikiGlossaryTerm {
 export const WIKI_GLOSSARY = {
   AP: {
     definition:
-      "Action points. The spendable actions you get each turn (base 4, plus office and party bonuses). Most political work costs AP.",
+      "Action points. The spendable actions you get each turn (base 5, plus office and party bonuses). Most political work costs AP.",
     aliases: ["action points", "action point"],
   },
   PI: {
@@ -143,7 +143,7 @@ export const WIKI_GLOSSARY = {
   },
   "ministerial actions": {
     definition:
-      "The daily action pool for a cabinet seat (cabinet actions in presidential systems). They refill at midnight Eastern and cap at 4.",
+      "The daily action pool for a cabinet seat (cabinet actions in presidential systems). They refill at midnight Eastern and cap at 5.",
     aliases: ["ministerial action", "cabinet actions", "cabinet action"],
   },
   SED: {

@@ -1,3 +1,13 @@
+/**
+ * Personal actions refresh with base, office and central-bank chair grants.
+ * processActionRefresh applies the player's Energy bank limits and hoard tax,
+ * and refreshes political stats without overwriting concurrent player spending.
+ */
+import {
+  playerActionAllowance,
+  playerBaseActionGain,
+  refreshPersonalActionBank,
+} from "@/lib/actions/rules/allowances";
 import type { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import type { Character, GameConfig, NPP } from "@/lib/db/types";
@@ -30,7 +40,6 @@ import {
   observeGovernmentAccountability,
   memberAccountabilityDrain,
 } from "@/lib/government/accountability";
-const MIN_BASE_ACTIONS_PER_TURN = 4;
 /*
  * Fallback if `gameConfig.chairActionBonus` is missing on legacy configs.
  * The per-country config in `countries.ts` sets each centralBankChair office
@@ -38,18 +47,14 @@ const MIN_BASE_ACTIONS_PER_TURN = 4;
  */
 const DEFAULT_CHAIR_ACTION_BONUS = 3;
 /*
- * Hoarding penalty: when a character sits above 100 unspent actions they lose
- * 4 per turn, effectively capping long-term stockpiling at ~150 equilibrium
- * (4 base + hoard penalty cancels at 100 + 4/4 * 50 = 150).
- * This prevents players from banking actions across months and then spending
- * them all in a single burst to dominate an election cycle.
+ * The hoard tax matches the five-action baseline. An idle ordinary player
+ * settles just above the Energy-scaled threshold instead of growing to the cap.
  */
-const ACTION_HOARD_PENALTY = 4;
 
 /**
  * Refresh actions and apply stat updates for all characters each turn.
- * - Actions: base + office bonus + chair bonus (stacked), capped at 200;
- *   hoarding penalty if > 100
+ * - Actions: base + office bonus + chair bonus (stacked), capped by Energy;
+ *   five-action hoarding penalty above the Energy-scaled threshold
  * - Political influence: decays at a lower 0.75% slope per turn (Campaign to maintain)
  * - National influence: passively accrues +state influence / 100 per turn (uncapped)
  * - Infamy: 5% decay per turn
@@ -62,8 +67,10 @@ export async function processActionRefresh(
 ): Promise<void> {
   const db = await getDb();
   const accountability = await observeGovernmentAccountability(db);
-  const baseActionsPerTurn = Math.max(config?.baseActionsPerTurn ?? 0, MIN_BASE_ACTIONS_PER_TURN);
-  const chairActionBonus = config?.chairActionBonus ?? DEFAULT_CHAIR_ACTION_BONUS;
+  const baseActionsPerTurn = playerBaseActionGain(config?.baseActionsPerTurn);
+  const chairActionBonus = playerActionAllowance(
+    config?.chairActionBonus ?? DEFAULT_CHAIR_ACTION_BONUS
+  );
 
   /*
    * Central bank chair is a standalone role that stacks on top of any elected
@@ -216,14 +223,15 @@ export async function processActionRefresh(
     }
 
     // Energy raises the per-character action cap and hoard threshold. Unmigrated
-    // characters (no Energy stat) fall back to the baseline 200/100 via STAT_MIN.
+    // characters (no Energy stat) fall back to the baseline 250/125 via STAT_MIN.
     const { cap: energyCap, threshold: energyThreshold } = energyActionLimits(
       character.stats?.energy ?? STAT_MIN
     );
-    const penalty = character.actions > energyThreshold ? ACTION_HOARD_PENALTY : 0;
-    const newActions = Math.min(
+    const newActions = refreshPersonalActionBank(
+      character.actions,
+      actionRefresh,
       energyCap,
-      Math.max(0, character.actions - penalty + actionRefresh)
+      energyThreshold
     );
 
     const currentInfluence = character.politicalInfluence ?? 0;

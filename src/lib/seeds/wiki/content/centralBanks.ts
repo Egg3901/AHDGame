@@ -10,7 +10,7 @@ The Chair is the most economically powerful non-executive position in the game. 
 
 **Benefits of holding the Chair:**
 - +0.5 national political influence per turn
-- +3 actions per turn (the "chairActionBonus")
+- +3.75 actions per turn (the "chairActionBonus")
 - A platform to set monetary policy
 
 **Drawbacks:**

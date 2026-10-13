@@ -53,7 +53,7 @@ describe("resolveOfficeActionBonus", () => {
         cabinetOfficeType: "parliamentaryCabinet",
         officeActionBonus: OAB,
       })
-    ).toBe(1);
+    ).toBe(1.25);
   });
 
   it("stacks cabinet bonus on the legislative seat when currentOffice was overwritten to the cabinet key", () => {
@@ -66,7 +66,7 @@ describe("resolveOfficeActionBonus", () => {
         cabinetOfficeType: "parliamentaryCabinet",
         officeActionBonus: OAB,
       })
-    ).toBe(2); // seat 1 + cabinet 1
+    ).toBe(2.5); // seat 1 + cabinet 1
   });
 
   it("stacks cabinet bonus on a non-cabinet currentOffice (cabinet member whose currentOffice stayed a real office)", () => {
@@ -79,7 +79,7 @@ describe("resolveOfficeActionBonus", () => {
         cabinetOfficeType: "parliamentaryCabinet",
         officeActionBonus: OAB,
       })
-    ).toBe(3); // seat 2 + cabinet 1
+    ).toBe(3.75); // seat 2 + cabinet 1
   });
 
   it("gives only the cabinet bonus for a US cabinet member with no legislative seat", () => {
@@ -91,7 +91,7 @@ describe("resolveOfficeActionBonus", () => {
         cabinetOfficeType: "usCabinet",
         officeActionBonus: OAB,
       })
-    ).toBe(1); // seat 0 + cabinet 1
+    ).toBe(1.25); // seat 0 + cabinet 1
   });
 
   it("does not double-count: the overwritten cabinet key is never added as both seat and cabinet", () => {
@@ -104,7 +104,7 @@ describe("resolveOfficeActionBonus", () => {
         cabinetOfficeType: "ukCabinet",
         officeActionBonus: OAB,
       })
-    ).toBe(2); // commons 1 + ukCabinet 1, NOT ukCabinet twice
+    ).toBe(2.5); // commons 1 + ukCabinet 1, NOT ukCabinet twice
   });
 
   it("falls back to 0 gracefully when config is missing the cabinet key (pre-heal live config)", () => {
@@ -117,7 +117,7 @@ describe("resolveOfficeActionBonus", () => {
         cabinetOfficeType: "parliamentaryCabinet",
         officeActionBonus: noCabinetKeys,
       })
-    ).toBe(1); // seat 1 + cabinet 0 (missing key) — at minimum the seat is restored
+    ).toBe(1.25); // seat 1 + cabinet 0 (missing key) — at minimum the seat is restored
   });
 
   it("returns 0 when the character holds no office", () => {
@@ -156,7 +156,7 @@ describe("resolveOfficeActionBonusBreakdown", () => {
         cabinetOfficeType: "parliamentaryCabinet",
         officeActionBonus: OAB,
       })
-    ).toEqual({ seatType: "bundestag", seatBonus: 1, cabinetBonus: 1 });
+    ).toEqual({ seatType: "bundestag", seatBonus: 1.25, cabinetBonus: 1.25 });
   });
 
   it("reports a real (non-cabinet) office as the seat with zero cabinet bonus", () => {
@@ -168,7 +168,7 @@ describe("resolveOfficeActionBonusBreakdown", () => {
         cabinetOfficeType: "parliamentaryCabinet",
         officeActionBonus: OAB,
       })
-    ).toEqual({ seatType: "bundestag", seatBonus: 1, cabinetBonus: 0 });
+    ).toEqual({ seatType: "bundestag", seatBonus: 1.25, cabinetBonus: 0 });
   });
 
   it("reports no seat for a US cabinet member with only the cabinet bonus", () => {
@@ -180,7 +180,7 @@ describe("resolveOfficeActionBonusBreakdown", () => {
         cabinetOfficeType: "usCabinet",
         officeActionBonus: OAB,
       })
-    ).toEqual({ seatType: undefined, seatBonus: 0, cabinetBonus: 1 });
+    ).toEqual({ seatType: undefined, seatBonus: 0, cabinetBonus: 1.25 });
   });
 
   it("sums to resolveOfficeActionBonus", () => {

@@ -10,6 +10,8 @@
  * literal reads as `43 * HUNDREDTHS` rather than as an opaque 4300.
  */
 
+import { playerActionAllowance } from "@/lib/actions/rules/allowances";
+
 /** Hundredths per point. All positions, magnitudes and thresholds use this grid. */
 export const HUNDREDTHS = 100;
 
@@ -545,7 +547,7 @@ export const SETTLEMENT_SEATS: readonly SettlementSeatDef[] = [
     countryId: "DD",
     tier: "primary",
     multiplierPct: 200,
-    actionsPerTurn: 3,
+    actionsPerTurn: playerActionAllowance(3),
     capitalPerTurn: 8,
     capitalLabel: "Party Capital",
     wireLabel: "EAST BERLIN",
@@ -557,7 +559,7 @@ export const SETTLEMENT_SEATS: readonly SettlementSeatDef[] = [
     countryId: "RU",
     tier: "secondary",
     multiplierPct: 100,
-    actionsPerTurn: 1,
+    actionsPerTurn: playerActionAllowance(1),
     capitalPerTurn: 4,
     capitalLabel: "Party Capital",
     wireLabel: "MOSCOW",
@@ -569,7 +571,7 @@ export const SETTLEMENT_SEATS: readonly SettlementSeatDef[] = [
     countryId: "US",
     tier: "secondary",
     multiplierPct: 100,
-    actionsPerTurn: 1,
+    actionsPerTurn: playerActionAllowance(1),
     capitalPerTurn: 4,
     capitalLabel: "Political Capital",
     wireLabel: "WASHINGTON",
@@ -581,7 +583,7 @@ export const SETTLEMENT_SEATS: readonly SettlementSeatDef[] = [
     countryId: "UK",
     tier: "secondary",
     multiplierPct: 100,
-    actionsPerTurn: 1,
+    actionsPerTurn: playerActionAllowance(1),
     capitalPerTurn: 4,
     capitalLabel: "Political Capital",
     wireLabel: "LONDON",

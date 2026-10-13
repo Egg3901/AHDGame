@@ -22,7 +22,7 @@ dashboard
 
 On each main hourly turn in normal multiplayer:
 
-- Actions refresh (+4 base + office + party).
+- Actions refresh (+5 base + office + party).
 - Campaign Funds tick from donor base and office.
 - PI decays 0.75%. NPI accrues from local PI. Infamy decays. Favorability decays if above 60.
 - Elections, bills, NPPs, and markets advance.

@@ -118,7 +118,7 @@ export const WIKI_LAST_UPDATED: Record<string, string> = {
   "national-budget": "2026-10-08",
   "national-corporations": "2026-08-11",
   "national-doctrine": "2026-10-13",
-  "national-metrics": "2026-10-09",
+  "national-metrics": "2026-10-13",
   nationalization: "2026-08-21",
   "naval-vessel-classes": "2026-09-06",
   news: "2026-08-20",

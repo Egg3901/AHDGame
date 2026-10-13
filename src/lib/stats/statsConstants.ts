@@ -1,12 +1,8 @@
 /**
- * Central constants and types for the RPG stat system (Fallout-SPECIAL style).
- *
- * Seven stats, each a float clamped to [1, 10], allocated at character creation
- * from a fixed point budget and shaped by play (use-growth + idle decay +
- * events). Every magnitude here is a tunable constant — balance is expected to
- * be adjusted after playtesting. See plans/2026-06-18-rpg-stats-overhaul-design.md.
+ * RPG character stats shape action effectiveness and personal action banking.
+ * Energy scales ENERGY_BASE_ACTION_CAP through ENERGY_MAX_ACTION_CAP, from 250
+ * to 313, and raises the hoard threshold from 125 to 156.
  */
-
 /** The seven stat keys, in canonical display order. */
 export const STAT_KEYS = [
   "charisma",
@@ -56,11 +52,11 @@ export const NEUTRAL_STAT = EFFICACY_PIVOT;
 
 // ── Energy → action economy ───────────────────────────────────────────────────
 /** Action cap at Energy 1 (baseline) and Energy 10 (max). */
-export const ENERGY_BASE_ACTION_CAP = 200;
-export const ENERGY_MAX_ACTION_CAP = 250;
+export const ENERGY_BASE_ACTION_CAP = 250;
+export const ENERGY_MAX_ACTION_CAP = 313;
 /** Hoard threshold at Energy 1 (baseline) and Energy 10 (max). */
-export const ENERGY_BASE_HOARD_THRESHOLD = 100;
-export const ENERGY_MAX_HOARD_THRESHOLD = 125;
+export const ENERGY_BASE_HOARD_THRESHOLD = 125;
+export const ENERGY_MAX_HOARD_THRESHOLD = 156;
 
 // ── Generic drift ─────────────────────────────────────────────────────────────
 /** XP added to a stat each time its qualifying action is performed. */

@@ -1,3 +1,9 @@
+/**
+ * International-organization diplomacy uses a per-country action pool.
+ * DIPLOMATIC_ACTIONS_PER_TURN grants five actions; initiating actions costs one
+ * and voting is free.
+ */
+import { wholePlayerActionAllowance } from "@/lib/actions/rules/allowances";
 import type { CountryId } from "./countries";
 import type { OrgMemberId } from "@/lib/db/types/internationalOrganization";
 import type { OrganizationCategory } from "./orgCategory";
@@ -135,7 +141,7 @@ export const ORG_PROPOSAL_VOTING_TURNS = 24;
  * Per-country diplomatic-action budget for the International Organizations page.
  * Proposing/initiating an action costs 1; voting is free. Resets each turn.
  */
-export const DIPLOMATIC_ACTIONS_PER_TURN = 4;
+export const DIPLOMATIC_ACTIONS_PER_TURN = wholePlayerActionAllowance(4);
 
 /**
  * How long a passed sanctions resolution stays in force (turns) before the turn

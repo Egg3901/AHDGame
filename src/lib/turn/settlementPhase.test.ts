@@ -1,3 +1,4 @@
+import { processSettlementTurn } from "./settlementPhase";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ObjectId, type Db } from "mongodb";
 import { createMockDb, type MockCollection, type MockDb } from "@/lib/test-utils/mockDb";
@@ -144,7 +145,6 @@ describe("processSettlementTurn", () => {
       settlementCrisisEnabled: false,
     });
     const crises = prime(db, "settlementCrises");
-    const { processSettlementTurn } = await import("./settlementPhase");
     const result = await processSettlementTurn(db as unknown as Db, 412);
     expect(result.playsResolved).toBe(0);
     expect(crises.updateOne).not.toHaveBeenCalled();
@@ -156,7 +156,6 @@ describe("processSettlementTurn", () => {
       settlementCrisisEnabled: true,
     });
     prime(db, "settlementCrises").findOne.mockResolvedValue(null);
-    const { processSettlementTurn } = await import("./settlementPhase");
     const result = await processSettlementTurn(db as unknown as Db, 412);
     expect(result.playsResolved).toBe(0);
   });
@@ -175,7 +174,6 @@ describe("processSettlementTurn", () => {
         return filter?.status === "cancelled" ? doc : null;
       }
     );
-    const { processSettlementTurn } = await import("./settlementPhase");
     const result = await processSettlementTurn(db as unknown as Db, 412);
     expect(result).toMatchObject({ playsResolved: 0, crisesResolved: 0, countriesLevied: 0 });
     expect(prime(db, "settlementCrises").updateOne).not.toHaveBeenCalled();
@@ -191,7 +189,6 @@ describe("processSettlementTurn", () => {
       currentYear: 1953,
     });
     prime(db, "settlementCrises").findOne.mockResolvedValue(null);
-    const { processSettlementTurn } = await import("./settlementPhase");
     await processSettlementTurn(db as unknown as Db, 12);
     expect(prime(db, "settlementCrises").insertOne).not.toHaveBeenCalled();
     expect(prime(db, "settlementCrises").updateOne).not.toHaveBeenCalled();
@@ -199,7 +196,6 @@ describe("processSettlementTurn", () => {
 
   it("does not tick a frozen crisis — the meter is held where the war froze it", async () => {
     arrange(db, crisis({ status: "frozen", conflictId: "conflict-1" }), [play()]);
-    const { processSettlementTurn } = await import("./settlementPhase");
     const result = await processSettlementTurn(db as unknown as Db, 412);
     expect(result.playsResolved).toBe(0);
     // No BOARD write. The sweep may stamp the war dispatch on the same
@@ -213,7 +209,6 @@ describe("processSettlementTurn", () => {
 
   it("applies a play at the seat multiplier and rewrites the index", async () => {
     arrange(db, crisis(), [play()]);
-    const { processSettlementTurn } = await import("./settlementPhase");
     await processSettlementTurn(db as unknown as Db, 412);
 
     const update = crisisUpdate(db);
@@ -242,7 +237,6 @@ describe("processSettlementTurn", () => {
         basePoints: 5 * HUNDREDTHS,
       }),
     ]);
-    const { processSettlementTurn } = await import("./settlementPhase");
     await processSettlementTurn(db as unknown as Db, 412);
 
     const update = crisisUpdate(db);
@@ -259,7 +253,6 @@ describe("processSettlementTurn", () => {
     arrange(db, crisis(), [
       play({ playId: "referendum", targetInstitutionId: null, basePoints: 5 * HUNDREDTHS }),
     ]);
-    const { processSettlementTurn } = await import("./settlementPhase");
     await processSettlementTurn(db as unknown as Db, 412);
 
     const update = crisisUpdate(db);
@@ -274,7 +267,6 @@ describe("processSettlementTurn", () => {
   it("stamps resolved plays rather than deleting them", async () => {
     const p = play();
     arrange(db, crisis(), [p]);
-    const { processSettlementTurn } = await import("./settlementPhase");
     await processSettlementTurn(db as unknown as Db, 412);
 
     expect(db.collectionMocks.settlementPlays!.updateOne).toHaveBeenCalledWith(
@@ -289,7 +281,6 @@ describe("processSettlementTurn", () => {
     arrange(db, crisis(), [p]);
     // matchedCount 0 = another turn runner already claimed this play.
     db.collectionMocks.settlementPlays!.updateOne.mockResolvedValue({ matchedCount: 0 });
-    const { processSettlementTurn } = await import("./settlementPhase");
     const result = await processSettlementTurn(db as unknown as Db, 412);
 
     expect(db.collectionMocks.settlementPlays!.updateOne).toHaveBeenCalledWith(
@@ -302,7 +293,6 @@ describe("processSettlementTurn", () => {
   it("claims on the same field the stamp writes, so the second runner matches nothing", async () => {
     const p = play();
     arrange(db, crisis(), [p]);
-    const { processSettlementTurn } = await import("./settlementPhase");
     await processSettlementTurn(db as unknown as Db, 412);
 
     const calls = db.collectionMocks.settlementPlays!.updateOne.mock.calls;
@@ -313,7 +303,6 @@ describe("processSettlementTurn", () => {
 
   it("records the weighted drift in a history capped at six entries", async () => {
     arrange(db, crisis({ driftHistory: [1, 2, 3, 4, 5, 6] }), []);
-    const { processSettlementTurn } = await import("./settlementPhase");
     await processSettlementTurn(db as unknown as Db, 412);
 
     const update = crisisUpdate(db);
@@ -335,7 +324,6 @@ describe("processSettlementTurn", () => {
       }),
       []
     );
-    const { processSettlementTurn } = await import("./settlementPhase");
     await processSettlementTurn(db as unknown as Db, 412);
 
     const update = crisisUpdate(db);
@@ -362,7 +350,6 @@ describe("processSettlementTurn", () => {
       }),
       []
     );
-    const { processSettlementTurn } = await import("./settlementPhase");
     await processSettlementTurn(db as unknown as Db, 412);
 
     for (const seat of crisisUpdate(db).seats) {
@@ -384,7 +371,6 @@ describe("processSettlementTurn", () => {
       }),
       []
     );
-    const { processSettlementTurn } = await import("./settlementPhase");
     await processSettlementTurn(db as unknown as Db, 412);
 
     for (const seat of crisisUpdate(db).seats) {
@@ -405,7 +391,6 @@ describe("processSettlementTurn", () => {
       position: 9000,
     });
     arrange(db, nearly, []);
-    const { processSettlementTurn } = await import("./settlementPhase");
     const result = await processSettlementTurn(db as unknown as Db, 412);
 
     const update = crisisUpdate(db);
@@ -427,7 +412,6 @@ describe("processSettlementTurn", () => {
       position: 800,
     });
     arrange(db, nearly, []);
-    const { processSettlementTurn } = await import("./settlementPhase");
     await processSettlementTurn(db as unknown as Db, 412);
 
     const update = crisisUpdate(db);
@@ -437,7 +421,6 @@ describe("processSettlementTurn", () => {
 
   it("holds ladder heat through a quiet turn — decay is slower than the climb", async () => {
     arrange(db, crisis({ ladder: { heat: 3, armedTurn: null } }), [play()]);
-    const { processSettlementTurn } = await import("./settlementPhase");
     await processSettlementTurn(db as unknown as Db, 412);
 
     expect(crisisUpdate(db).ladder).toMatchObject({ heat: 3, quietTurns: 1 });
@@ -451,7 +434,6 @@ describe("processSettlementTurn", () => {
       }),
       [play()]
     );
-    const { processSettlementTurn } = await import("./settlementPhase");
     await processSettlementTurn(db as unknown as Db, 412);
 
     expect(crisisUpdate(db).ladder).toMatchObject({ heat: 2, quietTurns: 0 });
@@ -461,7 +443,6 @@ describe("processSettlementTurn", () => {
     arrange(db, crisis({ ladder: { heat: 4, armedTurn: null } }), [
       play({ playId: "border", targetInstitutionId: "street", heatAdded: 1 }),
     ]);
-    const { processSettlementTurn } = await import("./settlementPhase");
     await processSettlementTurn(db as unknown as Db, 412);
 
     expect(crisisUpdate(db).ladder.heat).toBe(4);
@@ -469,7 +450,6 @@ describe("processSettlementTurn", () => {
 
   it("credits a seat's committed points and stamps that it acted", async () => {
     arrange(db, crisis(), [play()]);
-    const { processSettlementTurn } = await import("./settlementPhase");
     await processSettlementTurn(db as unknown as Db, 412);
 
     const dd = crisisUpdate(db).seats.find((s: { id: string }) => s.id === "DD");
@@ -479,7 +459,6 @@ describe("processSettlementTurn", () => {
 
   it("claims the tick so two overlapping runs cannot both write the crisis", async () => {
     arrange(db, crisis(), [play()]);
-    const { processSettlementTurn } = await import("./settlementPhase");
     await processSettlementTurn(db as unknown as Db, 412);
 
     expect(db.collectionMocks.settlementCrises!.updateOne).toHaveBeenCalledWith(
@@ -491,7 +470,6 @@ describe("processSettlementTurn", () => {
   it("does nothing when another runner already claimed this tick", async () => {
     arrange(db, crisis(), [play()]);
     db.collectionMocks.settlementCrises!.updateOne.mockResolvedValue({ matchedCount: 0 });
-    const { processSettlementTurn } = await import("./settlementPhase");
     const result = await processSettlementTurn(db as unknown as Db, 412);
 
     expect(result.playsResolved).toBe(0);
@@ -508,7 +486,6 @@ describe("processSettlementTurn", () => {
     // recomputePosition([]) is 0, which is below the lock threshold — without
     // the guard a malformed document resolves itself for the incumbent.
     arrange(db, crisis({ institutions: [], position: 0 }), []);
-    const { processSettlementTurn } = await import("./settlementPhase");
     const result = await processSettlementTurn(db as unknown as Db, 412);
 
     expect(result.crisesResolved).toBe(0);
@@ -523,7 +500,6 @@ describe("processSettlementTurn", () => {
       _id: "current",
       settlementCrisisEnabled: false,
     });
-    const { processSettlementTurn } = await import("./settlementPhase");
     const a = await processSettlementTurn(db as unknown as Db, 412);
     a.heat = 99;
     const b = await processSettlementTurn(db as unknown as Db, 413);
@@ -539,7 +515,6 @@ describe("processSettlementTurn", () => {
       sideB: { label: "Warsaw Pact", backer: "east" },
       outcome: { winner: "B" },
     });
-    const { processSettlementTurn } = await import("./settlementPhase");
     const result = await processSettlementTurn(db as unknown as Db, 412);
 
     expect(result.crisesResolved).toBe(1);
@@ -557,7 +532,6 @@ describe("processSettlementTurn", () => {
       sideA: { label: "NATO", backer: "west" },
       sideB: { label: "Warsaw Pact", backer: "east" },
     });
-    const { processSettlementTurn } = await import("./settlementPhase");
     const result = await processSettlementTurn(db as unknown as Db, 412);
 
     expect(result.crisesResolved).toBe(0);
@@ -570,7 +544,6 @@ describe("processSettlementTurn", () => {
     arrange(db, crisis({ ladder: { heat: 5, armedTurn: 410 } }), [
       play({ playId: "border", targetInstitutionId: "street", heatAdded: 1 }),
     ]);
-    const { processSettlementTurn } = await import("./settlementPhase");
     const result = await processSettlementTurn(db as unknown as Db, 412);
     expect(result.countriesLevied).toBe(4);
     expect(crisisUpdate(db).ladder).toEqual({ heat: 5, armedTurn: 410, quietTurns: 0 });
@@ -578,7 +551,6 @@ describe("processSettlementTurn", () => {
 
   it("levies nothing while the ladder is below the top rung", async () => {
     arrange(db, crisis({ ladder: { heat: 3, armedTurn: null } }), [play()]);
-    const { processSettlementTurn } = await import("./settlementPhase");
     const result = await processSettlementTurn(db as unknown as Db, 412);
     expect(result.countriesLevied).toBe(0);
   });
@@ -590,7 +562,6 @@ describe("processSettlementTurn", () => {
       crisis({ ladder: { heat: 5, armedTurn: 410, quietTurns: LADDER_DECAY_TURNS - 1 } }),
       []
     );
-    const { processSettlementTurn } = await import("./settlementPhase");
     const result = await processSettlementTurn(db as unknown as Db, 412);
     expect(crisisUpdate(db).ladder).toEqual({ heat: 4, armedTurn: null, quietTurns: 0 });
     expect(result.countriesLevied).toBe(0);
@@ -607,7 +578,6 @@ describe("processSettlementTurn", () => {
       }),
       [play({ playId: "border", targetInstitutionId: "street", heatAdded: 1 })]
     );
-    const { processSettlementTurn } = await import("./settlementPhase");
     const result = await processSettlementTurn(db as unknown as Db, 412);
     expect(crisisUpdate(db).ladder).toEqual({ heat: 0, armedTurn: null, quietTurns: 0 });
     expect(result.heat).toBe(0);
@@ -623,7 +593,6 @@ describe("processSettlementTurn", () => {
       }),
       [play({ playId: "border", targetInstitutionId: "street", heatAdded: 1 })]
     );
-    const { processSettlementTurn } = await import("./settlementPhase");
     const result = await processSettlementTurn(db as unknown as Db, 412);
     expect(result.institutionsMoved).toBe(1);
   });
@@ -637,7 +606,6 @@ describe("processSettlementTurn", () => {
       }),
       []
     );
-    const { processSettlementTurn } = await import("./settlementPhase");
     const result = await processSettlementTurn(db as unknown as Db, 412);
     expect(result.countriesLevied).toBe(0);
     expect(crisisUpdate(db).ladder).toEqual({ heat: 0, armedTurn: null, quietTurns: 0 });
@@ -647,14 +615,12 @@ describe("processSettlementTurn", () => {
     arrange(db, crisis({ ladder: { heat: 3, armedTurn: null } }), [
       play({ playId: "border", targetInstitutionId: "street", heatAdded: 1 }),
     ]);
-    const { processSettlementTurn } = await import("./settlementPhase");
     const result = await processSettlementTurn(db as unknown as Db, 412);
     expect(result.heat).toBe(4);
   });
 
   it("records the play that moved an institution", async () => {
     arrange(db, crisis(), [play()]);
-    const { processSettlementTurn } = await import("./settlementPhase");
     await processSettlementTurn(db as unknown as Db, 412);
 
     const laender = crisisUpdate(db).institutions.find((i: { id: string }) => i.id === "laender");
@@ -747,7 +713,6 @@ describe("processSettlementTurn — war attachment", () => {
       toArray: vi.fn().mockResolvedValue([war()]),
     });
 
-    const { processSettlementTurn } = await import("./settlementPhase");
     const result = await processSettlementTurn(db as unknown as Db, 412);
 
     // The tick returns idle: no play was drained, no drift was rolled.
@@ -780,7 +745,6 @@ describe("processSettlementTurn — war attachment", () => {
       ]),
     });
 
-    const { processSettlementTurn } = await import("./settlementPhase");
     const result = await processSettlementTurn(db as unknown as Db, 412);
 
     expect(result.playsResolved).toBe(1);
@@ -806,7 +770,6 @@ describe("processSettlementTurn — war attachment", () => {
       war({ sideB: { label: "East Germany", countries: [], kind: "state" } })
     );
 
-    const { processSettlementTurn } = await import("./settlementPhase");
     await processSettlementTurn(db as unknown as Db, 412);
 
     const release = db.collectionMocks.settlementCrises!.updateOne.mock.calls.find(
@@ -830,7 +793,6 @@ describe("processSettlementTurn — war attachment", () => {
       filter?.status === "open" ? { matchedCount: 0 } : { matchedCount: 1 }
     );
 
-    const { processSettlementTurn } = await import("./settlementPhase");
     await processSettlementTurn(db as unknown as Db, 412);
 
     const stateWrite = crises.updateOne.mock.calls.find(
@@ -853,7 +815,6 @@ describe("processSettlementTurn — war attachment", () => {
       war({ _id: "gq_de_400", sideB: { label: "Warsaw Pact", countries: [], kind: "coalition" } })
     );
 
-    const { processSettlementTurn } = await import("./settlementPhase");
     await processSettlementTurn(db as unknown as Db, 412);
 
     const release = db.collectionMocks.settlementCrises!.updateOne.mock.calls.find(

@@ -1,11 +1,13 @@
 /**
- * Constants for the Governor's Office / Minister-President's Office feature.
- * Values are tunable post-v1; collect them here for one-touch balance.
+ * Governor office actions have a separate bank. GUBERNATORIAL_ACTION_CAP is
+ * four actions, and GUBERNATORIAL_ACTION_REGEN_INTERVAL sets a fourteen-turn
+ * refill interval.
  */
+import { wholePlayerActionAllowance } from "@/lib/actions/rules/allowances";
 
 // Office AP pool — analogous to ministerialActions on cabinet members.
-export const GUBERNATORIAL_ACTION_CAP = 3;
-export const GUBERNATORIAL_ACTION_REGEN_INTERVAL = 18;
+export const GUBERNATORIAL_ACTION_CAP = wholePlayerActionAllowance(3);
+export const GUBERNATORIAL_ACTION_REGEN_INTERVAL = 14;
 
 // Executive orders
 export const EXEC_ORDER_DURATION_TURNS = 24;

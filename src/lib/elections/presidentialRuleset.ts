@@ -1,3 +1,9 @@
+/**
+ * Presidential races use the family selected by presidentialRulesetFor.
+ * The current v3 family allows three daily running-mate surrogate actions;
+ * historical v1 and v2 families retain their two-action allowance.
+ */
+import { wholePlayerActionAllowance } from "@/lib/actions/rules/allowances";
 import type { Election } from "@/lib/db/types";
 import { SUSPEND_ENDORSE_TRANSFER_MAX_FRACTION } from "@/lib/campaigns/constants/suspendEndorse";
 
@@ -138,6 +144,7 @@ const V3: PresidentialRuleset = {
   primaryCalendar: "stretched",
   conventionEnabled: true,
   suspendTransferMode: "affinity",
+  vpSurrogateActionCap: wholePlayerActionAllowance(2),
 };
 
 const RULESETS: Record<number, PresidentialRuleset> = {

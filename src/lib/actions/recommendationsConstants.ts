@@ -1,3 +1,9 @@
+/**
+ * Personal action hints use Energy 1 defaults: ACTION_CAP is 250 and
+ * ACTION_HOARDING_THRESHOLD is 125. ACTION_HOARDING_PENALTY is five actions.
+ */
+import { ENERGY_BASE_ACTION_CAP, ENERGY_BASE_HOARD_THRESHOLD } from "@/lib/stats/statsConstants";
+import { PLAYER_ACTION_HOARD_PENALTY } from "./rules/allowances";
 import { FAVORABILITY_NATURAL_DECAY_THRESHOLD } from "@shared/constants/formulas";
 
 // src/lib/actions/recommendationsConstants.ts
@@ -6,9 +12,9 @@ import { FAVORABILITY_NATURAL_DECAY_THRESHOLD } from "@shared/constants/formulas
  */
 
 // Action Points
-export const ACTION_CAP = 200;
-export const ACTION_HOARDING_THRESHOLD = 100;
-export const ACTION_HOARDING_PENALTY = 4;
+export const ACTION_CAP = ENERGY_BASE_ACTION_CAP;
+export const ACTION_HOARDING_THRESHOLD = ENERGY_BASE_HOARD_THRESHOLD;
+export const ACTION_HOARDING_PENALTY = PLAYER_ACTION_HOARD_PENALTY;
 export const ACTIONS_LOW_THRESHOLD = 10;
 export const ACTIONS_CRITICAL_THRESHOLD = 5;
 

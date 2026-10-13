@@ -1,3 +1,4 @@
+import { playerActionAllowance, playerBaseActionGain } from "@/lib/actions/rules/allowances";
 import { resolveCampaignPriceLevel } from "@/lib/campaigns/rules/priceLevel";
 import { loadCampaignCurrencyRates } from "@/lib/campaigns/campaignCurrency";
 import { NextResponse } from "next/server";
@@ -367,7 +368,7 @@ export async function GET(request: Request) {
           currentOfficeType: null,
           isCentralBankChair: false,
           chairActionBonus: 0,
-          baseActionsPerTurn: 4,
+          baseActionsPerTurn: playerBaseActionGain(),
           officeActionBonus: 0,
           bonusActionsFromParty: 0,
           dividendIncome: Math.round(dividendIncomePerTurn),
@@ -427,7 +428,7 @@ export async function GET(request: Request) {
           currentOfficeType: null,
           isCentralBankChair: false,
           chairActionBonus: 0,
-          baseActionsPerTurn: 4,
+          baseActionsPerTurn: playerBaseActionGain(),
           officeActionBonus: 0,
           bonusActionsFromParty: 0,
           dividendIncome: 0,
@@ -873,10 +874,12 @@ export async function GET(request: Request) {
     // exact breakdown actionRefresh actually applies, instead of a hardcoded
     // client table that drifts from gameConfig.
     const isCentralBankChair = chairBank != null;
-    const chairActionBonus = isCentralBankChair ? (gameConfigDoc?.chairActionBonus ?? 3) : 0;
+    const chairActionBonus = isCentralBankChair
+      ? playerActionAllowance(gameConfigDoc?.chairActionBonus ?? 3)
+      : 0;
     // Mirror the floors that actionRefresh applies so the displayed numbers
     // exactly match what the turn processor grants.
-    const baseActionsPerTurn = Math.max(gameConfigDoc?.baseActionsPerTurn ?? 0, 4);
+    const baseActionsPerTurn = playerBaseActionGain(gameConfigDoc?.baseActionsPerTurn);
     const officeActionBonus = resolveOfficeActionBonus({
       currentOfficeType: character.currentOffice?.type,
       electedSeatOfficeType: currentOfficial?.officeType,

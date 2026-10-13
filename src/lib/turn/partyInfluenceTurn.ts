@@ -1,4 +1,10 @@
+/**
+ * Party influence grants a share of the party's action pool.
+ * computeBonusActions applies alignment, the authored cap and the 25% player
+ * increase; processPartyInfluenceTurn adds it within the member's Energy cap.
+ */
 // src/lib/turn/partyInfluenceTurn.ts
+import { partyActionAllowance } from "@/lib/actions/rules/allowances";
 import type { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import type { Character, GameConfig } from "@/lib/db/types";
@@ -115,9 +121,7 @@ export function computeBonusActions(
   closenessScalar: number,
   maxBonus: number
 ): number {
-  if (totalInfluence === 0) return 0;
-  const rawShare = (myInfluence / totalInfluence) * totalPool;
-  return Math.min(maxBonus, Math.floor(rawShare * closenessScalar));
+  return partyActionAllowance(myInfluence, totalInfluence, totalPool, closenessScalar, maxBonus);
 }
 
 /**

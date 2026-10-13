@@ -69,6 +69,32 @@ describe("turn dashboard poll action costs", () => {
     expect(body.actionCosts.pollLarge).toBe(getPollActionCost("large"));
   });
 
+  it("reports the increased base and both cabinet seat sources without losing the chair grant", async () => {
+    const character = makeCharacter({
+      countryId: "DE",
+      currentOffice: { type: "parliamentaryCabinet", state: "NATIONAL" },
+    });
+    db.collection("characters").findOne.mockResolvedValue(character);
+    db.collection("gameConfig").findOne.mockResolvedValue({
+      baseActionsPerTurn: 4,
+      officeActionBonus: { bundestag: 1, parliamentaryCabinet: 1 },
+      chairActionBonus: 3,
+    });
+    db.collection("cabinetMembers").findOne.mockResolvedValue({ countryId: "DE" });
+    const seats = db.collection("electedOfficials").find();
+    seats.toArray.mockResolvedValue([{ officeType: "bundestag" }]);
+    db.collection("centralBanks").findOne.mockResolvedValue({ _id: "synthetic-chair-bank" });
+    const response = await GET();
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.actionsPerTurn).toEqual({
+      base: 5,
+      officeBonus: 2.5,
+      chairBonus: 3.75,
+      total: 11.25,
+    });
+  });
+
   it("follows a test-only canonical Poll cost move (no dashboard literals)", async () => {
     pollOverride = (tier) => (tier === "large" ? 22 : 11);
     const response = await GET();

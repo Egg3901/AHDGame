@@ -1,4 +1,11 @@
+/**
+ * Action advice flags a hoard penalty using the character's Energy threshold.
+ * checkStatThresholds recommends spending only when that threshold is exceeded;
+ * the warning quotes the actual five-action tax.
+ */
 // src/lib/actions/recommendations.ts
+import { energyActionLimits } from "@/lib/stats/statDrift";
+import { STAT_MIN } from "@/lib/stats/statsConstants";
 import type { Character, PartyBudget, PoliticalParty, StatePartyOrg } from "@/lib/db/types";
 import type { CountryId } from "@/lib/constants/countries";
 import { getPartyRoleLabel } from "@/lib/parties/partyRoleLabels";
@@ -16,7 +23,6 @@ import {
   REST_ACTION_COST,
 } from "../actions";
 import {
-  ACTION_HOARDING_THRESHOLD,
   ACTION_HOARDING_PENALTY,
   FAVORABILITY_LOW_THRESHOLD,
   INFLUENCE_LOW_THRESHOLD,
@@ -181,15 +187,17 @@ export function checkStatThresholds(
 ): ActionRecommendation[] {
   const recommendations: ActionRecommendation[] = [];
 
+  const hoardThreshold = energyActionLimits(character.stats?.energy ?? STAT_MIN).threshold;
+
   // ── Actions: Hoarding ──────────────────────────────────────────────────────
-  if ((character.actions ?? 0) > ACTION_HOARDING_THRESHOLD) {
-    const excess = (character.actions ?? 0) - ACTION_HOARDING_THRESHOLD;
+  if ((character.actions ?? 0) > hoardThreshold) {
+    const excess = (character.actions ?? 0) - hoardThreshold;
     recommendations.push({
       id: `actions-hoarding-${character._id.toString()}`,
       priority: "high",
       category: "resource-opt",
       title: "Action Point Hoarding Penalty Active",
-      why: `You have ${character.actions} AP (threshold: ${ACTION_HOARDING_THRESHOLD}). You're losing ${ACTION_HOARDING_PENALTY} AP/turn to hoarding penalty. Spend ${excess}+ AP to maximize efficiency.`,
+      why: `You have ${character.actions} AP (threshold: ${hoardThreshold}). You're losing ${ACTION_HOARDING_PENALTY} AP/turn to hoarding penalty. Spend ${excess}+ AP to maximize efficiency.`,
       action: {
         type: "campaign",
         targetState: homeStateId,

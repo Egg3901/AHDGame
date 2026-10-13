@@ -58,6 +58,7 @@ describe("presidential ruleset seam (rules freeze)", () => {
       primaryCalendar: _v1cal,
       conventionEnabled: _v1conv,
       suspendTransferMode: _v1mode,
+      vpSurrogateActionCap: _v1surrogate,
       campaignStrengthMaxBonus: _v1strength,
       applyExplicitLeanMultiplier: _v1lean,
       tacticalMovementRate: _v1tactical,
@@ -69,6 +70,7 @@ describe("presidential ruleset seam (rules freeze)", () => {
       primaryCalendar: _v3cal,
       conventionEnabled: _v3conv,
       suspendTransferMode: _v3mode,
+      vpSurrogateActionCap: _v3surrogate,
       campaignStrengthMaxBonus: _v3strength,
       applyExplicitLeanMultiplier: _v3lean,
       tacticalMovementRate: _v3tactical,
@@ -78,7 +80,7 @@ describe("presidential ruleset seam (rules freeze)", () => {
     expect(v3Rest).toEqual(v1Rest);
   });
 
-  it("carries the nomination magnitude + momentum + surrogate knobs at identity values", () => {
+  it("preserves nomination magnitudes while increasing the current surrogate allowance", () => {
     const r = presidentialRulesetFor({ rulesetVersion: 3 });
     // The structural knobs are intentionally flipped (see the guard above); the
     // magnitude knobs below are still at ship identity until calibrated at t384.
@@ -87,11 +89,11 @@ describe("presidential ruleset seam (rules freeze)", () => {
     expect(r.suspendTransferMaxFraction).toBe(0.25);
     expect(r.endorsementOrgFraction).toBe(0);
     expect(r.endorsementCoalitionCredibility).toBe(0);
-    expect(r.vpSurrogateActionCap).toBe(2);
+    expect(r.vpSurrogateActionCap).toBe(3);
     expect(r.vpTravelPresenceWeight).toBe(1);
   });
 
-  it("the running-mate surrogate knobs are identical across v1, v2, and v3", () => {
+  it("increases the current surrogate allowance while preserving historical v1 and v2", () => {
     // The surrogate mechanic wires to these knobs but ships at identity in this
     // PR: magnitude tuning happens later (t384). Pin cross-version equality so a
     // stray tuning edit to one version is caught.
@@ -100,7 +102,7 @@ describe("presidential ruleset seam (rules freeze)", () => {
     const v3 = presidentialRulesetFor({ rulesetVersion: 3 });
     expect(v1.vpSurrogateActionCap).toBe(2);
     expect(v2.vpSurrogateActionCap).toBe(2);
-    expect(v3.vpSurrogateActionCap).toBe(2);
+    expect(v3.vpSurrogateActionCap).toBe(3);
     expect(v1.vpTravelPresenceWeight).toBe(1);
     expect(v2.vpTravelPresenceWeight).toBe(1);
     expect(v3.vpTravelPresenceWeight).toBe(1);

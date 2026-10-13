@@ -210,7 +210,7 @@ describe("processActionRefresh", () => {
       nationalInfluence: 0,
     });
     const update = op.updateOne.update.$set as Record<string, unknown>;
-    expect(update.actions).toBe(9); // 5 + 4 base
+    expect(update.actions).toBe(10); // 5 + 5 base
     // politicalInfluence starts at 10, decays by 10 * 0.0075 = 0.075
     expect(update.politicalInfluence).toBeCloseTo(9.925, 5);
     // nationalInfluence starts at 0, gains state influence / 100 = 10/100 = 0.1
@@ -219,7 +219,7 @@ describe("processActionRefresh", () => {
     expect(update.favorability).toBeDefined();
   });
 
-  it("applies hoarding penalty when actions > 100", async () => {
+  it("applies hoarding penalty when actions > 125", async () => {
     const { processActionRefresh } = await import("./actionRefresh");
     const char: Character = {
       _id: "char2" as never,
@@ -228,7 +228,7 @@ describe("processActionRefresh", () => {
       countryId: "US",
       homeState: "TX",
       policies: { economic: 0, social: 0 },
-      actions: 105,
+      actions: 130,
       funds: 100000,
       favorability: 50,
       politicalInfluence: 0,
@@ -252,8 +252,8 @@ describe("processActionRefresh", () => {
 
     const [ops] = mockBulkWrite.mock.calls[0];
     const update = ops[0].updateOne.update.$set as Record<string, unknown>;
-    // 105 - 4 (penalty) + 4 (base) = 105
-    expect(update.actions).toBe(105);
+    // 130 - 5 (penalty) + 5 (base) = 130
+    expect(update.actions).toBe(130);
   });
 
   it("applies the advertised infamy favorability drain above 20 infamy", async () => {
@@ -391,7 +391,7 @@ describe("processActionRefresh", () => {
     const [ops] = mockBulkWrite.mock.calls[0];
     const update = ops[0].updateOne.update.$set as Record<string, unknown>;
     // 10 + base 4 + sangiin 1 + chair 3 = 18
-    expect(update.actions).toBe(18);
+    expect(update.actions).toBe(20);
   });
 
   it("grants only the chair bonus when chair holds no elected office", async () => {
@@ -431,7 +431,7 @@ describe("processActionRefresh", () => {
     const [ops] = mockBulkWrite.mock.calls[0];
     const update = ops[0].updateOne.update.$set as Record<string, unknown>;
     // 0 + base 4 + chair 3 = 7
-    expect(update.actions).toBe(7);
+    expect(update.actions).toBe(8.75);
   });
 
   it("grants the Justice NI bonus (#3598) on top of an elected-office NI bonus, stacked like the chair bonus", async () => {
@@ -521,7 +521,7 @@ describe("processActionRefresh", () => {
     const [ops] = mockBulkWrite.mock.calls[0];
     const update = ops[0].updateOne.update.$set as Record<string, unknown>;
     // 0 + base 4 + bundestag seat 1 + cabinet 1 = 6
-    expect(update.actions).toBe(6);
+    expect(update.actions).toBe(7.5);
   });
 
   it("grants an acting cabinet member the cabinet NI tier without currentOffice", async () => {
@@ -606,7 +606,7 @@ describe("processActionRefresh", () => {
       countryId: "US",
       homeState: "NY",
       policies: { economic: 0, social: 0 },
-      actions: 201, // 201 - 4 (hoard) + 3 (base) = 200
+      actions: 251, // 251 - 5 (hoard) + 5 (base) clamps at 250
       funds: 100000,
       favorability: 50,
       politicalInfluence: 0,
@@ -630,8 +630,8 @@ describe("processActionRefresh", () => {
 
     const [ops] = mockBulkWrite.mock.calls[0];
     const update = ops[0].updateOne.update.$set as Record<string, unknown>;
-    expect(update.actions).toBeLessThanOrEqual(200);
-    expect(update.actions).toBe(200); // capped
+    expect(update.actions).toBeLessThanOrEqual(250);
+    expect(update.actions).toBe(250); // capped
   });
 
   it("clamps over-cap player influence and favorability back to 100", async () => {
@@ -911,8 +911,8 @@ describe("processActionRefresh", () => {
       ).map((op) => [op.updateOne.filter._id, op.updateOne.update.$set])
     );
     // 5 + 4 base + 1 seat bonus — identical to the US representative.
-    expect(byId.ddDeputy.actions).toBe(10);
-    expect(byId.usRep.actions).toBe(10);
+    expect(byId.ddDeputy.actions).toBe(11.25);
+    expect(byId.usRep.actions).toBe(11.25);
     // Rank-and-file legislator NI tier, also identical.
     expect(byId.ddDeputy.nationalInfluence).toBeCloseTo(1.0, 5);
     expect(byId.usRep.nationalInfluence).toBeCloseTo(1.0, 5);

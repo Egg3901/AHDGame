@@ -95,11 +95,11 @@ Fund generation per turn:
 
 ### Actions
 
-- **Base per turn:** 4
-- **Office bonus:** House/State Sen +1 · Senate/VP +2 · Gov +2 · Pres +4 · Central Bank Chair +3
+- **Base per turn:** 5
+- **Office bonus:** House/State Sen +1.25 · Senate/VP +2.5 · Gov +2.5 · Pres +5 · Central Bank Chair +3.75
 - **Party bonus:** variable per turn, distributed from party pool by your Party Influence × platform alignment
-- **Cap:** 200
-- **Hoarding penalty:** −4/turn above 100
+- **Cap:** 250 at Energy 1, rising to 313 at Energy 10
+- **Hoarding penalty:** −5/turn above 125 at Energy 1; the threshold rises to 156 at Energy 10
 - **Starting grant:** 25 one-time
 
 ### Party Influence
@@ -188,8 +188,8 @@ Party Chairs and Vice Chairs draw from the **party action pool** to run influenc
 
 At the top of each hour, in this order:
 
-1. Hoarding penalty applies if > 100 actions.
-2. Base 4 actions refresh.
+1. Hoarding penalty applies above the Energy-scaled hoard threshold.
+2. Base 5 actions refresh.
 3. Office bonus actions refresh.
 4. Party bonus actions distribute from pool.
 5. Fund generation credits (base + donor + office).

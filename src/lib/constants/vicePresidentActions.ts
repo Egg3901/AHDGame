@@ -1,3 +1,9 @@
+/**
+ * Vice presidents have a separate daily pool for their self-serve actions.
+ * VP_ACTION_CAP allows three actions per Eastern-time day; action definitions
+ * set their favorability and influence effects.
+ */
+import { wholePlayerActionAllowance } from "@/lib/actions/rules/allowances";
 import { getCalendarDayInTimezone } from "@/lib/time/dailyReset";
 
 /**
@@ -12,7 +18,7 @@ import { getCalendarDayInTimezone } from "@/lib/time/dailyReset";
  */
 
 /** Max self-serve actions a seated vice-president can take per Eastern-time day. */
-export const VP_ACTION_CAP = 2;
+export const VP_ACTION_CAP = wholePlayerActionAllowance(2);
 
 /** Favorability the sitting president gains from one Surrogate Address (clamped to 100). */
 export const VP_SURROGATE_FAVORABILITY_GAIN = 2;

@@ -52,14 +52,38 @@ describe("checkStatThresholds", () => {
     expect(recs.length).toBe(0);
   });
 
-  it("flags action hoarding when above 100 AP", () => {
+  it("flags action hoarding when above the 125 AP baseline threshold", () => {
     const character = createCharacter({ actions: 150 });
     const recs = checkStatThresholds(character, "GA");
     const hoardingRec = recs.find((r) => r.id.includes("actions-hoarding"));
     expect(hoardingRec).toBeDefined();
     expect(hoardingRec?.priority).toBe("high");
     expect(hoardingRec?.why).toContain("150");
-    expect(hoardingRec?.why).toContain("100");
+    expect(hoardingRec?.why).toContain("125");
+  });
+
+  it("uses the larger Energy threshold before warning about a hoard penalty", () => {
+    const character = createCharacter({
+      actions: 150,
+      stats: {
+        charisma: 1,
+        debate: 1,
+        energy: 10,
+        fundraising: 1,
+        businessAcumen: 1,
+        statecraft: 1,
+        intellect: 1,
+      },
+    });
+    expect(
+      checkStatThresholds(character, "GA").some((r) => r.id.includes("actions-hoarding"))
+    ).toBe(false);
+    character.actions = 157;
+    const warning = checkStatThresholds(character, "GA").find((r) =>
+      r.id.includes("actions-hoarding")
+    );
+    expect(warning?.why).toContain("threshold: 156");
+    expect(warning?.why).toContain("5 AP/turn");
   });
 
   it("flags critically low actions", () => {

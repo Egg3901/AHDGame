@@ -1,5 +1,6 @@
 "use client";
 
+import { PLAYER_BASE_ACTION_GAIN } from "@/lib/actions/rules/allowances";
 import { useReducer, useEffect, useCallback, useMemo, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import Image from "next/image";
@@ -357,7 +358,7 @@ export function NavbarWrapper({
           currentOfficeType: data.currentOfficeType ?? null,
           isCentralBankChair: data.isCentralBankChair ?? false,
           chairActionBonus: data.chairActionBonus ?? 0,
-          baseActionsPerTurn: data.baseActionsPerTurn ?? 4,
+          baseActionsPerTurn: data.baseActionsPerTurn ?? PLAYER_BASE_ACTION_GAIN,
           officeActionBonus: data.officeActionBonus ?? 0,
           bonusActionsFromParty: data.bonusActionsFromParty ?? 0,
           dividendIncome: data.dividendIncome ?? 0,

@@ -1,8 +1,14 @@
+/**
+ * Activity summaries record what a character spent during a turn.
+ * processActivityLogging groups their actions and uses the effective personal
+ * base grant when the remaining action bank cannot supply a quota estimate.
+ */
 // Bulk-inserts one `turn_summary` ActivityLog per active character at the end of Group 6.
 // Reads from `actionLogs` (written by /api/actions/execute during the previous turn window)
 // and enriches each entry with target state names before bulk-inserting to `activityLog`.
 // Wrapped in runPhase — errors log to Sentry but do not halt turn processing.
 
+import { playerBaseActionGain } from "@/lib/actions/rules/allowances";
 import { ObjectId, type Db } from "mongodb";
 import type { ActionLog, Character, GameConfig } from "@/lib/db/types";
 import type { ActivityAction, ActivityLogTurnSummary } from "@/lib/db/types/activityLog";
@@ -77,7 +83,7 @@ export async function processActivityLogging(
     }
   }
 
-  const baseAp = config?.baseActionsPerTurn ?? 4;
+  const baseAp = playerBaseActionGain(config?.baseActionsPerTurn);
   const now = new Date();
   const summaries: ActivityLogTurnSummary[] = [];
 

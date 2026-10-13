@@ -1,3 +1,4 @@
+import { playerActionAllowance, playerBaseActionGain } from "@/lib/actions/rules/allowances";
 import { resolveCampaignPriceLevel } from "@/lib/campaigns/rules/priceLevel";
 import {
   loadCampaignPriceLevel,
@@ -83,12 +84,11 @@ import {
   getPopulationTier,
   DONOR_BASE_BONUS_PER_LEVEL,
 } from "@/lib/utils/fundGeneration";
-import { ACTION_HOARDING_THRESHOLD } from "@/lib/actions/recommendationsConstants";
+import { energyActionLimits } from "@/lib/stats/statDrift";
+import { STAT_MIN } from "@/lib/stats/statsConstants";
 import { countryElectionsUrl, countryUrl, politiciansUrl, regionUrl } from "@/lib/urls";
 import { truncate, loadCharacterByUrlId } from "./characterLoaders";
 import { buildPublicSummary, getCharacterById, type OverviewStatItem } from "./characterData";
-
-const MIN_BASE_ACTIONS_PER_TURN = 4;
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -206,10 +206,7 @@ export default async function CharacterPage({ params }: PageProps) {
   const infamyPenalty = infamy > 20 ? ((infamy - 20) * 0.05).toFixed(2) : null;
   const favAboveThresholdPenalty = calculateFavorabilityAboveThresholdPenalty(favorability);
   const favDecayDisplay = favAboveThresholdPenalty > 0 ? favAboveThresholdPenalty.toFixed(1) : null;
-  const baseActionsPerTurn = Math.max(
-    gameConfig?.baseActionsPerTurn ?? 0,
-    MIN_BASE_ACTIONS_PER_TURN
-  );
+  const baseActionsPerTurn = playerBaseActionGain(gameConfig?.baseActionsPerTurn);
   /*
    * Chair role lives on centralBanks.chairCharacterId and cabinet membership in
    * the unified cabinetMembers collection — neither on currentOffice. Both
@@ -290,7 +287,9 @@ export default async function CharacterPage({ params }: PageProps) {
     officeActionBonus: gameConfig?.officeActionBonus,
     countryId: (character.countryId ?? "US") as CountryId,
   });
-  const chairActionBonus = chairBankRow ? (gameConfig?.chairActionBonus ?? 3) : 0;
+  const chairActionBonus = chairBankRow
+    ? playerActionAllowance(gameConfig?.chairActionBonus ?? 3)
+    : 0;
   const positionNiBonus = resolvePositionNiBonus({
     currentOfficeType: character.currentOffice?.type,
     countryId: (character.countryId ?? "US") as CountryId,
@@ -333,7 +332,8 @@ export default async function CharacterPage({ params }: PageProps) {
     enabledCabinetSeats,
   });
   const totalActionsPerTurn = baseActionsPerTurn + officeActionBonus + chairActionBonus;
-  const actionHoarding = character.actions > ACTION_HOARDING_THRESHOLD;
+  const actionHoarding =
+    character.actions > energyActionLimits(character.stats?.energy ?? STAT_MIN).threshold;
 
   // Party influence per-turn stats (requires party data)
   const partyInfluenceMaxBonus = Math.max(
@@ -640,7 +640,7 @@ export default async function CharacterPage({ params }: PageProps) {
               actionBreakdown={actionBreakdown}
               totalActionsPerTurn={totalActionsPerTurn}
               actionHoarding={actionHoarding}
-              partyInfluenceMaxBonus={partyInfluenceMaxBonus}
+              partyInfluenceMaxBonus={playerActionAllowance(partyInfluenceMaxBonus)}
               partyInfluenceNetGain={partyInfluenceNetGain}
               bonusActionsFromParty={bonusActionsFromParty}
               partyInfluenceShare={partyInfluenceShare}

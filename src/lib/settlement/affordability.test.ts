@@ -14,9 +14,9 @@ const ddState: SettlementSeatState = {
 describe("seatBudgetFor", () => {
   it("reports the BANK, not a per-turn allowance", () => {
     expect(seatBudgetFor({ ...ddState, actions: 1 }, "DD")).toEqual({
-      actionsPerTurn: 3,
+      actionsPerTurn: 3.75,
       actionsRemaining: 1,
-      actionsBankCap: 9,
+      actionsBankCap: 11.25,
       capital: 20,
     });
   });
@@ -25,7 +25,7 @@ describe("seatBudgetFor", () => {
     // The whole point of banking: a secondary saves for a play it cannot
     // afford out of one turn's income.
     const saved = seatBudgetFor({ ...ddState, id: "RU", actions: 2 }, "RU");
-    expect(saved.actionsPerTurn).toBe(1);
+    expect(saved.actionsPerTurn).toBe(1.25);
     expect(saved.actionsRemaining).toBe(2);
   });
 
@@ -129,6 +129,6 @@ describe("canCharacterAfford", () => {
 
 describe("config sanity", () => {
   it("gives DD the action allowance the budget helper assumes", () => {
-    expect(getSeat("DD")!.actionsPerTurn).toBe(3);
+    expect(getSeat("DD")!.actionsPerTurn).toBe(3.75);
   });
 });

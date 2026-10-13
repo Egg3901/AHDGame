@@ -1,3 +1,9 @@
+/**
+ * Holding office grants extra personal actions. resolveOfficeActionBonusForType
+ * resolves the authored config or country registry and applies the 25% player
+ * increase. resolveOfficeNiBonus keeps the separate national-influence tiers.
+ */
+import { playerActionAllowance } from "./rules/allowances";
 import {
   COUNTRY_CONFIGS,
   getOfficeTypeConfig,
@@ -20,7 +26,7 @@ import {
  * received no per-turn generation for holding their seat (ticket #974).
  *
  * These helpers make (2) the fallback for (1): an explicit `gameConfig` entry
- * still wins (so admins keep their override), but an office the config has never
+ * still wins (so admins keep their authored override), but an office the config has never
  * heard of now resolves against the country registry instead of returning 0.
  */
 
@@ -48,7 +54,7 @@ function findOfficeConfig(officeType: string, countryId?: CountryId): OfficeType
 }
 
 /**
- * Per-turn action bonus for holding `officeType`.
+ * Per-turn action bonus for holding `officeType`, including the player allowance uplift.
  *
  * `gameConfig.officeActionBonus` is authoritative when it names the key; the
  * country office registry is the fallback. Returns 0 for keys neither source
@@ -61,8 +67,8 @@ export function resolveOfficeActionBonusForType(
 ): number {
   if (!officeType) return 0;
   const configured = officeActionBonus?.[officeType];
-  if (typeof configured === "number") return configured;
-  return findOfficeConfig(officeType, countryId)?.actionBonus ?? 0;
+  if (typeof configured === "number") return playerActionAllowance(configured);
+  return playerActionAllowance(findOfficeConfig(officeType, countryId)?.actionBonus ?? 0);
 }
 
 /**

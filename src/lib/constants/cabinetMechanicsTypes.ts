@@ -1,8 +1,9 @@
 /**
- * Shared type definitions for cabinet position mechanics.
- * Country-specific configs (ukCabinetMechanics.ts, usCabinetMechanics.ts)
- * import these types and define their position data.
+ * Ministerial actions use a separate daily pool. MINISTERIAL_ACTION_CAP gives
+ * cabinet positions five actions; the shared types describe their orders and
+ * country-specific catalogs.
  */
+import { wholePlayerActionAllowance } from "@/lib/actions/rules/allowances";
 
 // ── Metric format types ──────────────────────────────────────────────────────
 
@@ -164,7 +165,7 @@ export interface MinisterialOrderConfig {
 // ── Action economy constants (shared across all countries) ───────────────────
 
 /** Maximum ministerial actions a position can hold. */
-export const MINISTERIAL_ACTION_CAP = 4;
+export const MINISTERIAL_ACTION_CAP = wholePlayerActionAllowance(4);
 
 /** @deprecated Turn-based regen replaced by daily midnight Eastern refill. */
 export const MINISTERIAL_ACTION_REGEN_INTERVAL = 24;

@@ -1,3 +1,4 @@
+import { playerActionAllowance } from "@/lib/actions/rules/allowances";
 import type { Db, ObjectId } from "mongodb";
 import { unstable_cache } from "next/cache";
 import { getDb } from "@/lib/mongodb";
@@ -924,7 +925,7 @@ export function generatedOfficeDefaultContent(definition: GeneratedOfficeDefinit
       : "";
   const actionText =
     definition.actionBonus != null
-      ? ` The office grants a +${definition.actionBonus} action bonus while held.`
+      ? ` The office grants a +${playerActionAllowance(definition.actionBonus)} action bonus while held.`
       : "";
 
   if (definition.kind === "cabinet") {

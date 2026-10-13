@@ -143,9 +143,9 @@ describe("probeCampaignsAndActions", () => {
 
   it("accrues the production-rule budget per synthetic campaigner, unspent", () => {
     // The seed default baseActionsPerTurn is 4 and an unendorsed player
-    // candidate accrues exactly the baseline through the production rule.
+    // candidate accrues five actions through the production allowance rule.
     expect(PROBE_BASE_ACTIONS_PER_TURN).toBe(4);
-    expect(syntheticCampaignActionsPerActor()).toBe(4);
+    expect(syntheticCampaignActionsPerActor()).toBe(5);
     const result = probeCampaignsAndActions("synthetic", SEED);
     expect(result.campaigns).toBe(4);
     expect(result.playerActions).toBe(4 * syntheticCampaignActionsPerActor());

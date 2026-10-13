@@ -17,19 +17,19 @@ const stats: CharacterStats = {
 };
 
 describe("energyActionLimits", () => {
-  it("returns baseline 200/100 at Energy 1", () => {
-    expect(energyActionLimits(1)).toEqual({ cap: 200, threshold: 100 });
+  it("returns baseline 250/125 at Energy 1", () => {
+    expect(energyActionLimits(1)).toEqual({ cap: 250, threshold: 125 });
   });
 
-  it("returns max 250/125 at Energy 10", () => {
-    expect(energyActionLimits(10)).toEqual({ cap: 250, threshold: 125 });
+  it("returns max 313/156 at Energy 10", () => {
+    expect(energyActionLimits(10)).toEqual({ cap: 313, threshold: 156 });
   });
 
   it("scales linearly in between", () => {
     const mid = energyActionLimits(5.5); // halfway
-    expect(mid.cap).toBe(225);
-    expect(mid.threshold).toBeGreaterThan(100);
-    expect(mid.threshold).toBeLessThan(125);
+    expect(mid.cap).toBe(282);
+    expect(mid.threshold).toBeGreaterThan(125);
+    expect(mid.threshold).toBeLessThan(156);
   });
 });
 

@@ -1,8 +1,11 @@
+import { playerActionAllowance, playerBaseActionGain } from "@/lib/actions/rules/allowances";
 import { loadCampaignPriceLevel } from "@/lib/campaigns/campaignCurrency";
 import { NextResponse } from "next/server";
 import { withNoStore } from "@/lib/api/withNoStore";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
+import { getCabinetMembersCollection } from "@/lib/db/collections/cabinetMembers";
+import type { CountryId } from "@/lib/constants/countries";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { getGameState } from "@/lib/gameState";
@@ -20,6 +23,11 @@ import { isForexEnabled } from "@/lib/currency/featureFlag";
 import { getTotalPersonalLiquidWealth } from "@/lib/currency/characterFunds";
 import { FAVORABILITY_NATURAL_DECAY_THRESHOLD } from "@shared/constants/formulas";
 import { resolveOfficeActionBonusForType } from "@/lib/actions/officeBonusRegistry";
+import {
+  CABINET_OFFICE_TYPES,
+  cabinetOfficeTypeForCountry,
+  resolveOfficeActionBonus,
+} from "@/lib/actions/officeActionBonus";
 import { unionContributionIncomePerTurn } from "@/lib/unions/unionContributionIncome";
 import {
   projectFavorabilityDecay,
@@ -28,6 +36,7 @@ import {
 } from "@/lib/utils/decayProjections";
 import type {
   Character,
+  ElectedOfficial,
   Corporation,
   Election,
   ExchangeRate,
@@ -37,8 +46,6 @@ import type {
   PoliticalParty,
   StatePartyOrg,
 } from "@/lib/db/types";
-
-const MIN_BASE_ACTIONS_PER_TURN = 4;
 
 // GET /api/game/turn/dashboard — Returns aggregated character stats, action costs, fund projections, and nearest election for the status bar.
 // Auth: requireBasicAuth
@@ -187,11 +194,43 @@ async function handleGET() {
     const infamyProjection = projectInfamyDecay(infamy);
 
     // --- Office action bonus ---
-    const officeActionBonus = resolveOfficeActionBonusForType(
-      character.currentOffice?.type,
-      config?.officeActionBonus,
-      character.countryId
-    );
+    const [cabinetSeat, electedSeats] = await Promise.all([
+      getCabinetMembersCollection(db).findOne(
+        { characterId: character._id },
+        { projection: { countryId: 1 } }
+      ),
+      character.currentOffice && CABINET_OFFICE_TYPES.has(character.currentOffice.type)
+        ? db
+            .collection<ElectedOfficial>("electedOfficials")
+            .find({ characterId: character._id }, { projection: { officeType: 1 } })
+            .toArray()
+        : [],
+    ]);
+    const recoveredSeat = electedSeats.sort(
+      (a, b) =>
+        resolveOfficeActionBonusForType(
+          b.officeType,
+          config?.officeActionBonus,
+          character.countryId
+        ) -
+        resolveOfficeActionBonusForType(
+          a.officeType,
+          config?.officeActionBonus,
+          character.countryId
+        )
+    )[0]?.officeType;
+    const officeActionBonus = resolveOfficeActionBonus({
+      currentOfficeType: character.currentOffice?.type,
+      electedSeatOfficeType: recoveredSeat,
+      isCabinetMember: cabinetSeat != null,
+      cabinetOfficeType: cabinetSeat
+        ? cabinetOfficeTypeForCountry(
+            (cabinetSeat.countryId ?? character.countryId ?? "US") as CountryId
+          )
+        : undefined,
+      officeActionBonus: config?.officeActionBonus,
+      countryId: character.countryId,
+    });
     /*
      * Chair bonus is independent of currentOffice: the role lives on
      * centralBanks.chairCharacterId and stacks with any elected seat.
@@ -199,8 +238,10 @@ async function handleGET() {
     const chairBankRow = await db
       .collection("centralBanks")
       .findOne({ chairCharacterId: character._id }, { projection: { _id: 1 } });
-    const chairActionBonus = chairBankRow ? (config?.chairActionBonus ?? 3) : 0;
-    const baseActionsPerTurn = Math.max(config?.baseActionsPerTurn ?? 0, MIN_BASE_ACTIONS_PER_TURN);
+    const chairActionBonus = chairBankRow
+      ? playerActionAllowance(config?.chairActionBonus ?? 3)
+      : 0;
+    const baseActionsPerTurn = playerBaseActionGain(config?.baseActionsPerTurn);
 
     return NextResponse.json({
       forexEnabled,
