@@ -7,16 +7,12 @@ vi.mock("@/lib/api/requireAuth", () => ({ requireAuth: vi.fn() }));
 vi.mock("@/lib/cabinet/officeVisibility", () => ({
   resolveCabinetOfficeVisibility: vi.fn(),
 }));
-vi.mock("@/lib/api/requireConfirmedSecretary", () => ({
-  requireConfirmedSecretary: vi.fn(() => null),
-}));
 vi.mock("@/lib/intelligence/runOperation", () => ({ runOperation: vi.fn() }));
 vi.mock("@/lib/countryAccess", () => ({ getCountryAccessFromDb: vi.fn() }));
 
 const { getDb } = await import("@/lib/mongodb");
 const { requireAuth } = await import("@/lib/api/requireAuth");
 const { resolveCabinetOfficeVisibility } = await import("@/lib/cabinet/officeVisibility");
-const { requireConfirmedSecretary } = await import("@/lib/api/requireConfirmedSecretary");
 const { runOperation } = await import("@/lib/intelligence/runOperation");
 const { getCountryAccessFromDb } = await import("@/lib/countryAccess");
 
@@ -59,7 +55,6 @@ beforeEach(() => {
     canView: true,
     canAct: true,
   } as never);
-  vi.mocked(requireConfirmedSecretary).mockReturnValue(null);
   vi.mocked(getCountryAccessFromDb).mockResolvedValue({ registered: true } as never);
   vi.mocked(runOperation).mockResolvedValue({
     ok: true,
@@ -109,12 +104,16 @@ describe("POST intelligence operation", () => {
     expect((await run(VALID)).status).toBe(403);
   });
 
-  it("403s an acting director, whose scope bars pointing the service", async () => {
-    vi.mocked(requireConfirmedSecretary).mockReturnValue(
-      new Response(null, { status: 403 }) as never
-    );
-    expect((await run(VALID)).status).toBe(403);
-    expect(runOperation).not.toHaveBeenCalled();
+  it("allows an acting director to run an operation", async () => {
+    db.collectionMocks.cabinetMembers.findOne.mockResolvedValue({
+      _id: "m1",
+      countryId: "US",
+      positionId: "director_of_intelligence",
+      characterId: HOLDER,
+      acting: true,
+    });
+    expect((await run(VALID)).status).toBe(200);
+    expect(runOperation).toHaveBeenCalled();
   });
 
   it("400s on an unknown domain", async () => {

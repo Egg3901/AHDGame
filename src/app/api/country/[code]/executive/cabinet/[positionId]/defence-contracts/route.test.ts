@@ -69,7 +69,12 @@ describe("POST defence-contracts", () => {
     db.collectionMocks.defenceContracts.insertOne.mockResolvedValue({ acknowledged: true });
   });
 
-  it("awards a contract against a domestic defence plant", async () => {
+  it.each([true, false])("awards a domestic contract when acting=%s", async (acting) => {
+    db.collectionMocks.cabinetMembers.findOne.mockResolvedValue({
+      _id: "m1",
+      characterId: "char_1",
+      acting,
+    });
     const { POST } = await import(ROUTE);
     const res = await POST(req({ sectorId: SECTOR_ID.toString(), lotsOrdered: 1 }), params);
     expect(res.status).toBe(200);
@@ -77,6 +82,20 @@ describe("POST defence-contracts", () => {
     expect(body.contract.component).toBe("ground");
     expect(body.contract.lotsOrdered).toBe(1);
     expect(body.contract.pricePerLot).toBeGreaterThan(0);
+    expect(db.collectionMocks.defenceContracts.insertOne).toHaveBeenCalled();
+  });
+
+  it("refuses a non-holder on an acting-held seat without awarding a contract", async () => {
+    db.collectionMocks.cabinetMembers.findOne.mockResolvedValue({
+      _id: "m1",
+      characterId: "other_holder",
+      acting: true,
+    });
+    const { POST } = await import(ROUTE);
+    expect(
+      (await POST(req({ sectorId: SECTOR_ID.toString(), lotsOrdered: 1 }), params)).status
+    ).toBe(403);
+    expect(db.collectionMocks.defenceContracts.insertOne).not.toHaveBeenCalled();
   });
 
   // Ticket #1134: a two-domain plant can fill either domain, not only components[0].

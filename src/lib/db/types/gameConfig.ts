@@ -323,6 +323,16 @@ export interface GameConfig {
   /** Length of the governor glide in turns (default 24). */
   marketGovernorGlideTurns?: number;
   /**
+   * Turn the no-buyer extraction phase-out started. A mine whose recipe has no
+   * leg its state can extract offers nothing to the market, yet the deposit
+   * ramps (the 0.5 haircut floor below plants, the launch-governor ramp under
+   * plants) kept paying it for part of its output. From this turn those ramps
+   * close over EXTRACTION_NO_BUYER_PHASE_OUT_TURNS (24) for such mines only.
+   * Stamped by the corporation turn the first time it runs without one, so the
+   * phase-out starts when the code deploys. Cleared on world reset.
+   */
+  extractionNoBuyerPhaseOutStartTurn?: number;
+  /**
    * Geographic freight rollout. Shadow records routes for calibration; active
    * also feeds delivered state inputs into next turn's plant throughput.
    */

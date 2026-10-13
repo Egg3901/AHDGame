@@ -248,14 +248,11 @@ export async function GET(_request: Request, { params }: RouteParams) {
               ? { ministerialActions: sharedRemaining ?? member.ministerialActions ?? 2 }
               : {}),
             bannerImageUrl: member.bannerImageUrl ?? null,
-            // Whether the seat is held in an acting capacity is a roster fact, so
-            // it rides along even on a withheld office. `barredScopes` is derived
-            // from it rather than left for the client to hardcode, so the disabled
-            // controls and the API's 403s can never drift apart.
+            // Acting status remains a roster fact. Keep scope metadata compatible
+            // with existing clients; the current policy returns no barred scopes.
             acting: isActingMember(member),
             barredScopes: barredScopesFor(member),
-            // The tenure is a separate fact from the scope: the locks say what a
-            // caretaker cannot do, this says how long they remain one.
+            // Full departmental authority does not extend the acting term.
             actingExpiresOnTurn: member.actingExpiresOnTurn ?? null,
           }
         : null;

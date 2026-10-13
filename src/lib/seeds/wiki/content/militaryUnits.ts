@@ -2,7 +2,7 @@ export const militaryUnitsContent = `# Units, Recruitment & Procurement
 
 Your army is a list of **formations**. Each one is a real object with a headcount, a technology level, a veterancy grade, a posture, and (once you have generals) a commander. This page covers how you get them, what they cost, and how you improve them.
 
-Everything here is done by the **defence seat holder** from their cabinet office → **Military** tab. An **acting** secretary (a caretaker seated without confirmation) can recruit, upgrade, set postures and assign units, but cannot commission or dismiss generals, adopt doctrine, touch the nuclear programme, or award and cancel defence contracts: those wait for a confirmed holder.
+Everything here is done by the **defence seat holder** from their cabinet office → **Military** tab. An **acting** secretary seated without confirmation has the same departmental powers as a confirmed holder, including military operations, generals, doctrine, the nuclear programme and defence contracts. The acting appointment still expires after 24 turns.
 
 ## Domains and branches
 

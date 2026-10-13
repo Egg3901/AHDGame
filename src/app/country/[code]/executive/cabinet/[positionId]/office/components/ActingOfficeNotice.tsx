@@ -1,11 +1,4 @@
-/**
- * How long this office stays in caretaker hands.
- *
- * Complements `ActingLock`, which disables the individual levers and says why.
- * That covers WHAT an acting secretary cannot do; this covers how long they
- * remain one, which no lock can express because it is a property of the
- * appointment rather than of any control.
- */
+/** Acting appointments retain full authority until confirmation or expiry. */
 export function ActingOfficeNotice({
   turnsRemaining,
 }: {
@@ -32,7 +25,7 @@ export function ActingOfficeNotice({
       {turnsRemaining !== null && (
         <p className="mt-2 text-sm text-muted">
           {turnsRemaining > 0
-            ? `${turnsRemaining} turns remain before this appointment lapses, and the locked controls below stay locked until then. Senate confirmation ends it early and lifts every one of them.`
+            ? `${turnsRemaining} turns remain before this appointment lapses. The acting secretary has full departmental authority. Senate confirmation replaces the acting appointment early.`
             : "This appointment lapses at the next turn."}
         </p>
       )}

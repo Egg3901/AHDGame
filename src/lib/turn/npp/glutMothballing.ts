@@ -70,6 +70,11 @@ export function buildNppGlutMothballUpdates(args: {
       if (stateChangeBudget <= 0) break;
       if (sp.sector.mothballed !== true) continue;
       if (divestedSectorIds.includes(sp.sector._id)) continue;
+      // A mine on a dead deposit (its state holds none of what it extracts)
+      // was mothballed for that, not for a glut. Extraction prices are high
+      // precisely because such mines produce nothing, so the price signal
+      // would restart it straight back onto a zero-output deposit.
+      if (sp.sector.sectorType === "extraction" && sp.sector.capacityUtilization === 0) continue;
       const ratio = sectorShortageScore(
         sp.sector.sectorType,
         sp.sector.countryId ?? corp.countryId,

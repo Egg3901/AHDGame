@@ -1,11 +1,7 @@
 /**
- * The manifest's completeness guarantee.
- *
- * `requireConfirmedSecretary(member, "stance")` is readable at the call site but
- * says nothing about the routes that never call it: a new cabinet route ships
- * wide open and nothing notices. These tests walk the real route tree and hold
- * it against `CABINET_ROUTE_SCOPES`, so a mutating route cannot exist without
- * someone deciding, in writing, what an acting secretary may do with it.
+ * Classifies every mutating cabinet route and checks that existing scope calls
+ * agree with the shared authority policy. Acting holders are unrestricted;
+ * holder authorization and successful writes are covered by route integration tests.
  */
 import { describe, expect, it } from "vitest";
 import { readFileSync, readdirSync } from "node:fs";
@@ -64,7 +60,7 @@ describe("CABINET_ROUTE_SCOPES covers the route tree", () => {
     expect(
       CABINET_ROUTE_SCOPES[key],
       `Route "${key}" has a mutating handler but no entry in CABINET_ROUTE_SCOPES. ` +
-        `Decide what an acting secretary may do with it and add it to the manifest.`
+        `Classify its capability and add it to the manifest.`
     ).toBeDefined();
   });
 
@@ -75,7 +71,7 @@ describe("CABINET_ROUTE_SCOPES covers the route tree", () => {
   });
 });
 
-describe("the routes enforce the scope the manifest records", () => {
+describe("the routes consult the policy with the scope the manifest records", () => {
   const barred = routes.filter(
     (r) => CABINET_ROUTE_SCOPES[r.key] && CABINET_ROUTE_SCOPES[r.key] !== "operational"
   );
@@ -86,7 +82,7 @@ describe("the routes enforce the scope the manifest records", () => {
     expect(
       route.source,
       `Route "${key}" is recorded as scope "${CABINET_ROUTE_SCOPES[key]}" but never calls ` +
-        `requireConfirmedSecretary, so an acting secretary can use it.`
+        `requireConfirmedSecretary to consult the shared authority policy.`
     ).toContain("requireConfirmedSecretary");
   });
 
@@ -107,8 +103,6 @@ describe("the routes enforce the scope the manifest records", () => {
       .filter((r) => CABINET_ROUTE_SCOPES[r.key] === "operational")
       .filter((r) => r.source.includes("requireConfirmedSecretary"))
       .map((r) => r.key);
-    expect(wronglyGated, "routes recorded as operational but refusing acting secretaries").toEqual(
-      []
-    );
+    expect(wronglyGated, "operational routes with unnecessary scope-policy calls").toEqual([]);
   });
 });

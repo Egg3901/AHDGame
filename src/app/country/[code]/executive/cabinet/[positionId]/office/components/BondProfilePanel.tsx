@@ -32,7 +32,7 @@ export function BondProfilePanel({
   sovereignBondsOutstanding,
   onUpdate,
 }: Props) {
-  // An acting secretary reads this surface but does not move it.
+  // Compatibility hook; the current acting policy leaves this capability open.
   const actingLockReason = useActingLock("treasury");
   const canAct = canActProp && !actingLockReason;
 

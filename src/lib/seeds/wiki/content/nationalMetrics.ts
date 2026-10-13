@@ -6,36 +6,28 @@ National metrics are the economic and social health indicators tracked for each 
 
 ### GDP growth
 
-GDP growth measures the percentage change in total economic output. Corporate sector activity first produces a demand signal: owned sectors contribute their growth weighted by revenue, unowned sectors contribute a **0.5% background rate**, and a **40% inertia** smooths the sector signal.
+GDP growth measures the percentage change in real economic output: what the country's sectors actually produce, valued at constant prices so price swings do not count as growth. The measured output trend is smoothed over roughly a year and a **40% inertia** so a noisy turn does not swing the headline. Net exports above or below the world baseline, consumption taxes, and crises shift it on top.
 
-The displayed national rate then runs through the output-gap model:
+There is no target the rate is pulled back toward. If output keeps growing fast, growth stays high; if production stalls, growth falls.
 
-\`\`\`
-sectorSignal = smoothed revenue-weighted sector activity
-impulse = sectorSignal - potentialGrowth
-gdpGrowth = potentialGrowth + realizedChangeInBoundedOutputGap
-\`\`\`
+The game also tracks each region's **output trend**, learned from its own recent growth, and the **output gap**: how far actual output sits above or below that trend. Steady growth at any pace converges to a gap of zero. A slowdown opens a negative gap until the trend catches up.
 
-The output gap closes over time, so a one-turn boom or contraction does not permanently reset the printed growth rate.
-
-Potential growth comes from labor-force growth, capital accumulation, and productivity. Productive public spending on infrastructure, transport, housing, and energy can add to capital alongside paid corporate expansion. Both channels share a cap, so they cannot stack into unlimited growth.
-
-Economies below the live GDP-per-capita frontier can also receive a self-extinguishing catch-up bonus. Market economies qualify through ownership, trade, and economic freedom. State-heavy economies can instead qualify through industrial-plan execution, workforce skill, transport efficiency, productive public investment, and trade access. The bonus shrinks as the income gap closes and never reduces frontier-country growth.
+**Potential growth** (labor force, capital and productivity) is still shown as a supply-side indicator, but it no longer sets the headline rate.
 
 ### Unemployment
 
-Unemployment follows a simplified Okun's Law relationship with GDP growth relative to the country's **potential growth**:
-- **At potential:** No Okun pressure
-- **Above potential:** Unemployment falls by 0.2 percentage points per 1% excess growth
-- **Below potential:** Unemployment rises by 0.25 percentage points per 1% shortfall
+Unemployment follows a simplified Okun's Law relationship with GDP growth relative to the region's **output trend**:
+- **At trend:** No Okun pressure
+- **Above trend:** Unemployment falls by 0.2 percentage points per 1% excess growth
+- **Below trend:** Unemployment rises by 0.25 percentage points per 1% shortfall
 
-Potential falls back to 2% only when the country has no seeded value. When macro labour effects are active, wage and automation shocks add pressure after Okun. Unemployment has an **85% inertia** and hard bounds of **1% to 15%**.
+When macro labour effects are active, wage and automation shocks add pressure after Okun. Unemployment has an **85% inertia** and hard bounds of **1% to 15%**.
 
 ### Inflation
 
 In multiplayer, inflation advances halfway at half past each hour, with the hourly turn applying the rest of the step. The model incorporates:
 - Central bank prime rate (higher rates dampen inflation)
-- GDP growth (higher growth adds demand-pull pressure)
+- The output gap (output running above its trend adds demand-pull pressure; below it, slack pulls inflation down)
 - Unemployment (lower unemployment adds wage-push pressure)
 - Commodity prices (commodity cost-push effect)
 - Fiscal stance (deficit spending adds inflationary pressure)

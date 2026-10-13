@@ -82,7 +82,7 @@ describe("union ban enforcement route", () => {
     ).toBe(403);
   });
 
-  it("lets an acting delegate read but blocks enforcement mutations", async () => {
+  it("lets an acting delegate read and change enforcement posture", async () => {
     vi.mocked(requireAuthWithCharacter).mockResolvedValue({
       ok: true,
       user: { userId: "director", character: { _id: characterId, countryId: "US" } },
@@ -96,7 +96,7 @@ describe("union ban enforcement route", () => {
       (await GET(new Request("http://localhost"), { params: Promise.resolve({ code: "US" }) }))
         .status
     ).toBe(200);
-    expect((await post({ action: "posture", posture: "crackdown" })).status).toBe(403);
+    expect((await post({ action: "posture", posture: "crackdown" })).status).toBe(200);
   });
 
   it("reports the persisted posture only to the country's executive", async () => {

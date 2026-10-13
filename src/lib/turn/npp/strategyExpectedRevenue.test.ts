@@ -52,6 +52,42 @@ describe("primaryExtractionResource", () => {
 });
 
 describe("decideExtractionStrategySwitch", () => {
+  it("moves a dead-deposit mine to the least-bad live recipe even when all forecast a loss", () => {
+    const timberOnly = (resource: string) => (resource === "timber" ? 1 : 0);
+    const decision = decideExtractionStrategySwitch({
+      currentStrategyId: "rare_earth_mining",
+      strategies: EXTRACTION,
+      priceRatioOf: neutralPrices,
+      headroomOf: timberOnly,
+      // Every recipe forecasts a loss; timber's is the smallest.
+      scoreOf: (strategy) => (strategy.id === "timber_logging" ? -0.2 : -0.5),
+      currentZeroYield: true,
+    });
+    expect(decision?.strategyId).toBe("timber_logging");
+    // Without the dead-deposit flag the same losses keep the mine where it is.
+    expect(
+      decideExtractionStrategySwitch({
+        currentStrategyId: "rare_earth_mining",
+        strategies: EXTRACTION,
+        priceRatioOf: neutralPrices,
+        headroomOf: timberOnly,
+        scoreOf: (strategy) => (strategy.id === "timber_logging" ? -0.2 : -0.5),
+      })
+    ).toBeNull();
+  });
+
+  it("returns null for a dead-deposit mine when no recipe can produce in the state", () => {
+    expect(
+      decideExtractionStrategySwitch({
+        currentStrategyId: "standard",
+        strategies: EXTRACTION,
+        priceRatioOf: neutralPrices,
+        headroomOf: () => 0,
+        currentZeroYield: true,
+      })
+    ).toBeNull();
+  });
+
   it("stays put when the current strategy is already (near) best", () => {
     // Iron premium: iron_mining scores 0.78 × 1.5 = 1.17; the diversified
     // "standard" (Σ rates ≈ 1.01, iron leg boosted → ≈ 1.135) is close but
