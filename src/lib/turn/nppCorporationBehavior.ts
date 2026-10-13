@@ -577,6 +577,7 @@ export async function processNppCorporationDecisions(
         {
           chronicLowFill: decision.autopilotSignals?.chronicLowFill === true,
           debtDominant: decision.autopilotSignals?.debtDominant === true,
+          losingSectors: decision.autopilotSignals?.losingSectors ?? 0,
           distressed: corp.financialDistressSinceTurn != null,
           affordableTech: techScratch[0]?.nodeName ?? null,
         },

@@ -192,7 +192,7 @@ export interface SoeState {
 import type { NppStrategyState } from "@/lib/turn/npp/corpStrategy";
 
 /** A move autopilot recommends but leaves to the owner. */
-export type CorpAutopilotAdvisoryKind = "pivot" | "debt" | "distress" | "tech";
+export type CorpAutopilotAdvisoryKind = "pivot" | "debt" | "distress" | "losers" | "tech";
 
 export interface CorpAutopilotAdvisory {
   kind: CorpAutopilotAdvisoryKind;

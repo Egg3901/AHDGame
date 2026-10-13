@@ -1,7 +1,7 @@
 /**
  * Corporation autopilot: the owner stays CEO while the cautious NPP corp brain
- * runs the routine levers (budgets, dividends, capacity growth, divesting deep
- * losers). It never pivots, tech-picks, issues debt or attacks, so it earns a
+ * runs the routine levers (budgets, dividends, capacity growth, glut pauses).
+ * It never pivots, retools, divests, tech-picks, borrows or attacks, so it earns a
  * steady return rather than an engaged player's. What it judges worthwhile but
  * leaves to the owner is recorded each turn as advisories.
  */
@@ -62,11 +62,19 @@ export interface AutopilotSignals {
   debtDominant: boolean;
   /** Corp is in uncured financial distress (nationalization clock running). */
   distressed: boolean;
+  /** Losing or stranded sectors the brain would have shed. */
+  losingSectors?: number;
   /** Name of the technology the corp can afford and would benefit from, if any. */
   affordableTech?: string | null;
 }
 
-const ADVISORY_ORDER: readonly CorpAutopilotAdvisoryKind[] = ["distress", "debt", "pivot", "tech"];
+const ADVISORY_ORDER: readonly CorpAutopilotAdvisoryKind[] = [
+  "distress",
+  "debt",
+  "losers",
+  "pivot",
+  "tech",
+];
 
 /**
  * Advisories for this turn. A continuing advisory keeps its original
@@ -80,6 +88,7 @@ export function deriveAutopilotAdvisories(
   const active = new Map<CorpAutopilotAdvisoryKind, string | undefined>();
   if (signals.distressed) active.set("distress", undefined);
   if (signals.debtDominant) active.set("debt", undefined);
+  if ((signals.losingSectors ?? 0) > 0) active.set("losers", String(signals.losingSectors));
   if (signals.chronicLowFill) active.set("pivot", undefined);
   if (signals.affordableTech) active.set("tech", signals.affordableTech);
 
@@ -164,6 +173,13 @@ export const AUTOPILOT_ADVISORY_COPY: Record<CorpAutopilotAdvisoryKind, Autopilo
       "Bond interest is larger than what the business earns. Autopilot will not refinance or buy back bonds.",
     tab: "credit",
     action: "Open bonds",
+  },
+  losers: {
+    title: "Sectors losing money",
+    body: (subject) =>
+      `${subject === "1" ? "One sector is" : `${subject ?? "Some"} sectors are`} losing money or failing to sell. Autopilot keeps them running and will not sell or close them for you.`,
+    tab: "sectors",
+    action: "Open sectors",
   },
   pivot: {
     title: "Plants cannot sell their output",

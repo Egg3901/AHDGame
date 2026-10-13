@@ -390,6 +390,11 @@ export function makeNppCorpDecision(
     }
   }
 
+  // Autopilot never sheds a player's plant: a divest deletes the sector with no
+  // proceeds. It reports the losers to the owner instead.
+  const autopilot = isAutopilotRun(corp);
+  const autopilotLosers = autopilot ? divestedSectorIds.splice(0).length : 0;
+
   // Divest-leg flag (section 1): a completed shed; blocked-shed flags are set
   // inside the margin-divest loop above.
   if (divestedSectorIds.length > 0) constraintFlags.divested = true;
@@ -539,7 +544,8 @@ export function makeNppCorpDecision(
   // shift never target the same sector (a shift candidate is running and
   // selling; a mothball candidate is unfilled), and only one shift per corp
   // per turn keeps the cohort gradual. SOEs are exempt for 2c's reason.
-  if (!corp.countryOwnerId && glutStaggerEligible(corp._id.toString(), ctx.turn)) {
+  // Autopilot leaves retooling to the owner.
+  if (!corp.countryOwnerId && !autopilot && glutStaggerEligible(corp._id.toString(), ctx.turn)) {
     const retool = chooseNppStrategyRetool({
       corp,
       sectors,
@@ -1564,8 +1570,14 @@ export function makeNppCorpDecision(
     entryDiagnostic,
     strategy: strategyDecision?.state,
     capacityObservations,
-    ...(isAutopilotRun(corp)
-      ? { autopilotSignals: { chronicLowFill: situation.chronicLowFill, debtDominant } }
+    ...(autopilot
+      ? {
+          autopilotSignals: {
+            chronicLowFill: situation.chronicLowFill,
+            debtDominant,
+            losingSectors: autopilotLosers,
+          },
+        }
       : {}),
     operatorObservation: buildNppOperatorObservation({
       sectorType: operatingCorpType,

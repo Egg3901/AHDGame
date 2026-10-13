@@ -87,6 +87,17 @@ describe("deriveAutopilotAdvisories", () => {
   });
 });
 
+describe("losers advisory", () => {
+  it("names the count of sectors autopilot kept instead of shedding", () => {
+    const out = deriveAutopilotAdvisories(
+      { chronicLowFill: false, debtDominant: false, distressed: false, losingSectors: 2 },
+      undefined,
+      7
+    );
+    expect(out).toEqual([{ kind: "losers", sinceTurn: 7, subject: "2" }]);
+  });
+});
+
 describe("advisoriesToNotify", () => {
   it("notifies newly raised urgent advisories but never research", () => {
     const next = [

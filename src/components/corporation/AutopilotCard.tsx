@@ -61,8 +61,8 @@ export function AutopilotCard({
       <div className="space-y-2 py-1">
         <p className="text-xs text-muted">
           {on
-            ? "Autopilot sets budgets and dividends each turn, grows plants that sell, and closes deep losers. Budgets and dividends you change by hand are reset on the next turn while it is on. Everything else still works as normal."
-            : "Let the corporation run itself. Autopilot sets budgets and dividends, grows plants that sell, and closes deep losers. It plays safe: it never borrows, picks research, retools plants or buys rivals, and it tells you here when one of those is worth doing. You stay CEO."}
+            ? "Autopilot sets budgets and dividends each turn, grows plants that sell, pauses plants in a glut, and opens new plants when it has cash to spare. Budgets and dividends you change by hand are reset on the next turn while it is on. Everything else still works as normal."
+            : "Let the corporation run itself. Autopilot sets budgets and dividends, grows plants that sell, and opens new plants when it has cash to spare. It plays safe: it never borrows, picks research, retools, sells or closes plants, or buys rivals, and it tells you here when one of those is worth doing. You stay CEO."}
         </p>
         {on && autopilot.advisories.length === 0 && (
           <p className="text-xs text-muted">Nothing needs you right now.</p>
