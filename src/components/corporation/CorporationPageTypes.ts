@@ -3,6 +3,7 @@ import type { CurrencyCode } from "@/lib/constants/currencies";
 import type { LoyaltyLabel } from "@/lib/market/brandLoyalty";
 import type { FillRateBand } from "@/lib/corporations/financialFogOfWar";
 import type { BuildQueueSummary } from "@/lib/corporations/sectorBuildQueue";
+import type { CorpAutopilotAdvisoryKind } from "@/lib/db/types/corporation";
 
 export interface ShareholderInfo {
   /** Set for individual character shareholders */
@@ -264,6 +265,11 @@ export interface CorporationDetail {
   caretakerUnderlyingCharacterId?: string | null;
   /** Owner-selected caretaker operating mandate. */
   caretakerMandate?: "active" | "passive";
+  /** Autopilot state, sent to the owner only; null when off or not the owner. */
+  autopilot?: {
+    enabledTurn: number;
+    advisories: Array<{ kind: CorpAutopilotAdvisoryKind; sinceTurn: number; subject?: string }>;
+  } | null;
   /** Turns left on the post-reclaim cooldown before a new caretaker may be installed (0 = none). */
   caretakerReappointCooldownTurnsRemaining?: number;
   pendingCeoCharacterId: string | null;

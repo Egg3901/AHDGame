@@ -99,6 +99,7 @@ export async function processInactiveCeoCorpShares(
           ceoType: 1,
           countryOwnerId: 1,
           isNationalized: 1,
+          autopilot: 1,
           shareholders: 1,
         },
       }

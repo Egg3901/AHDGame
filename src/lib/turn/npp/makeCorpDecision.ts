@@ -45,6 +45,7 @@ import type { CorporateSector, SectorBuildOrder } from "@/lib/db/types";
 import type { UnownedSector } from "@/lib/db/types/unownedSector";
 import { CAPITAL_DEPRECIATION_PER_TURN } from "@/lib/market/capital";
 import { isStateOwned } from "@/lib/nationalization/nationalCorporation";
+import { isAutopilotRun } from "@/lib/corporations/autopilot";
 import { bucketKey } from "@/lib/nationalization/stateControlledBuckets";
 import { NEUTRAL_STAT } from "@/lib/stats/statsConstants";
 import {
@@ -288,7 +289,7 @@ export function makeNppCorpDecision(
     // exact bug class this module keeps producing: the seeded-margin read,
     // the nominal-revenue read, the unconverted foreign revenue. The corp
     // document already knows.
-    isCaretaker: !!corp.caretakerCeo,
+    isCaretaker: !!corp.caretakerCeo || isAutopilotRun(corp),
   };
   // Absent reads as enabled: see `strategyLoopEnabled`. When off, the corp runs
   // the `expand` levers and no strategy state is written, so an operator can
@@ -1563,6 +1564,9 @@ export function makeNppCorpDecision(
     entryDiagnostic,
     strategy: strategyDecision?.state,
     capacityObservations,
+    ...(isAutopilotRun(corp)
+      ? { autopilotSignals: { chronicLowFill: situation.chronicLowFill, debtDominant } }
+      : {}),
     operatorObservation: buildNppOperatorObservation({
       sectorType: operatingCorpType,
       cashNegative: cashLocal < 0,

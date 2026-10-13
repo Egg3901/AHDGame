@@ -191,6 +191,24 @@ export interface SoeState {
 
 import type { NppStrategyState } from "@/lib/turn/npp/corpStrategy";
 
+/** A move autopilot recommends but leaves to the owner. */
+export type CorpAutopilotAdvisoryKind = "pivot" | "debt" | "distress" | "tech";
+
+export interface CorpAutopilotAdvisory {
+  kind: CorpAutopilotAdvisoryKind;
+  /** First turn of the current unbroken run of this advisory. */
+  sinceTurn: number;
+  /** Short subject, e.g. the technology name for `tech`. */
+  subject?: string;
+}
+
+export interface CorporationAutopilot {
+  enabledTurn: number;
+  advisories?: CorpAutopilotAdvisory[];
+  /** Last turn the owner was notified about each advisory kind (throttle). */
+  notifiedTurn?: Partial<Record<CorpAutopilotAdvisoryKind, number>>;
+}
+
 export interface Corporation {
   /** Group settings are runtime state and disappear with corporations on world reset. */
   groupManagement?: Partial<GroupManagement>;
@@ -613,6 +631,14 @@ export interface Corporation {
    * off turn-to-turn. Absent / in the past ⇒ no cooldown active.
    */
   caretakerCooldownUntilTurn?: number;
+  /**
+   * Owner-enabled autopilot. Unlike a caretaker, the player stays CEO: the corp
+   * keeps `ceoType:"character"` and every manual command still works. Each turn
+   * the cautious NPP brain runs budgets, dividends, capacity and divestment, and
+   * records the moves it judged worthwhile but will not make itself as
+   * `advisories` for the owner. Absent means the player runs the corp.
+   */
+  autopilot?: CorporationAutopilot;
   /** Country owner for state-owned / nationalized corporations */
   countryOwnerId?: CountryId;
   /** Hide the corporation from stock-exchange style equity listings */

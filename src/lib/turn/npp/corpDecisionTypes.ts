@@ -75,6 +75,8 @@ export type NppSectorUpdateDoc = {
 
 export interface NppCorpDecision {
   corpId: ObjectId;
+  /** Situation flags a player-owned autopilot corp turns into owner advisories. */
+  autopilotSignals?: { chronicLowFill: boolean; debtDominant: boolean };
   /**
    * Non-cash field writes only. `liquidCapital` MUST NOT appear here — the NPP
    * ops are appended to the corporation bulkWrite AFTER this turn's income
