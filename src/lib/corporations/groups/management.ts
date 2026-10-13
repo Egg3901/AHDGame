@@ -1,3 +1,4 @@
+import { groupCapabilities } from "./rules/capabilities";
 import { COMMODITY_LABELS, COMMODITY_UNITS, type CommodityType } from "@/lib/constants/commodities";
 import { loadGroupBondDebt } from "./financialComparison";
 import { clampGroupDiscount } from "./rules/discounts";
@@ -105,10 +106,11 @@ export async function loadGroupManagement(db: Db, corporation: Corporation, user
     turn,
     parent,
     regions,
-    supplyEngineEnabled:
-      config?.groupSupplyCoordinationEnabled === true &&
-      config?.marketSystemMode === "plants" &&
-      world?.subsidiaryCorporationsEnabled === true,
+    ...groupCapabilities({
+      subsidiariesEnabled: world?.subsidiaryCorporationsEnabled,
+      marketSystemMode: config?.marketSystemMode,
+      groupSupplyCoordinationEnabled: config?.groupSupplyCoordinationEnabled,
+    }),
     supplyAgreementsEnabled: config?.supplyAgreementsEnabled === true,
     enabled: world?.subsidiaryCorporationsEnabled === true,
   };
@@ -200,6 +202,8 @@ export async function groupManagementView(db: Db, corporation: Corporation, user
     managementEnabled: ctx.enabled,
     /** No economic activation is implied by saving a direction or participation preference. */
     supplyEngineEnabled: ctx.supplyEngineEnabled,
+    directionsEnabled: ctx.directionsEnabled,
+    internalSupplyEnabled: ctx.internalSupplyEnabled,
     supplyAgreementsEnabled: ctx.supplyAgreementsEnabled,
     regions: ctx.regions.map((r) => ({ id: String(r._id), name: r.name, countryId: r.countryId })),
     members: ctx.corps.map((c) => {

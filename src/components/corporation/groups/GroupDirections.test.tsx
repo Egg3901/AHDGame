@@ -34,6 +34,7 @@ const player = {
 const data = {
   canManage: true,
   supplyEngineEnabled: false,
+  directionsEnabled: false,
   members: [{ id: "root", name: "Parent", isRoot: true }, npp, player],
   regions: Array.from({ length: 10 }, (_, i) => ({
     id: "r" + i,
@@ -60,7 +61,12 @@ describe("Subsidiary direction", () => {
     expect(screen.getByText(/Investment is currently not authorized/)).toBeTruthy();
     expect(screen.queryByLabelText("Primary objective")).toBeNull();
     expect(screen.queryByRole("button", { name: "Acknowledge" })).toBeNull();
-    expect(screen.getByText(/This world has not enabled/)).toBeTruthy();
+    expect(screen.getByText(/Subsidiary directions are unavailable/)).toBeTruthy();
+  });
+  it("keeps directions available when the separate Group Chain is off", () => {
+    mount({ ...data, directionsEnabled: true, supplyEngineEnabled: false });
+    expect(screen.queryByText(/Subsidiary directions are unavailable/)).toBeNull();
+    expect(screen.getByRole("button", { name: "Edit direction" })).toBeTruthy();
   });
   it("edits objectives and searchable target regions, validates regional selection and saves existing command fields", async () => {
     const save = mount();

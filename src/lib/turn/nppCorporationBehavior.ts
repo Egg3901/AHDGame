@@ -1,4 +1,4 @@
-import { resolveFormalizedGroups } from "@/lib/corporations/groups/groupMembership";
+import { loadGroupDirectionMembership } from "./npp/groupDirectionMembership";
 /**
  * NPP corporation decisions use shared market and funding observations.
  * processNppCorporationDecisions loads them and prepares corporation and sector writes.
@@ -362,7 +362,7 @@ export async function processNppCorporationDecisions(
       fxByCurrency.set(rate.currencyCode, rate.rate);
     }
   }
-  const { labourMode, retailExpansionPaused, ledgerShadow, bankingPolicy, groupManagementEnabled } =
+  const { labourMode, retailExpansionPaused, ledgerShadow, bankingPolicy } =
     await loadNppBehaviorConfig(db, turn);
   const nppConstructionFinanceEnabled =
     plants?.enabled === true &&
@@ -403,11 +403,12 @@ export async function processNppCorporationDecisions(
       },
     }
   );
-  const groupMembership =
-    groupManagementEnabled && strategyGate?.subsidiaryCorporationsEnabled === true
-      ? (preloaded?.groupMembership ??
-        (await resolveFormalizedGroups(db, { includeReserved: true })))
-      : undefined;
+  const groupMembership = await loadGroupDirectionMembership(
+    db,
+    strategyGate?.subsidiaryCorporationsEnabled === true,
+    nppCorps,
+    preloaded?.groupMembership
+  );
   const strategyLoopEnabled = strategyGate?.nppCorpStrategyEnabled !== false;
   // Frontier-entry experiment turn state (issue #991). See
   // createFrontierEntryTurnState: fail-closed, no new turn-path round trip.
