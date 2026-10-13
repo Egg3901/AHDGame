@@ -15,6 +15,7 @@ import { getGameState } from "@/lib/gameState";
 import { getAuthUser } from "@/lib/auth";
 import type { Corporation } from "@/lib/db/types";
 import { shouldRedactCorporation } from "@/lib/corporations/redaction";
+import { getControllingCorporateParent } from "@/lib/corporations/corporateOwnership";
 import { isSectorTechTreesEnabled } from "@/lib/corporations/techTree/featureFlag";
 import {
   OPERATING_SECTOR_TYPE_LABELS,
@@ -72,11 +73,32 @@ export async function GET(_request: Request, { params }: RouteParams) {
       !corporation.ceoVacant &&
       !!authUser?.userId &&
       corporation.userId?.toString() === authUser.userId;
-    const redact = shouldRedactCorporation(
-      corporation,
-      authUser?.userId ?? undefined,
-      authUser?.isAdmin === true
-    );
+    // The CEO of the controlling parent is an insider of a private subsidiary,
+    // the same rule the corporation page and sector detail apply. This only
+    // lifts the read redaction: `isCeo` stays false, so unlock/abandon actions
+    // remain with the subsidiary's own CEO.
+    let viewerIsControllingParentCeo = false;
+    const controllingParent =
+      authUser?.userId && !isCeo ? getControllingCorporateParent(corporation) : null;
+    if (authUser?.userId && controllingParent) {
+      const parentCorp = await db
+        .collection<Corporation>("corporations")
+        .findOne(
+          { _id: controllingParent.corporationId },
+          { projection: { userId: 1, ceoVacant: 1 } }
+        );
+      viewerIsControllingParentCeo =
+        !!parentCorp &&
+        parentCorp.ceoVacant !== true &&
+        parentCorp.userId?.toString() === authUser.userId;
+    }
+    const redact =
+      !viewerIsControllingParentCeo &&
+      shouldRedactCorporation(
+        corporation,
+        authUser?.userId ?? undefined,
+        authUser?.isAdmin === true
+      );
 
     const currentTurn = gameState?.currentTurn ?? 1;
     const startingYear = gameState?.startingYear ?? STARTING_YEAR;

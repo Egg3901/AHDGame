@@ -167,4 +167,77 @@ describe("GET /api/corporation/[id]/tech", () => {
     expect(genericRoot.laneLocked).toBe(false);
     expect(sectorRoot.laneLocked).toBe(false);
   });
+
+  describe("private subsidiary visibility (ticket 1529)", () => {
+    const parentId = new ObjectId();
+    const parentCeoUserId = new ObjectId();
+
+    function privateSub() {
+      return makeCorp({
+        isPrivate: true,
+        totalShares: 1000,
+        rdScore: 42,
+        rdBudget: 500,
+        shareholders: [{ corporationId: parentId, shares: 1000 }],
+      });
+    }
+
+    async function getAs(userId: ObjectId | null, parentDoc: Record<string, unknown> | null) {
+      const { resolveCorporation } = await import("@/lib/api/corporations/resolveQuery");
+      vi.mocked(resolveCorporation).mockResolvedValue({
+        ok: true,
+        corporation: privateSub(),
+      } as never);
+      const { getAuthUser } = await import("@/lib/auth");
+      vi.mocked(getAuthUser).mockResolvedValue(
+        (userId ? { userId: userId.toString(), isAdmin: false } : null) as never
+      );
+      db.collection("corporations").findOne.mockResolvedValue(parentDoc as never);
+      const { GET } = await import("./route");
+      const res = await GET(new Request("http://localhost/api/corporation/x/tech"), {
+        params: Promise.resolve({ id: corpId.toString() }),
+      });
+      return res.json();
+    }
+
+    it("shows the tech book read-only to the controlling parent's CEO", async () => {
+      const body = await getAs(parentCeoUserId, {
+        _id: parentId,
+        userId: parentCeoUserId,
+        ceoVacant: false,
+      });
+      expect(body.redacted).toBe(false);
+      expect(body.isCeo).toBe(false);
+      expect(body.rdBudget).toBe(500);
+      for (const decade of body.decades ?? []) {
+        for (const node of [...decade.lanes.generic, ...decade.lanes.sector]) {
+          expect(node.affordable).toBe(false);
+        }
+      }
+    });
+
+    it("keeps redacting for an unrelated viewer", async () => {
+      const body = await getAs(new ObjectId(), {
+        _id: parentId,
+        userId: parentCeoUserId,
+        ceoVacant: false,
+      });
+      expect(body.redacted).toBe(true);
+      expect(body.rdBudget).toBeNull();
+    });
+
+    it("keeps redacting when the parent's CEO seat is vacant", async () => {
+      const body = await getAs(parentCeoUserId, {
+        _id: parentId,
+        userId: parentCeoUserId,
+        ceoVacant: true,
+      });
+      expect(body.redacted).toBe(true);
+    });
+
+    it("keeps redacting for anonymous viewers", async () => {
+      const body = await getAs(null, null);
+      expect(body.redacted).toBe(true);
+    });
+  });
 });
