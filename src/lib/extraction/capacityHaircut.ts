@@ -31,6 +31,25 @@ export const EXTRACTION_CAPACITY_HAIRCUT_TURNS = 240;
 /** One-turn utilization drop that restarts the capacity haircut ramp. */
 export const RAMP_REANCHOR_DELTA = 0.25;
 
+/**
+ * Most a sector's extraction capacity utilization may RISE in one turn. Falls
+ * apply at once (a deposit that runs out is out); rises ease in so a corrected
+ * reading (the anchor-currency fix lifted 56 live mines' ceilings ~2.5x) or a
+ * sudden deposit change cannot dump a step of new supply and input demand into
+ * one turn. 0.05 takes a mine from fully bound to unbound over 20 turns.
+ */
+export const EXTRACTION_UTILIZATION_MAX_RISE_PER_TURN = 0.05;
+
+/** `next` utilization, held to at most MAX_RISE above last turn's persisted value. */
+export function limitExtractionUtilizationRise(
+  next: { utilization: number; bindingResource: ExtractableResource | null },
+  prior: number | null | undefined
+): { utilization: number; bindingResource: ExtractableResource | null } {
+  if (typeof prior !== "number" || !Number.isFinite(prior)) return next;
+  const cap = Math.max(0, prior) + EXTRACTION_UTILIZATION_MAX_RISE_PER_TURN;
+  return next.utilization > cap ? { ...next, utilization: cap } : next;
+}
+
 /** Utilization below this is treated as "capacity bound" for display/alerts. */
 export const CAPACITY_BINDING_THRESHOLD = 0.9;
 

@@ -11,10 +11,14 @@ import { SECTOR_STRATEGIES } from "@/lib/constants/sectorStrategies";
 /** Per state, the unclaimed share of each resource deposit the state holds. */
 export type ExtractionResourceHeadroom = Partial<Record<ExtractableResource, number>>;
 
+/** ₳ revenue of a sector; see `extractionRevenueAnchorOf` for why not `revenue`. */
+export type SectorRevenueAnchorOf = (sector: CorporateSector) => number;
+
 function desiredExtractionByState(
   sectors: CorporateSector[],
   eraUnitScale: number,
-  extractionOutputScaleEnabled: boolean
+  extractionOutputScaleEnabled: boolean,
+  revenueAnchorOf: SectorRevenueAnchorOf
 ): Map<string, Partial<Record<ExtractableResource, number>>> {
   const desiredByState = new Map<string, Partial<Record<ExtractableResource, number>>>();
   for (const sector of sectors) {
@@ -30,7 +34,7 @@ function desiredExtractionByState(
       forState[resource] =
         (forState[resource] ?? 0) +
         extractionDesiredUnits(
-          sector.revenue,
+          revenueAnchorOf(sector),
           rate,
           resource,
           eraUnitScale,
@@ -51,12 +55,14 @@ export function computeExtractionHeadroomByStateResource(
   capDocs: Array<Pick<StateResourceCapacity, "stateId" | "resources">>,
   sectors: CorporateSector[],
   eraUnitScale: number,
-  extractionOutputScaleEnabled: boolean
+  extractionOutputScaleEnabled: boolean,
+  revenueAnchorOf: SectorRevenueAnchorOf
 ): Map<string, ExtractionResourceHeadroom> {
   const desiredByState = desiredExtractionByState(
     sectors,
     eraUnitScale,
-    extractionOutputScaleEnabled
+    extractionOutputScaleEnabled,
+    revenueAnchorOf
   );
   const headroomByState = new Map<string, ExtractionResourceHeadroom>();
   for (const capDoc of capDocs) {
@@ -76,13 +82,15 @@ export function computeExtractionHeadroomByState(
   capDocs: Array<Pick<StateResourceCapacity, "stateId" | "resources">>,
   sectors: CorporateSector[],
   eraUnitScale: number,
-  extractionOutputScaleEnabled: boolean
+  extractionOutputScaleEnabled: boolean,
+  revenueAnchorOf: SectorRevenueAnchorOf
 ): Map<string, number> {
   const byResource = computeExtractionHeadroomByStateResource(
     capDocs,
     sectors,
     eraUnitScale,
-    extractionOutputScaleEnabled
+    extractionOutputScaleEnabled,
+    revenueAnchorOf
   );
   const headroomByState = new Map<string, number>();
   for (const capDoc of capDocs) {

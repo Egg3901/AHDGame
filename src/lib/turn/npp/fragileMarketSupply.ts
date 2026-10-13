@@ -11,6 +11,7 @@ import {
   getOperatingSectorType,
 } from "@/lib/constants/sectorStrategies";
 import { loadWorldEraUnitScale } from "@/lib/currency/gdpAnchorRate";
+import { loadExtractionRevenueAnchorOf } from "@/lib/extraction/revenueAnchor";
 import { getExtractionOutputScaleEnabled } from "@/lib/market/featureFlag";
 import {
   computeExtractionHeadroomByState,
@@ -57,17 +58,21 @@ export async function loadNppPlacementSignals(
       ),
   ]);
   const extractionOutputScaleEnabled = await getExtractionOutputScaleEnabled(config);
+  const extractionSectors = sectors.filter((sector) => sector.sectorType === "extraction");
+  const revenueAnchorOf = await loadExtractionRevenueAnchorOf(db, extractionSectors);
   const extractionHeadroomByState = computeExtractionHeadroomByState(
     capacity,
-    sectors,
+    extractionSectors,
     eraUnitScale,
-    extractionOutputScaleEnabled
+    extractionOutputScaleEnabled,
+    revenueAnchorOf
   );
   const extractionHeadroomByStateResource = computeExtractionHeadroomByStateResource(
     capacity,
-    sectors,
+    extractionSectors,
     eraUnitScale,
-    extractionOutputScaleEnabled
+    extractionOutputScaleEnabled,
+    revenueAnchorOf
   );
   const currentYear =
     gameState?.currentYear ??
