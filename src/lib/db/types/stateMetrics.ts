@@ -90,6 +90,8 @@ export interface StateMetrics {
      * approval scoring (redundant with the gdpGrowth it will drive).
      */
     potentialGrowth?: StateMetricValue;
+    /** Growth reference Okun and migration measure against (metricEngine/outputTrend.ts). */
+    trendGrowth?: StateMetricValue;
     /**
      * Civilian labor force `L` = (workingAge − serving) × laborParticipation
      * (people), the input to potential growth (§5.1). Surfaced read-only; a raw
