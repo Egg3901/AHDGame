@@ -1,5 +1,9 @@
 import type { CommodityType } from "@/lib/constants/commodities";
-import { priceRealizationFactor } from "../priceRealization";
+import {
+  PRICE_REALIZATION_MAX,
+  PRICE_REALIZATION_MIN,
+  priceRealizationFactor,
+} from "../priceRealization";
 
 /** Accepts a stored sector type or an operating lane. */
 export function supportsCostPlusPricing(sectorType: string): boolean {
@@ -77,14 +81,24 @@ export function recordCostPlusBasis(input: {
   return validCostPlusBasis(basis) ? basis : undefined;
 }
 
-/** Recorded operating cost plus markup; output scarcity never multiplies this price. */
+/**
+ * Recorded operating cost plus markup; output scarcity never multiplies this price.
+ *
+ * The index is bounded by the same realization clamp the input bill uses
+ * (`priceRealizationFactor`), so the quote passes material inflation through
+ * exactly as far as the bill charges it. A tighter cap here (it was 1.5 while
+ * the bill ran to 2.0) quoted below cost whenever inputs averaged above 2.25x
+ * base, so a sold-out plant lost money at any markup.
+ */
 export function costPlusPriceFactor(
   index: number,
   markup: number,
   inputShare = 1,
   fixedShare = 0
 ): number {
-  const boundedIndex = Number.isFinite(index) ? Math.max(0.7, Math.min(1.5, index)) : 1;
+  const boundedIndex = Number.isFinite(index)
+    ? Math.max(PRICE_REALIZATION_MIN, Math.min(PRICE_REALIZATION_MAX, index))
+    : 1;
   const share = Number.isFinite(inputShare) ? Math.max(0, inputShare) : 0;
   const fixed = Number.isFinite(fixedShare) ? Math.max(0, fixedShare) : 0;
   return (fixed + share * boundedIndex) * (1 + clampPricingPosture(markup));

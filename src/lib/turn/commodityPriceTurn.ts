@@ -44,6 +44,7 @@ import {
   COMMODITY_TYPES,
   eraScaledBasePrices,
   computeRawSupplyDemand,
+  type SectorUnitsOut,
   type CommodityType,
   type ExtractableResource,
 } from "@/lib/constants/commodities";
@@ -117,6 +118,9 @@ import {
 } from "./commodity/pricing";
 import { buildBlocsByCountry, buildCurtainedCountries } from "./commodity/tradeContext";
 import { runFreightSettlementPhase } from "./commodity/sourcingSettlement";
+import { buildOwnRoutes } from "@/lib/logistics/ownRoutes";
+import { stateHops } from "@/lib/logistics/stateDistance";
+import { resolveSupplyPolicies } from "@/lib/market/internalSupply/rules";
 import { persistTurnOutputs } from "./commodity/persistence";
 import { loadBlockadeClosure } from "./commodity/blockadeClosure";
 import { bookExtractionDepletion } from "./commodity/extractionDepletion";
@@ -267,6 +271,10 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
             countryOwnerId: 1,
             countryId: 1,
             liquidCurrencyCode: 1,
+            internalSupplyPolicy: 1,
+            totalShares: 1,
+            "shareholders.corporationId": 1,
+            "shareholders.shares": 1,
           },
         }
       )
@@ -556,6 +564,7 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
   }
 
   // Compute raw supply/demand in units (retail demand scaled by GDP growth)
+  const sectorUnits: SectorUnitsOut = { supplyBySector: new Map(), inputDemandBySector: new Map() };
   const { global, byState, supplyByCorporation, demandTruncated, productionInputDemandByState } =
     computeRawSupplyDemand(
       sectorData,
@@ -579,7 +588,8 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
       LEDGER_BASE_PRICES,
       // Ticket 1370: the 1.5x cap bounds CALIBRATED demand. See the parameter.
       demandCalibration,
-      activePreset
+      activePreset,
+      sectorUnits
     );
 
   // Plants-tier produced/sold units for the inventory advance (see module).
@@ -799,6 +809,31 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
     demandUsesByState.set(stateId, byCommodity);
   }
 
+  const ownRoutes = buildOwnRoutes({
+    sectors: sectorData
+      .filter((s) => !!s.corporationId && !!s.sectorId && !!s.stateId)
+      .map((s) => ({
+        sectorId: s.sectorId,
+        corporationId: s.corporationId!.toString(),
+        stateId: s.stateId,
+      })),
+    supplyBySector: sectorUnits.supplyBySector,
+    inputDemandBySector: sectorUnits.inputDemandBySector,
+    policies: resolveSupplyPolicies(
+      allCorporations.map((c) => ({
+        id: c._id.toString(),
+        totalShares: c.totalShares,
+        holders: (c.shareholders ?? []).map((h) => ({
+          corporationId: h.corporationId?.toString(),
+          shares: h.shares,
+        })),
+        policy: c.internalSupplyPolicy,
+      }))
+    ),
+    stateToCountry,
+    hops: stateHops,
+  });
+
   // ── Landed-price freight settlement (shadow or active) ─────────────────
   const { freightSettlement, freightRampFraction, freightSettlementActive } =
     await runFreightSettlementPhase(
@@ -815,6 +850,7 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
         ftaPairs,
         affinityFor,
         demandUsesByState,
+        ownRoutes,
       },
       turn,
       now,

@@ -20,7 +20,12 @@ import { adjacentStates } from "@/lib/constants/stateAdjacency";
 import { unownedHeadroomUnitsOf } from "@/lib/corporations/marketShare";
 import { foundingStarterUnits } from "@/lib/corporations/foundingPlant";
 import { bucketKey } from "@/lib/nationalization/stateControlledBuckets";
-import { SECTOR_SUPPLY, type CommodityType } from "@/lib/constants/commodities";
+import {
+  EXTRACTABLE_RESOURCES,
+  SECTOR_SUPPLY,
+  type CommodityType,
+  type ExtractableResource,
+} from "@/lib/constants/commodities";
 import { getOperatingSectorType } from "@/lib/constants/sectorStrategies";
 import { clampProductionPolicy } from "@/lib/utils/productionPolicy";
 
@@ -78,11 +83,13 @@ export const FRAGILE_MARKET_SHORTAGE_SCORE = ESSENTIAL_SHORTAGE_SCORE;
 export function fragileMarketCommodityForSector(
   sectorType: OperatingSectorType,
   countryId: string,
-  priceRatioOf: CommodityPriceRatioFn
+  priceRatioOf: CommodityPriceRatioFn,
+  canSupply?: (commodity: CommodityType) => boolean
 ): CommodityType | null {
   let best: CommodityType | null = null;
   let bestRatio = FRAGILE_MARKET_SHORTAGE_SCORE;
   for (const commodity of FRAGILE_MARKET_COMMODITIES_BY_SECTOR[sectorType] ?? []) {
+    if (canSupply && !canSupply(commodity)) continue;
     const ratio = priceRatioOf(commodity, countryId);
     if (ratio != null && ratio >= bestRatio) {
       best = commodity;
@@ -96,12 +103,67 @@ export function fragileMarketCommodityForSector(
 export function fragileMarketFoundingStrategy(
   sectorType: OperatingSectorType,
   countryId: string,
-  priceRatioOf: CommodityPriceRatioFn
+  priceRatioOf: CommodityPriceRatioFn,
+  canSupply?: (commodity: CommodityType) => boolean
 ): string | undefined {
-  const commodity = fragileMarketCommodityForSector(sectorType, countryId, priceRatioOf);
+  const commodity = fragileMarketCommodityForSector(sectorType, countryId, priceRatioOf, canSupply);
   if (commodity === "fertilizers") return "fertilizers";
   if (commodity === "rare_earth") return "rare_earth_mining";
   return undefined;
+}
+
+/**
+ * Deposit headroom a fragile-market mine in `stateId` would have for
+ * `commodity`. Non-extractable commodities are not deposit-bound (1). Without
+ * the per-resource signal the state reads as uncapped (1), which is the legacy
+ * behavior for callers that do not load capacity documents.
+ */
+export function fragileDepositHeadroom(
+  signals: PlacementSignals | undefined,
+  stateId: string,
+  commodity: CommodityType
+): number {
+  if (!(EXTRACTABLE_RESOURCES as readonly string[]).includes(commodity)) return 1;
+  const headroom = signals?.extractionResourceHeadroomOf?.(
+    stateId,
+    commodity as ExtractableResource
+  );
+  return headroom === undefined ? 1 : Math.max(0, Math.min(1, headroom));
+}
+
+/**
+ * Deposit gate for the fragile-market treatment: an extraction founding may
+ * only target a resource its state actually holds unclaimed deposit of. Other
+ * sector types are not deposit-bound, so they get no gate.
+ */
+export function fragileSupplyGate(
+  sectorType: string,
+  stateId: string,
+  signals: PlacementSignals | undefined
+): ((commodity: CommodityType) => boolean) | undefined {
+  if (sectorType !== "extraction") return undefined;
+  return (commodity) => fragileDepositHeadroom(signals, stateId, commodity) > 0;
+}
+
+/**
+ * Price signal an extraction candidate in `stateId` can actually answer: an
+ * extractable resource the state holds no unclaimed deposit of reads as
+ * unpriced (null), which every shortage score skips. Without this a timber
+ * state scored as a critical rare earth shortage and founded a mine that
+ * could only add timber. Other sector types, and callers that do not load
+ * the per-resource signal, get the price function back unchanged.
+ */
+export function depositAwarePriceRatioOf(
+  sectorType: string,
+  stateId: string,
+  signals: PlacementSignals | undefined,
+  priceRatioOf: CommodityPriceRatioFn
+): CommodityPriceRatioFn {
+  if (sectorType !== "extraction" || !signals?.extractionResourceHeadroomOf) return priceRatioOf;
+  return (commodity, countryId) =>
+    fragileDepositHeadroom(signals, stateId, commodity) > 0
+      ? priceRatioOf(commodity, countryId)
+      : null;
 }
 
 /** A function that returns currentPrice/basePrice for a commodity in a country,
@@ -129,6 +191,14 @@ export interface PlacementSignals {
    * output forever, it is never the right build.
    */
   extractionHeadroomOf?: (stateId: string) => number;
+  /**
+   * Unclaimed share of ONE resource's deposit in a state, in [0, 1]: 0 when
+   * the state holds none of it, 1 for an uncapped legacy state. The aggregate
+   * signal above cannot tell a timber state from a rare earth state, so a
+   * shortage-driven founding or growth step must read this one for the
+   * resource the mine would actually extract.
+   */
+  extractionResourceHeadroomOf?: (stateId: string, resource: ExtractableResource) => number;
   /** Treatment gate: route an existing entry slot to uncovered markets first. */
   preferEmptyMarkets?: boolean;
   /** Treatment gate: route an existing entry slot to one of four diagnosed fragile markets. */
@@ -397,10 +467,10 @@ export function findBestUnownedSector(
     sectorShortageScore(
       getOperatingSectorType(c.sectorType, c.industryModel, c.mediaDiscriminator),
       countryId,
-      (commodity, cid) => {
+      depositAwarePriceRatioOf(c.sectorType, c.stateId, signals, (commodity, cid) => {
         const stateRatio = signals?.statePriceRatioOf?.(commodity, c.stateId);
         return stateRatio ?? priceRatioOf(commodity, cid);
-      }
+      })
     );
   const score = (c: UnownedSector) => {
     // Extraction ranks on deposit x shortage (via marketSizeOf); demand-side
@@ -418,11 +488,18 @@ export function findBestUnownedSector(
     const commodity = fragileMarketCommodityForSector(
       getOperatingSectorType(c.sectorType, c.industryModel, c.mediaDiscriminator),
       c.countryId,
-      candidatePriceRatioOf(c)
+      candidatePriceRatioOf(c),
+      fragileSupplyGate(c.sectorType, c.stateId, signals)
     );
     if (!commodity) return 0;
     const ratio = candidatePriceRatioOf(c)(commodity, c.countryId) ?? 0;
-    let result = marketSizeOf(c) * ratio;
+    // A mine is sized by the deposit of the resource it is founded to extract,
+    // not by the state's other deposits: a timber state has no rare earth room.
+    const size =
+      c.sectorType === "extraction" && signals?.extractionResourceHeadroomOf
+        ? fragileDepositHeadroom(signals, c.stateId, commodity)
+        : marketSizeOf(c);
+    let result = size * ratio;
     if (c.stateId === hqState) result *= HQ_STATE_SCORE_BONUS;
     return result;
   };
@@ -436,7 +513,7 @@ export function findBestUnownedSector(
     sectorPeakShortageScore(
       getOperatingSectorType(c.sectorType, c.industryModel, c.mediaDiscriminator),
       countryId,
-      priceRatioOf
+      depositAwarePriceRatioOf(c.sectorType, c.stateId, signals, priceRatioOf)
     );
   // Highest market-weighted score wins; the HQ state gets a score bonus, not
   // the old unconditional first pick (see HQ_STATE_SCORE_BONUS).
