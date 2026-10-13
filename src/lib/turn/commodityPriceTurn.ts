@@ -104,6 +104,8 @@ import {
   applyRateSensitiveDemand,
   aggregateByCountry,
   applyGovernmentDemand,
+  capHealthcareDemandToLocalSupply,
+  globalDemandCapSupply,
   applyDemandCalibration,
   demandCalibrationFor,
   buildStatesByCountry,
@@ -618,6 +620,12 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
     applyDemographicsUplift(allStates, global, byState);
   }
 
+  const healthcareOtherDemandByState = new Map(
+    [...byState].map(([stateId, balances]) => [
+      stateId,
+      balances.get("healthcare_services")?.demand ?? 0,
+    ])
+  );
   let householdFinalDemandByState = new Map<string, Map<CommodityType, number>>();
   if (householdConsumptionEnabled) {
     // Optional per-world sizing override (sandbox tuning without a redeploy).
@@ -640,7 +648,9 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
         // plants supply uses, clamped per commodity against prior supply. Legacy
         // worlds pass 1/undefined and are byte-identical (ticket #1027).
         plantsUnitScale: plantsLedgerEnabled ? plantsHouseholdUnitScale(worldPreset) : 1,
-        priorGlobalSupply: plantsLedgerEnabled ? priorGlobalSupply : undefined,
+        priorGlobalSupply: plantsLedgerEnabled
+          ? globalDemandCapSupply(priorGlobalSupply)
+          : undefined,
         states: allStates.map((s) => ({
           stateId: s._id,
           countryId: s.countryId,
@@ -712,12 +722,15 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
       ledgerCommandEconomyEnabled,
       statesByCountry,
       stateToCountry,
-      // Plants worlds cap government purchases at last turn's supply, like households.
+      // Healthcare is capped below against the same state supply the clearing pre-pass reads.
+      // Other commodities retain their prior-world-supply ceiling.
       priorGlobalSupply: plantsLedgerEnabled
-        ? new Map(
-            existingPrices
-              .filter((p) => typeof p.globalSupply === "number")
-              .map((p) => [p.commodity as CommodityType, p.globalSupply as number])
+        ? globalDemandCapSupply(
+            new Map(
+              existingPrices
+                .filter((p) => typeof p.globalSupply === "number")
+                .map((p) => [p.commodity as CommodityType, p.globalSupply as number])
+            )
           )
         : undefined,
       householdDemand: sumHouseholdDemand(householdFinalDemandByState),
@@ -728,6 +741,19 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
     byState,
     demandTruncated
   );
+
+  if (plantsLedgerEnabled) {
+    capHealthcareDemandToLocalSupply({
+      global,
+      byCountry,
+      byState,
+      stateToCountry,
+      householdDemandByState: householdFinalDemandByState,
+      otherDemandByState: healthcareOtherDemandByState,
+      truncated: demandTruncated,
+      demandCalibration,
+    });
+  }
 
   // ── Era-aware demand calibration ──────────────────────────────────────
   // Applied once, after the last demand generator and BEFORE freight sourcing,
