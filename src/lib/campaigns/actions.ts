@@ -68,3 +68,28 @@ export function campaignActionsPerTurn(inputs: CampaignActionInputs): number {
 
   return calculateCampaignActions(inputs.nppEndorsements + player + weighted, baseline);
 }
+
+/**
+ * How many turns of its own income a campaign may bank. Past this the turn pays
+ * nothing until the campaign spends back under it.
+ */
+export const CAMPAIGN_ACTION_BANK_TURNS = 48;
+
+/** Most actions a campaign earning `perTurn` a turn may hold from income. */
+export function campaignActionBankCap(perTurn: number): number {
+  const safe = Number.isFinite(perTurn) && perTurn > 0 ? Math.floor(perTurn) : 0;
+  return safe * CAMPAIGN_ACTION_BANK_TURNS;
+}
+
+/**
+ * Actions the turn actually credits: income up to the bank cap, never past it.
+ * A campaign already over the cap (banked before the cap existed, or whose
+ * income fell) keeps what it holds and simply earns nothing until it spends
+ * below the line, so the cap never claws anything back.
+ */
+export function cappedCampaignActionGrant(currentActions: number, perTurn: number): number {
+  if (!Number.isFinite(perTurn) || perTurn <= 0) return 0;
+  const current = Number.isFinite(currentActions) ? currentActions : 0;
+  const headroom = campaignActionBankCap(perTurn) - current;
+  return Math.max(0, Math.min(perTurn, headroom));
+}

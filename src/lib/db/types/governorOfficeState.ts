@@ -31,6 +31,8 @@ export interface GovernorOfficeState {
   referendumRequestRevision?: number;
   /** Turn when the AP pool last incremented. */
   lastActionGrantedTurn: number;
+  /** Turn the holder last bought +1 office action with main AP (once per turn). */
+  lastGubernatorialActionTopUpTurn?: number;
 
   /**
    * UK FM Devolution Policy — only meaningful when

@@ -11,7 +11,7 @@ import {
   resolveOfficeActionBonus,
 } from "@/lib/actions/officeActionBonus";
 import { getActionBreakdown } from "@/lib/actions/actionBreakdown";
-import { resolvePositionNiBonus } from "@/lib/actions/positionNiBonus";
+import { loadCharacterRoleBonuses } from "@/lib/actions/characterRoleBonuses";
 import { resolveProfilePositionLabels } from "@/lib/profilePositionLabels";
 import { getCabinetMembersCollection } from "@/lib/db/collections/cabinetMembers";
 import { resolveGameYear } from "@/lib/era/era";
@@ -43,7 +43,7 @@ import {
 } from "@/lib/utils/fundGeneration";
 import {
   calculateFavorabilityAboveThresholdPenalty,
-  calculateNationalInfluenceGain,
+  calculateNetNationalInfluencePerTurn,
   calculatePoliticalInfluenceDecay,
 } from "@shared/constants/formulas";
 import {
@@ -518,7 +518,10 @@ export default async function ProfilePage() {
 
   const influence = character.politicalInfluence ?? 0;
   const nationalInfluence = character.nationalInfluence ?? 0;
-  const influenceDecay = calculatePoliticalInfluenceDecay(influence).toFixed(2);
+  const influenceDecay = calculatePoliticalInfluenceDecay(
+    influence,
+    character.politicalInfluenceDecayMultiplier ?? 1
+  ).toFixed(2);
   const favorability = character.favorability ?? 50;
   const infamy = character.infamy ?? 0;
   const infamyPenalty = infamy > 20 ? ((infamy - 20) * 0.05).toFixed(2) : null;
@@ -583,22 +586,20 @@ export default async function ProfilePage() {
     countryId: (character.countryId ?? "US") as CountryId,
   });
   const chairActionBonus = chairBankRow ? (gameConfig?.chairActionBonus ?? 3) : 0;
-  const positionNiBonus = resolvePositionNiBonus({
-    currentOfficeType: character.currentOffice?.type,
-    countryId: (character.countryId ?? "US") as CountryId,
+  const roleBonuses = await loadCharacterRoleBonuses(apDb, {
+    character,
+    party: party ?? null,
     congressLeadershipRoles: congressLeadershipRows.map((row) => row.role),
-    isPartyChair: party?.chairId?.toString() === character._id.toString(),
-    isPartySubChair:
-      party?.viceChairId?.toString() === character._id.toString() ||
-      party?.treasurerId?.toString() === character._id.toString(),
     isSeatedJustice: justiceSeat != null,
-    cabinetCountryId: cabinetSeat
-      ? ((cabinetSeat.countryId ?? character.countryId ?? "US") as CountryId)
-      : undefined,
+    isCentralBankChair: chairBankRow != null,
+    cabinetSeats,
   });
-  const nationalGainPerTurn = (calculateNationalInfluenceGain(influence) + positionNiBonus).toFixed(
-    2
-  );
+  const nationalGainPerTurn = calculateNetNationalInfluencePerTurn(
+    character.nationalInfluence ?? 0,
+    influence,
+    roleBonuses.positionNiBonus
+  ).toFixed(2);
+
   const profileBaseOffice =
     character.currentOffice && CABINET_OFFICE_TYPES.has(character.currentOffice.type)
       ? electedSeat
@@ -624,7 +625,11 @@ export default async function ProfilePage() {
     gameYear,
     enabledCabinetSeats,
   });
-  const totalActionsPerTurn = baseActionsPerTurn + officeActionBonus + chairActionBonus;
+  // Chamber leadership and the Court are positions too; the itemised
+  // breakdown below lists them separately.
+  const positionActionBonus =
+    officeActionBonus + roleBonuses.leadershipActionBonus + roleBonuses.justiceActionBonus;
+  const totalActionsPerTurn = baseActionsPerTurn + positionActionBonus + chairActionBonus;
   const actionHoarding = character.actions > ACTION_HOARDING_THRESHOLD;
 
   void checkPassiveProfileAchievements(character.userId, character._id, {
@@ -715,6 +720,8 @@ export default async function ProfilePage() {
     officeActionBonus: gameConfig?.officeActionBonus,
     baseActionsPerTurn,
     chairActionBonus,
+    justiceActionBonus: roleBonuses.justiceActionBonus,
+    leadershipActionBonus: roleBonuses.leadershipActionBonus,
     bonusActionsFromParty: bonusActionsFromParty ?? 0,
   });
 
@@ -803,7 +810,7 @@ export default async function ProfilePage() {
               infamyPenalty={infamyPenalty}
               maxNPI={maxNPI}
               baseActionsPerTurn={baseActionsPerTurn}
-              officeActionBonus={officeActionBonus}
+              officeActionBonus={positionActionBonus}
               chairActionBonus={chairActionBonus}
               actionBreakdown={actionBreakdown}
               totalActionsPerTurn={totalActionsPerTurn}

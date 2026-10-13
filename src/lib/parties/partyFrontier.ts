@@ -17,16 +17,31 @@
  * same reason the Build Org foothold rule re-checks presence live.
  */
 import type { Db } from "mongodb";
-import { adjacentStates } from "@/lib/constants/stateAdjacency";
+import { STATE_ADJACENCY, adjacentStates } from "@/lib/constants/stateAdjacency";
 import type { Character, ElectedOfficial, NPP, PoliticalParty, State } from "@/lib/db/types";
 import type { CountryId } from "@/lib/constants/countries";
 
 /**
+ * Regions the country's adjacency map lists with no neighbours at all (RU
+ * `MOL`). Distinct from unknown regions, which have no entry.
+ */
+export function isolatedRegions(countryId: CountryId): string[] {
+  const map = STATE_ADJACENCY[countryId];
+  if (!map) return [];
+  return Object.keys(map).filter((id) => map[id]?.length === 0);
+}
+
+/**
  * Expand a presence set by exactly one adjacency hop. Pure.
  *
- * A state with no entry in the country's adjacency map contributes only
- * itself — `adjacentStates` returns [] for both an unknown state and a
- * genuinely isolated one (US `HI`), and the two are indistinguishable here.
+ * A state absent from the country's adjacency map contributes only itself.
+ *
+ * Deliberately disconnected regions (an explicit empty neighbour list, such
+ * as RU MOL) have no land or ferry edge, so one-hop growth could never reach
+ * them: a party without a foothold there was locked out for good, and a
+ * player homed there could only join parties already present there. Such a
+ * region is treated as next to every region, so any party with presence
+ * somewhere can grow into it. An empty presence set stays empty.
  */
 export function expandFrontier(countryId: CountryId, presence: Iterable<string>): Set<string> {
   const out = new Set<string>();
@@ -34,6 +49,9 @@ export function expandFrontier(countryId: CountryId, presence: Iterable<string>)
     if (!stateId) continue;
     out.add(stateId);
     for (const neighbour of adjacentStates(countryId, stateId)) out.add(neighbour);
+  }
+  if (out.size > 0) {
+    for (const isolated of isolatedRegions(countryId)) out.add(isolated);
   }
   return out;
 }

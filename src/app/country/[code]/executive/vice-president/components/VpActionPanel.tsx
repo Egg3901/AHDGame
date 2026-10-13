@@ -4,11 +4,17 @@ import { useState } from "react";
 import { Button } from "@/components/ui";
 import type { VpActionDef } from "@/lib/constants/vicePresidentActions";
 import { apiErrorText } from "@/lib/errors/catalog";
+import type { OfficePoolTopUpStatus } from "@/lib/actions/officePoolTopUpRules";
+import { OfficePoolTopUpButton } from "@/components/officials/OfficePoolTopUpButton";
 
 interface VpActionPanelProps {
   actions: VpActionDef[];
   actionsRemaining: number;
   resetHint: string;
+  /** Pool cap; the top-up button only shows below it. */
+  actionCap?: number;
+  /** Holder-only state for buying +1 action with main AP. */
+  topUp?: OfficePoolTopUpStatus | null;
   canAct: boolean;
   /** True when there is a character-backed president to campaign for. */
   hasPresident: boolean;
@@ -25,6 +31,8 @@ export function VpActionPanel({
   actions,
   actionsRemaining,
   resetHint,
+  actionCap = 2,
+  topUp = null,
   canAct,
   hasPresident,
   countryCode,
@@ -82,7 +90,18 @@ export function VpActionPanel({
           >
             {actionsRemaining} {actionsRemaining !== 1 ? "actions" : "action"} remaining
           </span>
-          {actionsRemaining < 2 && <p className="mt-1 text-xs text-muted">{resetHint}</p>}
+          {actionsRemaining < actionCap && <p className="mt-1 text-xs text-muted">{resetHint}</p>}
+          {canAct && (
+            <OfficePoolTopUpButton
+              className="mt-2"
+              countryCode={countryCode}
+              body={{ pool: "vp" }}
+              remaining={actionsRemaining}
+              cap={actionCap}
+              topUp={topUp}
+              onUpdate={onUpdate}
+            />
+          )}
         </div>
       </div>
 

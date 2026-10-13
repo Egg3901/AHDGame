@@ -36,14 +36,20 @@ Actions are your activity budget. Everything you do (campaigning, voting, wiring
 Each turn you receive:
 
 - **4 base actions**: everyone gets this.
-- **Office bonus**: stacked on top of base:
+- **Office bonus**: stacked on top of base. Each country's office table sets the value; typical ones:
   - House / State Senate / Bundestag member / Sangiin member / MP: **+1**
   - Senate / Vice President / state governor analogue: **+2**
   - Governor: **+2**
-  - President: **+4**
-  - Central Bank Chair: **+3** (stacks on any office bonus you also hold)
+  - Executive President, or a Prime Minister or Premier who runs the government: **+4** (French Prime Minister **+3**)
+  - Ceremonial head of state (for example the Presidents of Italy, Austria and China): **+0**
+- **Role bonuses**: stack on top of your office:
+  - Central Bank Chair: **+3**
+  - Supreme Court justice: **+2**
+  - Chamber leadership, highest single role only: presiding officers (Speaker of the House, Bundestagspräsident, NPCSC Chairman, Nigerian Speaker and Senate President) **+3**; Majority and Minority Leaders and the Leader of the Opposition **+2**; President pro tempore, CPPCC Chairman, whips and shadow cabinet members **+1**
 - **Party bonus**: a variable share of your party's action pool, allocated by Party Influence × platform-alignment closeness.
 - **Starting grant**: a one-time 25 actions at character creation.
+
+Office action pools (ministerial, vice president, justice, gubernatorial) are separate from these actions. Once per turn per pool you can spend 10 actions to buy 1 office action, up to that pool's cap.
 
 Actions accumulate up to a **cap of 200**. Above 100 you pay a **−4 hoarding penalty per turn** applied before the refresh. For characters with only the base 4 actions, this creates a soft cap around **100-104**; office holders with higher refresh still grow toward the hard cap, just slowed by 4 per turn.
 

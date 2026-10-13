@@ -461,6 +461,7 @@ export default function CabinetOfficePage() {
                       positionId={positionId}
                       singleRegionFocus={mechanics.singleRegionFocus ?? null}
                       regionData={data.regionData}
+                      topUp={data.ministerialTopUp ?? null}
                       onUpdate={refetch}
                     />
                   )}

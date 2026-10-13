@@ -97,11 +97,11 @@ A unit costs **three separate resources**, and you must have all three.
 
 ### 1. A ministerial action
 
-Recruiting costs **one ministerial action**. Your cabinet seat holds up to **4 ministerial actions**, and they refill to that cap **once per real day**, at midnight Eastern, not per turn.
+Recruiting costs **one ministerial action**. Your cabinet seat holds up to **4 ministerial actions** and regains **1 every 6 turns**, banked up to that cap. Once per turn you can also spend **10 AP** to buy 1 extra action, up to the cap.
 
 That is the real throttle on how fast an army can grow, and it is far tighter than money. **You can raise at most four formations a day**, no matter how large your treasury or how deep your manpower pool. An army is built over real weeks.
 
-Upgrading also costs one, so recruiting and modernising compete for the same daily budget. Setting a posture, assigning a unit to a general, and disbanding are all **free**.
+Upgrading also costs one, so recruiting and modernising compete for the same action pool. Setting a posture, assigning a unit to a general, and disbanding are all **free**.
 
 ### 2. Manpower
 
@@ -238,7 +238,7 @@ An admin may pause **new** defence procurement in an emergency. Existing contrac
 1. **Check your era.** Open the recruit panel and see which branches and types actually exist this year.
 2. **Check manpower before money.** Manpower refuses you outright; treasury just goes into debt.
 3. **Build infantry for mass, specialists for edge.** Cheap divisions are the efficient way to hold ground; special forces and armour are how you break it.
-4. **Build early, and build daily.** Four ministerial actions a day plus six turns of build time means a serious army takes real weeks. The force that fights your war is the one you started long before it.
+4. **Build early, and build steadily.** One ministerial action every six turns plus six turns of build time means a serious army takes real weeks. The force that fights your war is the one you started long before it.
 5. **Modernise selectively.** Upgrade the formations you intend to keep and fight with. Upgrading everything triples your running costs for a modest capability gain.
 6. **Leave postures low in peacetime.** High Alert on a peacetime army burns money and erodes cohesion at home for nothing.
 

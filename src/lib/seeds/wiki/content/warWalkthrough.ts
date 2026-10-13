@@ -31,7 +31,7 @@ This is the part players skip and then lose wars over.
 **Turn 1,000.** Brennan opens the defence office → **Military** tab. The US roster is its seeded order of battle. Brennan checks three things:
 
 - **Manpower pool**: say 2.1 million against a ceiling of 3.4 million. The US sits on **Selective Service** (reserve law level 2).
-- **Ministerial actions**: 4, refilling once per real day.
+- **Ministerial actions**: up to 4, regaining 1 every 6 turns.
 - **Treasury**: healthy.
 
 He recruits. Four ministerial actions means **four formations a day, maximum**, so this takes real time:

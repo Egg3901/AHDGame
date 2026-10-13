@@ -63,10 +63,12 @@ export function calculateInfamyFavorabilityDrain(infamy: number): number {
 /**
  * Political influence decay per turn.
  * Lower than the old 1% slope so high-influence characters can maintain a base
- * without spending nearly their full action budget on upkeep.
+ * without spending nearly their full action budget on upkeep. `multiplier`
+ * scales the decay for members of the party holding the national executive
+ * (see {@link executivePartyInfluenceDecayMultiplier}); everyone else passes 1.
  */
-export function calculatePoliticalInfluenceDecay(currentInfluence: number): number {
-  return Math.max(0, Math.min(100, currentInfluence)) * POLITICAL_INFLUENCE_DECAY_RATE;
+export function calculatePoliticalInfluenceDecay(currentInfluence: number, multiplier = 1): number {
+  return Math.max(0, Math.min(100, currentInfluence)) * POLITICAL_INFLUENCE_DECAY_RATE * multiplier;
 }
 
 /**
@@ -80,19 +82,79 @@ export function calculatePoliticalInfluenceDecay(currentInfluence: number): numb
  * NPP_POLITICAL_INFLUENCE_FLOOR so the player-tuned decay can't bleed a seeded
  * (10) NPP toward 0.
  */
-export function applyPoliticalInfluenceDecay(currentInfluence: number, floor = 0): number {
-  const decayed = currentInfluence - calculatePoliticalInfluenceDecay(currentInfluence);
+export function applyPoliticalInfluenceDecay(
+  currentInfluence: number,
+  floor = 0,
+  multiplier = 1
+): number {
+  const decayed = currentInfluence - calculatePoliticalInfluenceDecay(currentInfluence, multiplier);
   const lowerBound = Math.min(currentInfluence, floor);
   return Math.min(100, Math.max(lowerBound, decayed));
 }
 
 /**
- * Passive NPI gain per turn from current state influence.
- * This intentionally remains tied to the old 1% divisor so national reputation
- * growth keeps pace with the established presidential progression.
+ * Holding power costs home-state standing. Members of the party that holds the
+ * national executive (the president's party in presidential systems, the head
+ * of government's party in parliamentary ones) lose political influence faster,
+ * scaled by that government's approval:
+ *   0% approval   → 2.0x decay
+ *   50% approval  → 1.5x decay
+ *   100% approval → 1.0x decay
+ */
+export function executivePartyInfluenceDecayMultiplier(approval: number): number {
+  const clamped = Math.max(0, Math.min(100, Number.isFinite(approval) ? approval : 50));
+  return 2 - clamped / 100;
+}
+
+/** National influence decays by 1% of current value per turn. */
+export const NATIONAL_INFLUENCE_DECAY_RATE = 0.01;
+
+/**
+ * Passive national influence per turn from current state influence. Steep at
+ * both ends: a strong home base builds a national name, a neglected one costs
+ * it.
+ *   SI 0   → −0.5 / turn
+ *   SI 25  →  0
+ *   SI 50  → +0.5
+ *   SI 75  → +1.25
+ *   SI 100 → +2.0
  */
 export function calculateNationalInfluenceGain(currentInfluence: number): number {
-  return Math.max(0, Math.min(100, currentInfluence)) / 100;
+  const si = Math.max(0, Math.min(100, currentInfluence));
+  return si <= 50 ? si / 50 - 0.5 : 0.5 + (si - 50) * 0.03;
+}
+
+/** National influence lost to decay this turn. */
+export function calculateNationalInfluenceDecay(currentNational: number): number {
+  return Math.max(0, currentNational) * NATIONAL_INFLUENCE_DECAY_RATE;
+}
+
+/**
+ * One turn of national influence: decay, then this turn's gain (state
+ * influence term plus position bonuses). Floored at 0. Because decay is
+ * proportional, every role settles where gain equals decay, at 100 × gain.
+ */
+export function applyNationalInfluenceTurn(currentNational: number, gain: number): number {
+  const current = Math.max(0, currentNational);
+  return Math.max(0, current - calculateNationalInfluenceDecay(current) + gain);
+}
+
+/**
+ * Net national influence change next turn for display: the state-influence
+ * term plus position bonuses, less this turn's 1% decay.
+ */
+export function calculateNetNationalInfluencePerTurn(
+  currentNational: number,
+  currentInfluence: number,
+  positionBonus: number
+): number {
+  const current = Math.max(0, currentNational);
+  return (
+    applyNationalInfluenceTurn(
+      current,
+      calculateNationalInfluenceGain(currentInfluence) + positionBonus
+    ) - current
+  );
 }
 
 /**

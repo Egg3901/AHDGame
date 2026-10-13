@@ -138,6 +138,16 @@ export const ORG_PROPOSAL_VOTING_TURNS = 24;
 export const DIPLOMATIC_ACTIONS_PER_TURN = 4;
 
 /**
+ * Personal agenda pool of an organisation's head: accrues this many a turn, up
+ * to {@link ORG_HEAD_AGENDA_ACTION_CAP}, and pays only for proposals inside the
+ * organisation they lead. Spent before the country's diplomatic budget.
+ */
+export const ORG_HEAD_AGENDA_ACTIONS_PER_TURN = 2;
+
+/** Most agenda actions an organisation head can bank. */
+export const ORG_HEAD_AGENDA_ACTION_CAP = 4;
+
+/**
  * How long a passed sanctions resolution stays in force (turns) before the turn
  * phase auto-lifts its embargoes and marks the resolution terminated.
  * 48 turns ≈ one game year.

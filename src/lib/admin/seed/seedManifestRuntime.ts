@@ -858,6 +858,7 @@ export const RUNTIME: CollectionEntry[] = [
   },
   { name: "tradeFlowSnapshots", category: "runtime" },
   { name: "diplomaticActions", category: "runtime" },
+  { name: "orgHeadAgendaActions", category: "runtime" },
   { name: "customInternationalOrganizations", category: "runtime" },
   { name: "organizationFunds", category: "runtime" },
   { name: "organizationLeadershipElections", category: "runtime" },

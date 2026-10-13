@@ -15,7 +15,7 @@ This makes goal-setting inherently dynamic. A goal that made sense at turn 50 ma
 The highest executive office in your country. Reaching it requires:
 
 **For US President:**
-1. Accumulate NPI to 60+ (takes 50-100 turns of active play)
+1. Accumulate NPI to 60+. NPI decays 1% per turn and settles at 100 times your per-turn gain, so this takes a national seat or party office held for roughly 80 turns; a home base alone will not get there
 2. Maintain favorability 70+
 3. Build party influence and Campaign Presence in delegate-rich states
 4. Win the presidential primary: pledged delegates across the state waves, settled at a convention if nobody holds a majority
@@ -85,7 +85,7 @@ Winning one election is a milestone. Holding a Senate seat for 3+ consecutive te
 
 This requires:
 - **Maintaining favorability** above 65 between elections (don't go silent between campaigns)
-- **Building PI continuously** (0.75%/turn decay means you need ongoing investment)
+- **Building PI continuously** (0.75%/turn decay, faster while your party holds the national executive with low approval, means you need ongoing investment)
 - **Keeping party org high** in your home state
 - **Avoiding infamy accumulation** that reduces endorsement rates
 

@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import type { JusticeActionDef } from "@/lib/constants/justiceActions";
 import type { DivergentDeathChance } from "@/lib/scotus/tenure";
+import type { OfficePoolTopUpStatus } from "@/lib/actions/officePoolTopUpRules";
 
 export interface JusticeOfficeSeat {
   seatNumber: number;
@@ -23,6 +24,8 @@ export interface JusticeOfficeData {
   actionCap: number;
   resetHint: string;
   actions: JusticeActionDef[];
+  /** Holder-only: state for buying +1 action with main AP. */
+  topUp: OfficePoolTopUpStatus | null;
 }
 
 /** Mirrors `useVicePresidentOffice` — fetches the viewer's Justice office briefing (#3605). */

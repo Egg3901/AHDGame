@@ -7,6 +7,7 @@ import { canTableResolutionType } from "@/lib/constants/orgCategory";
 import { DIRECTIVE_CATALOG, getDirectiveDef } from "@/lib/constants/orgDirectives";
 import type { ProposalVote } from "@/lib/db/types/internationalOrganization";
 import type { OrgSummary, OrgViewerInfo } from "../orgTypes";
+import { orgProposingCountry } from "../orgTypes";
 import { VoteButtons } from "../VoteButtons";
 import { VoteRoster } from "../VoteRoster";
 import {
@@ -32,6 +33,10 @@ interface Props {
  */
 export function DirectivePanel({ org, viewer, currentTurn, votingWindowTurns, onChange }: Props) {
   const viewerFmCountry = viewer?.foreignMinisterOf ?? viewer?.headOfGovernmentOf ?? null;
+  // Who tables resolutions: the FM/HoG country, or the member an org head sits
+  // for (agenda pool). Votes stay on viewerFmCountry.
+  const proposer = orgProposingCountry(viewer, org.id);
+  const proposerIsMember = proposer != null && org.members.some((m) => m.countryId === proposer);
   const viewerIsMember =
     viewerFmCountry != null && org.members.some((m) => m.countryId === viewerFmCountry);
   // Tabling only needs membership, but voting needs a ballot: the route enforces
@@ -53,7 +58,7 @@ export function DirectivePanel({ org, viewer, currentTurn, votingWindowTurns, on
   const selectedDef = getDirectiveDef(directiveKey);
 
   async function submit() {
-    if (!viewerFmCountry || !directiveKey) {
+    if (!proposer || !directiveKey) {
       setError("Choose a directive.");
       return;
     }
@@ -61,7 +66,7 @@ export function DirectivePanel({ org, viewer, currentTurn, votingWindowTurns, on
     setError(null);
     try {
       const res = await fetch(
-        `/api/country/${viewerFmCountry}/international-organizations/${org.id}/legislation`,
+        `/api/country/${proposer}/international-organizations/${org.id}/legislation`,
         {
           method: "POST",
           headers: { "content-type": "application/json" },
@@ -109,7 +114,7 @@ export function DirectivePanel({ org, viewer, currentTurn, votingWindowTurns, on
             a majority of the members that hold a vote.
           </p>
         </div>
-        {viewerIsMember && viewerFmCountry && canTable && (
+        {proposerIsMember && proposer && canTable && (
           <Button
             size="md"
             variant={showForm ? "ghost" : "primary"}
@@ -120,7 +125,7 @@ export function DirectivePanel({ org, viewer, currentTurn, votingWindowTurns, on
         )}
       </div>
 
-      {showForm && viewerIsMember && viewerFmCountry && canTable && (
+      {showForm && proposerIsMember && proposer && canTable && (
         <div className="rounded-xl border border-primary/30 bg-primary/5 p-5">
           <h4 className="text-sm font-semibold text-foreground">Table a directive</h4>
           <div className="mt-3 max-w-md">

@@ -1,47 +1,34 @@
 // src/lib/turn/justiceActionReset.ts
-import type { AnyBulkWriteOperation } from "mongodb";
 import type { Db } from "@/lib/mongodb";
 import type { SupremeCourtSeat } from "@/lib/db/types/scotus";
-import { getCalendarDayInTimezone, shouldApplyDailyReset } from "@/lib/time/dailyReset";
-import { JUSTICE_ACTION_CAP } from "@/lib/constants/justiceActions";
+import { JUSTICE_ACTION_ACCRUAL_TURNS, JUSTICE_ACTION_CAP } from "@/lib/constants/justiceActions";
+import { isOfficePoolAccrualTurn } from "@/lib/actions/officePoolAccrual";
 
 /**
- * Refill every seated Justice's self-serve action pool to the cap once per
- * Eastern-time calendar day. Mirrors `resetVicePresidentActions` exactly —
- * same daily-boundary gate, same bulk-write shape. Runs for all occupied
- * seats; NPP/historical-held seats are refilled harmlessly (no player to
- * spend them, same as the VP mirror's NPP-held-seat note).
+ * Accrue every seated Justice's self-serve action pool: +1 every
+ * `JUSTICE_ACTION_ACCRUAL_TURNS` turns, banked up to `JUSTICE_ACTION_CAP`.
+ * Mirrors `resetVicePresidentActions`: one conditional `updateMany` that only
+ * matches occupied seats below cap that have not accrued this turn, so a
+ * re-run of the phase is a no-op. NPP/historical-held seats accrue harmlessly
+ * (no player to spend them).
  */
-export async function resetJusticeActions(db: Db): Promise<{ justiceActionsRegenerated: number }> {
-  const todayEastern = getCalendarDayInTimezone(new Date());
-  const seats = await db
-    .collection<SupremeCourtSeat>("supremeCourtSeats")
-    .find({ justiceCharacterId: { $ne: null } })
-    .project<Pick<SupremeCourtSeat, "_id" | "lastJusticeActionResetDay">>({
-      _id: 1,
-      lastJusticeActionResetDay: 1,
-    })
-    .toArray();
-
-  const bulkOps: AnyBulkWriteOperation<SupremeCourtSeat>[] = [];
-  for (const seat of seats) {
-    if (!shouldApplyDailyReset(seat.lastJusticeActionResetDay)) continue;
-    bulkOps.push({
-      updateOne: {
-        filter: { _id: seat._id },
-        update: {
-          $set: {
-            justiceActionsRemaining: JUSTICE_ACTION_CAP,
-            lastJusticeActionResetDay: todayEastern,
-          },
-        },
-      },
-    });
+export async function resetJusticeActions(
+  db: Db,
+  currentTurn: number
+): Promise<{ justiceActionsRegenerated: number }> {
+  if (!isOfficePoolAccrualTurn(currentTurn, JUSTICE_ACTION_ACCRUAL_TURNS)) {
+    return { justiceActionsRegenerated: 0 };
   }
-
-  if (bulkOps.length > 0) {
-    await db.collection<SupremeCourtSeat>("supremeCourtSeats").bulkWrite(bulkOps);
-  }
-
-  return { justiceActionsRegenerated: bulkOps.length };
+  const result = await db.collection<SupremeCourtSeat>("supremeCourtSeats").updateMany(
+    {
+      justiceCharacterId: { $ne: null },
+      justiceActionsRemaining: { $lt: JUSTICE_ACTION_CAP },
+      lastJusticeActionAccrualTurn: { $ne: currentTurn },
+    },
+    {
+      $inc: { justiceActionsRemaining: 1 },
+      $set: { lastJusticeActionAccrualTurn: currentTurn },
+    }
+  );
+  return { justiceActionsRegenerated: result.modifiedCount };
 }

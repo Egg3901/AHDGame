@@ -13,8 +13,8 @@ export interface DecayProjection {
   isDecaying: boolean;
 }
 
-export function projectInfluenceDecay(pi: number): DecayProjection {
-  const decayAmount = calculatePoliticalInfluenceDecay(pi);
+export function projectInfluenceDecay(pi: number, multiplier = 1): DecayProjection {
+  const decayAmount = calculatePoliticalInfluenceDecay(pi, multiplier);
   return {
     current: pi,
     decayAmount: Math.round(decayAmount * 100) / 100,

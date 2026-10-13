@@ -24,13 +24,17 @@ export interface GetActionBreakdownArgs {
   officeActionBonus: Record<string, number> | undefined;
   baseActionsPerTurn: number;
   chairActionBonus: number;
+  /** Supreme Court justice bonus (stacks on any office). */
+  justiceActionBonus?: number;
+  /** Chamber leadership bonus (highest single role). */
+  leadershipActionBonus?: number;
   bonusActionsFromParty: number;
 }
 
 /**
  * Build the ordered, labeled per-source action breakdown for the Political
- * Standing tooltip: Base → Office (seat) → Cabinet (position) → Central Bank
- * Chair → Party influence. Zero-value sources are omitted. The seat and cabinet
+ * Standing tooltip: Base → Office (seat) → Cabinet (position) → Chamber
+ * leadership → Supreme Court → Central Bank Chair → Party influence. Zero-value sources are omitted. The seat and cabinet
  * bonuses come from {@link resolveOfficeActionBonusBreakdown} so the figures
  * match the turn processor exactly.
  */
@@ -43,6 +47,8 @@ export function getActionBreakdown({
   officeActionBonus,
   baseActionsPerTurn,
   chairActionBonus,
+  justiceActionBonus = 0,
+  leadershipActionBonus = 0,
   bonusActionsFromParty,
 }: GetActionBreakdownArgs): ActionBreakdownItem[] {
   const cabinetOfficeType = isCabinetMember ? cabinetOfficeTypeForCountry(countryId) : undefined;
@@ -70,6 +76,14 @@ export function getActionBreakdown({
       label: positionName ? `Cabinet (${positionName})` : "Cabinet",
       amount: cabinetBonus,
     });
+  }
+
+  if (leadershipActionBonus > 0) {
+    items.push({ label: "Chamber leadership", amount: leadershipActionBonus });
+  }
+
+  if (justiceActionBonus > 0) {
+    items.push({ label: "Supreme Court", amount: justiceActionBonus });
   }
 
   if (chairActionBonus > 0) {

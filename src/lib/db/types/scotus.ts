@@ -78,7 +78,12 @@ export interface SupremeCourtSeat extends IterationStampFields {
 
   // ── Judicial self-serve action pool (mirrors VP_ACTION_CAP machinery) ──────
   justiceActionsRemaining?: number;
+  /** Eastern-time day the pool was seeded or backfilled. */
   lastJusticeActionResetDay?: string;
+  /** Turn the pool last gained its per-turn accrual (idempotency stamp). */
+  lastJusticeActionAccrualTurn?: number;
+  /** Turn the Justice last bought +1 action with main AP (once per turn). */
+  lastJusticeActionTopUpTurn?: number;
 
   createdAt: Date;
   updatedAt: Date;

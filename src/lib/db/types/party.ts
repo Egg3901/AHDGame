@@ -6,8 +6,9 @@ export type PartyLeadershipTitles = Partial<Record<PartyLeadershipTitleKey, stri
 
 /**
  * A single Shadow Cabinet appointment (player suggestion #52) — the character
- * the Leader of the Opposition has named to shadow one cabinet post. Display /
- * roleplay only; carries no mechanical or gameplay effect. Stored in
+ * the Leader of the Opposition has named to shadow one cabinet post. A member
+ * of the sitting Opposition Leader's shadow cabinet earns +1 action per turn
+ * (see `SHADOW_CABINET_ACTION_BONUS`); no other mechanical effect. Stored in
  * `PoliticalParty.shadowCabinet`, keyed by cabinet position id.
  */
 export interface ShadowCabinetAppointment {

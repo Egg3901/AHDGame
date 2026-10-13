@@ -79,6 +79,12 @@ export interface CampaignData {
 
   funds?: number;
   actions?: number;
+  /**
+   * Most actions the campaign can bank from income (CAMPAIGN_ACTION_BANK_TURNS
+   * of its gross per-turn gain). Present alongside `actions`. A balance above
+   * it is kept but earns nothing until spent below.
+   */
+  actionsCap?: number;
 
   levels: {
     fundraising: number;

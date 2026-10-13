@@ -30,7 +30,7 @@
       "stateInfluence": "Einfluss im Staat",
       "influenceTooltip": "Politischer Rückhalt im Heimatstaat. Gib Aktionen aus, um ihn auszubauen; er nimmt jeden Zug ab. Höherer Einfluss verbessert deine Chancen bei Staatswahlen und schaltet lokale Macht frei.",
       "nationalInfluence": "Nationaler Einfluss",
-      "nationalTooltip": "Ansehen auf nationaler Bühne. Wächst jeden Zug passiv auf Basis des Staatseinflusses. Der Hinweis zeigt deinen Rang im Land und den Wert des Spitzenreiters.",
+      "nationalTooltip": "Ansehen auf nationaler Bühne. Sinkt jeden Zug um 1 % und wächst dann durch deinen Staatseinfluss und dein höchstes Amt. Der Hinweis zeigt deinen Rang im Land und den Wert des Spitzenreiters.",
       "nationalRankTop": "Platz {rank} landesweit, Spitze bei {top}",
       "nationalTop": "Spitze bei {top}",
       "favorability": "Beliebtheit",

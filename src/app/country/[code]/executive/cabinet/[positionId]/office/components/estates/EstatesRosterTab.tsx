@@ -30,7 +30,7 @@ export function EstatesRosterTab({
   portfolioKey: string;
   estates: EstateView[];
   /**
-   * Opening and expanding spend the seat's daily ministerial actions, which can
+   * Opening and expanding spend the seat's ministerial actions, which can
    * differ from the cabinet action charges shown in the office header.
    */
   ministerialActions?: number;
@@ -157,7 +157,7 @@ export function EstatesRosterTab({
       {ministerialActions != null && (
         <p className="text-[11px] text-muted" data-testid="estate-ministerial-actions">
           Opening or expanding costs 1 ministerial action: {ministerialActions}/
-          {MINISTERIAL_ACTION_CAP} left today. {MINISTERIAL_ACTION_RESET_HINT}
+          {MINISTERIAL_ACTION_CAP} left. {MINISTERIAL_ACTION_RESET_HINT}
         </p>
       )}
 
