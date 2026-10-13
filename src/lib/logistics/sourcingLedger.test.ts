@@ -17,6 +17,7 @@ function baseResult(overrides: Partial<SourcingResult> = {}): SourcingResult {
     haulRevenueByOriginState: new Map(),
     pairAggregates: [],
     destinationAggregates: [],
+    ownRouteDelivered: [],
     ...overrides,
   };
 }
@@ -72,6 +73,7 @@ describe("buildSourcingDocs", () => {
       haulRevenueByOriginState: new Map(),
       pairAggregates: [],
       destinationAggregates: [],
+      ownRouteDelivered: [],
     };
 
     const { commodityDocs } = buildSourcingDocs(result, 365, new Date("2026-08-25T00:00:00.000Z"));

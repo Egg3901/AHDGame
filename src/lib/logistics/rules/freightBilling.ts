@@ -49,6 +49,7 @@ export interface FreightBillingSectorUnits {
   demandUnitsByCommodity: ReadonlyMap<CommodityType, number>;
   /** The sector's `freight` commodity supply units this turn. */
   freightSupplyUnits: number;
+  corporationId?: string;
 }
 
 export interface FreightBillingApportionment {
@@ -88,6 +89,10 @@ export function apportionFreightBilling(inputs: {
    * A commodity or state with no price is left unbounded.
    */
   unitPriceByDestState?: ReadonlyMap<string, ReadonlyMap<CommodityType, number>>;
+  directChargesByCorp?: ReadonlyMap<
+    string,
+    ReadonlyMap<string, ReadonlyMap<CommodityType, number>>
+  >;
 }): FreightBillingApportionment {
   const {
     freightChargesByDestState,
@@ -97,6 +102,7 @@ export function apportionFreightBilling(inputs: {
     demandCalibrationByCommodity,
     freightSupplyUnitsByOriginState,
     unitPriceByDestState,
+    directChargesByCorp,
   } = inputs;
   const positiveFinite = (value: number | undefined): number =>
     typeof value === "number" && Number.isFinite(value) ? Math.max(0, value) : 0;
@@ -115,6 +121,7 @@ export function apportionFreightBilling(inputs: {
   const creditBySectorId = new Map<string, number>();
   let unapportionedCharges = 0;
   let unapportionedHaulRevenue = 0;
+  const sharedBySectorCommodity = new Map<string, number>();
 
   for (const [stateId, byCommodity] of freightChargesByDestState) {
     const stateSectors = sectorsByState.get(stateId);
@@ -147,9 +154,55 @@ export function apportionFreightBilling(inputs: {
             ? Math.min(raw, demand * unitPrice * FREIGHT_BILL_MAX_SHARE_OF_GOODS_VALUE)
             : raw;
         chargeBySectorId.set(sector.sectorId, (chargeBySectorId.get(sector.sectorId) ?? 0) + share);
+        sharedBySectorCommodity.set(`${sector.sectorId}|${commodity}`, share);
         apportioned += share;
       }
       unapportionedCharges += Math.max(0, charge - apportioned);
+    }
+  }
+
+  for (const [corporationId, byDest] of directChargesByCorp ?? []) {
+    for (const [stateId, byCommodity] of byDest) {
+      const own = (sectorsByState.get(stateId) ?? []).filter(
+        (sector) => sector.corporationId === corporationId
+      );
+      for (const [commodity, rawCharge] of byCommodity) {
+        const charge = positiveFinite(rawCharge);
+        if (!(charge > 0)) continue;
+        const calibration = positiveFinite(demandCalibrationByCommodity?.get(commodity) ?? 1);
+        const demandOf = (sector: FreightBillingSectorUnits) =>
+          positiveFinite(sector.demandUnitsByCommodity.get(commodity)) * calibration;
+        const totalOwnDemand = own.reduce((sum, sector) => sum + demandOf(sector), 0);
+        if (!(totalOwnDemand > 0)) {
+          unapportionedCharges += charge;
+          continue;
+        }
+        const unitPrice = positiveFinite(unitPriceByDestState?.get(stateId)?.get(commodity));
+        let apportioned = 0;
+        for (const sector of own) {
+          const demand = demandOf(sector);
+          if (!(demand > 0)) continue;
+          const raw = (charge * demand) / totalOwnDemand;
+          const already = sharedBySectorCommodity.get(`${sector.sectorId}|${commodity}`) ?? 0;
+          const share =
+            unitPrice > 0
+              ? Math.max(
+                  0,
+                  Math.min(
+                    raw,
+                    demand * unitPrice * FREIGHT_BILL_MAX_SHARE_OF_GOODS_VALUE - already
+                  )
+                )
+              : raw;
+          if (!(share > 0)) continue;
+          chargeBySectorId.set(
+            sector.sectorId,
+            (chargeBySectorId.get(sector.sectorId) ?? 0) + share
+          );
+          apportioned += share;
+        }
+        unapportionedCharges += Math.max(0, charge - apportioned);
+      }
     }
   }
 

@@ -20,6 +20,12 @@ describe("readApiError", () => {
     expect(d.message).toMatch(/unavailable/i);
   });
 
+  it("falls back to the status code on an empty body", async () => {
+    const d = await readApiError(new Response(null, { status: 503 }));
+    expect(d.code).toBe("SERVICE_UNAVAILABLE");
+    expect(d.status).toBe(503);
+  });
+
   it("uses the x-request-id header when the body has no ref", async () => {
     const d = await readApiError(
       new Response("{}", { status: 500, headers: { "x-request-id": "hdr1" } })
