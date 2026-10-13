@@ -74,3 +74,21 @@ describe("NPP engine 6.5 whip count", () => {
     expect(withBloc.againstSeats).toBe(1);
   });
 });
+
+describe("NPP engine 6.10 whip-aware count", () => {
+  it("counts the government's own soft whip on a goal bill", () => {
+    // A mildly opposed co-partisan abstains on the party-line lean alone and
+    // votes for under the soft whip, which is what 6.7 voting does.
+    const input = base({
+      voters: [{ npp: npp("gov", -0.8), seats: 1 }],
+      legislationType: { _id: "t", policyDomain: "Healthcare" } as never,
+    });
+    expect(projectChamberVote(input)).toMatchObject({ forSeats: 0, abstainSeats: 1 });
+    expect(
+      projectChamberVote({
+        ...input,
+        governmentWhip: { governingPartyId: "gov", goalDomains: new Set(["healthcare"]) },
+      })
+    ).toMatchObject({ forSeats: 1, abstainSeats: 0 });
+  });
+});

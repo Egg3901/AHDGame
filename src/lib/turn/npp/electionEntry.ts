@@ -70,6 +70,7 @@ import {
   compareStrongestFirst,
   placementOrder,
 } from "@/lib/nppAutonomy/v6/rules/candidatePlacement";
+import { isCareerClimber, pickCareerStep } from "@/lib/nppAutonomy/v6/rules/careerLadder";
 import {
   inConsolidationWindow,
   trailingCandidatesToWithdraw,
@@ -370,6 +371,14 @@ export async function processElectionEntry(ctx: NPPContext): Promise<number> {
     return ctx.nppElectionEligiblePartyKeys.has(`${countryId}:${npp.party}`);
   };
 
+  // Countries running NPP engine 6 behavior (v6): 6.9 career steps,
+  // 6.1 placement, 6.4 consolidation and 6.3 presidential challengers. Read once per country; the level is served
+  // from the phase snapshot.
+  const engine6Countries = new Set<string>();
+  for (const cid of new Set(openPrimaries.map((p) => (p.countryId ?? "US") as CountryId))) {
+    if (await nppAutonomyAtLeast(db, cid, NPP_ENGINE_LEVEL)) engine6Countries.add(cid);
+  }
+
   // Phase 1: incumbents defend their current seat before generic party fill.
   const incumbentEntries: { npp: NPP; primary: Election }[] = [];
 
@@ -399,8 +408,43 @@ export async function processElectionEntry(ctx: NPPContext): Promise<number> {
     return getRacePriority(a.primary.electionType) - getRacePriority(b.primary.electionType);
   });
 
+  const careerStepFor = (npp: NPP, primary: Election): Election | null => {
+    if (!isCareerClimber(npp) || slateSuppressesAutoPick(npp, slateMaps)) return null;
+    const countryId = (primary.countryId ?? "US") as CountryId;
+    if (isNationwideDirectExecutiveElection(primary.electionType, primary.state, countryId)) {
+      return null;
+    }
+    const officeKey = officeKeyForElectionType(primary.electionType, primary.countryId);
+    const seat = ctx.officialsByNPP
+      .get(npp._id.toString())
+      ?.find((o) => o.officeType === officeKey);
+    if (!seat || (seat.seatsHeld ?? 1) > 1) return null;
+    const options = openPrimaries.filter((p) => {
+      if ((p.countryId ?? "US") !== countryId || p.state !== npp.homeState) return false;
+      if (p._id.equals(primary._id) || getRacePriority(p.electionType) === 999) return false;
+      if (isNationwideDirectExecutiveElection(p.electionType, p.state, countryId)) return false;
+      const field = candidatesByElection.get(p._id.toString()) ?? [];
+      if (field.some((c) => c.party === npp.party && c.status === "active")) return false;
+      return !incumbentEntries.some(
+        (e) => e.primary._id.equals(p._id) && e.npp.party === npp.party
+      );
+    });
+    return pickCareerStep(getRacePriority(primary.electionType), options, (p) =>
+      getRacePriority(p.electionType)
+    );
+  };
+
   for (const { npp, primary } of incumbentEntries) {
     if (assignedThisTurn.has(npp._id.toString())) continue;
+    // Engine 6.9 (v6): an ambitious, strong single-seat incumbent runs for an
+    // open, more senior race in its home region instead of defending.
+    const step = engine6Countries.has(primary.countryId ?? "US")
+      ? careerStepFor(npp, primary)
+      : null;
+    if (step && (await enterPrimary(npp, step))) {
+      if (!ctx.batchCandidateInserts) entered++;
+      continue;
+    }
     if (await enterPrimary(npp, primary, { incumbentDefense: true })) {
       if (!ctx.batchCandidateInserts) entered++;
     }
@@ -432,14 +476,6 @@ export async function processElectionEntry(ctx: NPPContext): Promise<number> {
     entered += slateFiling.filed;
   } catch (error) {
     logger.error("Turn", "fileAcceptedSlateRows failed; continuing election entry", error);
-  }
-
-  // Countries running NPP engine 6 behavior (v6): 6.1 placement below and the
-  // 6.3 presidential challengers. Read once per country; the level is served
-  // from the phase snapshot.
-  const engine6Countries = new Set<string>();
-  for (const cid of new Set(openPrimaries.map((p) => (p.countryId ?? "US") as CountryId))) {
-    if (await nppAutonomyAtLeast(db, cid, NPP_ENGINE_LEVEL)) engine6Countries.add(cid);
   }
 
   // Reserve nationwide executive candidates before the regional generic-fill
