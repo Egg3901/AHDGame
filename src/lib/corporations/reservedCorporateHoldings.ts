@@ -97,12 +97,16 @@ export async function loadReservedCorporatePositions(
 
 /** Batch loader for turn cleanup: reserved positions keyed by target corp id. */
 export async function loadReservedCorporatePositionsByTarget(
-  db: Db
+  db: Db,
+  targetCorpIds?: readonly ObjectId[]
 ): Promise<Map<string, ReservedCorporatePosition[]>> {
+  if (targetCorpIds?.length === 0) return new Map();
+  const targetFilter = targetCorpIds ? { corporationId: { $in: [...targetCorpIds] } } : {};
   const [orders, listings] = await Promise.all([
     db
       .collection<ShareOrder>("shareOrders")
       .find({
+        ...targetFilter,
         type: "sell",
         status: "open",
         placerCorporationId: { $exists: true },
@@ -111,6 +115,7 @@ export async function loadReservedCorporatePositionsByTarget(
     db
       .collection<ShareListing>("shareListings")
       .find({
+        ...targetFilter,
         status: "open",
         sellerCorporationId: { $exists: true },
       })
