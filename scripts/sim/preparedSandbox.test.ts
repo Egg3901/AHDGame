@@ -34,7 +34,8 @@ describe("prepared world arguments and provenance", () => {
 
   it("reports the preserved v4 level rather than the CLI v3 default", () => {
     expect(preservedAutonomyLevel("v4")).toBe("v4");
-    expect(() => preservedAutonomyLevel("v6")).toThrow();
+    expect(preservedAutonomyLevel("v6")).toBe("v6");
+    expect(() => preservedAutonomyLevel("v7")).toThrow();
   });
 
   it("hashes restored BSON and captured JSON identically despite key order", () => {

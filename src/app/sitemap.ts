@@ -53,6 +53,7 @@ const STATIC_PUBLIC_ROUTES: Array<{
   { path: "/terms", changeFrequency: "yearly", priority: 0.3 },
   { path: "/changelog", changeFrequency: "weekly", priority: 0.65 },
   { path: "/changelog/legacy", changeFrequency: "monthly", priority: 0.4 },
+  { path: "/changelog/npp", changeFrequency: "weekly", priority: 0.4 },
   { path: "/news", changeFrequency: "daily", priority: 0.8 },
   { path: "/world", changeFrequency: "daily", priority: 0.85 },
 ];

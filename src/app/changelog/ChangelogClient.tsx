@@ -18,6 +18,7 @@ import { classifyItem, parseAdminChangelog } from "./changelogUtils";
 import { HeroImage } from "@/components/HeroImage";
 import { HeroStatsStrip } from "@/components/ui";
 import { LocalTime } from "@/components/time/LocalTime";
+import { NPP_ENGINE_VERSION } from "@/lib/nppAutonomy/engineVersion";
 
 interface ChangelogClientProps {
   publicPosts: ChangelogPost[];
@@ -172,6 +173,15 @@ export function ChangelogClient({ publicPosts }: ChangelogClientProps) {
               Pre-0.4.0
             </Link>
           </div>
+          <div className="flex flex-col px-5 py-3 min-w-max">
+            <span className="text-body-sm font-medium text-muted">NPP engine</span>
+            <Link
+              href="/changelog/npp"
+              className="text-base font-bold tabular-nums text-foreground hover:text-primary"
+            >
+              {NPP_ENGINE_VERSION}
+            </Link>
+          </div>
         </HeroStatsStrip>
       </header>
 
@@ -262,7 +272,11 @@ export function ChangelogClient({ publicPosts }: ChangelogClientProps) {
         <Link href="/changelog/legacy" className="text-primary hover:underline">
           Browse the legacy changelog
         </Link>{" "}
-        (pre-v0.4.0).
+        (pre-v0.4.0). Non-player politician changes have their own{" "}
+        <Link href="/changelog/npp" className="text-primary hover:underline">
+          NPP engine changelog and roadmap
+        </Link>
+        .
       </p>
     </div>
   );

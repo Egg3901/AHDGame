@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { NPP_AUTONOMY_LEVELS } from "@/lib/nppAutonomy/levels";
 import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";
 import { handleRouteError, errorResponse } from "@/lib/api/errors";
@@ -92,7 +93,7 @@ const bodySchema = z.discriminatedUnion("kind", [
   }),
   z.object({
     kind: z.literal("level"),
-    value: z.enum(["off", "v0", "v1", "v2", "v3", "v4", "v5"]),
+    value: z.enum(NPP_AUTONOMY_LEVELS),
   }),
   z.object({
     kind: z.literal("foreign-policy-mode"),

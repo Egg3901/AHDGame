@@ -51,7 +51,7 @@ export function assertSafeToken(value: string, field: string): string {
   return value;
 }
 
-const AUTONOMY_LEVELS = ["v3", "v4", "v5"];
+const AUTONOMY_LEVELS = ["v3", "v4", "v5", "v6"];
 const SIM_TURN_PHASE_MODES = ["full", "elections-only"];
 
 function booleanFlag(

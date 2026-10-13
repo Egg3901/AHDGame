@@ -41,6 +41,24 @@ npm run changelog:migrate
 That moves the entry to `content/changelog/unreleased/<topic>.md` and strips the
 version. Commit the move; the release that carries it assigns the number.
 
+## NPP engine changes
+
+Non-player politician behavior has its own version line and changelog, at
+`content/changelog/npp/NPP_CHANGELOG.md` (rendered at `/changelog/npp`, linked
+from the main feed). A pull request that changes NPP behavior does three
+things:
+
+1. Bumps `NPP_ENGINE_VERSION` in `src/lib/nppAutonomy/engineVersion.ts`: minor
+   when an NPP decision changes, patch when none does (a fix or a cost-only
+   change), major for a new autonomy tier.
+2. Adds the version's section to the NPP changelog, newest first. A test fails
+   when the newest section and the constant disagree.
+3. Writes its unreleased note here as usual, and tags the pull request title
+   `(npp engine X.Y.Z)`.
+
+Engine 6 behavior is gated on autonomy `v6`; worlds below it keep the engine 5
+behavior.
+
 ## Why it works this way
 
 The generator used to hand out the next unused patch number per entry, which
