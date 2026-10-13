@@ -31,6 +31,17 @@ describe("planEquityUnderwriting", () => {
     expect(plan).toMatchObject({ placedShares: 10_000, unsoldShares: 10_000, fillRatio: 0.5 });
   });
 
+  it("places at most the block-pacing cap in one turn and leaves the rest unsold", () => {
+    const plan = planEquityUnderwriting({
+      requestedShares: 1_000_000_000,
+      poolCashLocal: 1e12,
+      pricePerShareLocal: 3.86,
+      maxPlacedShares: 100_000_000,
+    });
+    expect(plan.placedShares).toBe(100_000_000);
+    expect(plan.unsoldShares).toBe(900_000_000);
+  });
+
   it("fully places a small issue", () => {
     expect(
       planEquityUnderwriting({

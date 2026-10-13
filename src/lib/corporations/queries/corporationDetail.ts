@@ -1,4 +1,5 @@
 import type { Db } from "mongodb";
+import { loadPoolSellPacing } from "@/lib/equities/blockPacing";
 import type { Corporation, ShareListing, ShareOrder } from "@/lib/db/types";
 import {
   indexFundOwnershipFraction,
@@ -50,6 +51,7 @@ export async function loadCorporationDetailView(args: {
 
   const refDataPromise = getTurnReferenceData(db, currentTurn);
   const equityQuotePromise = loadEquityQuote(db, corporation);
+  const sellPacingPromise = loadPoolSellPacing(db, corporation._id);
   const viewerOwnsCorporation = !!viewerUserId && corporation.userId?.toString() === viewerUserId;
   const bankingPolicyPromise =
     corporation.bankCharter || viewerOwnsCorporation
@@ -224,6 +226,7 @@ export async function loadCorporationDetailView(args: {
   const physical = buildPhysicalPnl(plantsMode, physicalRollups, sectorDetails.length);
 
   const equityQuote = await equityQuotePromise;
+  const sellPacing = await sellPacingPromise;
   const underwritingPolicy = await bankingPolicyPromise;
 
   return {
@@ -298,7 +301,16 @@ export async function loadCorporationDetailView(args: {
       equityMarketPoolActive: equityQuote.active,
       marketBidPrice: equityQuote.bidPriceLocal,
       marketAskPrice: equityQuote.askPriceLocal,
-      marketDepthShares: equityQuote.bidDepthShares,
+      // Bid depth is the smaller of the pool's cash and this turn's block-pacing
+      // allowance for the company, so the trade modal never offers a market
+      // sell the server will refuse.
+      marketDepthShares:
+        equityQuote.active && equityQuote.bidPriceLocal > 0
+          ? Math.min(
+              equityQuote.bidDepthShares,
+              Math.floor(sellPacing.remainingLocal / equityQuote.bidPriceLocal)
+            )
+          : equityQuote.bidDepthShares,
       totalShares: income.totalShares,
       publicFloat: corporation.publicFloat ?? 0,
       pendingIpoShares:

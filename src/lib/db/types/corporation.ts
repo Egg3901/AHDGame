@@ -521,6 +521,13 @@ export interface Corporation {
     initialPriceLocal: number;
     underwriting?: import("@/lib/banking/underwritingTypes").PrimaryUnderwritingOffer;
   };
+  /**
+   * Equity pool sell pacing: the turn of the last pool purchase from sellers of
+   * this company and the local-currency value bought that turn. See
+   * `src/lib/equities/blockPacing.ts`.
+   */
+  poolSellAbsorbedTurn?: number;
+  poolSellAbsorbedLocal?: number;
   /** Dividend payout rate (0, 100%). Income × this % is distributed to shareholders each turn. */
   dividendRate?: number;
   /** When the dividend rate was last changed (enforces 24h cooldown) */

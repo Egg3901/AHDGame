@@ -550,7 +550,11 @@ export async function POST(request: Request) {
       ipoResult && foundingOffer
         ? await planEquityPrimaryPlacement(
             db,
-            { countryId: character.countryId, liquidCurrencyCode: corpHomeCurrency },
+            {
+              countryId: character.countryId,
+              liquidCurrencyCode: corpHomeCurrency,
+              totalShares: founderShares,
+            },
             ipoResult.newShares,
             initialSharePrice
           )
@@ -579,6 +583,7 @@ export async function POST(request: Request) {
             {
               countryId: character.countryId,
               liquidCurrencyCode: corpHomeCurrency,
+              totalShares: founderShares,
             },
             ipoResult.newShares,
             initialSharePrice,
