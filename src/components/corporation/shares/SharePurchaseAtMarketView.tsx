@@ -627,6 +627,8 @@ export function SharePurchaseAtMarketView({
             {marketDepthInsufficient && (
               <p className="mt-1 text-xs text-error">
                 The market can currently absorb {marketDepthShares.toLocaleString("en-US")} shares.
+                Very large sales are limited to 5% of the company&apos;s value per turn; place a
+                sell order and the rest fills over the coming turns.
               </p>
             )}
           </div>

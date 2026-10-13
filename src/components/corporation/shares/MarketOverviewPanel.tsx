@@ -263,7 +263,7 @@ export default function MarketOverviewPanel({
                 label="Bid depth"
                 value={corporation.marketDepthShares.toLocaleString("en-US")}
                 hint="shares"
-                title="How many shares the market pool will buy at the bid right now."
+                title="How many shares the market pool will buy at the bid this turn. It buys at most 5% of the company's value per turn across all sellers."
               />
             )}
             {dualClass && (

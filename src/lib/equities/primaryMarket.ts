@@ -9,6 +9,7 @@ import { issuanceDilutionFactorExpr } from "@/lib/corporations/shareConsolidatio
 import { recordShareTrade } from "@/lib/corporations/shareTradeHistory";
 import { settlePrimaryUnderwritingFill } from "@/lib/banking/underwritingSettlement";
 import { corpLiquidCapitalToAnchor, getCorpFxRate } from "@/lib/currency/corporationCapital";
+import { primaryPlaceCapShares } from "./blockPacing";
 import { emitTx } from "@/lib/financialTxLog/emit";
 import {
   debitEquityPoolGated,
@@ -39,6 +40,8 @@ export function planEquityUnderwriting(input: {
   poolM2Local?: number;
   poolLiquidityTargetLocal?: number;
   pricePerShareLocal: number;
+  /** Block pacing: most shares the pool places this turn (blockPacing.ts). */
+  maxPlacedShares?: number;
 }): { placedShares: number; unsoldShares: number; capacityLocal: number; fillRatio: number } {
   const requested = wholeShares(input.requestedShares);
   const cash = Math.max(0, input.poolCashLocal);
@@ -54,7 +57,11 @@ export function planEquityUnderwriting(input: {
   const capacityLocal = liquidityCash * EQUITY_PRIMARY_COMMIT_SHARE;
   const capacityShares =
     input.pricePerShareLocal > 0 ? Math.floor(capacityLocal / input.pricePerShareLocal) : 0;
-  const placedShares = Math.min(requested, Math.max(0, capacityShares));
+  const pacingCap =
+    input.maxPlacedShares !== undefined && Number.isFinite(input.maxPlacedShares)
+      ? Math.max(0, Math.floor(input.maxPlacedShares))
+      : Number.MAX_SAFE_INTEGER;
+  const placedShares = Math.min(requested, Math.max(0, capacityShares), pacingCap);
   return {
     placedShares,
     unsoldShares: requested - placedShares,
@@ -97,7 +104,8 @@ export interface PlannedEquityPlacement {
 /** Read-only placement quote used when a journal will own the actual debit. */
 export async function planEquityPrimaryPlacement(
   db: Db,
-  corporation: Pick<Corporation, "countryId" | "liquidCurrencyCode">,
+  corporation: Pick<Corporation, "countryId" | "liquidCurrencyCode"> &
+    Partial<Pick<Corporation, "totalShares">>,
   requestedShares: number,
   pricePerShareLocal: number
 ): Promise<PlannedEquityPlacement> {
@@ -123,6 +131,11 @@ export async function planEquityPrimaryPlacement(
         ? pool.targetCashLocal
         : undefined,
     pricePerShareLocal,
+    maxPlacedShares: primaryPlaceCapShares({
+      totalShares: corporation.totalShares ?? 0,
+      pricePerShareLocal,
+      localPerAnchor: await getCorpFxRate(db, corporation),
+    }),
   });
   return {
     poolActive: true,
@@ -137,7 +150,8 @@ export async function planEquityPrimaryPlacement(
 /** Reserve real pool cash before a caller atomically creates primary float. */
 export async function prepareEquityPrimaryPlacement(
   db: Db,
-  corporation: Pick<Corporation, "countryId" | "liquidCurrencyCode">,
+  corporation: Pick<Corporation, "countryId" | "liquidCurrencyCode"> &
+    Partial<Pick<Corporation, "totalShares">>,
   requestedShares: number,
   pricePerShareLocal: number,
   now: Date
@@ -258,7 +272,14 @@ export async function placePendingShareIssuances(
     if (!(price > 0)) continue;
     const perTurnCap = Math.max(
       1,
-      Math.floor(pending.requestedShares * EQUITY_PENDING_PLACEMENT_SHARE_PER_TURN)
+      Math.min(
+        Math.floor(pending.requestedShares * EQUITY_PENDING_PLACEMENT_SHARE_PER_TURN),
+        primaryPlaceCapShares({
+          totalShares: corporation.totalShares ?? 0,
+          pricePerShareLocal: price,
+          localPerAnchor: await getCorpFxRate(db, corporation),
+        })
+      )
     );
     const pacedShares = Math.min(
       wholeShares(pending.remainingShares),

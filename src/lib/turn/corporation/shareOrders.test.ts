@@ -118,6 +118,9 @@ function setupOpenSellOrder(opts: {
   currentSharePrice: number;
   heldShares: number;
   sharesDebitedAtCreation?: boolean;
+  totalShares?: number;
+  poolSellAbsorbedTurn?: number;
+  poolSellAbsorbedLocal?: number;
 }) {
   const orderDoc = {
     _id: new ObjectId(),
@@ -140,10 +143,16 @@ function setupOpenSellOrder(opts: {
     sharePrice: opts.currentSharePrice,
     fundamentalSharePrice: opts.currentSharePrice,
     publicFloat: 0,
-    totalShares: 1_000,
+    totalShares: opts.totalShares ?? 1_000,
     shareholders: [{ characterId: opts.characterId, shares: opts.heldShares }],
     liquidCurrencyCode: "USD",
     countryId: "US",
+    ...(opts.poolSellAbsorbedTurn !== undefined
+      ? {
+          poolSellAbsorbedTurn: opts.poolSellAbsorbedTurn,
+          poolSellAbsorbedLocal: opts.poolSellAbsorbedLocal,
+        }
+      : {}),
   };
   db.collection("corporations").find.mockReturnValue({
     toArray: vi.fn().mockResolvedValue([corpDoc]),
@@ -291,6 +300,42 @@ describe("fillPendingShareOrders", () => {
         }),
       ])
     );
+  });
+
+  it("paces a large block: the pool buys only the company's remaining per-turn allowance", async () => {
+    const { fillPendingShareOrders } = await import("./shareOrders");
+    const corpId = new ObjectId();
+    const sellerId = new ObjectId();
+    // $1bn company (10M shares at $100): 5% a turn is $50M; $40M already sold
+    // directly this turn, so the book may fill only $10M more.
+    setupOpenSellOrder({
+      corpId,
+      characterId: sellerId,
+      shares: 9_000_000,
+      orderLimitPrice: 90,
+      currentSharePrice: 100,
+      heldShares: 9_000_000,
+      totalShares: 10_000_000,
+      poolSellAbsorbedTurn: 258,
+      poolSellAbsorbedLocal: 40_000_000,
+    });
+    const pool = db.collection("equityMarketPools");
+    mockPoolRead(pool, { _id: "USD", cashLocal: 1e12, targetCashLocal: 1e12 });
+    pool.updateOne.mockResolvedValue({ matchedCount: 1, modifiedCount: 1 });
+
+    await fillPendingShareOrders(db as unknown as Db, new Date(), 258);
+
+    // Bid is $99: floor($10M / $99) = 101,010 shares; the rest stays open.
+    const orderUpdate = db.collection("shareOrders").bulkWrite.mock.calls[0][0][0];
+    expect(orderUpdate.updateOne.update.$set).toMatchObject({
+      status: "open",
+      sharesRemaining: 9_000_000 - 101_010,
+    });
+    const pacingWrite = db
+      .collection("corporations")
+      .bulkWrite.mock.calls.flatMap((call: unknown[]) => call[0] as unknown[])
+      .find((op: unknown) => JSON.stringify(op).includes("poolSellAbsorbedLocal"));
+    expect(JSON.stringify(pacingWrite)).toContain('"poolSellAbsorbedTurn":258');
   });
 
   it("shares finite pool cash across corporations instead of starving later sells", async () => {

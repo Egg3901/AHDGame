@@ -42,6 +42,7 @@ import {
   isOrderFlowWashRoundTrip,
 } from "@/lib/corporations/orderFlowWashGuard";
 import { emitTx } from "@/lib/financialTxLog/emit";
+import { poolSellPacedMessage } from "@/lib/equities/blockPacing";
 import {
   settleFloatSellDebit,
   reverseFloatSellDebit,
@@ -157,6 +158,13 @@ export async function sellPublicShares(request: Request, { params }: RouteParams
       }
       const settle = await settleFloatSellDebit(db, corporation, issuerBuyback);
       issuerBuybackSplit = settle.split;
+      if (settle.paced) {
+        const pacedShares =
+          executionPrice > 0 ? Math.floor((settle.pacedRemainingLocal ?? 0) / executionPrice) : 0;
+        return errorResponse(400, poolSellPacedMessage(pacedShares, corporation.name), {
+          extra: { marketPacedShares: pacedShares },
+        });
+      }
       if (!settle.ok) {
         const sym = CURRENCY_SYMBOLS[issuerCurrency] ?? "$";
         return errorResponse(
