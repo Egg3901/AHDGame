@@ -8,12 +8,14 @@ import {
 import { extractionDesiredUnits } from "@/lib/extraction/capacityHaircut";
 import { SECTOR_STRATEGIES } from "@/lib/constants/sectorStrategies";
 
-export function computeExtractionHeadroomByState(
-  capDocs: Array<Pick<StateResourceCapacity, "stateId" | "resources">>,
+/** Per state, the unclaimed share of each resource deposit the state holds. */
+export type ExtractionResourceHeadroom = Partial<Record<ExtractableResource, number>>;
+
+function desiredExtractionByState(
   sectors: CorporateSector[],
   eraUnitScale: number,
   extractionOutputScaleEnabled: boolean
-): Map<string, number> {
+): Map<string, Partial<Record<ExtractableResource, number>>> {
   const desiredByState = new Map<string, Partial<Record<ExtractableResource, number>>>();
   for (const sector of sectors) {
     if (sector.sectorType !== "extraction") continue;
@@ -37,7 +39,51 @@ export function computeExtractionHeadroomByState(
     }
     desiredByState.set(sector.stateId, forState);
   }
+  return desiredByState;
+}
 
+/**
+ * Per state and resource, the unclaimed fraction of that deposit in [0, 1].
+ * A resource the state holds no deposit of is absent (read as 0); a state with
+ * no capacity document is absent from the map (read as uncapped).
+ */
+export function computeExtractionHeadroomByStateResource(
+  capDocs: Array<Pick<StateResourceCapacity, "stateId" | "resources">>,
+  sectors: CorporateSector[],
+  eraUnitScale: number,
+  extractionOutputScaleEnabled: boolean
+): Map<string, ExtractionResourceHeadroom> {
+  const desiredByState = desiredExtractionByState(
+    sectors,
+    eraUnitScale,
+    extractionOutputScaleEnabled
+  );
+  const headroomByState = new Map<string, ExtractionResourceHeadroom>();
+  for (const capDoc of capDocs) {
+    const byResource: ExtractionResourceHeadroom = {};
+    for (const resource of EXTRACTABLE_RESOURCES) {
+      const capacity = capDoc.resources?.[resource] ?? 0;
+      if (capacity <= 0) continue;
+      const desired = desiredByState.get(capDoc.stateId)?.[resource] ?? 0;
+      byResource[resource] = Math.max(0, capacity - desired) / capacity;
+    }
+    headroomByState.set(capDoc.stateId, byResource);
+  }
+  return headroomByState;
+}
+
+export function computeExtractionHeadroomByState(
+  capDocs: Array<Pick<StateResourceCapacity, "stateId" | "resources">>,
+  sectors: CorporateSector[],
+  eraUnitScale: number,
+  extractionOutputScaleEnabled: boolean
+): Map<string, number> {
+  const byResource = computeExtractionHeadroomByStateResource(
+    capDocs,
+    sectors,
+    eraUnitScale,
+    extractionOutputScaleEnabled
+  );
   const headroomByState = new Map<string, number>();
   for (const capDoc of capDocs) {
     let capValue = 0;
@@ -46,11 +92,32 @@ export function computeExtractionHeadroomByState(
       const capacity = capDoc.resources?.[resource] ?? 0;
       if (capacity <= 0) continue;
       const basePrice = COMMODITY_BASE_PRICES[resource] ?? 1;
-      const desired = desiredByState.get(capDoc.stateId)?.[resource] ?? 0;
       capValue += capacity * basePrice;
-      headroomValue += Math.max(0, capacity - desired) * basePrice;
+      headroomValue += capacity * (byResource.get(capDoc.stateId)?.[resource] ?? 0) * basePrice;
     }
     headroomByState.set(capDoc.stateId, capValue > 0 ? headroomValue / capValue : 0);
   }
   return headroomByState;
+}
+
+/**
+ * Deposit headroom for a mine that extracts `supply`: the output-value weighted
+ * headroom of the resources in its recipe. A recipe whose resources the state
+ * holds none of reads 0, so a mine on the wrong deposit never looks like room
+ * to grow just because the state has some other resource to spare.
+ */
+export function extractionHeadroomForSupply(
+  supply: Partial<Record<string, number>>,
+  resourceHeadroomOf: (resource: ExtractableResource) => number
+): number {
+  let weight = 0;
+  let weighted = 0;
+  for (const resource of EXTRACTABLE_RESOURCES) {
+    const rate = supply[resource] ?? 0;
+    if (!(rate > 0)) continue;
+    const value = rate * (COMMODITY_BASE_PRICES[resource] ?? 1);
+    weight += value;
+    weighted += value * Math.max(0, Math.min(1, resourceHeadroomOf(resource)));
+  }
+  return weight > 0 ? weighted / weight : 0;
 }

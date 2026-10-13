@@ -70,7 +70,10 @@ import {
   setNppMarketEntryReason,
 } from "@/lib/turn/npp/entryDiagnostics";
 import { evaluateNppEntry } from "@/lib/turn/npp/entryEvaluation";
-import { fragileReinvestmentPriority } from "@/lib/turn/npp/fragileMarketSupply";
+import {
+  extractionGrowthHeadroom,
+  fragileReinvestmentPriority,
+} from "@/lib/turn/npp/fragileMarketSupply";
 import {
   evaluateFrontierCandidate,
   settleFrontierEntryPlacement,
@@ -78,6 +81,7 @@ import {
 import { buildNppGlutMothballUpdates } from "@/lib/turn/npp/glutMothballing";
 import {
   computeMacroProductionPolicy,
+  depositAwarePriceRatioOf,
   ESSENTIAL_SHORTAGE_SCORE,
   hasEnterableHeadroom,
   sectorPeakShortageScore,
@@ -1166,19 +1170,25 @@ export function makeNppCorpDecision(
       // built size forever; half lets it shrink toward what its state can
       // absorb while a plant in a starved state replaces in full. Growth is
       // already state-tilted via targetGrowthRate (section 2a).
-      const stateShortage = sectorShortageScore(
+      // A mine is scored only on the resources its state holds, so a shortage
+      // it cannot extract neither props up its replacement nor its growth.
+      const statePriceRatioOf = depositAwarePriceRatioOf(
         sector.sectorType,
-        sectorCountryId,
+        sector.stateId,
+        placementSignals,
         (commodity, cid) =>
           placementSignals?.statePriceRatioOf?.(commodity, sector.stateId) ??
           priceRatioOf(commodity, cid)
       );
+      const stateShortage = sectorShortageScore(
+        sector.sectorType,
+        sectorCountryId,
+        statePriceRatioOf
+      );
       const peakStateShortage = sectorPeakShortageScore(
         sector.sectorType,
         sectorCountryId,
-        (commodity, cid) =>
-          placementSignals?.statePriceRatioOf?.(commodity, sector.stateId) ??
-          priceRatioOf(commodity, cid)
+        statePriceRatioOf
       );
       const criticalShortage = peakStateShortage >= ESSENTIAL_SHORTAGE_SCORE;
       const interventionPriority = fragileReinvestmentPriority(
@@ -1215,7 +1225,7 @@ export function makeNppCorpDecision(
       const utilization = capitalStock > 0 ? runUnits / capitalStock : 0;
       const extractionHeadroom =
         sector.sectorType === "extraction"
-          ? Math.max(0, Math.min(1, placementSignals?.extractionHeadroomOf?.(sector.stateId) ?? 1))
+          ? extractionGrowthHeadroom(sector, placementSignals, ctx.turn)
           : 1;
       // Growth is bounded by capacity IN FLIGHT, not by how many orders are
       // pending. The old gate counted orders, so two replacement-sized slices
