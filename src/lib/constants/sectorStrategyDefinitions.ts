@@ -1132,8 +1132,12 @@ export const SECTOR_STRATEGIES: Record<OperatingSectorType, SectorStrategy[]> = 
       // Unified mining strategy for the merged commodity. Adopts the shortage
       // -adjusted 0.72 output (from the former copper_mining) so the short merged
       // market is worth mining; copper_mining is deleted and its sectors remap here.
+      // Inputs total 0.60 of nameplate, in the 0.55-0.65 band of the other
+      // focused mining recipes. At 0.72 the recipe sat near break-even at base
+      // prices, and its energy/ordnance-heavy basket inflated faster than its
+      // output, so rare earth miners lost money in a rare earth shortage.
       supply: { rare_earth: 0.72 },
-      demand: { energy: 0.25, chemicals: 0.2, vehicles: 0.1, freight: 0.1, ordnance: 0.07 },
+      demand: { energy: 0.2, chemicals: 0.15, vehicles: 0.1, freight: 0.1, ordnance: 0.05 },
     },
     {
       id: "coal_mining",
