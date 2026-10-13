@@ -1,6 +1,6 @@
 /** @vitest-environment happy-dom */
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import CorporationDetailPage from "./page";
 import { captureClientExceptionWithId } from "@/lib/observability/sentryClientLazy";
 
@@ -36,6 +36,22 @@ vi.mock("@/components/corporation/CorporationPageTabs", () => ({
   DefenceContractsTab: () => null,
   SupplyAgreementsSection: () => null,
   DefaultedBondCrisisModal: () => null,
+}));
+vi.mock("@/components/corporation/CorporationMasthead", () => ({
+  CorporationMasthead: ({
+    corporation,
+    onRefresh,
+  }: {
+    corporation: { name: string };
+    onRefresh: () => void;
+  }) => (
+    <div>
+      <span>{corporation.name}</span>
+      <button type="button" onClick={onRefresh}>
+        Refresh corporation
+      </button>
+    </div>
+  ),
 }));
 
 beforeEach(() => {
@@ -76,5 +92,113 @@ describe("corporation load errors", () => {
       )
     );
     expect(await screen.findByTitle("Click to copy: sentry-event-1234567890")).toBeTruthy();
+  });
+
+  it.each(["", "<html>bad gateway</html>"])(
+    "shows a retryable generic error when a successful response contains %s",
+    async (body) => {
+      const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url === "/api/corporations/bad-id") {
+          return new Response(body, {
+            status: 200,
+            headers: { "content-type": "text/html", "x-request-id": "proxy-req-123456" },
+          });
+        }
+        return new Response("{}", { status: 200 });
+      });
+      vi.stubGlobal("fetch", fetchMock);
+
+      render(<CorporationDetailPage />);
+
+      expect(
+        await screen.findByRole("heading", {
+          name: "This page hit an unexpected problem and could not finish loading. (CLIENT_ERROR)",
+        })
+      ).toBeTruthy();
+      expect(screen.getByRole("button", { name: "Retry" })).toBeTruthy();
+      expect(screen.queryByText(/Unexpected end|Unexpected token|JSON/i)).toBeNull();
+      expect(await screen.findByTitle("Click to copy: sentry-event-1234567890")).toBeTruthy();
+      expect(captureClientExceptionWithId).toHaveBeenCalledWith(
+        expect.objectContaining({ name: "CorporationResponseError" }),
+        expect.objectContaining({
+          extra: expect.objectContaining({
+            url: "/api/corporations/bad-id",
+            status: 200,
+            contentType: "text/html",
+          }),
+        })
+      );
+    }
+  );
+
+  it("keeps the last valid corporation visible when a refresh returns malformed JSON", async () => {
+    let detailRequests = 0;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === "/api/corporations/bad-id") {
+        detailRequests += 1;
+        if (detailRequests > 1) return new Response("", { status: 200 });
+        return new Response(
+          JSON.stringify({
+            corporation: {
+              _id: "corp-1",
+              name: "Alder Works",
+              isPrivate: true,
+              type: "manufacturing",
+            },
+            ceo: null,
+            financials: null,
+            sectors: [],
+            balanceSheet: null,
+          }),
+          { status: 200 }
+        );
+      }
+      return new Response("{}", { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<CorporationDetailPage />);
+    expect((await screen.findAllByText("Alder Works")).length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole("button", { name: "Refresh corporation" }));
+
+    await waitFor(() => expect(toast).toHaveBeenCalled());
+    expect(screen.getAllByText("Alder Works").length).toBeGreaterThan(0);
+    expect(toast).toHaveBeenCalledWith(
+      "This page hit an unexpected problem and could not finish loading. (CLIENT_ERROR)",
+      "error"
+    );
+  });
+
+  it("normalizes an aborted corporation request as a network failure", async () => {
+    const error = new DOMException("The operation was aborted", "AbortError");
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(error));
+    render(<CorporationDetailPage />);
+    expect(
+      await screen.findByText(
+        "Could not reach the server. Check your connection and try again. (NETWORK_ERROR)"
+      )
+    ).toBeTruthy();
+  });
+
+  it("preserves an abort that happens while reading a successful response body", async () => {
+    const abort = new DOMException("The operation was aborted", "AbortError");
+    const response = new Response("", { status: 200 });
+    Object.defineProperty(response, "json", { value: vi.fn().mockRejectedValue(abort) });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) =>
+        String(input) === "/api/corporations/bad-id"
+          ? response
+          : new Response("{}", { status: 200 })
+      )
+    );
+    render(<CorporationDetailPage />);
+    expect(
+      await screen.findByText(
+        "Could not reach the server. Check your connection and try again. (NETWORK_ERROR)"
+      )
+    ).toBeTruthy();
   });
 });
