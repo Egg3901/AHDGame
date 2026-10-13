@@ -1,3 +1,8 @@
+import type {
+  GroupManagement,
+  GroupReceivingPreference,
+  GroupDirection,
+} from "@/lib/corporations/groups/managementTypes";
 import type { OperatingSectorType } from "@/lib/constants/corporations";
 import type { ObjectId } from "mongodb";
 import type {
@@ -187,6 +192,13 @@ export interface SoeState {
 import type { NppStrategyState } from "@/lib/turn/npp/corpStrategy";
 
 export interface Corporation {
+  /** Group settings are runtime state and disappear with corporations on world reset. */
+  groupManagement?: Partial<GroupManagement>;
+  groupReceiving?: GroupReceivingPreference;
+  groupDirection?: GroupDirection;
+  /** Bounded private forecast inputs, written only while coordination is enabled. */
+  groupSupplyBasis?: import("@/lib/corporations/groups/rules/forecast").GroupForecastBasis;
+
   _id: ObjectId;
   name: string;
   /**

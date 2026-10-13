@@ -1,3 +1,4 @@
+import { configureGroupSupply, groupForecastWriteOps } from "./groupSupplyTurn";
 /**
  * Corporation turns settle operating results and distribute shareholder income.
  * processCorporationTurn shares monetary quotes across automatic dividend conversions.
@@ -192,6 +193,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
           politicalMediaMarketEnabled: 1,
           explicitPlantCostsEnabled: 1,
           supplyAgreementsEnabled: 1,
+          groupSupplyCoordinationEnabled: 1,
           prospectingEnabled: 1,
           commandEconomyEnabled: 1,
           privateBankingEnabled: 1,
@@ -482,11 +484,13 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
     market.freightBillingChargeBySectorId = billing.chargeBySectorId;
     market.freightBillingCreditBySectorId = billing.creditBySectorId;
   }
-  // Clearing pre-pass: offer-book construction, the clearing-factors run,
-  // canonical-basis book invariant diagnostics, delivered advertising value,
-  // and the loyalty rollup. Lives in ./clearingPrePass so this entry point
-  // stays under the architecture audit file-size cap. Same position in the
-  // phase order, same inputs, no new reads or writes.
+  // Resolve group ownership once before clearing and reuse it for NPP decisions.
+  const groupMembership = await configureGroupSupply(
+    db,
+    market,
+    subsidiaryCorporationsEnabled,
+    marketGovernorConfig?.groupSupplyCoordinationEnabled === true
+  );
   const {
     clearingInvariantBreaches,
     brandLoyaltyUpdates,
@@ -494,6 +498,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
     buyerDemandByCorpCommodity,
     politicalMediaSettlementPlans,
   } = runClearingPrePass({
+    groupMembership,
     lookups,
     market,
     turn,
@@ -789,6 +794,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
     constructionFinanceCandidateCount: nppConstructionFinanceCandidateCount,
     constructionFinanceBacklogCount: nppConstructionFinanceBacklogCount,
   } = await processNppCorporationDecisions(db, turn ?? 0, now, techTreesEnabled, {
+    groupMembership,
     corporations: lookups.corporations,
     issuerBondsByCorpId: lookups.bondsByCorpId,
     heldBondsByCorpId: lookups.bondsHeldByCorpId,
@@ -808,6 +814,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
     }
   }
 
+  corpOps.push(...groupForecastWriteOps(market, lookups));
   // Merge NPP corp updates into the main corpOps
   for (const nppUpdate of nppCorpUpdates) {
     corpOps.push({

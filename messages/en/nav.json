@@ -31,6 +31,7 @@
       },
       "world": {
         "myCorporation": "My Corporation",
+        "subsidiaryGroup": "Subsidiary Group",
         "hallOfFame": "Hall of Fame",
         "nations": "Nations & World Map",
         "map": "Country Map",

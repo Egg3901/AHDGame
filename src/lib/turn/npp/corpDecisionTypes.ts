@@ -14,6 +14,9 @@ import type { CapacityDecisionObservation } from "@/lib/corporations/capacityDec
 import type { NppOperatorObservation } from "@/lib/corporations/nppOperatorTelemetry/rules";
 
 export interface NppCorpDecisionContext {
+  /** Validated current group direction; absent preserves autonomous behavior. */
+  groupDirection?: import("@/lib/corporations/groups/managementTypes").GroupDirection;
+  groupRootId?: string;
   corp: Corporation;
   sectors: CorporateSector[];
   turn: number;

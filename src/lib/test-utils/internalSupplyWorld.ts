@@ -61,7 +61,13 @@ function emptyLookups(): CorporationLookups {
 
 export function runInternalSupplyWorld(
   policy: InternalSupplyPolicy,
-  overrides: { mothballed?: boolean; group?: boolean; fx?: number } = {}
+  overrides: {
+    mothballed?: boolean;
+    group?: boolean;
+    fx?: number;
+    coordinationDiscount?: number;
+    eraScale?: number;
+  } = {}
 ) {
   const parentId = new ObjectId("000000000000000000000001");
   const childId = new ObjectId("000000000000000000000002");
@@ -93,6 +99,18 @@ export function runInternalSupplyWorld(
     internalSupplyPolicy: undefined,
     shareholders: [{ corporationId: parentId, shares: 100 }],
   } as Corporation;
+  if (overrides.coordinationDiscount != null) {
+    corp.ceoId = new ObjectId("000000000000000000000021");
+    corp.ceoType = "npp";
+    corp.groupManagement = {
+      name: "Synthetic group",
+      supplyPolicy: "members",
+      supplyDiscount: overrides.coordinationDiscount,
+    };
+    child.ceoId = new ObjectId("000000000000000000000022");
+    child.ceoType = "npp";
+    child.subsidiaryFormalizedAtTurn = 1;
+  }
   const common = {
     stateId: "MN",
     countryId: "US",
@@ -135,7 +153,7 @@ export function runInternalSupplyWorld(
     factory.revenue *= overrides.fx;
   }
   const lookups = emptyLookups();
-  lookups.eraUnitScale = 1;
+  lookups.eraUnitScale = overrides.eraScale ?? 1;
   lookups.preset = "2019-default";
   lookups.exchangeRatesByCurrency = new Map(overrides.fx ? [["JPY", overrides.fx]] : []);
   lookups.reachablePriceRatioByCountry = new Map();
@@ -154,6 +172,7 @@ export function runInternalSupplyWorld(
   lookups.globalCommodityBalances.set("iron", { supply: 500, demand: 1000 });
   const market = buildMarketContext("plants");
   market.explicitPlantCostsEnabled = true;
+  market.groupSupplyEnabled = overrides.coordinationDiscount != null;
   runClearingPrePass({
     lookups,
     market,

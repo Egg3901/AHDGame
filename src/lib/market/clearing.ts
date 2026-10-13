@@ -1,3 +1,13 @@
+import { offerPriceFactor } from "./rules/offerPricing";
+import type { GroupForecastBasis } from "@/lib/corporations/groups/rules/forecast";
+import {
+  coordinateGroupMarket,
+  coordinationSlices,
+  type CoordinationBuyer,
+  type GroupMarketReceipt,
+} from "@/lib/corporations/groups/rules/marketCoordination";
+import type { SupplyMember } from "@/lib/corporations/groups/rules/supply";
+import { TURNS_PER_DAY } from "@/lib/constants/turnTime";
 import {
   reserveInternalSupply,
   finishInternalSupplyCommodity,
@@ -5,7 +15,7 @@ import {
 } from "./internalSupply/clearing";
 import { normalizedOfferShare } from "./rules/demandAllocation";
 import { capDeliveredMediaUnits, type MediaOwnershipMarket } from "@/lib/mediaRegulation/rules";
-import type { CommodityType } from "@/lib/constants/commodities";
+import { COMMODITY_BASE_PRICES, type CommodityType } from "@/lib/constants/commodities";
 import { commodityMixWeight as mixWeight } from "@/lib/constants/commodities";
 import { priceRealizationFactor } from "@/lib/market/priceRealization";
 import { LOYAL_POOL_FRACTION, SLICE_NOISE_FLOOR } from "@/lib/market/brandLoyalty";
@@ -72,25 +82,13 @@ export const AUTO_POSTURE_FILL_HEALTHY = 0.7;
  * ±0.2 posture cap and quality 100, the realized premium widens from +0.20 to
  * at most +0.26 (mult 1.3); at quality 0 it shrinks to +0.14 (mult 0.7).
  */
-export const QUALITY_PREMIUM_REF = 50;
-/** Slope: how far a full-scale quality swing (0…100) moves the premium multiplier. */
-export const QUALITY_PREMIUM_STRENGTH = 0.3;
-export const QUALITY_PREMIUM_MULT_MIN = 0.5;
-export const QUALITY_PREMIUM_MULT_MAX = 1.5;
-
-/**
- * Multiplier applied to a positive pricing posture given the seller's output
- * quality (0–100). 1.0 at neutral quality; > 1 rewards a premium brand, < 1
- * penalizes a premium on low quality. Clamped to keep the effect bounded.
- * Returns 1 (no effect) for non-finite quality.
- */
-export function qualityPremiumMultiplier(quality: number): number {
-  if (!Number.isFinite(quality)) return 1;
-  const raw =
-    1 + (QUALITY_PREMIUM_STRENGTH * (quality - QUALITY_PREMIUM_REF)) / QUALITY_PREMIUM_REF;
-  return Math.max(QUALITY_PREMIUM_MULT_MIN, Math.min(QUALITY_PREMIUM_MULT_MAX, raw));
-}
-
+export {
+  QUALITY_PREMIUM_REF,
+  QUALITY_PREMIUM_STRENGTH,
+  QUALITY_PREMIUM_MULT_MIN,
+  QUALITY_PREMIUM_MULT_MAX,
+  qualityPremiumMultiplier,
+} from "./rules/offerPricing";
 /**
  * Automated posture for NPP/unowned sellers: skim into shortages, undercut
  * into gluts, sit at market when balanced. Deliberately milder than the
@@ -494,6 +492,29 @@ export function computeClearingFactors(args: {
   /** Enabled ownership laws constrain actual advertising fills before receipts. */
   mediaOwnership?: MediaOwnershipMarket;
   recordDelivery?: boolean;
+  /** NPP-only internal allocations; absent leaves legacy clearing unchanged. */
+  groupSupply?: {
+    turn: number;
+    activeRoots?: ReadonlySet<string>;
+    localInputAvailabilityByState?: ReadonlyMap<string, ReadonlyMap<CommodityType, number>>;
+    localBalancesByState?: ReadonlyMap<string, ReadonlyMap<CommodityType, { demand: number }>>;
+    forecastByRoot?: Map<string, GroupForecastBasis>;
+    freightSettlementActive: boolean;
+    members: readonly SupplyMember[];
+    buyersByCommodity: ReadonlyMap<CommodityType, readonly CoordinationBuyer[]>;
+    locationBySector: ReadonlyMap<string, { countryId: string; stateId: string }>;
+    physicalBySectorCommodity: ReadonlyMap<string, ReadonlyMap<CommodityType, number>>;
+    receipts: GroupMarketReceipt[];
+    committedOutputBySector?: Map<string, Map<string, number>>;
+    availabilityBySector: Map<string, Map<CommodityType, number>>;
+    inputAllocationsBySector?: Map<
+      string,
+      Map<
+        CommodityType,
+        import("@/lib/corporations/groups/rules/inputPricing").GroupInputAllocation
+      >
+    >;
+  };
   /** Lagged per-commodity aggregate balances (prior turn). */
   balances: ReadonlyMap<CommodityType, { supply: number; demand: number }>;
   /** Lagged price-over-base ratios (prior turn). */
@@ -646,6 +667,11 @@ export function computeClearingFactors(args: {
   // 1) Resolve each sector's effective posture + offered units per commodity.
   const sellersByCommodity = new Map<CommodityType, ClearingSeller[]>();
   const postureBySector = new Map<string, number>();
+  const sourceBySector = new Map(sectors.map((s) => [s.sectorId, s]));
+  const groupFractionByCommodity = new Map<CommodityType, Map<string, number>>();
+  const groupCash = new Map(
+    args.groupSupply?.members.map((m) => [m.id, m.cashAvailableAnchor]) ?? []
+  );
   for (const s of sectors) {
     const commodities = new Set([
       ...Object.keys(s.supplyRates),
@@ -737,7 +763,9 @@ export function computeClearingFactors(args: {
   // Offered fraction a buyer took but an ownership law refused, kept apart
   // from sold so production feedback does not read a legal limit as no demand.
   const regulationBlockedByCommodityBySector = new Map<CommodityType, Map<string, number>>();
-  for (const [commodity, sellers] of sellersByCommodity) {
+  for (const [commodity, sellers] of args.groupSupply
+    ? [...sellersByCommodity].sort(([a], [b]) => a.localeCompare(b))
+    : sellersByCommodity) {
     // Market partition: split the commodity's sellers into per-group books
     // (seller's home country) and clear each book against ITS reachable
     // balances. Without partition args this is one worldwide group ("") over
@@ -897,8 +925,171 @@ export function computeClearingFactors(args: {
         }
       }
 
+      // Existing agreements take precedence. Group allocations consume the same
+      // finite offers and anonymous demand, and carry no premium or damages.
+      const groupContext = args.groupSupply;
+      const groupReserved = new Map<string, number>();
+      let groupUnits = 0;
+      if (groupContext && args.sectorCorpId && commodity !== "advertising") {
+        const buyers = (groupContext.buyersByCommodity.get(commodity) ?? []).filter(
+          (b) => bookKeyFor(commodity, b.sectorId) === g
+        );
+        const price =
+          (basePrices[commodity] * realizedPriceFor(commodity, groupSellers[0]?.id ?? "")) /
+          TURNS_PER_DAY;
+        const allSellers = groupSellers.map((s) => ({
+          sectorId: s.id,
+          memberId: args.sectorCorpId!.get(s.id) ?? "",
+          countryId: groupContext.locationBySector.get(s.id)?.countryId ?? "",
+          stateId: groupContext.locationBySector.get(s.id)?.stateId ?? "",
+          units: s.units,
+          committedUnits: contractedUnitsById?.get(s.id) ?? 0,
+          physicalUnits: groupContext.physicalBySectorCommodity.get(s.id)?.get(commodity) ?? 0,
+        }));
+        if (groupContext.committedOutputBySector)
+          for (const seller of allSellers) {
+            const row =
+              groupContext.committedOutputBySector?.get(seller.sectorId) ??
+              new Map<string, number>();
+            row.set(commodity, seller.committedUnits);
+            groupContext.committedOutputBySector?.set(seller.sectorId, row);
+          }
+        const baselineFill = groupContext.forecastByRoot
+          ? clearCommodityMarket(
+              demandForPass,
+              groupSellers,
+              loyaltyBySectorId,
+              contractedUnitsById
+            )
+          : new Map<string, number>();
+        for (const [rootId, basis] of groupContext.forecastByRoot ?? []) {
+          const ownSellers = allSellers.filter((s) => basis.memberIds.includes(s.memberId));
+          const ownBuyers = buyers.filter((b) => basis.memberIds.includes(b.memberId));
+          if (!ownSellers.length && !ownBuyers.length) continue;
+          if (
+            basis.books.length >= 128 ||
+            basis.books.reduce((n, b) => n + b.sellers.length + b.buyers.length, 0) +
+              ownSellers.length +
+              ownBuyers.length >
+              2000
+          ) {
+            basis.complete = false;
+            continue;
+          }
+          const preview = {
+            commodity,
+            supply: bal?.supply ?? 0,
+            demand: bal?.demand ?? 0,
+            unitPriceAnchor: price,
+            benchmarkFactor: realizedPriceFor(commodity, groupSellers[0]?.id ?? ""),
+            freightSettlementActive: groupContext.freightSettlementActive,
+            buyers: ownBuyers,
+            sellers: ownSellers.map((s) => {
+              return {
+                ...s,
+                openFill:
+                  s.units > s.committedUnits
+                    ? Math.max(
+                        0,
+                        (s.units * (baselineFill.get(s.sectorId) ?? 0) - s.committedUnits) /
+                          (s.units - s.committedUnits)
+                      )
+                    : 0,
+                quoteFactor:
+                  offerPriceFactor({
+                    posture: postureBySector.get(s.sectorId) ?? 0,
+                    priceLeg: realizedPriceFor(commodity, s.sectorId),
+                    qualityPremiumEnabled: args.qualityPremiumEnabled,
+                    quality:
+                      sourceBySector.get(s.sectorId)?.productQualityByCommodity?.[commodity] ??
+                      sourceBySector.get(s.sectorId)?.outputQuality,
+                    inputCostIndex: sourceBySector.get(s.sectorId)?.inputCostIndex,
+                    inputCostShare: sourceBySector.get(s.sectorId)?.inputCostShare,
+                    fixedCostShare: sourceBySector.get(s.sectorId)?.fixedCostShare,
+                  }) / realizedPriceFor(commodity, s.sectorId),
+              };
+            }),
+          };
+          for (const slice of coordinationSlices(
+            { ...preview, turn: groupContext.turn, members: groupContext.members },
+            groupContext.localInputAvailabilityByState,
+            groupContext.localBalancesByState
+          )) {
+            const rows = slice.sellers.length + slice.buyers.length;
+            if (
+              basis.books.length >= 128 ||
+              basis.books.reduce((n, b) => n + b.sellers.length + b.buyers.length, 0) + rows > 2000
+            ) {
+              basis.complete = false;
+              break;
+            }
+            basis.books.push({
+              ...preview,
+              supply: slice.supply,
+              demand: slice.demand,
+              buyers: slice.buyers,
+              sellers: preview.sellers.filter((s) =>
+                slice.sellers.some((r) => r.sectorId === s.sectorId)
+              ),
+            });
+          }
+          if (rootId !== basis.rootId) basis.complete = false;
+        }
+        const allocation = coordinateGroupMarket(
+          {
+            commodity,
+            turn: groupContext.turn,
+            supply: bal?.supply ?? 0,
+            demand: bal?.demand ?? 0,
+            unitPriceAnchor: price,
+            freightSettlementActive: groupContext.freightSettlementActive,
+            members: groupContext.members
+              .filter((m) => !groupContext.activeRoots || groupContext.activeRoots.has(m.rootId))
+              .map((m) => ({
+                ...m,
+                cashAvailableAnchor: groupCash.get(m.id) ?? 0,
+              })),
+            buyers,
+            sellers: allSellers,
+          },
+          groupContext.localInputAvailabilityByState,
+          groupContext.localBalancesByState
+        );
+        for (const [id, units] of allocation.reservedBySeller) {
+          groupReserved.set(id, units);
+          groupUnits += units;
+          const seller = groupSellers.find((s) => s.id === id)!;
+          const fractions = groupFractionByCommodity.get(commodity) ?? new Map<string, number>();
+          fractions.set(id, seller.units > 0 ? units / seller.units : 0);
+          groupFractionByCommodity.set(commodity, fractions);
+        }
+        for (const [id, amount] of allocation.spendByBuyer)
+          groupCash.set(id, Math.max(0, (groupCash.get(id) ?? 0) - amount));
+        for (const [id, availability] of allocation.availabilityByBuyer) {
+          const byCommodity =
+            groupContext.availabilityBySector.get(id) ?? new Map<CommodityType, number>();
+          byCommodity.set(commodity, availability);
+          groupContext.availabilityBySector.set(id, byCommodity);
+        }
+        for (const receipt of allocation.receipts) {
+          if (!groupContext.inputAllocationsBySector) continue;
+          const byCommodity =
+            groupContext.inputAllocationsBySector.get(receipt.buyerSectorId) ?? new Map();
+          const prev = byCommodity.get(commodity);
+          const units =
+            (receipt.units * basePrices[commodity]) /
+            COMMODITY_BASE_PRICES[commodity] /
+            TURNS_PER_DAY;
+          byCommodity.set(commodity, {
+            units: (prev?.units ?? 0) + units,
+            marketFactor: realizedPriceFor(commodity, receipt.supplierSectorId),
+          });
+          groupContext.inputAllocationsBySector.set(receipt.buyerSectorId, byCommodity);
+        }
+        groupContext.receipts.push(...allocation.receipts);
+      }
       const internalReservations =
-        args.internalSupply && args.sectorCorpId
+        args.internalSupply && !args.groupSupply && args.sectorCorpId
           ? reserveInternalSupply({
               context: args.internalSupply,
               commodity,
@@ -919,11 +1110,26 @@ export function computeClearingFactors(args: {
             })
           : undefined;
       const groupSold = clearCommodityMarket(
-        demandForPass,
-        groupSellers,
+        Math.max(0, demandForPass - groupUnits),
+        groupSellers.map((s) => ({
+          ...s,
+          units: Math.max(0, s.units - (groupReserved.get(s.id) ?? 0)),
+        })),
         loyaltyBySectorId,
         internalReservations ?? contractedUnitsById
       );
+      for (const seller of groupSellers) {
+        const reserved = groupReserved.get(seller.id) ?? 0;
+        if (reserved > 0)
+          groupSold.set(
+            seller.id,
+            Math.min(
+              1,
+              (reserved + (seller.units - reserved) * (groupSold.get(seller.id) ?? 0)) /
+                seller.units
+            )
+          );
+      }
       for (const [id, f] of groupSold) sold.set(id, f);
     }
     if (commodity === "advertising" && args.mediaOwnership) {
@@ -959,7 +1165,7 @@ export function computeClearingFactors(args: {
       }
       regulationBlockedByCommodityBySector.set(commodity, blocked);
     }
-    if (args.internalSupply)
+    if (args.internalSupply && !args.groupSupply)
       finishInternalSupplyCommodity(
         args.internalSupply,
         commodity,
@@ -1021,7 +1227,7 @@ export function computeClearingFactors(args: {
 
   // 3) Weighted per-sector factor across outputs.
   const internalUnitsByCommodity = new Map<CommodityType, Map<string, number>>();
-  for (const trade of args.internalSupply?.tradesOut ?? []) {
+  for (const trade of (args.groupSupply ? [] : args.internalSupply?.tradesOut) ?? []) {
     const units = internalUnitsByCommodity.get(trade.commodity) ?? new Map<string, number>();
     units.set(trade.supplierSectorId, (units.get(trade.supplierSectorId) ?? 0) + trade.units);
     internalUnitsByCommodity.set(trade.commodity, units);
@@ -1085,31 +1291,29 @@ export function computeClearingFactors(args: {
         stateRatio ?? groupRatios?.get(commodity) ?? priceRatioByCommodity.get(commodity)
       );
       const quality = s.productQualityByCommodity?.[commodity] ?? s.outputQuality;
-      const premiumMult =
-        args.qualityPremiumEnabled && posture > 0 && quality != null
-          ? qualityPremiumMultiplier(quality)
-          : 1;
-      const effectivePremium = posture > 0 ? posture * premiumMult : posture;
-      const offerFactor =
-        s.inputCostIndex !== undefined
-          ? costPlusPriceFactor(
-              s.inputCostIndex,
-              effectivePremium,
-              s.inputCostShare,
-              s.fixedCostShare
-            )
-          : (1 + effectivePremium) * priceLeg;
+      const offerFactor = offerPriceFactor({
+        posture,
+        priceLeg,
+        qualityPremiumEnabled: args.qualityPremiumEnabled,
+        quality,
+        inputCostIndex: s.inputCostIndex,
+        inputCostShare: s.inputCostShare,
+        fixedCostShare: s.fixedCostShare,
+      });
       const internalUnits = internalUnitsByCommodity.get(commodity)?.get(s.sectorId) ?? 0;
       const offeredUnits = offeredUnitsByCommodity.get(commodity)?.get(s.sectorId) ?? 0;
       const internalSold =
         offeredUnits > 0 ? Math.min(sold, (internalUnits / offeredUnits) * availability) : 0;
-      // Internal units clear at the market price. Only open-market surplus
-      // earns the posted quote; the consumed-input discount settles separately.
-      const realizedRevenueFactor = (sold - internalSold) * offerFactor + internalSold * priceLeg;
-      offerFactorByCommodity[commodity] = sold > 0 ? realizedRevenueFactor / sold : offerFactor;
+      // Group units realize exactly the benchmark, without posture, quality or cost-plus markup.
+      const groupFraction =
+        (groupFractionByCommodity.get(commodity)?.get(s.sectorId) ?? 0) * availability;
+      const revenueFactor =
+        Math.max(0, sold - groupFraction - internalSold) * offerFactor +
+        (groupFraction + internalSold) * priceLeg;
+      offerFactorByCommodity[commodity] = sold > 0 ? revenueFactor / sold : offerFactor;
       rateSum += weight;
-      factorSum += weight * realizedRevenueFactor;
-      revenueWeightByCommodity[commodity] = weight * realizedRevenueFactor;
+      factorSum += weight * revenueFactor;
+      revenueWeightByCommodity[commodity] = weight * revenueFactor;
       quotedPostureSum += weight * (offerFactor / priceLeg - 1);
       soldSum += weight * sold;
       soldByCommodity[commodity] = sold;

@@ -749,6 +749,7 @@ export function processSector(
   // ─── P3.5: physical cost decomposition (plants only) ──────────────────────
   // Pure computation in `sectorTurn/sectorCosts.ts`; names are unchanged.
   const physicalCostInput = {
+    groupAllocations: market.groupSupplyInputsBySector?.get(sector._id.toString()),
     plantsEnabled,
     internalSupplyDiscountCost: market.internalSupplyDiscountCostBySectorId?.get(
       sector._id.toString()
@@ -1330,7 +1331,19 @@ export function processSector(
     stateId: sector.stateId,
     countryId: sectorCountryId,
   };
-  if (market.internalSupplyTrades?.length && physicalPnl) {
+  if ((market.internalSupplyTrades?.length || market.groupSupplyDiscountsEnabled) && physicalPnl) {
+    if (market.groupSupplyDiscountsEnabled)
+      result.groupSupplyOutputUnits = new Map(
+        Object.keys(strategyRates.supply ?? {}).map((commodity) => [
+          commodity,
+          Math.max(0, mothballed ? 0 : producedUnits) *
+            commodityMixWeight(
+              strategyRates.supply ?? {},
+              eraScaledBasePrices(lookups.eraUnitScale),
+              commodity as CommodityType
+            ),
+        ])
+      );
     result.internalSupplyInputUnits = new Map(
       [...inputUnitsByCommodity].map(([commodity, units]) => [
         commodity,
