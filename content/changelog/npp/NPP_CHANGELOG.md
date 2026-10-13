@@ -67,6 +67,9 @@ number.
 - **Fewer writes.** Ministerial orders and settings are written in batches
   per country.
 
+- **Currency defence.** Central banks answer sharp currency moves (6.6.0).
+  Governments do not yet respond with fiscal policy or reserves.
+
 ### Stage 3: corporations
 
 - **Investing on value.** NPP share and bond purchases compare price with
@@ -99,6 +102,25 @@ number.
 - Autonomy v6 becomes the default for new singleplayer and simulation worlds,
   after the engine 6 stages are validated. Running worlds never change level on
   their own.
+
+## 6.6.0 (unreleased)
+
+Stage 2 (governing).
+
+- **Central banks answer currency moves (v6).** An autonomous central bank
+  chair used to set its rate from inflation and growth alone, so a currency
+  could fall sharply and the bank would not respond until the higher import
+  prices showed up as inflation. Now a floating currency's move over the last
+  24 turns also counts.
+  - A fall of more than 5% raises the bank's target rate by 0.1 points for
+    each further 1%.
+  - A rise of more than 5% lowers it at half that rate.
+  - The shift is capped at 3 points.
+  - The bank still moves toward its target in the same limited steps, with the
+    same wait between changes, and the rate history records the currency move
+    as part of the reason.
+  - Pegged currencies and currencies under a shared central bank are not
+    affected.
 
 ## 6.5.0 (unreleased)
 
