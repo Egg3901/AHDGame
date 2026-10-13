@@ -17,6 +17,7 @@ import { PRIMARY_SECTOR_BY_COMMODITY } from "@/lib/trade/commoditySector";
 import { applyFreightHaulDemand } from "@/lib/logistics/freightDemand";
 import type { CommodityType } from "@/lib/constants/commodities";
 import type { DemandUsesByState } from "@/lib/logistics/rules/purchaseExposure";
+import type { SourcingOwnRoute } from "@/lib/logistics/sourcing";
 import { NATIONAL_SCOPE_IDS } from "@/lib/constants/nationalScope";
 import type { CountryLedger, GlobalLedger, StateLedger } from "./ledgerTypes";
 
@@ -32,6 +33,7 @@ export interface FreightSettlementInputs {
   ftaPairs: Parameters<typeof importerTariffOnFlow>[1];
   affinityFor: (commodity: CommodityType, exporter: CountryId, importer: CountryId) => number;
   demandUsesByState?: DemandUsesByState;
+  ownRoutes?: readonly SourcingOwnRoute[];
 }
 
 export interface FreightSettlementOutcome {
@@ -73,6 +75,7 @@ export async function runFreightSettlementPhase(
     ftaPairs,
     affinityFor,
     demandUsesByState,
+    ownRoutes,
   } = inputs;
   // Freight is a separately-soaked rollout. The market ladder enables the
   // ledger needed to observe routes, while this gate decides whether those
@@ -134,6 +137,7 @@ export async function runFreightSettlementPhase(
         affinityFor(commodity, exporter, importer) === 0,
       shortageResponsiveSourcingEnabled:
         freightSettlementConfig?.shortageResponsiveSourcingEnabled === true,
+      ownRoutes: freightSettlementActive ? ownRoutes : undefined,
     });
     const { commodityDocs, networkDoc } = buildSourcingDocs(freightSettlement.sourcing, turn, now, {
       includeFreightBilling: canonicalFreightBillingEnabled,
@@ -169,6 +173,14 @@ export async function runFreightSettlementPhase(
     ) {
       networkDoc.freightSettlementRampFraction = Math.round(freightRampFraction * 10000) / 10000;
     }
+    const ownRouteBillingScale = canonicalFreightBillingEnabled
+      ? Math.max(0, Math.min(1, freightRampFraction))
+      : 0;
+    networkDoc.ownRouteDelivered = freightSettlement.sourcing.ownRouteDelivered.map((r) => ({
+      ...r,
+      units: Math.round(r.units * 10000) / 10000,
+      freightCharge: Math.round((r.freightCharge ?? 0) * ownRouteBillingScale * 100) / 100,
+    }));
     await db
       .collection("sourcingNetworkLoad")
       .updateOne({ turn }, { $set: networkDoc }, { upsert: true });
