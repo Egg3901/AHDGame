@@ -102,3 +102,32 @@ describe("buildOwnRoutes", () => {
     expect(routes.map((r) => r.destStateId)).toEqual(["CA", "NV"]);
   });
 });
+
+it("carries the opt-in for newly founded and existing sectors while keeping own local plants supplied", () => {
+  const routes = buildOwnRoutes({
+    sectors: [...sectors, { sectorId: "new-plant", corporationId: "c1", stateId: "MN" }],
+    supplyBySector: m([["mine-mn", [["coal", 100]]]]),
+    inputDemandBySector: m([
+      ["new-plant", [["coal", 40]]],
+      ["steel-ca", [["coal", 100]]],
+    ]),
+    policies: new Map([
+      [
+        "c1",
+        { root: "c1", policy: { priority: "own", discount: 0.1, ownFirstAcrossStates: true } },
+      ],
+    ]),
+    stateToCountry,
+    hops,
+  });
+  expect(routes).toEqual([
+    {
+      commodity: "coal",
+      corporationId: "c1",
+      originStateId: "MN",
+      destStateId: "CA",
+      units: 60,
+      ownFirstAcrossStates: true,
+    },
+  ]);
+});
