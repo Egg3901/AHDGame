@@ -162,3 +162,59 @@ it("disables internal priority while group coordination is active without deleti
   );
   expect(db.collectionMocks.corporations.updateOne).not.toHaveBeenCalled();
 });
+
+it("persists the opt-in and rejects non-boolean settings", async () => {
+  expect(
+    (
+      await POST(request("POST", { priority: "own", discount: 0.1, ownFirstAcrossStates: true }), {
+        params,
+      })
+    ).status
+  ).toBe(200);
+  expect(
+    db.collectionMocks.corporations.updateOne.mock.calls[0][1].$set.internalSupplyPolicy
+      .ownFirstAcrossStates
+  ).toBe(true);
+  expect(
+    (
+      await POST(request("POST", { priority: "own", discount: 0.1, ownFirstAcrossStates: "yes" }), {
+        params,
+      })
+    ).status
+  ).toBe(400);
+});
+it("shows only this company's recorded hauls with separately dated anchor freight costs", async () => {
+  db.collection("sourcingNetworkLoad");
+  db.collectionMocks.sourcingNetworkLoad.findOne.mockResolvedValue({
+    turn: 13,
+    ownRouteDelivered: [
+      {
+        corporationId: id.toString(),
+        commodity: "coal",
+        originStateId: "IL",
+        destStateId: "CA",
+        units: 20,
+        freightCharge: 100,
+      },
+      {
+        corporationId: parentId.toString(),
+        commodity: "coal",
+        originStateId: "IL",
+        destStateId: "CA",
+        units: 50,
+        freightCharge: 900,
+      },
+    ],
+  });
+  const body = await (await GET(request("GET"), { params })).json();
+  expect(body.ownHaulTurn).toBe(13);
+  expect(body.ownHauls).toEqual([
+    {
+      commodity: "coal",
+      originStateId: "IL",
+      destStateId: "CA",
+      units: 20,
+      freightPerUnitAnchor: 5,
+    },
+  ]);
+});
