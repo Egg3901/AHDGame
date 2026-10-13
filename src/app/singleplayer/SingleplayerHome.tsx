@@ -4,6 +4,7 @@ import { apiErrorText } from "@/lib/errors/catalog";
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import type { NppAutonomyLevel } from "@/lib/db/types/gameState";
 import type { SingleplayerStatus } from "@/lib/singleplayerServer";
 import {
   DEFAULT_SINGLEPLAYER_FEATURE_FLAGS,
@@ -56,9 +57,7 @@ export function SingleplayerHome({ status }: Props) {
   const [displayName, setDisplayName] = useState("");
   const [mode, setMode] = useState<"normal" | "head-of-state" | "worldsim">("normal");
   const [difficulty, setDifficulty] = useState<"easy" | "normal" | "hard">("normal");
-  const [autonomyLevel, setAutonomyLevel] = useState<
-    "off" | "v0" | "v1" | "v2" | "v3" | "v4" | "v5"
-  >("v4");
+  const [autonomyLevel, setAutonomyLevel] = useState<NppAutonomyLevel>("v4");
   const [featureFlags, setFeatureFlags] = useState(DEFAULT_SINGLEPLAYER_FEATURE_FLAGS);
   const [phase, setPhase] = useState<"idle" | "running" | "done" | "error">("idle");
   const [logs, setLogs] = useState<string[]>([]);

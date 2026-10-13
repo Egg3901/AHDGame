@@ -352,6 +352,50 @@ describe("nppActionProcessing", () => {
       );
     });
 
+    describe("v6 staggered cycle (NPP engine 6.0)", () => {
+      // Lane is the ObjectId's low bytes mod 4, so these four sit in lanes 0-3.
+      const laned = () =>
+        [0, 1, 2, 3].map((lane) =>
+          createNpp({ _id: new ObjectId(`0000000000000000000000${String(lane).padStart(2, "0")}`) })
+        );
+
+      it("acts only the lane whose turn it is, off the shared cycle turn", async () => {
+        mockFindOne.mockResolvedValue({ nppEconomyEnabled: true, nppAutonomyLevel: "v6" });
+        mockNppFind.mockImplementation(() => createAsyncCursor(laned()));
+
+        const result = await processNppActions(mockDb, 5);
+
+        expect(result.nppsProcessed).toBe(1);
+      });
+
+      it("skips an NPP whose lane is not up", async () => {
+        mockFindOne.mockResolvedValue({ nppEconomyEnabled: true, nppAutonomyLevel: "v6" });
+        mockNppFind.mockImplementation(() => createAsyncCursor([laned()[1]]));
+
+        expect((await processNppActions(mockDb, 6)).nppsProcessed).toBe(0);
+        expect((await processNppActions(mockDb, 9)).nppsProcessed).toBe(1);
+      });
+
+      it("acts every NPP exactly once across one four-turn interval", async () => {
+        mockFindOne.mockResolvedValue({ nppEconomyEnabled: true, nppAutonomyLevel: "v6" });
+        mockNppFind.mockImplementation(() => createAsyncCursor(laned()));
+
+        let processed = 0;
+        for (const turn of [8, 9, 10, 11]) {
+          processed += (await processNppActions(mockDb, turn)).nppsProcessed;
+        }
+        expect(processed).toBe(4);
+      });
+
+      it("keeps every NPP on the shared cycle turn below v6", async () => {
+        mockFindOne.mockResolvedValue({ nppEconomyEnabled: true, nppAutonomyLevel: "v5" });
+        mockNppFind.mockImplementation(() => createAsyncCursor(laned()));
+
+        expect((await processNppActions(mockDb, 5)).nppsProcessed).toBe(0);
+        expect((await processNppActions(mockDb, 8)).nppsProcessed).toBe(4);
+      });
+    });
+
     it("does NOT sweep to savings below v3 either (funds inc excludes savings)", async () => {
       vi.mocked(decideNppAction)
         .mockReturnValueOnce({ action: "campaign", reason: "Testing" })

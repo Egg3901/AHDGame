@@ -1,7 +1,8 @@
 /**
  * NPP Action Processing Turn Phase
  *
- * Runs every 4 turns to process actions for active Non-Player Politicians.
+ * Runs every 4 turns to process actions for active Non-Player Politicians (at
+ * v6, NPP engine 6.0, a quarter of them each turn: v6/rules/actionCadence.ts).
  * Uses the action AI to select which action each NPP takes, then executes
  * the action at full player effectiveness (the 4-turn cadence and per-cycle
  * action cap are the throttle, not a per-action discount).
@@ -49,7 +50,13 @@ import {
 import { loadTxThresholds, emitTxBulk } from "@/lib/financialTxLog/emit";
 import type { FinancialTxLogEntry } from "@/lib/db/types/financialTxLog";
 import { makeSeededRng } from "@/lib/events/substrate/rng";
-import { getNppAutonomyWorldContext, nppAutonomyLevelAtLeast } from "@/lib/nppAutonomy/featureFlag";
+import {
+  getNppAutonomyLevel,
+  getNppAutonomyWorldContext,
+  nppAutonomyLevelAtLeast,
+} from "@/lib/nppAutonomy/featureFlag";
+import { NPP_ENGINE_LEVEL } from "@/lib/nppAutonomy/engineVersion";
+import { NPP_ACTION_INTERVAL, nppActsThisTurn } from "@/lib/nppAutonomy/v6/rules/actionCadence";
 import { getAllCountryAccess } from "@/lib/countryAccess";
 import { careerArchetypeModifiersContinuous } from "@/lib/nppAutonomy/v3/careerArchetype";
 import { nppBuyBond } from "@/lib/nppAutonomy/v3/finance/nppBonds";
@@ -106,7 +113,7 @@ export function nonPlayerCountryIds(
     .map(([id]) => id);
 }
 
-const ACTION_PROCESSING_INTERVAL = 4;
+const ACTION_PROCESSING_INTERVAL = NPP_ACTION_INTERVAL;
 // Max actions a single NPP performs per 4-turn processing cycle. Avg ~2.5 AP/action ×4 ≈
 // 9–10 AP spent vs +8 regen/cycle → AP draws down slowly from the cap. Sole throughput knob.
 export const NPP_ACTIONS_PER_CYCLE = 4;
@@ -269,10 +276,15 @@ export async function processNppActions(
 
 async function runNppActions(db: Db, currentTurn: number): Promise<NppActionProcessingResult> {
   const step = substepMarker();
-  // Only process every 4 turns
-  if (currentTurn % ACTION_PROCESSING_INTERVAL !== 0) {
+  // Below v6 every NPP acts on the same turn, one in every four. At v6 (NPP
+  // engine 6.0) each NPP acts on its own lane's turn instead, so the cost is
+  // spread across all four; see v6/rules/actionCadence.ts.
+  const cycleTurn = currentTurn % ACTION_PROCESSING_INTERVAL === 0;
+  const staggered = nppAutonomyLevelAtLeast(await getNppAutonomyLevel(db), NPP_ENGINE_LEVEL);
+  if (!cycleTurn && !staggered) {
     return zeroResult();
   }
+  const actsThisTurn = staggered ? (id: ObjectId) => nppActsThisTurn(id, currentTurn) : undefined;
 
   // NPP economy is on by default; only an explicit `false` disables it.
   const config = await db.collection<GameConfig>("gameConfig").findOne({ _id: "default" });
@@ -390,6 +402,7 @@ async function runNppActions(db: Db, currentTurn: number): Promise<NppActionProc
   }[] = [];
 
   for await (const npp of cursor) {
+    if (actsThisTurn && !actsThisTurn(npp._id)) continue;
     result.nppsProcessed++;
 
     // Use finite guard: ?? only catches null/undefined, not NaN
@@ -650,10 +663,14 @@ async function runNppActions(db: Db, currentTurn: number): Promise<NppActionProc
 
   step.mark("actions");
   if (econActive) {
-    await investNppBondSurplus(db, currentTurn, econScopeCountries, preset);
+    // The two per-NPP buy sweeps follow the NPP's lane at v6. The other three
+    // iterate corporations, party organisations and a capped founding pool
+    // rather than NPPs, so they stay on the shared cycle turn.
+    await investNppBondSurplus(db, currentTurn, econScopeCountries, preset, actsThisTurn);
     step.mark("bondInvesting");
-    await investNppStockSurplus(db, currentTurn, econScopeCountries, preset);
+    await investNppStockSurplus(db, currentTurn, econScopeCountries, preset, actsThisTurn);
     step.mark("stockInvesting");
+    if (!cycleTurn) return result;
     await sellNppStockSurplus(db, currentTurn, econScopeCountries, preset);
     step.mark("stockSelling");
     await buildNppPartyOrgSurplus(db, currentTurn, econScopeCountries);
@@ -681,7 +698,8 @@ async function investNppBondSurplus(
   db: Db,
   currentTurn: number,
   countryScope: CountryId[] | null = null,
-  preset?: string
+  preset?: string,
+  actsThisTurn?: (id: ObjectId) => boolean
 ): Promise<void> {
   // Investment capital is the personal forex account (₳), NOT campaign funds
   // and NOT savings — the full campaign/economy wall.
@@ -699,6 +717,8 @@ async function investNppBondSurplus(
   const fxByCcy = await loadFxRatesByCurrency(db);
 
   for await (const npp of cursor) {
+    // Before any RNG draw, so a skipped NPP leaves the stream to the ones acting.
+    if (actsThisTurn && !actsThisTurn(npp._id)) continue;
     const countryId = (npp.countryId ?? "US") as CountryId;
     const homeCurrency = preset
       ? getSeedCurrencyCode(countryId, preset)
@@ -830,7 +850,8 @@ async function investNppStockSurplus(
   db: Db,
   currentTurn: number,
   countryScope: CountryId[] | null = null,
-  preset?: string
+  preset?: string,
+  actsThisTurn?: (id: ObjectId) => boolean
 ): Promise<void> {
   void currentTurn; // kept for signature symmetry with the bond sweep; not needed by nppBuyShares.
 
@@ -848,6 +869,8 @@ async function investNppStockSurplus(
   const fxByCcy = await loadFxRatesByCurrency(db);
 
   for await (const npp of cursor) {
+    // Before any RNG draw, so a skipped NPP leaves the stream to the ones acting.
+    if (actsThisTurn && !actsThisTurn(npp._id)) continue;
     const countryId = (npp.countryId ?? "US") as CountryId;
     const homeCurrency = preset
       ? getSeedCurrencyCode(countryId, preset)

@@ -184,9 +184,9 @@ function scalarConfig(
  * same seed at v3 and v4 is the A/B that tells you whether letting autonomy into
  * player-enabled countries changed the balance.
  */
-const AUTONOMY_LEVEL = (arg("autonomy") ?? "v3") as "v3" | "v4" | "v5";
-if (!(["v3", "v4", "v5"] as const).includes(AUTONOMY_LEVEL)) {
-  throw new Error(`--autonomy must be v3, v4, or v5 (got "${AUTONOMY_LEVEL}")`);
+const AUTONOMY_LEVEL = (arg("autonomy") ?? "v3") as "v3" | "v4" | "v5" | "v6";
+if (!(["v3", "v4", "v5", "v6"] as const).includes(AUTONOMY_LEVEL)) {
+  throw new Error(`--autonomy must be v3, v4, v5, or v6 (got "${AUTONOMY_LEVEL}")`);
 }
 
 /**

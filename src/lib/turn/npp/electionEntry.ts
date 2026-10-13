@@ -61,6 +61,11 @@ import { careerArchetypeModifiersContinuous } from "@/lib/nppAutonomy/v3/careerA
 import { ChallengerBudget } from "@/lib/nppAutonomy/playerImpactBudget";
 import { isCountryEnabledForPlayers } from "@/lib/countryAccess";
 import { makeSeededRng } from "@/lib/events/substrate/rng";
+import { NPP_ENGINE_LEVEL } from "@/lib/nppAutonomy/engineVersion";
+import {
+  compareStrongestFirst,
+  placementOrder,
+} from "@/lib/nppAutonomy/v6/rules/candidatePlacement";
 import { logger } from "../../observability/logger";
 
 // Optional global salt so headless sim runs can vary this RNG across runs
@@ -418,6 +423,13 @@ export async function processElectionEntry(ctx: NPPContext): Promise<number> {
     logger.error("Turn", "fileAcceptedSlateRows failed; continuing election entry", error);
   }
 
+  // Engine 6.1 (v6): place the strongest NPPs in the most senior races. Read
+  // once per country here; the level is served from the phase snapshot.
+  const placementCountries = new Set<string>();
+  for (const cid of new Set(openPrimaries.map((p) => (p.countryId ?? "US") as CountryId))) {
+    if (await nppAutonomyAtLeast(db, cid, NPP_ENGINE_LEVEL)) placementCountries.add(cid);
+  }
+
   // Reserve nationwide executive candidates before the regional generic-fill
   // pass consumes the available NPP pool. Presidential primaries are present
   // here only for autonomy-active countries; Uachtaran is directly elected in
@@ -454,8 +466,12 @@ export async function processElectionEntry(ctx: NPPContext): Promise<number> {
               ctx.nppElectionEligiblePartyKeys.has(`${cid}:${n.party}`))
         )
         // Deterministic pick: lowest nppId string (sequentialId is not loaded
-        // into the turn context).
-        .sort((a, b) => (a._id.toString() < b._id.toString() ? -1 : 1));
+        // into the turn context). At v6, the strongest NPP, id as tie-break.
+        .sort(
+          placementCountries.has(cid)
+            ? compareStrongestFirst
+            : (a, b) => (a._id.toString() < b._id.toString() ? -1 : 1)
+        );
 
       const npp = pool[0];
       if (!npp) continue;
@@ -531,6 +547,35 @@ export async function processElectionEntry(ctx: NPPContext): Promise<number> {
       const sortedPrimaries = [...primaries].sort((a, b) => {
         return getRacePriority(a.electionType) - getRacePriority(b.electionType);
       });
+
+      if (placementCountries.has(primaryCountryId ?? "US")) {
+        // Same primaries as the loop below would fill, strongest NPP to the
+        // most senior one. A failed filing (cooldown, presence gate) tries the
+        // next NPP for that primary rather than moving the NPP down a race.
+        const unfilled = sortedPrimaries.filter((primary) => {
+          const key = `${primary._id}_${party}`;
+          if (filledThisTurn.has(key)) return false;
+          const candidates = candidatesByElection.get(primary._id.toString()) ?? [];
+          if (candidates.some((c) => c.party === party && c.status === "active")) {
+            filledThisTurn.add(key);
+            return false;
+          }
+          return true;
+        });
+        const pool = [...availableNPPs].sort(compareStrongestFirst);
+        for (const primary of placementOrder(unfilled, pool.length, (p) =>
+          getRacePriority(p.electionType)
+        )) {
+          for (const npp of pool) {
+            if (await enterPrimary(npp, primary)) {
+              if (!ctx.batchCandidateInserts) entered++;
+              pool.splice(pool.indexOf(npp), 1);
+              break;
+            }
+          }
+        }
+        continue;
+      }
 
       for (const primary of sortedPrimaries) {
         const key = `${primary._id}_${party}`;

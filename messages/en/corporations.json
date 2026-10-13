@@ -768,7 +768,11 @@
       "netCharge": "Net internal discount charge: ₳{amount} per day.",
       "retry": "Retry",
       "pricingHint": "Pricing posture changes open-market sales. Supplying your own plants first is a separate policy.",
-      "pricingLink": "Manage internal supply"
+      "pricingLink": "Manage internal supply",
+      "ownFirstAcrossStates": "Ship own surplus to out-of-state plants before local market buyers",
+      "ownFirstFreightWarning": "Off by default. Keeps supply for your own local plants first. Out-of-state shipping can leave other local buyers short. Freight is charged separately and can cost more than the internal discount saves; nearby purchases avoid this haul. New reservations use the previous turn's recorded deliveries.",
+      "ownHaulTurn": "Own cross-state hauls, turn {turn}",
+      "ownHaulCost": "{commodity}: {origin} to {destination}, {units} units; freight ₳{cost} per unit (anchor currency)."
     }
   }
 }

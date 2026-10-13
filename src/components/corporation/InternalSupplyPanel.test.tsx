@@ -120,3 +120,40 @@ it("explains why internal priority is disabled during Group coordination", async
   await screen.findByText(/Subsidiary Group coordination is active/);
   expect(screen.getByLabelText("Supply priority")).toHaveProperty("disabled", true);
 });
+
+it("saves the cross-state opt-in and shows freight separately from discounts", async () => {
+  fetcher.mockResolvedValue({
+    ok: true,
+    json: async () => ({
+      ...view,
+      policy: { priority: "own", discount: 0.1 },
+      ownHaulTurn: 13,
+      ownHauls: [
+        {
+          commodity: "coal",
+          originStateId: "IL",
+          destStateId: "CA",
+          units: 20,
+          freightPerUnitAnchor: 5,
+        },
+      ],
+    }),
+  });
+  show();
+  await screen.findByText("Own cross-state hauls, turn 13");
+  expect(
+    screen.getByText("coal: IL to CA, 20 units; freight ₳5 per unit (anchor currency).")
+  ).toBeTruthy();
+  const toggle = screen.getByLabelText(
+    "Ship own surplus to out-of-state plants before local market buyers"
+  );
+  expect(toggle).toHaveProperty("checked", false);
+  fireEvent.click(toggle);
+  fetcher.mockResolvedValueOnce({
+    ok: true,
+    json: async () => ({ policy: { priority: "own", discount: 0.1, ownFirstAcrossStates: true } }),
+  });
+  fireEvent.click(screen.getByText("Save policy"));
+  await screen.findByText("Policy saved. New reservations and discounts apply next turn.");
+  expect(JSON.parse(fetcher.mock.calls[1][1].body).ownFirstAcrossStates).toBe(true);
+});
