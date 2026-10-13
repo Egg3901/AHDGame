@@ -44,4 +44,27 @@ describe("depositors panel", () => {
     expect(screen.getByText("legacy")).toBeTruthy();
     expect(screen.getByText("empty")).toBeTruthy();
   });
+
+  it("does not link a character when its public sequential id is absent", () => {
+    render(
+      <DepositorBookPanel
+        currency="USD"
+        householdDeposits={0}
+        book={{
+          source: "accounts",
+          total: 25,
+          rows: [
+            {
+              key: "opaque-key",
+              type: "character",
+              name: "No public link",
+              sequentialId: null,
+              balance: 25,
+            },
+          ],
+        }}
+      />
+    );
+    expect(screen.getByText("No public link").closest("a")).toBeNull();
+  });
 });

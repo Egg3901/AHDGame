@@ -7,6 +7,7 @@ import { getBankDepositorBook } from "./depositorBook";
 const bank = new ObjectId();
 const first = new ObjectId();
 const second = new ObjectId();
+const unnamed = new ObjectId();
 const owner = { isCeo: true, isAdmin: false, isChair: false };
 
 describe("bank depositor balances", () => {
@@ -54,6 +55,9 @@ describe("bank depositor balances", () => {
       ["First", 100],
     ]);
     expect(book?.total).toBe(400);
+    expect(JSON.stringify(book)).not.toContain(first.toString());
+    expect(JSON.stringify(book)).not.toContain(second.toString());
+    expect(new Set(book?.rows.map((row) => row.key)).size).toBe(book?.rows.length);
   });
 
   it("uses authoritative accounts without double-counting legacy projections", async () => {
@@ -88,7 +92,7 @@ describe("bank depositor balances", () => {
       },
       {
         _id: new ObjectId(),
-        ownerId: new ObjectId(),
+        ownerId: unnamed,
         ownerType: "character",
         holder: bank.toString(),
         currency: "USD",
@@ -122,6 +126,15 @@ describe("bank depositor balances", () => {
         status: "closed",
         balance: 900,
       },
+      {
+        _id: new ObjectId(),
+        ownerId: new ObjectId(),
+        ownerType: "corporation",
+        holder: bank.toString(),
+        currency: "USD",
+        status: "open",
+        balance: 800,
+      },
     ]);
     const policy = resolveBankingPolicy({
       savingsAccountsMode: "authoritative",
@@ -135,6 +148,14 @@ describe("bank depositor balances", () => {
       ["character", null, 50],
     ]);
     expect(book?.total).toBe(350);
+    const keys = book!.rows.map((row) => row.key);
+    expect(new Set(keys).size).toBe(keys.length);
+    expect(JSON.stringify(book)).not.toContain(first.toString());
+    expect(JSON.stringify(book)).not.toContain(second.toString());
+    expect(JSON.stringify(book)).not.toContain(unnamed.toString());
+
+    const repeated = await getBankDepositorBook(db as unknown as Db, bank, "USD", policy, owner);
+    expect(repeated?.rows.map((row) => row.key)).toEqual(keys);
   });
 
   it("respects the currency read cohort", async () => {

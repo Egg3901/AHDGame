@@ -32,13 +32,10 @@ export function DepositorBookPanel({
           </thead>
           <tbody>
             {book.rows.map((row) => (
-              <tr key={`${row.type}:${row.id}`}>
+              <tr key={`${row.type}:${row.key}`}>
                 <Td>
-                  {row.name && row.type === "character" ? (
-                    <Link
-                      className="hover:underline"
-                      href={`/character/${row.sequentialId ?? row.id}`}
-                    >
+                  {row.name && row.type === "character" && row.sequentialId !== null ? (
+                    <Link className="hover:underline" href={`/character/${row.sequentialId}`}>
                       {row.name}
                     </Link>
                   ) : (

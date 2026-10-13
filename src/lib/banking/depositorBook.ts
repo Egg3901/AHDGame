@@ -4,6 +4,7 @@
  * Access is checked before reading any depositor records.
  */
 import { ObjectId, type Db } from "mongodb";
+import { createHash } from "node:crypto";
 import type { Character, NPP } from "@/lib/db/types";
 import type { SavingsAccount } from "@/lib/db/types/savingsAccount";
 import type { CurrencyCode } from "@/lib/constants/currencies";
@@ -11,7 +12,7 @@ import type { BankingPolicySnapshot } from "./rules/policy";
 import { savingsReadsAuthoritative } from "./rules/policy";
 
 export interface BankDepositor {
-  id: string;
+  key: string;
   type: "character" | "npp";
   name: string | null;
   sequentialId: number | null;
@@ -34,12 +35,20 @@ export async function getBankDepositorBook(
   if (!access.isCeo && !access.isAdmin && !access.isChair) return null;
   const holder = bankId.toString();
   const authoritative = savingsReadsAuthoritative(policy, currency);
+  const rowKey = (type: BankDepositor["type"], ownerId: ObjectId) =>
+    createHash("sha256").update(`${holder}:${type}:${ownerId.toString()}`).digest("hex");
   let rows: BankDepositor[];
   if (authoritative) {
     const accounts = await db
       .collection<SavingsAccount>("savingsAccounts")
       .find(
-        { holder, currency, status: { $in: ["open", "frozen"] }, balance: { $gt: 0 } },
+        {
+          holder,
+          currency,
+          ownerType: { $in: ["character", "npp"] },
+          status: { $in: ["open", "frozen"] },
+          balance: { $gt: 0 },
+        },
         { projection: { ownerId: 1, ownerType: 1, balance: 1 } }
       )
       .toArray();
@@ -63,7 +72,7 @@ export async function getBankDepositorBook(
     rows = accounts.map((account) => {
       const owner = names.get(account.ownerId.toString());
       return {
-        id: account.ownerId.toString(),
+        key: rowKey(account.ownerType, account.ownerId),
         type: account.ownerType,
         name: owner?.name ?? null,
         sequentialId: owner?.sequentialId ?? null,
@@ -82,7 +91,7 @@ export async function getBankDepositorBook(
       )
       .toArray();
     rows = characters.map((character) => ({
-      id: character._id.toString(),
+      key: rowKey("character", character._id),
       type: "character",
       name: character.name ?? null,
       sequentialId: character.sequentialId ?? null,
@@ -90,7 +99,7 @@ export async function getBankDepositorBook(
     }));
   }
   rows = rows.filter((row) => Number.isFinite(row.balance) && row.balance > 0);
-  rows.sort((a, b) => b.balance - a.balance || a.id.localeCompare(b.id));
+  rows.sort((a, b) => b.balance - a.balance || a.key.localeCompare(b.key));
   return {
     source: authoritative ? "accounts" : "legacy",
     rows,
