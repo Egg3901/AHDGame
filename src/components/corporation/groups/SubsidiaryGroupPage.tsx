@@ -15,18 +15,10 @@ import { GroupSupplyForecast } from "./GroupSupplyForecast";
 import { GroupParticipation } from "./GroupParticipation";
 import { useGroupManagement } from "./useGroupManagement";
 import { GroupFinancialComparison } from "./GroupFinancialComparison";
-import type { GroupObjective } from "@/lib/corporations/groups/managementTypes";
+import { GroupDirections } from "./GroupDirections";
 const button =
   "inline-flex items-center justify-center gap-2 rounded-lg border border-card-border bg-card px-3 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 enabled:hover:bg-card-elevated focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-info";
 const sectionIcons = [Building2, ChartNoAxesCombined, Compass, Network];
-const objectives: GroupObjective[] = [
-  "balanced",
-  "profit",
-  "capacity",
-  "expansion",
-  "regional",
-  "stability",
-];
 export function SubsidiaryGroupPage({ corpId }: { corpId: string }) {
   const t = useTranslations("corporations.group");
   const { data, loading, error, busy, save, refresh } = useGroupManagement(corpId);
@@ -218,119 +210,7 @@ export function SubsidiaryGroupPage({ corpId }: { corpId: string }) {
       <div hidden={section !== "financials"}>
         <GroupFinancialComparison data={data} sheet={sheet} />
       </div>
-      {section === "directions" && (
-        <>
-          <p className="text-sm text-muted">{t("directionNote")}</p>
-          {!data.supplyEngineEnabled && (
-            <p className="rounded-lg border border-info/25 bg-info/5 p-4 text-sm text-muted">
-              {t("directionsPending")}
-            </p>
-          )}
-          <div className="grid gap-4 md:grid-cols-2">
-            {data.members
-              .filter((m) => !m.isRoot && (data.canManage || m.canEdit))
-              .map((m) => (
-                <section
-                  key={m.id}
-                  className="rounded-xl border border-card-border bg-card p-5 space-y-3"
-                >
-                  <h2 className="break-words font-semibold">{m.name}</h2>
-                  <p className="text-xs text-muted">
-                    {m.operator === "npp" ? t("nppDirection") : t("playerSuggestion")}
-                  </p>
-                  {data.canManage ? (
-                    <form
-                      className="space-y-3"
-                      key={m.direction?.revision ?? m.id}
-                      onSubmit={(e) => {
-                        e.preventDefault();
-                        const form = new FormData(e.currentTarget);
-                        void save({
-                          action: "direction",
-                          memberId: m.id,
-                          objective: form.get("objective") as GroupObjective,
-                          regions: form.getAll("regions").map(String),
-                          allowInvestment: form.get("investment") === "on",
-                        });
-                      }}
-                    >
-                      <label className="block text-sm">
-                        {t("objective")}
-                        <select
-                          className="block mt-1 rounded bg-card border border-card-border p-2 w-full"
-                          name="objective"
-                          defaultValue={m.direction?.objective ?? "balanced"}
-                        >
-                          {objectives.map((o) => (
-                            <option key={o} value={o}>
-                              {t("objectives." + o)}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                      <label className="block text-sm">
-                        {t("regions")}
-                        <select
-                          multiple
-                          className="block mt-1 rounded bg-card border border-card-border p-2 w-full"
-                          name="regions"
-                          defaultValue={m.direction?.regions ?? []}
-                        >
-                          {data.regions?.map((region) => (
-                            <option key={region.id} value={region.id}>
-                              {region.countryId}: {region.name}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                      <label className="flex gap-2 text-sm">
-                        <input
-                          name="investment"
-                          type="checkbox"
-                          defaultChecked={m.direction?.allowInvestment ?? false}
-                        />
-                        {t("investment")}
-                      </label>
-                      <button className={button} disabled={busy}>
-                        {t("saveDirection")}
-                      </button>
-                    </form>
-                  ) : (
-                    <p className="text-sm">
-                      {m.direction ? t("objectives." + m.direction.objective) : t("noDirection")}
-                    </p>
-                  )}
-                  {m.direction && (
-                    <p className="text-xs text-muted">
-                      {m.operator === "npp"
-                        ? t("nppEffective", { turn: m.direction.setTurn + 1 })
-                        : t("response", { response: m.direction.response })}
-                    </p>
-                  )}
-                  {m.canEdit && m.direction && (
-                    <div className="flex gap-2">
-                      {(["acknowledged", "declined"] as const).map((response) => (
-                        <button
-                          className={button}
-                          disabled={busy}
-                          key={response}
-                          onClick={() =>
-                            void save(
-                              { action: "respond", response, revision: m.direction!.revision },
-                              m.id
-                            )
-                          }
-                        >
-                          {t(response)}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </section>
-              ))}
-          </div>
-        </>
-      )}
+      {section === "directions" && <GroupDirections data={data} busy={busy} save={save} />}
       {section === "supply" && (
         <>
           <div className="space-y-3">
