@@ -12,10 +12,16 @@ import {
 } from "@/lib/constants/sectorStrategies";
 import { loadWorldEraUnitScale } from "@/lib/currency/gdpAnchorRate";
 import { getExtractionOutputScaleEnabled } from "@/lib/market/featureFlag";
-import { computeExtractionHeadroomByState } from "@/lib/turn/nppExtractionOpportunity";
 import {
+  computeExtractionHeadroomByState,
+  computeExtractionHeadroomByStateResource,
+  extractionHeadroomForSupply,
+} from "@/lib/turn/nppExtractionOpportunity";
+import {
+  depositAwarePriceRatioOf,
   fragileMarketCommodityForSector,
   fragileMarketFoundingStrategy,
+  fragileSupplyGate,
   type CommodityPriceRatioFn,
   type PlacementSignals,
 } from "@/lib/turn/npp/marketSignals";
@@ -57,6 +63,12 @@ export async function loadNppPlacementSignals(
     eraUnitScale,
     extractionOutputScaleEnabled
   );
+  const extractionHeadroomByStateResource = computeExtractionHeadroomByStateResource(
+    capacity,
+    sectors,
+    eraUnitScale,
+    extractionOutputScaleEnabled
+  );
   const currentYear =
     gameState?.currentYear ??
     (gameState?.startingYear ?? STARTING_YEAR) +
@@ -67,6 +79,10 @@ export async function loadNppPlacementSignals(
     // No capacity document means an uncapped legacy state, not an exhausted
     // deposit. A present document with no resources still resolves to 0.
     extractionHeadroomOf: (stateId) => extractionHeadroomByState.get(stateId) ?? 1,
+    extractionResourceHeadroomOf: (stateId, resource) => {
+      const byResource = extractionHeadroomByStateResource.get(stateId);
+      return byResource ? (byResource[resource] ?? 0) : 1;
+    },
     preferEmptyMarkets: config?.nppMarketCoverageEnabled === true,
     preferFragileMarketSupply: config?.nppFragileMarketSupplyEnabled === true,
     fragileMarketCountryEligible: (countryId) =>
@@ -83,15 +99,30 @@ export function resolveFragileEntryTreatment(
   interventionTargetCommodity: CommodityType | null;
   foundingStrategyId: string | undefined;
 } {
-  const candidatePriceRatioOf: CommodityPriceRatioFn = (commodity, countryId) =>
+  const statePriceRatioOf: CommodityPriceRatioFn = (commodity, countryId) =>
     entryCandidate
       ? (placementSignals?.statePriceRatioOf?.(commodity, entryCandidate.stateId) ??
         priceRatioOf(commodity, countryId))
       : priceRatioOf(commodity, countryId);
+  // The entry gates (critical shortage, glut) score the candidate on what its
+  // state can actually extract, not on a resource it holds no deposit of.
+  const candidatePriceRatioOf: CommodityPriceRatioFn = entryCandidate
+    ? depositAwarePriceRatioOf(
+        entryCandidate.sectorType,
+        entryCandidate.stateId,
+        placementSignals,
+        statePriceRatioOf
+      )
+    : statePriceRatioOf;
   const treatmentEligible =
     entryCandidate !== null &&
     placementSignals?.preferFragileMarketSupply === true &&
     placementSignals.fragileMarketCountryEligible?.(entryCandidate.countryId) !== false;
+  // A founding is only steered onto a resource its state holds: a rare earth
+  // recipe in a timber state extracts nothing and still buys its inputs.
+  const canSupply = entryCandidate
+    ? fragileSupplyGate(entryCandidate.sectorType, entryCandidate.stateId, placementSignals)
+    : undefined;
 
   return {
     candidatePriceRatioOf,
@@ -99,14 +130,16 @@ export function resolveFragileEntryTreatment(
       ? fragileMarketCommodityForSector(
           entryCandidate.sectorType,
           entryCandidate.countryId,
-          candidatePriceRatioOf
+          candidatePriceRatioOf,
+          canSupply
         )
       : null,
     foundingStrategyId: treatmentEligible
       ? fragileMarketFoundingStrategy(
           entryCandidate.sectorType,
           entryCandidate.countryId,
-          candidatePriceRatioOf
+          candidatePriceRatioOf,
+          canSupply
         )
       : undefined,
   };
@@ -136,7 +169,10 @@ export function fragileReinvestmentPriority(
   const commodity = fragileMarketCommodityForSector(
     operatingSectorType as OperatingSectorType,
     countryId,
-    localPriceRatioOf
+    localPriceRatioOf,
+    // A mine whose state holds none of the commodity (or has no room left)
+    // sells none of it, so it must not jump the reinvestment queue.
+    fragileSupplyGate(sector.sectorType, sector.stateId, placementSignals)
   );
   if (!commodity) return 0;
   const effectiveSupply = getEffectiveStrategyRatesForOperatingModel(
@@ -150,4 +186,33 @@ export function fragileReinvestmentPriority(
   ).supply;
   if ((effectiveSupply[commodity] ?? 0) <= 0) return 0;
   return localPriceRatioOf(commodity, countryId) ?? 0;
+}
+
+/**
+ * Deposit headroom that gates an existing mine's growth, in [0, 1]. Read over
+ * the resources the mine's own recipe extracts, so a rare earth mine in a
+ * timber state reads 0 instead of the timber deposit's room. Falls back to the
+ * aggregate state signal when the per-resource one is not loaded.
+ */
+export function extractionGrowthHeadroom(
+  sector: CorporateSector,
+  placementSignals: PlacementSignals | undefined,
+  turn: number
+): number {
+  const resourceHeadroomOf = placementSignals?.extractionResourceHeadroomOf;
+  if (!resourceHeadroomOf) {
+    return Math.max(0, Math.min(1, placementSignals?.extractionHeadroomOf?.(sector.stateId) ?? 1));
+  }
+  const supply = getEffectiveStrategyRatesForOperatingModel(
+    sector.sectorType,
+    sector.strategyId ?? "standard",
+    sector.transitionFromStrategyId,
+    sector.transitionStartTurn,
+    turn,
+    sector.industryModel,
+    sector.mediaDiscriminator
+  ).supply;
+  return extractionHeadroomForSupply(supply, (resource) =>
+    resourceHeadroomOf(sector.stateId, resource)
+  );
 }
