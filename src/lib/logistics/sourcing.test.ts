@@ -1160,3 +1160,98 @@ describe("freight billing aggregates (canonical freight billing v1)", () => {
     expect(r.haulRevenueByOriginState.get("A2")).toBeCloseTo(0.5 * 4);
   });
 });
+
+describe("own-company priority routes", () => {
+  type Balance = { supply: number; demand: number };
+  const bal = (entries: Partial<Record<CommodityType, Balance>>) =>
+    new Map(Object.entries(entries) as [CommodityType, Balance][]);
+  const threeStates = (overrides: Partial<SourcingInputs> = {}): SourcingInputs =>
+    makeInputs({
+      states: [
+        { stateId: "A1", countryId: "US" as CountryId },
+        { stateId: "A2", countryId: "US" as CountryId },
+        { stateId: "A3", countryId: "US" as CountryId },
+      ],
+      byState: new Map([
+        ["A1", bal({ coal: { supply: 0, demand: 100 }, freight: { supply: 1000, demand: 0 } })],
+        ["A2", bal({ coal: { supply: 100, demand: 0 }, freight: { supply: 1000, demand: 0 } })],
+        ["A3", bal({ coal: { supply: 0, demand: 100 }, freight: { supply: 1000, demand: 0 } })],
+      ]),
+      byCountry: new Map([["US", bal({ coal: { supply: 100, demand: 200 } })]]),
+      statePricesFor: () => ({ A1: 100, A2: 90, A3: 100 }),
+      nationalPricesFor: () => ({ US: 95 }),
+      ...overrides,
+    });
+  const delivered = (r: ReturnType<typeof runSourcingPass>, dest: string) =>
+    coalFlow(r)
+      .filter((f) => f.destStateId === dest)
+      .reduce((sum, f) => sum + f.units, 0);
+  const route = {
+    commodity: "coal" as CommodityType,
+    corporationId: "corp1",
+    originStateId: "A2",
+    destStateId: "A3",
+  };
+
+  it("leaves output unchanged when no own routes are given", () => {
+    const base = runSourcingPass(threeStates());
+    expect(delivered(base, "A1")).toBeCloseTo(100);
+    expect(delivered(base, "A3")).toBeCloseTo(0);
+    expect(base.ownRouteDelivered).toEqual([]);
+    expect(runSourcingPass(threeStates({ ownRoutes: [] }))).toEqual(base);
+  });
+
+  it("ships the company's own output to its plant in another state before landed-price buyers", () => {
+    const r = runSourcingPass(threeStates({ ownRoutes: [{ ...route, units: 60 }] }));
+    expect(delivered(r, "A3")).toBeCloseTo(60);
+    expect(delivered(r, "A1")).toBeCloseTo(40);
+    expect(r.ownRouteDelivered).toHaveLength(1);
+    expect(r.ownRouteDelivered[0]!.units).toBeCloseTo(60);
+  });
+
+  it("bills the route's haul to the company, not the destination state, and pays the origin", () => {
+    const r = runSourcingPass(threeStates({ ownRoutes: [{ ...route, units: 60 }] }));
+    const shared = [...r.freightChargesByDestState.values()]
+      .flatMap((m) => [...m.values()])
+      .reduce((a, b) => a + b, 0);
+    const own = r.ownRouteDelivered.reduce((a, b) => a + (b.freightCharge ?? 0), 0);
+    const paid = [...r.haulRevenueByOriginState.values()].reduce((a, b) => a + b, 0);
+    expect(own).toBeGreaterThan(0);
+    expect(shared + own).toBeCloseTo(paid);
+    expect(r.freightChargesByDestState.get("A3")?.get("coal") ?? 0).toBe(0);
+    expect(r.landedPremiumByDestState.get("A3")?.get("coal")).toBeUndefined();
+    expect(r.freightChargesByDestState.get("A1")?.get("coal") ?? 0).toBeGreaterThan(0);
+  });
+
+  it("is bounded by the origin state's freight capacity", () => {
+    const tight = threeStates({
+      byState: new Map([
+        ["A1", bal({ coal: { supply: 0, demand: 100 }, freight: { supply: 1000, demand: 0 } })],
+        ["A2", bal({ coal: { supply: 100, demand: 0 }, freight: { supply: 0, demand: 0 } })],
+        ["A3", bal({ coal: { supply: 0, demand: 100 }, freight: { supply: 1000, demand: 0 } })],
+      ]),
+      ownRoutes: [{ ...route, units: 60 }],
+    });
+    const r = runSourcingPass(tight);
+    expect(r.ownRouteDelivered).toEqual([]);
+    expect(delivered(r, "A3")).toBe(0);
+  });
+
+  it("never ships more than the company routed, the seller has, or the plant needs", () => {
+    const r = runSourcingPass(threeStates({ ownRoutes: [{ ...route, units: 500 }] }));
+    expect(r.ownRouteDelivered[0]!.units).toBeCloseTo(100);
+    expect(delivered(r, "A1")).toBeCloseTo(0);
+  });
+
+  it("ignores routes across countries or without a land route", () => {
+    const r = runSourcingPass(
+      threeStates({
+        ownRoutes: [
+          { ...route, destStateId: "B1", units: 50 },
+          { ...route, originStateId: "A3", destStateId: "A3", units: 50 },
+        ],
+      })
+    );
+    expect(r.ownRouteDelivered).toEqual([]);
+  });
+});
