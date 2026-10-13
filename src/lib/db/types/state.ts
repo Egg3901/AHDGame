@@ -55,12 +55,20 @@ export interface State {
    */
   conflictCapacityApplied?: ConflictCapacityApplied;
   /**
-   * Per-region cyclical OUTPUT GAP (%, actual vs potential output, §5.2). The
-   * GDP engine accumulates the sector signal's deviation from potential into this
-   * gap and closes it over time, so `gdpGrowth` reverts toward potential (P1c-2).
-   * Cold-starts at 0 (no gap assumed) when absent.
+   * Per-region OUTPUT GAP (%): actual real output vs its measured Holt trend
+   * (metricEngine/outputTrend.ts). Positive = above trend. Read by inflation's
+   * demand-pull term and the UI. Starts at 0 when the trend is first seeded.
    */
   outputGap?: number;
+  /** Annual growth rate (%) of the measured output trend the gap is taken against. */
+  outputTrendGrowth?: number;
+  /**
+   * The legacy potential-anchored gap, carried only while the headline blends
+   * from the legacy formula to measured growth (REAL_OUTPUT_BLEND_TURNS).
+   */
+  legacyOutputGap?: number;
+  /** Turn the region's headline began blending to measured growth. */
+  realOutputStartTurn?: number;
   /** The :30 half tick's stamp (turn/subhour/stepFraction.ts). */
   subhourStep?: SubhourStepStamp;
   /** Start-of-hour GDP and output gap the :30 half tick overwrote (turn/subhour/stepBase.ts). */

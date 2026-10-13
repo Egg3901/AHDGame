@@ -7,7 +7,8 @@ import { getCurrencyPrefix } from "@/lib/utils/budgetCalculations";
 interface Props {
   gdp: number | null;
   gdpGrowth: number;
-  potentialGrowth: number;
+  /** Growth reference: the measured trend (`economic.trendGrowth`). */
+  trendGrowth: number;
   outputGap: number | null;
   laborForce: number | null;
   countryId: string;
@@ -16,20 +17,20 @@ interface Props {
 const pct = (v: number) => `${v >= 0 ? "+" : ""}${v.toFixed(1)}%`;
 
 /**
- * GDP growth decomposed into its supply-side potential trend and the cyclical
- * (output-gap) component — `gdpGrowth = potential + cyclical` by construction in
- * the engine. A diverging bar shows how far above/below trend the region runs.
+ * Measured GDP growth against the region's own output trend
+ * (metricEngine/outputTrend.ts): the trend rate plus how far this turn's growth
+ * runs above or below it. The output gap below is the level counterpart.
  */
 export function GdpDecompositionCard({
   gdp,
   gdpGrowth,
-  potentialGrowth,
+  trendGrowth,
   outputGap,
   laborForce,
   countryId,
 }: Props) {
-  const d = decomposeGdpGrowth(gdpGrowth, potentialGrowth);
-  // Scale the split bar against the larger of |potential| and |total| so both
+  const d = decomposeGdpGrowth(gdpGrowth, trendGrowth);
+  // Scale the split bar against the larger of |trend| and |total| so both
   // segments stay on one axis; guard a zero denominator.
   const scale = Math.max(Math.abs(d.potential), Math.abs(d.total), 0.1);
   const potentialW = (Math.abs(d.potential) / scale) * 100;
@@ -59,13 +60,13 @@ export function GdpDecompositionCard({
         </div>
       </div>
 
-      {/* Potential vs cyclical split bar */}
+      {/* Trend vs cyclical split bar */}
       <div className="space-y-1.5">
         <div className="flex h-3 overflow-hidden rounded-full bg-card-border/40">
           <div
             className="h-full bg-info"
             style={{ width: `${potentialW}%` }}
-            title={`Potential ${pct(d.potential)}`}
+            title={`Trend ${pct(d.potential)}`}
           />
           <div
             className={`h-full ${d.cyclical >= 0 ? "bg-success" : "bg-error"}`}
@@ -74,7 +75,7 @@ export function GdpDecompositionCard({
           />
         </div>
         <div className="flex justify-between text-[11px]">
-          <span className="text-info">Potential {pct(d.potential)}</span>
+          <span className="text-info">Trend {pct(d.potential)}</span>
           <span className={d.cyclical >= 0 ? "text-success" : "text-error"}>
             Cyclical {pct(d.cyclical)}
           </span>

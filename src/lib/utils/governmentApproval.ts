@@ -181,6 +181,9 @@ export const APPROVAL_EXCLUDED_METRICS = new Set([
   // `laborForce` is a raw headcount. Neither is an approval term.
   "potentialGrowth",
   "laborForce",
+  // The growth reference Okun and migration measure against (outputTrend.ts):
+  // a diagnostic of gdpGrowth's own history, not a separate outcome.
+  "trendGrowth",
   // Cyclical sector signal (P1c-2) — an intermediate; the integrated gdpGrowth
   // carries the approval term.
   "sectorGrowth",

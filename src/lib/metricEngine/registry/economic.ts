@@ -23,6 +23,7 @@ import type { OperatingSectorType } from "@/lib/constants/corporations";
 import { fundingResponse } from "../spendingChannel";
 import { SOCIAL_SPEND_HALF_SAT } from "./social";
 import { advanceOutputGap, GDP_GROWTH_BOUND } from "../outputGap";
+import { blendToMeasured } from "../outputTrend";
 import { tfpBasket } from "../potentialGrowth";
 import type { FiscalTradeInputs } from "../providers";
 import type { RegistryNode } from "../types";
@@ -188,24 +189,16 @@ export const sectorGrowthNode: RegistryNode = {
 };
 
 /**
- * gdpGrowth node (P1c-2) — the INTEGRATED rate: `potential + cyclical`, where the
- * cyclical part is the output gap's realized change (§5.2). Reverts toward
- * `potential` (the attractor) as the gap closes; the sector signal's deviation
- * from potential is the impulse. `potential` (`economic.potentialGrowth`) and the
- * prior gap (`economic.outputGapPrev`) are threaded in by the phase via
- * `seedCurrent` (they are not registry nodes). No EMA / no policy delta here —
- * the EMA + tax/legislation coexistence live on `sectorGrowth`; this node is the
- * deterministic gap integration. The phase persists the new gap to
- * `state.outputGap`.
+ * gdpGrowth node: the MEASURED real output growth. Headline growth is the
+ * sector signal (physical constant-price output trend, crisis shocks and the
+ * net-exports / consumption-tax terms on top, smoothed by its own EMA), with no
+ * pull toward a calibrated potential.
  *
- * bounds widened to mirror OUTPUT_GAP_BOUND (2026-06-30 incident): a live
- * GAP_CLOSURE change left `state.outputGap` calibrated to the old steady
- * state, so the first turns under the new constant computed a realized gap
- * swing past the old [-10,15] floor — every region got floor-clamped to an
- * identical -10 instead of showing the true (still bad, but distinct and
- * recovering) value, which fed Okun's law the same worst-case number for
- * every turn the floor bound. [-15,15] gives headroom for a closure-constant
- * transient without distorting the signal Okun's law and others read.
+ * The legacy form (`potential + realized output-gap change`, P1c-2) is kept only
+ * to blend a live world across the cutover: the phase seeds the blend weight
+ * (`economic.realOutputBlendWeight`, 0 → 1 over REAL_OUTPUT_BLEND_TURNS) and the
+ * legacy gap (`economic.outputGapPrev`). Weight 1 (the default, and every fresh
+ * world) is exactly the sector signal.
  */
 export const gdpGrowthNode: RegistryNode = {
   id: "economic.gdpGrowth",
@@ -219,9 +212,12 @@ export const gdpGrowthNode: RegistryNode = {
   decimals: 3,
   compute: (ctx) => {
     const sector = ctx.current["economic.sectorGrowth"] ?? 0;
+    const weight = ctx.current["economic.realOutputBlendWeight"] ?? 1;
+    if (weight >= 1) return sector;
     const potential = ctx.current["economic.potentialGrowth"] ?? NEUTRAL_GDP_GROWTH;
     const prevGap = ctx.current["economic.outputGapPrev"] ?? 0;
-    return advanceOutputGap(prevGap, sector, potential, TURNS_PER_YEAR).gdpGrowth;
+    const legacy = advanceOutputGap(prevGap, sector, potential, TURNS_PER_YEAR).gdpGrowth;
+    return blendToMeasured(legacy, sector, weight);
   },
 };
 
@@ -266,11 +262,16 @@ export const unemploymentNode: RegistryNode = {
     const gdp = ctx.current["economic.gdpGrowth"] ?? 0;
     const prevRaw = ctx.prevSimBaseline["economic.unemploymentRate"];
     const prevUnemployment = Number.isFinite(prevRaw) ? prevRaw : 4.5;
-    // Okun off the REAL output gap (growth vs potential, P1c-2) instead of a fixed
-    // 2.0 — a low-potential (shrinking-workforce) economy isn't permanently "in
-    // recession". Falls back to NEUTRAL_GDP_GROWTH when potential isn't seeded.
-    const potential = ctx.current["economic.potentialGrowth"] ?? NEUTRAL_GDP_GROWTH;
-    const gdpDeviation = gdp - potential;
+    // Okun off growth vs the economy's own measured trend (outputTrend.ts), so
+    // steady growth at any pace is employment-neutral and a slowdown below the
+    // trend raises unemployment. The phase seeds the reference already blended
+    // from the legacy potential across the cutover; potential, then the old
+    // fixed 2.0, are the fallbacks when it is not seeded.
+    const reference =
+      ctx.current["economic.trendGrowth"] ??
+      ctx.current["economic.potentialGrowth"] ??
+      NEUTRAL_GDP_GROWTH;
+    const gdpDeviation = gdp - reference;
     const okunCoeff = gdpDeviation > 0 ? OKUN_COEFFICIENT_DOWN : OKUN_COEFFICIENT_UP;
     const okunTarget = Math.max(
       UNEMPLOYMENT_MIN,
