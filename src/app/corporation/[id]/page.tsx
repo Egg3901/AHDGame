@@ -4,8 +4,8 @@ import { getOperatingSectorType } from "@/lib/constants/sectorStrategies";
 import { useGameEvents } from "@/hooks/useGameEvents";
 
 import { InlineError } from "@/components/ui/InlineError";
-import { apiErrorText, newRequestRef, parseErrorBody } from "@/lib/errors/catalog";
-import { toDisplayError } from "@/lib/errors/client";
+import { apiErrorText, newRequestRef } from "@/lib/errors/catalog";
+import { readApiError, toDisplayError } from "@/lib/errors/client";
 import { captureClientExceptionWithId } from "@/lib/observability/sentryClientLazy";
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useParams, useRouter, useSearchParams, usePathname } from "next/navigation";
@@ -214,26 +214,32 @@ export default function CorporationDetailPage() {
       // so that local subtab state (e.g. CEO Office subtab) is not reset on save.
       if (!hasLoaded.current) setLoading(true);
       const res = await fetch(makeCorpApiUrl());
-      const data = await res.json();
-      if (res.ok) {
-        setError("");
-        setErrorRef(null);
-        setCorporation(data.corporation);
-        setCeo(data.ceo);
-        setFinancials(data.financials);
-        setSectors(data.sectors);
-        setBalanceSheet(data.balanceSheet);
-        setFinancialFogOfWar(data.financialFogOfWar ?? null);
-        setDefenceContracts(data.defenceContracts ?? null);
-        setCeoIsInactive(data.ceoIsInactive === true);
-      } else if (!hasLoaded.current) {
-        // Only set page-level error on initial load — refresh failures should not
-        // destroy the entire page when we already have valid data displayed.
-        setError(apiErrorText(data, "Corporation not found"));
-        setErrorRef(parseErrorBody(data).ref ?? null);
-      } else {
-        showToast(apiErrorText(data, "Failed to refresh corporation data"), "error");
+      if (!res.ok) {
+        // A proxy error or deploy restart can return an empty or non-JSON body, so read
+        // the error envelope leniently instead of letting res.json() throw.
+        const apiError = await readApiError(res);
+        const body = { error: apiError.message, code: apiError.code, ref: apiError.ref };
+        if (!hasLoaded.current) {
+          // Only set page-level error on initial load — refresh failures should not
+          // destroy the entire page when we already have valid data displayed.
+          setError(apiErrorText(body, "Corporation not found"));
+          setErrorRef(apiError.ref ?? null);
+        } else {
+          showToast(apiErrorText(body, "Failed to refresh corporation data"), "error");
+        }
+        return;
       }
+      const data = await res.json();
+      setError("");
+      setErrorRef(null);
+      setCorporation(data.corporation);
+      setCeo(data.ceo);
+      setFinancials(data.financials);
+      setSectors(data.sectors);
+      setBalanceSheet(data.balanceSheet);
+      setFinancialFogOfWar(data.financialFogOfWar ?? null);
+      setDefenceContracts(data.defenceContracts ?? null);
+      setCeoIsInactive(data.ceoIsInactive === true);
     } catch (err) {
       const display = toDisplayError(err, "Failed to load corporation data");
       const ref =
