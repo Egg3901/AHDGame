@@ -285,6 +285,8 @@ export interface ExtractionAutoStrategyResult {
   relocatedOffDeadDeposit?: number;
   /** Dead-deposit NPP mines mothballed because no recipe can produce there. */
   deadDepositMothballed?: number;
+  /** Of those, mines owned by a system-run state company. */
+  stateCompanyDeadDepositMothballed?: number;
   /** Always 0. The generic pass was removed; 2e owns non-extraction retools. */
   genericRestrategized?: number;
   genericByStrategy?: Record<string, number>;
@@ -556,6 +558,13 @@ export async function processExtractionAutoStrategy(
   let restrategized = 0;
   let relocatedOffDeadDeposit = 0;
   let deadDepositMothballed = 0;
+  let stateCompanyDeadDepositMothballed = 0;
+  // Dead-deposit mines no recipe can rescue (NPC) or that the state company
+  // cannot retool on its own (see below). Mothballing stops the input bill they
+  // pay for output that never reaches a buyer.
+  type DeadDepositMine = Pick<CorporateSector, "_id" | "capitalStock">;
+  const deadDepositMothballs: DeadDepositMine[] = [];
+  const stateCompanyDeadMineIds = new Set<string>();
   const nppCountryById = new Map(npcCorps.map((c) => [c._id.toString(), c.countryId]));
   if (npcCorps.length > 0) {
     const alreadyChosen = new Set(chosen.map((p) => p.sector._id.toString()));
@@ -620,10 +629,6 @@ export async function processExtractionAutoStrategy(
       deadDeposit: boolean;
     };
     const switches: Switch[] = [];
-    // Dead-deposit mines no recipe can rescue: the state holds nothing any
-    // extraction recipe produces. Mothballing stops the input bill they pay
-    // for output that never reaches a buyer.
-    const deadDepositMothballs: NppSector[] = [];
     for (const s of nppSectors) {
       if (alreadyChosen.has(s._id.toString())) continue;
       if (s.transitionCooldownUntilTurn != null && currentTurn < s.transitionCooldownUntilTurn)
@@ -759,25 +764,70 @@ export async function processExtractionAutoStrategy(
         restrategizedByStrategy[p.strategyId] = (restrategizedByStrategy[p.strategyId] ?? 0) + 1;
       }
     }
+  }
 
-    // Largest dead mines first: they buy the most inputs for nothing. Capped per
-    // run so a fleet of them goes cold over several turns, not at once. A
-    // mothballed plant is cold on both sides and stays restartable.
-    const mothballs = deadDepositMothballs
-      .sort((a, b) => (b.capitalStock ?? 0) - (a.capitalStock ?? 0))
-      .slice(0, EXTRACTION_DEAD_DEPOSIT_MOTHBALL_MAX_PER_RUN);
-    if (mothballs.length > 0) {
-      const now = new Date();
-      await db.collection<CorporateSector>("corporateSectors").bulkWrite(
-        mothballs.map((sector) => ({
-          updateOne: {
-            filter: { _id: sector._id },
-            update: { $set: { mothballed: true, updatedAt: now } },
-          },
-        }))
-      );
-      deadDepositMothballed = mothballs.length;
+  // System-run state companies (a National Corporation with no appointed CEO)
+  // on dead deposits. They are outside the retool passes on purpose: their
+  // retooling stays a deliberate act, and a state company with an appointed
+  // player CEO is that player's to run. But a mine whose state holds nothing
+  // its recipe extracts produces nothing and still buys inputs and pays
+  // labour, and state companies are exempt from every other mothball path, so
+  // this is the only exit. Mothballed, never retooled; a minister can restart.
+  const stateCompanies = await db
+    .collection<Corporation>("corporations")
+    .find({
+      $or: [{ countryOwnerId: { $type: "string", $not: /^$/ } }, { ownershipState: "stateOwned" }],
+      ceoVacant: true,
+      ceoType: { $ne: "character" },
+    })
+    .project<Pick<Corporation, "_id">>({ _id: 1 })
+    .toArray();
+  if (stateCompanies.length > 0) {
+    const stateCompanySectors = await db
+      .collection<CorporateSector>("corporateSectors")
+      .find({
+        sectorType: "extraction",
+        corporationId: { $in: stateCompanies.map((c) => c._id as ObjectId) },
+        mothballed: { $ne: true },
+      })
+      .project<Pick<CorporateSector, "_id" | "stateId" | "strategyId" | "capitalStock">>({
+        _id: 1,
+        stateId: 1,
+        strategyId: 1,
+        capitalStock: 1,
+      })
+      .toArray();
+    for (const sector of stateCompanySectors) {
+      const stateRes = capByState.get(sector.stateId);
+      const recipe = strategies.find((x) => x.id === (sector.strategyId ?? "standard"));
+      if (stateRes === undefined || !recipe) continue;
+      if (!isExtractionStrategyZeroYield(recipe, stateRes)) continue;
+      deadDepositMothballs.push(sector);
+      stateCompanyDeadMineIds.add(sector._id.toString());
     }
+  }
+
+  // Largest dead mines first: they buy the most inputs for nothing. One shared
+  // cap across NPC and state-company mines, so a fleet of them goes cold over
+  // several turns, not at once. A mothballed plant is cold on both sides and
+  // stays restartable.
+  const mothballs = deadDepositMothballs
+    .sort((a, b) => (b.capitalStock ?? 0) - (a.capitalStock ?? 0))
+    .slice(0, EXTRACTION_DEAD_DEPOSIT_MOTHBALL_MAX_PER_RUN);
+  if (mothballs.length > 0) {
+    const now = new Date();
+    await db.collection<CorporateSector>("corporateSectors").bulkWrite(
+      mothballs.map((sector) => ({
+        updateOne: {
+          filter: { _id: sector._id },
+          update: { $set: { mothballed: true, updatedAt: now } },
+        },
+      }))
+    );
+    deadDepositMothballed = mothballs.length;
+    stateCompanyDeadDepositMothballed = mothballs.filter((sector) =>
+      stateCompanyDeadMineIds.has(sector._id.toString())
+    ).length;
   }
 
   const placementCandidates: Array<{
@@ -892,6 +942,7 @@ export async function processExtractionAutoStrategy(
     restrategizedByStrategy,
     relocatedOffDeadDeposit,
     deadDepositMothballed,
+    stateCompanyDeadDepositMothballed,
     genericRestrategized: 0,
     genericByStrategy: {},
     ...(shortage.size === 0 &&
