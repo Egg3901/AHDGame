@@ -694,6 +694,93 @@ function handleCastBallot(
   return { allowed: true, next, transition };
 }
 
+/**
+ * A player chair tables the motion for the open meeting: raise, cut or hold,
+ * with a size on the quarter-point grid. The committee still decides it by
+ * majority. Ballots are recorded as directions, so votes already cast keep
+ * their meaning (a hike ballot agrees with a hike motion and opposes a hold).
+ * NPP chairs never use this; their motion stays the automatic rule.
+ */
+function handleSetMotion(
+  state: JurisdictionState,
+  command: Extract<GovernanceCommand, { type: "set_motion" }>,
+  actor: GovernanceActor,
+  clock: GovernanceClock
+): GovernanceDecision {
+  const membership = checkMembership(state, command.countryId);
+  if (membership) return membership;
+  const committee = checkCommitteeBank(state);
+  if (committee) return committee;
+  const meeting = state.activeMeeting;
+  if (!meeting || meeting.status !== "voting") {
+    return refuse("no-meeting", "No meeting is currently taking votes.");
+  }
+  if (clock.turn > meeting.resolvesOnTurn || clock.now >= meeting.playerVoteDeadlineMs) {
+    return refuse("deadline-passed", "The vote window closed.");
+  }
+  const seatId = command.seatId || actor.seatId;
+  const seat = state.board.find((s) => s.seatId === seatId);
+  if (!seat || !seat.isChair || seat.occupantType !== "player") {
+    return refuse("not-chair", "Only a player chair can table the motion.");
+  }
+  if (actor.characterId && seat.characterId && actor.characterId !== seat.characterId) {
+    return refuse("not-chair", "You are not the chair of this committee.");
+  }
+
+  let proposedDelta = 0;
+  if (command.motion !== "hold") {
+    const size = command.delta ?? PRIME_RATE_STEP;
+    if (!Number.isFinite(size) || size <= EPSILON) {
+      return refuse("invalid-delta", "Pick a move size of at least a quarter point.");
+    }
+    const snapped = Math.round(size / PRIME_RATE_STEP) * PRIME_RATE_STEP;
+    if (Math.abs(snapped - size) > EPSILON) {
+      return refuse("invalid-delta", "Move sizes come in quarter-point steps.");
+    }
+    proposedDelta = command.motion === "hike" ? snapped : -snapped;
+    const blocked = committeeRateExecutionRefusal(state, proposedDelta, clock.turn);
+    if (blocked) {
+      return refuse(
+        blocked,
+        blocked === "delta-hike" || blocked === "delta-cut" || blocked === "out-of-range"
+          ? "That move is larger than the committee can make in one meeting."
+          : "The committee cannot change the rate right now, so only a hold can be tabled."
+      );
+    }
+  }
+  if (
+    meeting.motion === command.motion &&
+    Math.abs(meeting.proposedDelta - proposedDelta) < EPSILON
+  ) {
+    return refuse("already-tabled", "That motion is already on the table.");
+  }
+
+  const next = cloneState(state);
+  const transition = blankTransition();
+  const updated: MeetingState = { ...meeting, motion: command.motion, proposedDelta };
+  next.activeMeeting = updated;
+  transition.set.activeFomcMeeting = updated;
+  transition.events.push({
+    kind: "meeting.transitioned",
+    command: "monetary.meeting.set_motion",
+    turn: clock.turn,
+    outcome: "ok",
+    bankId: state.institutionId,
+    subjectType: "meeting",
+    subjectId: meeting.meetingId,
+    statusBefore: "voting",
+    statusAfter: "voting",
+    meta: {
+      seatId: seat.seatId,
+      previousMotion: meeting.motion,
+      previousDelta: meeting.proposedDelta,
+      motion: command.motion,
+      proposedDelta,
+    },
+  });
+  return { allowed: true, next, transition };
+}
+
 function handleResolveMeeting(
   state: JurisdictionState,
   command: Extract<GovernanceCommand, { type: "resolve_meeting" }>,
@@ -948,6 +1035,8 @@ function handleCommand(
       return handleOpenMeeting(state, command, clock);
     case "cast_ballot":
       return handleCastBallot(state, command, actor, clock);
+    case "set_motion":
+      return handleSetMotion(state, command, actor, clock);
     case "resolve_meeting":
       return handleResolveMeeting(state, command, clock);
     case "set_rate":

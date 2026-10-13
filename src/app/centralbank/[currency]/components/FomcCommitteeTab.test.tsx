@@ -173,9 +173,13 @@ describe("FomcCommitteeTab governance contract", () => {
 
     render(<FomcCommitteeTab countryId={"US" as CountryId} />);
 
-    await waitFor(() => expect(screen.getByText("Raise rate")).toBeTruthy());
-    expect((screen.getByText("Raise rate") as HTMLButtonElement).disabled).toBe(false);
+    await waitFor(() => expect(screen.getByRole("button", { name: "Raise rate" })).toBeTruthy());
+    expect((screen.getByRole("button", { name: "Raise rate" }) as HTMLButtonElement).disabled).toBe(
+      false
+    );
     expect(screen.getByText(/Next deadline: turn 538/)).toBeTruthy();
+    expect(screen.getByText("Chair: table the motion")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Table motion" })).toBeTruthy();
   });
 
   it("awaiting resolution: shows the recorded ballot", async () => {
@@ -227,8 +231,10 @@ describe("FomcCommitteeTab governance contract", () => {
 
     render(<FomcCommitteeTab countryId={"US" as CountryId} />);
 
-    await waitFor(() => expect(screen.getByText("Raise rate")).toBeTruthy());
-    expect((screen.getByText("Raise rate") as HTMLButtonElement).disabled).toBe(true);
+    await waitFor(() => expect(screen.getByRole("button", { name: "Raise rate" })).toBeTruthy());
+    expect((screen.getByRole("button", { name: "Raise rate" }) as HTMLButtonElement).disabled).toBe(
+      true
+    );
     expect(screen.getByText("Only a seated board member can vote.")).toBeTruthy();
   });
 });
