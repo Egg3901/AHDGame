@@ -133,6 +133,34 @@ describe("StockList quote", () => {
   });
 });
 
+describe("StockList management labels", () => {
+  it("labels explicit NPP and character CEOs, independent of the legacy NPP flag", () => {
+    render(
+      <StockList
+        listings={[
+          { ...tradable, _id: "npp", name: "NPP Corp", ceoType: "npp", isNpp: true },
+          { ...tradable, _id: "player", name: "Player Corp", ceoType: "character", isNpp: true },
+        ]}
+      />
+    );
+    expect(screen.getByText("NPP-run")).toBeTruthy();
+    expect(screen.getByText("Player-run")).toBeTruthy();
+  });
+
+  it("leaves missing and other CEO types unlabeled", () => {
+    render(
+      <StockList
+        listings={[
+          { ...tradable, _id: "legacy", name: "Legacy Corp" },
+          { ...tradable, _id: "imperial", name: "Imperial Corp", ceoType: "imperial" },
+        ]}
+      />
+    );
+    expect(screen.queryByText("Player-run")).toBeNull();
+    expect(screen.queryByText("NPP-run")).toBeNull();
+  });
+});
+
 describe("StockList trade shortcut", () => {
   it("links tradable rows with float to the share ticket", () => {
     render(<StockList listings={[{ ...tradable, tickerSymbol: "PUB" }]} />);
