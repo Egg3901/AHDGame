@@ -3,7 +3,7 @@ import { getDb } from "@/lib/mongodb";
 import { handleRouteError } from "@/lib/api/errors";
 import { resolveCorporation } from "@/lib/api/corporations/resolveQuery";
 import { getAuthUser } from "@/lib/auth";
-import { shouldRedactCorporation } from "@/lib/corporations/redaction";
+import { shouldRedactCorporationForViewer } from "@/lib/corporations/reservedCorporateHoldings";
 import {
   computeCommodityOutputSharePercent,
   findCommodityOutputBasisChange,
@@ -41,7 +41,8 @@ export async function GET(request: Request, { params }: RouteParams) {
       authUser?.isModerator === true &&
       new URL(request.url).searchParams.get("modView") === "1";
     if (
-      shouldRedactCorporation(
+      await shouldRedactCorporationForViewer(
+        db,
         corporation,
         authUser?.userId,
         authUser?.isAdmin === true,
@@ -52,7 +53,9 @@ export async function GET(request: Request, { params }: RouteParams) {
         { isPrivate: true, series: [] },
         {
           headers: {
-            "Cache-Control": "public, s-maxage=120, stale-while-revalidate=300, no-transform",
+            "Cache-Control": corporation.isPrivate
+              ? "private, no-store, no-transform"
+              : "public, s-maxage=120, stale-while-revalidate=300, no-transform",
           },
         }
       );
@@ -87,7 +90,9 @@ export async function GET(request: Request, { params }: RouteParams) {
         { series: [] },
         {
           headers: {
-            "Cache-Control": "public, s-maxage=120, stale-while-revalidate=300, no-transform",
+            "Cache-Control": corporation.isPrivate
+              ? "private, no-store, no-transform"
+              : "public, s-maxage=120, stale-while-revalidate=300, no-transform",
           },
         }
       );
@@ -106,7 +111,9 @@ export async function GET(request: Request, { params }: RouteParams) {
         { series: [] },
         {
           headers: {
-            "Cache-Control": "public, s-maxage=120, stale-while-revalidate=300, no-transform",
+            "Cache-Control": corporation.isPrivate
+              ? "private, no-store, no-transform"
+              : "public, s-maxage=120, stale-while-revalidate=300, no-transform",
           },
         }
       );
@@ -185,7 +192,9 @@ export async function GET(request: Request, { params }: RouteParams) {
       },
       {
         headers: {
-          "Cache-Control": "public, s-maxage=120, stale-while-revalidate=300, no-transform",
+          "Cache-Control": corporation.isPrivate
+            ? "private, no-store, no-transform"
+            : "public, s-maxage=120, stale-while-revalidate=300, no-transform",
         },
       }
     );
