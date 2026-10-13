@@ -776,7 +776,7 @@ export async function processExtractionAutoStrategy(
   const stateCompanies = await db
     .collection<Corporation>("corporations")
     .find({
-      $or: [{ countryOwnerId: { $nin: [null, ""] } }, { ownershipState: "stateOwned" }],
+      $or: [{ countryOwnerId: { $type: "string", $ne: "" } }, { ownershipState: "stateOwned" }],
       ceoVacant: true,
       ceoType: { $ne: "character" },
     })
