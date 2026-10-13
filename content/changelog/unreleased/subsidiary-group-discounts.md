@@ -16,3 +16,5 @@ areas: [fullstack]
 - Selected-policy estimates show per-corporation and combined sales and profit impact for Commercial independence or Group members first, with both-policy comparisons retained.
 
 - Subsidiary Group screens now use game theme surfaces, active navigation, styled policy cards and clearer financial tables.
+
+- The Navbar Subsidiary Group shortcut now appears only for a parent or member of a formalized Group.

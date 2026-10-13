@@ -27,6 +27,7 @@ export interface WorldNavItem {
 export interface WorldNavOpts {
   countryId?: string;
   myCorporationId?: number | null;
+  myCorporationHasGroup?: boolean;
   myUnionId?: string | null;
   conflictsEnabled?: boolean;
   unionsEnabled?: boolean;
@@ -46,6 +47,7 @@ export interface WorldNavOpts {
 export function buildWorldNavItems({
   countryId = "US",
   myCorporationId = null,
+  myCorporationHasGroup = false,
   myUnionId = null,
   conflictsEnabled = false,
   unionsEnabled = false,
@@ -69,7 +71,7 @@ export function buildWorldNavItems({
       labelKey: "menus.world.subsidiaryGroup",
       href: "/corporation/" + myCorporationId + "/group",
       section: "corporate",
-      show: myCorporationId != null,
+      show: myCorporationId != null && myCorporationHasGroup,
       parentId: "myCorporation",
     },
     {

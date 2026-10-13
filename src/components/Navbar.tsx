@@ -110,6 +110,7 @@ interface NavbarProps {
   activePresidentElectionSeatId?: string;
   unreadCount?: number;
   myCorporationId?: number | null;
+  myCorporationHasGroup?: boolean;
   myUnionId?: string | null;
   onOpenFeedback?: () => void;
   feedbackCapturing?: boolean;
@@ -155,6 +156,7 @@ export const Navbar = React.memo(function Navbar({
   activePresidentElectionSeatId,
   unreadCount = 0,
   myCorporationId = null,
+  myCorporationHasGroup = false,
   myUnionId = null,
   onOpenFeedback,
   feedbackCapturing = false,
@@ -508,6 +510,7 @@ export const Navbar = React.memo(function Navbar({
                 isUKContext={isUKContext}
                 countryId={pageCountry}
                 myCorporationId={myCorporationId}
+                myCorporationHasGroup={myCorporationHasGroup}
                 myUnionId={myUnionId}
                 conflictsEnabled={conflictsEnabled}
                 unionsEnabled={unionsEnabled}
@@ -1185,6 +1188,7 @@ export const Navbar = React.memo(function Navbar({
                 {worldOpen && (
                   <div className="ml-3 mt-0.5 space-y-0.5 border-l border-card-border/60 pl-3">
                     {visibleWorldNavItems({
+                      myCorporationHasGroup,
                       countryId: pageCountry,
                       myCorporationId,
                       myUnionId,
