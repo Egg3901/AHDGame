@@ -144,7 +144,7 @@ describe("processExtractionAutoStrategy", () => {
     );
   });
 
-  it("never retools or displaces a player-owned extraction sector", async () => {
+  it("never retools a player-owned extraction sector, but may open a focused mine beside it", async () => {
     const playerCorpId = new ObjectId();
     const playerSectorId = new ObjectId();
     const playerUserId = new ObjectId();
@@ -188,9 +188,14 @@ describe("processExtractionAutoStrategy", () => {
 
     expect(res.converted).toBe(0);
     expect(res.restrategized).toBe(0);
-    expect(res.placed).toBe(0);
     expect(db.collectionMocks.corporateSectors.bulkWrite).not.toHaveBeenCalled();
-    expect(spawnNppCorporation).not.toHaveBeenCalled();
+    // A player's diversified mine does not close the state's iron deposit: the
+    // deposit has headroom and no mine runs the focused iron recipe there.
+    expect(res.placed).toBe(1);
+    expect(spawnNppCorporation).toHaveBeenCalledWith(
+      db,
+      expect.objectContaining({ headquartersState: "MN", initialStrategyId: "iron_mining" })
+    );
   });
 
   it("respects the placement cap independently of re-pointing", async () => {

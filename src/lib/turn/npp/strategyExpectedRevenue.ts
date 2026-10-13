@@ -134,6 +134,12 @@ export function primaryExtractionResource(strategy: ScorableStrategy): Extractab
  *   under chronic low fill) — except when the current strategy scores ~0
  *   (dead deposit), where any positive candidate wins.
  *
+ * - When the current recipe is on a dead deposit (`currentZeroYield`: the state
+ *   holds none of the resources it extracts), the best viable candidate wins
+ *   even when every candidate forecasts a loss. A dead-deposit mine produces
+ *   nothing and still buys its inputs, so any recipe with output is strictly
+ *   better. Null then means no recipe can produce here at all.
+ *
  * Cooldown/transition eligibility is the caller's responsibility (it lives on
  * the sector document, not in this pure helper).
  */
@@ -146,8 +152,18 @@ export function decideExtractionStrategySwitch(params: {
   soldFraction?: number | null;
   /** Optional mode-aware forecast. Omission preserves legacy raw-price scoring. */
   scoreOf?: (strategy: ScorableStrategy) => number;
+  /** The current recipe cannot extract anything in this state. */
+  currentZeroYield?: boolean;
 }): StrategySwitchDecision | null {
-  const { currentStrategyId, strategies, priceRatioOf, headroomOf, soldFraction, scoreOf } = params;
+  const {
+    currentStrategyId,
+    strategies,
+    priceRatioOf,
+    headroomOf,
+    soldFraction,
+    scoreOf,
+    currentZeroYield,
+  } = params;
   if (strategies.length === 0) return null;
   const score =
     scoreOf ??
@@ -167,10 +183,14 @@ export function decideExtractionStrategySwitch(params: {
     const primary = primaryExtractionResource(strategy);
     if (primary && headroomOf(primary) <= MIN_PRIMARY_HEADROOM_FRACTION) continue;
     const candidateScore = score(strategy);
-    if (!Number.isFinite(candidateScore) || candidateScore <= SCORE_EPSILON) continue;
+    if (!Number.isFinite(candidateScore)) continue;
+    if (!currentZeroYield && candidateScore <= SCORE_EPSILON) continue;
     if (!best || candidateScore > best.score) best = { strategy, score: candidateScore };
   }
   if (!best) return null;
+  if (currentZeroYield) {
+    return { strategyId: best.strategy.id, currentScore, bestScore: best.score };
+  }
 
   const chronicLowFill = soldFraction != null && soldFraction < CHRONIC_LOW_FILL_THRESHOLD;
   const minImprovement = chronicLowFill
