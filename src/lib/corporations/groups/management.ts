@@ -1,3 +1,4 @@
+import { COMMODITY_LABELS, COMMODITY_UNITS, type CommodityType } from "@/lib/constants/commodities";
 import { loadGroupBondDebt } from "./financialComparison";
 import { clampGroupDiscount } from "./rules/discounts";
 import { estimateGroupSupply } from "./rules/forecast";
@@ -181,6 +182,14 @@ export async function groupManagementView(db: Db, corporation: Corporation, user
       ? {
           ...forecast,
           total: ctx.parent ? forecast.total : null,
+          connections: ctx.parent
+            ? forecast.connections.map((c) => ({
+                ...c,
+                commodityLabel: COMMODITY_LABELS[c.commodity as CommodityType] ?? c.commodity,
+                unit: COMMODITY_UNITS[c.commodity as CommodityType] ?? "",
+              }))
+            : [],
+          connectionCount: ctx.parent ? forecast.connectionCount : null,
           corporations: forecast.corporations.filter((c) => visibleIds.has(c.id)),
         }
       : null,

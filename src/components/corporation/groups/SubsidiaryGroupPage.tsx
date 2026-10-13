@@ -9,10 +9,7 @@ import { useTranslations } from "next-intl";
 
 import { CorporationLogo } from "../CorporationLogo";
 import { GroupOverviewCard, type GroupOverviewPayload } from "../GroupOverviewCard";
-import SupplyAgreementsSection from "../SupplyAgreementsSection";
-import { SUPPLY_AGREEMENT_PRICE_BAND } from "@/lib/db/types/supplyAgreement";
-import { GroupSupplyForecast } from "./GroupSupplyForecast";
-import { GroupParticipation } from "./GroupParticipation";
+import { GroupSupplyChain } from "./GroupSupplyChain";
 import { useGroupManagement } from "./useGroupManagement";
 import { GroupFinancialComparison } from "./GroupFinancialComparison";
 import { GroupDirections } from "./GroupDirections";
@@ -28,7 +25,6 @@ export function SubsidiaryGroupPage({ corpId }: { corpId: string }) {
   const [name, setName] = useState<string | null>(null),
     [uploading, setUploading] = useState(false);
   const [editingIdentity, setEditingIdentity] = useState(false);
-  const [agreementCorpId, setAgreementCorpId] = useState<string | null>(null);
   useEffect(() => {
     const controller = new AbortController();
     fetch("/api/corporations/" + corpId + "/group", { signal: controller.signal })
@@ -58,9 +54,6 @@ export function SubsidiaryGroupPage({ corpId }: { corpId: string }) {
         <Link href={"/corporation/" + corpId}>{t("viewCorporation")}</Link>
       </main>
     );
-  const agreementMembers = data.members.filter((m) => m.canEdit);
-  const agreementMember =
-    agreementMembers.find((m) => m.id === agreementCorpId) ?? agreementMembers[0];
   async function uploadLogo(file: File | undefined) {
     if (!file || !data) return;
     setUploading(true);
@@ -211,119 +204,7 @@ export function SubsidiaryGroupPage({ corpId }: { corpId: string }) {
         <GroupFinancialComparison data={data} sheet={sheet} />
       </div>
       {section === "directions" && <GroupDirections data={data} busy={busy} save={save} />}
-      {section === "supply" && (
-        <>
-          <div className="space-y-3">
-            <h2 className="text-xl font-semibold">{t("supplyTitle")}</h2>
-            <p className="text-sm text-muted">{t("marketPrice")}</p>
-            <div className="grid gap-3 sm:grid-cols-2">
-              {(["independent", "members"] as const).map((policy) => (
-                <button
-                  className={`flex items-center gap-3 rounded-xl border p-5 text-left font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-2 focus-visible:outline-info ${data.settings.supplyPolicy === policy ? "border-gold bg-gold/5 text-foreground" : "border-card-border bg-card text-muted enabled:hover:bg-card-elevated"}`}
-                  key={policy}
-                  disabled={busy || !data.canManage}
-                  aria-pressed={data.settings.supplyPolicy === policy}
-                  onClick={() => void save({ action: "policy", policy })}
-                >
-                  <Network
-                    size={20}
-                    className={data.settings.supplyPolicy === policy ? "text-gold" : "text-muted"}
-                    aria-hidden="true"
-                  />
-                  {t("policies." + policy)}
-                </button>
-              ))}
-            </div>
-          </div>
-          {!data.supplyEngineEnabled && (
-            <p className="rounded-lg border border-info/25 bg-info/5 p-4 text-sm text-muted">
-              {t("enginePending")}
-            </p>
-          )}
-          {data.settings.supplyPolicy === "members" && (
-            <>
-              <section className="rounded-xl border border-card-border bg-card p-5 space-y-3">
-                <label className="block text-sm">
-                  {t("chainDiscount")}
-                  <select
-                    className="block mt-2 rounded border border-card-border bg-card p-2"
-                    value={data.settings.supplyDiscount ?? 0}
-                    disabled={busy || !data.canManage}
-                    onChange={(e) =>
-                      void save({ action: "discount", discount: Number(e.target.value) })
-                    }
-                  >
-                    {[
-                      ...new Set([
-                        ...Array.from(
-                          { length: Math.round((SUPPLY_AGREEMENT_PRICE_BAND * 100) / 5) + 1 },
-                          (_, i) => (i * 5) / 100
-                        ),
-                        data.settings.supplyDiscount ?? 0,
-                      ]),
-                    ]
-                      .sort((a, b) => a - b)
-                      .map((discount) => (
-                        <option key={discount} value={discount}>
-                          {t("chainDiscountValue", {
-                            percent: Number((discount * 100).toFixed(4)),
-                            price: Number(((1 - discount) * 100).toFixed(4)),
-                          })}
-                        </option>
-                      ))}
-                  </select>
-                </label>
-                <p className="text-xs text-muted">{t("chainDiscountNote")}</p>
-              </section>
-              <h3 className="font-semibold">{t("participation")}</h3>
-              <div className="grid gap-4 md:grid-cols-2">
-                {data.members
-                  .filter((m) => m.operator === "player")
-                  .map((m) => (
-                    <GroupParticipation
-                      key={m.id}
-                      data={data}
-                      member={m}
-                      busy={busy}
-                      onChange={(enabled) => void save({ action: "participation", enabled }, m.id)}
-                    />
-                  ))}
-              </div>
-            </>
-          )}
-          <p className="text-sm text-muted">{t("supplySafeguards")}</p>
-          <GroupSupplyForecast data={data} />
-          {data.supplyAgreementsEnabled && (
-            <section className="rounded-xl border border-card-border bg-card p-5 space-y-3">
-              <h3 className="font-semibold">{t("agreementsTitle")}</h3>
-              <p className="text-sm text-muted">
-                {t("agreementsNote", { percent: Math.round(SUPPLY_AGREEMENT_PRICE_BAND * 100) })}
-              </p>
-              {agreementMember ? (
-                <>
-                  <label className="block text-sm">
-                    {t("agreementsCorporation")}
-                    <select
-                      className="block mt-2 rounded border border-card-border bg-card p-2"
-                      value={agreementMember.id}
-                      onChange={(e) => setAgreementCorpId(e.target.value)}
-                    >
-                      {agreementMembers.map((m) => (
-                        <option key={m.id} value={m.id}>
-                          {m.name}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <SupplyAgreementsSection key={agreementMember.id} corpId={agreementMember.id} />
-                </>
-              ) : (
-                <p className="text-sm text-muted">{t("agreementsCeoOnly")}</p>
-              )}
-            </section>
-          )}
-        </>
-      )}
+      {section === "supply" && <GroupSupplyChain data={data} busy={busy} save={save} />}
     </main>
   );
 }

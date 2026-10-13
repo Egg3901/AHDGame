@@ -168,6 +168,8 @@ describe("corporation office suggestions and supply estimates", () => {
   it("renders policy comparisons and identifies the fixed-output assumptions", async () => {
     const data = structuredClone(base);
     data.forecast = {
+      connections: [],
+      connectionCount: 0,
       basisTurn: 19,
       appliesTurn: 21,
       corporations: [
@@ -195,7 +197,7 @@ describe("corporation office suggestions and supply estimates", () => {
     fireEvent.click(screen.getByRole("button", { name: "Supply chain" }));
     expect(screen.getByText("Estimated supply policy effects")).toBeTruthy();
     expect(screen.getByText(/Estimates hold output/)).toBeTruthy();
-    expect(screen.getAllByText("Combined group total")).toHaveLength(2);
+    expect(screen.getAllByText("Combined group total")).toHaveLength(3);
   });
   it("shows the corporation CEO the suggestion details and sends its revision", () => {
     const data = structuredClone(base);
