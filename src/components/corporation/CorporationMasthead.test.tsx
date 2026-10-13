@@ -122,6 +122,13 @@ describe("CorporationMasthead", () => {
     expect(screen.queryByText("Mkt cap")).toBeNull();
   });
 
+  it("shows private subsidiary valuation to the controlling parent CEO without settings", () => {
+    renderMasthead({ isPrivate: true, viewerIsControllingParentCeo: true });
+    expect(screen.getByText("$24.74")).toBeTruthy();
+    expect(screen.getByText("Mkt cap")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Corporation settings" })).toBeNull();
+  });
+
   it("offers Trade only when the viewer can trade, and Settings only to the CEO", () => {
     const onTrade = vi.fn();
     renderMasthead({}, { onTrade });
