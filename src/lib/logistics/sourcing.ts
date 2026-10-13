@@ -26,6 +26,7 @@
  */
 
 import type { CommodityType } from "@/lib/constants/commodities";
+import type { SourcingOwnRoute } from "./ownRoutes";
 import type { CountryId } from "@/lib/constants/countries";
 import {
   addPurchaseExposure,
@@ -329,6 +330,7 @@ export interface ImportAggregate {
 
 export interface SourcingResult {
   flows: SourcingFlow[];
+  ownRouteDelivered: SourcingOwnRoute[];
   summaries: SourcingCommoditySummary[];
   /** TEU consumed per state per class, the load on each shipping network. */
   freightTeuByState: Map<string, Record<FreightClass, number>>;
@@ -425,6 +427,11 @@ export interface SourcingResult {
 
 type Balance = { supply: number; demand: number };
 
+const OWN_LEG_TERMS = {
+  baseCeiling: Number.POSITIVE_INFINITY,
+  ceiling: Number.POSITIVE_INFINITY,
+};
+
 type SourcingCandidate = {
   originType: "state" | "country";
   originId: string;
@@ -435,6 +442,7 @@ type SourcingCandidate = {
   hopCount: number;
   /** Same-country sellers win landed-price ties. */
   domestic: boolean;
+  ownRoute?: SourcingOwnRoute;
 };
 
 type FairForeignDemand = {
@@ -509,7 +517,10 @@ export interface SourcingInputs {
   isBlocked: (commodity: CommodityType, exporter: CountryId, importer: CountryId) => boolean;
   /** Raise the landed-price ceiling only for states below 50 percent local fill. */
   shortageResponsiveSourcingEnabled?: boolean;
+  ownRoutes?: ReadonlyArray<SourcingOwnRoute>;
 }
+
+export type { SourcingOwnRoute };
 
 // ── Pass ─────────────────────────────────────────────────────────────────────
 
@@ -531,6 +542,7 @@ export function runSourcingPass(inputs: SourcingInputs): SourcingResult {
     tariffRatePct,
     isBlocked,
     shortageResponsiveSourcingEnabled = false,
+    ownRoutes,
   } = inputs;
 
   // Deterministic iteration: states sorted by id, countries sorted by id.
@@ -551,6 +563,8 @@ export function runSourcingPass(inputs: SourcingInputs): SourcingResult {
   }
 
   const flows: SourcingFlow[] = [];
+  const ownRouteDelivered: SourcingOwnRoute[] = [];
+  const stateById = new Map(sortedStates.map((state) => [state.stateId, state] as const));
   const summaries: SourcingCommoditySummary[] = [];
   const landedPremiumByDestState = new Map<string, Map<CommodityType, LandedPremiumAccumulator>>();
   const importAggregatesByCountry = new Map<string, ImportAggregate>();
@@ -820,15 +834,62 @@ export function runSourcingPass(inputs: SourcingInputs): SourcingResult {
       if (local > 0) destinationFor(countryId).localUnits += local;
     }
 
-    for (const buyer of sortedStates) {
+    const ownLegsByEntry = new Map<object, SourcingCandidate[]>();
+    if (ownRoutes && isHauledClass(freightClass)) {
+      const byDest = new Map<string, SourcingCandidate[]>();
+      for (const route of ownRoutes) {
+        if (route.commodity !== commodity || !(route.units > 0)) continue;
+        const buyer = stateById.get(route.destStateId);
+        const seller = stateById.get(route.originStateId);
+        if (!buyer || !seller || seller.countryId !== buyer.countryId) continue;
+        if (seller.stateId === buyer.stateId) continue;
+        const hopCount = hops(buyer.countryId, seller.stateId, buyer.stateId);
+        if (hopCount == null || hopCount <= 0) continue;
+        const ask = statePrices[seller.stateId] ?? basePrice;
+        const routeMultiplier = shippingCostMultiplier
+          ? Math.max(0, shippingCostMultiplier(buyer.countryId, seller.stateId, buyer.stateId))
+          : 1;
+        const shippingPerUnit = boundedShippingPerUnit(
+          shippingPerUnitPerHop * hopCount * routeMultiplier,
+          ask
+        );
+        const legs = byDest.get(buyer.stateId) ?? [];
+        legs.push({
+          originType: "state",
+          originId: seller.stateId,
+          landed: ask + shippingPerUnit,
+          ask,
+          shippingPerUnit,
+          tariffRatePct: 0,
+          hopCount,
+          domestic: true,
+          ownRoute: route,
+        });
+        byDest.set(buyer.stateId, legs);
+      }
+      for (const [destStateId, legs] of byDest) {
+        legs.sort(
+          (a, b) =>
+            a.hopCount - b.hopCount ||
+            a.originId.localeCompare(b.originId) ||
+            a.ownRoute!.corporationId.localeCompare(b.ownRoute!.corporationId)
+        );
+        ownLegsByEntry.set({ ...stateById.get(destStateId)! }, legs);
+      }
+    }
+    const ownEntries = [...ownLegsByEntry.keys()] as typeof sortedStates;
+    ownEntries.sort((a, b) => a.stateId.localeCompare(b.stateId));
+
+    for (const buyer of [...ownEntries, ...sortedStates]) {
       let unmet = unmetByState.get(buyer.stateId) ?? 0;
       if (unmet <= 0) continue;
-      const { baseCeiling, ceiling } = buyerTerms(buyer);
+      const ownLegs = ownLegsByEntry.get(buyer);
+      const { baseCeiling, ceiling } = ownLegs ? OWN_LEG_TERMS : buyerTerms(buyer);
 
       // Candidate sellers: same-country states with spare + foreign countries.
-      const candidates: SourcingCandidate[] = [];
+      const candidates: SourcingCandidate[] = ownLegs ? [...ownLegs] : [];
 
-      for (const seller of sortedStates) {
+      for (const seller of ownLegs ? [] : sortedStates) {
         if (seller.countryId !== buyer.countryId || seller.stateId === buyer.stateId) continue;
         const spare = spareByState.get(seller.stateId) ?? 0;
         if (spare <= 0) continue;
@@ -853,17 +914,18 @@ export function runSourcingPass(inputs: SourcingInputs): SourcingResult {
           domestic: true,
         });
       }
-      for (const cid of countryIds) {
+      for (const cid of ownLegs ? [] : countryIds) {
         const candidate = foreignCandidateFor(buyer, cid);
         if (candidate) candidates.push(candidate);
       }
 
-      candidates.sort(
-        (a, b) =>
-          a.landed - b.landed ||
-          Number(b.domestic) - Number(a.domestic) ||
-          a.originId.localeCompare(b.originId)
-      );
+      if (!ownLegs)
+        candidates.sort(
+          (a, b) =>
+            a.landed - b.landed ||
+            Number(b.domestic) - Number(a.domestic) ||
+            a.originId.localeCompare(b.originId)
+        );
 
       for (const cand of candidates) {
         if (unmet <= 0) break;
@@ -893,7 +955,7 @@ export function runSourcingPass(inputs: SourcingInputs): SourcingResult {
         // the seller's drawdown are two different numbers. `deliver` is what
         // lands, `dispatch` is what leaves.
         const deliveryFactor = gridDeliveryFactor(cand.hopCount);
-        let deliver = Math.min(unmet, spare * deliveryFactor);
+        let deliver = Math.min(unmet, cand.ownRoute?.units ?? Infinity, spare * deliveryFactor);
         let dispatch = deliveryFactor > 0 ? deliver / deliveryFactor : 0;
         if (cand.originType === "country") {
           const fairBudget = fairForeignBudgetFor(buyer, cand.originId as CountryId);
@@ -1014,12 +1076,26 @@ export function runSourcingPass(inputs: SourcingInputs): SourcingResult {
         // Delivered-units + extra-cost accumulation for money wiring, regardless
         // of the itemization floor below (that floor only caps the doc's flow
         // list; the aggregates must stay exact).
-        addLandedPremium(buyer.stateId, commodity, take, take * cand.shippingPerUnit + tariffPaid);
+        if (!cand.ownRoute) {
+          addLandedPremium(
+            buyer.stateId,
+            commodity,
+            take,
+            take * cand.shippingPerUnit + tariffPaid
+          );
+        }
         // Canonical freight billing: the shipping leg of a domestic hauled flow
         // is the buyer state's charge and the origin state's haul revenue, one
         // amount booked on both sides. Hauled classes lose nothing in transit
         // (deliveryFactor 1), so `take` here is also what was dispatched.
-        if (cand.originType === "state" && isHauledClass(freightClass)) {
+        if (cand.ownRoute) {
+          const freightCharge = take * cand.shippingPerUnit + congestionSurchargePaid;
+          haulRevenueByOriginState.set(
+            cand.originId,
+            (haulRevenueByOriginState.get(cand.originId) ?? 0) + freightCharge
+          );
+          ownRouteDelivered.push({ ...cand.ownRoute, units: take, freightCharge });
+        } else if (cand.originType === "state" && isHauledClass(freightClass)) {
           addFreightBilling(
             buyer.stateId,
             cand.originId,
@@ -1068,6 +1144,7 @@ export function runSourcingPass(inputs: SourcingInputs): SourcingResult {
         }
       }
 
+      if (ownLegs) continue; // the market pass for this state books what is left
       summary.unmetUnits += Math.max(0, unmet);
       if (unmet > 0) destinationFor(buyer.countryId).unmetUnits += unmet;
     }
@@ -1135,6 +1212,7 @@ export function runSourcingPass(inputs: SourcingInputs): SourcingResult {
 
   return {
     flows,
+    ownRouteDelivered,
     summaries,
     freightTeuByState: freightUsedByState,
     freightDemandTeuByState: freightDemandByState,
