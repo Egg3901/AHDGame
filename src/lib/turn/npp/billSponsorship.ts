@@ -76,6 +76,7 @@ import {
   type WhipCountInput,
 } from "@/lib/nppAutonomy/v6/rules/whipCount";
 import { nppGovernmentWhipFor } from "@/lib/nppAutonomy/v6/rules/governmentWhip";
+import { oppositionBlocWorthwhile } from "@/lib/nppAutonomy/v6/rules/oppositionBattles";
 import { isLegislationTypeActive } from "@/lib/era/legislationCatalog";
 import { getMarketSystemMode, marketAtLeast } from "@/lib/market/featureFlag";
 import { isMediaOwnershipBillAvailable } from "@/lib/mediaRegulation/rules";
@@ -388,6 +389,7 @@ async function loadGovernmentDirectives(
   goalDomains?: ReadonlySet<string>;
   /** The head of government is an NPP and no player holds the post. */
   nppLed?: boolean;
+  coalitionPartyIds?: string[];
 }> {
   const gov = await getGovernmentFormationsCollection(db).findOne(
     { _id: countryId },
@@ -397,6 +399,7 @@ async function loadGovernmentDirectives(
         governingAgenda: 1,
         fiscalStance: 1,
         governingPartyId: 1,
+        coalitionPartyIds: 1,
         pmNppId: 1,
         pmCharacterId: 1,
         presidentNppId: 1,
@@ -431,6 +434,7 @@ async function loadGovernmentDirectives(
     seatsByParty,
     goalDomains: goalDomains && goalDomains.size > 0 ? goalDomains : undefined,
     nppLed: !gov.pmCharacterId && !!(gov.pmNppId || gov.presidentNppId),
+    coalitionPartyIds: gov.coalitionPartyIds ?? [],
   };
 }
 
@@ -977,8 +981,15 @@ export async function processNppBillSponsorship(ctx: NPPContext): Promise<number
           const playerSeats = seats - (nppSeatsByParty[partyId] ?? 0);
           if (playerSeats > 0) playerSeatsByParty[partyId] = playerSeats;
         }
+        // Engine 6.11: the count applies the opposition bloc only where voting
+        // will (no bloc against a commanding government).
         const opposition =
-          directives.governingPartyId && directives.seatsByParty
+          directives.governingPartyId &&
+          directives.seatsByParty &&
+          oppositionBlocWorthwhile(directives.seatsByParty, [
+            directives.governingPartyId,
+            ...(directives.coalitionPartyIds ?? []),
+          ])
             ? identifyOppositionParty(directives.seatsByParty, directives.governingPartyId)
             : null;
         const governingParty = directives.governingPartyId

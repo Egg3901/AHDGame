@@ -84,6 +84,7 @@ import {
   type NppBusinessStakes,
 } from "@/lib/nppAutonomy/v6/rules/businessInterest";
 import { getOperatingSectorType } from "@/lib/constants/sectorStrategies";
+import { oppositionBlocWorthwhile } from "@/lib/nppAutonomy/v6/rules/oppositionBattles";
 import type { Corporation, CorporateSector } from "@/lib/db/types";
 
 export async function processBillVoting(ctx: NPPContext): Promise<number> {
@@ -248,6 +249,16 @@ export async function processBillVoting(ctx: NPPContext): Promise<number> {
       const seatsByParty = await tallySeatsByParty(db, countryId);
       const opposition = identifyOppositionParty(seatsByParty, gov.governingPartyId);
       if (!opposition) continue;
+      // Engine 6.11 (v6): no bloc against a government the bloc cannot defeat.
+      if (
+        (await nppAutonomyAtLeast(db, countryId, NPP_ENGINE_LEVEL)) &&
+        !oppositionBlocWorthwhile(seatsByParty, [
+          gov.governingPartyId,
+          ...(gov.coalitionPartyIds ?? []),
+        ])
+      ) {
+        continue;
+      }
       oppositionByCountry.set(countryId, {
         governingPartyId: gov.governingPartyId,
         oppositionPartyId: opposition.partyId,

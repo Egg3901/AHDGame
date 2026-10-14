@@ -62,7 +62,7 @@ number.
   district, donor and opposition pressure; whips and caucuses come later.)
 - **Whipping its own program.** A governing party whips co-partisans on the
   bills that serve its standing goals (shipped in 6.7.0). Opposition
-  coordinates against a bill only when it has the votes to defeat it.
+  coordinates only against a government it can defeat (shipped in 6.11.0).
 - **Ministers judged on their goal.** Cabinet posts already go to NPPs ranked
   on fit with the head of government, competence and the brief, and ministers
   whose briefs badly miss target are already reshuffled. The remaining step is
@@ -106,6 +106,19 @@ number.
 - Autonomy v6 becomes the default for new singleplayer and simulation worlds,
   after the engine 6 stages are validated. Running worlds never change level on
   their own.
+
+## 6.11.0 (unreleased)
+
+Stage 2 (governing).
+
+- **The opposition picks its battles (v6).** The opposition's NPPs used to vote
+  as a bloc against every government bill, even against a government with a
+  large majority, where the bloc could defeat nothing and only stopped
+  opposition members backing bills they agreed with. Now the bloc holds only
+  while the government side (governing party plus coalition partners) has
+  less than 55% of the lower chamber. Above that, opposition NPPs vote on each
+  bill's merits, home region and donors like any other member. The pre-filing
+  vote count from 6.5.0 uses the same rule.
 
 ## 6.10.0 (unreleased)
 
