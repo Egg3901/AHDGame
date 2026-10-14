@@ -7,7 +7,7 @@ import { getContestRoundsCollection } from "./collection";
 import type { ContestRound, ContestStanding } from "@/lib/db/types/contestRound";
 import { migration } from "@/lib/migrations/entries/2026-10-14-contest-account-history";
 import { getLegacyLeaderboardData } from "@/lib/world/legacyLeaderboard";
-const uri = process.env.CONTEST_TEST_MONGO_URI;
+const uri = process.env.CONTEST_TEST_MONGO_URI ?? process.env.FEDERATION_TEST_MONGO_URI;
 describe.skipIf(!uri)("contest records and career ranking on isolated Mongo", () => {
   let client: MongoClient;
   let db: Db;
