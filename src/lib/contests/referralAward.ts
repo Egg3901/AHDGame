@@ -111,56 +111,56 @@ export async function awardReferralContest(
   }
 
   const winners: ContestWinner[] = [];
-  for (const [index, standing] of ranked.entries()) {
-    const user = byId.get(standing.subjectId)!;
-    const decision = referralGrantDecision(
-      {
-        tier: user.patreonTier ?? null,
-        expiresAtMs: user.patreonExpiresAt ? new Date(user.patreonExpiresAt).getTime() : null,
-        provider: user.supporterProvider ?? null,
-      },
-      now.getTime()
-    );
-    if (decision === "grant") {
-      // No end date: the next iteration's award ends it.
-      await applyPatreonStatus(db, {
+  const outcomes: Record<string, boolean> = {};
+  try {
+    for (const [index, standing] of ranked.entries()) {
+      const user = byId.get(standing.subjectId)!;
+      const decision = referralGrantDecision(
+        {
+          tier: user.patreonTier ?? null,
+          expiresAtMs: user.patreonExpiresAt ? new Date(user.patreonExpiresAt).getTime() : null,
+          provider: user.supporterProvider ?? null,
+        },
+        now.getTime()
+      );
+      if (decision === "grant") {
+        // No end date: the next iteration's award ends it.
+        await applyPatreonStatus(db, {
+          userId: user._id,
+          tier: "supporter",
+          expiresAt: null,
+          adsDisabledDefault: true,
+          provider: "contest",
+        });
+      }
+      outcomes[`winners.${index}.alreadySupporter`] = decision === "already_supporter";
+      await createNotification({
         userId: user._id,
-        tier: "supporter",
-        expiresAt: null,
-        adsDisabledDefault: true,
-        provider: "contest",
+        type: "system",
+        title: "You placed in the referral contest",
+        message:
+          decision === "already_supporter"
+            ? `You finished #${index + 1} with ${standing.score} referrals. Thank you for bringing new players in.`
+            : `You finished #${index + 1} with ${standing.score} referrals. Supporter benefits are yours for the whole next iteration.`,
+        metadata: { href: "/contests" },
+      });
+      winners.push({
+        rank: index + 1,
+        userId: standing.subjectId,
+        characterId: standing.characterId,
+        characterName: standing.characterName,
+        subjectId: standing.subjectId,
+        // Public record: account usernames are never shown, only character names.
+        subjectName: standing.characterName,
+        score: standing.score,
+        alreadySupporter: decision === "already_supporter",
       });
     }
-    // Record the outcome before notification delivery can interrupt this award.
-    await rounds.updateOne(
-      { _id: active._id },
-      {
-        $set: {
-          [`winners.${index}.alreadySupporter`]: decision === "already_supporter",
-        },
-      }
-    );
-    await createNotification({
-      userId: user._id,
-      type: "system",
-      title: "You placed in the referral contest",
-      message:
-        decision === "already_supporter"
-          ? `You finished #${index + 1} with ${standing.score} referrals. Thank you for bringing new players in.`
-          : `You finished #${index + 1} with ${standing.score} referrals. Supporter benefits are yours for the whole next iteration.`,
-      metadata: { href: "/contests" },
-    });
-    winners.push({
-      rank: index + 1,
-      userId: standing.subjectId,
-      characterId: standing.characterId,
-      characterName: standing.characterName,
-      subjectId: standing.subjectId,
-      // Public record: account usernames are never shown, only character names.
-      subjectName: standing.characterName,
-      score: standing.score,
-      alreadySupporter: decision === "already_supporter",
-    });
+  } finally {
+    // A single write preserves confirmed outcomes even if notification delivery fails.
+    if (Object.keys(outcomes).length > 0) {
+      await rounds.updateOne({ _id: active._id }, { $set: outcomes });
+    }
   }
 
   await Promise.all([

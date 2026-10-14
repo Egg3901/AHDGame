@@ -65,7 +65,7 @@ Contest achievements come from settled awarded placings:
 
 Career rankings give politics, business, enacted legislation, contest performance and earned gameplay achievements up to 1,000 points each. Influence, legislation, contests and achievements have diminishing returns. Only offices actually held count. Business includes all cash and savings currency pockets, shares, bonds and funds, less outstanding personal loans. Borrowing cash or moving it between currency accounts creates no business credit. Drafts, failed bills, staff law overrides, special achievements, paid perks and manual achievement grants earn no points. Infamy subtracts up to 500 points; the total cannot fall below zero.
 
-The ranking uses your strongest recorded career and adds account achievements once. Retiring extra characters does not add their scores together. You may choose a different character as your display identity; the ranking also names the career supplying the score. New retirement snapshots save enacted laws and converted balances before a world reset clears them. Historical information that was already erased cannot be reconstructed.
+The ranking uses your strongest political and business career, adds enacted laws and contest wins across all your characters, and counts account achievements once. Retiring extra characters does not add their scores together. Your display identity defaults to your current character, or the latest retired character when none is active. You may choose a different recorded character; the ranking also names the career supplying the score. New retirement snapshots save enacted laws and converted balances before a world reset clears them. Historical information that was already erased cannot be reconstructed.
 
 ## Strategic notes
 

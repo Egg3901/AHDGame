@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { contestAchievementSlugs, type ContestPlacing } from "./history";
+import {
+  contestAchievementSlugs,
+  contestAchievementMilestones,
+  type ContestPlacing,
+} from "./history";
 const win = (roundNumber: number, extra: Partial<ContestPlacing> = {}): ContestPlacing => ({
   kind: "influence_gain",
   iterationKey: "Beta:2",
@@ -33,5 +37,23 @@ describe("contest achievements", () => {
     expect(slugs).toContain("contest_versatile_winner");
     expect(slugs).toContain("contest_cross_iteration");
     expect(slugs).not.toContain("contest_winning_streak");
+  });
+});
+
+describe("contest achievement provenance", () => {
+  it("uses the first qualifying character for each achievement, across character changes", () => {
+    const milestones = contestAchievementMilestones([
+      { ...win(1, { rank: 3 }), characterId: "first-podium" },
+      { ...win(2), characterId: "first-winner" },
+      { ...win(3, { kind: "wealth_growth" }), characterId: "second-winner" },
+      { ...win(4, { kind: "party_growth", iterationKey: "Beta:3" }), characterId: "third-winner" },
+    ]);
+    expect(milestones.find((m) => m.slug === "contest_podium")?.characterId).toBe("first-podium");
+    expect(milestones.find((m) => m.slug === "contest_first_win")?.characterId).toBe(
+      "first-winner"
+    );
+    expect(milestones.find((m) => m.slug === "contest_repeat_winner")?.characterId).toBe(
+      "third-winner"
+    );
   });
 });

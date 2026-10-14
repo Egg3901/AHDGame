@@ -1,5 +1,6 @@
+import { leaderboardDisplayCharacterId } from "./rules/leaderboardIdentity";
 import { liquidBalancesAnchor, personalDebtAnchor } from "./rules/netWorth";
-import { computeCareerScore, CAREER_SCORE_VERSION } from "./rules/careerScore";
+import { computeCareerScore, careerRecordTotals, CAREER_SCORE_VERSION } from "./rules/careerScore";
 import { loadCareerLegislation, loadCareerContests, loadCareerLoans } from "./careerEvidence";
 import { ObjectId, type Db } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
@@ -50,6 +51,8 @@ interface Life {
   partyInfluence: number;
   achievementCount: number;
   highestOffice: string | null;
+  highestOfficeRank: number;
+  infamy: number;
   avatarUrl: string | null;
   isActive: boolean;
   iteration: GameIteration | null;
@@ -100,8 +103,8 @@ function computeNetWorth(
   return { total, breakdown };
 }
 
-/** Recalculate careers from retained evidence on every read. Best life plus account achievements,
- * rather than summing disposable characters. Politics, business, legislation, contests and
+/** Recalculate careers from retained evidence on every read. Strongest political/business career plus all enacted laws,
+ * contest placings and account achievements, without summing disposable character stats. Politics, business, legislation, contests and
  * earned gameplay achievements each contribute at most 1,000 points. */
 export async function getLegacyLeaderboardData(
   db: Db,
@@ -152,7 +155,7 @@ export async function getLegacyLeaderboardData(
     db
       .collection<RetiredCharacter>("retiredCharacters")
       .find(
-        {},
+        { "snapshot.isSynthetic": { $ne: true } },
         {
           projection: {
             userId: 1,
@@ -276,7 +279,7 @@ export async function getLegacyLeaderboardData(
     )
     .toArray();
 
-  const bannedUserIds = new Set(users.filter((u) => u.isBanned).map((u) => String(u._id)));
+  const eligibleUserIds = new Set(users.filter((u) => !u.isBanned).map((u) => String(u._id)));
   const preferenceByUser = new Map(
     users.map((u) => [String(u._id), u.legacyDisplayCharacterId ?? null])
   );
@@ -298,10 +301,21 @@ export async function getLegacyLeaderboardData(
   );
   const livesByUser = new Map<string, Life[]>();
   const pushLife = (life: Life) => {
-    if (bannedUserIds.has(life.userId)) return;
+    if (!eligibleUserIds.has(life.userId)) return;
     const existing = livesByUser.get(life.userId);
-    if (existing) existing.push(life);
-    else livesByUser.set(life.userId, [life]);
+    if (!existing) {
+      livesByUser.set(life.userId, [life]);
+      return;
+    }
+    const duplicate = existing.findIndex((prior) => prior.characterId === life.characterId);
+    if (duplicate === -1) existing.push(life);
+    else if (
+      life.isActive ||
+      (!existing[duplicate].isActive &&
+        (life.retiredAt?.getTime() ?? 0) > (existing[duplicate].retiredAt?.getTime() ?? 0))
+    ) {
+      existing[duplicate] = life;
+    }
   };
 
   for (const c of activeCharacters) {
@@ -359,6 +373,8 @@ export async function getLegacyLeaderboardData(
       nationalInfluence: c.nationalInfluence ?? 0,
       partyInfluence: c.partyInfluence ?? 0,
       achievementCount,
+      highestOfficeRank: deriveHighestOfficeRank(c),
+      infamy: c.infamy ?? 0,
       highestOffice: deriveHighestOffice(c) ?? null,
       avatarUrl: c.avatarUrl ?? null,
       isActive: true,
@@ -432,6 +448,8 @@ export async function getLegacyLeaderboardData(
       nationalInfluence: r.snapshot.stats.nationalInfluence ?? 0,
       partyInfluence: r.snapshot.stats.partyInfluence ?? 0,
       achievementCount,
+      highestOfficeRank: deriveHighestOfficeRank(officeSource),
+      infamy: r.snapshot.stats.infamy ?? 0,
       highestOffice: deriveHighestOffice(officeSource) ?? null,
       avatarUrl: r.snapshot.avatarUrl ?? null,
       isActive: false,
@@ -444,8 +462,6 @@ export async function getLegacyLeaderboardData(
     });
   }
 
-  const metricOf = (life: Life): number => (rankBy === "netWorth" ? life.netWorth : life.score);
-
   const ranked: LegacyLeaderboardEntry[] = [];
   for (const [userId, lives] of livesByUser) {
     const inScopeLives =
@@ -454,6 +470,18 @@ export async function getLegacyLeaderboardData(
         : lives;
     if (inScopeLives.length === 0) continue;
 
+    const record = careerRecordTotals(inScopeLives);
+    const scoreFor = (life: Life) =>
+      computeCareerScore({
+        nationalInfluence: life.nationalInfluence,
+        partyInfluence: life.partyInfluence,
+        highestOfficeRank: life.highestOfficeRank,
+        infamy: life.infamy,
+        achievementCount: life.achievementCount,
+        netWorthAnchor: life.netWorth,
+        ...record,
+      });
+    const metricOf = (life: Life) => (rankBy === "netWorth" ? life.netWorth : scoreFor(life).total);
     const bestLife = inScopeLives.reduce((best, life) =>
       metricOf(life) > metricOf(best) ||
       (metricOf(life) === metricOf(best) &&
@@ -461,11 +489,17 @@ export async function getLegacyLeaderboardData(
         ? life
         : best
     );
+    const careerScore = scoreFor(bestLife);
     const preference = preferenceByUser.get(userId) ?? null;
-    const displayLife =
-      preference === "current"
-        ? (lives.find((l) => l.isActive) ?? bestLife)
-        : (lives.find((l) => l.characterId === preference) ?? bestLife);
+    const displayId = leaderboardDisplayCharacterId(
+      lives.map((life) => ({
+        characterId: life.characterId,
+        isActive: life.isActive,
+        retiredAtMs: life.retiredAt?.getTime() ?? null,
+      })),
+      preference
+    );
+    const displayLife = lives.find((life) => life.characterId === displayId) ?? bestLife;
     const displayName = displayLife.name;
 
     ranked.push({
@@ -475,15 +509,15 @@ export async function getLegacyLeaderboardData(
       displayCharacterId: displayLife.characterId,
       scoringCharacterId: bestLife.characterId,
       scoringCharacterName: bestLife.name,
-      enactedBills: bestLife.enactedBills,
-      contestWins: bestLife.contestWins,
-      contestPodiums: bestLife.contestPodiums,
+      enactedBills: record.enactedBills,
+      contestWins: record.contestWins,
+      contestPodiums: record.contestPodiums,
       scoreVersion: CAREER_SCORE_VERSION,
       countryId: bestLife.countryId,
       homeState: bestLife.homeState,
       iterationLabel: bestLife.iteration ? iterationLabel(bestLife.iteration) : "Unknown Era",
-      score: bestLife.score,
-      scoreBreakdown: bestLife.scoreBreakdown,
+      score: careerScore.total,
+      scoreBreakdown: careerScore.breakdown,
       netWorth: bestLife.netWorth,
       netWorthBreakdown: bestLife.netWorthBreakdown,
       nationalInfluence: bestLife.nationalInfluence,

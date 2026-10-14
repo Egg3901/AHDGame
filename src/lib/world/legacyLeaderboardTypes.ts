@@ -42,11 +42,11 @@ export interface LegacyNetWorthBreakdown {
   debt: number;
 }
 
-/** One user's single best-scoring life, ranked against every other player's best life. */
+/** One account's career record, with political and business stats from its strongest life. */
 export interface LegacyLeaderboardEntry {
   rank: number;
   userId: string;
-  /** Resolved per the user's `legacyDisplayCharacterId` preference; falls back to the scoring life's own name. */
+  /** Resolved per the user's `legacyDisplayCharacterId` preference; defaults to the current or latest character. */
   displayName: string;
   scoringCharacterId: string;
   scoringCharacterName: string;
@@ -92,7 +92,7 @@ export interface LegacyLeaderboardData {
   self: {
     rank: number | null;
     lives: LegacyLifeOption[];
-    /** Current preference: "current", a characterId, or null (default = best life's own name). */
+    /** Current preference: "current", a characterId, or null (default = current or latest character). */
     displayPreference: string | null;
   } | null;
 }

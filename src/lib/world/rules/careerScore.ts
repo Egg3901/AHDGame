@@ -41,3 +41,21 @@ export function computeCareerScore(input: CareerScoreInputs): {
     breakdown,
   };
 }
+
+/** Real enacted laws and awarded placings accumulate; disposable lives add no free credit. */
+export function careerRecordTotals(
+  records: readonly {
+    enactedBills: number;
+    contestWins: number;
+    contestPodiums: number;
+  }[]
+): { enactedBills: number; contestWins: number; contestPodiums: number } {
+  return records.reduce(
+    (sum, record) => ({
+      enactedBills: sum.enactedBills + positive(record.enactedBills),
+      contestWins: sum.contestWins + positive(record.contestWins),
+      contestPodiums: sum.contestPodiums + positive(record.contestPodiums),
+    }),
+    { enactedBills: 0, contestWins: 0, contestPodiums: 0 }
+  );
+}

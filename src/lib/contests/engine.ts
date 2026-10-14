@@ -79,7 +79,7 @@ async function loadPlayers(db: Db): Promise<Map<string, PlayerCharacter>> {
   const characters = await db
     .collection<Character>("characters")
     .find(
-      {},
+      { isSynthetic: { $ne: true } },
       {
         projection: {
           _id: 1,

@@ -105,11 +105,11 @@
     },
     "career": {
       "title": "Karriere-Rangliste",
-      "intro": "Ein ausgewogener Wert für Politik, Wirtschaft, verabschiedete Gesetze, Wettbewerbe und spielerische Erfolge. Die Rangliste wird aus gespeicherten Daten neu berechnet. Jeder Bereich bringt bis zu 1.000 Punkte. Deine beste Karriere liefert die Lebenswertung; Kontoerfolge zählen einmal."
+      "intro": "Ein ausgewogener Wert für Politik, Wirtschaft, verabschiedete Gesetze, Wettbewerbe und spielerische Erfolge. Jeder Bereich bringt bis zu 1.000 Punkte. Deine stärkste politische und wirtschaftliche Karriere liefert diese Punkte; verabschiedete Gesetze und Wettbewerbssiege zählen über alle deine Charaktere. Kontoerfolge zählen einmal."
     },
     "champions": {
       "title": "Wettbewerbssieger aller Zeiten",
-      "intro": "Über alle Iterationen, sortiert nach Siegen, prämierten Platzierungen und ausgezahlten Preisen. Ein Eintrag je Konto und Runde. Namen stammen vom zuletzt erfassten Wettbewerbscharakter."
+      "intro": "Über alle Iterationen, sortiert nach Siegen, prämierten Platzierungen und ausgezahlten Preisen. Ein Eintrag je Konto und Runde. Dein gewählter Ranglistenname gilt für beide Ranglisten."
     },
     "history": {
       "title": "Deine Wettbewerbsbilanz",

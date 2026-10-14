@@ -36,6 +36,7 @@ export interface ContestHistoryData {
   iterations: string[];
 }
 export interface ContestChampion {
+  userId: string;
   characterName: string;
   wins: number;
   podiums: number;
@@ -46,6 +47,16 @@ export interface ContestChampion {
 /** One best entry per account per round. Prize sums include every paid entry. */
 function resultPipeline(): Document[] {
   return [
+    {
+      $project: {
+        kind: 1,
+        roundNumber: 1,
+        iterationKey: 1,
+        settledAt: 1,
+        standings: 1,
+        winners: 1,
+      },
+    },
     { $set: { entrants: { $size: "$standings" } } },
     { $unwind: { path: "$standings", includeArrayIndex: "position" } },
     {
@@ -274,7 +285,17 @@ export async function loadContestChampions(db: Db): Promise<ContestChampion[]> {
       { $match: { "account.0": { $exists: true }, wins: { $gt: 0 } } },
       { $sort: { wins: -1, podiums: -1, prizeAnchor: -1, _id: 1 } },
       { $limit: 20 },
-      { $project: { _id: 0, characterName: 1, wins: 1, podiums: 1, rounds: 1, prizeAnchor: 1 } },
+      {
+        $project: {
+          _id: 0,
+          userId: "$_id",
+          characterName: 1,
+          wins: 1,
+          podiums: 1,
+          rounds: 1,
+          prizeAnchor: 1,
+        },
+      },
     ])
     .toArray();
 }

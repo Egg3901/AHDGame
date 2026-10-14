@@ -3,7 +3,7 @@ import { ObjectId, type Db } from "mongodb";
 import type { Achievement, CharacterAchievement } from "@/lib/db/types";
 import { invalidateRarityCache } from "@/lib/achievements/cache";
 import { getContestRoundsCollection } from "./collection";
-import { contestAchievementSlugs, type ContestPlacing } from "./rules/history";
+import { contestAchievementMilestones, type ContestPlacing } from "./rules/history";
 
 /** Reconcile from durable results, with batched reads/writes and retry-safe ids. */
 export async function reconcileContestAchievements(
@@ -14,8 +14,7 @@ export async function reconcileContestAchievements(
   const records = await getContestRoundsCollection(db)
     .aggregate<{
       _id: string;
-      characterId: string;
-      placings: ContestPlacing[];
+      placings: Array<ContestPlacing & { characterId?: string | null }>;
     }>([
       {
         $match: {
@@ -30,13 +29,15 @@ export async function reconcileContestAchievements(
           "winners.score": { $gt: 0 },
         },
       },
-      { $sort: { settledAt: -1, _id: 1 } },
+      { $sort: { settledAt: 1, roundNumber: 1, _id: 1 } },
       {
         $group: {
           _id: "$winners.userId",
-          characterId: { $first: "$winners.characterId" },
           placings: {
             $push: {
+              characterId: {
+                $cond: [{ $eq: [{ $type: "$settledAt" }, "date"] }, "$winners.characterId", null],
+              },
               kind: "$kind",
               roundNumber: "$roundNumber",
               iterationKey: "$iterationKey",
@@ -70,7 +71,7 @@ export async function reconcileContestAchievements(
   const bySlug = new Map(definitions.map((d) => [d.slug, d]));
   const now = new Date();
   const docs: CharacterAchievement[] = [];
-  const add = (userId: string, slug: string, characterId: string) => {
+  const add = (userId: string, slug: string, characterId: string | undefined) => {
     const definition = bySlug.get(slug);
     if (!definition) return;
     const earned = have.get(userId) ?? new Set<string>();
@@ -80,13 +81,15 @@ export async function reconcileContestAchievements(
     docs.push({
       _id: new ObjectId(
         createHash("sha256")
-          .update(`contest-achievement:${userId}:${slug}`)
+          .update(`contest-achievement:${userId}:${definition._id}`)
           .digest("hex")
           .slice(0, 24)
       ),
       userId: new ObjectId(userId),
       achievementId: definition._id,
-      ...(ObjectId.isValid(characterId) ? { characterId: new ObjectId(characterId) } : {}),
+      ...(characterId && ObjectId.isValid(characterId)
+        ? { characterId: new ObjectId(characterId) }
+        : {}),
       earnedAt: now,
     });
   };
@@ -95,10 +98,10 @@ export async function reconcileContestAchievements(
     .map((d) => d._id.toString());
   for (const record of records) {
     if (!eligibleOwners.has(record._id)) continue;
-    for (const slug of contestAchievementSlugs(record.placings))
-      add(record._id, slug, record.characterId);
+    for (const milestone of contestAchievementMilestones(record.placings))
+      add(record._id, milestone.slug, milestone.characterId);
     if (required.length > 0 && required.every((id) => have.get(record._id)?.has(id)))
-      add(record._id, "completionist", record.characterId);
+      add(record._id, "completionist", record.placings.at(-1)?.characterId ?? undefined);
   }
   if (docs.length === 0) return;
   await db.collection<CharacterAchievement>("characterAchievements").bulkWrite(

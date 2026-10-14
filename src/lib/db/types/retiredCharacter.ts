@@ -11,6 +11,8 @@ import type { CharacterRecap } from "@/lib/recap/types";
 
 export interface RetiredCharacterSnapshot {
   name: string;
+  /** Harness lives remain excluded from public rankings after retirement. */
+  isSynthetic?: boolean;
   countryId: CountryId;
   homeState: string;
   party: string;

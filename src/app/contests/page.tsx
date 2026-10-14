@@ -650,6 +650,9 @@ export default async function ContestsPage({
     view === "rankings" ? loadContestChampions(db) : [],
     view === "rankings" ? getLegacyLeaderboardData(db, viewer, { scope, rankBy }) : null,
   ]);
+  const leaderboardNames = new Map(
+    career?.entries.map((entry) => [entry.userId, entry.displayName] as const) ?? []
+  );
   const weekly = data.contests.filter((c) => c.kind !== "referrals_weekly");
   const weeklyReferrals = data.contests.find((c) => c.kind === "referrals_weekly");
   // Weekly rounds open together, so any one of them carries the week's clock.
@@ -744,7 +747,14 @@ export default async function ContestsPage({
                 />
               )}
             </div>
-            <ContestChampions champions={champions} t={t} locale={locale} />
+            <ContestChampions
+              champions={champions.map((entry) => ({
+                ...entry,
+                characterName: leaderboardNames.get(entry.userId) ?? entry.characterName,
+              }))}
+              t={t}
+              locale={locale}
+            />
           </div>
         )}
         {view === "current" && (

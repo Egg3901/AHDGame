@@ -179,6 +179,7 @@ export async function retireCharacter(
 
   const snapshot: RetiredCharacterSnapshot = {
     name: character.name,
+    isSynthetic: character.isSynthetic,
     countryId: character.countryId,
     homeState: character.homeState,
     party: character.party,

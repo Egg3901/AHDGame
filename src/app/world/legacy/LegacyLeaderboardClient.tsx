@@ -135,7 +135,8 @@ function ScoreBreakdownModal({
               to 1,000 points. Influence has diminishing returns. Only offices actually held,
               enacted sponsored laws and settled contest placings count. Special, paid and manual
               achievements earn no points. Infamy subtracts up to 500; total has a floor of zero.
-              Career: {row.scoringCharacterName}. Scoring version {row.scoreVersion}.
+              Political and business career: {row.scoringCharacterName}. Enacted laws and contest
+              results cover every career in the selected scope. Scoring version {row.scoreVersion}.
             </p>
             <div className="mt-2 flex items-center justify-between border-t border-card-border pt-2 text-sm font-semibold">
               <span className="text-foreground">Total career score</span>
@@ -226,6 +227,7 @@ export default function LegacyLeaderboardClient({
         feature: "legacy-leaderboard-display-name",
       });
       await refetch(scope, rankBy);
+      if (embedded) router.refresh();
     } catch {
       setSaveError("Couldn't save: try again.");
     } finally {
@@ -461,7 +463,7 @@ export default function LegacyLeaderboardClient({
                       onChange={(e) => setPendingChoice(e.target.value)}
                       className="min-h-10 w-full rounded-lg border border-card-border bg-background px-3 py-2 text-sm text-foreground sm:w-auto"
                     >
-                      <option value="">Best life (default)</option>
+                      <option value="">Current or latest character (default)</option>
                       {self.lives.map((life) => (
                         <option key={life.characterId} value={life.characterId}>
                           {life.name}: {life.iterationLabel}

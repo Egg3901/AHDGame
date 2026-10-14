@@ -245,4 +245,86 @@ describe.skipIf(!uri)("contest records and career ranking on isolated Mongo", ()
     expect(career.netWorthBreakdown.debt).toBe(-1_000_000);
     expect(career.scoreBreakdown.wealth).toBe(0);
   });
+  it("carries enacted laws and contest wins across distinct lives without counting duplicate archives", async () => {
+    const newCharacter = new ObjectId();
+    await db
+      .collection<{ _id: string; iteration: { type: string; number: number } }>("gameState")
+      .insertOne({ _id: "current", iteration: { type: "Beta", number: 3 } });
+    await db.collection("characters").insertOne({
+      _id: newCharacter,
+      userId: user,
+      name: "New Life",
+      countryId: "US",
+      homeState: "CA",
+      nationalInfluence: 0,
+    });
+    const archived = {
+      userId: user,
+      characterId: character,
+      retiredAt: date,
+      iteration: { type: "Beta", number: 2 },
+      snapshot: {
+        name: "Historic Career",
+        countryId: "US",
+        homeState: "CA",
+        stats: { nationalInfluence: 1_000, enactedBills: 2 },
+      },
+    };
+    await db.collection("retiredCharacters").insertMany([{ ...archived }, { ...archived }]);
+    await db
+      .collection("bills")
+      .insertOne({ sponsorId: newCharacter, status: "signed", enactedAt: date });
+    await getContestRoundsCollection(db).insertMany([
+      round(1),
+      round(2, {
+        iterationKey: "Beta:3",
+        standings: [entry({ characterId: newCharacter.toString() })],
+        winners: [{ ...entry({ characterId: newCharacter.toString() }), rank: 1 }],
+      }),
+    ]);
+    const all = (await getLegacyLeaderboardData(db, null)).entries[0];
+    expect(all.enactedBills).toBe(3);
+    expect(all.contestWins).toBe(2);
+    expect(all.lifetimeLives).toBe(2);
+    expect(all.scoringCharacterName).toBe("Historic Career");
+    expect(all.displayName).toBe("New Life");
+    const current = (await getLegacyLeaderboardData(db, null, { scope: "current" })).entries[0];
+    expect(current.enactedBills).toBe(1);
+    expect(current.contestWins).toBe(1);
+  });
+  it("excludes synthetic and deleted-account careers from public rankings", async () => {
+    await db.collection("characters").insertOne({
+      _id: character,
+      userId: user,
+      name: "Harness",
+      isSynthetic: true,
+      countryId: "US",
+      homeState: "CA",
+      nationalInfluence: 100_000,
+    });
+    await db.collection("retiredCharacters").insertMany([
+      {
+        userId: user,
+        characterId: new ObjectId(),
+        snapshot: {
+          name: "Retired Harness",
+          isSynthetic: true,
+          countryId: "US",
+          homeState: "CA",
+          stats: { nationalInfluence: 100_000 },
+        },
+      },
+      {
+        userId: new ObjectId(),
+        characterId: new ObjectId(),
+        snapshot: {
+          name: "Deleted Account",
+          countryId: "US",
+          homeState: "CA",
+          stats: { nationalInfluence: 100_000 },
+        },
+      },
+    ]);
+    expect((await getLegacyLeaderboardData(db, null)).entries).toEqual([]);
+  });
 });

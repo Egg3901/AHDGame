@@ -105,11 +105,11 @@
     },
     "career": {
       "title": "Career rankings",
-      "intro": "A balanced score across politics, business, enacted laws, contests and gameplay achievements. Rankings are recalculated from saved records. Each area contributes up to 1,000 points. Your best career supplies the life score; account achievements count once."
+      "intro": "A balanced score across politics, business, enacted laws, contests and gameplay achievements. Each area contributes up to 1,000 points. Your strongest political and business career supplies those points; enacted laws and contest wins carry across all your characters. Account achievements count once."
     },
     "champions": {
       "title": "All-time contest champions",
-      "intro": "Across every iteration, ordered by wins, awarded placings, then paid prizes. One entry per account per round. Names show the most recent recorded contest character."
+      "intro": "Across every iteration, ordered by wins, awarded placings, then paid prizes. One entry per account per round. Your chosen leaderboard name is shared across both rankings."
     },
     "history": {
       "title": "Your contest record",

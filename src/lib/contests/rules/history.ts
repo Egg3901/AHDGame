@@ -36,3 +36,22 @@ export function contestAchievementSlugs(placings: readonly ContestPlacing[]): st
     slugs.push("contest_winning_streak");
   return slugs;
 }
+
+/** Input is ordered by settlement. Attribute each milestone to its first qualifying result. */
+export function contestAchievementMilestones(
+  placings: readonly (ContestPlacing & { characterId?: string | null })[]
+): Array<{ slug: string; characterId?: string }> {
+  const awarded = new Set<string>();
+  const history: ContestPlacing[] = [];
+  const result: Array<{ slug: string; characterId?: string }> = [];
+  for (const placing of placings) {
+    history.push(placing);
+    for (const slug of contestAchievementSlugs(history)) {
+      if (awarded.has(slug)) continue;
+      awarded.add(slug);
+      result.push({ slug, ...(placing.characterId ? { characterId: placing.characterId } : {}) });
+    }
+    if (awarded.size === 6) break;
+  }
+  return result;
+}
