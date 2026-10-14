@@ -1,8 +1,12 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import type { Db } from "mongodb";
 import { ObjectId } from "mongodb";
 import type { Corporation } from "@/lib/db/types";
-import { isEligibleForAutoCaretaker } from "./autoCaretakerVacantCorps";
-import { buildVacantCaretakerCeoUpdate } from "@/lib/corporations/caretakerCeo";
+import { isEligibleForAutoCaretaker, isStrandedCaretaker } from "./autoCaretakerVacantCorps";
+import {
+  buildVacantCaretakerCeoUpdate,
+  reseatStrandedCaretaker,
+} from "@/lib/corporations/caretakerCeo";
 
 type EligibilityInput = Parameters<typeof isEligibleForAutoCaretaker>[0];
 const base: EligibilityInput = {
@@ -115,5 +119,54 @@ describe("buildVacantCaretakerCeoUpdate", () => {
       now
     );
     expect(set).not.toHaveProperty("caretakerCeo");
+  });
+});
+
+describe("isStrandedCaretaker", () => {
+  const stash = {
+    underlyingUserId: new ObjectId(),
+    appointedTurn: 86,
+    appointmentSource: "owner" as const,
+    mandate: "active" as const,
+  };
+
+  it("is stranded when a caretaken corp is marked vacant", () => {
+    expect(isStrandedCaretaker({ ceoVacant: true, caretakerCeo: stash })).toBe(true);
+  });
+
+  it("is not stranded while the caretaker seat is filled", () => {
+    expect(isStrandedCaretaker({ ceoVacant: false, caretakerCeo: stash })).toBe(false);
+    expect(isStrandedCaretaker({ ceoVacant: true, caretakerCeo: undefined })).toBe(false);
+  });
+
+  it("ignores state-owned, nationalized and suspended shells", () => {
+    const corp = { ceoVacant: true, caretakerCeo: stash };
+    expect(isStrandedCaretaker({ ...corp, countryOwnerId: "US" })).toBe(false);
+    expect(isStrandedCaretaker({ ...corp, isNationalized: true })).toBe(false);
+    expect(isStrandedCaretaker({ ...corp, suspended: true })).toBe(false);
+  });
+});
+
+describe("reseatStrandedCaretaker", () => {
+  it("fills the seat and keeps the owner's caretaker stash", async () => {
+    const updateOne = vi.fn(async () => ({ matchedCount: 1, modifiedCount: 1 }));
+    const db = { collection: () => ({ updateOne }) } as unknown as Db;
+    const corp = {
+      _id: new ObjectId(),
+      ceoId: undefined,
+      caretakerCeo: { underlyingUserId: new ObjectId(), appointedTurn: 86 },
+    } as unknown as Corporation;
+    const nppId = new ObjectId().toString();
+
+    await reseatStrandedCaretaker(db, { corp, nppId, turn: 200, now: new Date() });
+
+    const [, update] = updateOne.mock.calls[0] as unknown as [
+      unknown,
+      { $set: Record<string, unknown>; $unset: Record<string, unknown> },
+    ];
+    expect(update.$set).toMatchObject({ ceoType: "npp", ceoVacant: false });
+    expect(String(update.$set.ceoId)).toBe(nppId);
+    expect(update.$set).not.toHaveProperty("caretakerCeo");
+    expect(update.$unset).not.toHaveProperty("caretakerCeo");
   });
 });

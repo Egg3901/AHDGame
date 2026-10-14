@@ -156,3 +156,12 @@ export const NPP_WAGE_STEP = 0.02;
 export const NPP_WAGE_BASELINE = 1;
 export const NPP_WAGE_SHORTAGE_TARGET = 1.08;
 export const NPP_WAGE_GLUT_TARGET = 0.95;
+
+/**
+ * Engine 6 R&D maintenance. Any positive R&D budget earns the flat per-turn
+ * base gain (`RD_BASE_GAIN_PER_TURN`), which against 3% decay settles rdScore
+ * above the quality tech reference. A thin-margin or loss-making corp keeps
+ * this token budget instead of zero, so quality does not decay into a spiral.
+ */
+export const NPP_RD_MAINTENANCE_BUDGET_MIN = 1;
+export const NPP_RD_MAINTENANCE_SHARE = 0.001;

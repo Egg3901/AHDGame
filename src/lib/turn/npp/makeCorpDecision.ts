@@ -115,6 +115,8 @@ import {
   NPP_REINVEST_MAX_QUEUE_DEPTH,
   NPP_REINVEST_MAX_SECTORS_PER_TURN,
   NPP_REINVEST_MIN_FILL,
+  NPP_RD_MAINTENANCE_BUDGET_MIN,
+  NPP_RD_MAINTENANCE_SHARE,
   NPP_SHORTAGE_ENTRIES_PER_TURN,
 } from "@/lib/turn/npp/nppCorporationTuning";
 import { pushNppWageUpdates } from "@/lib/turn/npp/nppWagePolicy";
@@ -654,7 +656,16 @@ export function makeNppCorpDecision(
     totalRevenue * marketingPct * modifiers.marketingMult * levers.marketingMult
   );
   const logisticsBudget = Math.round(totalRevenue * logisticsPct);
-  const rdBudget = Math.round(totalRevenue * rdPct * modifiers.rdMult * levers.rdMult);
+  let rdBudget = Math.round(totalRevenue * rdPct * modifiers.rdMult * levers.rdMult);
+  // Engine 6: R&D never drops to zero. Any R&D budget earns the flat per-turn
+  // base gain, which holds rdScore (the quality tech pillar) near par for a
+  // token cost; a zero budget lets it decay 3% a turn and quality with it.
+  if (ctx.engineSix && rdBudget < NPP_RD_MAINTENANCE_BUDGET_MIN) {
+    rdBudget = Math.max(
+      NPP_RD_MAINTENANCE_BUDGET_MIN,
+      Math.round(totalRevenue * NPP_RD_MAINTENANCE_SHARE)
+    );
+  }
   if (marketingBudget !== (corp.marketingBudget ?? 0)) updates.marketingBudget = marketingBudget;
   if (logisticsBudget !== (corp.logisticsBudget ?? 0)) updates.logisticsBudget = logisticsBudget;
   if (rdBudget !== (corp.rdBudget ?? 0)) updates.rdBudget = rdBudget;
