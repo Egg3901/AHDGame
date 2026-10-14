@@ -1,13 +1,13 @@
-import { groupOperator } from "@/lib/corporations/groups/operator";
-import {
-  activeGroupDirection,
-  groupDirectionLevers,
-} from "@/lib/corporations/groups/rules/direction";
 /**
  * Autonomous corporations choose investment, entry, divestment and production.
  * makeNppCorpDecision uses the corporation, market signals and CEO strategy to
  * return planned sector and cash changes for the turn processor to apply.
  */
+import { groupOperator } from "@/lib/corporations/groups/operator";
+import {
+  activeGroupDirection,
+  groupDirectionLevers,
+} from "@/lib/corporations/groups/rules/direction";
 import {
   CAPACITY_BUILD_TURNS,
   computeBuildCost,
@@ -66,6 +66,10 @@ import type {
 import { advanceStrategy, type StrategySituation } from "@/lib/turn/npp/corpStrategy";
 import { memoizeOnce } from "@/lib/turn/npp/rules/strategyCadence";
 import { existingPlantGrowthStep, existingPlantGrowthUnits } from "./rules/existingPlantGrowth";
+import {
+  allowsNppIndustryInvestment,
+  isNppDivestmentProtected,
+} from "./rules/investmentProtection";
 import { lossChronicityUpdates } from "@/lib/turn/npp/costMothball";
 import {
   resolveFoundingShortfallReason,
@@ -322,14 +326,24 @@ export function makeNppCorpDecision(
     directionContext
   );
 
-  const entryPools = groupDirection?.regions.length
-    ? new Map(
-        [...unownedByCountry].map(([country, rows]) => [
-          country,
-          rows.filter((row) => groupDirection.regions.includes(row.stateId)),
-        ])
-      )
-    : unownedByCountry;
+  const primaryIndustryOnly = groupDirection?.primaryIndustryOnly === true;
+  const entryPools =
+    groupDirection?.regions.length || primaryIndustryOnly
+      ? new Map(
+          [...unownedByCountry].map(([country, rows]) => [
+            country,
+            rows.filter(
+              (row) =>
+                (!groupDirection?.regions.length || groupDirection.regions.includes(row.stateId)) &&
+                allowsNppIndustryInvestment(
+                  operatingCorpType,
+                  getOperatingSectorType(row.sectorType, row.industryModel, row.mediaDiscriminator),
+                  primaryIndustryOnly
+                )
+            ),
+          ])
+        )
+      : unownedByCountry;
 
   // ── 1. Divest losing sectors ──────────────────────────────────────────────
   // Divest a losing sector once its margin falls to/below the archetype's
@@ -340,6 +354,7 @@ export function makeNppCorpDecision(
     for (const sp of sectorProfits) {
       if (
         !hasProtectedConstructionProperty(sp.sector) &&
+        !isNppDivestmentProtected(sp.sector, ctx.turn) &&
         sp.income < 0 &&
         sp.margin <= modifiers.divestMarginFloor + levers.divestMarginFloorDelta
       ) {
@@ -378,6 +393,7 @@ export function makeNppCorpDecision(
           (sp.sector.lowFillTurns ?? 0) >= STRANDED_DIVEST_TURNS &&
           !isCoreSector(sp.sector) &&
           !hasProtectedConstructionProperty(sp.sector) &&
+          !isNppDivestmentProtected(sp.sector, ctx.turn) &&
           sp.sector.mothballed !== true &&
           !divestedSectorIds.includes(sp.sector._id)
       )
@@ -413,6 +429,25 @@ export function makeNppCorpDecision(
   for (const sp of sectorProfits) {
     // Skip sectors being divested
     if (divestedSectorIds.includes(sp.sector._id)) continue;
+    if (
+      !allowsNppIndustryInvestment(
+        operatingCorpType,
+        getOperatingSectorType(
+          sp.sector.sectorType,
+          sp.sector.industryModel,
+          sp.sector.mediaDiscriminator
+        ),
+        primaryIndustryOnly
+      )
+    ) {
+      if (!plants?.enabled && (sp.sector.targetGrowthRate ?? 2) > 0) {
+        sectorUpdates.push({
+          filter: { _id: sp.sector._id },
+          update: { $set: { targetGrowthRate: 0, updatedAt: now } },
+        });
+      }
+      continue;
+    }
     // A mothballed plant is deliberately idle (section 2c): growth targets are
     // meaningless while it's cold, and its stale margin would only add noise.
     if (sp.sector.mothballed === true) continue;
@@ -1090,6 +1125,18 @@ export function makeNppCorpDecision(
 
     for (const sp of sectorProfits) {
       const sector = sp.sector;
+      if (
+        !allowsNppIndustryInvestment(
+          operatingCorpType,
+          getOperatingSectorType(
+            sector.sectorType,
+            sector.industryModel,
+            sector.mediaDiscriminator
+          ),
+          primaryIndustryOnly
+        )
+      )
+        continue;
       // Nothing built yet (a newborn founding, or a pre-flip sector still
       // awaiting its transition order): there is no capacity to maintain and no
       // fill telemetry to justify a build.

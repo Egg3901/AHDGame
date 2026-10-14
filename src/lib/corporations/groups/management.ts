@@ -338,6 +338,13 @@ export async function updateGroupManagement(
             objective: command.objective,
             regions: [...new Set(command.regions)],
             allowInvestment: command.allowInvestment,
+            primaryIndustryOnly:
+              command.primaryIndustryOnly ??
+              (target.groupDirection?.rootId === rootId &&
+              target.groupDirection.ceoId === target.ceoId?.toString() &&
+              target.groupDirection.ceoTenureKey === groupOperator(target, rootId).ceoTenureKey
+                ? (target.groupDirection.primaryIndustryOnly ?? false)
+                : false),
             setTurn: ctx.turn,
             response: "pending",
             ceoId: target.ceoId?.toString() ?? "",

@@ -490,6 +490,8 @@
       "regions": "Target regions",
       "investment": "Authorize viable capital investment",
       "investmentAllowed": "Viable capital investment is authorized.",
+      "primaryIndustryOnly": "Primary industry only",
+      "primaryIndustryOnlyHelp": "Restrict this NPP CEO's new sectors and capacity investment to the subsidiary's primary industry, including during shortages. Existing off-industry sectors are not removed. Takes effect next turn.",
       "investmentBlocked": "New capital investment is not authorized.",
       "targetRegions": "Target regions: {regions}",
       "saveDirection": "Save objective",

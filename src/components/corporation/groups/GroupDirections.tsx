@@ -129,6 +129,7 @@ function DirectionCard({ member: m, data, busy, save }: Props & { member: Member
               : t("directionUI." + d.response + "Help")}
           </p>
           {npp && <p>{t(d.allowInvestment ? "investmentAllowed" : "investmentBlocked")}</p>}
+          {npp && d.primaryIndustryOnly && <p>{t("primaryIndustryOnly")}</p>}
           {npp &&
             !d.allowInvestment &&
             ["capacity", "expansion", "regional"].includes(d.objective) && (
@@ -180,6 +181,9 @@ function DirectionEditor({
   const [objective, setObjective] = useState<GroupObjective>(m.direction?.objective ?? "balanced");
   const [regions, setRegions] = useState(m.direction?.regions ?? []);
   const [investment, setInvestment] = useState(m.direction?.allowInvestment ?? false);
+  const [primaryIndustryOnly, setPrimaryIndustryOnly] = useState(
+    m.direction?.primaryIndustryOnly ?? false
+  );
   const [search, setSearch] = useState(""),
     [error, setError] = useState("");
   const npp = m.operator === "npp";
@@ -203,6 +207,7 @@ function DirectionEditor({
             objective,
             regions,
             allowInvestment: investment,
+            ...(npp ? { primaryIndustryOnly } : {}),
           })
         )
           close();
@@ -302,6 +307,16 @@ function DirectionEditor({
               {t("investment")}
             </label>
             <p className="mt-2 text-xs text-muted">{t("directionUI.investmentHelp")}</p>
+            <label className="mt-4 flex items-start gap-2 text-sm font-medium">
+              <input
+                type="checkbox"
+                className="mt-1"
+                checked={primaryIndustryOnly}
+                onChange={(e) => setPrimaryIndustryOnly(e.target.checked)}
+              />
+              {t("primaryIndustryOnly")}
+            </label>
+            <p className="mt-2 text-xs text-muted">{t("primaryIndustryOnlyHelp")}</p>
           </div>
         ) : (
           <p className="rounded-lg bg-info/5 p-3 text-sm text-muted">
