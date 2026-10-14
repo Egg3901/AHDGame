@@ -6,6 +6,7 @@
 import { buildMarketContext } from "@/lib/market/marketContext";
 import { getMarketSystemMode } from "@/lib/market/featureFlag";
 import { computeThroughput, inputAvailability, THROUGHPUT_MIN } from "@/lib/market/throughput";
+import { isStateScopedCommodity } from "@/lib/market/rules/commodityMarketScope";
 import { CAPITAL_DEPRECIATION_PER_TURN, impliedOutputUnits } from "@/lib/market/capital";
 import { computePriceRealization, priceRealizationFactor } from "@/lib/market/priceRealization";
 import type { CommodityPrice, CorporateSector, Corporation } from "@/lib/db/types";
@@ -429,7 +430,8 @@ export async function buildSectorCommoditySections(args: {
   }
 
   // Throughput coupling (marketSystemMode >= "clearing"): projected raw
-  // Leontief minimum from global lagged balances; `applied` and its binding
+  // Leontief minimum from global lagged balances (state balances for
+  // state-scoped inputs, mirroring the turn engine); `applied` and its binding
   // input are the last turn's actual telemetry, which can include regional
   // delivery and internal supply.
   let throughput:
@@ -438,7 +440,20 @@ export async function buildSectorCommoditySections(args: {
   if (market.throughputEnabled) {
     const demandRatesMap: Partial<Record<CommodityType, number>> = {};
     for (const f of demandFlows) demandRatesMap[f.commodity] = f.rate;
-    const t = computeThroughput(demandRatesMap, globalBalances);
+    // Mirror the turn engine: state-scoped inputs read their own state's
+    // balance, not the global book, when a state balance exists.
+    const stateScopedAvailability = new Map<CommodityType, number>();
+    for (const commodity of Object.keys(demandRatesMap) as CommodityType[]) {
+      if (!isStateScopedCommodity(commodity)) continue;
+      const stateBalance = stateBalances.get(commodity);
+      if (!stateBalance) continue;
+      stateScopedAvailability.set(commodity, inputAvailability(stateBalance));
+    }
+    const t = computeThroughput(
+      demandRatesMap,
+      globalBalances,
+      stateScopedAvailability.size > 0 ? stateScopedAvailability : undefined
+    );
     const applied = typeof sector.throughputFactor === "number" ? sector.throughputFactor : null;
     throughput = {
       applied,
