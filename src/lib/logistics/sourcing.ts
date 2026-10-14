@@ -27,7 +27,12 @@
 
 import type { CommodityType } from "@/lib/constants/commodities";
 import type { SourcingOwnRoute } from "./ownRoutes";
-import { ownRouteAvailable, reclaimedLocalUnits } from "./rules/ownPriority";
+import {
+  ownRouteAvailable,
+  reclaimedLocalUnits,
+  ownRouteBudgets,
+  ownRouteBudgetKey,
+} from "./rules/ownPriority";
 import type { CountryId } from "@/lib/constants/countries";
 import {
   addPurchaseExposure,
@@ -565,6 +570,7 @@ export function runSourcingPass(inputs: SourcingInputs): SourcingResult {
 
   const flows: SourcingFlow[] = [];
   const ownRouteDelivered: SourcingOwnRoute[] = [];
+  const ownBudgets = ownRouteBudgets(ownRoutes ?? []);
   const stateById = new Map(sortedStates.map((state) => [state.stateId, state] as const));
   const summaries: SourcingCommoditySummary[] = [];
   const landedPremiumByDestState = new Map<string, Map<CommodityType, LandedPremiumAccumulator>>();
@@ -960,7 +966,15 @@ export function runSourcingPass(inputs: SourcingInputs): SourcingResult {
         // the seller's drawdown are two different numbers. `deliver` is what
         // lands, `dispatch` is what leaves.
         const deliveryFactor = gridDeliveryFactor(cand.hopCount);
-        let deliver = Math.min(unmet, cand.ownRoute?.units ?? Infinity, spare * deliveryFactor);
+        const ownSupplyKey = cand.ownRoute && ownRouteBudgetKey(cand.ownRoute, "origin");
+        const ownDemandKey = cand.ownRoute && ownRouteBudgetKey(cand.ownRoute, "destination");
+        let deliver = Math.min(
+          unmet,
+          cand.ownRoute?.units ?? Infinity,
+          spare * deliveryFactor,
+          ownSupplyKey ? (ownBudgets.supply.get(ownSupplyKey) ?? Infinity) : Infinity,
+          ownDemandKey ? (ownBudgets.demand.get(ownDemandKey) ?? Infinity) : Infinity
+        );
         let dispatch = deliveryFactor > 0 ? deliver / deliveryFactor : 0;
         if (cand.originType === "country") {
           const fairBudget = fairForeignBudgetFor(buyer, cand.originId as CountryId);
@@ -1035,6 +1049,12 @@ export function runSourcingPass(inputs: SourcingInputs): SourcingResult {
         }
         if (deliver <= 0) continue;
         const take = deliver;
+        // Spend company budgets after capacity gates, using actual dispatch.
+        // Unshipped surplus remains in the ordinary market pass below.
+        if (ownSupplyKey && ownBudgets.supply.has(ownSupplyKey))
+          ownBudgets.supply.set(ownSupplyKey, ownBudgets.supply.get(ownSupplyKey)! - dispatch);
+        if (ownDemandKey && ownBudgets.demand.has(ownDemandKey))
+          ownBudgets.demand.set(ownDemandKey, ownBudgets.demand.get(ownDemandKey)! - take);
         if (shortageResponsiveSourcingEnabled) {
           if (cand.landed > baseCeiling) {
             summary.shortageResponsiveUnits += take;

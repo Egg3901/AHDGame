@@ -10,6 +10,9 @@ export interface SourcingOwnRoute {
   units: number;
   freightCharge?: number;
   ownFirstAcrossStates?: boolean;
+  /** Shared budgets across alternative routes; spent only by successful hauls. */
+  originSupplyUnits?: number;
+  destinationDemandUnits?: number;
 }
 
 export interface OwnRouteSector {
@@ -59,6 +62,7 @@ export function buildOwnRoutes(args: {
       if (demand - supply > ROUTE_FLOOR_UNITS) need.set(stateId, demand - supply);
     }
     if (spare.size === 0 || need.size === 0) continue;
+    const ownFirst = args.policies.get(corporationId)?.policy.ownFirstAcrossStates === true;
     for (const destStateId of [...need.keys()].sort()) {
       const country = args.stateToCountry.get(destStateId);
       if (!country) continue;
@@ -79,12 +83,20 @@ export function buildOwnRoutes(args: {
           originStateId: o,
           destStateId,
           units,
-          ...(args.policies.get(corporationId)?.policy.ownFirstAcrossStates === true
-            ? { ownFirstAcrossStates: true }
+          ...(ownFirst
+            ? {
+                ownFirstAcrossStates: true,
+                originSupplyUnits: available,
+                destinationDemandUnits: remaining,
+              }
             : {}),
         });
-        spare.set(o, available - units);
-        remaining -= units;
+        // An opted-in plan lists alternatives. Failed or partial hauls must
+        // leave the shared supply and demand budget for another reachable mine.
+        if (!ownFirst) {
+          spare.set(o, available - units);
+          remaining -= units;
+        }
       }
     }
   }

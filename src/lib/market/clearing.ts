@@ -279,6 +279,8 @@ export interface SectorClearingInput {
   outputUnitsByCommodity?: Partial<Record<CommodityType, number>>;
   /** Fraction of each physical offer reachable by current media product titles. */
   offerAvailabilityByCommodity?: Partial<Record<CommodityType, number>>;
+  /** Host-state placement cap for each output, independent of other commodities. */
+  offerPlacementByCommodity?: Partial<Record<CommodityType, number>>;
   /** Conserved nominal output value by commodity, used to weight sector realization. */
   outputAnchorByCommodity?: Partial<Record<CommodityType, number>>;
   /** Product quality by output commodity, overriding the legacy corp average for that output. */
@@ -721,8 +723,14 @@ export function computeClearingFactors(args: {
         ? Math.max(0, Math.min(1, s.offerAvailabilityByCommodity?.[commodity] ?? 1))
         : 1;
       const availability = editorialAvailability * productAvailability;
-      const units = physicalUnits * availability;
-      if (units <= 0 && !Number.isFinite(s.offerAvailabilityByCommodity?.[commodity])) continue;
+      const placement = s.offerPlacementByCommodity?.[commodity] ?? 1;
+      const units = physicalUnits * availability * placement;
+      if (
+        units <= 0 &&
+        !Number.isFinite(s.offerAvailabilityByCommodity?.[commodity]) &&
+        !Number.isFinite(s.offerPlacementByCommodity?.[commodity])
+      )
+        continue;
       sellersByCommodity.set(commodity, [
         ...(sellersByCommodity.get(commodity) ?? []),
         {

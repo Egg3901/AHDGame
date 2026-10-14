@@ -128,6 +128,25 @@ it("carries the opt-in for newly founded and existing sectors while keeping own 
       destStateId: "CA",
       units: 60,
       ownFirstAcrossStates: true,
+      originSupplyUnits: 60,
+      destinationDemandUnits: 100,
     },
   ]);
+});
+
+it("keeps fallback origins for opted-in own supply instead of spending demand on a planned haul", () => {
+  const routes = buildOwnRoutes({
+    sectors,
+    supplyBySector: m([
+      ["mine-nv", [["coal", 100]]],
+      ["mine-mn", [["coal", 200]]],
+    ]),
+    inputDemandBySector: m([["steel-ca", [["coal", 60]]]]),
+    policies: new Map([
+      ["c1", { root: "c1", policy: { priority: "own", discount: 0, ownFirstAcrossStates: true } }],
+    ]),
+    stateToCountry,
+    hops,
+  });
+  expect(routes.map((r) => r.originStateId)).toEqual(["NV", "MN"]);
 });
