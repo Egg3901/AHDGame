@@ -1,4 +1,4 @@
-import type { Db } from "mongodb";
+import type { Db, ObjectId } from "mongodb";
 import type { Character } from "@/lib/db/types";
 import type { CountryId } from "@/lib/constants/countries";
 import { formatElectionTypeLabel } from "@/lib/utils/electionLabels";
@@ -65,9 +65,11 @@ export function firstDaysComplete(data: FirstDaysData): boolean {
 }
 
 interface ElectionRow {
-  _id: { toString(): string };
+  _id: ObjectId;
   electionType: string;
   countryId?: string;
+  state?: string;
+  status?: string;
   primaryEndTime?: Date | string;
 }
 
