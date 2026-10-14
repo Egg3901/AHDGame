@@ -18,3 +18,5 @@ areas: [backend, engine]
 ## Scope
 
 Worlds below autonomy v6 are unchanged. Production runs v4.
+
+NPP engine version 6.16.1, recorded in the [NPP changelog](/changelog/npp).

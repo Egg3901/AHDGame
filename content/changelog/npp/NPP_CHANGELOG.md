@@ -74,16 +74,17 @@ number.
 ### Stage 3: corporations
 
 - **Investing on value.** NPP share and bond purchases compare price with
-  fundamentals and sell on the same test, instead of fixed-probability rolls.
+  fundamentals and sell on the same test, instead of fixed-probability rolls
+  (shipped in 6.16.0).
 - **CEO choice by record.** NPP-run companies choose CEOs from NPPs with a
-  track record running companies in the same sector. Needs a record of each
-  NPP's results as a CEO first; none is kept yet.
+  track record running companies in the same sector (shipped in 6.17.0).
 - **Consequences across politics and business.** NPP officeholders weigh their
   holdings in votes (6.8.0), the conflict is shown on their profile (6.13.1),
   and voters mark down a vote their holdings decided (6.14.0).
-- **Batched purchases.** The share-buying sweep is the largest single NPP cost
-  in a turn (18.0 seconds and 1,465 database round trips on live turn 168); it
-  moves to one batched settlement per country.
+- **Batched purchases.** The share-buying sweep was the largest single NPP
+  cost in a turn (18.0 seconds and 1,465 database round trips on live turn
+  168). Markets now settle in parallel with one pool read per sweep (6.16.1).
+  The bond sweep is still one purchase at a time.
 
 ### Stage 4: cost
 
@@ -104,6 +105,42 @@ number.
 - Autonomy v6 becomes the default for new singleplayer and simulation worlds
   (shipped in 6.14.1). Running worlds never change level on their own, and the
   live multiplayer world keeps its own setting.
+
+## 6.17.0 (unreleased)
+
+Stage 3 (corporations).
+
+- **CEOs chosen by track record (v6).** NPPs now keep a record of how the
+  companies they ran did, per industry: time in charge and the company's
+  operating margin against other companies in the same country and industry.
+  When an NPP-run company needs a CEO, it prefers a free NPP with a good record
+  in its industry. A record counts only after half a game year and only if the
+  NPP beat its peers. With no such candidate, the old rule applies. A CEO a
+  player names is never overridden. The record is kept in every world, so a
+  world switched to v6 already has history.
+- **Fix: a dead NPP no longer stays CEO.** When an NPP dies (autonomy v5 and
+  above), its NPP-run companies now get a new CEO the next turn instead of
+  keeping the dead one.
+
+## 6.16.1 (unreleased)
+
+- **Faster share buying (v6).** At v6 the NPP share-buying sweep runs each
+  currency's market separately and in parallel, and reads each market's pool
+  once per sweep instead of once per purchase. Tests confirm every purchase
+  still balances to the cent and the result matches buying one at a time.
+  Decisions are unchanged.
+
+## 6.16.0 (unreleased)
+
+Stage 3 (corporations).
+
+- **Investing on opportunity (v6).** NPPs used to decide whether to buy shares
+  or bonds with a fixed roll before looking at the market, then picked what to
+  buy. Now they look first: the better the best deal on offer (a share price
+  below what the company is worth, or a bond yield above the minimum), the more
+  likely they are to buy. Shares well above what the company is worth are more
+  likely to be sold. Across the market the total amount of buying and selling
+  stays about the same as before; it just goes where the value is.
 
 ## 6.15.0 (unreleased)
 

@@ -17,3 +17,7 @@ areas: [backend, engine]
 ## Scope
 
 Worlds below autonomy v6 choose CEOs exactly as before. Production runs v4.
+
+NPP engine version 6.17.0, recorded in the [NPP changelog](/changelog/npp).
+
+- Fix: when an NPP dies (autonomy v5+), its NPP-run companies are marked CEO-vacant in one write, so the caretaker step seats a living NPP next turn. Player companies with a caretaker are left to their owner.

@@ -21,3 +21,5 @@ areas: [backend, engine]
 ## Scope
 
 Worlds below autonomy v6 are unchanged; a fixture test pins their decisions. Production runs v4.
+
+NPP engine version 6.16.0, recorded in the [NPP changelog](/changelog/npp).
