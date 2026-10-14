@@ -3,7 +3,7 @@ import { bundledChartFontCss } from "@/lib/charts/chartFont";
 import { generateVoteSplitChartSvg, type ChamberVoteSplit } from "@/lib/charts/voteSplitChart";
 import { getBaseUrl } from "@/lib/utils/network";
 
-export type DiscordEventCardTone = "positive" | "election" | "warning" | "neutral";
+export type DiscordEventCardTone = "positive" | "election" | "warning" | "suggestion" | "neutral";
 
 export interface DiscordEventCardInput {
   eyebrow: string;
@@ -75,7 +75,8 @@ function wrap(value: string, maxCharacters: number, maxLines: number): string[] 
   }
   if (current && lines.length < maxLines) lines.push(current);
   if ((truncated || lines.join(" ").length < clean.length) && lines.length > 0) {
-    lines[lines.length - 1] = clamp(lines[lines.length - 1], maxCharacters - 1) + "…";
+    const last = lines[lines.length - 1].replace(/…$/, "");
+    lines[lines.length - 1] = `${last.slice(0, maxCharacters - 1).trimEnd()}…`;
   }
   return lines;
 }
@@ -84,6 +85,7 @@ function toneColor(tone: DiscordEventCardTone): string {
   if (tone === "positive") return "#4ade80";
   if (tone === "election") return "#f2c94c";
   if (tone === "warning") return "#ef4444";
+  if (tone === "suggestion") return "#b48cf2";
   return "#94a3b8";
 }
 

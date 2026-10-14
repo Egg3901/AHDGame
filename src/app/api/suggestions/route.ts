@@ -13,10 +13,9 @@ import { getNextSuggestionNumber } from "@/lib/suggestionCounter";
 import { createPlayerSuggestionGitHubIssue } from "@/lib/github";
 import { createNotification } from "@/lib/notifications";
 import {
-  buildPlayerSuggestionDiscordEmbed,
-  deliverPlayerSuggestionDiscordEmbed,
   getDiscordSuggestionsWebhookUrl,
   notifyNewSuggestionDiscord,
+  type PlayerSuggestionDiscordInput,
 } from "@/lib/discordWebhooks";
 import type { Suggestion, User } from "@/lib/db/types";
 import { getSuggestionsCollection } from "@/lib/db/collections/suggestions";
@@ -95,7 +94,7 @@ export async function PUT(request: Request) {
       const uid = s.userId?.toString();
       const u = uid ? userById.get(uid) : undefined;
       const detailUrl = `${baseUrl}/feedback/${s.issueNumber}`;
-      const embed = buildPlayerSuggestionDiscordEmbed({
+      const suggestionInput: PlayerSuggestionDiscordInput = {
         issueNumber: s.issueNumber,
         category: String(s.category),
         title: s.title,
@@ -109,9 +108,8 @@ export async function PUT(request: Request) {
         detailUrl,
         githubIssueUrl: s.githubIssueUrl,
         gameSystem: s.gameSystem,
-      });
-
-      const { status, messageId } = await deliverPlayerSuggestionDiscordEmbed(embed);
+      };
+      const { status, messageId } = await notifyNewSuggestionDiscord(suggestionInput);
       if (status === "posted") {
         posted++;
         await coll.updateOne(
