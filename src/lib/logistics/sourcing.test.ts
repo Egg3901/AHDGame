@@ -694,6 +694,37 @@ describe("runSourcingPass", () => {
     expect(r.importAggregatesByCountry.has("US")).toBe(false);
   });
 
+  it("unplacedSupplyByState: exported units are placed in the exporting states", () => {
+    // UK (B1) holds 500 coal spare and no UK buyer. A1 wants 100 and the
+    // domestic seller A2 has none, so A1 imports from the UK. Before the fix
+    // the import drew only the UK national pool and B1 still read 500 unplaced.
+    const r = runSourcingPass(
+      makeInputs({
+        byState: new Map([
+          [
+            "A1",
+            new Map([
+              ["coal", { supply: 0, demand: 100 }],
+              ["freight", { supply: 1000, demand: 0 }],
+            ]) as Map<CommodityType, Balance>,
+          ],
+          ["A2", new Map([["coal", { supply: 0, demand: 0 }]]) as Map<CommodityType, Balance>],
+          ["B1", new Map([["coal", { supply: 500, demand: 0 }]]) as Map<CommodityType, Balance>],
+        ]),
+        byCountry: new Map([
+          ["US", new Map([["coal", { supply: 0, demand: 100 }]])],
+          ["UK", new Map([["coal", { supply: 500, demand: 0 }]])],
+        ]) as SourcingInputs["byCountry"],
+      })
+    );
+    const coal = r.summaries.find((s) => s.commodity === "coal")!;
+    expect(coal.importUnits).toBeGreaterThan(0);
+    const unplacedB1 = r.unplacedSupplyByState.get("coal")!.get("B1")!;
+    expect(unplacedB1).toBeLessThan(500);
+    // Every dispatched export leaves B1's spare (sea freight has no transit loss).
+    expect(500 - unplacedB1).toBeCloseTo(coal.importUnits, 6);
+  });
+
   it("unplacedSupplyByState: reports the spare no buyer anywhere took", () => {
     // A2 makes 200 coal, A1 wants 100 and takes all of it; nobody else buys.
     const r = runSourcingPass(makeInputs());
