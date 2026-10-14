@@ -1,28 +1,179 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import type { Db } from "mongodb";
 import { districtedHouseResolution } from "./districtedHouseResolution";
 
-function makeFakeDb(seed: Record<string, unknown[]>): { db: Db; store: Record<string, unknown[]> } {
+function makeFakeDb(seed: Record<string, unknown[]>): {
+  db: Db;
+  store: Record<string, unknown[]>;
+  finds: Record<string, ReturnType<typeof vi.fn>>;
+  updates: Record<string, ReturnType<typeof vi.fn>>;
+} {
   const store: Record<string, unknown[]> = { ...seed };
+  const finds: Record<string, ReturnType<typeof vi.fn>> = {};
+  const updates: Record<string, ReturnType<typeof vi.fn>> = {};
+  const collections: Record<
+    string,
+    { find: ReturnType<typeof vi.fn>; updateOne: ReturnType<typeof vi.fn> }
+  > = {};
   const db = {
     collection(name: string) {
+      if (collections[name]) return collections[name];
       store[name] = store[name] ?? [];
       const rows = store[name];
-      return {
-        find: () => ({ toArray: async () => rows }),
-        async updateOne(filter: { _id: string }, update: { $set: Record<string, unknown> }) {
+      const find = vi.fn(() => ({ toArray: async () => rows }));
+      const updateOne = vi.fn(
+        async (filter: { _id: string }, update: { $set: Record<string, unknown> }) => {
           const row = rows.find((r) => (r as { _id: string })._id === filter._id) as
             Record<string, unknown> | undefined;
           if (row) Object.assign(row, update.$set);
           return { acknowledged: true };
-        },
-      };
+        }
+      );
+      finds[name] = find;
+      updates[name] = updateOne;
+      collections[name] = { find, updateOne };
+      return collections[name];
     },
   } as unknown as Db;
-  return { db, store };
+  for (const name of Object.keys(store)) db.collection(name);
+  return { db, store, finds, updates };
 }
 
 describe("districtedHouseResolution", () => {
+  it("returns the same result with standalone reads or preloaded districts and parties", async () => {
+    const districts = docsFor([
+      { left: 16, right: 0, grey: 0 },
+      { left: 0, right: 16, grey: 0 },
+    ]);
+    const standalone = makeFakeDb({
+      politicalParties: PARTIES,
+      congressionalDistricts: districts,
+    });
+    const preloaded = makeFakeDb({
+      politicalParties: PARTIES,
+      congressionalDistricts: districts,
+    });
+    const args = {
+      countryId: "US",
+      stateId: "TX",
+      candidateVotes: { d: 550, g: 450 },
+      candidateParty: { d: "DEM", g: "GOP" },
+      candidateCharacterId: { d: CHAR, g: CHAR },
+      primaryShares: null,
+      now: new Date("2026-01-01"),
+    };
+
+    const standaloneResult = await districtedHouseResolution(standalone.db, args);
+    const preloadedResult = await districtedHouseResolution(preloaded.db, {
+      ...args,
+      preloadedDistricts: districts as never,
+      preloadedParties: PARTIES as never,
+    });
+
+    expect(preloadedResult).toEqual(standaloneResult);
+    expect(standalone.finds.congressionalDistricts).toHaveBeenCalledTimes(1);
+    expect(standalone.finds.politicalParties).toHaveBeenCalledTimes(1);
+    expect(preloaded.finds.congressionalDistricts).not.toHaveBeenCalled();
+    expect(preloaded.finds.politicalParties).not.toHaveBeenCalled();
+  });
+
+  it("treats preloaded empty districts as authoritative and does not read the database", async () => {
+    const { db, finds } = makeFakeDb({
+      politicalParties: PARTIES,
+      congressionalDistricts: docsFor([{ left: 8, right: 8, grey: 0 }]),
+    });
+
+    const result = await districtedHouseResolution(db, {
+      countryId: "US",
+      stateId: "TX",
+      candidateVotes: { d: 550, g: 450 },
+      candidateParty: { d: "DEM", g: "GOP" },
+      candidateCharacterId: { d: CHAR, g: CHAR },
+      primaryShares: null,
+      now: new Date("2026-01-01"),
+      preloadedDistricts: [],
+    });
+
+    expect(result).toBeNull();
+    expect(finds.congressionalDistricts).not.toHaveBeenCalled();
+    expect(finds.politicalParties).not.toHaveBeenCalled();
+  });
+
+  it("does not read parties when an empty party list was preloaded", async () => {
+    const districts = docsFor([{ left: 8, right: 8, grey: 0 }]);
+    const { db, finds } = makeFakeDb({
+      politicalParties: PARTIES,
+      congressionalDistricts: districts,
+    });
+
+    const result = await districtedHouseResolution(db, {
+      countryId: "US",
+      stateId: "TX",
+      candidateVotes: { d: 550, g: 450 },
+      candidateParty: { d: "DEM", g: "GOP" },
+      candidateCharacterId: { d: CHAR, g: CHAR },
+      primaryShares: null,
+      now: new Date("2026-01-01"),
+      preloadedDistricts: districts as never,
+      preloadedParties: [],
+    });
+
+    expect(result).not.toBeNull();
+    expect(finds.congressionalDistricts).not.toHaveBeenCalled();
+    expect(finds.politicalParties).not.toHaveBeenCalled();
+  });
+
+  it("writes identical NPP holder payloads and filters with or without preloaded data", async () => {
+    const districts = docsFor([
+      { left: 12, right: 4, grey: 0 },
+      { left: 4, right: 12, grey: 0 },
+    ]);
+    const nppId = "607f1f77bcf86cd799439099";
+    const args = {
+      countryId: "US",
+      stateId: "TX",
+      candidateVotes: { d: 500, g: 500 },
+      candidateParty: { d: "DEM", g: "GOP" },
+      candidateCharacterId: { d: CHAR, g: null },
+      candidateNppId: { d: null, g: nppId },
+      primaryShares: null,
+      now: new Date("2026-01-01"),
+      persist: true,
+    };
+    const standalone = makeFakeDb({
+      politicalParties: PARTIES,
+      congressionalDistricts: districts.map((doc) => ({ ...doc })),
+    });
+    const preloaded = makeFakeDb({
+      politicalParties: PARTIES,
+      congressionalDistricts: districts.map((doc) => ({ ...doc })),
+    });
+
+    const standaloneResult = await districtedHouseResolution(standalone.db, args);
+    const preloadedResult = await districtedHouseResolution(preloaded.db, {
+      ...args,
+      preloadedDistricts: districts as never,
+      preloadedParties: PARTIES as never,
+    });
+
+    expect(preloadedResult).toEqual(standaloneResult);
+    expect(preloaded.updates.congressionalDistricts.mock.calls).toEqual(
+      standalone.updates.congressionalDistricts.mock.calls
+    );
+    expect(standalone.updates.congressionalDistricts).toHaveBeenCalledTimes(2);
+    expect(standalone.updates.congressionalDistricts.mock.calls.map(([filter]) => filter)).toEqual([
+      { _id: "US_TX_1" },
+      { _id: "US_TX_2" },
+    ]);
+    const payloads = standalone.updates.congressionalDistricts.mock.calls.map(
+      ([, update]) => update.$set
+    );
+    expect(payloads.map((payload) => payload.holderParty)).toEqual(["DEM", "GOP"]);
+    expect(String(payloads[0].holderCharacterId)).toBe(CHAR);
+    expect(payloads[0].holderNppId).toBeNull();
+    expect(payloads[1].holderCharacterId).toBeNull();
+    expect(String(payloads[1].holderNppId)).toBe(nppId);
+  });
   it("returns null when the state has no district docs (caller falls back)", async () => {
     const { db } = makeFakeDb({ congressionalDistricts: [], politicalParties: [] });
     const res = await districtedHouseResolution(db, {
@@ -101,7 +252,7 @@ describe("districtedHouseResolution", () => {
   // wrote `npps` ids into `holderCharacterId`, so every NPP-held seat resolved
   // against `characters`, found nothing, and rendered unheld.
   it("does not touch the district docs unless persist is set", async () => {
-    const { db, store } = makeFakeDb({
+    const { db, store, updates } = makeFakeDb({
       politicalParties: PARTIES,
       congressionalDistricts: docsFor([
         { left: 16, right: 0, grey: 0 },
@@ -129,6 +280,7 @@ describe("districtedHouseResolution", () => {
       expect(doc.holderParty).toBeUndefined();
       expect(doc.updatedAt).toBeUndefined();
     }
+    expect(updates.congressionalDistricts).not.toHaveBeenCalled();
   });
 });
 

@@ -413,6 +413,7 @@ export interface ElectionDeps {
   incumbent: { name: string; partyId: string } | null;
   /** Shared list-view data; undefined preserves the single-election loader. */
   apportionment?: Apportionment;
+  preloadedDistricts?: import("@/lib/db/types/congressionalDistrict").CongressionalDistrict[];
   /** Preloaded local region for list enrichment; null means it was not found. */
   localRegionState?: State | null;
 }
