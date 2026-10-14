@@ -34,7 +34,10 @@ import { getNationalDocId } from "@/lib/constants/nationalScope";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { getNationalBudgetId } from "@/lib/bonds/sovereign";
 import { getInflationTarget } from "@/lib/budget/inflation";
-import { processNppChairAutoRate } from "@/lib/nppAutonomy/nppChairAutoRate";
+import {
+  processNppChairAutoRate,
+  processNppCurrencyDefence,
+} from "@/lib/nppAutonomy/nppChairAutoRate";
 import { getStartingYearForPreset } from "@/lib/constants/turnTime";
 import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
 import { boardCanCarryMotions } from "@/lib/centralBank/fomc";
@@ -389,6 +392,7 @@ export async function processCentralBankChairTurn(
         startingYear,
         area
       );
+      await processNppCurrencyDefence(db, bank, countryId, currentTurn, startingYear, area);
       continue;
     }
 

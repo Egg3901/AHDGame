@@ -69,8 +69,8 @@ number.
 - **Fewer writes.** Ministerial orders and settings are written in batches
   per country.
 
-- **Currency defence.** Central banks answer sharp currency moves (6.6.0).
-  Governments do not yet respond with fiscal policy or reserves.
+- **Currency defence.** Central banks answer sharp currency moves with rates
+  (6.6.0) and reserve-backed trading bands (6.13.0).
 
 ### Stage 3: corporations
 
@@ -105,6 +105,24 @@ number.
 - Autonomy v6 becomes the default for new singleplayer and simulation worlds,
   after the engine 6 stages are validated. Running worlds never change level on
   their own.
+
+## 6.13.0 (unreleased)
+
+Stage 2 (governing).
+
+- **Central banks defend a falling currency (v6).** Since 6.6.0 a central
+  bank run by an NPP adjusts its interest rate when its currency moves, but in
+  limited steps that a sharp fall can outrun. Its other tool, a trading band
+  defended with the bank's reserves, was only ever used by player chairs.
+  - Now, once a floating currency has fallen 15% or more over 24 turns, the
+    NPP chair sets a band. Its top sits 5% above today's rate, which caps
+    further weakening, and its bottom 10% below.
+  - The bank defends the band with its own reserves under the usual rules, so
+    it can never spend more than it holds.
+  - The chair removes its own band once the currency's 24-turn move is back
+    within 5%, after the normal wait between band changes.
+  - A band set by a player is never touched, and government-held rates, pegs
+    and shared currencies are left alone.
 
 ## 6.12.0 (unreleased)
 
