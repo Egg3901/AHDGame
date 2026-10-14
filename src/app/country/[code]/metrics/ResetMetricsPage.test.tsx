@@ -94,7 +94,9 @@ describe("v2 metrics page", () => {
     render(<ResetMetricsPage country="US" />);
     expect(await screen.findByRole("heading", { name: "United States" })).toBeTruthy();
     expect(screen.getByTestId("stat-masthead")).toBeTruthy();
-    expect(screen.getByText("Primary observations")).toBeTruthy();
+    expect(screen.getByText("METRICS TRACKED")).toBeTruthy();
+    expect(screen.getByLabelText("Average condition score 62.0 out of 100")).toBeTruthy();
+    expect(screen.getByText("Average score")).toBeTruthy();
     expect(screen.getByText("National spirit")).toBeTruthy();
     expect(screen.getByText("Political direction")).toBeTruthy();
     expect(screen.getByText("Democratic health")).toBeTruthy();

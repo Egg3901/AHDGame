@@ -11,6 +11,7 @@ const base = {
   spending: 900_000,
   gdp: 50_000_000,
   debtToGdp: 0.4,
+  debtPrincipal: 25_000_000,
   rating: "AAA" as const,
   treasuryReserve: 100_000,
 };
@@ -35,5 +36,20 @@ describe("FiscalStatStrip GDP tile", () => {
   it("keeps the era-dollar note alongside the assumption label", () => {
     render(<FiscalStatStrip {...base} gdpGrowth={1.5} toUsd={(n) => n / 4} />);
     expect(screen.getByText(/\+1\.5% FY assumption · ≈ \$/)).toBeTruthy();
+  });
+});
+
+describe("FiscalStatStrip sovereign debt", () => {
+  it("shows outstanding bond principal and explains the debt ratio calculation", () => {
+    render(<FiscalStatStrip {...base} gdpGrowth={2} />);
+
+    expect(screen.getByText("Outstanding bond principal")).toBeTruthy();
+    expect(screen.getByText("₽25.0M")).toBeTruthy();
+    expect(screen.getByText("Debt-to-GDP").getAttribute("title")).toContain(
+      "smoothed national GDP"
+    );
+    expect(screen.getByText("Debt-to-GDP").getAttribute("title")).toContain(
+      "not part of the numerator"
+    );
   });
 });
