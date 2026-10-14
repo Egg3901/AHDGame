@@ -96,3 +96,13 @@ export function roundSavingsAmount(amount: number, currencyCode: CurrencyCode): 
   }
   return Math.round(amount * 100) / 100;
 }
+
+/**
+ * Floor a spendable balance to whole yen or cents without exceeding it.
+ * Rounds first so binary noise (4.35 * 100 = 434.999...) does not drop a cent.
+ */
+export function floorSavingsAmount(amount: number, currencyCode: CurrencyCode): number {
+  const rounded = roundSavingsAmount(amount, currencyCode);
+  if (rounded <= amount + 1e-9) return rounded;
+  return roundSavingsAmount(rounded - (currencyCode === "JPY" ? 1 : 0.01), currencyCode);
+}
