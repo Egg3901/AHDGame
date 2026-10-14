@@ -377,7 +377,9 @@ describe("bank fund eligibility and segregation", () => {
     ).toBe(false);
     f.sponsor.bankCharter!.status = "revoked";
     expect(bankMayManageFunds(f.sponsor.bankCharter)).toBe(false);
-    expect(await fundCreationEligibility(f.db, f.sponsor)).toMatch(/active/);
+    // A revoked charter counts as no charter: no longer refused as a bank...
+    expect(await fundCreationEligibility(f.db, f.sponsor)).not.toMatch(/active/);
+    // ...but picking companies still needs an active bank.
     expect((await charterFund(f.db, f.creation)).ok).toBe(false);
   });
   it("matches creation capability when the charter fee cannot settle", async () => {
