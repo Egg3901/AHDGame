@@ -1130,15 +1130,16 @@ export const RETAIL_NEGATIVE_COMMODITY_PENALTY_FACTOR = 0.25;
  */
 export function computeRetailDemandMultiplier(
   nationalGdpGrowth: number,
-  stateGdpGrowth: number
+  stateGdpGrowth: number,
+  params: { scale: number; max: number } = {
+    scale: RETAIL_GDP_DEMAND_SCALE,
+    max: RETAIL_GDP_MULTIPLIER_MAX,
+  }
 ): number {
   const blended =
     RETAIL_GDP_NATIONAL_WEIGHT * nationalGdpGrowth + RETAIL_GDP_REGIONAL_WEIGHT * stateGdpGrowth;
-  const raw = 1 + (blended / 100) * RETAIL_GDP_DEMAND_SCALE;
-  return Math.max(
-    RETAIL_GDP_MULTIPLIER_MIN,
-    Math.min(RETAIL_GDP_MULTIPLIER_MAX, Math.round(raw * 1000) / 1000)
-  );
+  const raw = 1 + (blended / 100) * params.scale;
+  return Math.max(RETAIL_GDP_MULTIPLIER_MIN, Math.min(params.max, Math.round(raw * 1000) / 1000));
 }
 
 // ─── Financial services latent demand (rate environment + debt issuance) ─────
@@ -2153,7 +2154,9 @@ export function computeRawSupplyDemand(
    */
   demandCalibration?: (commodity: CommodityType) => number,
   preset?: string,
-  sectorUnitsOut?: SectorUnitsOut
+  sectorUnitsOut?: SectorUnitsOut,
+  /** Retail GDP amplifier override (commodity treadmill fix stage 2). */
+  retailGdpParams?: { scale: number; max: number }
 ): {
   global: Map<CommodityType, { supply: number; demand: number }>;
   byState: Map<string, Map<CommodityType, { supply: number; demand: number }>>;
@@ -2479,7 +2482,11 @@ export function computeRawSupplyDemand(
     let demandMultiplier = 1;
     if (st === "retail" && gdpGrowthData) {
       const stateGdp = gdpGrowthData.byState.get(sector.stateId) ?? 0;
-      demandMultiplier = computeRetailDemandMultiplier(gdpGrowthData.nationalAverage, stateGdp);
+      demandMultiplier = computeRetailDemandMultiplier(
+        gdpGrowthData.nationalAverage,
+        stateGdp,
+        retailGdpParams
+      );
     }
 
     // World Events v1 Phase 1: temporary world-event sector demand bump
@@ -2537,7 +2544,11 @@ export function computeRawSupplyDemand(
       const retailBal = stateMap.get("retail");
       if (!retailBal || retailBal.supply <= 0) continue;
       const stateGdp = gdpGrowthData.byState.get(stateId) ?? 0;
-      const multiplier = computeRetailDemandMultiplier(gdpGrowthData.nationalAverage, stateGdp);
+      const multiplier = computeRetailDemandMultiplier(
+        gdpGrowthData.nationalAverage,
+        stateGdp,
+        retailGdpParams
+      );
       const consumerDemand = retailBal.supply * multiplier * retailLegacyFactor;
       retailBal.demand += consumerDemand;
       const g = global.get("retail")!;

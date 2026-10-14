@@ -183,6 +183,8 @@ export function collectHouseholdSignals(inputs: HouseholdSignalInputs): {
 
 export interface HouseholdDemandInputs {
   financialDemandByCountry?: ReadonlyMap<string, number>;
+  /** Household ceiling as a multiple of prior supply (default PLANTS_HOUSEHOLD_SUPPLY_CAP). */
+  supplyCapMultiple?: number;
   eraUnitScale: number;
   plantsUnitScale: number;
   priorGlobalSupply?: Map<CommodityType, number>;
@@ -214,6 +216,7 @@ export function applyHouseholdDemand(
     // worlds pass 1/undefined and are byte-identical (ticket #1027).
     plantsUnitScale: inputs.plantsUnitScale,
     priorGlobalSupply: inputs.priorGlobalSupply,
+    supplyCapMultiple: inputs.supplyCapMultiple,
     states: inputs.states,
     metricsByState: inputs.metricsByState,
     priorGlobalPrice: inputs.priorGlobalPrice,
@@ -484,6 +487,8 @@ export interface GovernmentDemandInputs {
    * (legacy worlds) leaves demand uncapped.
    */
   priorGlobalSupply?: Map<CommodityType, number>;
+  /** Shared ceiling multiple (default GOVERNMENT_DEMAND_SUPPLY_CAP). */
+  supplyCapMultiple?: number;
   /**
    * Household final demand already booked this turn, per commodity. Households
    * and governments are buyers of the same finished goods, so they share ONE
@@ -571,7 +576,8 @@ export function applyGovernmentDemand(
     priorGlobalSupply,
     demandCalibration,
     truncated,
-    householdDemand
+    householdDemand,
+    inputs.supplyCapMultiple
   );
   for (const purchase of purchases) {
     const { commodity, cid, regional } = purchase;
@@ -611,7 +617,8 @@ export function governmentSupplyCapFactors(
   priorGlobalSupply: Map<CommodityType, number> | undefined,
   demandCalibration: ((commodity: CommodityType) => number) | undefined,
   truncated?: Map<CommodityType, number>,
-  householdDemand?: ReadonlyMap<CommodityType, number>
+  householdDemand?: ReadonlyMap<CommodityType, number>,
+  supplyCapMultiple: number = GOVERNMENT_DEMAND_SUPPLY_CAP
 ): Map<CommodityType, number> {
   const factors = new Map<CommodityType, number>();
   if (!priorGlobalSupply) return factors;
@@ -625,7 +632,7 @@ export function governmentSupplyCapFactors(
     const calibration = calibrationMultiplier(demandCalibration, commodity);
     const cap = Math.max(
       0,
-      (supply * GOVERNMENT_DEMAND_SUPPLY_CAP) / calibration - (householdDemand?.get(commodity) ?? 0)
+      (supply * supplyCapMultiple) / calibration - (householdDemand?.get(commodity) ?? 0)
     );
     if (total <= cap) continue;
     factors.set(commodity, cap / total);

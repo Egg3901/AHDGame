@@ -78,6 +78,7 @@ import {
 import { buildManufacturedSectorOutput } from "@/lib/products/rules/manufacturingRules";
 import { getManufacturingProductKind } from "@/lib/products/manufacturingCatalog";
 import { isLegalManufacturingProductForPlant } from "@/lib/products/rules/manufacturingEligibility";
+import { shortagePolicyHeadroom } from "@/lib/market/commodityFixStages";
 
 /** Process one sector and append its persisted update to the turn collectors. */
 export function processSector(
@@ -454,6 +455,14 @@ export function processSector(
     wideCommodityBalances,
     politicalBoard,
   });
+  // Commodity treadmill fix stage 4: a plant at positive policy whose own
+  // output clears into a deep shortage gets extra output AND input headroom.
+  const policyHeadroomFactor = shortagePolicyHeadroom({
+    stage: market.commodityFixStage,
+    policyLevel: newPolicyLevel,
+    supplyRates: strategyRates.supply,
+    balances: wideCommodityBalances,
+  });
   // ─── P3b extraction capacity + realized revenue ───────────────────────────
   // Pure computation in `sectorTurn/plantsRevenue.ts`; the orchestrator only
   // threads its inputs and consumes the legs. Names are unchanged.
@@ -509,6 +518,7 @@ export function processSector(
     priorProductionUnitRatio,
     disasterOutputFactor,
     newPolicyLevel,
+    policyHeadroomFactor,
     plantsCapacity,
     plantsMixPrice,
     plantsStartTurn,
@@ -796,6 +806,7 @@ export function processSector(
     producedUnits,
     retoolCapacityRatio,
     newPolicyLevel,
+    policyHeadroomFactor,
     mothballed,
     stateId: sector.stateId,
     landedPremiumByState: lookups.landedPremiumByState,

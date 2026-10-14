@@ -104,6 +104,13 @@ export interface CommodityPrice {
    */
   scarcityMultByCountry?: Record<string, number>;
   /**
+   * Momentum-mode ratchet (commodityFixStage >= 1): trailing signed imbalance
+   * (unmet share minus surplus share) per turn, newest last, for the world
+   * integrator and per reachable country. See updateScarcityMultiplierMomentum.
+   */
+  scarcityImbalanceHistory?: number[];
+  scarcityImbalanceHistoryByCountry?: Record<string, number[]>;
+  /**
    * Per-country reachable-market price (the wide leg of the state blend),
    * persisted so lagged consumers — clearing's price-realization factor —
    * can read the price of the market a seller actually clears in rather than

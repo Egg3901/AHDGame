@@ -19,6 +19,7 @@ export const CORPORATION_TURN_GAME_CONFIG_PROJECTION = {
   qualityPremiumPricingEnabled: 1,
   politicalMediaMarketEnabled: 1,
   explicitPlantCostsEnabled: 1,
+  commodityFixStage: 1,
   supplyAgreementsEnabled: 1,
   groupSupplyCoordinationEnabled: 1,
   prospectingEnabled: 1,
