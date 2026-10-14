@@ -139,6 +139,25 @@ export default function PrivacyPolicyPage() {
                 </p>
               </div>
               <div>
+                <p className="font-semibold text-foreground mb-1">Sign-up source cookie</p>
+                <p>
+                  If you arrive from another website or a tagged link, we may set an HTTP-only
+                  cookie named{" "}
+                  <code className="rounded bg-card-elevated px-1 py-0.5 font-mono text-xs">
+                    __ahd_src
+                  </code>{" "}
+                  for up to 30 days. It holds only the referring site&apos;s domain (for example
+                  reddit.com), any campaign tags in the link, and the date. If you create an
+                  account, that summary is saved with it so we can see which channels bring new
+                  players. A short-lived{" "}
+                  <code className="rounded bg-card-elevated px-1 py-0.5 font-mono text-xs">
+                    ahd-new-account
+                  </code>{" "}
+                  cookie naming your sign-in provider is also set for 15 minutes after a new Google,
+                  Discord or Apple sign-up.
+                </p>
+              </div>
+              <div>
                 <p className="font-semibold text-foreground mb-1">Optional product analytics</p>
                 <p>
                   After you accept optional analytics, PostHog may use browser storage to recognize

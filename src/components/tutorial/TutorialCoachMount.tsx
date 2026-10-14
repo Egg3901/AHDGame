@@ -9,6 +9,7 @@ import {
   type TutorialPlan,
 } from "@/lib/onboarding/tutorialPlan";
 import { TutorialCoach } from "./TutorialCoach";
+import { captureProductEvent } from "@/lib/analytics/capture";
 import { TutorialWelcome } from "./TutorialWelcome";
 
 /**
@@ -111,6 +112,11 @@ export function TutorialCoachMount() {
       body: JSON.stringify({ experience: plan.experience, interests: plan.interests }),
     });
     if (!res.ok) throw new Error("Failed to save tutorial plan");
+    void captureProductEvent("tutorial_plan_chosen", {
+      experience: plan.experience,
+      interest_count: plan.interests.length,
+      interests: [...plan.interests].sort().join(","),
+    });
     setState((prev) => (prev ? { ...prev, plan, chosen: true } : prev));
     setJustChose(true);
     setChoosing(false);

@@ -14,6 +14,7 @@ import {
   YAxis,
 } from "recharts";
 import { SectionLabel } from "@/components/ui/SectionLabel";
+import { AdminIntakePanel } from "./AdminIntakePanel";
 
 type Resolution = "hour" | "day";
 
@@ -727,6 +728,8 @@ export function AdminTrafficTab() {
           </>
         )}
       </section>
+
+      <AdminIntakePanel days={activeRange.kind === "days" ? activeRange.value : 1} />
     </div>
   );
 }

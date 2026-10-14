@@ -5,6 +5,8 @@
  * Fire-and-forget: a failed beacon never surfaces to the player.
  */
 export type IntakeBeaconEvent =
+  | "landing_viewed"
+  | "landing_cta_clicked"
   | "signup_viewed"
   | "signup_started"
   | "create_character_viewed"
@@ -13,7 +15,8 @@ export type IntakeBeaconEvent =
   | "create_character_submit_failed";
 
 export interface IntakeBeaconProperties {
-  surface?: "register" | "login" | "create_character";
+  surface?: "landing" | "register" | "login" | "create_character";
+  cta?: "register" | "login" | "discord" | "play_free" | "wiki";
   method?: "email" | "google" | "discord" | "apple";
   reason?: string;
   step?: string;
