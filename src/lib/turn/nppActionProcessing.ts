@@ -718,7 +718,7 @@ async function runNppActions(db: Db, currentTurn: number): Promise<NppActionProc
  * deduct-then-reserve-with-refund protection, unlike the savings sweep (a
  * same-document balance move that's safe to fold into the batch).
  */
-async function investNppBondSurplus(
+export async function investNppBondSurplus(
   db: Db,
   currentTurn: number,
   countryScope: CountryId[] | null = null,
@@ -870,7 +870,7 @@ type StockCandidateCorp = Pick<
  * sweep so both can spend from the same cycle's post-spend savings without
  * double-counting (sequential passes over the same document).
  */
-async function investNppStockSurplus(
+export async function investNppStockSurplus(
   db: Db,
   currentTurn: number,
   countryScope: CountryId[] | null = null,
@@ -1156,7 +1156,7 @@ async function buildNppPartyOrgSurplus(
  * 19% in one run). A CEO divesting their own company is a fundamentally
  * different, much higher-stakes decision this sweep was never designed for.
  */
-async function sellNppStockSurplus(
+export async function sellNppStockSurplus(
   db: Db,
   currentTurn: number,
   countryScope: CountryId[] | null = null,
