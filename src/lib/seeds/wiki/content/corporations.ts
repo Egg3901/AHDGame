@@ -86,6 +86,12 @@ Votes run for 24 turns but can finish early once the result is mathematically ce
 
 The turn processor sweeps open corporation votes every turn, so passed or failed votes finalize even if nobody opens the vote page. Passed share-issuance votes add the approved shares to public float and credit the proceeds to corporate liquid capital.
 
+### What happens to plants that leave a corporation
+
+When a corporation abandons a sector, dissolves (by the CEO, a shareholder vote, bond default, or insolvency), or liquidates sectors in a bond restructure, its plants do not simply shut. An NPP operator in the same industry takes over about three quarters of each plant's built capacity: one already running that industry in the same region if there is one, otherwise one elsewhere in the same country, otherwise a new NPP corporation. The rest of the capacity closes, and that share of the market reopens to anyone who builds into it.
+
+Unfinished construction is not handed over. It is refunded and cancelled exactly as before. Payouts to the leaving corporation and its shareholders are unchanged. Extraction concessions and defence contracts move with the plants that hold them.
+
 ## Expanding into markets
 
 Corporations grow by acquiring **sectors** in state economies. A sector is not an abstract slice of a market: it **is the plants you own** in that state. The capacity is the real asset, and the revenue figure you see is derived from what that capacity actually produces and sells.
