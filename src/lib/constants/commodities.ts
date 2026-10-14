@@ -1670,10 +1670,12 @@ export const SECTOR_SUPPLY: Partial<Record<OperatingSectorType, CommodityFlow[]>
   extraction: [
     { commodity: "iron", rate: 0.4 },
     { commodity: "coal", rate: 0.3 },
-    { commodity: "oil", rate: 0.14 },
+    // Timber 0.2 to 0.05, the 0.15 moved to oil and gas (see the diversified
+    // extraction strategy): byproduct timber flooded a ~24k-unit market.
+    { commodity: "oil", rate: 0.215 },
     { commodity: "rare_earth", rate: 0.27 },
-    { commodity: "natural_gas", rate: 0.24 },
-    { commodity: "timber", rate: 0.2 },
+    { commodity: "natural_gas", rate: 0.315 },
+    { commodity: "timber", rate: 0.05 },
   ],
 };
 
