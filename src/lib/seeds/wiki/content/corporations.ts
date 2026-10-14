@@ -349,7 +349,7 @@ Computer-run corporations may automatically retool a sector onto a better strate
 | Media | Streaming Media, Standard, Digital-First, Legacy Broadcast | 4 |
 | Defense | Directed-Energy Systems, Standard, Cyber Warfare, Heavy Armor, Munitions & Arms Export, Naval Systems, Missile & Rocket Systems, Aerospace Systems | 8 |
 | Real Estate | PropTech Platforms, Standard, Commercial Development, Green Building | 4 |
-| Construction | Modular Construction, General Contracting, Infrastructure Buildout, plus a research-gated factory-built Modular Construction method from 2019 | 4 |
+| Construction | Modular Construction, General Contracting, Infrastructure Buildout, plus a research-gated Factory-built Modular Construction method from 2019 | 4 |
 | Telecommunications | 5G/6G Networks, Standard, 5G/Infrastructure, Cloud Services | 4 |
 | Media (entertainment) | Live-Service Platforms, Standard, Streaming/Digital, Live/Venue | 4 |
 | Retail | E-Commerce Fulfillment, Standard, E-Commerce, Brick & Mortar | 4 |
