@@ -7,6 +7,9 @@ vi.mock("@/lib/nppAutonomy/v3/finance/nppFoundCorporation", () => ({
 vi.mock("@/lib/nppAutonomy/v3/finance/nppEconomicAccount", () => ({
   nppHomeFxRate: vi.fn(async () => 2),
 }));
+vi.mock("@/lib/currency/corporationCapital", () => ({
+  loadFxRatesByCurrency: vi.fn(async () => new Map()),
+}));
 vi.mock("@/lib/economy/queries/privateEnterpriseGate", () => ({
   loadPrivateEnterpriseBlockedCountries: vi.fn(async () => new Set(["DD"])),
 }));
