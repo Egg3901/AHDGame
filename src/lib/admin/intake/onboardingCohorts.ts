@@ -9,18 +9,24 @@ import { ONBOARDING_STEP_IDS } from "@/lib/onboarding/checklist";
  *
  * "Campaigned within 24h" comes from `actionLogs` (indexed on characterId +
  * actionType), so it is exact for cohorts from before step stamps existed.
- * "Zero influence after 72h" is read from current influence for characters at
- * least 72 hours old; influence decays slowly (0.75% a turn) and only rises by
- * campaigning, so a character above zero now was above zero at 72h unless it
- * first campaigned later.
+ * "No influence growth after 72h" compares current influence with what the
+ * character started with, for characters at least 72 hours old. From 1.16 new
+ * characters start at 10 (`startingPoliticalInfluence`), and influence only
+ * decays on its own, so a character that never campaigned sits at or below its
+ * start. Older characters started at 0, so for them this is the original
+ * "still at zero" measure and the pre-1.16 baseline (45% of mid-world joiners)
+ * stays comparable. `startedWithInfluence` counts the 1.16-onward characters
+ * so the two populations can be told apart.
  */
 export interface OnboardingCohort {
   characters: number;
   campaignedWithin24h: number;
   /** Characters at least 72 hours old. */
   atLeast72h: number;
-  /** Of those, still at zero political influence. */
-  zeroInfluenceAfter72h: number;
+  /** Of those, influence not above the starting value (never grew it). */
+  noInfluenceGrowthAfter72h: number;
+  /** Characters created with starting influence (1.16 onward). */
+  startedWithInfluence: number;
   /** First-completion stamps per checklist step (stamps exist from rollout). */
   steps: Record<string, number>;
 }
@@ -34,6 +40,7 @@ interface Row {
   createdAt: Date;
   createdTurn?: number;
   politicalInfluence?: number;
+  startingPoliticalInfluence?: number;
   stepKeys?: string[];
   firstCampaignAt?: Date | null;
 }
@@ -45,7 +52,8 @@ function emptyCohort(): OnboardingCohort {
     characters: 0,
     campaignedWithin24h: 0,
     atLeast72h: 0,
-    zeroInfluenceAfter72h: 0,
+    noInfluenceGrowthAfter72h: 0,
+    startedWithInfluence: 0,
     steps: Object.fromEntries(ONBOARDING_STEP_IDS.map((id) => [id, 0])),
   };
 }
@@ -78,6 +86,7 @@ export async function computeOnboardingCohorts(
           createdAt: 1,
           createdTurn: 1,
           politicalInfluence: 1,
+          startingPoliticalInfluence: 1,
           stepKeys: {
             $map: {
               input: { $objectToArray: { $ifNull: ["$onboarding.steps", {}] } },
@@ -100,12 +109,14 @@ export async function computeOnboardingCohorts(
         : result.founding;
     const created = row.createdAt.getTime();
     cohort.characters++;
+    const start = row.startingPoliticalInfluence ?? 0;
+    if (start > 0) cohort.startedWithInfluence++;
     if (row.firstCampaignAt instanceof Date && row.firstCampaignAt.getTime() - created <= 24 * H) {
       cohort.campaignedWithin24h++;
     }
     if (now.getTime() - created >= 72 * H) {
       cohort.atLeast72h++;
-      if (!((row.politicalInfluence ?? 0) > 0)) cohort.zeroInfluenceAfter72h++;
+      if (!((row.politicalInfluence ?? 0) > start)) cohort.noInfluenceGrowthAfter72h++;
     }
     for (const key of row.stepKeys ?? []) {
       if (key in cohort.steps) cohort.steps[key]++;

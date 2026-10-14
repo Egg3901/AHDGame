@@ -408,6 +408,11 @@ export interface Character {
    * `createdAt` Date for those.
    */
   createdTurn?: number;
+  /**
+   * Political influence the character was created with (10 from the 1.16
+   * onboarding change; absent means it started at the old default of 0).
+   */
+  startingPoliticalInfluence?: number;
   updatedAt: Date;
   /**
    * A test character driven by the playtest harness, not a person.
