@@ -10,7 +10,7 @@ describe("buildCeoTrackRecordWrites", () => {
     const writes = buildCeoTrackRecordWrites(
       [
         { nppId: a, lane: "energy", relMarginPp: 4 },
-        { nppId: a, lane: "banking", relMarginPp: -2 },
+        { nppId: a, lane: "financial", relMarginPp: -2 },
         { nppId: b, lane: "energy", relMarginPp: 1 },
       ],
       new Map([[a, { energy: { turns: 24, relMarginPp: 0, lastTurn: 24 } }]]),
@@ -23,7 +23,7 @@ describe("buildCeoTrackRecordWrites", () => {
         update: {
           $set: {
             "ceoTrackRecord.energy": { turns: 48, relMarginPp: 2, lastTurn: 48 },
-            "ceoTrackRecord.banking": { turns: 24, relMarginPp: -2, lastTurn: 48 },
+            "ceoTrackRecord.financial": { turns: 24, relMarginPp: -2, lastTurn: 48 },
           },
         },
       },

@@ -46,7 +46,7 @@ describe("NPP engine 6 CEO track record", () => {
 
   it("scores an NPP CEO against other companies in the same country and lane", () => {
     const sectorsByCorp = new Map([
-      ["npp-corp", [sector("npp-corp", 30), sector("npp-corp", 20, { sectorType: "banking" })]],
+      ["npp-corp", [sector("npp-corp", 30), sector("npp-corp", 20, { sectorType: "financial" })]],
       ["peer-1", [sector("peer-1", 20)]],
       ["peer-2", [sector("peer-2", 10)]],
       ["abroad", [sector("abroad", 90, { countryId: "UK" })]],
@@ -96,6 +96,6 @@ describe("NPP engine 6 CEO track record", () => {
     expect(ceoRecordScore(line(48, 5), "energy")).toBeCloseTo(2.5);
     expect(hasGoodCeoRecord(line(48, 5), "energy")).toBe(true);
     expect(hasGoodCeoRecord(line(48, -5), "energy")).toBe(false);
-    expect(hasGoodCeoRecord(line(48, 5), "banking")).toBe(false);
+    expect(hasGoodCeoRecord(line(48, 5), "financial")).toBe(false);
   });
 });

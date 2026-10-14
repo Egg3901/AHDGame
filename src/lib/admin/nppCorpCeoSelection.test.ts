@@ -210,7 +210,7 @@ describe("chooseNppCorpCeo NPP engine 6 CEO choice by record", () => {
   });
 
   it("falls back to the balance when nobody has a good record in the lane", () => {
-    expect(chooseNppCorpCeo({ affiliations, sectorLane: "banking" })).toEqual({
+    expect(chooseNppCorpCeo({ affiliations, sectorLane: "financial" })).toEqual({
       kind: "existing",
       party: "1",
       nppId: "balanced",
@@ -219,9 +219,9 @@ describe("chooseNppCorpCeo NPP engine 6 CEO choice by record", () => {
       { party: "1", corpCount: 0, freeNpps: [npp("balanced", 9, 1)] },
       { party: "2", corpCount: 5, freeNpps: [withRecord("bad", bad)] },
     ];
-    expect(chooseNppCorpCeo({ affiliations: onlyBad, sectorLane: "energy" }).nppId).toBe(
-      "balanced"
-    );
+    expect(chooseNppCorpCeo({ affiliations: onlyBad, sectorLane: "energy" })).toMatchObject({
+      nppId: "balanced",
+    });
   });
 
   it("a short record does not count yet", () => {
@@ -230,7 +230,9 @@ describe("chooseNppCorpCeo NPP engine 6 CEO choice by record", () => {
       { party: "1", corpCount: 0, freeNpps: [npp("balanced", 9, 1)] },
       { party: "2", corpCount: 5, freeNpps: [withRecord("short", short)] },
     ];
-    expect(chooseNppCorpCeo({ affiliations: rows, sectorLane: "energy" }).nppId).toBe("balanced");
+    expect(chooseNppCorpCeo({ affiliations: rows, sectorLane: "energy" })).toMatchObject({
+      nppId: "balanced",
+    });
   });
 
   it("a forced party keeps the search inside that party", () => {
