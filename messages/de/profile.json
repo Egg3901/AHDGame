@@ -169,11 +169,12 @@
       "progress": "{completed} von {total} erledigt",
       "dismiss": "Ausblenden",
       "dismissChecklistAria": "Checkliste ausblenden",
+      "later": "Später, nicht nötig für die Belohnung",
       "doneSr": "(erledigt)",
       "claimFailed": "Abholen fehlgeschlagen. Versuch es erneut.",
       "rewardAdded": "{reward} wurde deiner Wahlkampfkasse gutgeschrieben.",
       "claim": "{reward} abholen",
-      "finishSteps": "Schließe alle {total} Schritte ab, um {reward} für deine Wahlkampfkasse zu erhalten.",
+      "finishSteps": "Schließe die {total} nummerierten Schritte ab, um {reward} für deine Wahlkampfkasse zu erhalten.",
       "newTitle": "Neu bei A House Divided?",
       "newSubtitle": "Sieh dir persönliche Vorschläge für deine nächsten Schritte an →",
       "newDismissAria": "Hinweis für neue Spieler ausblenden"
