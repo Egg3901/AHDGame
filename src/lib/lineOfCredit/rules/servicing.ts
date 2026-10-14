@@ -8,7 +8,7 @@ import {
   computeLocScheduledPaymentFace,
   toInternalUnits,
 } from "../locMath";
-import { roundSavingsAmount } from "@/lib/currency/savingsInterest";
+import { floorSavingsAmount, roundSavingsAmount } from "@/lib/currency/savingsInterest";
 export type CurrencyAmounts = Partial<Record<CurrencyCode, number>>;
 export interface LocServiceInput {
   loc: NonNullable<Character["lineOfCredit"]>;
@@ -102,7 +102,7 @@ export function quoteLocService(input: LocServiceInput) {
     if (cRate && cRate > 0) scheduledInternalTotal += toInternalUnits(scheduled, cRate);
 
     const walletC = availableBalance[c] ?? 0;
-    let pay = Math.min(scheduled, walletC);
+    let pay = Math.min(scheduled, floorSavingsAmount(walletC, c));
     const walletPay = pay;
 
     // If the loan-currency wallet falls short, convert from other currencies.
@@ -131,7 +131,7 @@ export function quoteLocService(input: LocServiceInput) {
             (remainingShortfall * loanRate) / otherRate,
             other
           );
-          const otherUsed = Math.min(otherNeeded, otherAvailable);
+          const otherUsed = Math.min(otherNeeded, floorSavingsAmount(otherAvailable, other));
           if (otherUsed <= 0) continue;
           const loanGained = roundSavingsAmount((otherUsed * otherRate) / loanRate, c);
           if (loanGained <= 0) continue;
