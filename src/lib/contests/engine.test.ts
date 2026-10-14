@@ -821,3 +821,209 @@ describe("runContests: one weekly clock", () => {
     expect(party.endsAt.getTime()).toBe(later.getTime() + CONTEST_ROUND_MS);
   });
 });
+
+describe("runContests: rookie, backbench, image, statehouse, kingmaker and comeback", () => {
+  const later = (ms: number) => new Date(now.getTime() + ms);
+  const day = 24 * 60 * 60 * 1000;
+
+  function seed() {
+    const base = world(
+      10,
+      { small: 400_000, mid: 2e6, big: 3e7 },
+      { alice: 50, bob: 10, carol: 30 }
+    );
+    const profile: Doc[] = [
+      { createdAt: later(-3 * day), favorability: 40 },
+      { createdAt: later(-60 * day), favorability: 70 },
+      { createdAt: later(-20 * day), favorability: 55 },
+    ];
+    const characters: Doc[] = base.characters.map((c, i) => ({ ...c, ...profile[i] }));
+    return { ...base, characters };
+  }
+
+  it("enters rookies by age and the backbench by opening influence, and scores favorability gains", async () => {
+    const { db, data } = fakeDb(seed());
+    await runContests(db, 10, now);
+    const opened = (kind: string) =>
+      rounds(data)
+        .find((r) => r.kind === kind)!
+        .baselines.map((b) => b.subjectId)
+        .sort();
+    // Alice is three days old; Bob and Carol are older than two weeks.
+    expect(opened("rookie_influence")).toEqual([alice.toString()]);
+    // Median influence is 30: only Bob opened below it.
+    expect(opened("backbench_influence")).toEqual([bob.toString()]);
+
+    for (const c of data.characters) {
+      if (String(c._id) === alice.toString())
+        Object.assign(c, { nationalInfluence: 58, favorability: 41 });
+      if (String(c._id) === bob.toString())
+        Object.assign(c, { nationalInfluence: 25, favorability: 79 });
+    }
+    await runContests(db, 11, later(3_600_000));
+
+    const scores = (kind: string) =>
+      rounds(data)
+        .find((r) => r.kind === kind)!
+        .standings.map((s) => [s.characterName, s.score]);
+    expect(scores("rookie_influence")).toEqual([["Alice", 8]]);
+    expect(scores("backbench_influence")).toEqual([["Bob", 15]]);
+    expect(scores("favorability_gain")).toEqual([
+      ["Bob", 9],
+      ["Alice", 1],
+      ["Carol", 0],
+    ]);
+  });
+
+  it("ranks state approval gains while the opening governor holds office", async () => {
+    const official = (state: string, characterId: ObjectId | null, electedAt: Date) => ({
+      _id: new ObjectId(),
+      countryId: "US",
+      state,
+      officeType: "governor",
+      characterId,
+      electedAt,
+    });
+    const { db, data } = fakeDb({
+      ...seed(),
+      electedOfficials: [
+        official("PA", alice, later(-10 * day)),
+        // A stale earlier holder of the same office does not count.
+        official("PA", carol, later(-400 * day)),
+        official("OH", carol, later(-10 * day)),
+        // Not a player.
+        official("TX", null, later(-10 * day)),
+      ],
+      stateApprovalHistory: [
+        { _id: "PA", countryId: "US", approvalRating: 45 },
+        { _id: "OH", countryId: "US", approvalRating: 50 },
+        { _id: "TX", countryId: "US", approvalRating: 60 },
+      ],
+      states: [
+        { _id: "PA", countryId: "US", name: "Pennsylvania" },
+        { _id: "OH", countryId: "US", name: "Ohio" },
+      ],
+    });
+    await runContests(db, 10, now);
+    const opened = rounds(data).find((r) => r.kind === "governor_approval")!;
+    expect(opened.baselines.map((b) => [b.subjectId, b.characterId])).toEqual(
+      expect.arrayContaining([
+        ["PA", alice.toString()],
+        ["OH", carol.toString()],
+      ])
+    );
+    expect(opened.baselines).toHaveLength(2);
+
+    for (const a of data.stateApprovalHistory) {
+      if (a._id === "PA") a.approvalRating = 51.5;
+      if (a._id === "OH") a.approvalRating = 58;
+    }
+    // Ohio changes hands mid-round, so its entry drops out.
+    data.electedOfficials.push(official("OH", bob, later(60_000)));
+    await runContests(db, 11, later(3_600_000));
+
+    const round = rounds(data).find((r) => r.kind === "governor_approval")!;
+    expect(round.standings.map((s) => [s.subjectName, s.characterName, s.score])).toEqual([
+      ["Pennsylvania", "Alice", 6.5],
+    ]);
+  });
+
+  it("counts races won by endorsed candidates, once per race, never for self-endorsement", async () => {
+    const race1 = new ObjectId();
+    const race2 = new ObjectId();
+    const race3 = new ObjectId();
+    const npp = new ObjectId();
+    const candCarol = new ObjectId();
+    const candNpp = new ObjectId();
+    const candBob = new ObjectId();
+    const candLoser = new ObjectId();
+    const closes = later(2 * 3_600_000);
+    const { db, data } = fakeDb({
+      ...seed(),
+      elections: [
+        { _id: race1, countryId: "US", status: "resolved", endTurn: 12, endTime: closes },
+        { _id: race2, countryId: "US", status: "resolved", endTurn: 12, endTime: closes },
+        // Closed before the round: ignored.
+        { _id: race3, countryId: "US", status: "resolved", endTurn: 9, endTime: later(-day) },
+      ],
+      electionCandidates: [
+        { _id: candCarol, electionId: race1, characterId: carol },
+        { _id: candLoser, electionId: race1, characterId: new ObjectId() },
+        { _id: candNpp, electionId: race2, characterId: new ObjectId(), isNPP: true, nppId: npp },
+        { _id: candBob, electionId: race2, characterId: bob },
+      ],
+      playerEndorsements: [] as Doc[],
+      electedOfficials: [] as Doc[],
+    });
+    await runContests(db, 10, now);
+    const endorse = (
+      by: ObjectId,
+      electionId: ObjectId,
+      candidateId: ObjectId,
+      extra: Doc = {}
+    ) => ({
+      _id: new ObjectId(),
+      characterId: by,
+      electionId,
+      candidateId,
+      isActive: true,
+      createdAt: later(60_000),
+      ...extra,
+    });
+    data.playerEndorsements.push(
+      endorse(alice, race1, candCarol),
+      endorse(alice, race2, candNpp),
+      // Withdrawn before voting closed: does not count.
+      endorse(carol, race2, candNpp, { isActive: false, withdrawnAt: later(120_000) }),
+      // Backed the loser.
+      endorse(carol, race1, candLoser),
+      // Self-endorsement.
+      endorse(bob, race2, candBob)
+    );
+    data.electedOfficials.push(
+      { _id: new ObjectId(), countryId: "US", characterId: carol, electedAt: closes },
+      { _id: new ObjectId(), countryId: "US", characterId: null, nppId: npp, electedAt: closes },
+      { _id: new ObjectId(), countryId: "US", characterId: bob, electedAt: closes }
+    );
+    await runContests(db, 12, later(3 * 3_600_000));
+
+    const round = rounds(data).find((r) => r.kind === "kingmaker")!;
+    expect(round.standings.map((s) => [s.characterName, s.score])).toEqual([["Alice", 2]]);
+  });
+
+  it("enters only corporations that lost at least a tenth of their value in the week before", async () => {
+    const base = seed();
+    const weekAgo = new Date(now.getTime() - CONTEST_ROUND_MS - 3_600_000);
+    const { db, data } = fakeDb({
+      ...base,
+      corporationHistory: [
+        ...base.corporationHistory,
+        // Mid Co fell from 3M to 2M; Big Co grew; Small Co slipped only 5%.
+        { corporationId: corpMid, turn: 1, marketCap: 3e6, fxRateAtWrite: 1, createdAt: weekAgo },
+        { corporationId: corpBig, turn: 1, marketCap: 2e7, fxRateAtWrite: 1, createdAt: weekAgo },
+        {
+          corporationId: corpSmall,
+          turn: 1,
+          marketCap: 420_000,
+          fxRateAtWrite: 1,
+          createdAt: weekAgo,
+        },
+      ],
+    });
+    await runContests(db, 10, now);
+    const opened = rounds(data).find((r) => r.kind === "corp_comeback")!;
+    expect(opened.baselines.map((b) => b.subjectId)).toEqual([corpMid.toString()]);
+
+    data.corporationHistory.push({
+      corporationId: corpMid,
+      turn: 11,
+      marketCap: 2.5e6,
+      fxRateAtWrite: 1,
+    });
+    await runContests(db, 11, later(3_600_000));
+    const round = rounds(data).find((r) => r.kind === "corp_comeback")!;
+    expect(round.standings.map((s) => [s.subjectName, Math.round(s.score)])).toEqual([
+      ["Mid Co", 25],
+    ]);
+  });
+});
