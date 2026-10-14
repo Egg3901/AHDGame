@@ -11,6 +11,8 @@ import { isSingleplayer } from "@/lib/singleplayer";
 
 /** Events a browser may report. Completions are server-side only. */
 const CLIENT_EVENTS = [
+  "landing_viewed",
+  "landing_cta_clicked",
   "signup_viewed",
   "signup_started",
   "create_character_viewed",
@@ -23,7 +25,8 @@ const token = z.string().regex(/^[a-z0-9_]{1,40}$/);
 
 const bodySchema = z.object({
   event: z.enum(CLIENT_EVENTS),
-  surface: z.enum(["register", "login", "create_character"]).optional(),
+  surface: z.enum(["landing", "register", "login", "create_character"]).optional(),
+  cta: z.enum(["register", "login", "discord", "play_free", "wiki"]).optional(),
   method: z.enum(["email", "google", "discord", "apple"]).optional(),
   reason: token.optional(),
   step: token.optional(),

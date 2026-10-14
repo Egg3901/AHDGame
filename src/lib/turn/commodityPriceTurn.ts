@@ -367,6 +367,10 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
             stateNudges: 1,
             scarcityMult: 1,
             scarcityMultByCountry: 1,
+            // Momentum-mode ratchet (commodityFixStage >= 1) reads its
+            // trailing imbalance window back from the previous turn.
+            scarcityImbalanceHistory: 1,
+            scarcityImbalanceHistoryByCountry: 1,
             // Plants household re-anchor: prior global supply for the
             // PLANTS_HOUSEHOLD_SUPPLY_CAP clamp.
             globalSupply: 1,

@@ -18,6 +18,15 @@ export interface ModNote {
 }
 
 export interface User {
+  /**
+   * Coarse first-party record of where the account came from (referring
+   * domain and campaign tags only), copied from the acquisition cookie at
+   * signup. Absent for accounts created before it existed or with no
+   * external source. See @/lib/analytics/acquisition.
+   */
+  acquisition?: import("@/lib/analytics/acquisition").Acquisition;
+  /** Start of the last UTC day the account loaded the game (written at most daily). */
+  lastSeenAt?: Date;
   /** Bounded game navigation context for support, without raw device identifiers. */
   supportRecentVisits?: import("@/lib/tickets/intakeContext").TicketVisit[];
   _id: ObjectId;

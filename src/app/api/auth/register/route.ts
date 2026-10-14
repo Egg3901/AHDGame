@@ -1,5 +1,10 @@
 import { NextResponse } from "next/server";
 import { captureIntakeEvent } from "@/lib/analytics/intakeEvents";
+import {
+  ACQUISITION_COOKIE,
+  acquisitionEventProperties,
+  parseAcquisition,
+} from "@/lib/analytics/acquisition";
 import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { timingSafeCompare } from "@/lib/api/timingSafeCompare";
 import bcrypt from "bcryptjs";
@@ -308,7 +313,9 @@ export async function POST(request: Request) {
     const observedAt = new Date();
 
     // Create player user
+    const acquisition = parseAcquisition(cookieStore.get(ACQUISITION_COOKIE)?.value);
     const result = await usersCollection.insertOne({
+      ...(acquisition ? { acquisition } : {}),
       email: email.toLowerCase(),
       username: username.toLowerCase(),
       displayName: username,
@@ -361,6 +368,7 @@ export async function POST(request: Request) {
       await captureIntakeEvent("account_registered", {
         auth_provider: "email",
         has_referral: Boolean(referredByObjectId),
+        ...acquisitionEventProperties(acquisition),
       });
     }
 

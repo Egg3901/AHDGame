@@ -558,6 +558,50 @@ describe("analytics fan-out", () => {
     }
   );
 
+  it("records account_created for a same-day OAuth signup from the provider marker", async () => {
+    state.consent = "accepted";
+    const cookies = { value: "theme=dark; ahd-new-account=google" };
+    vi.stubGlobal("document", {
+      get cookie() {
+        return cookies.value;
+      },
+      set cookie(next: string) {
+        if (next.startsWith("ahd-new-account=;")) cookies.value = "theme=dark";
+      },
+    });
+    const { setAnalyticsAccount } = await import("./accountContext");
+    setAnalyticsAccount({
+      id: "stable-account-id",
+      signupDate: new Date().toISOString().slice(0, 10),
+    });
+    const { capturePendingAccountCreated } = await import("./capture");
+    await capturePendingAccountCreated();
+    expect(state.amplitude.track).toHaveBeenCalledWith(
+      "account_created",
+      expect.objectContaining({ auth_provider: "google" })
+    );
+    expect(cookies.value).toBe("theme=dark");
+  });
+
+  it("ignores the OAuth marker for an account that is not new today", async () => {
+    state.consent = "accepted";
+    const cookies = { value: "ahd-new-account=discord" };
+    vi.stubGlobal("document", {
+      get cookie() {
+        return cookies.value;
+      },
+      set cookie(next: string) {
+        if (next.startsWith("ahd-new-account=;")) cookies.value = "";
+      },
+    });
+    const { setAnalyticsAccount } = await import("./accountContext");
+    setAnalyticsAccount({ id: "stable-account-id", signupDate: "2026-01-01" });
+    const { capturePendingAccountCreated } = await import("./capture");
+    await capturePendingAccountCreated();
+    expect(state.amplitude.track).not.toHaveBeenCalled();
+    expect(cookies.value).toBe("");
+  });
+
   it("resets Amplitude on logout and captures nothing until a fresh account is known", async () => {
     state.consent = "accepted";
     await identifyPlayer();

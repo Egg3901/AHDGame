@@ -15,6 +15,8 @@ import { getServerPosthogClient } from "./serverPosthog";
  */
 export const INTAKE_EVENTS = [
   // Page surfaces
+  "landing_viewed",
+  "landing_cta_clicked",
   "signup_viewed",
   "signup_started",
   "create_character_viewed",

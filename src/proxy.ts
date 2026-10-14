@@ -8,6 +8,12 @@ import { CHARACTER_GATE_COOKIE, isCharacterGatedPath } from "@/lib/auth/characte
 import { isLoopbackOrigin, isSingleplayer, singleplayerSessionClaims } from "@/lib/singleplayer";
 import { getAuthUserFromToken, verifyAuthToken, type AuthUser } from "@/lib/auth";
 import { errorResponse } from "@/lib/api/errors";
+import {
+  ACQUISITION_COOKIE,
+  ACQUISITION_COOKIE_MAX_AGE_SECONDS,
+  acquisitionFromRequest,
+  serializeAcquisition,
+} from "@/lib/analytics/acquisition";
 
 // Well-known root files that must never be rewritten under /wiki on the
 // subdomain — /robots.txt would otherwise hit the wiki [slug] route and serve
@@ -101,6 +107,41 @@ function passthrough(request: NextRequest): NextResponse {
   requestHeaders.set("x-pathname", request.nextUrl.pathname);
   requestHeaders.set("x-search", request.nextUrl.search);
   return NextResponse.next({ request: { headers: requestHeaders } });
+}
+
+/**
+ * Remember where a logged-out visitor first arrived from (see
+ * @/lib/analytics/acquisition). Set once; never overwritten, never for a
+ * signed-in request, and only when the visit is external or tagged.
+ */
+function withAcquisitionCookie(
+  request: NextRequest,
+  response: NextResponse,
+  host: string
+): NextResponse {
+  const hasAuth = request.cookies.has(AUTH_COOKIE_NAME);
+  if (hasAuth || request.method !== "GET" || request.cookies.has(ACQUISITION_COOKIE)) {
+    return response;
+  }
+  const onWikiHost = host.startsWith("wiki.");
+  const acquisition = acquisitionFromRequest({
+    pathname: onWikiHost ? "/wiki" : request.nextUrl.pathname,
+    searchParams: request.nextUrl.searchParams,
+    referer: request.headers.get("referer"),
+  });
+  if (!acquisition) return response;
+  response.cookies.set(ACQUISITION_COOKIE, serializeAcquisition(acquisition), {
+    httpOnly: true,
+    secure: request.nextUrl.protocol === "https:",
+    sameSite: "lax",
+    path: "/",
+    maxAge: ACQUISITION_COOKIE_MAX_AGE_SECONDS,
+    // Shared with the wiki subdomain, where search traffic often lands first.
+    ...(/(^|\.)ahousedividedgame\.com$/.test(host.split(":")[0])
+      ? { domain: "ahousedividedgame.com" }
+      : {}),
+  });
+  return response;
 }
 
 /** `/api/auth/<provider>/callback`: safe to move between hosts as a GET. */
@@ -210,11 +251,11 @@ export async function proxy(request: NextRequest) {
     if (pathname.startsWith("/wiki") || WIKI_PASSTHROUGH_PATHS.has(pathname)) {
       // Dynamic /wiki/* hrefs intentionally retain the prefix so they resolve
       // on both ahousedividedgame.com/wiki/* and this subdomain.
-      return withRailwayNoindex(passthrough(request), host);
+      return withAcquisitionCookie(request, withRailwayNoindex(passthrough(request), host), host);
     }
     const url = request.nextUrl.clone();
     url.pathname = `/wiki${pathname === "/" ? "" : pathname}`;
-    return NextResponse.rewrite(url);
+    return withAcquisitionCookie(request, NextResponse.rewrite(url), host);
   }
 
   // Character-creation gate: a logged-in player with no active character is
@@ -272,7 +313,8 @@ export async function proxy(request: NextRequest) {
     }
   }
 
-  return withRailwayNoindex(passthrough(request), host);
+  const response = withRailwayNoindex(passthrough(request), host);
+  return singleplayer ? response : withAcquisitionCookie(request, response, host);
 }
 
 /**

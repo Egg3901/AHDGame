@@ -120,45 +120,54 @@ export function CookieConsentBanner() {
 
   if (consent === UNSET || consent !== null) return null;
 
+  // Small screens: a compact sheet (tighter type and padding, full-width
+  // buttons side by side, height capped) plus an in-flow spacer, so the
+  // register and login forms can always scroll clear of it. On a 390px phone
+  // the old card covered the sign-in buttons. Copy, choices and defaults are
+  // unchanged.
   return (
-    <div
-      role="dialog"
-      aria-live="polite"
-      aria-label="Cookie consent"
-      className="fixed inset-x-3 bottom-[calc(4rem+env(safe-area-inset-bottom))] z-[150] mx-auto max-w-3xl rounded-xl border border-card-border bg-card shadow-modal sm:inset-x-4 sm:bottom-[calc(5rem+env(safe-area-inset-bottom))]"
-    >
-      <div className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:gap-4">
-        <div className="flex-1 text-sm text-muted leading-relaxed">
-          <p className="mb-1 font-semibold text-foreground">We use cookies</p>
-          <p>
-            We use essential cookies to keep you signed in and the game running. With your
-            permission, PostHog records how you use the game and we may record a sample of sessions
-            to find confusing flows and technical problems. You can reject optional analytics or
-            change your choice at any time. See our{" "}
-            <Link href="/privacy" className="text-primary hover:underline">
-              Privacy policy
-            </Link>
-            .
-          </p>
-        </div>
-        <div className="flex shrink-0 gap-2">
-          <Button
-            variant="ghost"
-            onClick={() => setConsent("rejected")}
-            aria-label="Reject non-essential cookies"
-          >
-            Reject
-          </Button>
-          <Button
-            variant="primary"
-            className="min-w-0 px-4"
-            onClick={() => setConsent("accepted")}
-            aria-label="Accept all cookies"
-          >
-            Accept all
-          </Button>
+    <>
+      <div aria-hidden="true" className="h-56 sm:hidden" />
+      <div
+        role="dialog"
+        aria-live="polite"
+        aria-label="Cookie consent"
+        className="fixed inset-x-2 bottom-[calc(4rem+env(safe-area-inset-bottom))] z-[150] mx-auto max-h-[40vh] max-w-3xl overflow-y-auto rounded-xl border border-card-border bg-card shadow-modal sm:inset-x-4 sm:bottom-[calc(5rem+env(safe-area-inset-bottom))] sm:max-h-none sm:overflow-visible"
+      >
+        <div className="flex flex-col gap-2 p-3 sm:flex-row sm:items-center sm:gap-4 sm:p-4">
+          <div className="flex-1 text-xs leading-snug text-muted sm:text-sm sm:leading-relaxed">
+            <p className="mb-0.5 font-semibold text-foreground sm:mb-1">We use cookies</p>
+            <p>
+              We use essential cookies to keep you signed in and the game running. With your
+              permission, PostHog records how you use the game and we may record a sample of
+              sessions to find confusing flows and technical problems. You can reject optional
+              analytics or change your choice at any time. See our{" "}
+              <Link href="/privacy" className="text-primary hover:underline">
+                Privacy policy
+              </Link>
+              .
+            </p>
+          </div>
+          <div className="flex shrink-0 gap-2">
+            <Button
+              variant="ghost"
+              className="flex-1 sm:flex-none"
+              onClick={() => setConsent("rejected")}
+              aria-label="Reject non-essential cookies"
+            >
+              Reject
+            </Button>
+            <Button
+              variant="primary"
+              className="min-w-0 flex-1 px-4 sm:flex-none"
+              onClick={() => setConsent("accepted")}
+              aria-label="Accept all cookies"
+            >
+              Accept all
+            </Button>
+          </div>
         </div>
       </div>
-    </div>
+    </>
   );
 }
