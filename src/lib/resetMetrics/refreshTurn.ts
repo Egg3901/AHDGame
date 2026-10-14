@@ -67,7 +67,9 @@ export async function refreshResetMetricSnapshotsTurn(input: {
           asOfTurn: 1,
           lastRefreshFromTurn: 1,
           observations: 1,
-          ...(recordHistory ? { history: 1 } : {}),
+          // History carries each metric's opening value, which policy drift
+          // (collectOwnerReadings) anchors to; it is written back only on cadence.
+          history: 1,
         },
       }
     )
