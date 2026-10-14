@@ -4,7 +4,7 @@ title: Better measurement of how new players arrive and settle in
 summary: Staff can now see every new account's path from sign-up to character to returning, and which sites send new players.
 tags: [onboarding]
 badges: [minor]
-areas: [backend, admin]
+areas: [fullstack]
 ---
 
 The admin traffic page has a new-player intake panel. It shows every new account in the chosen window, whatever the sign-in method: how many created a character within an hour and within a day, how many came back after their first day and after a week, and which sign-in methods and referring sites they came from.
