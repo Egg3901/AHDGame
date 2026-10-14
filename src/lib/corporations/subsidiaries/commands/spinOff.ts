@@ -160,7 +160,8 @@ export async function spinOff(
       db,
       parent.countryId,
       parent.headquartersState,
-      forcedNppId
+      forcedNppId,
+      sectorType
     );
     ceoUserId = SYSTEM_USER; // fully-NPP-run corp — system placeholder, NOT parent
     ceoTypeResolved = "npp";

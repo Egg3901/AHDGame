@@ -449,7 +449,6 @@
     "e5e6daff7cb93d61a8c82c61881f3566f5b813ceacaeee7a3ecf9eed3e85c0dc": 1,
     "9edf0b005e0024a70839abb4130526eb1f4090a9913fec098cbc3d8ba283b961": 1,
     "e0dcd686b5aae26b5f2e798f633f9de48ece861340608bc38082a653367f9ebb": 1,
-    "a6377418191d8a766c4451693c14ae589f1de55f35f2f81b32dff79dedfb2e99": 1,
     "7c494a57afc572397bca34f03e8d0f63a81684045a9cc2c616c0d1a2f9bcafe1": 1,
     "ba7f904522eec0077999fd4cc7ccafff2e2cfca0140d1c1cabd0d88003d4ad2a": 1,
     "52ae8856c0f5209b4c6ef90ae370b4b34d012d40e73f4455affddb2d773e3598": 1,
@@ -3899,13 +3898,6 @@
       "owner": "applyMinisterialPlanForMinister",
       "expression": "membersCol.updateOne({ _id: minister._id, ministerialActions: { $gte: 1 } }, { $inc: { ministerialActions: -1 } })",
       "fingerprint": "e0dcd686b5aae26b5f2e798f633f9de48ece861340608bc38082a653367f9ebb"
-    },
-    {
-      "file": "src/lib/nppAutonomy/ministerialGovernance.ts",
-      "operation": "insertOne",
-      "owner": "applyMinisterialPlanForMinister",
-      "expression": "ordersCol.insertOne(order)",
-      "fingerprint": "a6377418191d8a766c4451693c14ae589f1de55f35f2f81b32dff79dedfb2e99"
     },
     {
       "file": "src/lib/nppAutonomy/ministerialGovernance.ts",
