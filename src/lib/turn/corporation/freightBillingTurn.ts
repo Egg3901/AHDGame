@@ -27,6 +27,7 @@ import {
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import type { MarketContext } from "@/lib/market/marketContext";
 import { TURNS_PER_DAY } from "@/lib/constants/corporations";
+import { ownRouteGroupRoot } from "@/lib/market/internalSupply/rules";
 import type { CorporationLookups } from "./types";
 import { COMMODITY_TYPES } from "@/lib/constants/commodities";
 import { commodityDemandCalibration } from "@/lib/constants/commodityDemandCalibration";
@@ -58,6 +59,7 @@ export function buildFreightBillingBySector(args: {
     | "freightUnitPriceByDestState"
     | "freightSupplyByOriginState"
     | "ownRouteFreightByCorp"
+    | "ownRouteGroupMembersByRoot"
   >;
   currentTurn: number;
   plantsEnabled: boolean;
@@ -68,6 +70,23 @@ export function buildFreightBillingBySector(args: {
   const freightChargesByDestState = lookups.freightChargesByDestState ?? new Map();
   const haulRevenueByOriginState = lookups.freightHaulRevenueByOriginState ?? new Map();
   const ownRouteFreightByCorp = lookups.ownRouteFreightByCorp ?? new Map();
+  const groupRouteStatesByCorp = new Map<string, Set<string>>();
+  for (const [routeIdentity, byDest] of ownRouteFreightByCorp) {
+    const groupRoot = ownRouteGroupRoot(routeIdentity);
+    if (!groupRoot) continue;
+    const members = new Set(lookups.ownRouteGroupMembersByRoot?.get(groupRoot) ?? []);
+    // A route receipt remains billable to its root if the saved policy changed
+    // after the haul. Current group members share the charge when still known.
+    members.add(groupRoot);
+    for (const [stateId, byCommodity] of byDest) {
+      if (!byCommodity.size) continue;
+      for (const corporationId of members) {
+        const states = groupRouteStatesByCorp.get(corporationId) ?? new Set<string>();
+        states.add(stateId);
+        groupRouteStatesByCorp.set(corporationId, states);
+      }
+    }
+  }
 
   const sectors: FreightBillingSectorUnits[] = [];
   if (
@@ -85,7 +104,8 @@ export function buildFreightBillingBySector(args: {
         const stateCharges = freightChargesByDestState.get(sector.stateId);
         const stateRevenue = haulRevenueByOriginState.get(sector.stateId) ?? 0;
         const ownRouteCharges = ownRouteFreightByCorp.get(corpId)?.get(sector.stateId);
-        if (!stateCharges && !(stateRevenue > 0) && !ownRouteCharges) continue;
+        const groupRouteCharge = groupRouteStatesByCorp.get(corpId)?.has(sector.stateId);
+        if (!stateCharges && !(stateRevenue > 0) && !ownRouteCharges && !groupRouteCharge) continue;
         const hostCode = resolveSectorHostCurrencyCode(sector, corp);
         const hostRate = fxRateForSectorHostFromMap(sector, corp, lookups.exchangeRatesByCurrency);
         const units = computeSectorCommodityUnits(
@@ -134,6 +154,7 @@ export function buildFreightBillingBySector(args: {
     freightSupplyUnitsByOriginState: lookups.freightSupplyByOriginState ?? new Map(),
     sectors,
     directChargesByCorp: ownRouteFreightByCorp,
+    groupCorporationsByRoot: lookups.ownRouteGroupMembersByRoot,
   });
 }
 

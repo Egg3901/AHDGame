@@ -25,6 +25,7 @@
  */
 
 import type { CommodityType } from "@/lib/constants/commodities";
+import { ownRouteGroupRoot } from "@/lib/market/internalSupply/rules";
 
 /**
  * Ceiling on a sector's freight bill for one commodity, as a share of the
@@ -93,6 +94,8 @@ export function apportionFreightBilling(inputs: {
     string,
     ReadonlyMap<string, ReadonlyMap<CommodityType, number>>
   >;
+  /** Eligible group members share a recorded group-route freight charge. */
+  groupCorporationsByRoot?: ReadonlyMap<string, ReadonlySet<string>>;
 }): FreightBillingApportionment {
   const {
     freightChargesByDestState,
@@ -103,6 +106,7 @@ export function apportionFreightBilling(inputs: {
     freightSupplyUnitsByOriginState,
     unitPriceByDestState,
     directChargesByCorp,
+    groupCorporationsByRoot,
   } = inputs;
   const positiveFinite = (value: number | undefined): number =>
     typeof value === "number" && Number.isFinite(value) ? Math.max(0, value) : 0;
@@ -163,8 +167,12 @@ export function apportionFreightBilling(inputs: {
 
   for (const [corporationId, byDest] of directChargesByCorp ?? []) {
     for (const [stateId, byCommodity] of byDest) {
+      const groupRoot = ownRouteGroupRoot(corporationId);
+      const billedCorporations = groupRoot
+        ? (groupCorporationsByRoot?.get(groupRoot) ?? new Set([groupRoot]))
+        : new Set([corporationId]);
       const own = (sectorsByState.get(stateId) ?? []).filter(
-        (sector) => sector.corporationId === corporationId
+        (sector) => !!sector.corporationId && billedCorporations.has(sector.corporationId)
       );
       for (const [commodity, rawCharge] of byCommodity) {
         const charge = positiveFinite(rawCharge);

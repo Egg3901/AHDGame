@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { buildOwnRoutes } from "./ownRoutes";
 import type { CommodityType } from "@/lib/constants/commodities";
-import type { InternalSupplyPolicy } from "@/lib/market/internalSupply/rules";
+import {
+  resolveSupplyPolicies,
+  type InternalSupplyPolicy,
+} from "@/lib/market/internalSupply/rules";
 
 const policy = (priority: InternalSupplyPolicy["priority"]) => ({
   root: "x",
@@ -149,4 +152,92 @@ it("keeps fallback origins for opted-in own supply instead of spending demand on
     hops,
   });
   expect(routes.map((r) => r.originStateId)).toEqual(["NV", "MN"]);
+});
+
+it("plans one cross-state group route across wholly owned nested subsidiaries", () => {
+  const resolved = resolveSupplyPolicies([
+    {
+      id: "parent",
+      totalShares: 100,
+      holders: [{ shares: 100 }],
+      policy: { priority: "group", discount: 0.1, ownFirstAcrossStates: true },
+    },
+    { id: "child", totalShares: 100, holders: [{ corporationId: "parent", shares: 100 }] },
+    { id: "nested", totalShares: 100, holders: [{ corporationId: "child", shares: 100 }] },
+    {
+      id: "minority",
+      totalShares: 100,
+      holders: [{ corporationId: "parent", shares: 99 }, { shares: 1 }],
+    },
+    { id: "unrelated", totalShares: 100, holders: [{ shares: 100 }] },
+  ]);
+  const routes = buildOwnRoutes({
+    sectors: [
+      { sectorId: "parent-mine", corporationId: "parent", stateId: "MN" },
+      { sectorId: "child-mine", corporationId: "child", stateId: "NV" },
+      { sectorId: "nested-plant", corporationId: "nested", stateId: "CA" },
+      { sectorId: "minority-plant", corporationId: "minority", stateId: "CA" },
+      { sectorId: "unrelated-plant", corporationId: "unrelated", stateId: "CA" },
+    ],
+    supplyBySector: m([
+      ["parent-mine", [["rare_earth", 40]]],
+      ["child-mine", [["rare_earth", 30]]],
+      ["minority-plant", [["rare_earth", 100]]],
+      ["unrelated-plant", [["rare_earth", 100]]],
+    ]),
+    inputDemandBySector: m([
+      ["nested-plant", [["rare_earth", 60]]],
+      ["minority-plant", [["rare_earth", 100]]],
+      ["unrelated-plant", [["rare_earth", 100]]],
+    ]),
+    policies: resolved,
+    stateToCountry,
+    hops,
+  });
+  expect(routes.map((route) => route.corporationId)).toEqual(["group:parent", "group:parent"]);
+  expect(routes.map((route) => [route.originStateId, route.units])).toEqual([
+    ["NV", 30],
+    ["MN", 40],
+  ]);
+  expect(routes.every((route) => route.destinationDemandUnits === 60)).toBe(true);
+  expect(routes.every((route) => route.ownFirstAcrossStates === true)).toBe(true);
+});
+
+it.each([
+  ["disabled", { priority: "group" as const, discount: 0, ownFirstAcrossStates: false }],
+  ["missing", { priority: "group" as const, discount: 0 }],
+])("keeps %s group shipping on the legacy own-company route", (_label, policyValue) => {
+  const policies = resolveSupplyPolicies([
+    {
+      id: "parent",
+      totalShares: 100,
+      holders: [{ shares: 100 }],
+      policy: policyValue,
+    },
+    { id: "child", totalShares: 100, holders: [{ corporationId: "parent", shares: 100 }] },
+  ]);
+  const routes = buildOwnRoutes({
+    sectors: [
+      { sectorId: "mine", corporationId: "parent", stateId: "MN" },
+      { sectorId: "own-plant", corporationId: "parent", stateId: "CA" },
+      { sectorId: "child-plant", corporationId: "child", stateId: "CA" },
+    ],
+    supplyBySector: m([["mine", [["iron", 100]]]]),
+    inputDemandBySector: m([
+      ["own-plant", [["iron", 30]]],
+      ["child-plant", [["iron", 60]]],
+    ]),
+    policies,
+    stateToCountry,
+    hops,
+  });
+  expect(routes).toEqual([
+    {
+      commodity: "iron",
+      corporationId: "parent",
+      originStateId: "MN",
+      destStateId: "CA",
+      units: 30,
+    },
+  ]);
 });

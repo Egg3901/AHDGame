@@ -218,3 +218,50 @@ it("shows only this company's recorded hauls with separately dated anchor freigh
     },
   ]);
 });
+
+it("shows an inherited group haul without exposing the parent's legacy own-only haul", async () => {
+  const child = {
+    ...corp,
+    shareholders: [{ corporationId: parentId, shares: 100 }],
+    internalSupplyPolicy: undefined,
+  };
+  const parent = {
+    _id: parentId,
+    totalShares: 100,
+    shareholders: [{ shares: 100 }],
+    internalSupplyPolicy: { priority: "group", discount: 0.1, ownFirstAcrossStates: true },
+  };
+  db.collectionMocks.corporations.find.mockReturnValue({ toArray: async () => [child, parent] });
+  db.collection("sourcingNetworkLoad");
+  db.collectionMocks.sourcingNetworkLoad.findOne.mockResolvedValue({
+    turn: 14,
+    ownRouteDelivered: [
+      {
+        corporationId: "group:" + parentId.toString(),
+        commodity: "rare_earth",
+        originStateId: "IL",
+        destStateId: "CA",
+        units: 15,
+        freightCharge: 75,
+      },
+      {
+        corporationId: parentId.toString(),
+        commodity: "rare_earth",
+        originStateId: "IL",
+        destStateId: "CA",
+        units: 50,
+        freightCharge: 900,
+      },
+    ],
+  });
+  const body = await (await GET(request("GET"), { params })).json();
+  expect(body.ownHauls).toEqual([
+    {
+      commodity: "rare_earth",
+      originStateId: "IL",
+      destStateId: "CA",
+      units: 15,
+      freightPerUnitAnchor: 5,
+    },
+  ]);
+});

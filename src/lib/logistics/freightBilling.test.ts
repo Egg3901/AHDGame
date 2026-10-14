@@ -362,3 +362,53 @@ describe("apportionFreightBilling — own-company route freight", () => {
     expect(billed + r.unapportionedCharges).toBeCloseTo(540 + 10_000);
   });
 });
+
+describe("apportionFreightBilling — group route freight", () => {
+  it("bills destination group members and conserves the recorded haul revenue", () => {
+    const result = apportionFreightBilling({
+      freightChargesByDestState: new Map(),
+      haulRevenueByOriginState: new Map([["WY", 500]]),
+      freightSupplyUnitsByOriginState: new Map([["WY", 1_000]]),
+      demandUnitsByDestState: new Map(),
+      sectors: [
+        sector({
+          sectorId: "parent-plant",
+          stateId: "CA",
+          corporationId: "parent",
+          demandUnitsByCommodity: demand({ rare_earth: 20 }),
+        }),
+        sector({
+          sectorId: "child-plant",
+          stateId: "CA",
+          corporationId: "child",
+          demandUnitsByCommodity: demand({ rare_earth: 80 }),
+        }),
+        sector({
+          sectorId: "unrelated-plant",
+          stateId: "CA",
+          corporationId: "other",
+          demandUnitsByCommodity: demand({ rare_earth: 1_000 }),
+        }),
+        sector({
+          sectorId: "freight-network",
+          stateId: "WY",
+          corporationId: "haulier",
+          freightSupplyUnits: 1_000,
+        }),
+      ],
+      directChargesByCorp: new Map([
+        ["group:parent", new Map([["CA", demand({ rare_earth: 500 })]])],
+      ]),
+      groupCorporationsByRoot: new Map([["parent", new Set(["parent", "child"])]]),
+    });
+    expect(result.chargeBySectorId.get("parent-plant")).toBeCloseTo(100);
+    expect(result.chargeBySectorId.get("child-plant")).toBeCloseTo(400);
+    expect(result.chargeBySectorId.has("unrelated-plant")).toBe(false);
+    expect(result.creditBySectorId.get("freight-network")).toBeCloseTo(500);
+    expect(
+      [...result.chargeBySectorId.values()].reduce((sum, value) => sum + value, 0)
+    ).toBeCloseTo([...result.creditBySectorId.values()].reduce((sum, value) => sum + value, 0));
+    expect(result.unapportionedCharges).toBe(0);
+    expect(result.unapportionedHaulRevenue).toBe(0);
+  });
+});
