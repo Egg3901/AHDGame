@@ -15,3 +15,6 @@ areas: [backend]
   long-running fixture cannot hold up a unit test shard.
 - Require successful bootstrap qualification in the existing verify gate;
   failed, cancelled, skipped or missing results block the full check.
+- Let the default-branch CodeQL scan finish so cancelled scans cannot disable
+  automatic incremental analysis for later pull requests. Superseded pull
+  request scans still cancel, and security query coverage stays unchanged.
