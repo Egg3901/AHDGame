@@ -23,12 +23,14 @@ const VALUE_TONE: Record<TreasuryTone, string> = {
 /** A single stat in the fiscal stat strip (label, value, optional sub + delta). */
 export function StatTile({
   label,
+  labelTitle,
   value,
   sub,
   tone = "foreground",
   delta,
 }: {
   label: string;
+  labelTitle?: string;
   value: string;
   sub?: ReactNode;
   tone?: TreasuryTone;
@@ -36,7 +38,9 @@ export function StatTile({
 }) {
   return (
     <div className="flex min-w-[120px] flex-col justify-start gap-1 bg-card px-4 py-3">
-      <span className="whitespace-nowrap text-body-sm font-medium text-muted">{label}</span>
+      <span className="whitespace-nowrap text-body-sm font-medium text-muted" title={labelTitle}>
+        {label}
+      </span>
       <div className="flex flex-col">
         <div className="flex items-baseline gap-2">
           <span
