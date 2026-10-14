@@ -138,7 +138,7 @@ export default function HeroPanel({
       </div>
       {/* Stats strip */}
       <div className="flex items-center overflow-x-auto divide-x divide-card-border border-t border-card-border">
-        <div className="flex flex-col px-5 py-3 min-w-max">
+        <div className="flex flex-1 flex-col px-5 py-3 min-w-max">
           <span className="text-body-sm font-medium text-muted">Market price</span>
           <span className="text-base font-bold tabular-nums">{priceDisplay}</span>
           <span
@@ -155,7 +155,7 @@ export default function HeroPanel({
           </span>
           <span className="mt-1 text-[10px] text-muted">{marketScope.marketCaption}</span>
         </div>
-        <div className="flex flex-col px-5 py-3 min-w-max">
+        <div className="flex flex-1 flex-col px-5 py-3 min-w-max">
           <span className="text-body-sm font-medium text-muted">
             {activeCountry ? "Regions" : "Rolling 1Y"}
           </span>
@@ -186,7 +186,7 @@ export default function HeroPanel({
             </>
           )}
         </div>
-        <div className="flex flex-col px-5 py-3 min-w-max">
+        <div className="flex flex-1 flex-col px-5 py-3 min-w-max">
           <span className="text-body-sm font-medium text-muted">
             {activeCountry ? "National supply" : "Global supply"}
           </span>
@@ -195,7 +195,7 @@ export default function HeroPanel({
           </span>
           <span className="text-xs text-muted">per day</span>
         </div>
-        <div className="flex flex-col px-5 py-3 min-w-max">
+        <div className="flex flex-1 flex-col px-5 py-3 min-w-max">
           <span className="text-body-sm font-medium text-muted">
             {activeCountry ? "National demand" : "Global demand"}
           </span>
@@ -204,7 +204,7 @@ export default function HeroPanel({
           </span>
           <span className="text-xs text-muted">per day</span>
         </div>
-        <div className="flex flex-col px-5 py-3 min-w-max">
+        <div className="flex flex-1 flex-col px-5 py-3 min-w-max">
           <span className="text-body-sm font-medium text-muted">Balance</span>
           <span className={`text-base font-bold tabular-nums ${balanceColor}`}>
             {balance > 0 ? "+" : ""}

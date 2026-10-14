@@ -326,6 +326,7 @@ export const GET = withNoStore(async () => {
           role: user?.role ?? "player",
           theme: user?.theme ?? undefined,
           statusBarLayout: user?.statusBarLayout ?? undefined,
+          corpOverviewMode: user?.corpOverviewMode ?? undefined,
           hasCharacter: !!character || !!imperialCharacter,
           isImperial: !!imperialCharacter && isImperialMode,
           forexEnabled,

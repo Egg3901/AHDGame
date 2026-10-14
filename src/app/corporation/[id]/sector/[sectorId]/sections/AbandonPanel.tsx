@@ -36,7 +36,7 @@ export default function AbandonPanel({
           <div>
             <h3 className="text-sm font-semibold text-error">Abandon sector</h3>
             <p className="text-xs text-muted mt-0.5">
-              Revenue returns to the unowned pool. This cannot be undone.
+              An NPP operator takes over most of its built plants. This cannot be undone.
             </p>
           </div>
           <button
@@ -58,7 +58,7 @@ export default function AbandonPanel({
         </p>
         <p className="text-xs text-muted">
           {financials
-            ? `${fmtMoney(Math.round(financials.revenue / 24))}/turn in revenue will return to the unowned pool.`
+            ? `You give up ${fmtMoney(Math.round(financials.revenue / 24))}/turn in revenue. An NPP operator takes over most of the built plants.`
             : "Are you sure? This cannot be undone."}
         </p>
         <div className="flex items-center gap-3">

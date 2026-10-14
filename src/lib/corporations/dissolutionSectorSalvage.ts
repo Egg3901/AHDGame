@@ -13,9 +13,9 @@ import { loadWorldEraUnitScale } from "@/lib/currency/gdpAnchorRate";
 /**
  * Salvage value (in ₳) a dissolving corp recovers from its operating sectors.
  *
- * On dissolution the sectors are abandoned to the unowned market — there is no
- * going-concern buyer — so only {@link DISSOLUTION_SECTOR_SALVAGE_FRACTION} of
- * their value is realized as cash for the payout pool. Paying the full value
+ * On dissolution the sectors pass to NPP successors (or the unowned market)
+ * with no going-concern sale, so only {@link DISSOLUTION_SECTOR_SALVAGE_FRACTION}
+ * of their value is realized as cash for the payout pool. Paying the full value
  * would mint the corp's enterprise value (the money-laundering exploit the
  * salvage haircut exists to prevent).
  *

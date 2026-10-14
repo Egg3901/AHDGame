@@ -152,6 +152,10 @@ export const actionsViewModeSchema = z.object({
   actionsViewMode: z.enum(["cards", "compact"]),
 });
 
+export const corpOverviewModeSchema = z.object({
+  corpOverviewMode: z.enum(["simple", "pro"]),
+});
+
 export const displayCurrencyPreferenceSchema = z.object({
   displayCurrencyPreference: z.enum([
     "local",

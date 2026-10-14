@@ -31,6 +31,7 @@ import { defect as poolCountryAttribution } from "./defects/AHD-1271-pool-countr
 import { defect as natCorpSplitSectorType } from "./defects/AHD-1271-natcorp-split-sector-type";
 import { defect as mergedPartyOrg } from "./defects/AHD-1372-merged-party-org";
 import { defect as freightOverbillingRestitution } from "./defects/AHD-1448-freight-overbilling-restitution";
+import { defect as dissolutionNppSuccessors } from "./defects/AHD-dissolution-npp-successors";
 import type { Defect } from "./types";
 
 export const DEFECTS: Defect[] = [
@@ -78,6 +79,9 @@ export const DEFECTS: Defect[] = [
   // Ticket #1448: canonical freight billing charged a full day's bill every
   // hourly turn. Credits overcharged buyers once; haulers keep their surplus.
   freightOverbillingRestitution,
+  // Dissolutions used to delete their plants into the unowned pool. Rebuilds
+  // NPP successors for past exits from the restore tokens they left behind.
+  dissolutionNppSuccessors,
 ];
 
 export function getDefect(id: string): Defect | undefined {

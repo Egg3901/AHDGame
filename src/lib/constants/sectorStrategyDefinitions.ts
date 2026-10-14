@@ -1090,13 +1090,18 @@ export const SECTOR_STRATEGIES: Record<OperatingSectorType, SectorStrategy[]> = 
       // and hitting the +30 surplus cap regardless of scarcity. Focused strategies now
       // supply 4–5× the per-resource rate. Removed ordnance demand (not a realistic
       // input for standard diversified mining; blasting explosives should be a chemicals cost).
+      // Timber 0.12 to 0.03, the 0.09 moved to oil and gas: diversified mines
+      // made most of the world's timber as a byproduct, against demand of ~24k
+      // units a turn, so timber sat near its price floor with a 3.9M stockpile
+      // and the dedicated loggers ran at a loss. Oil and gas are the shortest
+      // raw resources. Total output share is unchanged.
       supply: {
         iron: 0.25,
         coal: 0.22,
-        oil: 0.14,
+        oil: 0.185,
         rare_earth: 0.14,
-        natural_gas: 0.14,
-        timber: 0.12,
+        natural_gas: 0.185,
+        timber: 0.03,
       },
       demand: {
         energy: 0.2,

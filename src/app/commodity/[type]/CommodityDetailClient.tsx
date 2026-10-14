@@ -153,7 +153,7 @@ export default function CommodityDetailClient({ initialData }: CommodityDetailCl
 
   return (
     <div className="min-h-screen bg-background pb-16">
-      <main className="mx-auto max-w-4xl px-4 sm:px-6 py-8">
+      <main className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
         <nav className="mb-4 flex items-center gap-1.5 text-sm text-muted" aria-label="Breadcrumb">
           <Link
             href="/country/us/stockmarket?tab=commodities"
@@ -163,12 +163,20 @@ export default function CommodityDetailClient({ initialData }: CommodityDetailCl
           </Link>
           <span aria-hidden>/</span>
           <span className="text-foreground font-medium">{data.label}</span>
-          <Link
-            href={`/commodity/${data.commodity}/offers`}
-            className="ml-auto text-foreground underline decoration-card-border underline-offset-2 hover:decoration-foreground"
-          >
-            Supply offers
-          </Link>
+          <span className="ml-auto flex items-center gap-4">
+            <Link
+              href="/world/trade"
+              className="text-foreground underline decoration-card-border underline-offset-2 hover:decoration-foreground"
+            >
+              World trade ledger
+            </Link>
+            <Link
+              href={`/commodity/${data.commodity}/offers`}
+              className="text-foreground underline decoration-card-border underline-offset-2 hover:decoration-foreground"
+            >
+              Supply offers
+            </Link>
+          </span>
         </nav>
 
         <HeroPanel
@@ -201,13 +209,36 @@ export default function CommodityDetailClient({ initialData }: CommodityDetailCl
         )}
         <DemandDriverBanner demandDriver={data.demandDriver} unit={data.unit} />
         {data.commodity === "freight" && <FreightMarketExplainer />}
-        <SupplyDemandBar
-          supply={marketScope.supply}
-          demand={marketScope.demand}
-          unit={data.unit}
-          marketLabel={marketScope.marketLabel}
-        />
-        {data.flows && <FlowLedgerStrip flows={data.flows} unit={data.unit} />}
+        <div className="grid gap-x-6 lg:grid-cols-3">
+          <div className="min-w-0 lg:col-span-2">
+            <CommodityChart
+              history={data.history}
+              basePrice={data.basePrice}
+              unit={data.unit}
+              scopeLabel={marketScope.activeCountry ? "Global history" : marketScope.marketLabel}
+            />
+          </div>
+          <div className="min-w-0">
+            <SupplyDemandBar
+              supply={marketScope.supply}
+              demand={marketScope.demand}
+              unit={data.unit}
+              marketLabel={marketScope.marketLabel}
+            />
+            {data.flows && <FlowLedgerStrip flows={data.flows} unit={data.unit} />}
+            {heavyLoaded && (
+              <DislocationPanel
+                statePrices={marketScope.statePrices}
+                stateSupply={marketScope.stateSupply}
+                stateDemand={marketScope.stateDemand}
+                stateCountryMap={marketScope.stateCountryMap}
+                basePrice={data.basePrice}
+                capacityByState={marketScope.capacityByState}
+                unit={data.unit}
+              />
+            )}
+          </div>
+        </div>
         {data.capacityByState !== undefined && heavyLoaded && (
           <ResourceAvailabilityPanel
             unit={data.unit}
@@ -226,13 +257,6 @@ export default function CommodityDetailClient({ initialData }: CommodityDetailCl
             )}
           />
         )}
-        <CommodityChart
-          history={data.history}
-          basePrice={data.basePrice}
-          unit={data.unit}
-          scopeLabel={marketScope.activeCountry ? "Global history" : marketScope.marketLabel}
-        />
-
         {heavyLoaded && showAdvancedSections && (
           <div className="mb-6">
             {drillDownCountry ? (
@@ -285,19 +309,6 @@ export default function CommodityDetailClient({ initialData }: CommodityDetailCl
           </div>
         )}
 
-        <a
-          href="/world/trade"
-          className="mb-6 flex items-center justify-between rounded-xl border border-card-border bg-card px-4 py-3 transition-colors hover:border-foreground/30"
-        >
-          <span className="text-[12.5px] font-semibold text-foreground">
-            World trade ledger
-            <span className="ml-2 font-normal text-muted">
-              cross-border balance of trade by nation
-            </span>
-          </span>
-          <span className="text-[11px] text-primary">&rarr;</span>
-        </a>
-
         <TopProducersConsumers
           topProducers={marketScope.topProducers}
           topConsumers={marketScope.topConsumers}
@@ -307,18 +318,6 @@ export default function CommodityDetailClient({ initialData }: CommodityDetailCl
           consumerNote={data.demandDriver?.consumerNote}
           marketLabel={marketScope.marketLabel}
         />
-
-        {heavyLoaded && (
-          <DislocationPanel
-            statePrices={marketScope.statePrices}
-            stateSupply={marketScope.stateSupply}
-            stateDemand={marketScope.stateDemand}
-            stateCountryMap={marketScope.stateCountryMap}
-            basePrice={data.basePrice}
-            capacityByState={marketScope.capacityByState}
-            unit={data.unit}
-          />
-        )}
 
         {heavyLoaded && showAdvancedSections ? (
           <RegionalBreakdown

@@ -5,6 +5,7 @@ import { useCurrency } from "@/contexts/CurrencyContext";
 import { useLocalCurrency } from "@/hooks/useLocalCurrency";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import type { FillRateBand } from "@/lib/corporations/financialFogOfWar";
+import { ROW_ACCENT, type Tone } from "./InlineViz";
 import {
   FILL_BAND_TEXT,
   fillBandSentence,
@@ -45,6 +46,10 @@ export function DenseSection({
         {/* The meta sits beside the heading, not inside it, so the heading's
             accessible name is just the title. */}
         <div className="flex min-w-0 items-baseline gap-2">
+          <span
+            aria-hidden
+            className="h-3 w-[3px] shrink-0 self-center rounded-full bg-primary/80"
+          />
           <h2 className="truncate text-sm font-semibold text-foreground">{title}</h2>
           {meta != null && <span className="text-xs text-muted">{meta}</span>}
         </div>
@@ -63,6 +68,9 @@ export function KVRow({
   action,
   title,
   mono = true,
+  lead = false,
+  accent,
+  mark,
 }: {
   label: ReactNode;
   value: ReactNode;
@@ -73,16 +81,29 @@ export function KVRow({
   title?: string;
   /** Figures render in Geist Mono (design system tenet 2); pass false for words. */
   mono?: boolean;
+  /** A headline figure: larger value, so the row reads first in its list. */
+  lead?: boolean;
+  /** Left rule and soft wash in this tone, for a row that carries a verdict. */
+  accent?: Tone;
+  /** Inline mark (bar, gauge) drawn before the value. */
+  mark?: ReactNode;
 }) {
   return (
     <div
-      className="flex min-h-8 items-center justify-between gap-3 border-b border-card-border/60 py-1 last:border-b-0"
+      className={`flex items-center justify-between gap-3 border-b border-card-border/60 last:border-b-0 ${
+        lead ? "min-h-10 py-1.5" : "min-h-8 py-1"
+      } ${accent ? `-ml-2 border-l-2 pl-2 ${ROW_ACCENT[accent]}` : ""}`}
       title={title}
     >
-      <dt className="min-w-0 truncate text-xs text-muted">{label}</dt>
+      <dt className={`min-w-0 truncate text-xs ${lead ? "text-foreground/80" : "text-muted"}`}>
+        {label}
+      </dt>
       <dd className="flex min-w-0 items-center justify-end gap-2 text-right">
+        {mark}
         <span
-          className={`truncate text-[13px] font-medium tabular-nums text-foreground ${mono ? "font-mono" : ""}`}
+          className={`truncate font-medium tabular-nums text-foreground ${
+            lead ? "text-[15px] font-semibold tracking-tight" : "text-[13px]"
+          } ${mono ? "font-mono" : ""}`}
         >
           {value}
         </span>
