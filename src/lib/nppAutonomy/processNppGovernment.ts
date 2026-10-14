@@ -47,7 +47,8 @@ import { getGovernmentFormationsCollection } from "@/lib/db/collections/governme
 import { getRegisteredCountryIds } from "@/lib/country/registeredCountries";
 import { isPlannedEconomy, plannedShare } from "@/lib/constants/commandEconomy";
 import { loadConditionsSignal } from "@/lib/turn/npp/billSponsorship";
-import { nppAutonomyAtLeast } from "./featureFlag";
+import { getNppAutonomyLevel, nppAutonomyAtLeast, nppAutonomyLevelAtLeast } from "./featureFlag";
+import { NPP_ENGINE_LEVEL } from "./engineVersion";
 import {
   commitGoverningGoals,
   reviewGoverningGoals,
@@ -557,10 +558,17 @@ export async function runNppGovernmentPhases(gameNow: Date, currentTurn: number)
   // flight finish their domestic step); foreign policy runs
   // for the countries ordered before the failure (what the serial loop would
   // have finished), then the earliest-ordered error is rethrown.
+  //
+  // Lanes run only at v6 (NPP engine 6). Below it a single lane reproduces the
+  // old serial loop exactly, including the order of the caretaker-resignation
+  // draws and which countries a failure stops.
+  const lanes = nppAutonomyLevelAtLeast(await getNppAutonomyLevel(db), NPP_ENGINE_LEVEL)
+    ? NPP_GOVERNMENT_LANES
+    : 1;
   let failed = false;
   const domestic = await boundedParallelMap(
     countries,
-    NPP_GOVERNMENT_LANES,
+    lanes,
     async (countryId): Promise<{ outcome?: DomesticGovernmentOutcome; error?: unknown }> => {
       if (failed) return {};
       try {

@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 
+const levelMock = vi.hoisted(() => vi.fn(async () => "v6"));
 const {
   getDbMock,
   registeredMock,
@@ -26,8 +27,13 @@ vi.mock("@/lib/mongodb", () => ({ getDb: () => getDbMock() }));
 vi.mock("@/lib/country/registeredCountries", () => ({
   getRegisteredCountryIds: (...a: unknown[]) => registeredMock(...a),
 }));
-vi.mock("../featureFlag", () => ({
+vi.mock("../featureFlag", async (importOriginal) => ({
   nppAutonomyAtLeast: (...a: unknown[]) => atLeastMock(...a),
+  // Lanes are a v6 (NPP engine 6) behaviour; the suite runs at v6 unless a
+  // test sets the level itself.
+  getNppAutonomyLevel: () => levelMock(),
+  nppAutonomyLevelAtLeast: (await importOriginal<typeof import("../featureFlag")>())
+    .nppAutonomyLevelAtLeast,
 }));
 vi.mock("../appointNppPresident", () => ({
   appointNppPresident: vi.fn().mockResolvedValue(false),
@@ -98,6 +104,13 @@ describe("runNppGovernmentPhases", () => {
     const firstForeign = timeline.findIndex((e) => e.startsWith("foreign:"));
     expect(lastDomestic).toBeLessThan(firstForeign);
     expect(foreignPolicyMock.mock.calls.map((c) => c[1])).toEqual(ORDER);
+  });
+
+  it("runs one country at a time below v6", async () => {
+    levelMock.mockResolvedValueOnce("v5");
+    await runNppGovernmentPhases(now, 100);
+
+    expect(peakInFlight).toBe(1);
   });
 
   it("skips foreign policy for unregistered, unclaimed and player-enabled countries", async () => {
