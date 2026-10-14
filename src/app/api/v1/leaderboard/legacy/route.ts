@@ -5,7 +5,7 @@ import { handleRouteError } from "@/lib/api/errors";
 import { getLegacyLeaderboardData } from "@/lib/world/legacyLeaderboard";
 import type { LegacyLeaderboardScope, LegacyRankBy } from "@/lib/world/legacyLeaderboardTypes";
 
-// GET /api/v1/leaderboard/legacy - Cross-iteration Hall of Fame: every player ranked by their single best-scoring life ever played. ?scope=all|current&rankBy=legacy|netWorth
+// GET /api/v1/leaderboard/legacy - Cross-iteration career records: strongest political/business career plus lifetime laws, contest results and account achievements. ?scope=all|current&rankBy=legacy|netWorth
 // Auth: public (includes the caller's own rank/lives when signed in)
 // Errors: (none)
 export async function GET(request: Request) {

@@ -95,6 +95,48 @@
     "split": {
       "podium": "Top 3 teilen 50 / 30 / 20",
       "winnerTakesAll": "Der Sieger erhält alles"
-    }
+    },
+    "navigation": "Wettbewerbe und Ranglisten",
+    "tabs": {
+      "current": "Diese Woche",
+      "results": "Deine Ergebnisse",
+      "rankings": "Bestenliste aller Zeiten",
+      "contests": "Wettbewerbe"
+    },
+    "career": {
+      "title": "Karriere-Rangliste",
+      "intro": "Ein ausgewogener Wert für Politik, Wirtschaft, verabschiedete Gesetze, Wettbewerbe und spielerische Erfolge. Jeder Bereich bringt bis zu 1.000 Punkte. Deine stärkste politische und wirtschaftliche Karriere liefert diese Punkte; verabschiedete Gesetze und Wettbewerbssiege zählen über alle deine Charaktere. Kontoerfolge zählen einmal."
+    },
+    "champions": {
+      "title": "Wettbewerbssieger aller Zeiten",
+      "intro": "Über alle Iterationen, sortiert nach Siegen, prämierten Platzierungen und ausgezahlten Preisen. Ein Eintrag je Konto und Runde. Dein gewählter Ranglistenname gilt für beide Ranglisten."
+    },
+    "history": {
+      "title": "Deine Wettbewerbsbilanz",
+      "intro": "Abgeschlossene Ergebnisse aller deiner Charaktere und Iterationen. Namen und Punkte werden beim Abschluss gespeichert. Geldsummen enthalten ausgezahlte Preise; Supporter-Prämien werden separat angezeigt. Ungültige Runden zählen nicht.",
+      "rounds": "Teilnahmen",
+      "wins": "Siege",
+      "podiums": "Prämierte Platzierungen",
+      "prizes": "Gewonnenes Geld",
+      "contest": "Wettbewerb",
+      "iteration": "Iteration",
+      "allTime": "Gesamtbilanz je Wettbewerb",
+      "bestRank": "Beste Platzierung",
+      "allContests": "Alle Wettbewerbe",
+      "allIterations": "Alle Iterationen",
+      "filter": "Filter anwenden",
+      "empty": "Noch keine abgeschlossenen Ergebnisse für diese Auswahl.",
+      "unknownIteration": "Nicht erfasste Iteration",
+      "signIn": "Melde dich an, um deine Ergebnisse aller Iterationen zu sehen.",
+      "placed": "Prämierte Platzierung",
+      "noPrize": "Kein Preis",
+      "pages": "Ergebnisseiten",
+      "page": "Seite {page} von {pages}",
+      "previous": "Zurück",
+      "next": "Weiter",
+      "player": "Spieler",
+      "placing": "Platz {rank} von {count}"
+    },
+    "contestViews": "Wettbewerbsrunden und Ergebnisse"
   }
 }

@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ObjectId, type Db } from "mongodb";
 import type { ContestRound } from "@/lib/db/types/contestRound";
 
+vi.mock("./achievements", () => ({ reconcileContestAchievements: vi.fn() }));
 vi.mock("@sentry/nextjs", () => ({ captureException: vi.fn() }));
 vi.mock("@/lib/patreon/service", () => ({ applyPatreonStatus: vi.fn() }));
 vi.mock("@/lib/notifications", () => ({

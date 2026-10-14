@@ -95,6 +95,48 @@
     "split": {
       "podium": "Top 3 split 50 / 30 / 20",
       "winnerTakesAll": "Winner takes all"
-    }
+    },
+    "navigation": "Contests and rankings",
+    "tabs": {
+      "current": "This week",
+      "results": "Your results",
+      "rankings": "All time leaderboard",
+      "contests": "Contests"
+    },
+    "career": {
+      "title": "Career rankings",
+      "intro": "A balanced score across politics, business, enacted laws, contests and gameplay achievements. Each area contributes up to 1,000 points. Your strongest political and business career supplies those points; enacted laws and contest wins carry across all your characters. Account achievements count once."
+    },
+    "champions": {
+      "title": "All-time contest champions",
+      "intro": "Across every iteration, ordered by wins, awarded placings, then paid prizes. One entry per account per round. Your chosen leaderboard name is shared across both rankings."
+    },
+    "history": {
+      "title": "Your contest record",
+      "intro": "Finished results across all your characters and iterations. Names and scores are saved as they stood at settlement. Cash totals include successfully paid prizes; Supporter awards are shown separately. Voided rounds do not count.",
+      "rounds": "Rounds entered",
+      "wins": "Wins",
+      "podiums": "Awarded placings",
+      "prizes": "Cash won",
+      "contest": "Contest",
+      "iteration": "Iteration",
+      "allTime": "All-time by contest",
+      "bestRank": "Best rank",
+      "allContests": "All contests",
+      "allIterations": "All iterations",
+      "filter": "Apply filters",
+      "empty": "No finished results match this selection yet.",
+      "unknownIteration": "Unrecorded iteration",
+      "signIn": "Sign in to see your results across every iteration.",
+      "placed": "Awarded placing",
+      "noPrize": "No prize",
+      "pages": "Result pages",
+      "page": "Page {page} of {pages}",
+      "previous": "Previous",
+      "next": "Next",
+      "player": "Player",
+      "placing": "Finished #{rank} of {count}"
+    },
+    "contestViews": "Contest rounds and results"
   }
 }

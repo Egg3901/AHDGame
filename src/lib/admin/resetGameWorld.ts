@@ -1,3 +1,9 @@
+import {
+  loadCareerLegislation,
+  archiveRetiredCareerLegislation,
+  loadCareerLoans,
+} from "@/lib/world/careerEvidence";
+import { fetchExchangeRateMap } from "@/lib/world/forex";
 import { resolveStartingPartiesMode, type StartingPartiesMode } from "./startingParties";
 import { MongoServerError, ObjectId, type Db } from "mongodb";
 import { randomUUID } from "node:crypto";
@@ -482,6 +488,59 @@ export async function resetGameWorld(
     log(`Archived ${archived} office tenure(s) for the wiki`);
   }
 
+  // Archive careers while laws, portfolios, exchange rates and parties still exist.
+  let charactersDeleted = 0;
+  let charactersReset = 0;
+  let usersDeleted = 0;
+
+  if (options.deleteProfiles) {
+    const deleteResult = await db.collection("characters").deleteMany({});
+    charactersDeleted = deleteResult.deletedCount;
+
+    // Staff and banned accounts survive; see FULL_RESET_DELETABLE_USERS_FILTER.
+    const usersResult = await db
+      .collection("users")
+      .deleteMany({ ...FULL_RESET_DELETABLE_USERS_FILTER });
+    usersDeleted = usersResult.deletedCount;
+    // Every surviving account just lost all of its characters. Settle the
+    // fields `retireCharacter` settles on a soft reset, or the one-character
+    // limit (`activeCharacterCount >= 1`) refuses a kept moderator a new one.
+    await db
+      .collection<User>("users")
+      .updateMany({}, { $set: { hasCompletedSetup: false, activeCharacterCount: 0 } });
+
+    await db.collection("retiredCharacters").deleteMany({});
+    await db.collection("characterAchievements").deleteMany({});
+    log(
+      `Deleted ${charactersDeleted} character(s) and ${usersDeleted} player account(s); ` +
+        `staff and banned accounts kept`
+    );
+  } else {
+    const allCharacters = await db.collection<Character>("characters").find({}).toArray();
+    charactersReset = allCharacters.length;
+
+    // `retireCharacter` is ~25 sequential writes per character, so on a
+    // long-lived world this loop is the phase most likely to look like a hang.
+    // Announce it up front, then report the total.
+    if (charactersReset > 0) log(`Retiring ${charactersReset} character(s)…`);
+    const [careerLegislation, careerRates, careerLoans] = await Promise.all([
+      loadCareerLegislation(db),
+      fetchExchangeRateMap(db),
+      loadCareerLoans(db),
+    ]);
+    await archiveRetiredCareerLegislation(db, careerLegislation);
+    for (const character of allCharacters) {
+      await retireCharacter(db, character, character.userId, "game_reset", {
+        careerLegislation,
+        careerRates,
+        careerLoans,
+        iteration: recapIteration ?? outgoing?.iteration,
+        recap: seasonRecaps?.get(character._id.toString()),
+      });
+    }
+    log(`Retired ${charactersReset} character(s)`);
+  }
+
   // ── Runtime wipe (manifest-driven) ─────────────────────────────────────────
   // Clear every `runtime` collection in the seed manifest so no prior-iteration
   // state (cooldowns, ledgers, in-flight votes, snapshots, …) leaks into the
@@ -612,49 +671,6 @@ export async function resetGameWorld(
   const seedResult = seedHistorical
     ? await seedHistoricalOfficials(db, preset, preIteration ? "priors" : "winners")
     : { nppsCreated: 0, officialsCreated: 0 };
-
-  let charactersDeleted = 0;
-  let charactersReset = 0;
-  let usersDeleted = 0;
-
-  if (options.deleteProfiles) {
-    const deleteResult = await db.collection("characters").deleteMany({});
-    charactersDeleted = deleteResult.deletedCount;
-
-    // Staff and banned accounts survive; see FULL_RESET_DELETABLE_USERS_FILTER.
-    const usersResult = await db
-      .collection("users")
-      .deleteMany({ ...FULL_RESET_DELETABLE_USERS_FILTER });
-    usersDeleted = usersResult.deletedCount;
-    // Every surviving account just lost all of its characters. Settle the
-    // fields `retireCharacter` settles on a soft reset, or the one-character
-    // limit (`activeCharacterCount >= 1`) refuses a kept moderator a new one.
-    await db
-      .collection<User>("users")
-      .updateMany({}, { $set: { hasCompletedSetup: false, activeCharacterCount: 0 } });
-
-    await db.collection("retiredCharacters").deleteMany({});
-    await db.collection("characterAchievements").deleteMany({});
-    log(
-      `Deleted ${charactersDeleted} character(s) and ${usersDeleted} player account(s); ` +
-        `staff and banned accounts kept`
-    );
-  } else {
-    const allCharacters = await db.collection<Character>("characters").find({}).toArray();
-    charactersReset = allCharacters.length;
-
-    // `retireCharacter` is ~25 sequential writes per character, so on a
-    // long-lived world this loop is the phase most likely to look like a hang.
-    // Announce it up front, then report the total.
-    if (charactersReset > 0) log(`Retiring ${charactersReset} character(s)…`);
-    for (const character of allCharacters) {
-      await retireCharacter(db, character, character.userId, "game_reset", {
-        iteration: recapIteration,
-        recap: seasonRecaps?.get(character._id.toString()),
-      });
-    }
-    log(`Retired ${charactersReset} character(s)`);
-  }
 
   const resetDate = resolveResetStartDate(preset, options.startDate);
   const { startingYear } = resetDate;

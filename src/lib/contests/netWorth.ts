@@ -1,7 +1,8 @@
 /**
- * Personal net worth for the wealth contest, valued the same way as the legacy
- * leaderboard (cash + savings + shares + bonds + index funds, in ₳), but read
- * only for the characters asked about. loadExternalInflows is the money that
+ * Gross portfolio value for the wealth contest (home-currency cash + savings +
+ * shares + bonds + index funds, in ₳), read only for the characters asked about.
+ * This contest nets out loan cash as an external inflow; career rankings
+ * instead subtract outstanding personal liabilities from all-currency assets. loadExternalInflows is the money that
  * arrived from outside a character's own play (wires, loan principal), which
  * the contest nets out of growth.
  */
