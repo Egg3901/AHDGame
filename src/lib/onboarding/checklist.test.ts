@@ -186,12 +186,13 @@ describe("isOnboardingStepComplete", () => {
 });
 
 describe("deriveOnboardingChecklist", () => {
-  it("counts completed steps and reports allComplete only when every visible step is done", () => {
+  it("counts required steps and reports allComplete only when every required step is done", () => {
     const partial = deriveOnboardingChecklist(makeCharacter({ party: "3" }), {
       ...NO_SIGNALS,
       hasInvested: true,
     });
-    expect(partial.total).toBe(ONBOARDING_STEP_IDS.length);
+    // first-vote is shown but optional, so it never counts toward the total.
+    expect(partial.total).toBe(ONBOARDING_STEP_IDS.length - 1);
     expect(partial.completedCount).toBe(2);
     expect(partial.allComplete).toBe(false);
 
@@ -199,8 +200,30 @@ describe("deriveOnboardingChecklist", () => {
       makeCharacter({ party: "3", onboarding: VISITED_BOTH_PAGES }),
       ALL_SIGNALS
     );
-    expect(complete.completedCount).toBe(ONBOARDING_STEP_IDS.length);
+    expect(complete.completedCount).toBe(ONBOARDING_STEP_IDS.length - 1);
     expect(complete.allComplete).toBe(true);
+  });
+
+  it("does not hold the reward on a bill vote a new player cannot cast yet", () => {
+    const noVote = deriveOnboardingChecklist(
+      makeCharacter({ party: "3", onboarding: VISITED_BOTH_PAGES }),
+      { ...ALL_SIGNALS, hasVoted: false }
+    );
+    expect(noVote.steps.find((s) => s.id === "first-vote")).toMatchObject({
+      done: false,
+      optional: true,
+    });
+    expect(noVote.allComplete).toBe(true);
+  });
+
+  it("requires a real Campaign for every plan, including invest-only", () => {
+    const invest = deriveOnboardingChecklist(
+      makeCharacter({ onboarding: VISITED_BOTH_PAGES }),
+      { ...NO_SIGNALS, hasInvested: true },
+      { experience: "new", interests: ["invest"] }
+    );
+    expect(invest.steps.map((s) => s.id)).toContain("campaign-action");
+    expect(invest.allComplete).toBe(false);
   });
 
   it("an invest-only plan shows core plus the market step and nothing political", () => {
@@ -208,16 +231,21 @@ describe("deriveOnboardingChecklist", () => {
       experience: "new",
       interests: ["invest"],
     });
-    expect(invest.steps.map((s) => s.id)).toEqual(["scout-state", "invest", "read-wire"]);
+    expect(invest.steps.map((s) => s.id)).toEqual([
+      "scout-state",
+      "invest",
+      "campaign-action",
+      "read-wire",
+    ]);
   });
 
   it("an invest-only plan reaches allComplete without ever running for office", () => {
     const invest = deriveOnboardingChecklist(
       makeCharacter({ onboarding: VISITED_BOTH_PAGES }),
-      { ...NO_SIGNALS, hasInvested: true },
+      { ...NO_SIGNALS, hasInvested: true, hasCampaignActed: true },
       { experience: "new", interests: ["invest"] }
     );
-    expect(invest.completedCount).toBe(3);
+    expect(invest.completedCount).toBe(4);
     expect(invest.allComplete).toBe(true);
   });
 
@@ -250,7 +278,7 @@ describe("deriveOnboardingChecklist", () => {
       experience: "skip",
       interests: [],
     });
-    expect(skipped.total).toBe(ONBOARDING_STEP_IDS.length);
+    expect(skipped.total).toBe(ONBOARDING_STEP_IDS.length - 1);
     expect(skipped.allComplete).toBe(false);
   });
 
@@ -261,7 +289,7 @@ describe("deriveOnboardingChecklist", () => {
     });
     const defaulted = deriveOnboardingChecklist(makeCharacter({}), NO_SIGNALS);
     expect(defaulted.steps.map((s) => s.id)).toEqual(explicit.steps.map((s) => s.id));
-    expect(defaulted.total).toBe(ONBOARDING_STEP_IDS.length);
+    expect(defaulted.total).toBe(ONBOARDING_STEP_IDS.length - 1);
   });
 });
 
@@ -361,7 +389,7 @@ describe("loadOnboardingSignals", () => {
     });
   });
 
-  it("derives campaign-action from campaign and advertise action logs", async () => {
+  it("derives campaign-action from Campaign actions only", async () => {
     const db = createMockDb();
     const characterId = new ObjectId();
     db.collection("actionLogs").countDocuments.mockResolvedValue(1);
@@ -370,7 +398,7 @@ describe("loadOnboardingSignals", () => {
     expect(signals.hasCampaignActed).toBe(true);
     expect(db.collectionMocks.actionLogs!.countDocuments.mock.calls[0][0]).toEqual({
       characterId,
-      actionType: { $in: ["campaign", "advertise"] },
+      actionType: "campaign",
     });
   });
 });

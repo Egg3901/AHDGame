@@ -83,7 +83,9 @@ describe("batched party frontiers", () => {
   it("unions members, officials and active NPPs without queries per party", async () => {
     const db = makeDb();
     setMockCollection("states", {
-      find: vi.fn(() => ({ toArray: async () => [{ _id: "NY" }, { _id: "CA" }, { _id: "OR" }] })),
+      find: vi.fn(() => ({
+        toArray: async () => Object.keys(STATE_ADJACENCY.US).map((_id) => ({ _id })),
+      })),
     });
     setMockCollection("characters", {
       find: vi.fn(() => ({ toArray: async () => [{ party: "1", homeState: "NY" }] })),
@@ -96,7 +98,9 @@ describe("batched party frontiers", () => {
     });
     const result = await getPartyFrontiers(db, "US", ["1", "2", "3"]);
     expect(result.get("1")).toContain("NY");
-    expect(result.get("1")).toContain("OR");
+    expect(result.get("1")).not.toContain("OR");
+    expect(result.get("1")).toContain("AZ");
+    expect(result.get("1")).toContain("PA");
     expect(result.get("1")).not.toContain("TX");
     expect(result.get("2")).toContain("WA");
     expect(result.get("3")).toBeNull();
@@ -104,7 +108,7 @@ describe("batched party frontiers", () => {
       {
         $or: [{ countryId: "US" }, { countryId: { $exists: false } }],
         party: { $in: ["1", "2", "3"] },
-        homeState: { $in: ["NY", "CA", "OR"] },
+        homeState: { $in: Object.keys(STATE_ADJACENCY.US) },
         retiredAt: null,
       },
       { projection: { party: 1, homeState: 1 } }
@@ -241,6 +245,22 @@ describe("getPartyFrontier", () => {
     expect([...presence]).toEqual(["NY"]);
     expect(frontier.has("PA")).toBe(true);
     expect(frontier.has("CA")).toBe(false);
+  });
+
+  it("enters and leaves reconnect-only mode from live presence, without a stored flag", async () => {
+    const db = makeDb();
+    seedRegions(["WA", "OR", "CA", "AZ"]);
+    const members = setMockCollection("characters", {
+      distinct: vi.fn().mockResolvedValue(["WA", "OR", "CA"]),
+    });
+    expect((await getPartyFrontier(db, "US", "7")).frontier.has("AZ")).toBe(true);
+    members.distinct.mockResolvedValue(["WA", "CA"]);
+    const disconnected = await getPartyFrontier(db, "US", "7");
+    expect(disconnected.frontier.has("OR")).toBe(true);
+    expect(disconnected.frontier.has("AZ")).toBe(false);
+    members.distinct.mockResolvedValue(["WA", "OR", "CA"]);
+    expect((await getPartyFrontier(db, "US", "7")).frontier.has("AZ")).toBe(true);
+    expect(mockCollections.characters.find).not.toHaveBeenCalled();
   });
 });
 

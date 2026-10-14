@@ -30,6 +30,8 @@ import { getActiveCandidacySummary } from "@/lib/character/relocationCampaigns";
 import { performRelocation } from "@/lib/character/performRelocation";
 import { relocationLeavesParty, PARTY_DEPARTURE_WARNING } from "@/lib/character/relocationParty";
 import { getPartyFrontier } from "@/lib/parties/partyFrontier";
+import { PartyTerritoryError } from "@/lib/parties/relocationTerritory";
+import { withPartyTerritoryMutation } from "@/lib/parties/territoryMutation";
 import { getCountryAccess } from "@/lib/countryAccess";
 import { getGameState } from "@/lib/gameState";
 import { getGameTime } from "@/lib/time/gameTime";
@@ -88,100 +90,109 @@ export async function POST(request: Request) {
     ).toUpperCase() as import("@/lib/constants/countries").CountryId;
 
     const db = await getDb();
+    return await withPartyTerritoryMutation(
+      db,
+      [{ countryId: auth.character.countryId ?? "US", partyId: auth.character.party }],
+      async () => {
+        const targetState = await db
+          .collection<State>("states")
+          .findOne({ _id: normalizedTarget, countryId: targetCountryId });
+        if (!targetState) {
+          return errorResponse(400, "Invalid target state or region");
+        }
 
-    const targetState = await db
-      .collection<State>("states")
-      .findOne({ _id: normalizedTarget, countryId: targetCountryId });
-    if (!targetState) {
-      return errorResponse(400, "Invalid target state or region");
-    }
+        if (targetCountryId === "US") {
+          const { admittedIds, preset } = await loadUsPoliticalStateIds(db);
+          if (!isUsResidentPoliticalRegion(normalizedTarget, preset, admittedIds)) {
+            return errorResponse(400, unplayableTerritoryHomeError(targetState.name));
+          }
+        }
 
-    if (targetCountryId === "US") {
-      const { admittedIds, preset } = await loadUsPoliticalStateIds(db);
-      if (!isUsResidentPoliticalRegion(normalizedTarget, preset, admittedIds)) {
-        return errorResponse(400, unplayableTerritoryHomeError(targetState.name));
-      }
-    }
+        if (
+          auth.character.homeState === normalizedTarget &&
+          (auth.character.countryId ?? "US") === targetState.countryId
+        ) {
+          return errorResponse(400, "Already in this state/region");
+        }
 
-    if (
-      auth.character.homeState === normalizedTarget &&
-      (auth.character.countryId ?? "US") === targetState.countryId
-    ) {
-      return errorResponse(400, "Already in this state/region");
-    }
+        // Turn-first relocation cooldown (72 turns); legacy Date fallback inside the
+        // helper. Game clock used so a paused/drifted real clock can't move it.
+        const gameTime = await getGameTime();
+        const cooldown = getRelocationCooldownStatus(
+          auth.character,
+          gameTime.currentTurn,
+          gameTime.effectiveNow.getTime(),
+          Date.now()
+        );
+        if (cooldown.onCooldown) {
+          return errorResponse(
+            429,
+            `Relocation cooldown active. You can relocate again in ${cooldown.cooldownRemainingDays} day(s).`,
+            { extra: { cooldownRemainingDays: cooldown.cooldownRemainingDays } }
+          );
+        }
 
-    // Turn-first relocation cooldown (72 turns); legacy Date fallback inside the
-    // helper. Game clock used so a paused/drifted real clock can't move it.
-    const gameTime = await getGameTime();
-    const cooldown = getRelocationCooldownStatus(
-      auth.character,
-      gameTime.currentTurn,
-      gameTime.effectiveNow.getTime(),
-      Date.now()
+        const currentCountryId = auth.character.countryId ?? "US";
+        const isChangingCountry = targetState.countryId !== currentCountryId;
+        if (isChangingCountry && auth.isAdmin !== true) {
+          const { enabledForPlayers } = await getCountryAccess(targetState.countryId);
+          if (!enabledForPlayers) {
+            return errorResponse(403, "Relocation to this country is not currently available.");
+          }
+        }
+
+        const leaveParty = await relocationLeavesParty(db, auth.character, targetState);
+        if (leaveParty && !parsed.data.confirmPartyDeparture) {
+          return errorResponse(409, PARTY_DEPARTURE_WARNING, {
+            extra: { partyDepartureRequired: true },
+          });
+        }
+        const outcome = await performRelocation(db, auth.character, targetState, { leaveParty });
+
+        const notes: string[] = [];
+        if (outcome.resignedFromOffice) notes.push(`Resigned from ${outcome.resignedFromOffice}.`);
+        if (outcome.ceoResignedFrom) notes.push(`Removed as CEO of ${outcome.ceoResignedFrom}.`);
+        if (outcome.chairResignedFrom)
+          notes.push(`Resigned as central bank chair (${outcome.chairResignedFrom}).`);
+        if (outcome.leftPartyName) notes.push(`Left ${outcome.leftPartyName}; now independent.`);
+        // A general who moves abroad loses the command, and the move has to say so:
+        // it is the one consequence with units and a war attached to it.
+        if (outcome.relinquishedCommands.length > 0)
+          notes.push(`Gave up command of ${outcome.relinquishedCommands.join(", ")}.`);
+        const totalWithdrawals =
+          outcome.withdrawnGeneralElections +
+          outcome.withdrawnStatePartyElections +
+          outcome.withdrawnNationalPartyElections +
+          outcome.withdrawnCommitteeElections;
+        if (totalWithdrawals > 0)
+          notes.push(`Withdrew from ${totalWithdrawals} active candidacy(ies).`);
+
+        // Cooldown begins now (72 turns). Project the end instant from real time so
+        // the value the client shows is drift-immune.
+        return NextResponse.json({
+          success: true,
+          message: `Relocated to ${targetState.name}.${notes.length ? " " + notes.join(" ") : ""}`,
+          homeState: normalizedTarget,
+          homeStateName: targetState.name,
+          cooldownUntil: new Date(
+            Date.now() + RELOCATION_COOLDOWN_TURNS * MS_PER_TURN
+          ).toISOString(),
+          resignedFromOffice: outcome.resignedFromOffice,
+          ceoResignedFrom: outcome.ceoResignedFrom,
+          chairResignedFrom: outcome.chairResignedFrom,
+          leftPartyName: outcome.leftPartyName,
+          relinquishedCommands: outcome.relinquishedCommands,
+          withdrawnGeneralElections: outcome.withdrawnGeneralElections,
+          withdrawnStatePartyElections: outcome.withdrawnStatePartyElections,
+          withdrawnNationalPartyElections: outcome.withdrawnNationalPartyElections,
+          withdrawnCommitteeElections: outcome.withdrawnCommitteeElections,
+          countryChanged: outcome.countryChanged,
+        });
+      },
+      auth.character
     );
-    if (cooldown.onCooldown) {
-      return errorResponse(
-        429,
-        `Relocation cooldown active. You can relocate again in ${cooldown.cooldownRemainingDays} day(s).`,
-        { extra: { cooldownRemainingDays: cooldown.cooldownRemainingDays } }
-      );
-    }
-
-    const currentCountryId = auth.character.countryId ?? "US";
-    const isChangingCountry = targetState.countryId !== currentCountryId;
-    if (isChangingCountry && auth.isAdmin !== true) {
-      const { enabledForPlayers } = await getCountryAccess(targetState.countryId);
-      if (!enabledForPlayers) {
-        return errorResponse(403, "Relocation to this country is not currently available.");
-      }
-    }
-
-    const leaveParty = await relocationLeavesParty(db, auth.character, targetState);
-    if (leaveParty && !parsed.data.confirmPartyDeparture) {
-      return errorResponse(409, PARTY_DEPARTURE_WARNING, {
-        extra: { partyDepartureRequired: true },
-      });
-    }
-    const outcome = await performRelocation(db, auth.character, targetState, { leaveParty });
-
-    const notes: string[] = [];
-    if (outcome.resignedFromOffice) notes.push(`Resigned from ${outcome.resignedFromOffice}.`);
-    if (outcome.ceoResignedFrom) notes.push(`Removed as CEO of ${outcome.ceoResignedFrom}.`);
-    if (outcome.chairResignedFrom)
-      notes.push(`Resigned as central bank chair (${outcome.chairResignedFrom}).`);
-    if (outcome.leftPartyName) notes.push(`Left ${outcome.leftPartyName}; now independent.`);
-    // A general who moves abroad loses the command, and the move has to say so:
-    // it is the one consequence with units and a war attached to it.
-    if (outcome.relinquishedCommands.length > 0)
-      notes.push(`Gave up command of ${outcome.relinquishedCommands.join(", ")}.`);
-    const totalWithdrawals =
-      outcome.withdrawnGeneralElections +
-      outcome.withdrawnStatePartyElections +
-      outcome.withdrawnNationalPartyElections +
-      outcome.withdrawnCommitteeElections;
-    if (totalWithdrawals > 0)
-      notes.push(`Withdrew from ${totalWithdrawals} active candidacy(ies).`);
-
-    // Cooldown begins now (72 turns). Project the end instant from real time so
-    // the value the client shows is drift-immune.
-    return NextResponse.json({
-      success: true,
-      message: `Relocated to ${targetState.name}.${notes.length ? " " + notes.join(" ") : ""}`,
-      homeState: normalizedTarget,
-      homeStateName: targetState.name,
-      cooldownUntil: new Date(Date.now() + RELOCATION_COOLDOWN_TURNS * MS_PER_TURN).toISOString(),
-      resignedFromOffice: outcome.resignedFromOffice,
-      ceoResignedFrom: outcome.ceoResignedFrom,
-      chairResignedFrom: outcome.chairResignedFrom,
-      leftPartyName: outcome.leftPartyName,
-      relinquishedCommands: outcome.relinquishedCommands,
-      withdrawnGeneralElections: outcome.withdrawnGeneralElections,
-      withdrawnStatePartyElections: outcome.withdrawnStatePartyElections,
-      withdrawnNationalPartyElections: outcome.withdrawnNationalPartyElections,
-      withdrawnCommitteeElections: outcome.withdrawnCommitteeElections,
-      countryChanged: outcome.countryChanged,
-    });
   } catch (error) {
+    if (error instanceof PartyTerritoryError) return errorResponse(409, error.message);
     return handleRouteError(error);
   }
 }

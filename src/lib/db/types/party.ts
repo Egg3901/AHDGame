@@ -25,6 +25,10 @@ export interface PoliticalParty {
   /** Sequential ID for URLs - unique per country (e.g., /parties/1?country=us) */
   sequentialId: number;
   countryId: CountryId;
+  /** Transient cross-process territory writer claim. Cleared by its owner in
+   * finally; crash recovery requires staff reconciliation, never timed expiry.
+   * Full politicalParties deletion on world reset clears abandoned claims. */
+  territoryMutation?: { token: string; startedAt: Date };
   name: string;
   abbreviation: string;
   color: string;

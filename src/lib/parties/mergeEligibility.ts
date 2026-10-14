@@ -5,9 +5,9 @@
  */
 import type { Db } from "mongodb";
 import type { PoliticalParty } from "@/lib/db/types";
-import { STATE_ADJACENCY } from "@/lib/constants/stateAdjacency";
-import { getPartyPresenceMap } from "./partyFrontier";
+import { getPartyPresenceMap, getCountryRegionIds, getTerritoryAdjacency } from "./partyFrontier";
 import { hasMergeAdjacency } from "./rules/mergeAdjacency";
+import { preservesPartyTerritory } from "./rules/territory";
 
 export class MergeEligibilityError extends Error {}
 
@@ -26,16 +26,30 @@ export async function assertMergeEligibility(
   }
   const sourceId = String(source.sequentialId);
   const targetId = String(target.sequentialId);
-  const presence = await getPartyPresenceMap(db, source.countryId, [sourceId, targetId]);
+  const regions = await getCountryRegionIds(db, source.countryId);
+  const presence = await getPartyPresenceMap(db, source.countryId, [sourceId, targetId], regions);
   if (
     !hasMergeAdjacency(
       presence.get(sourceId) ?? new Set(),
       presence.get(targetId) ?? new Set(),
-      STATE_ADJACENCY[source.countryId] ?? {}
+      getTerritoryAdjacency(source.countryId, regions)
     )
   ) {
     throw new MergeEligibilityError(
       "Parties can only merge when their existing presence overlaps or touches an adjacent region. Presence requires a member, elected official, or active NPP in each party."
+    );
+  }
+  const sourceStates = presence.get(sourceId) ?? new Set<string>();
+  const targetStates = presence.get(targetId) ?? new Set<string>();
+  if (
+    !preservesPartyTerritory(
+      targetStates,
+      new Set([...sourceStates, ...targetStates]),
+      getTerritoryAdjacency(source.countryId, regions)
+    )
+  ) {
+    throw new MergeEligibilityError(
+      "A merger must preserve connected territory or help reconnect the receiving party's disconnected areas."
     );
   }
 }

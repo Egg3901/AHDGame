@@ -70,7 +70,10 @@ describe("POST /api/country/[code]/parties/[id]/leave", () => {
         },
       },
     } as never);
-
+    db.collection("characters").findOne.mockImplementation(async () => {
+      const current = await requireAuthWithCharacter();
+      return current.ok ? current.user.character : null;
+    });
     const { findPartyBySequentialId } = await import("@/lib/db/partyLookup");
     vi.mocked(findPartyBySequentialId).mockResolvedValue({
       _id: partyObjectId,
@@ -113,6 +116,53 @@ describe("POST /api/country/[code]/parties/[id]/leave", () => {
       foundedPartyId: "",
     });
   });
+
+  it.each([false, true])(
+    "recomputes reconnect-only growth after leaving; another bridge resident remains: %s",
+    async (anotherResident) => {
+      const { requireAuthWithCharacter } = await import("@/lib/api/requireAuth");
+      const auth = await requireAuthWithCharacter();
+      if (!auth.ok) throw new Error("Expected fixture authentication");
+      vi.mocked(requireAuthWithCharacter).mockResolvedValue({
+        ...auth,
+        user: { ...auth.user, character: { ...auth.user.character, homeState: "OR" } },
+      });
+      let memberLeft = false;
+      let officeLeft = false;
+      const states = ["WA", "OR", "CA", "AZ"];
+      db.collection("states").find.mockReturnValue({
+        toArray: async () => states.map((_id) => ({ _id })),
+      });
+      db.collection("characters").distinct.mockImplementation(async () =>
+        memberLeft && !anotherResident ? ["WA", "CA"] : ["WA", "OR", "CA"]
+      );
+      db.collection("electedOfficials").distinct.mockImplementation(async () =>
+        officeLeft ? [] : ["OR"]
+      );
+      db.collection("characters").updateOne.mockImplementation(async () => {
+        memberLeft = true;
+        return { matchedCount: 1, modifiedCount: 1, acknowledged: true };
+      });
+      db.collection("electedOfficials").updateMany.mockImplementation(async () => {
+        officeLeft = true;
+        return { matchedCount: 1, modifiedCount: 1, acknowledged: true };
+      });
+
+      const { getPartyFrontier } = await import("@/lib/parties/partyFrontier");
+      const before = await getPartyFrontier(db as unknown as Db, "US", "1");
+      expect(before.frontier.has("AZ")).toBe(true);
+      const { POST } = await import("./route");
+      const response = await POST(makeRequest(), {
+        params: Promise.resolve({ code: "us", id: "1" }),
+      });
+      // Leaving is allowed even when it removes the last connecting foothold.
+      expect(response.status).toBe(200);
+      const after = await getPartyFrontier(db as unknown as Db, "US", "1");
+      expect(after.frontier.has("OR")).toBe(true);
+      expect(after.frontier.has("AZ")).toBe(anotherResident);
+      expect(after.presence.has("OR")).toBe(anotherResident);
+    }
+  );
 
   it("clears state-party leadership seats the leaver held, not just national ones (ticket #0860)", async () => {
     const { findPartyBySequentialId } = await import("@/lib/db/partyLookup");

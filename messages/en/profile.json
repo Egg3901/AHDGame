@@ -172,11 +172,12 @@
       "progress": "{completed} of {total} done",
       "dismiss": "Dismiss",
       "dismissChecklistAria": "Dismiss checklist",
+      "later": "Later, not needed for the reward",
       "doneSr": "(done)",
       "claimFailed": "Claim failed. Try again.",
       "rewardAdded": "{reward} added to your campaign funds.",
       "claim": "Claim {reward}",
-      "finishSteps": "Finish all {total} steps to claim {reward} in campaign funds.",
+      "finishSteps": "Finish the {total} numbered steps to claim {reward} in campaign funds.",
       "newTitle": "New to A House Divided?",
       "newSubtitle": "See personalized suggestions for what to do next →",
       "newDismissAria": "Dismiss new player banner"
@@ -288,6 +289,27 @@
       "empty": "No changes have been recorded yet.",
       "unknown": "No reason was recorded.",
       "turn": "Turn {turn}"
+    },
+    "firstDays": {
+      "aria": "Your first days",
+      "title": "Your first days",
+      "titleYear": "Your first days in {year}",
+      "intro": "The world is already running. These three moves get you started today, whatever you came here to do.",
+      "campaignTitle": "Campaign in your home region ({done} of {goal})",
+      "campaignBody": "Campaign is the only action that raises Political Influence, and influence multiplies every fundraiser and carries you in races. You have {influence} right now.",
+      "campaignButton": "Campaign now",
+      "campaignFailed": "Campaign did not go through. Try again.",
+      "allActions": "All actions",
+      "partyTitle": "Join a party",
+      "partyBody": "A party gives you a primary to win, a shared action pool, and people to plan with. Pick one that admits members from your home region.",
+      "partyDone": "You are in a party.",
+      "raceTitle": "Enter a race you can still join",
+      "raceBody": "These races in your home region are still taking candidates, soonest to close first.",
+      "raceCloses": "closes in {hours} {hours, plural, one {hour} other {hours}}, {count} {count, plural, one {candidate} other {candidates}}",
+      "raceCandidates": "{count} {count, plural, one {candidate} other {candidates}}",
+      "raceNone": "No race in your home region is taking candidates right now. Keep campaigning; the next one opens soon and you will start it ahead.",
+      "raceDone": "You are in the arena.",
+      "skippedTour": "You skipped the tour. The <link>two-minute basics</link> are here whenever you want them."
     }
   }
 }

@@ -43,6 +43,7 @@ import { accumulateMarginModifiers } from "./sectorTurn/marginStack";
 import { resolvePlantsRevenue } from "./sectorTurn/plantsRevenue";
 import { computeGrowthAndRegulatory, decomposePhysicalCosts } from "./sectorTurn/sectorCosts";
 import { resolveBuildQueueTurn } from "./sectorBuildQueueTurn";
+import { sectorOutputUnmetShare, shortageBuildSpeedupOps } from "./sectorTurn/shortageBuildSpeedup";
 import { resolveSectorGrowthPolicy } from "./sectorGrowthPolicy";
 import {
   resolveSectorHeadcount,
@@ -1302,6 +1303,21 @@ export function processSector(
       update: sectorUpdateDoc,
     },
   });
+  // Shortage build speed-up: positional per-order updates, after the `$pull`
+  // above (bulkWrite is ordered), matched by order identity so an order placed
+  // during this phase is never touched.
+  if (plantsEnabled) {
+    sectorOps.push(
+      ...(shortageBuildSpeedupOps({
+        enabled: market.shortageBuildSpeedupEnabled === true,
+        sectorId: sector._id,
+        outstanding: existingQueue.filter((o) => o.onlineTurn > currentTurn),
+        currentTurn,
+        unmetShare: sectorOutputUnmetShare(strategyRates.supply, wideCommodityBalances),
+        now,
+      }) as SectorUpdateOp[])
+    );
+  }
   // Flip-turn growth credit: a separate op, because `$push` cannot share the
   // `buildQueue` path with the `$pull` above. bulkWrite is ordered by default,
   // so this always lands after the pull. `$push` is additive, so it cannot

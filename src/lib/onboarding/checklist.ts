@@ -84,6 +84,12 @@ export interface OnboardingStepContent {
    * plan runs any one of them.
    */
   chapters: TutorialChapterId[];
+  /**
+   * Shown, but not required for the completion reward. Used for steps a
+   * player who joins a running world cannot reach for days (a bill vote needs
+   * a seat), so the checklist stays finishable in the first session.
+   */
+  optional?: boolean;
 }
 
 /** Lowercased per-country region noun ("state", "nation", "land", "region"). */
@@ -122,6 +128,7 @@ export function buildOnboardingStepContent(
       body: "Bills change real numbers: taxes, wages, growth. Once you hold a seat, read one on the floor and vote.",
       link: legislatureUrl(countryId),
       chapters: ["office", "nation"],
+      optional: true,
     },
     {
       id: "invest",
@@ -133,9 +140,11 @@ export function buildOnboardingStepContent(
     {
       id: "campaign-action",
       title: "Make yourself known",
-      body: "Run a Campaign action to build Political Influence. Nobody votes for a stranger.",
+      body: "Run a Campaign action to build Political Influence. It is the only action that raises it, it lifts what every fundraiser brings in, and nobody votes for a stranger.",
       link: "/actions",
-      chapters: ["office", "nation"],
+      // Core: influence underpins every path, and campaigning is the first
+      // thing a player joining a running world can do that the world notices.
+      chapters: ["core"],
     },
     {
       id: "file-for-race",
@@ -179,7 +188,7 @@ export interface OnboardingSignals {
   hasCandidacy: boolean;
   /** Holds corporate shares or an index-fund position. */
   hasInvested: boolean;
-  /** Has ever run a Campaign or Run Advertisements action. */
+  /** Has ever run a Campaign action (Advertise builds favorability, not influence). */
   hasCampaignActed: boolean;
   /** Sits as the player CEO of a corporation (founded it or took the chair). */
   hasCompany: boolean;
@@ -228,6 +237,7 @@ export interface OnboardingChecklistStep extends OnboardingStepContent {
 
 export interface OnboardingChecklist {
   steps: OnboardingChecklistStep[];
+  /** Required steps only: optional steps never gate the reward. */
   completedCount: number;
   total: number;
   allComplete: boolean;
@@ -270,12 +280,13 @@ export function deriveOnboardingChecklist(
       ...content,
       done: isOnboardingStepComplete(content.id, character, signals),
     }));
-  const completedCount = steps.filter((s) => s.done).length;
+  const required = steps.filter((s) => !s.optional);
+  const completedCount = required.filter((s) => s.done).length;
   return {
     steps,
     completedCount,
-    total: steps.length,
-    allComplete: steps.length > 0 && completedCount === steps.length,
+    total: required.length,
+    allComplete: required.length > 0 && completedCount === required.length,
   };
 }
 
@@ -341,7 +352,7 @@ export async function loadOnboardingSignals(
       .then((n) => n > 0),
     db
       .collection("actionLogs")
-      .countDocuments({ characterId, actionType: { $in: ["campaign", "advertise"] } }, { limit: 1 })
+      .countDocuments({ characterId, actionType: "campaign" }, { limit: 1 })
       .then((n) => n > 0),
     // Player-run seat only. `ceoType` defaults to "character" when absent
     // (see Corporation type); founding historically omitted the field, so
