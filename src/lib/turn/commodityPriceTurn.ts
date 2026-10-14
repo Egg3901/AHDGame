@@ -167,6 +167,26 @@ export interface CommodityPriceTurnResult {
  *
  * Only OWNED sectors count for supply/demand. Unowned does not participate.
  */
+/** Turns of debt issuance that feed latent financial-services demand (one game year). */
+export const DEBT_ISSUANCE_WINDOW_TURNS = 48;
+
+/**
+ * Bonds counted as recent debt issuance for the turn being processed.
+ *
+ * The window is the completed year before this turn, [turn - 48, turn), and a
+ * bond still counts if it was matured or redeemed during this turn. Both rules
+ * matter because bond issuance and maturity run in parallel with commodity
+ * pricing: the old `issuedAtTurn > turn - 48 && matured: false` filter dropped
+ * the cohort issued a year ago before this turn's replacement issue was
+ * visible, so financial-services demand dipped every quarter.
+ */
+export function recentDebtIssuanceFilter(turn: number) {
+  return {
+    issuedAtTurn: { $gte: Math.max(0, turn - DEBT_ISSUANCE_WINDOW_TURNS), $lt: turn },
+    $or: [{ matured: false }, { redeemedAtTurn: { $gte: turn } }],
+  };
+}
+
 export async function processCommodityPriceTurn(turn: number): Promise<CommodityPriceTurnResult> {
   const db = await getDb();
   const now = new Date();
@@ -175,7 +195,6 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
   // leave countries whose only bonds were seeded at game start with zero demand once
   // those bonds age out — the 1-year window keeps demand stable across countries with
   // infrequent sovereign issuance (JP, CA, DE).
-  const debtIssuanceWindowStart = Math.max(0, turn - 48);
   const [countries, ledgerConfig] = await Promise.all([
     getRegisteredCountryIds(db),
     db.collection<GameConfig>("gameConfig").findOne(
@@ -305,18 +324,15 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
       .toArray(),
     db
       .collection<Bond>("bonds")
-      .find(
-        { issuedAtTurn: { $gt: debtIssuanceWindowStart }, matured: false },
-        {
-          projection: {
-            issuerType: 1,
-            countryId: 1,
-            corporationId: 1,
-            totalIssued: 1,
-            currencyCode: 1,
-          },
-        }
-      )
+      .find(recentDebtIssuanceFilter(turn), {
+        projection: {
+          issuerType: 1,
+          countryId: 1,
+          corporationId: 1,
+          totalIssued: 1,
+          currencyCode: 1,
+        },
+      })
       .toArray(),
     db
       .collection<FederalBudget>("federalBudget")
