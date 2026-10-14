@@ -59,7 +59,7 @@ describe("POST /api/singleplayer/new-game", () => {
     );
     expect(mocks.setSingleplayerConfig).toHaveBeenCalledWith(
       expect.anything(),
-      expect.objectContaining({ mode: "normal", difficulty: "normal", nppAutonomyLevel: "v4" })
+      expect.objectContaining({ mode: "normal", difficulty: "normal", nppAutonomyLevel: "v6" })
     );
   });
 });

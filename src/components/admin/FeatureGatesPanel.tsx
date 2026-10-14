@@ -217,9 +217,9 @@ const NPP_LEVELS: { value: NppAutonomyLevel; label: string; blurb: string }[] = 
   },
   {
     value: "v6",
-    label: "v6 (NPP engine 6, in development)",
+    label: "v6 (NPP engine 6)",
     blurb:
-      "Same activities and the same resources as v5, run by NPP engine 6. Engine 6 changes how well autonomous politicians pursue those activities and what they cost each turn. It adds no stat bonus. In development: see the NPP changelog for what each engine version changed.",
+      "Same activities and the same resources as v5, run by NPP engine 6. Engine 6 changes how well autonomous politicians pursue those activities and what they cost each turn. It adds no stat bonus. Default for new singleplayer and simulation worlds; see the NPP changelog for what each engine version changed.",
   },
 ];
 

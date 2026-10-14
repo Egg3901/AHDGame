@@ -237,6 +237,7 @@ export function SingleplayerAdmin({
                   <option value="v3">V3</option>
                   <option value="v4">V4</option>
                   <option value="v5">V5</option>
+                  <option value="v6">V6 (NPP engine 6)</option>
                 </select>
               </label>
             </div>

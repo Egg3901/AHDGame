@@ -37,7 +37,7 @@ import type { Referendum } from "@/lib/db/types/referendum";
  * `stateSenate` and `regionalCouncil` NPPs — are not currently processed here.
  */
 
-import type { Bill, GovernorAddress, NPPVotePrediction } from "@/lib/db/types";
+import type { Bill, GovernorAddress, NPP, NPPVotePrediction } from "@/lib/db/types";
 import { ObjectId } from "mongodb";
 import type { NPPContext } from "./context";
 import { resolveWhipForNPP } from "./whipResolution";
@@ -80,10 +80,13 @@ import {
 import {
   buildNppBusinessStakes,
   businessInterestForce,
+  businessInterestLabel,
   hasBusinessProvision,
+  INTEREST_VOTE_FAVORABILITY_COST,
   type NppBusinessStakes,
 } from "@/lib/nppAutonomy/v6/rules/businessInterest";
 import { getOperatingSectorType } from "@/lib/constants/sectorStrategies";
+import { oppositionBlocWorthwhile } from "@/lib/nppAutonomy/v6/rules/oppositionBattles";
 import type { Corporation, CorporateSector } from "@/lib/db/types";
 
 export async function processBillVoting(ctx: NPPContext): Promise<number> {
@@ -248,6 +251,16 @@ export async function processBillVoting(ctx: NPPContext): Promise<number> {
       const seatsByParty = await tallySeatsByParty(db, countryId);
       const opposition = identifyOppositionParty(seatsByParty, gov.governingPartyId);
       if (!opposition) continue;
+      // Engine 6.11 (v6): no bloc against a government the bloc cannot defeat.
+      if (
+        (await nppAutonomyAtLeast(db, countryId, NPP_ENGINE_LEVEL)) &&
+        !oppositionBlocWorthwhile(seatsByParty, [
+          gov.governingPartyId,
+          ...(gov.coalitionPartyIds ?? []),
+        ])
+      ) {
+        continue;
+      }
       oppositionByCountry.set(countryId, {
         governingPartyId: gov.governingPartyId,
         oppositionPartyId: opposition.partyId,
@@ -308,6 +321,9 @@ export async function processBillVoting(ctx: NPPContext): Promise<number> {
       new Set(voterIds.map(String))
     );
   }
+
+  // Engine 6.14 (v6): NPPs whose own business interest decided a vote this pass.
+  const interestDecidedVotes = new Set<string>();
 
   for (const bill of activeBills) {
     const isOtherChamber = bill.status === "active_other";
@@ -502,7 +518,7 @@ export async function processBillVoting(ctx: NPPContext): Promise<number> {
 
       // Compute the four cross-pressure forces and the resulting verdict.
       const homeStateDemographics = stateDemographicsMap.get(npp.homeState) ?? null;
-      const { forces, donorsLabel } = computeCrossPressureForces(npp, bill, {
+      const { forces, donorsLabel: baseDonorsLabel } = computeCrossPressureForces(npp, bill, {
         legislationType,
         homeStateDemographics,
         whips: {
@@ -524,10 +540,15 @@ export async function processBillVoting(ctx: NPPContext): Promise<number> {
         forces.ideology = constitutionalConsentForce(bill.referendumConsent, npp.party);
 
       // Engine 6.8 (v6): the NPP's own companies, folded into the donors bucket.
+      // Engine 6.13.1: and named on the forecast, so the conflict is visible.
+      let donorsLabel = baseDonorsLabel;
+      let businessInterest = 0;
       if (businessCountries.has(billCountry)) {
         const interest = businessInterestForce(bill.provisions, stakesByNpp.get(nppIdStr));
         if (interest !== 0) {
+          businessInterest = interest;
           forces.donors = Math.max(-100, Math.min(100, forces.donors + interest));
+          donorsLabel = `${baseDonorsLabel}. ${businessInterestLabel(interest)}`;
         }
       }
 
@@ -603,6 +624,14 @@ export async function processBillVoting(ctx: NPPContext): Promise<number> {
       }
 
       const rawVerdict = verdictFromForces(forces);
+      // Engine 6.14 (v6): voters notice when an NPP's own companies decided
+      // its vote, i.e. the verdict without the interest would differ.
+      if (
+        businessInterest !== 0 &&
+        verdictFromForces({ ...forces, donors: forces.donors - businessInterest }) !== rawVerdict
+      ) {
+        interestDecidedVotes.add(nppIdStr);
+      }
 
       // Override votes don't allow abstain (US veto override or JP Shugiin override).
       let vote: "for" | "against" | "abstain" = rawVerdict;
@@ -693,6 +722,36 @@ export async function processBillVoting(ctx: NPPContext): Promise<number> {
         }))
       );
     }
+  }
+
+  // Engine 6.14 (v6): a small favorability cost, once per NPP per pass, never
+  // below zero. One batched write.
+  if (interestDecidedVotes.size > 0) {
+    await db.collection<NPP>("npps").bulkWrite(
+      [...interestDecidedVotes].map((id) => ({
+        updateOne: {
+          filter: { _id: new ObjectId(id) },
+          update: [
+            {
+              $set: {
+                favorability: {
+                  $max: [
+                    0,
+                    {
+                      $subtract: [
+                        { $ifNull: ["$favorability", 0] },
+                        INTEREST_VOTE_FAVORABILITY_COST,
+                      ],
+                    },
+                  ],
+                },
+              },
+            },
+          ],
+        },
+      })),
+      { ordered: false }
+    );
   }
 
   return votescast;

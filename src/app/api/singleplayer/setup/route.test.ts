@@ -123,11 +123,11 @@ describe("POST /api/singleplayer/setup", () => {
     }
   });
 
-  it("defaults an omitted level to v4, never to v5", async () => {
+  it("defaults an omitted level to v6, the new-world default since 2026-10-14", async () => {
     await POST(request({ preset: "2023-default", mode: "normal", difficulty: "normal" }));
     expect(mocks.setSingleplayerConfig).toHaveBeenCalledWith(
       expect.anything(),
-      expect.objectContaining({ nppAutonomyLevel: "v4" })
+      expect.objectContaining({ nppAutonomyLevel: "v6" })
     );
   });
 });

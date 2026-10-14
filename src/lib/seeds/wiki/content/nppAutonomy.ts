@@ -17,7 +17,7 @@ For baseline NPP behavior (bill cross-pressure, elections, influence actions), s
 | **v3** | Economic and financial autonomy (savings, union bargaining, campaign finance) plus NPP entry into presidential primaries as challengers |
 | **v4** | Widest reach (the seeded default): global-scope economic actions and deeper autonomous bill sponsorship |
 | **v5** | Persistent governing goals: a government keeps up to five standing goals, grades them, and lets the results steer its next agenda. Singleplayer and worldsim beta |
-| **v6** | NPP engine 6: the same activities and resources as v5, with the engine 6 decision and cost changes listed in the NPP changelog. In development |
+| **v6** | NPP engine 6: the same activities and resources as v5, with the engine 6 decision and cost changes listed in the NPP changelog. Default for new singleplayer and simulation worlds |
 
 Levels are cumulative: v2 includes everything in v0 and v1, and v6 includes everything below it.
 
@@ -68,10 +68,11 @@ This rail prevents autonomous NPP governments from overriding player-led countri
 - NPPs age, retire and are replaced by successors.
 - Adds no new lever and no resources. Validated in singleplayer and worldsim, not yet in live multiplayer.
 
-### v6: NPP engine 6 (in development)
+### v6: NPP engine 6
 
 - Changes how well NPPs pursue the v5 activities and what they cost to run each turn, never what they may do or how much money and action points they receive.
-- First change (engine 6.0): NPP action cycles are staggered. Each NPP still acts once every four turns, but a quarter of NPPs act each turn instead of all of them on the same turn.
+- Includes better candidate placement and career moves, rallies in their own races, vote counting before sponsoring, government whips on goal bills, an opposition that picks its battles, central banks that answer and defend currency moves, and votes shaped by business interests, which voters can see and mark down.
+- New singleplayer and simulation worlds start on v6. The live multiplayer world keeps its own setting.
 - Every engine version and the planned ones are listed in the [NPP changelog](/changelog/npp).
 
 ## Admin controls

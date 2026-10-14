@@ -35,7 +35,7 @@ describe("SingleplayerHome new-game rules", () => {
 
     expect((screen.getByLabelText("Career") as HTMLInputElement).checked).toBe(true);
     expect((screen.getByLabelText("Difficulty") as HTMLSelectElement).value).toBe("normal");
-    expect((screen.getByLabelText("Autonomous politicians") as HTMLSelectElement).value).toBe("v4");
+    expect((screen.getByLabelText("Autonomous politicians") as HTMLSelectElement).value).toBe("v6");
 
     fireEvent.click(screen.getByLabelText("Head of state"));
     fireEvent.change(screen.getByLabelText("Difficulty"), { target: { value: "hard" } });

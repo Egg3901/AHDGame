@@ -26,7 +26,18 @@ import { chairAlignmentPolicy, type ChairAlignment } from "@/lib/centralBank/cha
 import { computeNppChairRateTarget } from "@/lib/nppAutonomy/rules/chairRateTarget";
 export { computeNppChairRateTarget } from "@/lib/nppAutonomy/rules/chairRateTarget";
 import { isBankGovernmentControlled } from "@/lib/centralBank/governance";
-import type { ExchangeRate } from "@/lib/db/types/exchangeRate";
+import type { ExchangeRate, InterventionPolicy } from "@/lib/db/types/exchangeRate";
+import {
+  INITIAL_RATES,
+  INTERVENTION_POLICY_COOLDOWN_TURNS,
+  RATE_CEILING_MULTIPLIER,
+  RATE_FLOOR_MULTIPLIER,
+} from "@/lib/constants/currencies";
+import {
+  defenceAction,
+  defenceBand,
+  type DefenceAction,
+} from "@/lib/nppAutonomy/v6/rules/currencyDefence";
 import { NPP_ENGINE_LEVEL } from "@/lib/nppAutonomy/engineVersion";
 import { nppAutonomyAtLeast } from "@/lib/nppAutonomy/featureFlag";
 import {
@@ -290,4 +301,88 @@ export function isStandingAdviceDue(
     return currentTurn - lastAdvice >= RATE_CHANGE_COOLDOWN_TURNS;
   }
   return true;
+}
+
+/**
+ * Engine 6.13 (v6): an autonomous chair's currency defence band. Runs every
+ * chair turn alongside the rate setter (not gated on the rate cooldown) and
+ * sets or releases a reserve-backed intervention band per
+ * `v6/rules/currencyDefence.ts`. Never touches a band someone else set, a
+ * government-held rate, a pegged currency, or a common monetary policy.
+ */
+export async function processNppCurrencyDefence(
+  db: Db,
+  bank: Pick<CentralBank, "_id" | "chairMode" | "chairNppId" | "governmentControlled">,
+  countryId: CountryId,
+  currentTurn: number,
+  startingYear: number | undefined,
+  commonIndicators?: EuroPolicyIndicators
+): Promise<DefenceAction> {
+  if (bank.chairMode !== "npp" || commonIndicators || !bank.chairNppId) return "none";
+  if (isBankGovernmentControlled(bank, countryId, startingYear)) return "none";
+  if (!(await nppAutonomyAtLeast(db, countryId, NPP_ENGINE_LEVEL))) return "none";
+
+  const fx = await db.collection<ExchangeRate>("exchangeRates").findOne(
+    { _id: countryId },
+    {
+      projection: {
+        rate: 1,
+        baseRate: 1,
+        hardPeg: 1,
+        fxRegime: 1,
+        interventionPolicy: 1,
+        rateHistory: { $slice: -(FX_LOOKBACK_TURNS * 2) },
+      },
+    }
+  );
+  if (!fx || fx.hardPeg != null || (fx.fxRegime ?? "float") !== "float") return "none";
+
+  const band = fx.interventionPolicy ?? null;
+  const action = defenceAction({
+    depreciation: fxDepreciation(fx.rateHistory, fx.rate, currentTurn),
+    hasBand: !!band,
+    ownBand: !!band && band.setByCharacterId?.toString() === bank.chairNppId.toString(),
+    turnsSinceBandChange: band ? currentTurn - band.lastAdjustedAtTurn : null,
+    cooldownTurns: INTERVENTION_POLICY_COOLDOWN_TURNS,
+  });
+  const now = new Date();
+
+  if (action === "release" && band) {
+    await db
+      .collection<ExchangeRate>("exchangeRates")
+      .updateOne(
+        { _id: countryId, "interventionPolicy.setAtTurn": band.setAtTurn },
+        { $set: { interventionPolicy: null, updatedAt: now } }
+      );
+    return action;
+  }
+  if (action !== "set") return "none";
+
+  const baseRate = fx.baseRate > 0 ? fx.baseRate : (INITIAL_RATES[countryId] ?? 0);
+  if (!(baseRate > 0)) return "none";
+  const target = defenceBand(fx.rate, {
+    floor: baseRate * RATE_FLOOR_MULTIPLIER,
+    ceiling: baseRate * RATE_CEILING_MULTIPLIER,
+  });
+  if (!target) return "none";
+  const chair = await db
+    .collection<{ _id: ObjectId; name?: string }>("npps")
+    .findOne({ _id: bank.chairNppId }, { projection: { name: 1 } });
+  const policy: InterventionPolicy = {
+    floor: target.floor,
+    ceiling: target.ceiling,
+    setByCharacterId: bank.chairNppId,
+    setByCharacterName: chair?.name ? `${chair.name} (autonomous chair)` : "Autonomous chair",
+    setAtTurn: currentTurn,
+    lastAdjustedAtTurn: currentTurn,
+    recentInterventions: [],
+  };
+  // Only into an empty slot: a band a person set between the read and now wins.
+  await db
+    .collection<ExchangeRate>("exchangeRates")
+    .updateOne(
+      { _id: countryId, interventionPolicy: null },
+      { $set: { interventionPolicy: policy, updatedAt: now } }
+    );
+  return action;
 }

@@ -53,3 +53,26 @@ export function placementOrder<T>(
     .sort((a, b) => priorityOf(b.primary) - priorityOf(a.primary) || a.index - b.index)
     .map(({ primary }) => primary);
 }
+
+/**
+ * NPP engine 6.12: placement by chance of winning (v6).
+ *
+ * 6.1 sends a party's strongest NPPs to its most senior races. Where the party
+ * is weak across the region, the senior regional races are the ones it cannot
+ * win, so that spent its best candidates on lost causes. A party whose
+ * organization in the region is below `COMPETITIVE_ORG_RATIO` of the leading
+ * party's places its strongest NPPs in its most local races instead, where a
+ * weaker party can still win seats. The same primaries are filled either way.
+ */
+export const COMPETITIVE_ORG_RATIO = 0.75;
+
+/** Whether a party can contest the region's senior races. True without data. */
+export function partyCompetitiveInRegion(
+  partyOrganization: number | undefined,
+  leadingOrganization: number | undefined
+): boolean {
+  if (partyOrganization == null || leadingOrganization == null || !(leadingOrganization > 0)) {
+    return true;
+  }
+  return partyOrganization >= COMPETITIVE_ORG_RATIO * leadingOrganization;
+}
