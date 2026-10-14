@@ -1,6 +1,7 @@
 import { corridorVerdict } from "@/lib/centralBank/rateCorridor";
 import { stanceMatchesTaylorTarget } from "@/lib/centralBank/rules/credibility";
 import type { ChairAlignment } from "@/lib/centralBank/chairAlignment";
+import type { ChairActivityInputs } from "@/lib/nppAutonomy/rules/chairRateTarget";
 
 /**
  * Central-bank credibility, derived from the existing scrutiny stock
@@ -82,7 +83,8 @@ export function stanceIsCorrect(
   targetInflation: number,
   neutralRate?: number,
   gdpGrowth?: number,
-  alignment?: ChairAlignment | null
+  alignment?: ChairAlignment | null,
+  activity?: ChairActivityInputs
 ): boolean {
   if (neutralRate !== undefined && gdpGrowth !== undefined) {
     return stanceMatchesTaylorTarget({
@@ -92,6 +94,7 @@ export function stanceIsCorrect(
       targetInflation,
       gdpGrowth,
       alignment,
+      activity,
     });
   }
   // Compatibility for older callers without macro inputs; all turn processing

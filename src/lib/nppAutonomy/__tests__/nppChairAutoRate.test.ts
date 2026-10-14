@@ -7,7 +7,8 @@ import {
   processNppCurrencyDefence,
   isStandingAdviceDue,
 } from "../nppChairAutoRate";
-import { RATE_HISTORY_MAX } from "@/lib/db/types/centralBank";
+import { NPP_CHAIR_RATE_FLOOR, RATE_HISTORY_MAX } from "@/lib/db/types/centralBank";
+import { computeNppChairActivityTarget } from "@/lib/nppAutonomy/rules/chairRateTarget";
 import { SYSTEM_RATE_ACTOR } from "@/lib/centralBank/rateHistory";
 
 describe("computeNppChairRateTarget", () => {
@@ -42,6 +43,62 @@ describe("computeNppChairRateTarget", () => {
     });
     // 4.0 + 2.0 - 1.0 = 5.0 (net hike because inflation gap dominates)
     expect(target).toBeCloseTo(5.0, 6);
+  });
+});
+
+describe("computeNppChairActivityTarget", () => {
+  it("cuts for unemployment above NAIRU and ignores raw GDP growth", () => {
+    // 4.0 + 0 (inflation on target) + 0.5*0 (no gap) - 0.5*clamp(12-5, -2, 4) = 2.0
+    const target = computeNppChairActivityTarget({
+      neutralRate: 4.0,
+      inflationRate: 2.0,
+      targetInflation: 2.0,
+      activity: { outputGap: 0, unemploymentRate: 12 },
+    });
+    expect(target).toBeCloseTo(2.0, 6);
+  });
+
+  it("hikes for a positive output gap and tight labour", () => {
+    // 4.0 + 0 + 0.5*2 - 0.5*(3-5) = 6.0
+    const target = computeNppChairActivityTarget({
+      neutralRate: 4.0,
+      inflationRate: 2.0,
+      targetInflation: 2.0,
+      activity: { outputGap: 2, unemploymentRate: 3 },
+    });
+    expect(target).toBeCloseTo(6.0, 6);
+  });
+
+  it("clamps the gap terms and floors the target", () => {
+    const target = computeNppChairActivityTarget({
+      neutralRate: 1.0,
+      inflationRate: -2.0,
+      targetInflation: 2.0,
+      activity: { outputGap: -20, unemploymentRate: 40 },
+    });
+    expect(target).toBe(NPP_CHAIR_RATE_FLOOR);
+  });
+
+  it("missing activity inputs leave only the inflation term", () => {
+    const target = computeNppChairActivityTarget({
+      neutralRate: 4.0,
+      inflationRate: 5.0,
+      targetInflation: 2.0,
+      activity: { outputGap: null, unemploymentRate: Number.NaN },
+    });
+    expect(target).toBeCloseTo(7.0, 6);
+  });
+
+  it("dove alignment weighs slack harder than hawk", () => {
+    const base = {
+      neutralRate: 6.0,
+      inflationRate: 2.0,
+      targetInflation: 2.0,
+      activity: { outputGap: -1, unemploymentRate: 11 },
+    };
+    expect(computeNppChairActivityTarget({ ...base, alignment: "dove" })).toBeLessThan(
+      computeNppChairActivityTarget({ ...base, alignment: "hawk" })
+    );
   });
 });
 
@@ -112,14 +169,15 @@ describe("computeNppChairRateStep", () => {
   });
 });
 
-function mockRateDb(budget: any, nationalMetrics: any, npp: any = null) {
+function mockRateDb(budget: any, nationalMetrics: any, npp: any = null, states: any[] = []) {
   const updateOne = vi.fn(async () => ({ matchedCount: 1 }));
   const db = {
     collection: (name: string) => ({
       updateOne,
+      find: () => ({ toArray: async () => (name === "states" ? states : []) }),
       findOne: async (_q: any) => {
         if (name === "federalBudget") return budget;
-        if (name === "stateMetrics") return nationalMetrics;
+        if (name === "stateMetrics" || name === "macroMetrics") return nationalMetrics;
         if (name === "npps") return npp;
         return null;
       },
@@ -138,6 +196,28 @@ function pushedRecord(updateOne: ReturnType<typeof vi.fn>) {
 }
 
 describe("processNppChairAutoRate", () => {
+  it("an AI chair cuts in a slump with 12% unemployment even when GDP growth reads high", async () => {
+    const { db, updateOne } = mockRateDb(
+      { economicFactors: { inflationRate: 2.0 } },
+      { economic: { gdpGrowth: { value: 12.0 }, unemploymentRate: { value: 12.0 } } },
+      null,
+      [{ gdp: 100, outputGap: -1, outputTrendGrowth: 2 }]
+    );
+    // US neutral 3.0 -> 3.0 + 0 + 0.5*(-1) - 0.5*4 = 0.5; step 0.5*(0.5-6) = -2.75 -> -1.75
+    const bank = {
+      _id: "b" as any,
+      primeRate: 6.0,
+      lastRateChangeTurn: null,
+      chairMode: "npp",
+    } as any;
+    await processNppChairAutoRate(db, bank, "US" as any, 50, null, false, 2019);
+    const op = (
+      updateOne.mock.calls[0] as unknown as [unknown, { $set: { primeRate: number } }]
+    )[1];
+    expect(op.$set.primeRate).toBeCloseTo(4.25, 6);
+    expect(pushedRecord(updateOne)?.$each[0].reason).toContain("unemployment 12.0%");
+  });
+
   it("hikes primeRate when inflation hot and writes lastRateChangeTurn", async () => {
     const { db, updateOne } = mockRateDb(
       { economicFactors: { inflationRate: 5.0 } },
@@ -501,6 +581,7 @@ describe("processNppChairAutoRate — engine 6.6 currency response (v6)", () => 
     const db = {
       collection: (name: string) => ({
         updateOne,
+        find: () => ({ toArray: async () => [] }),
         findOne: async () => {
           // Inflation and growth on target: the closed-economy Taylor rule alone
           // leaves the US rate at its 3.0 neutral.
@@ -552,6 +633,7 @@ describe("processNppCurrencyDefence — engine 6.13 (v6)", () => {
     const db = {
       collection: (name: string) => ({
         updateOne,
+        find: () => ({ toArray: async () => [] }),
         findOne: async () => {
           if (name === "gameState") return { nppAutonomyLevel: level };
           if (name === "exchangeRates") return fx;
