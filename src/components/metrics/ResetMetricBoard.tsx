@@ -418,8 +418,9 @@ function RegistryMasthead({
         <div className="min-w-[220px] flex-1">
           <h1 className="text-display font-bold leading-tight text-foreground">{displayName}</h1>
           <div className="mt-2 flex flex-wrap items-center gap-2">
-            <span className="inline-block rounded border border-success bg-card-muted px-2 py-0.5 font-mono text-body-xs font-bold tracking-wider text-success">
-              {board.metrics.length} PRIMARY METRICS
+            <span className="inline-flex items-center gap-1.5 font-mono text-body-xs font-bold tracking-wider text-success">
+              <span>{board.metrics.length}</span>
+              <span>METRICS TRACKED</span>
             </span>
             <span className="font-mono text-body-xs text-muted">
               TURN {board.asOfTurn.toLocaleString("en-US")}
@@ -460,10 +461,16 @@ function RegistrySummary({
   const provisional = categories.reduce((total, category) => total + category.provisional, 0);
   const influenced = categories.reduce((total, category) => total + category.influenced, 0);
   const sourced = board.metrics.length - provisional;
+  const scores = board.metrics
+    .map((metric) => metric.conditionScore)
+    .filter((score): score is number => typeof score === "number" && Number.isFinite(score));
+  const averageScore =
+    scores.length > 0 ? scores.reduce((total, score) => total + score, 0) / scores.length : null;
+  const averageScoreShare =
+    averageScore === null ? 0 : Math.max(0, Math.min(100, averageScore)) / 100;
   const ringSize = 84;
   const radius = (ringSize - 8) / 2;
   const circumference = 2 * Math.PI * radius;
-  const sourcedShare = board.metrics.length === 0 ? 0 : sourced / board.metrics.length;
 
   return (
     <div className="mt-4 overflow-hidden rounded-lg border border-card-border bg-card p-0 shadow-card">
@@ -471,7 +478,11 @@ function RegistrySummary({
         <div className="col-span-2 flex items-center gap-4 border-b border-card-border px-4 py-3 lg:col-span-1 lg:border-b-0 lg:border-r">
           <span
             className="relative inline-flex text-success"
-            aria-label={`${sourced} sourced metrics`}
+            aria-label={
+              averageScore === null
+                ? "Average condition score unavailable"
+                : `Average condition score ${averageScore.toFixed(1)} out of 100`
+            }
           >
             <svg width={ringSize} height={ringSize} className="-rotate-90">
               <circle
@@ -491,23 +502,25 @@ function RegistrySummary({
                 strokeWidth="7"
                 strokeLinecap="round"
                 strokeDasharray={circumference.toFixed(1)}
-                strokeDashoffset={(circumference * (1 - sourcedShare)).toFixed(1)}
+                strokeDashoffset={(circumference * (1 - averageScoreShare)).toFixed(1)}
               />
             </svg>
             <span className="absolute inset-0 flex items-center justify-center">
               <span className="text-heading font-extrabold tabular-nums">
-                {board.metrics.length}
+                {averageScore === null ? "n/a" : averageScore.toFixed(1)}
               </span>
             </span>
           </span>
           <div>
             <div className="font-mono text-body-xs uppercase tracking-widest text-muted">
-              Primary observations
+              Average score
             </div>
             <div className="mt-0.5 text-heading font-semibold text-foreground">
               {categories.length} outcome domains
             </div>
-            <div className="text-body-xs text-muted">current world registry</div>
+            <div className="text-body-xs text-muted">
+              Across {scores.length} scored metrics, out of 100
+            </div>
           </div>
         </div>
         <SummaryTile

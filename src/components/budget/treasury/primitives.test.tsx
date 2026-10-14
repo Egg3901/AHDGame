@@ -57,6 +57,7 @@ describe("FiscalStatStrip USD equivalent (ticket-1065)", () => {
     gdp: 1_029_166_000_000,
     gdpGrowth: 5.2,
     debtToGdp: 0.1,
+    debtPrincipal: 100_000_000_000,
     rating: "AAA" as const,
     treasuryReserve: 5_800_000_000,
   };
