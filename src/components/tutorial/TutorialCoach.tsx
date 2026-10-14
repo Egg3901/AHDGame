@@ -9,6 +9,7 @@ import { coachCountryContext, type CoachCharacter, type TourStep } from "@/lib/t
 import { parseTutorialFacts, type TutorialFacts } from "@/lib/tutorial/facts";
 import { tutorialWorldFromFlags, type TutorialWorld } from "@/lib/tutorial/world";
 import { useWorldFlags } from "@/hooks/useWorldFlags";
+import { captureProductEvent } from "@/lib/analytics/capture";
 import {
   DEFAULT_TUTORIAL_PLAN,
   isTutorialChapterId,
@@ -326,7 +327,14 @@ export function TutorialCoach({ character, plan, autoStart }: TutorialCoachProps
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ progress: { chapterId: current.chapterId, stepId: current.id } }),
     }).catch(bestEffort("progress save"));
-  }, [active, resumeSettled, step, current, replayChapter]);
+    // Consented funnel: which tour steps players reach (and so where they stop).
+    void captureProductEvent("tutorial_step_viewed", {
+      chapter_id: current.chapterId,
+      step_id: current.id,
+      step_index: step,
+      step_count: steps.length,
+    });
+  }, [active, resumeSettled, step, current, replayChapter, steps.length]);
 
   // Mark a chapter finished the first time the player leaves its last step.
   useEffect(() => {
@@ -335,6 +343,7 @@ export function TutorialCoach({ character, plan, autoStart }: TutorialCoachProps
     if (!previous || previous.chapterId === current.chapterId) return;
     if (savedChaptersRef.current.has(previous.chapterId)) return;
     savedChaptersRef.current.add(previous.chapterId);
+    void captureProductEvent("tutorial_chapter_completed", { chapter_id: previous.chapterId });
     void fetch("/api/tutorial/plan", {
       method: "PUT",
       credentials: "same-origin",
@@ -342,6 +351,12 @@ export function TutorialCoach({ character, plan, autoStart }: TutorialCoachProps
       body: JSON.stringify({ completedChapter: previous.chapterId }),
     }).catch(bestEffort("chapter completion save"));
   }, [active, step, current, steps, replayChapter]);
+
+  // Where the player was when they closed the tour, for the consented funnel.
+  const closingStepRef = useRef<{ chapterId: string; id: string } | null>(null);
+  useEffect(() => {
+    closingStepRef.current = current ? { chapterId: current.chapterId, id: current.id } : null;
+  }, [current]);
 
   const onStepPage = !current?.link || pathOf(current.link) === pathname;
 
@@ -419,6 +434,7 @@ export function TutorialCoach({ character, plan, autoStart }: TutorialCoachProps
     } catch {
       /* private mode */
     }
+    void captureProductEvent("tutorial_finished");
     // Clear the server resume point too, so a later replay starts clean.
     void fetch("/api/tutorial/plan", {
       method: "PUT",
@@ -440,6 +456,13 @@ export function TutorialCoach({ character, plan, autoStart }: TutorialCoachProps
    * tour from opening by itself again.
    */
   const close = useCallback(() => {
+    const closedAt = closingStepRef.current;
+    if (closedAt) {
+      void captureProductEvent("tutorial_closed", {
+        chapter_id: closedAt.chapterId,
+        step_id: closedAt.id,
+      });
+    }
     try {
       window.localStorage.setItem(TUTORIAL_DONE_KEY, "1");
     } catch {

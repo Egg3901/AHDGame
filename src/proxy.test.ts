@@ -1,4 +1,4 @@
-import { afterEach, describe, it, expect, vi } from "vitest";
+import { afterEach, beforeEach, describe, it, expect, vi } from "vitest";
 
 // proxy() consults the DB for maintenance / public-viewing state. Stub those to
 // safe defaults so we can exercise the pure routing behaviors (redirects,
@@ -332,5 +332,48 @@ describe("proxy() — singleplayer host mode (LAN guests)", () => {
       })
     );
     expect(res.headers.get("location")).toContain("/profile");
+  });
+});
+
+describe("proxy() acquisition cookie", () => {
+  beforeEach(() => {
+    mockMaintenanceStatus.mockReset();
+    mockMaintenanceStatus.mockResolvedValue({ mode: "off", enabled: false });
+  });
+
+  const visit = (url: string, referer: string | null, cookies: Record<string, string> = {}) => {
+    const headers = new Headers({ host: new URL(url).host });
+    if (referer) headers.set("referer", referer);
+    const req = new NextRequest(new URL(url), { headers });
+    for (const [k, v] of Object.entries(cookies)) req.cookies.set(k, v);
+    return proxy(req);
+  };
+
+  it("records a logged-out visitor's external source, shared with the wiki subdomain", async () => {
+    const res = await visit(
+      "https://ahousedividedgame.com/?utm_source=reddit",
+      "https://old.reddit.com/r/x/comments/y/"
+    );
+    const cookie = res.cookies.get("__ahd_src");
+    expect(cookie?.value).toContain("r=reddit.com");
+    expect(cookie?.value).toContain("s=reddit");
+    expect(cookie?.httpOnly).toBe(true);
+    expect(cookie?.domain).toBe("ahousedividedgame.com");
+  });
+
+  it("never overwrites an existing source or tags a signed-in request", async () => {
+    const existing = await visit("https://ahousedividedgame.com/", "https://www.google.com/", {
+      __ahd_src: "r=reddit.com&l=home&t=1",
+    });
+    expect(existing.cookies.get("__ahd_src")).toBeUndefined();
+    const signedIn = await visit("https://ahousedividedgame.com/", "https://www.google.com/", {
+      [AUTH_COOKIE_NAME]: "token",
+    });
+    expect(signedIn.cookies.get("__ahd_src")).toBeUndefined();
+  });
+
+  it("does nothing for an internal, untagged visit", async () => {
+    const res = await visit("https://ahousedividedgame.com/", "https://ahousedividedgame.com/wiki");
+    expect(res.cookies.get("__ahd_src")).toBeUndefined();
   });
 });
