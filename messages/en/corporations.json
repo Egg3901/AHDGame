@@ -215,7 +215,7 @@
         "position": "Where the bank stands right now. Each figure links to the tab that moves it.",
         "postedCapital": "Capital posted from the treasury plus retained earnings. It stands behind depositors and sets the deposit ceiling.",
         "deposits": "Household savings arrive as cash in the vault; player savings pointed at the bank are pointers, not cash. Only the cash half raises the reserve requirement, but both count toward the deposit ceiling.",
-        "depositCeiling": "The most deposits the bank may hold: the lower of deposit-network capacity and 12x book equity.",
+        "depositCeiling": "The most deposits the bank may hold: the lower of deposit-network capacity and 12x book equity. Deposit-network capacity comes from the company's financial sectors, so selling or abandoning them lowers it.",
         "loansOut": "Named player loans plus the household book. Lending earns interest but consumes reserves.",
         "rates": "Your offsets versus central bank prime, inside the legal rate limits. Pay more to attract savers; charge more to earn, at the cost of demand.",
         "capitalUndercapitalized": "Post {amount} or lose the charter",

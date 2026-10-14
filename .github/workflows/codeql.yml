@@ -9,7 +9,10 @@ on:
 
 concurrency:
   group: codeql-${{ github.ref }}
-  cancel-in-progress: true
+  # A cancelled default-branch scan records an unsuccessful overlay-base build
+  # in the Actions cache, disabling incremental PR analysis for later runs.
+  # Let that baseline finish; superseded pull requests still cancel normally.
+  cancel-in-progress: ${{ github.event_name != 'push' || github.ref_name != github.event.repository.default_branch }}
 
 jobs:
   analyze:
