@@ -16,12 +16,28 @@ const mockGetDb = vi.fn(async () => ({
 }));
 vi.mock("@/lib/mongodb", () => ({ getDb: () => mockGetDb() }));
 vi.mock("@/lib/countryAccess", () => ({ isCountryEnabledForPlayers: async () => true }));
+const mockCardUrl = vi.hoisted(() => ({ value: undefined as string | null | undefined }));
+vi.mock("@/lib/discord/eventCard", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/discord/eventCard")>();
+  return {
+    ...actual,
+    generateDiscordEventCard: async (
+      ...args: Parameters<typeof actual.generateDiscordEventCard>
+    ) =>
+      mockCardUrl.value !== undefined
+        ? mockCardUrl.value
+        : actual.generateDiscordEventCard(...args),
+  };
+});
 
 import {
   buildBillVetoedDiscordEmbed,
+  buildPlayerSuggestionDiscordEmbed,
   DISCORD_COLORS,
+  notifyNewSuggestionDiscord,
   sendDiscordWebhookMultiple,
   sendNewsEvent,
+  suggestionEventCardInput,
 } from "./discordWebhooks";
 
 describe("sendNewsEvent dedup (#1208)", () => {
@@ -197,5 +213,77 @@ describe("buildBillVetoedDiscordEmbed", () => {
     const body = call[1].body;
     expect(body).not.toContain("cardVoteSplit");
     expect(body).toContain("Tax Bill");
+  });
+});
+
+describe("player suggestion branded card", () => {
+  const input = {
+    issueNumber: 371,
+    category: "ui_improvement",
+    title: "Party Organization, well...organization",
+    description: "See every party's organization values in one view.",
+    impact: "Less clicking.",
+    reporterUsername: "player",
+    reporterDiscordUsername: "player",
+    detailUrl: "https://ahousedividedgame.com/feedback/371",
+    gameSystem: "parties",
+  };
+
+  it("builds card copy with humanized chips and the reporter", () => {
+    const card = suggestionEventCardInput(input);
+    expect(card.eyebrow).toBe("Player suggestion · S#371");
+    expect(card.title).toBe(input.title);
+    expect(card.metadata).toEqual(["UI improvement", "Parties"]);
+    expect(card.detailLines).toEqual(["Suggested by @player"]);
+    expect(card.tone).toBe("suggestion");
+  });
+
+  it("falls back to the plain embed when the card has no fetchable URL", async () => {
+    mockGameConfig = { discordSuggestionsWebhookUrl: "http://hook/suggestions" };
+    const fetchMock = vi.fn(async (_url: string, _init: { body: string }) => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ id: "msg-1" }),
+      text: async () => "",
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+    // Local-disk card storage returns a relative path Discord cannot fetch.
+    mockCardUrl.value = "/api/uploads/charts/event-suggestion-371.png";
+    const result = await notifyNewSuggestionDiscord(input);
+    expect(result).toEqual({ status: "posted", messageId: "msg-1" });
+    const body = JSON.parse(fetchMock.mock.calls[0]![1].body);
+    expect(body.embeds[0].image).toBeUndefined();
+    expect(body.embeds[0].fields.map((f: { name: string }) => f.name)).toContain("Category");
+  });
+
+  it("posts the card image and drops the fields the card already shows", async () => {
+    mockGameConfig = { discordSuggestionsWebhookUrl: "http://hook/suggestions" };
+    mockCardUrl.value = "https://cdn.example/charts/event-suggestion-371.png";
+    const fetchMock = vi.fn(async (_url: string, _init: { body: string }) => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ id: "msg-2" }),
+      text: async () => "",
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+    const result = await notifyNewSuggestionDiscord(input);
+    expect(result.status).toBe("posted");
+    const embed = JSON.parse(fetchMock.mock.calls[0]![1].body).embeds[0];
+    expect(embed.image).toEqual({ url: "https://cdn.example/charts/event-suggestion-371.png" });
+    expect(embed.description).toContain(input.description);
+    expect(embed.fields.map((f: { name: string }) => f.name)).toEqual(["Expected impact"]);
+    mockCardUrl.value = undefined;
+  });
+
+  it("shows the reporter identity as the embed author line", () => {
+    const embed = buildPlayerSuggestionDiscordEmbed({
+      ...input,
+      reporterIdentity: { name: "Jane Smith", iconUrl: "https://cdn.discordapp.com/a.png" },
+    });
+    expect(embed.author).toEqual({
+      name: "Jane Smith",
+      icon_url: "https://cdn.discordapp.com/a.png",
+    });
+    expect(buildPlayerSuggestionDiscordEmbed(input).author).toBeUndefined();
   });
 });

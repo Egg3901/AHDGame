@@ -10,8 +10,13 @@ import { ownsConfiguredWebhooks } from "@/lib/deploymentIdentity";
 import { isCountryEnabledForPlayers } from "@/lib/countryAccess";
 import type { CountryId } from "@/lib/constants/countries";
 import type { GameConfig } from "@/lib/db/types";
-import { generateLegacyDiscordEventCard } from "@/lib/discord/eventCard";
+import {
+  generateDiscordEventCard,
+  generateLegacyDiscordEventCard,
+  type DiscordEventCardInput,
+} from "@/lib/discord/eventCard";
 import type { ChamberVoteSplit } from "@/lib/charts/voteSplitChart";
+import type { SuggestionReporterIdentity } from "@/lib/suggestions/reporterIdentity";
 
 export interface DiscordEmbed {
   title?: string;
@@ -428,14 +433,17 @@ export interface SuggestionDiscordDeliveryResult {
 /**
  * Posts one suggestion embed to the configured suggestions webhook.
  * Uses ?wait=true so Discord returns the message ID, which callers can store for reaction tracking.
+ * Pass the source `input` to render the branded suggestion card; without it the plain embed posts.
  */
 export async function deliverPlayerSuggestionDiscordEmbed(
-  embed: DiscordEmbed
+  embed: DiscordEmbed,
+  input?: PlayerSuggestionDiscordInput
 ): Promise<SuggestionDiscordDeliveryResult> {
   try {
     const { suggestions } = await getWebhookUrls();
     if (!suggestions) return { status: "no_webhook" };
-    const messageId = await sendDiscordWebhookForId(suggestions, [embed]);
+    const postable = input ? await withSuggestionCard(embed, input) : embed;
+    const messageId = await sendDiscordWebhookForId(suggestions, [postable]);
     return { status: "posted", messageId };
   } catch (err) {
     console.error("[Discord] Suggestions event failed:", err);
@@ -459,21 +467,26 @@ export type PlayerSuggestionDiscordInput = {
   githubIssueUrl?: string;
   /** Shown as an embed field when set (player suggestion form). */
   gameSystem?: string;
+  /** Author line: in-game name and avatar (Discord avatar when linked). */
+  reporterIdentity?: SuggestionReporterIdentity;
 };
+
+function suggestionReporterLabel(input: PlayerSuggestionDiscordInput): string {
+  const discordOnlyLabel =
+    input.discordSubmitDisplayName?.trim() ||
+    (input.discordSubmitUsername?.trim() ? `@${input.discordSubmitUsername.trim()}` : null);
+  return input.reporterUsername != null && input.reporterUsername.length > 0
+    ? `@${input.reporterUsername}`
+    : discordOnlyLabel
+      ? discordOnlyLabel
+      : "Anonymous";
+}
 
 /** Rich embed for a player suggestion (forum) — title links to `detailUrl`. */
 export function buildPlayerSuggestionDiscordEmbed(
   input: PlayerSuggestionDiscordInput
 ): DiscordEmbed {
-  const discordOnlyLabel =
-    input.discordSubmitDisplayName?.trim() ||
-    (input.discordSubmitUsername?.trim() ? `@${input.discordSubmitUsername.trim()}` : null);
-  const reporter =
-    input.reporterUsername != null && input.reporterUsername.length > 0
-      ? `@${input.reporterUsername}`
-      : discordOnlyLabel
-        ? discordOnlyLabel
-        : "Anonymous";
+  const reporter = suggestionReporterLabel(input);
 
   const fields: NonNullable<DiscordEmbed["fields"]> = [
     { name: "Category", value: truncateDiscordText(input.category, 256), inline: true },
@@ -518,6 +531,14 @@ export function buildPlayerSuggestionDiscordEmbed(
     url: input.detailUrl,
     description: truncateDiscordText(body, 4096),
     color: DISCORD_COLORS.suggestion,
+    ...(input.reporterIdentity
+      ? {
+          author: {
+            name: truncateDiscordText(input.reporterIdentity.name, 256),
+            ...(input.reporterIdentity.iconUrl ? { icon_url: input.reporterIdentity.iconUrl } : {}),
+          },
+        }
+      : {}),
     fields,
     footer: { text: "A House Divided — player suggestions" },
   };
@@ -530,5 +551,58 @@ export function buildPlayerSuggestionDiscordEmbed(
 export async function notifyNewSuggestionDiscord(
   input: PlayerSuggestionDiscordInput
 ): Promise<SuggestionDiscordDeliveryResult> {
-  return deliverPlayerSuggestionDiscordEmbed(buildPlayerSuggestionDiscordEmbed(input));
+  return deliverPlayerSuggestionDiscordEmbed(buildPlayerSuggestionDiscordEmbed(input), input);
+}
+
+const SUGGESTION_LABEL_ACRONYMS = new Set(["ui", "ux", "ai", "npp", "npc"]);
+
+function humanizeSuggestionLabel(value: string): string {
+  const spaced = value.replace(/[_-]+/g, " ").trim();
+  if (!spaced) return value;
+  return spaced
+    .split(/\s+/)
+    .map((word) => (SUGGESTION_LABEL_ACRONYMS.has(word.toLowerCase()) ? word.toUpperCase() : word))
+    .join(" ")
+    .replace(/^./, (first) => first.toUpperCase());
+}
+
+/** Card copy for a player suggestion, rendered by the shared branded event card. */
+export function suggestionEventCardInput(
+  input: PlayerSuggestionDiscordInput
+): DiscordEventCardInput {
+  const reporter = suggestionReporterLabel(input);
+  const metadata = [humanizeSuggestionLabel(input.category)];
+  if (input.gameSystem) metadata.push(humanizeSuggestionLabel(input.gameSystem));
+  return {
+    eyebrow: `Player suggestion · S#${input.issueNumber}`,
+    title: input.title,
+    summary: input.description,
+    metadata,
+    detailLines: [`Suggested by ${reporter}`],
+    tone: "suggestion",
+  };
+}
+
+/**
+ * Swaps the suggestion's metadata fields for the branded card image. The full
+ * suggestion text stays in the description so players can read it before
+ * voting. Falls back to the plain embed when the card cannot be rendered.
+ */
+async function withSuggestionCard(
+  embed: DiscordEmbed,
+  input: PlayerSuggestionDiscordInput
+): Promise<DiscordEmbed> {
+  const imageUrl = await generateDiscordEventCard(
+    suggestionEventCardInput(input),
+    `suggestion-${input.issueNumber}`
+  ).catch(() => null);
+  // Local-disk fallback returns a relative path Discord cannot fetch.
+  if (!imageUrl || !/^https?:\/\//.test(imageUrl)) return embed;
+  const onCard = new Set(["Category", "Reporter", "Game system", "Discord"]);
+  const fields = embed.fields?.filter((field) => !onCard.has(field.name));
+  return {
+    ...embed,
+    fields: fields?.length ? fields : undefined,
+    image: { url: imageUrl },
+  };
 }
