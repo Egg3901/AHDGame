@@ -13,6 +13,9 @@ import type { ElectedOfficial } from "@/lib/db/types/officials";
 import type { ElectionCandidate } from "@/lib/db/types/election";
 import type { GovernmentFormation } from "@/lib/db/types/governmentFormation";
 import type { Corporation } from "@/lib/db/types/corporation";
+import type { CabinetMember } from "@/lib/db/types/cabinet";
+import type { CountryLeaderState } from "@/lib/db/types/countryLeaderState";
+import { closeCeoTenure, openCeoTenure } from "@/lib/corporations/ceoHistory";
 import { nppAutonomyAtLeast } from "@/lib/nppAutonomy/featureFlag";
 import { generateNPP } from "@/lib/npp/generator";
 import { getNextSequentialId } from "@/lib/db/sequentialId";
@@ -70,6 +73,8 @@ export async function processNppMortality(
     now: Date;
     year: number;
     rng: () => number;
+    /** Turn of this pass; stamps the successor's caretaker CEO tenure when given. */
+    turn?: number;
     /** Test seam: replaces the generateNPP-backed minter above. */
     mintReplacement?: ReplacementMinter;
   }
@@ -199,6 +204,43 @@ export async function processNppMortality(
         );
     }
 
+    // The successor also inherits the dead NPP's cabinet posts and national
+    // leadership, so neither keeps pointing at a retired NPP.
+    await db
+      .collection<CabinetMember>("cabinetMembers")
+      .updateMany(
+        { nppId: npp._id },
+        { $set: { nppId: replacement._id, characterName: replacement.name, updatedAt: now } }
+      );
+    await db
+      .collection<CountryLeaderState>("countryLeaderStates")
+      .updateMany({ leaderNppId: npp._id }, { $set: { leaderNppId: replacement._id } });
+
+    // A player company the dead NPP was caretaking keeps a caretaker: the
+    // successor takes the seat, and the owner's stashed CEO and mandate stay.
+    const caretaken = await db
+      .collection<Corporation>("corporations")
+      .find({ ceoId: npp._id, caretakerCeo: { $exists: true } }, { projection: { _id: 1 } })
+      .toArray();
+    if (caretaken.length > 0) {
+      await db
+        .collection<Corporation>("corporations")
+        .updateMany(
+          { _id: { $in: caretaken.map((corp) => corp._id) } },
+          { $set: { ceoId: replacement._id as ObjectId, updatedAt: now } }
+        );
+      if (opts.turn != null) {
+        for (const corp of caretaken) {
+          await closeCeoTenure(db, corp._id, { holderId: npp._id as ObjectId, turn: opts.turn });
+          await openCeoTenure(db, corp._id, {
+            holderId: replacement._id as ObjectId,
+            ceoType: "npp",
+            turn: opts.turn,
+          });
+        }
+      }
+    }
+
     deadIds.push(npp._id as ObjectId);
     deaths += 1;
     replacements += 1;
@@ -206,7 +248,7 @@ export async function processNppMortality(
 
   // A dead NPP must not stay on as a company's CEO. Its NPP-run companies are
   // marked vacant, so the caretaker step seats a living NPP next turn (by
-  // sector record at v6). A player company's caretaker is left to its owner.
+  // sector record at v6). Player companies were handed to the successor above.
   if (deadIds.length > 0) {
     await db
       .collection<Corporation>("corporations")

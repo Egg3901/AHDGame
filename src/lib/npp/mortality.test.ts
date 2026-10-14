@@ -193,6 +193,48 @@ describe("processNppMortality", () => {
     }
   });
 
+  it("hands cabinet posts, national leadership and player-company caretaking to the successor", async () => {
+    vi.mocked(nppAutonomyAtLeast).mockResolvedValue(true);
+    const dead = npp({ birthYear: 1900 });
+    const caretakenCorpId = new ObjectId();
+    db.collection("cabinetMembers");
+    db.collection("countryLeaderStates");
+    db.collection("corporations");
+    db.collectionMocks["corporations"].find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([{ _id: caretakenCorpId }]),
+    });
+    seedNpps([dead]);
+
+    await processNppMortality(db as unknown as Db, {
+      now: new Date("2019-01-01T00:00:00Z"),
+      year: 2019,
+      rng: () => 0,
+      mintReplacement: mintStub,
+    });
+
+    expect(db.collectionMocks["cabinetMembers"].updateMany).toHaveBeenCalledWith(
+      { nppId: dead._id },
+      expect.objectContaining({
+        $set: expect.objectContaining({
+          nppId: expect.any(ObjectId),
+          characterName: "Replacement Person",
+        }),
+      })
+    );
+    expect(db.collectionMocks["countryLeaderStates"].updateMany).toHaveBeenCalledWith(
+      { leaderNppId: dead._id },
+      { $set: { leaderNppId: expect.any(ObjectId) } }
+    );
+    expect(db.collectionMocks["corporations"].find).toHaveBeenCalledWith(
+      { ceoId: dead._id, caretakerCeo: { $exists: true } },
+      { projection: { _id: 1 } }
+    );
+    expect(db.collectionMocks["corporations"].updateMany).toHaveBeenCalledWith(
+      { _id: { $in: [caretakenCorpId] } },
+      expect.objectContaining({ $set: expect.objectContaining({ ceoId: expect.any(ObjectId) }) })
+    );
+  });
+
   it("withdraws active election candidacies for the dead NPP", async () => {
     vi.mocked(nppAutonomyAtLeast).mockResolvedValue(true);
     const dead = npp({ birthYear: 1900 });

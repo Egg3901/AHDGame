@@ -120,6 +120,21 @@ export function slateSuppressesAutoPick(npp: NPP, maps: SlateOverrideMaps): bool
 }
 
 /**
+ * Should consolidation leave this NPP's candidacy alone? True when a party
+ * chair slated the NPP to this race, or is managing the race for its party.
+ * A chair's slate outranks the engine's own withdraw-the-trailer rule.
+ */
+export function slateProtectsCandidacy(
+  nppId: string,
+  partyId: string,
+  electionId: string,
+  maps: SlateOverrideMaps
+): boolean {
+  if (maps.slatedElectionIdsByNpp.get(nppId)?.has(electionId)) return true;
+  return maps.chairManagedByPartyElection.has(partyElectionKey(partyId, electionId));
+}
+
+/**
  * Free a compliant NPP's live candidacy in a race the chair moved them AWAY
  * from, so their new slate assignment can file (#906). The chair's move action
  * only rewrites slate rows — it does not withdraw the standing candidacy — so
