@@ -106,6 +106,11 @@ async function readCorporationResponse(res: Response, url: string) {
     return await res.json();
   } catch (cause) {
     if (cause instanceof Error && cause.name === "AbortError") throw cause;
+    if (
+      cause instanceof TypeError &&
+      /failed to fetch|load failed|networkerror|network connection was lost/i.test(cause.message)
+    )
+      throw cause;
     const parseError = cause instanceof Error ? cause : new Error("Unknown JSON parse failure");
     const error = new Error(defaultMessageFor("CLIENT_ERROR")) as CorporationResponseError;
     error.name = "CorporationResponseError";
