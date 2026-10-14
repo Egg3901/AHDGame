@@ -79,6 +79,56 @@ export async function getBankDepositCeiling(db: Db, corp: Corporation): Promise<
 }
 
 /**
+ * What abandoning one sector does to the bank's deposit ceiling. Null unless
+ * the sector is financial and the corporation runs a deposit-taking charter,
+ * the only case where a sector feeds the branch network. Ticket 1553: a CEO
+ * abandoned every financial sector without knowing the bank's deposit ceiling
+ * came from them, and it fell to zero.
+ */
+export async function abandonBankImpact(
+  db: Db,
+  corp: Corporation,
+  sector: Pick<CorporateSector, "_id" | "sectorType">
+): Promise<{
+  ceilingBefore: number;
+  ceilingAfter: number;
+  lastFinancialSector: boolean;
+  deposits: number;
+} | null> {
+  const charter = corp.bankCharter;
+  if (
+    sector.sectorType !== "financial" ||
+    !isDepositTakingCharter(charter) ||
+    charter.status !== "active"
+  )
+    return null;
+  const [sectors, eraUnitScale] = await Promise.all([
+    db
+      .collection<CorporateSector>("corporateSectors")
+      .find(
+        { corporationId: corp._id, sectorType: "financial" },
+        { projection: { capitalStock: 1, revenue: 1, strategyId: 1, sectorType: 1 } }
+      )
+      .toArray(),
+    loadWorldEraUnitScale(db),
+  ]);
+  const share = getBranchCapacityShare(charter);
+  const units = (rows: typeof sectors) =>
+    rows.reduce((sum, s) => sum + financialSectorCapacityUnits(s, eraUnitScale), 0);
+  const remaining = sectors.filter((s) => !s._id.equals(sector._id as ObjectId));
+  const deposits =
+    typeof charter.totalDeposits === "number" && Number.isFinite(charter.totalDeposits)
+      ? charter.totalDeposits
+      : 0;
+  return {
+    ceilingBefore: computeDepositCeiling(units(sectors), share),
+    ceilingAfter: computeDepositCeiling(units(remaining), share),
+    lastFinancialSector: remaining.length === 0,
+    deposits,
+  };
+}
+
+/**
  * Commodity-side production scale for a financial sector: the share of capacity
  * NOT allocated to the branch network. 1 when banking is off or the corp is
  * unchartered (zero behaviour change).

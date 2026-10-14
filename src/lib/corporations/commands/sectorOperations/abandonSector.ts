@@ -25,12 +25,13 @@ import { restoreSectorsToUnowned } from "@/lib/corporations/restoreSectorsToUnow
 import { applyBrandFacilityLoss } from "@/lib/corporations/brandFacilityLoss";
 import { requireCorporationActionsEnabled } from "@/lib/api/requireCorporationActions";
 import { unprotectedConstructionPropertyFilter } from "@/lib/corporations/securedConstructionProperty";
+import { abandonBankImpact } from "@/lib/banking/capacityAllocation";
 
 interface RouteParams {
   params: Promise<{ id: string; sectorId: string }>;
 }
 
-export async function abandonSector(_request: Request, { params }: RouteParams) {
+export async function abandonSector(request: Request, { params }: RouteParams) {
   try {
     const auth = await requireBasicAuth();
     if (!auth.ok) return auth.response;
@@ -53,6 +54,35 @@ export async function abandonSector(_request: Request, { params }: RouteParams) 
 
     if (!ObjectId.isValid(sectorId)) {
       return errorResponse(400, "Invalid sector ID");
+    }
+
+    // A financial sector feeds a deposit-taking bank's branch network. Abandoning
+    // one lowers the deposit ceiling (to zero with the last one), so the CEO sees
+    // the impact and confirms it first (ticket 1553).
+    const preview = await db
+      .collection<CorporateSector>("corporateSectors")
+      .findOne(
+        { _id: new ObjectId(sectorId), corporationId: corporation._id },
+        { projection: { sectorType: 1 } }
+      );
+    if (preview) {
+      const impact = await abandonBankImpact(db, corporation, preview);
+      const body = (await request.json().catch(() => null)) as {
+        acknowledgeBankImpact?: unknown;
+      } | null;
+      if (
+        impact &&
+        impact.ceilingAfter < impact.ceilingBefore &&
+        body?.acknowledgeBankImpact !== true
+      ) {
+        return errorResponse(
+          409,
+          impact.lastFinancialSector
+            ? "This is your last financial sector. Your bank's deposit capacity comes only from financial sectors, so abandoning it cuts the deposit ceiling to zero: the bank takes no new deposits and existing deposits drain away each turn until you own a financial sector again."
+            : "Your bank's deposit capacity comes from your financial sectors. Abandoning this one lowers the deposit ceiling, and deposits above the new ceiling drain away each turn.",
+          { code: "BANK_CAPACITY_IMPACT", extra: { bankImpact: impact } }
+        );
+      }
     }
 
     // Reserve the sector without deleting it. The property marker makes this
