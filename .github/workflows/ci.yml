@@ -18,6 +18,7 @@ jobs:
     permissions:
       contents: read
       actions: read
+      checks: read
       pull-requests: read
     outputs:
       full_suite: ${{ steps.scope.outputs.full_suite }}
@@ -32,7 +33,11 @@ jobs:
           fetch-depth: 2
       - name: Record the tested checkout tree
         id: checkout
-        run: printf 'tree=%s\n' "$(git rev-parse 'HEAD^{tree}')" >> "$GITHUB_OUTPUT"
+        run: |
+          checked_tree=$(git -c safe.directory="$GITHUB_WORKSPACE" rev-parse 'HEAD^{tree}')
+          test "${#checked_tree}" -eq 40
+          case "$checked_tree" in *[!a-f0-9]*) exit 1 ;; esac
+          printf 'tree=%s\n' "$checked_tree" >> "$GITHUB_OUTPUT"
       - name: Find reusable staging qualification
         id: reuse
         env:
@@ -233,7 +238,7 @@ jobs:
           # Keep enough heap headroom for the hosted runner to finish reliably.
           NODE_OPTIONS: --max-old-space-size=12288
 
-  # Split out of `verify` and sharded: the suite is ~3,500 files and its cost is
+  # Split out of `verify` and sharded: the suite has thousands of files and its cost is
   # dominated by per-file module loading. Architecture contracts are excluded
   # here because the lint job runs the same files as a dedicated hard gate.
   test:
@@ -252,7 +257,7 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci --no-audit --no-fund
-      # job-total rather than a hard-coded 4, so adding or removing a shard in
+      # Use job-total rather than a fixed divisor, so adding or removing a shard in
       # the matrix above cannot silently desync the divisor and drop test files.
       - name: Unit tests (shard ${{ matrix.shard }}/${{ strategy.job-total }})
         # This full-world fixture alone took 320 s in a 583 s shard. Give it
