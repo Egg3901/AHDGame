@@ -11,6 +11,12 @@ vi.mock("@/lib/mongodb", () => ({
   getDb: vi.fn(),
 }));
 
+// Territory admission has dedicated unit, route and real-Mongo coverage.
+// These focused fixtures exercise creation/accounting, not Mongo writer claims.
+vi.mock("@/lib/parties/territoryMutation", () => ({
+  withPartyTerritoryMutation: vi.fn(async (_db, _parties, work) => work()),
+}));
+
 // Membership validation is exercised with the real frontier in character.partyFrontier.test.ts.
 vi.mock("@/lib/db/partyLookup", () => ({
   findPartyBySequentialId: vi.fn(async (_db, id, countryId) => ({

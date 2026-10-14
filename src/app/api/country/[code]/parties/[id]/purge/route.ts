@@ -6,6 +6,7 @@ import { parseJsonBody } from "@/lib/api/validate";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
 import { getDb } from "@/lib/mongodb";
+import { withPartyTerritoryMutation } from "@/lib/parties/territoryMutation";
 import { findPartyBySequentialId } from "@/lib/db/partyLookup";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { canActAsChair } from "@/lib/parties/actingChair";
@@ -65,174 +66,180 @@ export async function POST(
     }
 
     const db = await getDb();
+    return await withPartyTerritoryMutation(db, [{ countryId, partyId }], async () => {
+      const party = await findPartyBySequentialId(db, partyId, countryId);
+      if (!party) {
+        return errorResponse(404, "Party not found");
+      }
 
-    const party = await findPartyBySequentialId(db, partyId, countryId);
-    if (!party) {
-      return errorResponse(404, "Party not found");
-    }
+      if (!canActAsChair(party, chair._id)) {
+        return errorResponse(
+          403,
+          "Only the party Chair (or acting Vice-Chair when the chair seat is vacant) can purge members"
+        );
+      }
 
-    if (!canActAsChair(party, chair._id)) {
-      return errorResponse(
-        403,
-        "Only the party Chair (or acting Vice-Chair when the chair seat is vacant) can purge members"
+      const targetId = new ObjectId(parsed.data.characterId);
+      // Characters collection contains only player characters; NPPs live in 'npps'
+      const target = await db.collection<Character>("characters").findOne({ _id: targetId });
+
+      if (!target) {
+        return errorResponse(404, "Character not found");
+      }
+
+      if (target.party !== partyId || !isSameCountry(target, party)) {
+        return errorResponse(400, "That character is not a member of this party");
+      }
+
+      const isLeadership =
+        party.chairId?.equals(target._id) ||
+        party.viceChairId?.equals(target._id) ||
+        party.treasurerId?.equals(target._id);
+      if (isLeadership) {
+        return errorResponse(400, "Leadership roles cannot be purged");
+      }
+
+      const isCommitteeMember = (party.committeeIds ?? []).some((id) => id.equals(target._id));
+      if (isCommitteeMember) {
+        return errorResponse(400, "National committee members cannot be purged during their term");
+      }
+
+      const currentTurn = await getCurrentTurn(db);
+      if (
+        party.lastPurgeAtTurn !== undefined &&
+        currentTurn - party.lastPurgeAtTurn < PURGE_COOLDOWN_TURNS
+      ) {
+        const turnsRemaining = PURGE_COOLDOWN_TURNS - (currentTurn - party.lastPurgeAtTurn);
+        return errorResponse(
+          429,
+          `Purge is on cooldown for ${turnsRemaining} more turn${turnsRemaining === 1 ? "" : "s"}`,
+          { extra: { turnsRemaining } }
+        );
+      }
+
+      const now = new Date();
+      const influenceCost = Math.floor((target.partyInfluence ?? 0) / 2);
+
+      // Escalating infamy: +50% per successive purge, capped at PURGE_CHAIR_INFAMY_MAX.
+      // Reset count if the cooldown has expired since the last purge.
+      const purgeCount =
+        party.lastPurgeAtTurn !== undefined &&
+        currentTurn - party.lastPurgeAtTurn >= PURGE_COOLDOWN_TURNS
+          ? 0
+          : (party.purgeCount ?? 0);
+      const infamyCost = Math.min(
+        PURGE_CHAIR_INFAMY_MAX,
+        Math.floor(
+          PURGE_CHAIR_INFAMY_COST_BASE * Math.pow(PURGE_CHAIR_INFAMY_ESCALATION, purgeCount)
+        )
       );
-    }
+      const nextPurgeCount = purgeCount + 1;
 
-    const targetId = new ObjectId(parsed.data.characterId);
-    // Characters collection contains only player characters; NPPs live in 'npps'
-    const target = await db.collection<Character>("characters").findOne({ _id: targetId });
-
-    if (!target) {
-      return errorResponse(404, "Character not found");
-    }
-
-    if (target.party !== partyId || !isSameCountry(target, party)) {
-      return errorResponse(400, "That character is not a member of this party");
-    }
-
-    const isLeadership =
-      party.chairId?.equals(target._id) ||
-      party.viceChairId?.equals(target._id) ||
-      party.treasurerId?.equals(target._id);
-    if (isLeadership) {
-      return errorResponse(400, "Leadership roles cannot be purged");
-    }
-
-    const isCommitteeMember = (party.committeeIds ?? []).some((id) => id.equals(target._id));
-    if (isCommitteeMember) {
-      return errorResponse(400, "National committee members cannot be purged during their term");
-    }
-
-    const currentTurn = await getCurrentTurn(db);
-    if (
-      party.lastPurgeAtTurn !== undefined &&
-      currentTurn - party.lastPurgeAtTurn < PURGE_COOLDOWN_TURNS
-    ) {
-      const turnsRemaining = PURGE_COOLDOWN_TURNS - (currentTurn - party.lastPurgeAtTurn);
-      return errorResponse(
-        429,
-        `Purge is on cooldown for ${turnsRemaining} more turn${turnsRemaining === 1 ? "" : "s"}`,
-        { extra: { turnsRemaining } }
+      // Apply costs to chair
+      await db.collection<Character>("characters").updateOne(
+        { _id: chair._id },
+        {
+          $set: {
+            infamy: Math.min(100, (chair.infamy ?? 0) + infamyCost),
+            partyInfluence: Math.max(0, (chair.partyInfluence ?? 0) - influenceCost),
+            updatedAt: now,
+          },
+        }
       );
-    }
 
-    const now = new Date();
-    const influenceCost = Math.floor((target.partyInfluence ?? 0) / 2);
+      // Eject the target. The purge is involuntary, so it must NOT arm the global
+      // party-switch cooldown — clear lastPartySwitchAt (and partyJoinedAt) so the
+      // victim can join any other party immediately. The only restriction is a
+      // party-scoped rejoin block on the party that purged them.
+      const purgeRejoinBlocks = [
+        ...prunePurgeRejoinBlocks(target.purgeRejoinBlocks, currentTurn),
+        { partyId, countryId, purgedAtTurn: currentTurn },
+      ];
+      await db.collection<Character>("characters").updateOne(
+        { _id: target._id },
+        {
+          $set: { party: "independent", partyInfluence: 0, purgeRejoinBlocks, updatedAt: now },
+          $unset: {
+            partyJoinedAt: "",
+            lastPartySwitchAt: "",
+            partyJoinedTurn: "",
+            // A purged founder loses the leadership exemption too, so rejoining
+            // later cannot revive it (leadershipTenure.ts).
+            foundedPartyId: "",
+          },
+        }
+      );
 
-    // Escalating infamy: +50% per successive purge, capped at PURGE_CHAIR_INFAMY_MAX.
-    // Reset count if the cooldown has expired since the last purge.
-    const purgeCount =
-      party.lastPurgeAtTurn !== undefined &&
-      currentTurn - party.lastPurgeAtTurn >= PURGE_COOLDOWN_TURNS
-        ? 0
-        : (party.purgeCount ?? 0);
-    const infamyCost = Math.min(
-      PURGE_CHAIR_INFAMY_MAX,
-      Math.floor(PURGE_CHAIR_INFAMY_COST_BASE * Math.pow(PURGE_CHAIR_INFAMY_ESCALATION, purgeCount))
-    );
-    const nextPurgeCount = purgeCount + 1;
+      // Update elected official records for the ejected character
+      await db
+        .collection("electedOfficials")
+        .updateMany(
+          { characterId: target._id },
+          { $set: { party: "independent", updatedAt: now } }
+        );
 
-    // Apply costs to chair
-    await db.collection<Character>("characters").updateOne(
-      { _id: chair._id },
-      {
-        $set: {
-          infamy: Math.min(100, (chair.infamy ?? 0) + infamyCost),
-          partyInfluence: Math.max(0, (chair.partyInfluence ?? 0) - influenceCost),
-          updatedAt: now,
-        },
-      }
-    );
+      // Update party: decrement count and record purge turn + count
+      await db.collection<PoliticalParty>("politicalParties").updateOne(
+        { _id: party._id },
+        {
+          $inc: { memberCount: -1 },
+          $set: { lastPurgeAtTurn: currentTurn, purgeCount: nextPurgeCount, updatedAt: now },
+        }
+      );
 
-    // Eject the target. The purge is involuntary, so it must NOT arm the global
-    // party-switch cooldown — clear lastPartySwitchAt (and partyJoinedAt) so the
-    // victim can join any other party immediately. The only restriction is a
-    // party-scoped rejoin block on the party that purged them.
-    const purgeRejoinBlocks = [
-      ...prunePurgeRejoinBlocks(target.purgeRejoinBlocks, currentTurn),
-      { partyId, countryId, purgedAtTurn: currentTurn },
-    ];
-    await db.collection<Character>("characters").updateOne(
-      { _id: target._id },
-      {
-        $set: { party: "independent", partyInfluence: 0, purgeRejoinBlocks, updatedAt: now },
-        $unset: {
-          partyJoinedAt: "",
-          lastPartySwitchAt: "",
-          partyJoinedTurn: "",
-          // A purged founder loses the leadership exemption too, so rejoining
-          // later cannot revive it (leadershipTenure.ts).
-          foundedPartyId: "",
-        },
-      }
-    );
+      // Withdraw target from mismatched primaries
+      await withdrawFromMismatchedPrimaries(target._id, "independent");
 
-    // Update elected official records for the ejected character
-    await db
-      .collection("electedOfficials")
-      .updateMany({ characterId: target._id }, { $set: { party: "independent", updatedAt: now } });
+      // Clean up state party positions and candidacies
+      await cleanupPartyPositionsOnSwitch(target._id, partyId, "independent", countryId);
 
-    // Update party: decrement count and record purge turn + count
-    await db.collection<PoliticalParty>("politicalParties").updateOne(
-      { _id: party._id },
-      {
-        $inc: { memberCount: -1 },
-        $set: { lastPurgeAtTurn: currentTurn, purgeCount: nextPurgeCount, updatedAt: now },
-      }
-    );
+      // Caucuses are party-scoped — purge must drop membership/factionId the same
+      // way leave and party-switch do, or the target stays blocked from founding
+      // or joining caucuses elsewhere (ticket #1030).
+      await cleanupCaucusParticipationForCharacters(db, [target._id], {
+        removeMembership: true,
+        membershipStatus: "removed",
+        now,
+      });
 
-    // Withdraw target from mismatched primaries
-    await withdrawFromMismatchedPrimaries(target._id, "independent");
+      // Update party presence for the state the target came from
+      await updatePartyPresence(db, target.homeState, partyId);
 
-    // Clean up state party positions and candidacies
-    await cleanupPartyPositionsOnSwitch(target._id, partyId, "independent", countryId);
-
-    // Caucuses are party-scoped — purge must drop membership/factionId the same
-    // way leave and party-switch do, or the target stays blocked from founding
-    // or joining caucuses elsewhere (ticket #1030).
-    await cleanupCaucusParticipationForCharacters(db, [target._id], {
-      removeMembership: true,
-      membershipStatus: "removed",
-      now,
-    });
-
-    // Update party presence for the state the target came from
-    await updatePartyPresence(db, target.homeState, partyId);
-
-    await emitPartyMembershipEvent({
-      db,
-      countryId,
-      character: target,
-      oldPartyId: partyId,
-      newPartyId: "independent",
-      reason: "purge",
-      actor: chair,
-      actorRole: "chair",
-      turn: currentTurn,
-      now,
-      metadata: { influenceCost },
-      snapshots: buildPartyEventSnapshots({
+      await emitPartyMembershipEvent({
+        db,
+        countryId,
         character: target,
-        oldParty: party,
-        newParty: null,
-        newIsIndependent: true,
-      }),
-    });
+        oldPartyId: partyId,
+        newPartyId: "independent",
+        reason: "purge",
+        actor: chair,
+        actorRole: "chair",
+        turn: currentTurn,
+        now,
+        metadata: { influenceCost },
+        snapshots: buildPartyEventSnapshots({
+          character: target,
+          oldParty: party,
+          newParty: null,
+          newIsIndependent: true,
+        }),
+      });
 
-    // Notify the ejected member
-    await createNotification({
-      userId: target.userId,
-      type: "party_kicked",
-      title: "Expelled from party",
-      message: `${chair.name} has expelled you from the ${party.name}.`,
-      metadata: { partyId: String(party.sequentialId), partyName: party.name, countryId },
-    });
+      // Notify the ejected member
+      await createNotification({
+        userId: target.userId,
+        type: "party_kicked",
+        title: "Expelled from party",
+        message: `${chair.name} has expelled you from the ${party.name}.`,
+        metadata: { partyId: String(party.sequentialId), partyName: party.name, countryId },
+      });
 
-    return NextResponse.json({
-      success: true,
-      message: `${target.name} has been expelled from the ${party.name}.`,
-      infamyCost,
-      purgeCount: nextPurgeCount,
+      return NextResponse.json({
+        success: true,
+        message: `${target.name} has been expelled from the ${party.name}.`,
+        infamyCost,
+        purgeCount: nextPurgeCount,
+      });
     });
   } catch (error) {
     return handleRouteError(error);

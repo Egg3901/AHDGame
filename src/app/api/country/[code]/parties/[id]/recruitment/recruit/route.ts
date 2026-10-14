@@ -9,6 +9,7 @@ import { recruitNPPSchema } from "@/lib/api/schemas/recruitment";
 import { findPartyBySequentialId } from "@/lib/db/partyLookup";
 import { calculateRecruitmentSlots } from "@/lib/npp/recruitment";
 import { getPartyFrontier, isInFrontier } from "@/lib/parties/partyFrontier";
+import { withPartyTerritoryMutation } from "@/lib/parties/territoryMutation";
 import {
   NPP_RECRUITMENT_AP_COST,
   nppActionPointCap,
@@ -65,294 +66,296 @@ export async function POST(
     const { stateId } = parsed.data;
 
     const db = await getDb();
-    const now = new Date();
-    // Recruitment cooldown is turn-based (see recruitmentCooldown helper); we
-    // read currentTurn from the game clock so a paused or drifted real clock
-    // can't shorten or lengthen the cooldown window.
-    const gameTime = await getGameTime();
-    const gameNow = gameTime.effectiveNow;
+    return await withPartyTerritoryMutation(db, [{ countryId, partyId: id }], async () => {
+      const now = new Date();
+      // Recruitment cooldown is turn-based (see recruitmentCooldown helper); we
+      // read currentTurn from the game clock so a paused or drifted real clock
+      // can't shorten or lengthen the cooldown window.
+      const gameTime = await getGameTime();
+      const gameNow = gameTime.effectiveNow;
 
-    const party = await findPartyBySequentialId(db, id, countryId);
-    if (!party) {
-      return errorResponse(404, "Party not found");
-    }
+      const party = await findPartyBySequentialId(db, id, countryId);
+      if (!party) {
+        return errorResponse(404, "Party not found");
+      }
 
-    const partyIdStr = String(party.sequentialId);
-    const charId = auth.character._id.toString();
-    const isChair = party.chairId?.toString() === charId;
-    const isViceChair = party.viceChairId?.toString() === charId;
+      const partyIdStr = String(party.sequentialId);
+      const charId = auth.character._id.toString();
+      const isChair = party.chairId?.toString() === charId;
+      const isViceChair = party.viceChairId?.toString() === charId;
 
-    if (!isChair && !isViceChair && !auth.isAdmin) {
-      return errorResponse(403, "Not authorized");
-    }
+      if (!isChair && !isViceChair && !auth.isAdmin) {
+        return errorResponse(403, "Not authorized");
+      }
 
-    const nppControl = await getPartyNppControlStatus({
-      db,
-      countryId,
-      party,
-      actor: auth.character,
-      isAdmin: auth.isAdmin,
-      now,
-    });
-    if (!nppControl.ok) {
-      return errorResponse(403, nppControl.error);
-    }
+      const nppControl = await getPartyNppControlStatus({
+        db,
+        countryId,
+        party,
+        actor: auth.character,
+        isAdmin: auth.isAdmin,
+        now,
+      });
+      if (!nppControl.ok) {
+        return errorResponse(403, nppControl.error);
+      }
 
-    // Turn-first cooldown (24 turns); helper falls back to the legacy Date.
-    const remainingTurns = recruitmentCooldownRemainingTurns(
-      party,
-      gameTime.currentTurn,
-      gameNow.getTime()
-    );
-    if (remainingTurns > 0) {
-      return errorResponse(400, `Recruitment on cooldown. Available in ${remainingTurns} hours.`);
-    }
-
-    // Verify state exists and is in correct country
-    const state = await db.collection<State>("states").findOne({ _id: stateId, countryId });
-    if (!state) {
-      return errorResponse(404, "State not found");
-    }
-
-    // National leadership can recruit in any state, including those with active
-    // State/Regional Chair/VC. Only the per-state slot cap (below) and party
-    // resources gate this — letting national chairs back-fill states that are
-    // led by an inactive or recently-installed local chair, or where players
-    // are already present, was the original missing capability.
-    const statePartyOrg = await db
-      .collection<StatePartyOrg>("statePartyOrg")
-      .findOne({ stateId, partyId: partyIdStr });
-
-    // Calculate slots and cost
-    const stateOrg = statePartyOrg?.organization ?? 0;
-    const currentNPPs = await db
-      .collection<NPP>("npps")
-      .countDocuments(activePartyNppFilter(countryId, partyIdStr, stateId));
-    const partyNPPCount = await db
-      .collection<NPP>("npps")
-      .countDocuments(activePartyNppFilter(countryId, partyIdStr));
-    const partyNppCapacity = await getPartyNppCapacity(db, countryId, partyIdStr, now);
-    const capacityError = partyNppCapacityError(partyNppCapacity, partyNPPCount);
-    if (capacityError) {
-      return errorResponse(400, capacityError);
-    }
-
-    const maxSlots = calculateRecruitmentSlots(stateOrg);
-    if (currentNPPs >= maxSlots) {
-      return errorResponse(
-        400,
-        `No recruitment slots available in ${state.name}. Max: ${maxSlots}`
+      // Turn-first cooldown (24 turns); helper falls back to the legacy Date.
+      const remainingTurns = recruitmentCooldownRemainingTurns(
+        party,
+        gameTime.currentTurn,
+        gameNow.getTime()
       );
-    }
+      if (remainingTurns > 0) {
+        return errorResponse(400, `Recruitment on cooldown. Available in ${remainingTurns} hours.`);
+      }
 
-    // Growth frontier: a party may only recruit into a region it already
-    // touches, or one adjacent to it. Read LIVE, never from the cached
-    // `statePartyOrg.hasPresence` flag, which lags membership events.
-    const { presence, frontier } = await getPartyFrontier(db, countryId, partyIdStr);
-    if (!isInFrontier(presence, frontier, stateId)) {
-      return errorResponse(
-        400,
-        `${party.name} is not established in or next to ${state.name}. Recruit in a region the party already reaches first.`
-      );
-    }
+      // Verify state exists and is in correct country
+      const state = await db.collection<State>("states").findOne({ _id: stateId, countryId });
+      if (!state) {
+        return errorResponse(404, "State not found");
+      }
 
-    // NPP Recruitment spends a flat 5 Action Points plus a per-currency treasury
-    // cost. Legacy rows with an unset AP pool read as full (= tier cap).
-    const recruitCost = NPP_RECRUITMENT_AP_COST;
-    const recruitFund = nppRecruitmentFundCost(nppTreasuryCurrency(countryId));
-    const availableAp =
-      party.nppActionPoints ?? nppActionPointCap("national", resolvePartyTier(party));
-    if (availableAp < recruitCost) {
-      return errorResponse(400, `Insufficient actions. Need ${recruitCost}, have ${availableAp}`);
-    }
-    if ((party.treasury ?? 0) < recruitFund) {
-      return errorResponse(
-        400,
-        `Insufficient funds. Need $${recruitFund.toLocaleString()}, have $${(party.treasury ?? 0).toLocaleString()}`
-      );
-    }
+      // National leadership can recruit in any state, including those with active
+      // State/Regional Chair/VC. Only the per-state slot cap (below) and party
+      // resources gate this — letting national chairs back-fill states that are
+      // led by an inactive or recently-installed local chair, or where players
+      // are already present, was the original missing capability.
+      const statePartyOrg = await db
+        .collection<StatePartyOrg>("statePartyOrg")
+        .findOne({ stateId, partyId: partyIdStr });
 
-    // Generate NPP
-    const existingNPPs = await db
-      .collection<NPP>("npps")
-      .find({ retiredAt: null }, { projection: { name: 1 } })
-      .toArray();
-    const usedNames = new Set(existingNPPs.map((n) => n.name));
-    const name = generateUniqueNPPName([...usedNames], 100, countryId);
-    if (!name) {
-      return errorResponse(500, "Failed to generate unique name");
-    }
+      // Calculate slots and cost
+      const stateOrg = statePartyOrg?.organization ?? 0;
+      const currentNPPs = await db
+        .collection<NPP>("npps")
+        .countDocuments(activePartyNppFilter(countryId, partyIdStr, stateId));
+      const partyNPPCount = await db
+        .collection<NPP>("npps")
+        .countDocuments(activePartyNppFilter(countryId, partyIdStr));
+      const partyNppCapacity = await getPartyNppCapacity(db, countryId, partyIdStr, now);
+      const capacityError = partyNppCapacityError(partyNppCapacity, partyNPPCount);
+      if (capacityError) {
+        return errorResponse(400, capacityError);
+      }
 
-    const quality = calculateQualityBonus(stateOrg);
-    const stateLean = getStateLean(state);
-    const partyEcon = party.economicPosition ?? 0;
-    const partySoc = party.socialPosition ?? 0;
-
-    const blendEcon = partyEcon * 0.7 + stateLean * 0.3;
-    const variance = Math.max(0.4, 1.5 - (quality + 20) / 25);
-    const economic = Math.max(
-      -5,
-      Math.min(5, Math.round((blendEcon + (Math.random() * 2 - 1) * variance) * 10) / 10)
-    );
-    const social = Math.max(
-      -5,
-      Math.min(5, Math.round((partySoc + (Math.random() * 2 - 1) * variance) * 10) / 10)
-    );
-
-    const sequentialId = await getNextSequentialId(db, "npp");
-
-    const npp: NPP = {
-      _id: new ObjectId(),
-      name,
-      countryId,
-      homeState: stateId,
-      politicalInfluence: 10,
-      favorability: Math.round(
-        Math.max(20, Math.min(80, 50 + quality * 0.2 + (Math.random() * 20 - 10)))
-      ),
-      policies: { economic, social },
-      party: partyIdStr,
-      currentOffice: null,
-      // Economy fields via the shared SSOT — recruited NPPs must spawn at donor
-      // base 1 (with funds/AP initialized) just like generated/seeded ones.
-      ...NPP_ECONOMY_DEFAULTS,
-      personality: {
-        loyalty: Math.round(
-          Math.max(0, Math.min(100, 50 + quality * 0.3 + (Math.random() * 40 - 20)))
-        ),
-        ambition: Math.round(Math.max(0, Math.min(100, Math.random() * 60 + 20))),
-        stubbornness: Math.round(
-          Math.max(0, Math.min(100, 40 - quality * 0.15 + (Math.random() * 40 - 20)))
-        ),
-      },
-      generatedAt: now,
-      retiredAt: null,
-      influenceState: { totalTimesInfluenced: 0 },
-      sequentialId,
-      createdAt: now,
-      updatedAt: now,
-    };
-
-    // Cooldown stored turn-first (+ Date for display/legacy). The readiness
-    // filter is turn-first too so the atomic deduct can't double-recruit.
-    const cooldownSet = recruitmentCooldownSet(gameTime.currentTurn, gameNow.getTime());
-    const cooldownReadyFilter = recruitmentCooldownReadyFilter(gameTime.currentTurn, gameNow);
-
-    // Heal a never-initialized AP pool (paused / never-regenerated game) to the
-    // tier cap so the atomic `$gte` deduct can match. Idempotent via `$exists:false`.
-    if (party.nppActionPoints == null) {
-      await db
-        .collection<PoliticalParty>("politicalParties")
-        .updateOne(
-          { _id: party._id, nppActionPoints: { $exists: false } },
-          { $set: { nppActionPoints: availableAp } }
+      const maxSlots = calculateRecruitmentSlots(stateOrg);
+      if (currentNPPs >= maxSlots) {
+        return errorResponse(
+          400,
+          `No recruitment slots available in ${state.name}. Max: ${maxSlots}`
         );
-    }
+      }
 
-    await runWithOptionalTransaction(
-      async (session) => {
-        const deductResult = await db.collection<PoliticalParty>("politicalParties").updateOne(
-          {
-            _id: party._id,
-            nppActionPoints: { $gte: recruitCost },
-            treasury: { $gte: recruitFund },
-            ...cooldownReadyFilter,
-          },
-          {
-            $inc: { nppActionPoints: -recruitCost, treasury: -recruitFund },
-            $set: { ...cooldownSet, updatedAt: now },
-          },
-          { session }
+      // Growth frontier: a party may only recruit into a region it already
+      // touches, or one adjacent to it. Read LIVE, never from the cached
+      // `statePartyOrg.hasPresence` flag, which lags membership events.
+      const { presence, frontier } = await getPartyFrontier(db, countryId, partyIdStr);
+      if (!isInFrontier(presence, frontier, stateId)) {
+        return errorResponse(
+          400,
+          `${party.name} is not established in or next to ${state.name}, or this region does not help reconnect its disconnected territory. Recruit in an existing or eligible connecting region.`
         );
+      }
 
-        if (deductResult.matchedCount === 0) {
-          throw new Error("NATIONAL_RECRUITMENT_CHANGED");
-        }
+      // NPP Recruitment spends a flat 5 Action Points plus a per-currency treasury
+      // cost. Legacy rows with an unset AP pool read as full (= tier cap).
+      const recruitCost = NPP_RECRUITMENT_AP_COST;
+      const recruitFund = nppRecruitmentFundCost(nppTreasuryCurrency(countryId));
+      const availableAp =
+        party.nppActionPoints ?? nppActionPointCap("national", resolvePartyTier(party));
+      if (availableAp < recruitCost) {
+        return errorResponse(400, `Insufficient actions. Need ${recruitCost}, have ${availableAp}`);
+      }
+      if ((party.treasury ?? 0) < recruitFund) {
+        return errorResponse(
+          400,
+          `Insufficient funds. Need $${recruitFund.toLocaleString()}, have $${(party.treasury ?? 0).toLocaleString()}`
+        );
+      }
 
-        await db.collection<NPP>("npps").insertOne(npp, { session });
-      },
-      async () => {
-        const deductResult = await db.collection<PoliticalParty>("politicalParties").updateOne(
-          {
-            _id: party._id,
-            nppActionPoints: { $gte: recruitCost },
-            treasury: { $gte: recruitFund },
-            ...cooldownReadyFilter,
-          },
-          {
-            $inc: { nppActionPoints: -recruitCost, treasury: -recruitFund },
-            $set: { ...cooldownSet, updatedAt: now },
+      // Generate NPP
+      const existingNPPs = await db
+        .collection<NPP>("npps")
+        .find({ retiredAt: null }, { projection: { name: 1 } })
+        .toArray();
+      const usedNames = new Set(existingNPPs.map((n) => n.name));
+      const name = generateUniqueNPPName([...usedNames], 100, countryId);
+      if (!name) {
+        return errorResponse(500, "Failed to generate unique name");
+      }
+
+      const quality = calculateQualityBonus(stateOrg);
+      const stateLean = getStateLean(state);
+      const partyEcon = party.economicPosition ?? 0;
+      const partySoc = party.socialPosition ?? 0;
+
+      const blendEcon = partyEcon * 0.7 + stateLean * 0.3;
+      const variance = Math.max(0.4, 1.5 - (quality + 20) / 25);
+      const economic = Math.max(
+        -5,
+        Math.min(5, Math.round((blendEcon + (Math.random() * 2 - 1) * variance) * 10) / 10)
+      );
+      const social = Math.max(
+        -5,
+        Math.min(5, Math.round((partySoc + (Math.random() * 2 - 1) * variance) * 10) / 10)
+      );
+
+      const sequentialId = await getNextSequentialId(db, "npp");
+
+      const npp: NPP = {
+        _id: new ObjectId(),
+        name,
+        countryId,
+        homeState: stateId,
+        politicalInfluence: 10,
+        favorability: Math.round(
+          Math.max(20, Math.min(80, 50 + quality * 0.2 + (Math.random() * 20 - 10)))
+        ),
+        policies: { economic, social },
+        party: partyIdStr,
+        currentOffice: null,
+        // Economy fields via the shared SSOT — recruited NPPs must spawn at donor
+        // base 1 (with funds/AP initialized) just like generated/seeded ones.
+        ...NPP_ECONOMY_DEFAULTS,
+        personality: {
+          loyalty: Math.round(
+            Math.max(0, Math.min(100, 50 + quality * 0.3 + (Math.random() * 40 - 20)))
+          ),
+          ambition: Math.round(Math.max(0, Math.min(100, Math.random() * 60 + 20))),
+          stubbornness: Math.round(
+            Math.max(0, Math.min(100, 40 - quality * 0.15 + (Math.random() * 40 - 20)))
+          ),
+        },
+        generatedAt: now,
+        retiredAt: null,
+        influenceState: { totalTimesInfluenced: 0 },
+        sequentialId,
+        createdAt: now,
+        updatedAt: now,
+      };
+
+      // Cooldown stored turn-first (+ Date for display/legacy). The readiness
+      // filter is turn-first too so the atomic deduct can't double-recruit.
+      const cooldownSet = recruitmentCooldownSet(gameTime.currentTurn, gameNow.getTime());
+      const cooldownReadyFilter = recruitmentCooldownReadyFilter(gameTime.currentTurn, gameNow);
+
+      // Heal a never-initialized AP pool (paused / never-regenerated game) to the
+      // tier cap so the atomic `$gte` deduct can match. Idempotent via `$exists:false`.
+      if (party.nppActionPoints == null) {
+        await db
+          .collection<PoliticalParty>("politicalParties")
+          .updateOne(
+            { _id: party._id, nppActionPoints: { $exists: false } },
+            { $set: { nppActionPoints: availableAp } }
+          );
+      }
+
+      await runWithOptionalTransaction(
+        async (session) => {
+          const deductResult = await db.collection<PoliticalParty>("politicalParties").updateOne(
+            {
+              _id: party._id,
+              nppActionPoints: { $gte: recruitCost },
+              treasury: { $gte: recruitFund },
+              ...cooldownReadyFilter,
+            },
+            {
+              $inc: { nppActionPoints: -recruitCost, treasury: -recruitFund },
+              $set: { ...cooldownSet, updatedAt: now },
+            },
+            { session }
+          );
+
+          if (deductResult.matchedCount === 0) {
+            throw new Error("NATIONAL_RECRUITMENT_CHANGED");
           }
-        );
 
-        if (deductResult.matchedCount === 0) {
-          throw new Error("NATIONAL_RECRUITMENT_CHANGED");
-        }
+          await db.collection<NPP>("npps").insertOne(npp, { session });
+        },
+        async () => {
+          const deductResult = await db.collection<PoliticalParty>("politicalParties").updateOne(
+            {
+              _id: party._id,
+              nppActionPoints: { $gte: recruitCost },
+              treasury: { $gte: recruitFund },
+              ...cooldownReadyFilter,
+            },
+            {
+              $inc: { nppActionPoints: -recruitCost, treasury: -recruitFund },
+              $set: { ...cooldownSet, updatedAt: now },
+            }
+          );
 
-        try {
-          await db.collection<NPP>("npps").insertOne(npp);
-        } catch (error) {
-          const rollbackUpdate: {
-            $inc: { nppActionPoints: number; treasury: number };
-            $set: {
-              updatedAt: Date;
-              nppRecruitmentCooldownUntil?: Date;
-              nppRecruitmentCooldownUntilTurn?: number;
+          if (deductResult.matchedCount === 0) {
+            throw new Error("NATIONAL_RECRUITMENT_CHANGED");
+          }
+
+          try {
+            await db.collection<NPP>("npps").insertOne(npp);
+          } catch (error) {
+            const rollbackUpdate: {
+              $inc: { nppActionPoints: number; treasury: number };
+              $set: {
+                updatedAt: Date;
+                nppRecruitmentCooldownUntil?: Date;
+                nppRecruitmentCooldownUntilTurn?: number;
+              };
+              $unset?: Partial<{
+                nppRecruitmentCooldownUntil: "";
+                nppRecruitmentCooldownUntilTurn: "";
+              }>;
+            } = {
+              $inc: { nppActionPoints: recruitCost, treasury: recruitFund },
+              $set: { updatedAt: new Date() },
             };
-            $unset?: Partial<{
+
+            // Restore each pre-recruit cooldown field independently: $set the ones
+            // that existed, $unset the ones that did not — so a rollback never
+            // leaves a phantom turn/Date cooldown behind (e.g. a legacy party that
+            // had only the Date field would otherwise keep the freshly-written turn).
+            const rollbackUnset: Partial<{
               nppRecruitmentCooldownUntil: "";
               nppRecruitmentCooldownUntilTurn: "";
-            }>;
-          } = {
-            $inc: { nppActionPoints: recruitCost, treasury: recruitFund },
-            $set: { updatedAt: new Date() },
-          };
+            }> = {};
+            if (party.nppRecruitmentCooldownUntil) {
+              rollbackUpdate.$set.nppRecruitmentCooldownUntil = party.nppRecruitmentCooldownUntil;
+            } else {
+              rollbackUnset.nppRecruitmentCooldownUntil = "";
+            }
+            if (party.nppRecruitmentCooldownUntilTurn != null) {
+              rollbackUpdate.$set.nppRecruitmentCooldownUntilTurn =
+                party.nppRecruitmentCooldownUntilTurn;
+            } else {
+              rollbackUnset.nppRecruitmentCooldownUntilTurn = "";
+            }
+            if (Object.keys(rollbackUnset).length > 0) {
+              rollbackUpdate.$unset = rollbackUnset;
+            }
 
-          // Restore each pre-recruit cooldown field independently: $set the ones
-          // that existed, $unset the ones that did not — so a rollback never
-          // leaves a phantom turn/Date cooldown behind (e.g. a legacy party that
-          // had only the Date field would otherwise keep the freshly-written turn).
-          const rollbackUnset: Partial<{
-            nppRecruitmentCooldownUntil: "";
-            nppRecruitmentCooldownUntilTurn: "";
-          }> = {};
-          if (party.nppRecruitmentCooldownUntil) {
-            rollbackUpdate.$set.nppRecruitmentCooldownUntil = party.nppRecruitmentCooldownUntil;
-          } else {
-            rollbackUnset.nppRecruitmentCooldownUntil = "";
+            await db
+              .collection<PoliticalParty>("politicalParties")
+              .updateOne({ _id: party._id }, rollbackUpdate);
+            throw error;
           }
-          if (party.nppRecruitmentCooldownUntilTurn != null) {
-            rollbackUpdate.$set.nppRecruitmentCooldownUntilTurn =
-              party.nppRecruitmentCooldownUntilTurn;
-          } else {
-            rollbackUnset.nppRecruitmentCooldownUntilTurn = "";
-          }
-          if (Object.keys(rollbackUnset).length > 0) {
-            rollbackUpdate.$unset = rollbackUnset;
-          }
-
-          await db
-            .collection<PoliticalParty>("politicalParties")
-            .updateOne({ _id: party._id }, rollbackUpdate);
-          throw error;
         }
-      }
-    );
+      );
 
-    console.log(
-      `[NPP Recruitment] ${auth.character.name} recruited ${name} in ${state.name} for ${party.name}`
-    );
+      console.log(
+        `[NPP Recruitment] ${auth.character.name} recruited ${name} in ${state.name} for ${party.name}`
+      );
 
-    return NextResponse.json({
-      success: true,
-      npp: {
-        id: npp._id.toString(),
-        sequentialId: npp.sequentialId,
-        name: npp.name,
-        homeState: stateId,
-      },
-      cooldownUntil: cooldownSet.nppRecruitmentCooldownUntil.toISOString(),
-      cost: { actionPoints: recruitCost, funds: recruitFund },
+      return NextResponse.json({
+        success: true,
+        npp: {
+          id: npp._id.toString(),
+          sequentialId: npp.sequentialId,
+          name: npp.name,
+          homeState: stateId,
+        },
+        cooldownUntil: cooldownSet.nppRecruitmentCooldownUntil.toISOString(),
+        cost: { actionPoints: recruitCost, funds: recruitFund },
+      });
     });
   } catch (error) {
     if (error instanceof Error && error.message === "NATIONAL_RECRUITMENT_CHANGED") {
