@@ -219,7 +219,7 @@ export async function processCentralBankChairTurn(
   // against it. One read for every country with an AI chair.
   const nppCountries = banks
     .filter((b) => b.chairMode === "npp" && COUNTRY_CONFIGS[b.countryId as CountryId])
-    .map((b) => b.countryId as string);
+    .map((b) => b.countryId as CountryId);
   const gapRegions =
     nppCountries.length > 0
       ? ((await db
