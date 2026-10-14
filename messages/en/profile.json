@@ -172,11 +172,12 @@
       "progress": "{completed} of {total} done",
       "dismiss": "Dismiss",
       "dismissChecklistAria": "Dismiss checklist",
+      "later": "Later, not needed for the reward",
       "doneSr": "(done)",
       "claimFailed": "Claim failed. Try again.",
       "rewardAdded": "{reward} added to your campaign funds.",
       "claim": "Claim {reward}",
-      "finishSteps": "Finish all {total} steps to claim {reward} in campaign funds.",
+      "finishSteps": "Finish the {total} numbered steps to claim {reward} in campaign funds.",
       "newTitle": "New to A House Divided?",
       "newSubtitle": "See personalized suggestions for what to do next →",
       "newDismissAria": "Dismiss new player banner"

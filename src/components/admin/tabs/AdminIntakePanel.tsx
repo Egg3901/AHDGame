@@ -3,6 +3,9 @@
 import { useEffect, useState } from "react";
 import { SectionLabel } from "@/components/ui/SectionLabel";
 import type { IntakeSummary } from "@/lib/admin/intake/intakeSummary";
+import type { OnboardingCohorts } from "@/lib/admin/intake/onboardingCohorts";
+
+type IntakePayload = IntakeSummary & { onboarding?: OnboardingCohorts };
 
 function pct(part: number, whole: number): string {
   return whole > 0 ? `${Math.round((part / whole) * 100)}%` : "–";
@@ -19,7 +22,7 @@ function topEntries(map: Record<string, number>, limit = 6): [string, number][] 
  * independent. The number PostHog totals are reconciled against.
  */
 export function AdminIntakePanel({ days }: { days: number }) {
-  const [data, setData] = useState<IntakeSummary | null>(null);
+  const [data, setData] = useState<IntakePayload | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -27,7 +30,7 @@ export function AdminIntakePanel({ days }: { days: number }) {
     fetch(`/api/admin/intake/summary?days=${days}`, { cache: "no-store" })
       .then(async (res) => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        return (await res.json()) as IntakeSummary;
+        return (await res.json()) as IntakePayload;
       })
       .then((summary) => {
         if (!cancelled) {
@@ -124,8 +127,77 @@ export function AdminIntakePanel({ days }: { days: number }) {
               </div>
             ))}
           </div>
+          {data.onboarding && <OnboardingCohortTable cohorts={data.onboarding} />}
         </div>
       )}
     </section>
+  );
+}
+
+const STEP_LABELS: Record<string, string> = {
+  "scout-state": "Scouted home",
+  "join-party": "Joined party",
+  "campaign-action": "Campaigned",
+  "file-for-race": "Filed for race",
+  invest: "Invested",
+  "found-company": "Ran company",
+  "back-union": "Backed union",
+  "read-wire": "Read news",
+  "first-vote": "Voted",
+};
+
+/**
+ * Characters created in the window, founding-race joiners vs joiners of a
+ * running world. The onboarding target: mid-world zero influence after 72h
+ * at 25% or lower, and Campaign within 24h at 70% or higher.
+ */
+function OnboardingCohortTable({ cohorts }: { cohorts: OnboardingCohorts }) {
+  const rows = [
+    ["Joined during founding", cohorts.founding],
+    ["Joined a running world", cohorts.midWorld],
+  ] as const;
+  return (
+    <div className="overflow-x-auto rounded-xl border border-card-border bg-card p-4 shadow-sm">
+      <p className="mb-1 text-body-sm font-medium text-muted">First days of new characters</p>
+      <p className="mb-3 text-xs text-muted">
+        Target for joiners of a running world: Campaign within 24h at 70% or more, zero influence
+        after 72h at 25% or less. Step counts exist from the stamp rollout onward.
+      </p>
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="text-left text-xs text-muted">
+            <th className="py-1 pr-3 font-medium">Cohort</th>
+            <th className="py-1 pr-3 font-medium tabular-nums">Characters</th>
+            <th className="py-1 pr-3 font-medium">Campaigned in 24h</th>
+            <th className="py-1 pr-3 font-medium">Zero influence after 72h</th>
+            {Object.keys(STEP_LABELS).map((id) => (
+              <th key={id} className="py-1 pr-3 font-medium">
+                {STEP_LABELS[id]}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map(([label, c]) => (
+            <tr key={label} className="border-t border-card-border/60">
+              <td className="py-1.5 pr-3">{label}</td>
+              <td className="py-1.5 pr-3 tabular-nums">{c.characters}</td>
+              <td className="py-1.5 pr-3 tabular-nums">
+                {c.campaignedWithin24h} ({pct(c.campaignedWithin24h, c.characters)})
+              </td>
+              <td className="py-1.5 pr-3 tabular-nums">
+                {c.zeroInfluenceAfter72h} of {c.atLeast72h} (
+                {pct(c.zeroInfluenceAfter72h, c.atLeast72h)})
+              </td>
+              {Object.keys(STEP_LABELS).map((id) => (
+                <td key={id} className="py-1.5 pr-3 tabular-nums">
+                  {c.steps[id] ?? 0}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
