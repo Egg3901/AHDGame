@@ -35,6 +35,8 @@ export interface DistrictedArgs {
    * `holderCharacterId` and every NPP-held seat rendered unheld (#2906 again).
    */
   persist?: boolean;
+  preloadedDistricts?: CongressionalDistrict[];
+  preloadedParties?: PoliticalParty[];
 }
 
 export interface SeatResult {
@@ -55,17 +57,21 @@ export async function districtedHouseResolution(
   db: Db,
   args: DistrictedArgs
 ): Promise<SeatResult | null> {
-  const docs = (await db
-    .collection<CongressionalDistrict>("congressionalDistricts")
-    .find({ countryId: args.countryId, stateId: args.stateId } as Partial<CongressionalDistrict>)
-    .toArray()) as CongressionalDistrict[];
+  const docs =
+    args.preloadedDistricts ??
+    (await db
+      .collection<CongressionalDistrict>("congressionalDistricts")
+      .find({ countryId: args.countryId, stateId: args.stateId } as Partial<CongressionalDistrict>)
+      .toArray());
   if (docs.length === 0) return null;
 
   // Build a party→pool lookup keyed by the identifier forms candidate.party may use.
-  const parties = (await db
-    .collection<PoliticalParty>("politicalParties")
-    .find({ countryId: args.countryId } as Partial<PoliticalParty>)
-    .toArray()) as PoliticalParty[];
+  const parties =
+    args.preloadedParties ??
+    (await db
+      .collection<PoliticalParty>("politicalParties")
+      .find({ countryId: args.countryId } as Partial<PoliticalParty>)
+      .toArray());
   const poolByKey = new Map<string, Pool>();
   for (const p of parties) {
     const pool = getPartyPool({

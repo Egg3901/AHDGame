@@ -42,6 +42,7 @@ vi.mock("@/lib/constants/nationalScope", () => ({
 const processNppChairAutoRateMock = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/nppAutonomy/nppChairAutoRate", () => ({
   processNppChairAutoRate: processNppChairAutoRateMock,
+  processNppCurrencyDefence: vi.fn(async () => "none"),
 }));
 
 describe("processCentralBankChairTurn", () => {

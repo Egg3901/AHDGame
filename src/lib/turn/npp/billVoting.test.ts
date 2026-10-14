@@ -722,6 +722,10 @@ describe("processBillVoting", () => {
   });
 
   it("identifies the opposition from a live seat tally, ignoring a stale gov.seatsByParty", async () => {
+    // A v1 behaviour: below v6, so the 6.11 "futile bloc" rule stays out of it.
+    atLeastMock.mockImplementation(
+      async (_db: unknown, _c: unknown, level: string) => level !== "v6"
+    );
     // Regression for the stale-cache defect: `governmentFormations.seatsByParty`
     // is a write-triggered cache that can drift arbitrarily far from the real
     // chamber (measured in the field: BR/NG summed to 0 against real totals of
@@ -821,6 +825,7 @@ describe("processBillVoting", () => {
     // Party "2" is NOT the opposition once seats are tallied live (it only
     // looks dominant in the stale cache) — it must carry no opposition force.
     expect(forceFor(party2Npp._id)).toBe(0);
+    atLeastMock.mockReset().mockResolvedValue(true);
   });
 
   it("still lets a same-country NPP vote (BR senator on BR senate bill)", async () => {
@@ -1582,6 +1587,7 @@ describe("processBillVoting — engine 6.7 government whip (v6)", () => {
 
 describe("processBillVoting — engine 6.8 business interest (v6)", () => {
   async function donorsForceOn(engine6: boolean) {
+    nppBulkWrites = [];
     atLeastMock.mockImplementation(async (_db: unknown, _c: unknown, level: string) =>
       level === "v6" ? engine6 : true
     );
@@ -1612,6 +1618,7 @@ describe("processBillVoting — engine 6.8 business interest (v6)", () => {
         updateOne: vi.fn(() => Promise.resolve({ modifiedCount: 1 })),
         bulkWrite: vi.fn((...args: unknown[]) => {
           if (name === "nppVotePredictions") predictions.push(args);
+          if (name === "npps") nppBulkWrites.push(args);
           return Promise.resolve({ upsertedCount: 0, modifiedCount: 0 });
         }),
         findOne: vi.fn(() => Promise.resolve(null)),
@@ -1639,14 +1646,105 @@ describe("processBillVoting — engine 6.8 business interest (v6)", () => {
     const ops = (
       predictions[0] as [Array<{ updateOne: { update: { $set: { forces: { donors: number } } } } }>]
     )[0];
+    lastDonorsLabel = (ops[0].updateOne.update.$set as unknown as { donorsLabel: string })
+      .donorsLabel;
     return ops[0].updateOne.update.$set.forces.donors;
   }
+  let lastDonorsLabel = "";
+  let nppBulkWrites: unknown[][] = [];
 
   it("pulls a CEO toward a subsidy for its own sector at v6", async () => {
     expect(await donorsForceOn(true)).toBe(40);
   });
 
+  it("charges a point of favorability when the interest decided the vote", async () => {
+    await donorsForceOn(true);
+    expect(nppBulkWrites).toHaveLength(1);
+  });
+
+  it("names the business interest on the forecast at v6", async () => {
+    await donorsForceOn(true);
+    expect(lastDonorsLabel).toContain("Own business interest");
+  });
+
   it("leaves the donors force alone below v6", async () => {
     expect(await donorsForceOn(false)).toBe(0);
+  });
+});
+
+describe("processBillVoting — engine 6.11 opposition battles (v6)", () => {
+  async function oppositionForce(governingSeats: number) {
+    atLeastMock.mockReset().mockResolvedValue(true);
+    const oppNpp = makeNPP({
+      countryId: "BR",
+      party: "3",
+      policies: { economic: 0, social: 0 },
+      personality: { loyalty: 50, ambition: 50, stubbornness: 50 },
+      donorBaseLevel: 0,
+    });
+    const official = makeOfficial(oppNpp._id, "house", {
+      countryId: "BR",
+      party: "3",
+      officeType: "chamber",
+    });
+    const bill = makeBill({
+      countryId: "BR",
+      sponsorParty: "1",
+      currentChamber: "chamber",
+      status: "active",
+    });
+    const predictions: unknown[][] = [];
+    const db = {
+      collection: vi.fn((name: string) => ({
+        updateOne: vi.fn(() => Promise.resolve({ modifiedCount: 1 })),
+        bulkWrite: vi.fn((...args: unknown[]) => {
+          if (name === "nppVotePredictions") predictions.push(args);
+          return Promise.resolve({ upsertedCount: 0, modifiedCount: 0 });
+        }),
+        findOne: vi.fn(() =>
+          Promise.resolve(
+            name === "governmentFormations"
+              ? { _id: "BR", status: "formed", governingPartyId: "1" }
+              : null
+          )
+        ),
+        find: vi.fn(() => ({
+          toArray: vi.fn().mockResolvedValue(
+            name === "electedOfficials"
+              ? [
+                  { officeType: "chamber", countryId: "BR", party: "1", seatsHeld: governingSeats },
+                  {
+                    officeType: "chamber",
+                    countryId: "BR",
+                    party: "3",
+                    seatsHeld: 100 - governingSeats,
+                  },
+                ]
+              : []
+          ),
+        })),
+      })),
+    } as unknown as Db;
+    const ctx = makeCtx(db, {
+      activeBills: [bill],
+      nppOfficials: [official],
+      nppMap: new Map([[oppNpp._id.toString(), oppNpp]]),
+    });
+    const { processBillVoting } = await import("./billVoting");
+    await processBillVoting(ctx);
+    const ops = (
+      predictions[0] as [
+        Array<{ updateOne: { update: { $set: { forces: { ideology: number } } } } }>,
+      ]
+    )[0];
+    return ops[0].updateOne.update.$set.forces.ideology;
+  }
+
+  it("keeps the bloc against a government it could defeat", async () => {
+    expect(await oppositionForce(52)).toBeLessThan(0);
+  });
+
+  it("drops the bloc against a commanding government", async () => {
+    expect(await oppositionForce(60)).toBe(0);
   });
 });

@@ -38,10 +38,9 @@ number.
 
 ### Stage 1: running for office
 
-- **Race choice by chance of winning.** NPPs file where their home approval,
-  party strength and incumbency give them a real chance, instead of filling the
-  first open primary in a fixed office order. (Placing the strongest NPPs in the
-  senior races shipped in 6.1.0.)
+- **Race choice by chance of winning.** NPPs file where their party's strength
+  gives them a real chance. (Strongest NPPs in senior races shipped in 6.1.0;
+  weak parties putting them in winnable local races shipped in 6.12.0.)
 - **Campaigning tied to a race.** Campaign and advertising actions spend on the
   race the NPP is running in, weighted toward close races, instead of raising
   general influence and favorability. (Rallies in the NPP's own race shipped in
@@ -62,7 +61,7 @@ number.
   district, donor and opposition pressure; whips and caucuses come later.)
 - **Whipping its own program.** A governing party whips co-partisans on the
   bills that serve its standing goals (shipped in 6.7.0). Opposition
-  coordinates against a bill only when it has the votes to defeat it.
+  coordinates only against a government it can defeat (shipped in 6.11.0).
 - **Ministers judged on their goal.** Cabinet posts already go to NPPs ranked
   on fit with the head of government, competence and the brief, and ministers
   whose briefs badly miss target are already reshuffled. The remaining step is
@@ -70,8 +69,8 @@ number.
 - **Fewer writes.** Ministerial orders and settings are written in batches
   per country.
 
-- **Currency defence.** Central banks answer sharp currency moves (6.6.0).
-  Governments do not yet respond with fiscal policy or reserves.
+- **Currency defence.** Central banks answer sharp currency moves with rates
+  (6.6.0) and reserve-backed trading bands (6.13.0).
 
 ### Stage 3: corporations
 
@@ -80,9 +79,9 @@ number.
 - **CEO choice by record.** NPP-run companies choose CEOs from NPPs with a
   track record running companies in the same sector. Needs a record of each
   NPP's results as a CEO first; none is kept yet.
-- **Consequences across politics and business.** NPP officeholders who hold or
-  run companies weigh those holdings in votes (shipped in 6.8.0) and
-  sponsorship, and opponents and voters can see and react to the conflict.
+- **Consequences across politics and business.** NPP officeholders weigh their
+  holdings in votes (6.8.0), the conflict is shown on their profile (6.13.1),
+  and voters mark down a vote their holdings decided (6.14.0).
 - **Batched purchases.** The share-buying sweep is the largest single NPP cost
   in a turn (18.0 seconds and 1,465 database round trips on live turn 168); it
   moves to one batched settlement per country.
@@ -101,11 +100,78 @@ number.
 - Step down the income NPPs receive without acting until those measures match
   engine 5. The election modifiers are not changed.
 
-### Engine 7: default
+### Stage 6: default for new worlds
 
-- Autonomy v6 becomes the default for new singleplayer and simulation worlds,
-  after the engine 6 stages are validated. Running worlds never change level on
-  their own.
+- Autonomy v6 becomes the default for new singleplayer and simulation worlds
+  (shipped in 6.14.1). Running worlds never change level on their own, and the
+  live multiplayer world keeps its own setting.
+
+## 6.14.1 (unreleased)
+
+- **V6 is the default for new local worlds.** New singleplayer and simulation
+  worlds now start on autonomy v6, so they run every engine 6 change. Existing
+  worlds keep their level, and the live multiplayer world stays on its own
+  setting. The desktop client lists V6 and recommends it. No decision changes.
+
+## 6.14.0 (unreleased)
+
+Stage 3 (corporations).
+
+- **Voters notice self-interested votes (v6).** When an NPP's own companies
+  decide its vote on a bill, it loses 1 favorability. "Decide" means it would
+  have voted differently without them. This happens at most once per voting
+  turn and never takes favorability below zero. Business interest is no
+  longer free: an NPP that votes its holdings pays a small price with voters.
+
+## 6.13.1 (unreleased)
+
+- **Business interests are visible (v6).** When an NPP's own companies pull
+  its vote (6.8.0), the vote forecast on its profile now says so, naming
+  whether the bill helps or hurts a company it runs or holds. Players and
+  opponents can see the conflict. No decision changes.
+
+## 6.13.0 (unreleased)
+
+Stage 2 (governing).
+
+- **Central banks defend a falling currency (v6).** Since 6.6.0 a central
+  bank run by an NPP adjusts its interest rate when its currency moves, but in
+  limited steps that a sharp fall can outrun. Its other tool, a trading band
+  defended with the bank's reserves, was only ever used by player chairs.
+  - Now, once a floating currency has fallen 15% or more over 24 turns, the
+    NPP chair sets a band. Its top sits 5% above today's rate, which caps
+    further weakening, and its bottom 10% below.
+  - The bank defends the band with its own reserves under the usual rules, so
+    it can never spend more than it holds.
+  - The chair removes its own band once the currency's 24-turn move is back
+    within 5%, after the normal wait between band changes.
+  - A band set by a player is never touched, and government-held rates, pegs
+    and shared currencies are left alone.
+
+## 6.12.0 (unreleased)
+
+Stage 1 (running for office).
+
+- **Racing where the party can win (v6).** Since 6.1.0 a party runs its
+  strongest NPPs for its most senior races. Where the party is weak across the
+  whole region, those regionwide races are the ones it cannot win, so that
+  spent its best candidates on lost causes. Now a party whose organization in
+  the region is below 75% of the leading party's runs its strongest NPPs in
+  its most local races instead, where it can still win seats. The same races
+  are contested either way.
+
+## 6.11.0 (unreleased)
+
+Stage 2 (governing).
+
+- **The opposition picks its battles (v6).** The opposition's NPPs used to vote
+  as a bloc against every government bill, even against a government with a
+  large majority, where the bloc could defeat nothing and only stopped
+  opposition members backing bills they agreed with. Now the bloc holds only
+  while the government side (governing party plus coalition partners) has
+  less than 55% of the lower chamber. Above that, opposition NPPs vote on each
+  bill's merits, home region and donors like any other member. The pre-filing
+  vote count from 6.5.0 uses the same rule.
 
 ## 6.10.0 (unreleased)
 

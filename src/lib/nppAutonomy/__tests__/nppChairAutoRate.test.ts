@@ -4,6 +4,7 @@ import {
   computeNppChairRateTarget,
   computeNppChairRateStep,
   processNppChairAutoRate,
+  processNppCurrencyDefence,
   isStandingAdviceDue,
 } from "../nppChairAutoRate";
 import { RATE_HISTORY_MAX } from "@/lib/db/types/centralBank";
@@ -541,5 +542,60 @@ describe("processNppChairAutoRate — engine 6.6 currency response (v6)", () => 
     await processNppChairAutoRate(db, bank(), "US" as any, 50, null, false, 2019);
 
     expect(updateOne).not.toHaveBeenCalled();
+  });
+});
+
+describe("processNppCurrencyDefence — engine 6.13 (v6)", () => {
+  const chairNppId = new ObjectId();
+  function defenceDb(level: string, fx: Record<string, unknown>) {
+    const updateOne = vi.fn(async () => ({ matchedCount: 1 }));
+    const db = {
+      collection: (name: string) => ({
+        updateOne,
+        findOne: async () => {
+          if (name === "gameState") return { nppAutonomyLevel: level };
+          if (name === "exchangeRates") return fx;
+          if (name === "npps") return { name: "Chair NPP" };
+          return null;
+        },
+      }),
+    } as any;
+    return { db, updateOne };
+  }
+  const bank = { _id: "b" as any, chairMode: "npp", chairNppId } as any;
+  const fallen = { rate: 1.3, baseRate: 1.0, rateHistory: [{ turn: 20, rate: 1.0 }] };
+
+  it("sets a reserve-backed band after a 30% fall at v6", async () => {
+    const { db, updateOne } = defenceDb("v6", fallen);
+
+    expect(await processNppCurrencyDefence(db, bank, "US" as any, 50, 2019)).toBe("set");
+
+    const [filter, update] = updateOne.mock.calls[0] as unknown as [any, any];
+    expect(filter).toEqual({ _id: "US", interventionPolicy: null });
+    const policy = update.$set.interventionPolicy;
+    expect(policy.ceiling).toBeCloseTo(1.365, 6);
+    expect(policy.floor).toBeCloseTo(1.17, 6);
+    expect(policy.setByCharacterName).toBe("Chair NPP (autonomous chair)");
+  });
+
+  it("does nothing below v6", async () => {
+    const { db, updateOne } = defenceDb("v5", fallen);
+
+    expect(await processNppCurrencyDefence(db, bank, "US" as any, 50, 2019)).toBe("none");
+    expect(updateOne).not.toHaveBeenCalled();
+  });
+
+  it("releases its own band once the currency settles, and leaves a player's band alone", async () => {
+    const settled = { rate: 1.02, baseRate: 1.0, rateHistory: [{ turn: 20, rate: 1.0 }] };
+    const own = { setByCharacterId: chairNppId, setAtTurn: 30, lastAdjustedAtTurn: 30 };
+    const mine = defenceDb("v6", { ...settled, interventionPolicy: own });
+    expect(await processNppCurrencyDefence(mine.db, bank, "US" as any, 50, 2019)).toBe("release");
+
+    const theirs = defenceDb("v6", {
+      ...settled,
+      interventionPolicy: { ...own, setByCharacterId: new ObjectId() },
+    });
+    expect(await processNppCurrencyDefence(theirs.db, bank, "US" as any, 50, 2019)).toBe("none");
+    expect(theirs.updateOne).not.toHaveBeenCalled();
   });
 });

@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { compareStrongestFirst, nppCandidateStrength, placementOrder } from "./candidatePlacement";
+import {
+  compareStrongestFirst,
+  nppCandidateStrength,
+  partyCompetitiveInRegion,
+  placementOrder,
+} from "./candidatePlacement";
 
 const npp = (id: string, politicalInfluence?: number, favorability?: number) => ({
   _id: id,
@@ -29,5 +34,18 @@ describe("NPP engine 6.1 candidate placement", () => {
       "stateSenate",
     ]);
     expect(placementOrder(unfilled, 0, (p) => priority[p])).toEqual([]);
+  });
+});
+
+describe("NPP engine 6.12 placement by chance of winning", () => {
+  it("treats a party within 75% of the regional leader as competitive", () => {
+    expect(partyCompetitiveInRegion(30, 40)).toBe(true);
+    expect(partyCompetitiveInRegion(29, 40)).toBe(false);
+  });
+
+  it("assumes competitive without organization data", () => {
+    expect(partyCompetitiveInRegion(undefined, 40)).toBe(true);
+    expect(partyCompetitiveInRegion(10, undefined)).toBe(true);
+    expect(partyCompetitiveInRegion(10, 0)).toBe(true);
   });
 });

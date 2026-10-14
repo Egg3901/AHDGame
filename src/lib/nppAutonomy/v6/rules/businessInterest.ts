@@ -127,3 +127,20 @@ export function buildNppBusinessStakes(
   }
   return out;
 }
+
+/**
+ * Engine 6.13.1: the forecast line that makes a business-interest vote visible
+ * on the NPP's profile, so players and opponents can see the conflict.
+ */
+export function businessInterestLabel(force: number): string {
+  return force > 0
+    ? "Own business interest: the bill helps a company this NPP runs or holds - pushes FOR"
+    : "Own business interest: the bill hurts a company this NPP runs or holds - pushes AGAINST";
+}
+
+/**
+ * Engine 6.14: favorability an NPP loses when its own business interest
+ * decided its vote (the verdict without it would differ). Once per NPP per
+ * voting pass, never below zero.
+ */
+export const INTEREST_VOTE_FAVORABILITY_COST = 1;
