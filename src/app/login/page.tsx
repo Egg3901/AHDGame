@@ -3,11 +3,13 @@ import { isMissingRequiredEnvError } from "@/lib/env";
 import { getDb } from "@/lib/mongodb";
 import type { GameConfig } from "@/lib/db/types";
 import { normalizeMaintenanceMode } from "@/lib/maintenanceStatus";
+import { computeIntakeStatus } from "@/lib/auth/intakeStatus";
 import { getEraConfig } from "@/components/landing/eraThemes";
 import { getLoginImage } from "@/lib/images/staticCdnAssets";
 
 export default async function LoginPage() {
   let maintenanceMode = false;
+  let registrationOpen = true;
   let wireframeColor: string | undefined;
   let eraLabel: string | undefined;
   let eraTagline: string | undefined;
@@ -17,12 +19,16 @@ export default async function LoginPage() {
     const db = await getDb();
     const config = await db
       .collection<GameConfig>("gameConfig")
-      .findOne({ _id: "default" }, { projection: { maintenanceMode: 1, seedYear: 1 } });
+      .findOne(
+        { _id: "default" },
+        { projection: { maintenanceMode: 1, registrationEnabled: 1, seedYear: 1 } }
+      );
 
     // The login page only ever needs "is maintenance active at all" — no
     // partial-specific copy here (MaintenancePartialBanner carries the
     // player-facing partial notice).
     maintenanceMode = normalizeMaintenanceMode(config?.maintenanceMode) !== "off";
+    registrationOpen = computeIntakeStatus(config).registration.open;
     const eraConfig = getEraConfig(config?.seedYear ?? 1979);
     wireframeColor = eraConfig.wireframeColor ?? undefined;
     eraLabel = eraConfig.label;
@@ -40,6 +46,7 @@ export default async function LoginPage() {
   return (
     <LoginPageClient
       initialMaintenanceMode={maintenanceMode}
+      registrationOpen={registrationOpen}
       wireframeColor={wireframeColor}
       eraLabel={eraLabel}
       eraTagline={eraTagline}

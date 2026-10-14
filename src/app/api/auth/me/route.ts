@@ -35,6 +35,11 @@ function getPatreonAdPreference(
   return user?.adsDisabled ? "ad-free" : "all-ads";
 }
 
+/** Midnight UTC of the given instant. */
+function startOfUtcDay(now: Date): Date {
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+}
+
 // GET /api/auth/me — Returns the current user's profile, character, and unread notification counts.
 // Auth: public (manual JWT via cookie)
 // Errors: 401
@@ -74,6 +79,23 @@ export const GET = withNoStore(async () => {
     if (isTokenRevokedByCutoff(user.authRevokedAt, payload.iat)) {
       await clearAuthCookie("auth_me:auth_revoked");
       return errorResponse(401, "Authentication required");
+    }
+
+    // Day-level "seen" stamp for intake retention (returned after day 0, after
+    // a week). The user doc is already loaded, so this costs a write only on
+    // the first load of each UTC day. Fire-and-forget: never delays /me.
+    const seenDay = startOfUtcDay(new Date());
+    if (!(user.lastSeenAt instanceof Date) || user.lastSeenAt < seenDay) {
+      void db
+        .collection<User>("users")
+        .updateOne(
+          {
+            _id: user._id,
+            $or: [{ lastSeenAt: { $exists: false } }, { lastSeenAt: { $lt: seenDay } }],
+          },
+          { $set: { lastSeenAt: seenDay } }
+        )
+        .catch(() => {});
     }
 
     // Staff flags come from the current DB account record only. Verified JWT

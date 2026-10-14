@@ -9,7 +9,12 @@ import {
 import { getStoredConsent } from "@/components/CookieConsent";
 import { captureAmplitudeEvent, stopAmplitudeCapture } from "./amplitudeClient";
 import { capturePostHogEvent, stopPostHogCapture } from "./posthogClient";
-import { ACCOUNT_CREATED_KEY, FIRST_MEANINGFUL_ACTION_KEY, FIRST_TURN_KEY } from "./storageKeys";
+import {
+  ACCOUNT_CREATED_KEY,
+  FIRST_MEANINGFUL_ACTION_KEY,
+  FIRST_TURN_KEY,
+  OAUTH_NEW_ACCOUNT_COOKIE,
+} from "./storageKeys";
 
 interface ProductEventContext {
   iteration_id: string;
@@ -202,6 +207,28 @@ export function rememberAccountCreated(accountId: string): void {
   }
 }
 
+/** Provider named by the OAuth new-account marker cookie, if present. */
+function readOAuthNewAccountProvider(): string | null {
+  try {
+    const match = document.cookie
+      .split(";")
+      .map((part) => part.trim())
+      .find((part) => part.startsWith(`${OAUTH_NEW_ACCOUNT_COOKIE}=`));
+    const value = match?.slice(OAUTH_NEW_ACCOUNT_COOKIE.length + 1);
+    return value && /^(google|discord|apple)$/.test(value) ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+function clearOAuthNewAccountMarker(): void {
+  try {
+    document.cookie = `${OAUTH_NEW_ACCOUNT_COOKIE}=; max-age=0; path=/`;
+  } catch {
+    // Expires on its own.
+  }
+}
+
 export async function capturePendingAccountCreated(): Promise<void> {
   const { account, generation } = getAnalyticsAccount();
   if (!account) return;
@@ -209,16 +236,26 @@ export async function capturePendingAccountCreated(): Promise<void> {
   accountCaptureInFlight = true;
   try {
     const pendingAccount = window.localStorage.getItem(ACCOUNT_CREATED_KEY);
-    if (!pendingAccount) return;
-    if (pendingAccount !== getAnalyticsAccount().account?.id) {
+    const oauthProvider = pendingAccount ? null : readOAuthNewAccountProvider();
+    if (!pendingAccount && !oauthProvider) return;
+    if (pendingAccount && pendingAccount !== getAnalyticsAccount().account?.id) {
       window.localStorage.removeItem(ACCOUNT_CREATED_KEY);
+      return;
+    }
+    // The OAuth marker is not bound to an account id, so only a same-day
+    // account may claim it.
+    if (oauthProvider && accountEventProperties(account).account_age_band !== "day_0") {
+      clearOAuthNewAccountMarker();
       return;
     }
     if (getStoredConsent() !== "accepted") return;
     if (!isAnalyticsGenerationCurrent(generation)) return;
-    await captureProductEvent("account_created");
+    await captureProductEvent("account_created", {
+      auth_provider: oauthProvider ?? "email",
+    });
     if (!isAnalyticsGenerationCurrent(generation)) return;
-    window.localStorage.removeItem(ACCOUNT_CREATED_KEY);
+    if (pendingAccount) window.localStorage.removeItem(ACCOUNT_CREATED_KEY);
+    else clearOAuthNewAccountMarker();
   } catch {
     // Retry on a later navigation.
   } finally {

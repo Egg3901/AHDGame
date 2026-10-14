@@ -1,4 +1,11 @@
 import { NextResponse } from "next/server";
+import { captureIntakeEvent } from "@/lib/analytics/intakeEvents";
+import {
+  ACQUISITION_COOKIE,
+  acquisitionEventProperties,
+  parseAcquisition,
+} from "@/lib/analytics/acquisition";
+import { OAUTH_NEW_ACCOUNT_COOKIE } from "@/lib/analytics/storageKeys";
 import { cookies } from "next/headers";
 import { ObjectId } from "mongodb";
 import { randomBytes, randomUUID } from "crypto";
@@ -414,7 +421,9 @@ async function handleDiscordLogin(
   // stamps (src/lib/auth/identitySignals.ts).
   const newUserObservedAt = new Date();
 
+  const acquisition = parseAcquisition(cookieStore.get(ACQUISITION_COOKIE)?.value);
   const result = await usersCollection.insertOne({
+    ...(acquisition ? { acquisition } : {}),
     email,
     username,
     displayName: discordUser.username,
@@ -459,6 +468,13 @@ async function handleDiscordLogin(
     action: "account_created",
     username,
     details: `Registered via Discord (${discordUser.username})`,
+  });
+
+  // Anonymous, consent-independent signup count (see intakeEvents.ts).
+  await captureIntakeEvent("account_registered", {
+    auth_provider: "discord",
+    has_referral: Boolean(referredByObjectId),
+    ...acquisitionEventProperties(acquisition),
   });
 
   // Identity history runs. Recorded after the insert so the run carries the
@@ -521,6 +537,15 @@ async function handleDiscordLogin(
   cookieStore.set(AUTH_COOKIE_NAME, token, await getAuthCookieOptions());
   // Brand-new OAuth account — no character yet, so gate it into /create-character.
   await setCharacterGateCookie(cookieStore, true);
+  // Lets the consented client funnel record account_created for an OAuth
+  // signup (see OAUTH_NEW_ACCOUNT_COOKIE). Carries only the provider name.
+  cookieStore.set(OAUTH_NEW_ACCOUNT_COOKIE, "discord", {
+    httpOnly: false,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    maxAge: 15 * 60,
+  });
 
   await usersCollection.updateOne(
     { _id: result.insertedId },

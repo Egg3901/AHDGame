@@ -1,3 +1,4 @@
+import { createNotification } from "@/lib/notifications";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ObjectId, type Db } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
@@ -81,7 +82,16 @@ describe("awardReferralContest", () => {
     expect(result.roundId).toBe("referrals_iteration:4");
     expect(db.collection("contestRounds").updateOne).toHaveBeenCalledWith(
       { _id: "referrals_iteration:4", status: "active" },
-      { $set: { status: "settled", settledAt: now, endsAt: now } }
+      expect.objectContaining({
+        $set: expect.objectContaining({
+          status: "settled",
+          settledAt: now,
+          endsAt: now,
+          winners: expect.arrayContaining([
+            expect.objectContaining({ userId: ids.fresh.toString() }),
+          ]),
+        }),
+      })
     );
 
     // The paying supporter's plan is untouched; the rest get Supporter with no end date.
@@ -124,5 +134,19 @@ describe("awardReferralContest", () => {
     await expect(
       awardReferralContest(db as unknown as Db, { awardedBy: "staff", now })
     ).rejects.toBeInstanceOf(ReferralAwardError);
+  });
+  it("keeps all winners and confirmed benefits when notification delivery interrupts the award", async () => {
+    vi.mocked(createNotification)
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error("delivery failed"));
+    await expect(
+      awardReferralContest(db as unknown as Db, { awardedBy: "system", now })
+    ).rejects.toThrow("delivery failed");
+    const writes = db.collection("contestRounds").updateOne.mock.calls;
+    expect(writes[0][1].$set.winners).toHaveLength(3);
+    expect(writes.at(-1)?.[1].$set).toEqual({
+      "winners.0.alreadySupporter": true,
+      "winners.1.alreadySupporter": false,
+    });
   });
 });

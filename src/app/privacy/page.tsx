@@ -9,7 +9,7 @@ export const metadata: Metadata = publicPageMetadata({
   pathname: "/privacy",
 });
 
-const EFFECTIVE_DATE = "September 22, 2026";
+const EFFECTIVE_DATE = "October 14, 2026";
 
 export default function PrivacyPolicyPage() {
   return (
@@ -88,6 +88,13 @@ export default function PrivacyPolicyPage() {
                   without your name or email to understand onboarding and feature use. PostHog is
                   disabled in singleplayer.
                 </p>
+                <p className="mt-2">
+                  Separately, and whether or not you accept optional analytics, our servers send
+                  PostHog aggregate counts of sign-up steps, such as reaching the sign-up page,
+                  creating an account or creating a character, broken down only by sign-in method,
+                  device type and similar broad categories. These counts carry no account ID, name,
+                  email, IP address or device identifier, and cannot be linked back to you.
+                </p>
               </div>
               <div>
                 <p className="font-semibold text-foreground mb-1">Optional session replay</p>
@@ -129,6 +136,25 @@ export default function PrivacyPolicyPage() {
                   </code>{" "}
                   with a random identifier. It is used for duplicate-account signals and aggregate
                   first-party traffic statistics. It is not readable by client-side scripts.
+                </p>
+              </div>
+              <div>
+                <p className="font-semibold text-foreground mb-1">Sign-up source cookie</p>
+                <p>
+                  If you arrive from another website or a tagged link, we may set an HTTP-only
+                  cookie named{" "}
+                  <code className="rounded bg-card-elevated px-1 py-0.5 font-mono text-xs">
+                    __ahd_src
+                  </code>{" "}
+                  for up to 30 days. It holds only the referring site&apos;s domain (for example
+                  reddit.com), any campaign tags in the link, and the date. If you create an
+                  account, that summary is saved with it so we can see which channels bring new
+                  players. A short-lived{" "}
+                  <code className="rounded bg-card-elevated px-1 py-0.5 font-mono text-xs">
+                    ahd-new-account
+                  </code>{" "}
+                  cookie naming your sign-in provider is also set for 15 minutes after a new Google,
+                  Discord or Apple sign-up.
                 </p>
               </div>
               <div>

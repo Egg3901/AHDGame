@@ -14,6 +14,7 @@
  *     at z-50; the globe and hero sit behind it.
  */
 import dynamic from "next/dynamic";
+import { LandingIntakeBeacon } from "@/components/intake/LandingIntakeBeacon";
 import Image from "next/image";
 import Link from "next/link";
 import { useMemo, useState } from "react";
@@ -351,6 +352,7 @@ export function SandboxHome({
 
   return (
     <div className="relative bg-background text-foreground">
+      {!isSignedIn && <LandingIntakeBeacon />}
       {/* ── Fixed globe — always in the background viewport layer ──────────── */}
       {/* `fixed` bypasses parent overflow-x-hidden on <main> that breaks sticky. */}
       <div className="fixed inset-0 z-0" aria-hidden="true">

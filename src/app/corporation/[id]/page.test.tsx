@@ -201,4 +201,86 @@ describe("corporation load errors", () => {
       )
     ).toBeTruthy();
   });
+
+  it.each([new TypeError("Load failed"), new TypeError("Failed to fetch")])(
+    "preserves a network failure (%s) that happens while reading a successful response body",
+    async (networkError) => {
+      const response = new Response("", { status: 200 });
+      Object.defineProperty(response, "json", {
+        value: vi.fn().mockRejectedValue(networkError),
+      });
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async (input: RequestInfo | URL) =>
+          String(input) === "/api/corporations/bad-id"
+            ? response
+            : new Response("{}", { status: 200 })
+        )
+      );
+      render(<CorporationDetailPage />);
+      expect(
+        await screen.findByText(
+          "Could not reach the server. Check your connection and try again. (NETWORK_ERROR)"
+        )
+      ).toBeTruthy();
+      await waitFor(() =>
+        expect(captureClientExceptionWithId).toHaveBeenCalledWith(
+          networkError,
+          expect.objectContaining({
+            tags: { feature: "corporation-detail", error_code: "NETWORK_ERROR" },
+          })
+        )
+      );
+      expect(captureClientExceptionWithId).not.toHaveBeenCalledWith(
+        expect.objectContaining({ name: "CorporationResponseError" }),
+        expect.anything()
+      );
+    }
+  );
+
+  it("keeps the last valid corporation visible when a refresh drops the network while reading the body", async () => {
+    let detailRequests = 0;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === "/api/corporations/bad-id") {
+        detailRequests += 1;
+        if (detailRequests > 1) {
+          const response = new Response("", { status: 200 });
+          Object.defineProperty(response, "json", {
+            value: vi.fn().mockRejectedValue(new TypeError("Load failed")),
+          });
+          return response;
+        }
+        return new Response(
+          JSON.stringify({
+            corporation: {
+              _id: "corp-1",
+              name: "Alder Works",
+              isPrivate: true,
+              type: "manufacturing",
+            },
+            ceo: null,
+            financials: null,
+            sectors: [],
+            balanceSheet: null,
+          }),
+          { status: 200 }
+        );
+      }
+      return new Response("{}", { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<CorporationDetailPage />);
+    expect((await screen.findAllByText("Alder Works")).length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole("button", { name: "Refresh corporation" }));
+
+    await waitFor(() => expect(toast).toHaveBeenCalled());
+    expect(screen.getAllByText("Alder Works").length).toBeGreaterThan(0);
+    expect(toast).toHaveBeenCalledWith(
+      "Could not reach the server. Check your connection and try again. (NETWORK_ERROR)",
+      "error"
+    );
+    expect(toast).not.toHaveBeenCalledWith(expect.stringContaining("(CLIENT_ERROR)"), "error");
+  });
 });
