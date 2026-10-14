@@ -80,8 +80,8 @@ number.
   track record running companies in the same sector. Needs a record of each
   NPP's results as a CEO first; none is kept yet.
 - **Consequences across politics and business.** NPP officeholders weigh their
-  holdings in votes (6.8.0) and the conflict is shown on their profile
-  (6.13.1). Still to come: voters reacting to it.
+  holdings in votes (6.8.0), the conflict is shown on their profile (6.13.1),
+  and voters mark down a vote their holdings decided (6.14.0).
 - **Batched purchases.** The share-buying sweep is the largest single NPP cost
   in a turn (18.0 seconds and 1,465 database round trips on live turn 168); it
   moves to one batched settlement per country.
@@ -105,6 +105,16 @@ number.
 - Autonomy v6 becomes the default for new singleplayer and simulation worlds,
   after the engine 6 stages are validated. Running worlds never change level on
   their own.
+
+## 6.14.0 (unreleased)
+
+Stage 3 (corporations).
+
+- **Voters notice self-interested votes (v6).** When an NPP's own companies
+  decide its vote on a bill, it loses 1 favorability. "Decide" means it would
+  have voted differently without them. This happens at most once per voting
+  turn and never takes favorability below zero. Business interest is no
+  longer free: an NPP that votes its holdings pays a small price with voters.
 
 ## 6.13.1 (unreleased)
 

@@ -1587,6 +1587,7 @@ describe("processBillVoting — engine 6.7 government whip (v6)", () => {
 
 describe("processBillVoting — engine 6.8 business interest (v6)", () => {
   async function donorsForceOn(engine6: boolean) {
+    nppBulkWrites = [];
     atLeastMock.mockImplementation(async (_db: unknown, _c: unknown, level: string) =>
       level === "v6" ? engine6 : true
     );
@@ -1617,6 +1618,7 @@ describe("processBillVoting — engine 6.8 business interest (v6)", () => {
         updateOne: vi.fn(() => Promise.resolve({ modifiedCount: 1 })),
         bulkWrite: vi.fn((...args: unknown[]) => {
           if (name === "nppVotePredictions") predictions.push(args);
+          if (name === "npps") nppBulkWrites.push(args);
           return Promise.resolve({ upsertedCount: 0, modifiedCount: 0 });
         }),
         findOne: vi.fn(() => Promise.resolve(null)),
@@ -1649,9 +1651,15 @@ describe("processBillVoting — engine 6.8 business interest (v6)", () => {
     return ops[0].updateOne.update.$set.forces.donors;
   }
   let lastDonorsLabel = "";
+  let nppBulkWrites: unknown[][] = [];
 
   it("pulls a CEO toward a subsidy for its own sector at v6", async () => {
     expect(await donorsForceOn(true)).toBe(40);
+  });
+
+  it("charges a point of favorability when the interest decided the vote", async () => {
+    await donorsForceOn(true);
+    expect(nppBulkWrites).toHaveLength(1);
   });
 
   it("names the business interest on the forecast at v6", async () => {
