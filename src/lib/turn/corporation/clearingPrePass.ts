@@ -1,4 +1,4 @@
-import { outputPlacementRatios } from "@/lib/market/rules/outputPlacement";
+import { outputPlacementRatios, revenuePlacementRatios } from "@/lib/market/rules/outputPlacement";
 import { placementRevenuePhaseProgress } from "@/lib/market/placementRevenuePhase";
 import { buildGroupSupplyContext } from "./groupSupplyContext";
 import { buildInternalSupplyContext, finishInternalSupplyContext } from "./internalSupply";
@@ -664,6 +664,13 @@ export function runClearingPrePass(input: ClearingPrePassInput): ClearingPrePass
           clearingInput.offerPlacementByCommodity = outputPlacementRatios(
             clearingInput.supplyRates,
             lookups.statePlacementRatioByState?.get(sector.stateId)
+          );
+          clearingInput.revenuePlacementByCommodity = outputPlacementRatios(
+            clearingInput.supplyRates,
+            revenuePlacementRatios(
+              lookups.statePlacementRatioByState?.get(sector.stateId),
+              lookups.stateDeliveryLimitedRatioByState?.get(sector.stateId)
+            )
           );
         }
         if (freightSettlementActive) {
