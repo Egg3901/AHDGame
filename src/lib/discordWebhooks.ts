@@ -16,6 +16,7 @@ import {
   type DiscordEventCardInput,
 } from "@/lib/discord/eventCard";
 import type { ChamberVoteSplit } from "@/lib/charts/voteSplitChart";
+import type { SuggestionReporterIdentity } from "@/lib/suggestions/reporterIdentity";
 
 export interface DiscordEmbed {
   title?: string;
@@ -466,6 +467,8 @@ export type PlayerSuggestionDiscordInput = {
   githubIssueUrl?: string;
   /** Shown as an embed field when set (player suggestion form). */
   gameSystem?: string;
+  /** Author line: in-game name and avatar (Discord avatar when linked). */
+  reporterIdentity?: SuggestionReporterIdentity;
 };
 
 function suggestionReporterLabel(input: PlayerSuggestionDiscordInput): string {
@@ -528,6 +531,14 @@ export function buildPlayerSuggestionDiscordEmbed(
     url: input.detailUrl,
     description: truncateDiscordText(body, 4096),
     color: DISCORD_COLORS.suggestion,
+    ...(input.reporterIdentity
+      ? {
+          author: {
+            name: truncateDiscordText(input.reporterIdentity.name, 256),
+            ...(input.reporterIdentity.iconUrl ? { icon_url: input.reporterIdentity.iconUrl } : {}),
+          },
+        }
+      : {}),
     fields,
     footer: { text: "A House Divided — player suggestions" },
   };

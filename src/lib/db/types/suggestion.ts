@@ -50,6 +50,8 @@ export interface Suggestion {
   discordSubmitUsername?: string;
   /** Discord global display name from the bot at submit time */
   discordSubmitDisplayName?: string;
+  /** Discord CDN avatar URL from the bot at submit time, shown on the webhook post */
+  discordSubmitAvatarUrl?: string;
   category: SuggestionCategory;
   gameSystem: SuggestionGameSystem;
   title: string;

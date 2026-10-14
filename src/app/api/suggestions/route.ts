@@ -19,6 +19,7 @@ import {
 } from "@/lib/discordWebhooks";
 import type { Suggestion, User } from "@/lib/db/types";
 import { getSuggestionsCollection } from "@/lib/db/collections/suggestions";
+import { resolveSuggestionReporterIdentity } from "@/lib/suggestions/reporterIdentity";
 
 const DISCORD_SYNC_SPACING_MS = 400;
 
@@ -108,6 +109,7 @@ export async function PUT(request: Request) {
         detailUrl,
         githubIssueUrl: s.githubIssueUrl,
         gameSystem: s.gameSystem,
+        reporterIdentity: await resolveSuggestionReporterIdentity(db, s, baseUrl),
       };
       const { status, messageId } = await notifyNewSuggestionDiscord(suggestionInput);
       if (status === "posted") {
@@ -285,6 +287,7 @@ export async function POST(request: Request) {
       detailUrl: suggestionDetailUrl,
       githubIssueUrl,
       gameSystem: doc.gameSystem,
+      reporterIdentity: await resolveSuggestionReporterIdentity(db, doc, baseUrl),
     });
     if (discordStatus === "posted") {
       await coll.updateOne(

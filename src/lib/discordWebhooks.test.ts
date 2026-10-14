@@ -32,6 +32,7 @@ vi.mock("@/lib/discord/eventCard", async (importOriginal) => {
 
 import {
   buildBillVetoedDiscordEmbed,
+  buildPlayerSuggestionDiscordEmbed,
   DISCORD_COLORS,
   notifyNewSuggestionDiscord,
   sendDiscordWebhookMultiple,
@@ -272,5 +273,17 @@ describe("player suggestion branded card", () => {
     expect(embed.description).toContain(input.description);
     expect(embed.fields.map((f: { name: string }) => f.name)).toEqual(["Expected impact"]);
     mockCardUrl.value = undefined;
+  });
+
+  it("shows the reporter identity as the embed author line", () => {
+    const embed = buildPlayerSuggestionDiscordEmbed({
+      ...input,
+      reporterIdentity: { name: "Jane Smith", iconUrl: "https://cdn.discordapp.com/a.png" },
+    });
+    expect(embed.author).toEqual({
+      name: "Jane Smith",
+      icon_url: "https://cdn.discordapp.com/a.png",
+    });
+    expect(buildPlayerSuggestionDiscordEmbed(input).author).toBeUndefined();
   });
 });
