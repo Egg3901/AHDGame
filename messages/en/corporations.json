@@ -765,9 +765,9 @@
       "saving": "Saving...",
       "saved": "Policy saved. New reservations and discounts apply next turn.",
       "how": "How priority and pricing work",
-      "scope": "Existing supply agreements reserve first. Your own plants come next; group priority also includes plants in subsidiaries owned entirely by the same parent, including nested subsidiaries. Majority ownership alone does not qualify. Surplus still competes on the open market.",
+      "scope": "Existing supply agreements reserve first. Own priority serves only your own plants. Group priority serves your own plants first, then plants in subsidiaries owned entirely by the same parent, including nested subsidiaries. Majority ownership alone does not qualify. Surplus still competes on the open market.",
       "priceNote": "The discount is a rebate on realized market price, capped by the reserved inputs the receiving plant actually consumes this turn. The supplier pays a matching charge and the receiving plant gets an input credit in its operating accounts. Within one corporation these cancel before tax. Open-market pricing posture stays a separate choice.",
-      "constraints": "Priority does not create goods. Plants must consume the commodity, and output must be available in the same reachable market. Freight and other local goods keep their location constraints. With active freight settlement, priority for shipped goods stays within the same state; cross-state inputs keep ordinary freight sourcing. Your scarcest remaining input can still limit production.",
+      "constraints": "Priority does not create goods. Plants must consume the commodity, and output must be available in the same reachable market. Freight and other local goods keep their location constraints. With active freight settlement, cross-state priority requires enabled cross-state shipping and a recorded previous-turn haul. Own priority serves your own plants; Group priority can also serve wholly owned subsidiaries. Freight still applies. Otherwise cross-state inputs keep ordinary freight sourcing. Your scarcest remaining input can still limit production.",
       "lastTurn": "Reserved supply, turn {turn}",
       "waiting": "Waiting for the first clearing turn",
       "refresh": "Refresh",
@@ -782,8 +782,8 @@
       "retry": "Retry",
       "pricingHint": "Pricing posture changes open-market sales. Supplying your own plants first is a separate policy.",
       "pricingLink": "Manage internal supply",
-      "ownFirstAcrossStates": "Ship own surplus to out-of-state plants before local market buyers",
-      "ownFirstFreightWarning": "Off by default. Keeps supply for your own local plants first. Out-of-state shipping can leave other local buyers short. Freight is charged separately and can cost more than the internal discount saves; nearby purchases avoid this haul. New reservations use the previous turn's recorded deliveries.",
+      "ownFirstAcrossStates": "Ship eligible surplus to out-of-state plants before local market buyers",
+      "ownFirstFreightWarning": "Off by default. Under Own, this ships only to your own out-of-state plants; under Group, it can also serve wholly owned subsidiaries. Local plants get priority first. Out-of-state shipping can leave other local buyers short. Freight is charged separately and can cost more than the internal discount saves; nearby purchases avoid this haul. New reservations use the previous turn's recorded deliveries.",
       "ownHaulTurn": "Own cross-state hauls, turn {turn}",
       "ownHaulCost": "{commodity}: {origin} to {destination}, {units} units; freight ₳{cost} per unit (anchor currency)."
     }

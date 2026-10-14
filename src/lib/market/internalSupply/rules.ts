@@ -9,6 +9,24 @@ export interface InternalSupplyPolicy {
   /** Opt in to shipping own surplus before the origin state's market buyers. */
   ownFirstAcrossStates?: boolean;
 }
+const GROUP_ROUTE_ID_PREFIX = "group:";
+export function ownRouteIdentity(
+  corporationId: string,
+  setting?: { root: string; policy: InternalSupplyPolicy }
+): string {
+  return setting?.policy.priority === "group" && setting.policy.ownFirstAcrossStates === true
+    ? GROUP_ROUTE_ID_PREFIX + setting.root
+    : corporationId;
+}
+export function ownRouteGroupRoot(routeIdentity: string): string | undefined {
+  return routeIdentity.startsWith(GROUP_ROUTE_ID_PREFIX) &&
+    routeIdentity.length > GROUP_ROUTE_ID_PREFIX.length
+    ? routeIdentity.slice(GROUP_ROUTE_ID_PREFIX.length)
+    : undefined;
+}
+export function ownRoutePolicyOwner(routeIdentity: string, fallbackCorporationId: string): string {
+  return ownRouteGroupRoot(routeIdentity) ?? fallbackCorporationId;
+}
 export const DEFAULT_INTERNAL_SUPPLY_POLICY: InternalSupplyPolicy = {
   priority: "market",
   discount: 0,
@@ -58,6 +76,30 @@ export function resolveSupplyPolicies(
         ? { root: groupRoot!, policy: rootPolicy }
         : { root: o.id, policy: o.policy ?? DEFAULT_INTERNAL_SUPPLY_POLICY }
     );
+  }
+  return result;
+}
+
+/** Recorded group freight remains billable after a shipping policy is disabled. */
+export function recordedGroupRouteMembers(
+  owners: readonly SupplyOwner[],
+  routeIdentities: readonly string[]
+): Map<string, Set<string>> {
+  const result = new Map<string, Set<string>>();
+  const roots = new Set(
+    routeIdentities.map(ownRouteGroupRoot).filter((root): root is string => !!root)
+  );
+  for (const root of roots) {
+    const resolved = resolveSupplyPolicies(
+      owners.map((owner) => ({
+        ...owner,
+        policy: owner.id === root ? { priority: "group" as const, discount: 0 } : undefined,
+      }))
+    );
+    const members = new Set<string>();
+    for (const [id, setting] of resolved)
+      if (setting.root === root && setting.policy.priority === "group") members.add(id);
+    result.set(root, members);
   }
   return result;
 }
@@ -124,8 +166,22 @@ export function allocateInternalSupply(args: {
   const routeFor = (s: InternalSupplySeller, b: InternalSupplyBuyer) => {
     const origin = args.deliveryStateBySector?.get(s.sectorId);
     const dest = args.deliveryStateBySector?.get(b.sectorId);
-    return origin && dest && origin !== dest ? `${s.corporationId}|${origin}|${dest}` : undefined;
+    if (!origin || !dest || origin === dest) return undefined;
+    const routeIdentity = ownRouteIdentity(s.corporationId, args.policies.get(s.corporationId));
+    const groupKey = routeIdentity + "|" + origin + "|" + dest;
+    if (routeIdentity !== s.corporationId) {
+      // A former own-only receipt can still serve the seller's own plant, but
+      // must never be spent on a subsidiary that was not on that group route.
+      if (
+        b.corporationId === s.corporationId &&
+        !(routeLeft.get(groupKey) !== undefined && (routeLeft.get(groupKey) ?? 0) > 0)
+      )
+        return s.corporationId + "|" + origin + "|" + dest;
+      return groupKey;
+    }
+    return s.corporationId + "|" + origin + "|" + dest;
   };
+
   // Own plants go first across ALL suppliers. Group plants follow, with
   // proportional allocation so array order never gives one buyer a monopoly.
   for (const ownOnly of [true, false]) {
@@ -150,11 +206,18 @@ export function allocateInternalSupply(args: {
           return false;
         return sameCorpOk(b);
       });
+      const groupCrossState =
+        !ownOnly &&
+        setting.policy.priority === "group" &&
+        setting.policy.ownFirstAcrossStates === true;
       const crossState =
-        ownOnly && args.deliveryStateBySector && routeLeft.size
+        args.deliveryStateBySector && routeLeft.size
           ? buyers.filter((b) => {
               const key = routeFor(s, b);
-              return !!key && (routeLeft.get(key) ?? 0) > 0 && sameCorpOk(b);
+              const routeEligible = ownOnly
+                ? b.corporationId === s.corporationId
+                : groupCrossState && args.policies.get(b.corporationId)?.root === setting.root;
+              return !!key && (routeLeft.get(key) ?? 0) > 0 && routeEligible;
             })
           : [];
       const allocate = (group: InternalSupplyBuyer[], capped: boolean) => {
