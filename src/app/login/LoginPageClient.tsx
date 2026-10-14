@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { COMMUNITY_DISCORD_URL } from "@/lib/communityLinks";
 import Image from "next/image";
 import { CDN_LOGO_URL } from "@/lib/images/staticCdnAssets";
 import { useState, useEffect } from "react";
@@ -59,10 +60,13 @@ interface LoginPageClientProps {
   eraTagline?: string;
   /** CDN URL for the era-specific left-panel background image (modern eras only). */
   loginImageUrl?: string;
+  /** False while new accounts are refused (maintenance or the registration switch). */
+  registrationOpen?: boolean;
 }
 
 export default function LoginPageClient({
   initialMaintenanceMode,
+  registrationOpen = true,
   wireframeColor,
   eraLabel,
   eraTagline,
@@ -510,6 +514,21 @@ export default function LoginPageClient({
                     >
                       {chunks}
                     </Link>
+                  ),
+                })}
+              </p>
+            ) : !registrationOpen ? (
+              <p className="mt-8 text-center text-body-sm text-muted">
+                {t.rich("registrationClosed", {
+                  link: (chunks) => (
+                    <a
+                      href={COMMUNITY_DISCORD_URL}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="font-medium text-primary transition-colors hover:text-primary-dark link-underline"
+                    >
+                      {chunks}
+                    </a>
                   ),
                 })}
               </p>

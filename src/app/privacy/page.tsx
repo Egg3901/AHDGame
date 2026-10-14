@@ -9,7 +9,7 @@ export const metadata: Metadata = publicPageMetadata({
   pathname: "/privacy",
 });
 
-const EFFECTIVE_DATE = "September 22, 2026";
+const EFFECTIVE_DATE = "October 14, 2026";
 
 export default function PrivacyPolicyPage() {
   return (
@@ -87,6 +87,13 @@ export default function PrivacyPolicyPage() {
                   selected milestones such as account and character creation. We use an account ID
                   without your name or email to understand onboarding and feature use. PostHog is
                   disabled in singleplayer.
+                </p>
+                <p className="mt-2">
+                  Separately, and whether or not you accept optional analytics, our servers send
+                  PostHog aggregate counts of sign-up steps, such as reaching the sign-up page,
+                  creating an account or creating a character, broken down only by sign-in method,
+                  device type and similar broad categories. These counts carry no account ID, name,
+                  email, IP address or device identifier, and cannot be linked back to you.
                 </p>
               </div>
               <div>

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { captureIntakeEvent } from "@/lib/analytics/intakeEvents";
 import { cookies } from "next/headers";
 import { ObjectId } from "mongodb";
 import { randomBytes, randomUUID } from "crypto";
@@ -423,6 +424,12 @@ async function handleAppleLogin(
     action: "account_created",
     username,
     details: "Registered via Apple",
+  });
+
+  // Anonymous, consent-independent signup count (see intakeEvents.ts).
+  await captureIntakeEvent("account_registered", {
+    auth_provider: "apple",
+    has_referral: Boolean(referredByObjectId),
   });
 
   recordIdentitySignals(db, {

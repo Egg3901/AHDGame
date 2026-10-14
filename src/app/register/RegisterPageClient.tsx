@@ -18,6 +18,7 @@ import { Button } from "@/components/ui";
 import { AccountSection, type SocialAvailability } from "./components/AccountSection";
 import { TurnstileWidget } from "@/components/auth/TurnstileWidget";
 import { normalizeReferralCode } from "@/lib/auth/normalizeReferralCode";
+import { sendIntakeBeaconOnce } from "@/lib/analytics/intakeBeacon";
 
 const TURNSTILE_ENABLED = Boolean(process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY);
 
@@ -47,6 +48,13 @@ export default function RegisterPageClient({ heroImageUrl }: { heroImageUrl?: st
   const [googleSignup, setGoogleSignup] = useState<SocialAvailability | null>(null);
   const [appleSignup, setAppleSignup] = useState<SocialAvailability | null>(null);
   const showAdminKey = searchParams.get("admin") === "1";
+
+  // Anonymous intake counts: how many reach the page, and how many begin.
+  useEffect(() => {
+    sendIntakeBeaconOnce("signup_viewed", "signup_viewed", { surface: "register" });
+  }, []);
+  const markSignupStarted = (method: "email" | "google" | "discord" | "apple") =>
+    sendIntakeBeaconOnce("signup_started", "signup_started", { surface: "register", method });
 
   // Scroll to error when it appears
   useEffect(() => {
@@ -106,6 +114,7 @@ export default function RegisterPageClient({ heroImageUrl }: { heroImageUrl?: st
     provider: "discord" | "google" | "apple",
     referralCode: string | null
   ) => {
+    markSignupStarted(provider);
     const cookieSuffix = `; max-age=${OAUTH_FINGERPRINT_MAX_AGE_SECONDS}; path=/; samesite=lax${
       window.location.protocol === "https:" ? "; secure" : ""
     }`;
@@ -344,7 +353,13 @@ export default function RegisterPageClient({ heroImageUrl }: { heroImageUrl?: st
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="relative space-y-5">
+        <form
+          onSubmit={handleSubmit}
+          onFocusCapture={(e) => {
+            if (e.target instanceof HTMLInputElement) markSignupStarted("email");
+          }}
+          className="relative space-y-5"
+        >
           {/* Account Information */}
           <AccountSection
             formData={{
