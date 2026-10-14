@@ -8,7 +8,21 @@ import type { ObjectId } from "mongodb";
  */
 
 /** High-level ticket topic (mirrors the bot's ticket panel categories). */
-export type TicketCategory = "bug" | "moderation" | "account" | "gameplay" | "other";
+/**
+ * `incident` is a staff-opened catch-all for an outage or another event many
+ * players hit at once; repeat tickets about it are merged into it.
+ */
+export type TicketCategory = "bug" | "moderation" | "account" | "gameplay" | "other" | "incident";
+
+/** One report merged into this ticket (usually an incident). */
+export interface MergedTicketRef {
+  ticketNumber: number;
+  /** Reporter of the merged ticket, so incident updates can reach them. */
+  discordUserId?: string;
+  mergedAt: Date;
+  /** Discord id or admin email that performed the merge. */
+  mergedBy?: string;
+}
 
 export type TicketStatus =
   | "open" // just created; within the review-hold window
@@ -139,6 +153,13 @@ export interface Ticket {
   closedAt?: Date;
   /** Discord id or admin email that closed it. */
   closedBy?: string;
+  /** On a merged ticket: the ticket it was merged into. */
+  mergedInto?: number;
+  mergedAt?: Date;
+  /** Discord id or admin email that merged it. */
+  mergedBy?: string;
+  /** On a merge target: the reports merged into it, each recorded once. */
+  mergedTickets?: MergedTicketRef[];
   createdAt: Date;
   updatedAt: Date;
 }
