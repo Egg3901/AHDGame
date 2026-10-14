@@ -11,34 +11,14 @@ import {
 import { Button, Skeleton } from "@/components/ui";
 import { HeroImage } from "@/components/HeroImage";
 import { CDN_HERO_ACTIONS_URL } from "@/lib/images/staticCdnAssets";
-import { SuggestionCard } from "@/components/suggestions/SuggestionCard";
+import {
+  SuggestionThreadRow,
+  THREAD_GRID,
+  type SuggestionThreadItem,
+} from "@/components/suggestions/SuggestionThreadRow";
 import { SelectionBar } from "@/components/suggestions/SelectionBar";
-import type { CountryId } from "@/lib/constants/countries";
 
-interface ListItem {
-  id: string;
-  issueNumber: number;
-  category: string;
-  gameSystem: string;
-  title: string;
-  descriptionPreview?: string;
-  impactPreview?: string | null;
-  status: string;
-  screenshotUrl: string | null;
-  commentCount: number;
-  unreadCommentCount?: number;
-  reactions?: { like: number; dislike: number };
-  userReaction?: "like" | "dislike" | null;
-  reporterCharacterName?: string | null;
-  reporterDiscordUsername?: string | null;
-  reporterUsername?: string | null;
-  reporterAvatarUrl?: string | null;
-  reporterPartyAbbrev?: string | null;
-  reporterStateCode?: string | null;
-  reporterCountryId?: CountryId | null;
-  createdAt: string;
-  mergedInto?: string | null;
-}
+type ListItem = SuggestionThreadItem;
 
 /** Board tabs: '' = all statuses */
 const STATUS_TABS: { key: string; label: string }[] = [
@@ -74,12 +54,16 @@ function FeedbackBoardInner() {
   const [error, setError] = useState("");
   const [sort, setSort] = useState("recent");
   const [statusTab, setStatusTab] = useState("");
-  const [categoryFilter, setCategoryFilter] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState(() => {
+    const fromUrl = searchParams.get("category") ?? "";
+    return fromUrl in SUGGESTION_CATEGORY_LABELS ? fromUrl : "";
+  });
   const [gameSystemFilter, setGameSystemFilter] = useState("");
   const [offset, setOffset] = useState(0);
   const limit = 24;
 
-  // Selection state
+  // Selection state (admin merge / delete)
+  const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [isAdmin, setIsAdmin] = useState(false);
 
@@ -169,6 +153,7 @@ function FeedbackBoardInner() {
 
   const cancelSelection = useCallback(() => {
     setSelectedIds(new Set());
+    setSelectMode(false);
   }, []);
 
   const handleMerge = useCallback(async () => {
@@ -259,7 +244,7 @@ function FeedbackBoardInner() {
       {/* Hero */}
       <div className="mx-auto max-w-6xl px-4 sm:px-6 pt-6">
         <header className="relative overflow-hidden rounded-2xl border border-card-border bg-card shadow-lg">
-          <div className="relative h-[175px] w-full sm:h-[220px]">
+          <div className="relative h-[150px] w-full sm:h-[180px]">
             <HeroImage
               src={CDN_HERO_ACTIONS_URL}
               alt="Community suggestions"
@@ -285,7 +270,8 @@ function FeedbackBoardInner() {
                 Suggestions
               </h1>
               <p className="mt-1.5 text-sm text-white/80 drop-shadow max-w-xl">
-                Share ideas and vote on what comes next. One new post per 30 minutes.
+                Start a thread, vote and reply. Every suggestion is also posted on Discord, and
+                votes there count here.
               </p>
             </div>
           </div>
@@ -333,7 +319,8 @@ function FeedbackBoardInner() {
               }}
               className="rounded-lg border border-card-border bg-card px-2.5 py-1.5 text-sm text-foreground focus:border-primary focus:outline-none"
             >
-              <option value="recent">Recent</option>
+              <option value="recent">Newest</option>
+              <option value="top">Top voted</option>
               <option value="oldest">Oldest</option>
               <option value="comments">Most comments</option>
             </select>
@@ -374,6 +361,19 @@ function FeedbackBoardInner() {
               ))}
             </select>
           </div>
+          {isAdmin && (
+            <button
+              type="button"
+              onClick={() => (selectMode ? cancelSelection() : setSelectMode(true))}
+              className={`ml-auto rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${
+                selectMode
+                  ? "border-primary/40 bg-primary/15 text-primary"
+                  : "border-card-border text-muted hover:text-foreground"
+              }`}
+            >
+              {selectMode ? "Done selecting" : "Select to merge"}
+            </button>
+          )}
         </div>
 
         {error && (
@@ -382,56 +382,55 @@ function FeedbackBoardInner() {
           </div>
         )}
 
-        {loading ? (
-          <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {[1, 2, 3, 4, 5, 6].map((i) => (
-              <li key={i}>
-                <Skeleton className="h-44 rounded-xl" />
-              </li>
-            ))}
-          </ul>
-        ) : items.length === 0 ? (
-          <p className="py-10 text-center text-muted">No suggestions in this view yet.</p>
-        ) : (
-          <>
-            <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {items.map((item) => (
-                <li key={item.id}>
-                  <SuggestionCard
-                    id={item.id}
-                    issueNumber={item.issueNumber}
-                    category={item.category}
-                    gameSystem={item.gameSystem}
-                    title={item.title}
-                    descriptionPreview={item.descriptionPreview}
-                    impactPreview={item.impactPreview}
-                    status={item.status}
-                    screenshotUrl={item.screenshotUrl}
-                    commentCount={item.commentCount}
-                    unreadCommentCount={item.unreadCommentCount}
-                    reactions={item.reactions}
-                    userReaction={item.userReaction}
-                    reporterCharacterName={item.reporterCharacterName}
-                    reporterAvatarUrl={item.reporterAvatarUrl}
-                    reporterPartyAbbrev={item.reporterPartyAbbrev}
-                    reporterStateCode={item.reporterStateCode}
-                    reporterCountryId={item.reporterCountryId}
-                    createdAt={item.createdAt}
-                    mergedInto={item.mergedInto}
-                    selectable={isAdmin}
-                    selected={selectedIds.has(item.id)}
-                    onToggleSelect={toggleSelect}
-                  />
+        <section className="overflow-hidden rounded-xl border border-card-border bg-card shadow-md">
+          <div
+            className={`${THREAD_GRID} hidden border-b border-card-border bg-card-muted px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted md:grid`}
+          >
+            <span className="col-span-2">Thread</span>
+            <span className="text-center">Votes</span>
+            <span className="text-center">Replies</span>
+            <span className="text-right">Status</span>
+          </div>
+          {loading ? (
+            <ul className="divide-y divide-card-border">
+              {[1, 2, 3, 4, 5, 6].map((i) => (
+                <li key={i} className="flex items-center gap-4 px-4 py-4">
+                  <Skeleton className="h-10 w-10 shrink-0 rounded-full" />
+                  <div className="flex-1 space-y-2">
+                    <Skeleton className="h-4 w-2/3" />
+                    <Skeleton className="h-3 w-1/2" />
+                  </div>
                 </li>
               ))}
             </ul>
-
-            {total > limit && (
-              <div className="flex justify-center gap-2">
+          ) : items.length === 0 ? (
+            <p className="px-4 py-12 text-center text-sm text-muted">
+              No suggestions in this view yet.
+            </p>
+          ) : (
+            <ul className="divide-y divide-card-border">
+              {items.map((item) => (
+                <SuggestionThreadRow
+                  key={item.id}
+                  item={item}
+                  selectMode={isAdmin && selectMode}
+                  selected={selectedIds.has(item.id)}
+                  onToggleSelect={toggleSelect}
+                />
+              ))}
+            </ul>
+          )}
+          {!loading && total > limit && (
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-card-border bg-card-muted/60 px-4 py-2.5">
+              <span className="text-xs tabular-nums text-muted">
+                {offset + 1} to {Math.min(offset + limit, total)} of {total}
+              </span>
+              <div className="flex gap-2">
                 <Button
                   variant="secondary"
                   disabled={offset === 0}
                   onClick={() => setOffset((o) => Math.max(0, o - limit))}
+                  className="px-3 py-1 text-xs"
                 >
                   Previous
                 </Button>
@@ -439,13 +438,14 @@ function FeedbackBoardInner() {
                   variant="secondary"
                   disabled={offset + limit >= total}
                   onClick={() => setOffset((o) => o + limit)}
+                  className="px-3 py-1 text-xs"
                 >
                   Next
                 </Button>
               </div>
-            )}
-          </>
-        )}
+            </div>
+          )}
+        </section>
 
         {selectedIds.size > 0 && isAdmin && (
           <SelectionBar
@@ -472,13 +472,7 @@ export default function FeedbackPage() {
               <Skeleton key={i} className="h-8 w-20" />
             ))}
           </div>
-          <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {[1, 2, 3, 4, 5, 6].map((i) => (
-              <li key={i}>
-                <Skeleton className="h-44 rounded-xl" />
-              </li>
-            ))}
-          </ul>
+          <Skeleton className="h-96 w-full rounded-xl" />
         </div>
       }
     >
