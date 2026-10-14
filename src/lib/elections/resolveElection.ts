@@ -36,6 +36,7 @@ import type {
   StatePartyOrg,
   ElectionVoteTally,
   State,
+  CongressionalDistrict,
 } from "@/lib/db/types";
 import { getGameTime } from "@/lib/time/gameTime";
 import { isHexObjectIdString } from "@/lib/utils/objectIdHex";
@@ -45,6 +46,7 @@ import type {
   ElectionDeps,
 } from "./electionResponseTypes";
 import { _enrichElection, fetchDepsForElection } from "./enrichElection";
+import { resolvedSeatsEstimate } from "@/lib/elections/resolvedSeatsEstimate";
 import { buildActiveVisibleNppEndorsementFilter } from "@/lib/nppEndorsements";
 import {
   ELECTION_SUMMARY_CHARACTER_PROJECTION,
@@ -543,11 +545,40 @@ export async function resolveElections(
     countryId,
     _id: { $in: [...ids] },
   }));
-  const [sharedApportionment, localRegionStates] = await Promise.all([
+  const shouldBatchHouseDistricts =
+    gameState?.redistrictingEnabled === true &&
+    elections.some((e) => (e.countryId ?? "US") === "US" && e.electionType === "house") &&
+    elections.some(
+      (e) =>
+        (e.countryId ?? "US") === "US" &&
+        e.electionType === "house" &&
+        tallyByElection.get(e._id.toString()) &&
+        !resolvedSeatsEstimate(tallyByElection.get(e._id.toString())!, null)
+    );
+  const houseStates = [
+    ...new Set(
+      elections
+        .filter(
+          (e) =>
+            (e.countryId ?? "US") === "US" &&
+            e.electionType === "house" &&
+            tallyByElection.get(e._id.toString()) &&
+            !resolvedSeatsEstimate(tallyByElection.get(e._id.toString())!, null)
+        )
+        .map((e) => e.state)
+    ),
+  ];
+  const [sharedApportionment, localRegionStates, houseDistricts] = await Promise.all([
     loadApportionment(db, gameState?.preset, gameState?.currentYear),
     regionFilters.length
       ? db.collection<State>("states").find({ $or: regionFilters }).toArray()
       : Promise.resolve([] as State[]),
+    shouldBatchHouseDistricts && houseStates.length
+      ? db
+          .collection<CongressionalDistrict>("congressionalDistricts")
+          .find({ countryId: "US", stateId: { $in: houseStates } })
+          .toArray()
+      : Promise.resolve(undefined),
   ]);
   const localRegionByCountryAndId = new Map(
     localRegionStates.map((state) => [`${state.countryId ?? "US"}:${state._id}`, state])
@@ -632,6 +663,7 @@ export async function resolveElections(
 
       const deps: ElectionDeps = {
         apportionment: sharedApportionment,
+        ...(houseDistricts ? { preloadedDistricts: houseDistricts } : {}),
         localRegionState: election.seatId
           ? (localRegionByCountryAndId.get(
               `${electionCountryId}:${parseSeatId(election.seatId).localRegionId}`
