@@ -125,7 +125,7 @@ test("explicit recovery refuses symlinked compiler directories", async (t) => {
   assert.equal(existsSync(join(outside, "marker")), true);
 });
 
-for (const fail of ["first", "always"]) {
+for (const fail of ["never", "first", "always"]) {
   test(`npm build keeps postbuild after successful compilation only (${fail})`, async (t) => {
     const h = fixture(t);
     const { copyFileSync } = await import("node:fs");
@@ -149,9 +149,10 @@ for (const fail of ["first", "always"]) {
       env: { ...process.env, RAILWAY_ENVIRONMENT_NAME: "test", FAIL: fail, DIAGNOSTIC: panic },
       encoding: "utf8",
     });
-    assert.equal(result.status, fail === "first" ? 0 : 7, result.stderr);
-    assert.equal(h.attempts(), 2);
-    assert.equal(existsSync(join(h.cwd, "postbuilt")), fail === "first");
+    assert.equal(result.status, fail === "always" ? 7 : 0, result.stderr);
+    assert.equal(h.attempts(), fail === "never" ? 1 : 2);
+    assert.equal(h.marker("turbopack"), fail === "never");
+    assert.equal(existsSync(join(h.cwd, "postbuilt")), fail !== "always");
     assert.equal(h.marker("fetch-cache"), true);
   });
 }
