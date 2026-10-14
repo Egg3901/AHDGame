@@ -25,6 +25,7 @@ import { processSectors } from "./sectorCalculations";
 import { getLabourSystemMode, labourAtLeast } from "@/lib/labour/featureFlag";
 import { getMarketSystemMode, marketAtLeast } from "@/lib/market/featureFlag";
 import { buildMarketContext } from "@/lib/market/marketContext";
+import { normalizeCommodityFixStage } from "@/lib/market/commodityFixStages";
 import { isFairnessDoctrineInEffect } from "@/lib/mediaRegulation/rules";
 import { runClearingPrePass } from "./clearingPrePass";
 import { computeQualityUpdates } from "./brandQualityTurn";
@@ -439,6 +440,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
     glideFloor: marketGovernorConfig?.marketGovernorGlideFloor,
   });
   market.explicitPlantCostsEnabled = marketGovernorConfig?.explicitPlantCostsEnabled === true;
+  market.commodityFixStage = normalizeCommodityFixStage(marketGovernorConfig?.commodityFixStage);
   market.mediaRegulationEnabled = mediaRegulationEnabled;
   market.mediaEditorialEnabled = mediaEditorialEnabled;
   if (mediaRegulationEnabled) {
