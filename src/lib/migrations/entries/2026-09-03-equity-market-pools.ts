@@ -58,6 +58,10 @@ async function seedEquityMarketPools(db: Db, ctx: MigrationContext): Promise<Mig
       _id: currency as CurrencyCode,
       cashLocal: target,
       targetCashLocal: target,
+      // The opening balance, so poolConservationResidual can evaluate the pool
+      // from its first turn. Without it a fresh world reads NaN until the
+      // separate seed backfill runs, which it never did on the 1991 world.
+      seedLocal: target,
       lifetime: {},
       createdAt: now,
       updatedAt: now,
