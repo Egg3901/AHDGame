@@ -4,6 +4,7 @@ import type { CabinetPositionMechanics } from "@/lib/constants/cabinetMechanicsT
 import { isMergerAuthoritySeat } from "@/lib/corporations/mergerReview/constants";
 
 export type CabinetTabId =
+  | "contracts"
   | "overview"
   | "actions"
   | "treasury"
@@ -17,7 +18,7 @@ export type CabinetTabId =
 export interface CabinetTab {
   id: CabinetTabId;
   label: string;
-  labelKey?: "actionsTab";
+  labelKey?: "actionsTab" | "contractsTab";
 }
 
 /**
@@ -87,6 +88,8 @@ export function resolveCabinetTabs(args: {
   if (isForeignMinister(positionId)) {
     tabs.push({ id: "foreign", label: "Foreign Relations" });
   }
+
+  tabs.push({ id: "contracts", label: "Government Contracts", labelKey: "contractsTab" });
 
   if (args.cabinetVersion !== "v2" || args.flagshipAvailable)
     tabs.push({

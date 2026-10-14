@@ -44,7 +44,7 @@ describe("resolveCabinetTabs", () => {
       cabinetVersion: "v2",
       flagshipAvailable: false,
     });
-    expect(tabs.map((tab) => tab.id)).toEqual(["overview", "actions"]);
+    expect(tabs.map((tab) => tab.id)).toEqual(["overview", "actions", "contracts"]);
   });
   it("keeps implemented v2 management surfaces beside Actions", () => {
     const tabs = resolveCabinetTabs({
@@ -58,6 +58,7 @@ describe("resolveCabinetTabs", () => {
     expect(tabs.map((tab) => tab.id)).toEqual([
       "overview",
       "actions",
+      "contracts",
       "flagship",
       "commands",
       "doctrine",

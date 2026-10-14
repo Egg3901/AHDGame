@@ -24,6 +24,8 @@ export type DefenceContractStatus = "pending" | "active" | "complete" | "cancell
  */
 export interface DefenceContract {
   _id: ObjectId;
+  /** Public tender whose winning bid created this contract; absent on existing contracts. */
+  tenderId?: string;
   /** The buying country. Equals the supplying corporation's `countryId` — see above. */
   countryId: CountryId;
   corporationId: ObjectId;

@@ -126,6 +126,7 @@ export const CATEGORY_OF: Record<NotificationType, InboxCategory> = {
   prospect_succeeded: "treasury",
   prospect_failed: "treasury",
   contract_offered: "treasury",
+  government_contract_awarded: "treasury",
   defence_contract_offered: "treasury",
   defence_contract_cancelled: "treasury",
   contract_royalty_missed: "treasury",

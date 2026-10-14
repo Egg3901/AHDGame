@@ -1,4 +1,4 @@
-import { ObjectId } from "mongodb";
+import { ObjectId, type Db } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import type { NewsPost, NewsCategory } from "@/lib/db/types";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
@@ -11,9 +11,9 @@ const SYSTEM_AUTHOR_NAME = "National Wire Service";
 export async function createSystemNewsPost(
   content: string,
   category: NewsCategory,
-  options: { title?: string } = {}
+  options: { title?: string; id?: ObjectId; db?: Db } = {}
 ): Promise<void> {
-  const db = await getDb();
+  const db = options.db ?? (await getDb());
   const now = new Date();
 
   const post: Omit<NewsPost, "_id"> = {
@@ -29,7 +29,11 @@ export async function createSystemNewsPost(
     updatedAt: now,
   };
 
-  await db.collection("newsPosts").insertOne(post);
+  if (options.id)
+    await db
+      .collection("newsPosts")
+      .updateOne({ _id: options.id }, { $setOnInsert: post }, { upsert: true });
+  else await db.collection("newsPosts").insertOne(post);
 }
 
 // ─── Election result aggregation ──────────────────────────────────────────────

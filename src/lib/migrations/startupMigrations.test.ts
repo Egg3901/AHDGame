@@ -32,6 +32,7 @@ describe("runRequiredStartupMigrations", () => {
 
     expect(REQUIRED_STARTUP_MIGRATIONS.map((migration) => migration.id)).toEqual([
       "2026-10-14-contest-account-history",
+      "2026-10-14-government-contract-bidding",
       "2026-09-03-equity-market-pools",
       "2026-09-03-repair-orphan-index-fund-state",
       "2026-09-10-provider-identity-indexes",

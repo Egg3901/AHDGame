@@ -1,3 +1,4 @@
+import { migration as governmentContractBidding } from "./entries/2026-10-14-government-contract-bidding";
 import { migration as contestAccountHistory } from "./entries/2026-10-14-contest-account-history";
 import { migration as orgHeadAgendaIndex } from "./entries/2026-10-13-org-head-agenda-index";
 import { migration as bankFundSubscriptions } from "./entries/2026-10-12-bank-fund-subscriptions";
@@ -375,6 +376,7 @@ export const MIGRATIONS: Migration[] = [
   bankFundSubscriptions,
   orgHeadAgendaIndex,
   contestAccountHistory,
+  governmentContractBidding,
 ];
 
 // D13 rollback drill - registered but deliberately OUTSIDE the normal chain.

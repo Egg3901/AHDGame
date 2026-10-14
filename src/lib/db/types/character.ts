@@ -200,6 +200,8 @@ export interface Character {
   /** Party influence — accumulates per turn based on policy alignment and leadership. Floored at 0. */
   partyInfluence?: number;
   favorability: number;
+  /** Historical self-dealing receipts, retained on retired characters. Contract ids are never reused across worlds. */
+  governmentContractDisclosures?: string[];
   /** Last corporation-turn editorial favorability receipt, for replay safety. */
   mediaEditorialLastAppliedTurn?: number;
   infamy: number;

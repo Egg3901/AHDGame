@@ -213,14 +213,15 @@ Disbanding is **free** and instant. The unit's surviving personnel go back into 
 
 ## Defence procurement contracts
 
-The defence seat can award contracts to eligible domestic defence sectors from the cabinet office's **Military → Arsenal** area. A contract supplies the national arsenal over time; recruiting and upgrading draw equipment from that stock.
+The defence seat publishes tenders through the Cabinet Office's **Government Contracts** tab or the country's contract board. Corporations bid eligible domestic plants and a price; after bidding closes, the government selects a winner with a public reason. The accepted bid becomes an active order. **Military > Arsenal** retains existing orders and their delivery and termination controls.
 
-Signing a contract immediately reserves its full price against the defence appropriation. The server refuses an order that exceeds the **uncommitted** balance. Deliveries draw down that reservation, and cancelling, declining, or completing the contract releases whatever remains. Recruiting and upgrading also use the uncommitted balance, so they cannot spend money already promised to a supplier.
+Publishing a tender reserves its maximum value against the defence appropriation. Award converts that hold to the winning bid's actual price and releases the difference. The server refuses an order that exceeds the **uncommitted** balance. Deliveries draw down that reservation, and terminating or completing an order releases its remaining commitment after any required break fee. Recruiting and upgrading also use the uncommitted balance, so they cannot spend money already promised to a supplier.
 
-The minister chooses:
+The minister publishes:
 
+- **Equipment component**
 - **Lots ordered**
-- **Price per lot**, inside the server-calculated floor and ceiling
+- **Maximum price per lot**, with corporate bids constrained by the permitted price band
 - **Equipment grade**, from cheap mass production to premium equipment
 
 The floor follows the supplier's current commodity and overhead costs. If input prices rise after signing, the contract can become unprofitable. A supplier with enough cash delivers at a loss; one that cannot fund the loss stalls and reports why.
@@ -229,9 +230,9 @@ The contractor assigns up to four production lines from each plant across its or
 
 Both the minister's and contractor's order books show lots ordered, built, carried, delivered, paid, and still committed. A stalled order names the reason. Awards to a corporation the minister owns or materially holds are marked on the contract, reported on the public wire, and reduce the minister's standing.
 
-An admin may pause **new** defence procurement in an emergency. Existing contracts continue to deliver and may still be cancelled or declined.
+An admin may pause **new** defence procurement in an emergency. Existing active contracts continue to deliver and may still be terminated under their signed rules.
 
-**Planned economies do not contract.** The Soviet Union and East Germany have no private suppliers to place an order with, so their arsenals are fed by **state arms industry** instead: a fixed trickle of lots every turn, delivered straight to the store and pointed at whichever branch is furthest from a full load. It is enough to keep an army equipped and fit out a new formation in a few turns, and it banks a modest war reserve in peacetime, but it will not keep up with a war fought at full pace. The Soviet arsenal out-produces the East German one several times over.
+**Planned economies also receive state arms industry output.** Independently of tenders, the Soviet Union and East Germany receive a fixed trickle of lots every turn, delivered straight to the store and pointed at whichever branch is furthest from a full load. It is enough to keep an army equipped and fit out a new formation in a few turns, and it banks a modest war reserve in peacetime, but it will not keep up with a war fought at full pace. The Soviet arsenal out-produces the East German one several times over.
 
 ## A sensible build order
 

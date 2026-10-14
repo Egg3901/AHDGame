@@ -1394,11 +1394,16 @@ export default function CorporationDetailPage() {
                 )}
 
                 {tab === "contracts" && corporation.contractIssuanceEnabled && isExtractionCorp && (
-                  <CorporationContractsTab corpId={id} isCeo={isCeo} />
+                  <CorporationContractsTab
+                    corpId={id}
+                    isCeo={isCeo}
+                    countryId={corporation.countryId}
+                  />
                 )}
 
                 {tab === "defence" && isDefenceCorp && (
                   <DefenceContractsTab
+                    countryId={corporation.countryId}
                     corpId={id}
                     defence={defenceContracts ?? undefined}
                     isCeo={isCeo}

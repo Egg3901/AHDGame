@@ -129,6 +129,7 @@ export const NOTIFICATION_TYPES = [
   "prospect_succeeded",
   "prospect_failed",
   "contract_offered",
+  "government_contract_awarded",
   "contract_royalty_missed",
   "contract_defaulted",
   "contract_expired",

@@ -32,6 +32,8 @@ export const DEFAULT_PHASE_ROUND_TRIP_BUDGET = 500;
  * Sample counts and caveats are in the 1.10.0 dev changelog.
  */
 export const PHASE_ROUND_TRIP_BUDGETS: Readonly<Record<string, number>> = {
+  // One expiry update, one projected read, two batched releases and one completion update.
+  governmentContractExpiry: 10,
   russianCouncilComposition: 100,
   corporationTurn: 4500,
   ministerialOrders: 2000,

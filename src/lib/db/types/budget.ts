@@ -390,6 +390,11 @@ export interface DefenseAppropriation {
    * reproduces the old arithmetic exactly for a world with no live contracts.
    */
   encumbered?: number;
+  /** Idempotent holds for government tenders; transferred to contracts or released. */
+  governmentTenderReservations?: Record<
+    string,
+    { state: "held" | "converted" | "released"; amount: number }
+  >;
 }
 
 /**
@@ -540,6 +545,8 @@ export interface BankSovereignClaim {
 }
 
 export interface FederalBudget {
+  /** Cutover receipts prevent releasing an unanswered direct offer twice. */
+  governmentDirectOfferWithdrawals?: Record<string, boolean>;
   treasuryAccrual?: TreasuryAccrualReceipt;
   bankSovereignClaims?: BankSovereignClaim[];
   /**

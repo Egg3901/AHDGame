@@ -11,7 +11,8 @@
         "insufficient_funds": "This paid action needs available department funds. Staff work has no cash cost.",
         "seat_busy": "Wait for the current office action to finish.",
         "cooldown": "This target is still on cooldown."
-      }
+      },
+      "contractsTab": "Government Contracts"
     },
     "creation": {
       "colorDescription": "Your chosen Bloc color is used for the organization, world map, alignment ledgers, and influence views.",
