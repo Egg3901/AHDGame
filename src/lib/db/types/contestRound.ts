@@ -46,6 +46,8 @@ export interface ContestBaseline {
 }
 
 export interface ContestStanding {
+  /** Account owner captured while the character exists; retained across resets. */
+  userId?: string;
   subjectId: string;
   subjectName: string;
   characterId: string;
@@ -57,6 +59,8 @@ export interface ContestStanding {
 }
 
 export interface ContestWinner {
+  /** Account owner, independent of the character lifecycle. */
+  userId?: string;
   characterId: string;
   characterName: string;
   subjectId: string;

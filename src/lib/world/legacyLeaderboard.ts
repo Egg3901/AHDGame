@@ -1,3 +1,6 @@
+import { liquidBalancesAnchor, personalDebtAnchor } from "./rules/netWorth";
+import { computeCareerScore, CAREER_SCORE_VERSION } from "./rules/careerScore";
+import { loadCareerLegislation, loadCareerContests, loadCareerLoans } from "./careerEvidence";
 import { ObjectId, type Db } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
 import type { Character, ExchangeRate } from "@/lib/db/types";
@@ -51,72 +54,9 @@ interface Life {
   isActive: boolean;
   iteration: GameIteration | null;
   retiredAt: Date | null;
-}
-
-/**
- * Score weights for the Hall of Fame composite. Only counts stats that
- * represent something *built up* over a life — national influence and party
- * influence both accumulate turn over turn — not point-in-time snapshots like
- * raw Political Influence or Favorability, which fluctuate and don't reflect
- * sustained achievement (a character can end their life on a lucky high or
- * unlucky low reading of either). Wealth uses log10 specifically to cap how
- * much a currency/forex outlier can swing the ranking — this codebase has
- * shipped real bugs from unbounded cross-era forex amounts before.
- *
- * `partyInfluence` weight is a starting estimate, not empirically calibrated
- * like the others — the 1953 reset wiped it to 0 for every character, so
- * there's no historical distribution to calibrate against yet. Revisit once
- * the current iteration has real party-influence data.
- */
-const SCORE_WEIGHTS = {
-  nationalInfluence: 3,
-  partyInfluence: 3,
-  achievement: 250,
-  officeTier: 500,
-  infamy: -30,
-  wealthLog: 200,
-};
-
-interface ScoreInputs {
-  nationalInfluence: number;
-  partyInfluence: number;
-  achievementCount: number;
-  highestOfficeRank: number;
-  infamy: number;
-  /** Personal wealth (cashOnHand), in the character's local currency. */
-  cashOnHandLocal: number;
-  countryId: CountryId;
-}
-
-function computeLegacyScore(
-  inputs: ScoreInputs,
-  rateMap: Map<string, ExchangeRate>
-): { total: number; breakdown: LegacyScoreBreakdown } {
-  const rateDoc = getRateDoc(rateMap, inputs.countryId);
-  // Debt (negative cashOnHand) is real — clamp to 0 rather than feed a
-  // negative amount into log10, which returns NaN below -1 and poisons the
-  // whole score. Debt just contributes nothing to the wealth term, not a
-  // penalty (that's what SCORE_WEIGHTS.infamy is for).
-  const cashOnHandInternal = Math.max(0, toInternalAmount(inputs.cashOnHandLocal, rateDoc));
-
-  const breakdown: LegacyScoreBreakdown = {
-    nationalInfluence: inputs.nationalInfluence * SCORE_WEIGHTS.nationalInfluence,
-    partyInfluence: inputs.partyInfluence * SCORE_WEIGHTS.partyInfluence,
-    achievements: inputs.achievementCount * SCORE_WEIGHTS.achievement,
-    officeTier: inputs.highestOfficeRank * SCORE_WEIGHTS.officeTier,
-    infamyPenalty: inputs.infamy * SCORE_WEIGHTS.infamy,
-    wealth: Math.log10(cashOnHandInternal + 1) * SCORE_WEIGHTS.wealthLog,
-  };
-
-  const total =
-    breakdown.nationalInfluence +
-    breakdown.partyInfluence +
-    breakdown.achievements +
-    breakdown.officeTier +
-    breakdown.infamyPenalty +
-    breakdown.wealth;
-
-  return { total, breakdown };
+  enactedBills: number;
+  contestWins: number;
+  contestPodiums: number;
 }
 
 interface NetWorthInputs {
@@ -149,6 +89,7 @@ function computeNetWorth(
     shares: inputs.shareValueAnchor,
     bonds: inputs.bondValueAnchor,
     indexFunds: inputs.indexFundValueAnchor,
+    debt: 0,
   };
   const total =
     breakdown.personal +
@@ -159,44 +100,9 @@ function computeNetWorth(
   return { total, breakdown };
 }
 
-/**
- * Ranks every player by their single best life (current or retired), across
- * every game iteration ever played (or, with `scope: "current"`, only lives
- * from the current iteration — a snapshot of who's leading right now).
- * `rankBy` picks what "best" means: `"legacy"` (default) ranks by the
- * composite Legacy Score; `"netWorth"` ranks by forex-normalized net worth
- * instead — a separate, purely-wealth leaderboard. Either way, a user who
- * has retired five weak characters and one strong one ranks on the strong
- * one — lives aren't summed, so grinding out throwaway characters can't
- * inflate either ranking.
- *
- * The Legacy Score is a weighted composite of *built-up* stats only (see
- * SCORE_WEIGHTS) — national influence, party influence, achievements,
- * highest office ever held, an infamy penalty, and forex-normalized personal
- * wealth (cash + savings only, NOT shares/bonds/funds — see net worth for
- * those). Deliberately excludes raw Political Influence and Favorability
- * (point-in-time readings, not accumulated achievement) and legislative
- * record (bills passed/vetoed isn't tracked per-character anywhere in the
- * schema, only as world-level turn counters).
- *
- * Net worth covers the full asset picture — cash, savings, corp shares
- * (valued at current sharePrice), bonds (face value × market price), and
- * index-fund positions (units × NAV) — each converted to internal anchor
- * units so a JPY fortune and a GBP fortune compare fairly.
- *
- * "Highest office held" is re-derived live from each life's raw career
- * history on every read, rather than trusting a value frozen in the
- * retirement snapshot — snapshots taken before a past office-crediting fix
- * (ticket #991, losing candidates credited with offices they only ran for)
- * still carry the stale, wrong label, and re-deriving from history is the
- * only way old data self-heals without a backfill migration.
- *
- * Reads the whole `characters` + `retiredCharacters` + `corporations` +
- * `bonds` + `indexFundPositions` collections into memory. Fine at current
- * scale (low thousands of docs, and corporations/bonds are two further orders
- * of magnitude smaller than that); revisit with an aggregation pipeline if
- * any of them grows past ~50k.
- */
+/** Recalculate careers from retained evidence on every read. Best life plus account achievements,
+ * rather than summing disposable characters. Politics, business, legislation, contests and
+ * earned gameplay achievements each contribute at most 1,000 points. */
 export async function getLegacyLeaderboardData(
   db: Db,
   authUser: { userId: string } | null,
@@ -216,11 +122,14 @@ export async function getLegacyLeaderboardData(
     corporations,
     bonds,
     fundPositions,
+    legislationByCharacter,
+    contestsByCharacter,
+    loans,
   ] = await Promise.all([
     db
       .collection<Character>("characters")
       .find(
-        {},
+        { userId: { $exists: true }, isSynthetic: { $ne: true } },
         {
           projection: {
             userId: 1,
@@ -265,7 +174,24 @@ export async function getLegacyLeaderboardData(
     db
       .collection("characterAchievements")
       .aggregate<{ _id: unknown; count: number }>([
-        { $group: { _id: "$characterId", count: { $sum: 1 } } },
+        {
+          $lookup: {
+            from: "achievements",
+            localField: "achievementId",
+            foreignField: "_id",
+            as: "definition",
+          },
+        },
+        { $unwind: "$definition" },
+        { $match: { grantedBy: { $exists: false } } },
+        {
+          $match: {
+            "definition.category": { $ne: "special" },
+            "definition.triggerType": { $ne: "manual_only" },
+          },
+        },
+        { $group: { _id: { user: "$userId", achievement: "$achievementId" } } },
+        { $group: { _id: "$_id.user", count: { $sum: 1 } } },
       ])
       .toArray(),
     fetchExchangeRateMap(db),
@@ -288,6 +214,9 @@ export async function getLegacyLeaderboardData(
       .collection<IndexFundPosition>("indexFundPositions")
       .find({ holderKind: "character" }, { projection: { fundId: 1, characterId: 1, units: 1 } })
       .toArray(),
+    loadCareerLegislation(db),
+    loadCareerContests(db),
+    loadCareerLoans(db),
   ]);
 
   // Active-character net worth: shares/bonds/fund positions valued live and
@@ -351,10 +280,22 @@ export async function getLegacyLeaderboardData(
   const preferenceByUser = new Map(
     users.map((u) => [String(u._id), u.legacyDisplayCharacterId ?? null])
   );
-  const achievementCountByCharacter = new Map(
-    achievementCounts.map((a) => [String(a._id), a.count])
-  );
+  const achievementCountByUser = new Map(achievementCounts.map((a) => [String(a._id), a.count]));
 
+  const debts = personalDebtAnchor(
+    loans.flatMap((loan) =>
+      loan.borrowerId
+        ? [
+            {
+              borrowerId: loan.borrowerId.toString(),
+              currency: loan.currency,
+              outstanding: loan.outstanding,
+            },
+          ]
+        : []
+    ),
+    fxByCurrency
+  );
   const livesByUser = new Map<string, Life[]>();
   const pushLife = (life: Life) => {
     if (bannedUserIds.has(life.userId)) return;
@@ -364,23 +305,11 @@ export async function getLegacyLeaderboardData(
   };
 
   for (const c of activeCharacters) {
-    const achievementCount = achievementCountByCharacter.get(String(c._id)) ?? 0;
+    const achievementCount = achievementCountByUser.get(String(c.userId)) ?? 0;
     const cashOnHandLocal = c.currencyBalances?.personal?.[getHomeCurrency(c)] ?? c.cashOnHand ?? 0;
     const savingsLocal = c.currencyBalances?.savings?.[getHomeCurrency(c)] ?? c.savingsOnHand ?? 0;
     const characterIdStr = String(c._id);
-    const { total: score, breakdown: scoreBreakdown } = computeLegacyScore(
-      {
-        nationalInfluence: c.nationalInfluence ?? 0,
-        partyInfluence: c.partyInfluence ?? 0,
-        achievementCount,
-        highestOfficeRank: deriveHighestOfficeRank(c),
-        infamy: c.infamy ?? 0,
-        cashOnHandLocal,
-        countryId: c.countryId,
-      },
-      rateMap
-    );
-    const { total: netWorth, breakdown: netWorthBreakdown } = computeNetWorth(
+    const { breakdown: netWorthBreakdown } = computeNetWorth(
       {
         cashOnHandLocal,
         savingsLocal,
@@ -392,7 +321,36 @@ export async function getLegacyLeaderboardData(
       rateMap
     );
 
+    const liquid = liquidBalancesAnchor({
+      homeCurrency: getHomeCurrency(c),
+      personal: c.currencyBalances?.personal,
+      savings: c.currencyBalances?.savings,
+      legacyPersonal: c.cashOnHand ?? 0,
+      legacySavings: c.savingsOnHand ?? 0,
+      rates: fxByCurrency,
+    });
+    netWorthBreakdown.personal = liquid.personal;
+    netWorthBreakdown.savings = liquid.savings;
+    netWorthBreakdown.debt = -(debts.get(characterIdStr) ?? 0) || 0;
+    const netWorth = Object.values(netWorthBreakdown).reduce((sum, amount) => sum + amount, 0);
+    const enactedBills = legislationByCharacter.get(characterIdStr) ?? 0;
+    const contests = contestsByCharacter.get(characterIdStr) ?? { wins: 0, podiums: 0 };
+    const { total: score, breakdown: scoreBreakdown } = computeCareerScore({
+      nationalInfluence: c.nationalInfluence ?? 0,
+      partyInfluence: c.partyInfluence ?? 0,
+      achievementCount,
+      highestOfficeRank: deriveHighestOfficeRank(c),
+      infamy: c.infamy ?? 0,
+      netWorthAnchor: netWorth,
+      enactedBills,
+      contestWins: contests.wins,
+      contestPodiums: contests.podiums,
+    });
+
     pushLife({
+      enactedBills,
+      contestWins: contests.wins,
+      contestPodiums: contests.podiums,
       characterId: characterIdStr,
       userId: String(c.userId),
       name: c.name,
@@ -418,19 +376,7 @@ export async function getLegacyLeaderboardData(
       careerHistory: r.snapshot.careerHistory,
       currentOffice: r.snapshot.currentOffice,
     };
-    const { total: score, breakdown: scoreBreakdown } = computeLegacyScore(
-      {
-        nationalInfluence: r.snapshot.stats.nationalInfluence ?? 0,
-        partyInfluence: r.snapshot.stats.partyInfluence ?? 0,
-        achievementCount: r.snapshot.achievementCount ?? 0,
-        highestOfficeRank: deriveHighestOfficeRank(officeSource),
-        infamy: r.snapshot.stats.infamy ?? 0,
-        cashOnHandLocal: r.snapshot.stats.cashOnHand ?? 0,
-        countryId: r.snapshot.countryId,
-      },
-      rateMap
-    );
-    const { total: netWorth, breakdown: netWorthBreakdown } = computeNetWorth(
+    const { breakdown: netWorthBreakdown } = computeNetWorth(
       {
         cashOnHandLocal: r.snapshot.stats.cashOnHand ?? 0,
         savingsLocal: r.snapshot.stats.savingsOnHand ?? 0,
@@ -445,7 +391,39 @@ export async function getLegacyLeaderboardData(
       rateMap
     );
 
+    // New snapshots freeze forex at retirement; old snapshots retain their available balances.
+    if (r.snapshot.stats.cashValueAnchor !== undefined)
+      netWorthBreakdown.personal = r.snapshot.stats.cashValueAnchor;
+    if (r.snapshot.stats.savingsValueAnchor !== undefined)
+      netWorthBreakdown.savings = r.snapshot.stats.savingsValueAnchor;
+    netWorthBreakdown.debt =
+      -(r.snapshot.stats.debtValueAnchor ?? debts.get(String(r.characterId)) ?? 0) || 0;
+    const frozenNetWorth = Object.values(netWorthBreakdown).reduce(
+      (sum, amount) => sum + amount,
+      0
+    );
+    const enactedBills = Math.max(
+      r.snapshot.stats.enactedBills ?? 0,
+      legislationByCharacter.get(String(r.characterId)) ?? 0
+    );
+    const contests = contestsByCharacter.get(String(r.characterId)) ?? { wins: 0, podiums: 0 };
+    const achievementCount = achievementCountByUser.get(String(r.userId)) ?? 0;
+    const { total: score, breakdown: scoreBreakdown } = computeCareerScore({
+      nationalInfluence: r.snapshot.stats.nationalInfluence ?? 0,
+      partyInfluence: r.snapshot.stats.partyInfluence ?? 0,
+      achievementCount,
+      highestOfficeRank: deriveHighestOfficeRank(officeSource),
+      infamy: r.snapshot.stats.infamy ?? 0,
+      netWorthAnchor: frozenNetWorth,
+      enactedBills,
+      contestWins: contests.wins,
+      contestPodiums: contests.podiums,
+    });
+
     pushLife({
+      enactedBills,
+      contestWins: contests.wins,
+      contestPodiums: contests.podiums,
       characterId: String(r.characterId),
       userId: String(r.userId),
       name: r.snapshot.name,
@@ -453,7 +431,7 @@ export async function getLegacyLeaderboardData(
       homeState: r.snapshot.homeState,
       nationalInfluence: r.snapshot.stats.nationalInfluence ?? 0,
       partyInfluence: r.snapshot.stats.partyInfluence ?? 0,
-      achievementCount: r.snapshot.achievementCount ?? 0,
+      achievementCount,
       highestOffice: deriveHighestOffice(officeSource) ?? null,
       avatarUrl: r.snapshot.avatarUrl ?? null,
       isActive: false,
@@ -461,7 +439,7 @@ export async function getLegacyLeaderboardData(
       retiredAt: r.retiredAt,
       score,
       scoreBreakdown,
-      netWorth,
+      netWorth: frozenNetWorth,
       netWorthBreakdown,
     });
   }
@@ -477,20 +455,30 @@ export async function getLegacyLeaderboardData(
     if (inScopeLives.length === 0) continue;
 
     const bestLife = inScopeLives.reduce((best, life) =>
-      metricOf(life) > metricOf(best) ? life : best
+      metricOf(life) > metricOf(best) ||
+      (metricOf(life) === metricOf(best) &&
+        (life.isActive !== best.isActive ? life.isActive : life.characterId < best.characterId))
+        ? life
+        : best
     );
     const preference = preferenceByUser.get(userId) ?? null;
-    const displayName =
+    const displayLife =
       preference === "current"
-        ? (lives.find((l) => l.isActive)?.name ?? bestLife.name)
-        : preference
-          ? (lives.find((l) => l.characterId === preference)?.name ?? bestLife.name)
-          : bestLife.name;
+        ? (lives.find((l) => l.isActive) ?? bestLife)
+        : (lives.find((l) => l.characterId === preference) ?? bestLife);
+    const displayName = displayLife.name;
 
     ranked.push({
       rank: 0,
       userId,
       displayName,
+      displayCharacterId: displayLife.characterId,
+      scoringCharacterId: bestLife.characterId,
+      scoringCharacterName: bestLife.name,
+      enactedBills: bestLife.enactedBills,
+      contestWins: bestLife.contestWins,
+      contestPodiums: bestLife.contestPodiums,
+      scoreVersion: CAREER_SCORE_VERSION,
       countryId: bestLife.countryId,
       homeState: bestLife.homeState,
       iterationLabel: bestLife.iteration ? iterationLabel(bestLife.iteration) : "Unknown Era",
@@ -502,20 +490,21 @@ export async function getLegacyLeaderboardData(
       partyInfluence: bestLife.partyInfluence,
       achievementCount: bestLife.achievementCount,
       highestOffice: bestLife.highestOffice,
-      avatarUrl: bestLife.avatarUrl,
+      avatarUrl: displayLife.avatarUrl,
       isActive: bestLife.isActive,
       lifetimeLives: lives.length,
     });
   }
 
   if (rankBy === "netWorth") {
-    ranked.sort((a, b) => b.netWorth - a.netWorth);
+    ranked.sort((a, b) => b.netWorth - a.netWorth || a.userId.localeCompare(b.userId));
   } else {
     ranked.sort(
       (a, b) =>
         b.score - a.score ||
         b.achievementCount - a.achievementCount ||
-        b.nationalInfluence - a.nationalInfluence
+        b.nationalInfluence - a.nationalInfluence ||
+        a.userId.localeCompare(b.userId)
     );
   }
   ranked.forEach((entry, i) => {

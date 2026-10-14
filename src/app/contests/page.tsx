@@ -1,3 +1,15 @@
+import { iterationLabel } from "@/lib/wiki/officeIteration";
+import Link from "next/link";
+import {
+  loadContestHistory,
+  loadContestChampions,
+  HISTORY_PAGE_SIZE,
+  type ContestHistoryData,
+  type ContestChampion,
+} from "@/lib/contests/history";
+import { CONTEST_KINDS } from "@/lib/contests/rules";
+import { getLegacyLeaderboardData } from "@/lib/world/legacyLeaderboard";
+import LegacyLeaderboardClient from "@/app/world/legacy/LegacyLeaderboardClient";
 import type { Metadata } from "next";
 import { getLocale, getTranslations } from "next-intl/server";
 import { getDb } from "@/lib/mongodb";
@@ -30,6 +42,14 @@ export const dynamic = "force-dynamic";
 type T = Awaited<ReturnType<typeof getTranslations<"contests">>>;
 
 const DATE_OPTIONS: Intl.DateTimeFormatOptions = { dateStyle: "medium", timeStyle: "short" };
+
+function formatIteration(key: string | null, t: T): string {
+  const [type, number] = key?.split(":") ?? [];
+  if ((type === "Alpha" || type === "Beta" || type === "Iteration") && /^\d+$/.test(number ?? "")) {
+    return iterationLabel({ type, number: Number(number) });
+  }
+  return key ?? t("history.unknownIteration");
+}
 
 /** A contest's unit, applied to a score (signed) or a gap (unsigned). */
 function formatUnit(
@@ -323,7 +343,8 @@ function PastWinners({ past, t, locale }: { past: PastRoundData[]; t: T; locale:
                     ? t("past.iterationTitle")
                     : t(`kinds.${round.kind}.title`)}{" "}
                   <span className="font-normal text-muted">
-                    {t("past.round", { round: round.roundNumber })}
+                    {t("past.round", { round: round.roundNumber })} ·{" "}
+                    {formatIteration(round.iterationKey, t)}
                   </span>
                 </span>
                 <LocalTime
@@ -371,7 +392,242 @@ function PastWinners({ past, t, locale }: { past: PastRoundData[]; t: T; locale:
   );
 }
 
-export default async function ContestsPage() {
+function PersonalResults({
+  history,
+  t,
+  locale,
+  kind,
+  iterationKey,
+}: {
+  history: ContestHistoryData;
+  t: T;
+  locale: string;
+  kind?: ContestRecordKind;
+  iterationKey?: string;
+}) {
+  const totals = history.totals.reduce(
+    (sum, row) => ({
+      rounds: sum.rounds + row.rounds,
+      wins: sum.wins + row.wins,
+      podiums: sum.podiums + row.podiums,
+      prizeAnchor: sum.prizeAnchor + row.prizeAnchor,
+    }),
+    { rounds: 0, wins: 0, podiums: 0, prizeAnchor: 0 }
+  );
+  const pageHref = (page: number) => {
+    const params = new URLSearchParams({ view: "results", page: String(page) });
+    if (kind) params.set("kind", kind);
+    if (iterationKey) params.set("iteration", iterationKey);
+    return `/contests?${params}`;
+  };
+  return (
+    <section className="space-y-6">
+      <div>
+        <h2 className="text-2xl font-semibold">{t("history.title")}</h2>
+        <p className="mt-2 text-sm text-muted">{t("history.intro")}</p>
+      </div>
+      <dl className="grid grid-cols-2 gap-6 border-y border-card-border py-6 sm:grid-cols-4">
+        {(
+          [
+            ["rounds", totals.rounds],
+            ["wins", totals.wins],
+            ["podiums", totals.podiums],
+            ["prizes", formatAnchor(locale, totals.prizeAnchor)],
+          ] as const
+        ).map(([label, value]) => (
+          <div key={label}>
+            <dt className="text-sm text-muted">{t(`history.${label}`)}</dt>
+            <dd className="mt-1 text-2xl font-semibold tabular-nums">{value}</dd>
+          </div>
+        ))}
+      </dl>
+      {history.totals.length > 0 && (
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-sm">
+            <caption className="mb-3 text-left font-semibold">{t("history.allTime")}</caption>
+            <thead>
+              <tr>
+                {["contest", "rounds", "wins", "podiums", "bestRank", "prizes"].map((key) => (
+                  <th key={key} className="px-3 py-2">
+                    {t(`history.${key}`)}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {history.totals.map((row) => (
+                <tr key={row.kind} className="border-t border-card-border">
+                  <td className="px-3 py-3">{t(`kinds.${row.kind}.title`)}</td>
+                  <td className="px-3">{row.rounds}</td>
+                  <td className="px-3">{row.wins}</td>
+                  <td className="px-3">{row.podiums}</td>
+                  <td className="px-3">#{row.bestRank}</td>
+                  <td className="px-3">{formatAnchor(locale, row.prizeAnchor)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      <form action="/contests" method="get" className="flex flex-wrap items-end gap-4">
+        <input type="hidden" name="view" value="results" />
+        <label className="text-sm">
+          {t("history.contest")}
+          <select
+            name="kind"
+            defaultValue={kind ?? ""}
+            className="ml-2 rounded border border-card-border bg-card px-3 py-2"
+          >
+            <option value="">{t("history.allContests")}</option>
+            {[...CONTEST_KINDS, "referrals_iteration" as const].map((k) => (
+              <option key={k} value={k}>
+                {t(`kinds.${k}.title`)}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="text-sm">
+          {t("history.iteration")}
+          <select
+            name="iteration"
+            defaultValue={iterationKey ?? ""}
+            className="ml-2 rounded border border-card-border bg-card px-3 py-2"
+          >
+            <option value="">{t("history.allIterations")}</option>
+            {history.iterations.map((iteration) => (
+              <option key={iteration} value={iteration}>
+                {formatIteration(iteration, t)}
+              </option>
+            ))}
+          </select>
+        </label>
+        <button type="submit" className="rounded bg-primary px-4 py-2 text-sm text-white">
+          {t("history.filter")}
+        </button>
+      </form>
+      {history.entries.length === 0 ? (
+        <p className="py-6 text-muted">{t("history.empty")}</p>
+      ) : (
+        <ol className="divide-y divide-card-border">
+          {history.entries.map((row) => (
+            <li key={row.id} className="flex flex-wrap justify-between gap-4 py-5">
+              <div>
+                <h3 className="font-medium">
+                  {t(`kinds.${row.kind}.title`)} · {t("past.round", { round: row.roundNumber })}
+                </h3>
+                <p className="mt-1 text-sm text-muted">
+                  {formatIteration(row.iterationKey, t)} ·{" "}
+                  <LocalTime value={row.settledAt} options={{ dateStyle: "medium" }} />
+                </p>
+                <p className="mt-2 text-sm">
+                  {row.subjectName}
+                  {showsOwner(row.kind) ? ` · ${row.characterName}` : ""}
+                </p>
+              </div>
+              <div className="text-right">
+                <p className="font-semibold">
+                  {t("history.placing", { rank: row.rank, count: row.entrants })}
+                </p>
+                <p className="mt-1 text-sm tabular-nums">
+                  {formatScore(t, locale, row.kind, row.score)}
+                </p>
+                <p className="mt-1 text-sm text-gold">
+                  {row.supporter
+                    ? row.alreadySupporter
+                      ? t("past.alreadySupporter")
+                      : t("past.supporter")
+                    : row.prizeAnchor > 0
+                      ? formatAnchor(locale, row.prizeAnchor)
+                      : row.placed
+                        ? t("history.placed")
+                        : t("history.noPrize")}
+                </p>
+              </div>
+            </li>
+          ))}
+        </ol>
+      )}
+      <nav className="flex items-center gap-6 text-sm" aria-label={t("history.pages")}>
+        {history.page > 1 && <Link href={pageHref(history.page - 1)}>{t("history.previous")}</Link>}
+        <span className="text-muted">
+          {t("history.page", {
+            page: history.page,
+            pages: Math.max(1, Math.ceil(history.count / HISTORY_PAGE_SIZE)),
+          })}
+        </span>
+        {history.page * HISTORY_PAGE_SIZE < history.count && (
+          <Link href={pageHref(history.page + 1)}>{t("history.next")}</Link>
+        )}
+      </nav>
+    </section>
+  );
+}
+
+function ContestChampions({
+  champions,
+  t,
+  locale,
+}: {
+  champions: ContestChampion[];
+  t: T;
+  locale: string;
+}) {
+  return (
+    <section>
+      <h2 className="text-2xl font-semibold">{t("champions.title")}</h2>
+      <p className="mb-4 mt-2 text-sm text-muted">{t("champions.intro")}</p>
+      {champions.length === 0 ? (
+        <p className="text-muted">{t("past.empty")}</p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-sm">
+            <thead>
+              <tr>
+                <th className="px-3 py-2">#</th>
+                {["player", "wins", "podiums", "rounds", "prizes"].map((key) => (
+                  <th key={key} className="px-3 py-2">
+                    {t(`history.${key}`)}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {champions.map((row, index) => (
+                <tr key={index} className="border-t border-card-border">
+                  <td className="px-3 py-3">{index + 1}</td>
+                  <td className="px-3">{row.characterName}</td>
+                  <td className="px-3">{row.wins}</td>
+                  <td className="px-3">{row.podiums}</td>
+                  <td className="px-3">{row.rounds}</td>
+                  <td className="px-3">{formatAnchor(locale, row.prizeAnchor)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
+  );
+}
+
+export default async function ContestsPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const params = await searchParams;
+  const view =
+    params.view === "results" ? "results" : params.view === "rankings" ? "rankings" : "current";
+  const scope = params.scope === "current" ? "current" : "all";
+  const rankBy = params.rankBy === "netWorth" ? "netWorth" : "legacy";
+  const kinds: readonly ContestRecordKind[] = [...CONTEST_KINDS, "referrals_iteration"];
+  const kind =
+    typeof params.kind === "string" && kinds.includes(params.kind as ContestRecordKind)
+      ? (params.kind as ContestRecordKind)
+      : undefined;
+  const iterationKey =
+    typeof params.iteration === "string" ? params.iteration.slice(0, 100) : undefined;
+  const page = typeof params.page === "string" ? Number(params.page) : 1;
   const [t, locale, auth] = await Promise.all([
     getTranslations("contests"),
     getLocale(),
@@ -384,6 +640,16 @@ export default async function ContestsPage() {
     db,
     auth ? { userId: auth.userId, characterId: auth.character?._id.toString() ?? null } : null
   );
+  const viewer = auth
+    ? { userId: auth.userId, characterId: auth.character?._id.toString() ?? null }
+    : null;
+  const [history, champions, career] = await Promise.all([
+    view === "results" && viewer
+      ? loadContestHistory(db, viewer, page, { kind, iterationKey })
+      : null,
+    view === "rankings" ? loadContestChampions(db) : [],
+    view === "rankings" ? getLegacyLeaderboardData(db, viewer, { scope, rankBy }) : null,
+  ]);
   const weekly = data.contests.filter((c) => c.kind !== "referrals_weekly");
   const weeklyReferrals = data.contests.find((c) => c.kind === "referrals_weekly");
   // Weekly rounds open together, so any one of them carries the week's clock.
@@ -396,9 +662,11 @@ export default async function ContestsPage() {
         <header className="mb-10 flex flex-col gap-6 rounded-2xl border border-card-border bg-card px-6 py-7 md:flex-row md:items-end md:justify-between md:px-8">
           <div className="max-w-xl">
             <h1 className="text-4xl font-bold tracking-tight text-foreground">{t("title")}</h1>
-            <p className="mt-3 text-sm text-muted">{t("intro")}</p>
+            <p className="mt-3 text-sm text-muted">
+              {view === "rankings" ? t("career.intro") : t("intro")}
+            </p>
           </div>
-          {round && (
+          {round && view !== "rankings" && (
             <div className="w-full md:w-80">
               <div className="text-sm text-muted">{t("poolLabel")}</div>
               <div className="text-4xl font-bold tabular-nums text-gold">
@@ -416,38 +684,110 @@ export default async function ContestsPage() {
           )}
         </header>
 
-        {weekly.length === 0 ? (
-          <p className="mb-6 rounded-xl border border-dashed border-card-border p-6 text-sm text-muted">
-            {t("noRound")}
-          </p>
-        ) : (
-          <div className="mb-10 grid gap-4 md:grid-cols-2">
-            {weekly.map((contest) => (
-              <ContestCard
-                key={contest.kind}
-                contest={contest}
-                t={t}
-                locale={locale}
-                signedIn={auth !== null}
-              />
+        <nav
+          className="mb-8 flex flex-wrap gap-6 border-b border-card-border"
+          aria-label={t("navigation")}
+        >
+          {(["current", "rankings"] as const).map((tab) => {
+            const selected = tab === "rankings" ? view === "rankings" : view !== "rankings";
+            return (
+              <Link
+                key={tab}
+                href={`/contests?view=${tab}`}
+                aria-current={selected ? "page" : undefined}
+                className={`border-b-2 pb-3 font-medium ${selected ? "border-primary text-foreground" : "border-transparent text-muted hover:text-foreground"}`}
+              >
+                {tab === "current" ? t("tabs.contests") : t("tabs.rankings")}
+              </Link>
+            );
+          })}
+        </nav>
+        {view !== "rankings" && (
+          <nav className="mb-6 flex gap-2 text-sm" aria-label={t("contestViews")}>
+            {(["current", "results"] as const).map((tab) => (
+              <Link
+                key={tab}
+                href={`/contests?view=${tab}`}
+                aria-current={view === tab ? "page" : undefined}
+                className={`rounded-md px-4 py-2 ${view === tab ? "bg-card text-foreground" : "text-muted hover:text-foreground"}`}
+              >
+                {t(`tabs.${tab}`)}
+              </Link>
             ))}
+          </nav>
+        )}
+        {view === "results" &&
+          (history ? (
+            <PersonalResults
+              history={history}
+              t={t}
+              locale={locale}
+              kind={kind}
+              iterationKey={iterationKey}
+            />
+          ) : (
+            <p className="py-8 text-muted">{t("history.signIn")}</p>
+          ))}
+        {view === "rankings" && (
+          <div className="space-y-10">
+            <div>
+              <h2 className="text-2xl font-semibold">{t("career.title")}</h2>
+              <p className="mb-6 mt-2 text-sm text-muted">{t("career.intro")}</p>
+              {career && (
+                <LegacyLeaderboardClient
+                  data={{ ...career, entries: career.entries.slice(0, 50) }}
+                  total={career.total}
+                  selfUserId={auth?.userId ?? null}
+                  initialScope={scope}
+                  initialRankBy={rankBy}
+                  embedded
+                />
+              )}
+            </div>
+            <ContestChampions champions={champions} t={t} locale={locale} />
           </div>
         )}
+        {view === "current" && (
+          <>
+            {weekly.length === 0 ? (
+              <p className="mb-6 rounded-xl border border-dashed border-card-border p-6 text-sm text-muted">
+                {t("noRound")}
+              </p>
+            ) : (
+              <div className="mb-10 grid gap-4 md:grid-cols-2">
+                {weekly.map((contest) => (
+                  <ContestCard
+                    key={contest.kind}
+                    contest={contest}
+                    t={t}
+                    locale={locale}
+                    signedIn={auth !== null}
+                  />
+                ))}
+              </div>
+            )}
 
-        <h2 className="mb-1 text-xl font-semibold text-foreground">{t("referralsHeading")}</h2>
-        <p className="mb-4 max-w-3xl text-sm text-muted">{t("referralIntro")}</p>
-        <div className="mb-10 grid gap-4 md:grid-cols-2">
-          {weeklyReferrals ? (
-            <ContestCard contest={weeklyReferrals} t={t} locale={locale} signedIn={auth !== null} />
-          ) : (
-            <p className="rounded-xl border border-dashed border-card-border p-6 text-sm text-muted">
-              {t("noRound")}
-            </p>
-          )}
-          <ReferralCard board={data.referrals} t={t} userId={auth?.userId ?? null} />
-        </div>
+            <h2 className="mb-1 text-xl font-semibold text-foreground">{t("referralsHeading")}</h2>
+            <p className="mb-4 max-w-3xl text-sm text-muted">{t("referralIntro")}</p>
+            <div className="mb-10 grid gap-4 md:grid-cols-2">
+              {weeklyReferrals ? (
+                <ContestCard
+                  contest={weeklyReferrals}
+                  t={t}
+                  locale={locale}
+                  signedIn={auth !== null}
+                />
+              ) : (
+                <p className="rounded-xl border border-dashed border-card-border p-6 text-sm text-muted">
+                  {t("noRound")}
+                </p>
+              )}
+              <ReferralCard board={data.referrals} t={t} userId={auth?.userId ?? null} />
+            </div>
 
-        <PastWinners past={data.past} t={t} locale={locale} />
+            <PastWinners past={data.past} t={t} locale={locale} />
+          </>
+        )}
       </div>
     </div>
   );

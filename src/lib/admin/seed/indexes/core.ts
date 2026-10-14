@@ -26,6 +26,27 @@ function hasCorporateSectorIdentityIndex(
 // These are the bare-minimum indexes the app needs to function.
 export async function seedCoreIndexes(db: Db, log: (msg: string) => void) {
   log("Core indexes:");
+  await ensureIndex(
+    db,
+    "contestRounds",
+    { status: 1, "standings.userId": 1, settledAt: -1 },
+    { name: "contestRounds_account_history" },
+    log
+  );
+  await ensureIndex(
+    db,
+    "contestRounds",
+    { status: 1, "winners.userId": 1 },
+    { name: "contestRounds_account_winners" },
+    log
+  );
+  await ensureIndex(
+    db,
+    "contestRounds",
+    { status: 1, settledAt: -1 },
+    { name: "contestRounds_settled" },
+    log
+  );
   for (const note of await ensureProviderIdentityIndexes(db)) log(note);
 
   await ensureIndex(db, "users", { email: 1 }, { unique: true, name: "users_email" }, log);

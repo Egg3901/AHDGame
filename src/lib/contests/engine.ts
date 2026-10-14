@@ -48,6 +48,7 @@ import {
   iterationChanged,
   type CorpOpening,
 } from "./rules";
+import { reconcileContestAchievements } from "./achievements";
 import { awardReferralContest } from "./referralAward";
 import { payContestPrize } from "./prize";
 import { loadCharacterNetWorths, loadExternalInflows } from "./netWorth";
@@ -443,6 +444,21 @@ async function computeStandings(
   world: ContestWorld,
   round: ContestRound
 ): Promise<{ standings: ContestStanding[]; baselines: ContestBaseline[] }> {
+  const result = await computeRawStandings(db, world, round);
+  return {
+    ...result,
+    standings: result.standings.map((entry) => ({
+      ...entry,
+      userId: world.players.get(entry.characterId)?.userId.toString(),
+    })),
+  };
+}
+
+async function computeRawStandings(
+  db: Db,
+  world: ContestWorld,
+  round: ContestRound
+): Promise<{ standings: ContestStanding[]; baselines: ContestBaseline[] }> {
   const kind = round.kind as ContestKind;
   const standings: ContestStanding[] = [];
   const baselines = round.baselines;
@@ -687,6 +703,7 @@ export async function referralStandings(
     const character = playersByUser.get(referrerUserId);
     if (!character) continue;
     standings.push({
+      userId: referrerUserId,
       subjectId: referrerUserId,
       subjectName: character.name,
       characterId: character._id.toString(),
@@ -710,6 +727,7 @@ async function settleRound(
   const kind = round.kind as ContestKind;
   const winners: ContestWinner[] = pickPlacings(kind, standings).map((s, i) => ({
     rank: i + 1,
+    userId: s.userId,
     characterId: s.characterId,
     characterName: s.characterName,
     subjectId: s.subjectId,
@@ -978,6 +996,11 @@ export async function runContests(
     summary.referrals = "failed";
     Sentry.captureException(err, { tags: { area: "contests", step: "iterationReferrals" } });
     console.error("[contests] iteration referral step failed", err);
+  }
+  try {
+    await reconcileContestAchievements(db);
+  } catch (err) {
+    Sentry.captureException(err, { tags: { area: "contests", step: "achievements" } });
   }
   return summary;
 }

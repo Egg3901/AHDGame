@@ -1,3 +1,4 @@
+import { computeCareerScore } from "./rules/careerScore";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { ObjectId } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
@@ -143,9 +144,9 @@ describe("getLegacyLeaderboardData", () => {
 
     expect(data.entries).toHaveLength(2);
     expect(data.entries[0].displayName).toBe("Strong Life");
-    // Composite score: 1000*3 (NI) + 200*3 (party) + 3*250 (achievements) = 4350.
+    // Account gameplay achievement records are authoritative; raw snapshot counts do not add credit.
     // Political influence and favorability are deliberately NOT scored.
-    expect(data.entries[0].score).toBe(4350);
+    expect(data.entries[0].score).toBeCloseTo(200 + (200 * 200) / 700);
     expect(data.entries[0].lifetimeLives).toBe(2);
     expect(data.entries[1].displayName).toBe("Rival Life");
     expect(data.self?.rank).toBe(1);
@@ -188,7 +189,7 @@ describe("getLegacyLeaderboardData", () => {
     const data = await getLegacyLeaderboardData(db as unknown as import("mongodb").Db, null);
 
     expect(Number.isFinite(data.entries[0].score)).toBe(true);
-    expect(data.entries[0].score).toBe(300); // 100*3 (NI), debt contributes 0 to the wealth term
+    expect(data.entries[0].score).toBeCloseTo((400 * 100) / 1100); // Debt contributes no business credit.
   });
 
   it("computes the composite score from national/party influence, achievements, office tier, infamy penalty, and wealth", async () => {
@@ -232,9 +233,20 @@ describe("getLegacyLeaderboardData", () => {
 
     const data = await getLegacyLeaderboardData(db as unknown as import("mongodb").Db, null);
 
-    // 100*3 (NI) + 50*3 (party) + 2*250 (achievements) + 4*500 (senate = tier 4)
-    // - 10*30 (infamy) + log10(1000)*200 (wealth, no exchangeRates doc so 1:1) = 3250.
-    expect(data.entries[0].score).toBe(3250);
+    // Uses the bounded version-2 formula and verified account achievements.
+    expect(data.entries[0].score).toBeCloseTo(
+      computeCareerScore({
+        nationalInfluence: 100,
+        partyInfluence: 50,
+        achievementCount: 0,
+        highestOfficeRank: 4,
+        infamy: 10,
+        netWorthAnchor: 999,
+        enactedBills: 0,
+        contestWins: 0,
+        contestPodiums: 0,
+      }).total
+    );
     expect(data.entries[0].highestOffice).toBe("Senator (CA, Class 1)");
   });
 
@@ -293,7 +305,7 @@ describe("getLegacyLeaderboardData", () => {
 
     expect(data.entries[0].highestOffice).toBe("Governor of TX");
     // Governor = tier 5 * 500 = 2500, NOT president's tier 8 * 500 = 4000.
-    expect(data.entries[0].scoreBreakdown.officeTier).toBe(2500);
+    expect(data.entries[0].scoreBreakdown.officeTier).toBe(250);
   });
 
   it("excludes banned users from the leaderboard", async () => {
@@ -368,6 +380,7 @@ describe("getLegacyLeaderboardData", () => {
           iteration: { type: "Beta", number: 1 },
           snapshot: {
             name: "Original OC",
+            avatarUrl: "/synthetic-nostalgia.png",
             countryId: "US",
             homeState: "CA",
             stats: {
@@ -392,9 +405,11 @@ describe("getLegacyLeaderboardData", () => {
 
     expect(data.entries).toHaveLength(1);
     expect(data.entries[0].displayName).toBe("Original OC");
-    // score is the scoring (best) life's composite score, not the displayed
-    // life's: 1000*3 (NI) + 3*250 (achievements) = 3750.
-    expect(data.entries[0].score).toBe(3750);
+    expect(data.entries[0].avatarUrl).toBe("/synthetic-nostalgia.png");
+    expect(data.entries[0].scoringCharacterName).toBe("High Scorer");
+    expect(data.entries[0].displayCharacterId).toBe(String(nostalgiaCharId));
+    // The display preference never changes which career supplies the score.
+    expect(data.entries[0].score).toBe(200);
   });
 
   describe("net worth: shares, bonds, and index funds", () => {
@@ -549,6 +564,7 @@ describe("getLegacyLeaderboardData", () => {
       expect(data.entries[0].netWorthBreakdown).toEqual({
         personal: 100,
         savings: 200,
+        debt: 0,
         shares: 1000,
         bonds: 500,
         indexFunds: 250,
@@ -629,6 +645,7 @@ describe("getLegacyLeaderboardData", () => {
             iteration: { type: "Beta", number: 2 },
             snapshot: {
               name: "Statesman",
+              currentOffice: { type: "president" },
               countryId: "US",
               homeState: "CA",
               stats: {
@@ -779,5 +796,50 @@ describe("getLegacyLeaderboardData", () => {
       expect(data.entries).toHaveLength(1);
       expect(data.entries[0].displayName).toBe("Old Legend");
     });
+  });
+});
+
+describe("career scoring regressions", () => {
+  it("credits savings as much as cash in otherwise identical careers", async () => {
+    const db = createMockDb();
+    const cashUser = new ObjectId();
+    const savingsUser = new ObjectId();
+    db.collection("characters").find.mockReturnValue(
+      cursorOf([
+        {
+          _id: new ObjectId(),
+          userId: cashUser,
+          name: "Cash Career",
+          countryId: "US",
+          homeState: "CA",
+          cashOnHand: 1_000_000,
+        },
+        {
+          _id: new ObjectId(),
+          userId: savingsUser,
+          name: "Savings Career",
+          countryId: "US",
+          homeState: "CA",
+          savingsOnHand: 1_000_000,
+        },
+      ])
+    );
+    db.collection("retiredCharacters").find.mockReturnValue(cursorOf([]));
+    db.collection("users").find.mockReturnValue(
+      cursorOf([{ _id: cashUser }, { _id: savingsUser }])
+    );
+    for (const name of [
+      "corporations",
+      "bonds",
+      "indexFundPositions",
+      "legislation",
+      "contestRounds",
+    ]) {
+      db.collection(name).find.mockReturnValue(cursorOf([]));
+    }
+    db.collection("characterAchievements").aggregate.mockReturnValue(aggregateCursorOf([]));
+    const data = await getLegacyLeaderboardData(db as unknown as import("mongodb").Db, null);
+    expect(data.entries[0].score).toBeGreaterThan(0);
+    expect(data.entries[0].score).toBe(data.entries[1].score);
   });
 });

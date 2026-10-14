@@ -56,6 +56,7 @@ export interface PastRoundData {
   kind: ContestRecordKind;
   roundNumber: number;
   settledAt: string;
+  iterationKey: string | null;
   winners: Array<ContestWinner & EntryImages>;
 }
 
@@ -98,7 +99,7 @@ export async function loadContestsPage(
     rounds
       .find(
         { status: "settled", "winners.0": { $exists: true } },
-        { projection: { kind: 1, roundNumber: 1, settledAt: 1, winners: 1 } }
+        { projection: { kind: 1, roundNumber: 1, settledAt: 1, winners: 1, iterationKey: 1 } }
       )
       .sort({ settledAt: -1 })
       .limit(PAST_ROUNDS_SHOWN)
@@ -178,6 +179,7 @@ export async function loadContestsPage(
       id: r._id,
       kind: r.kind,
       roundNumber: r.roundNumber,
+      iterationKey: r.iterationKey ?? null,
       settledAt: (r.settledAt ?? new Date(0)).toISOString(),
       winners: r.winners.map((w) => withImages(r.kind, w)),
     })),

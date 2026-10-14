@@ -1,3 +1,7 @@
+import { liquidBalancesAnchor, personalDebtAnchor } from "@/lib/world/rules/netWorth";
+import type { BankLoan } from "@/lib/db/types/bank";
+import { loadCareerLegislation, loadCareerLoans } from "@/lib/world/careerEvidence";
+import { fetchExchangeRateMap } from "@/lib/world/forex";
 import { captureOfficeTransition } from "@/lib/analytics/officeTransitionAnalytics";
 import { closeCharacterSavings } from "@/lib/savings/closeCharacterSavings";
 import { ObjectId } from "mongodb";
@@ -55,7 +59,13 @@ export async function retireCharacter(
   character: Character,
   userId: ObjectId,
   reason: RetiredCharacter["reason"],
-  opts?: { iteration?: GameIteration; recap?: CharacterRecap }
+  opts?: {
+    iteration?: GameIteration;
+    recap?: CharacterRecap;
+    careerLegislation?: ReadonlyMap<string, number>;
+    careerRates?: Map<string, ExchangeRate>;
+    careerLoans?: BankLoan[];
+  }
 ): Promise<void> {
   const characterId = character._id;
   const now = new Date();
@@ -65,6 +75,37 @@ export async function retireCharacter(
     .countDocuments({ characterId });
 
   const highestOffice = deriveHighestOffice(character);
+  const [careerLegislation, careerRates, careerLoans] = await Promise.all([
+    opts?.careerLegislation ?? loadCareerLegislation(db, [characterId]),
+    opts?.careerRates ?? fetchExchangeRateMap(db),
+    opts?.careerLoans ?? loadCareerLoans(db, [characterId]),
+  ]);
+  const retirementRates = new Map(
+    [...careerRates.values()].map((r) => [r.currencyCode, r.rate ?? r.baseRate ?? 1])
+  );
+  const retirementLiquid = liquidBalancesAnchor({
+    homeCurrency: getHomeCurrency(character),
+    personal: character.currencyBalances?.personal,
+    savings: character.currencyBalances?.savings,
+    legacyPersonal: character.cashOnHand ?? 0,
+    legacySavings: character.savingsOnHand ?? 0,
+    rates: retirementRates,
+  });
+  const retirementDebt =
+    personalDebtAnchor(
+      careerLoans.flatMap((loan) =>
+        loan.borrowerId
+          ? [
+              {
+                borrowerId: loan.borrowerId.toString(),
+                currency: loan.currency,
+                outstanding: loan.outstanding,
+              },
+            ]
+          : []
+      ),
+      retirementRates
+    ).get(characterId.toString()) ?? 0;
 
   // Value held shares/bonds/index-fund positions BEFORE the release calls
   // further down zero them out — this is the only chance to record what they
@@ -161,6 +202,10 @@ export async function retireCharacter(
         character.currencyBalances?.savings?.[getHomeCurrency(character)] ??
         character.savingsOnHand ??
         0,
+      cashValueAnchor: retirementLiquid.personal,
+      savingsValueAnchor: retirementLiquid.savings,
+      debtValueAnchor: retirementDebt,
+      enactedBills: careerLegislation.get(characterId.toString()) ?? 0,
       shareValueAnchor,
       bondValueAnchor,
       indexFundValueAnchor,

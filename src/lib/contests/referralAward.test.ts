@@ -81,7 +81,16 @@ describe("awardReferralContest", () => {
     expect(result.roundId).toBe("referrals_iteration:4");
     expect(db.collection("contestRounds").updateOne).toHaveBeenCalledWith(
       { _id: "referrals_iteration:4", status: "active" },
-      { $set: { status: "settled", settledAt: now, endsAt: now } }
+      expect.objectContaining({
+        $set: expect.objectContaining({
+          status: "settled",
+          settledAt: now,
+          endsAt: now,
+          winners: expect.arrayContaining([
+            expect.objectContaining({ userId: ids.fresh.toString() }),
+          ]),
+        }),
+      })
     );
 
     // The paying supporter's plan is untouched; the rest get Supporter with no end date.
