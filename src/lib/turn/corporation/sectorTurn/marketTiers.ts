@@ -7,7 +7,8 @@
  */
 import { capacityHaircutFactor } from "@/lib/extraction/capacityHaircut";
 import { computePriceRealization } from "@/lib/market/priceRealization";
-import { computeThroughput } from "@/lib/market/throughput";
+import { computeThroughput, inputAvailability } from "@/lib/market/throughput";
+import { isStateScopedCommodity } from "@/lib/market/rules/commodityMarketScope";
 import {
   MARKET_REALIZATION_DEVIATION_CAP,
   advanceCapitalStock,
@@ -43,6 +44,8 @@ export interface MarketTiersInput {
   strategySupply: Partial<Record<CommodityType, number>> | undefined;
   strategyDemand: Partial<Record<CommodityType, number>> | undefined;
   wideCommodityBalances: CorporationLookups["globalCommodityBalances"];
+  /** The sector's state's raw balances, for state-scoped input availability. */
+  stateBalances?: ReadonlyMap<CommodityType, { supply: number; demand: number }>;
   stateId: string;
   currentTurn: number;
   preFlipNameplateRevenue: number;
@@ -74,6 +77,7 @@ export function computeMarketTiers(input: MarketTiersInput): MarketTiersResult {
     strategySupply,
     strategyDemand,
     wideCommodityBalances,
+    stateBalances,
     stateId,
     currentTurn,
     preFlipNameplateRevenue,
@@ -119,11 +123,43 @@ export function computeMarketTiers(input: MarketTiersInput): MarketTiersResult {
   const coordinated = market.groupSupplyAvailabilityBySector?.get(sector._id.toString());
   const priorityAvailability =
     coordinated ?? market.internalInputAvailabilityBySectorId?.get(sector._id.toString());
-  const inputAvailability = priorityAvailability
-    ? new Map([...(stateInputAvailabilityByState.get(stateId) ?? []), ...priorityAvailability])
-    : stateInputAvailabilityByState.get(stateId);
+  // Internal/group supply can only RAISE availability: its book residual is
+  // country-wide, so overwriting a state-local delivery figure with it could
+  // throttle a plant whose own state market fully covers its input.
+  const localAvailability = stateInputAvailabilityByState.get(stateId);
+  let mergedAvailability: Map<CommodityType, number> | undefined;
+  if (priorityAvailability) {
+    mergedAvailability = new Map(localAvailability ?? []);
+    for (const [commodity, value] of priorityAvailability) {
+      const local = mergedAvailability.get(commodity);
+      mergedAvailability.set(commodity, typeof local === "number" ? Math.max(local, value) : value);
+    }
+  } else if (localAvailability) {
+    mergedAvailability = new Map(localAvailability);
+  }
+  // State-scoped inputs (freight and local services) have no freight class, so
+  // freight settlement writes no state-local availability for them and they
+  // would fall back to the country book. They trade only in their own state,
+  // so read availability from that state's balance when one exists. An
+  // internal-supply value for such an input is a country-wide residual, so it
+  // can only raise the state figure, never replace it.
+  if (stateBalances) {
+    for (const commodity of Object.keys(strategyDemand ?? {}) as CommodityType[]) {
+      if (!isStateScopedCommodity(commodity)) continue;
+      if (localAvailability?.has(commodity)) continue;
+      const stateBalance = stateBalances.get(commodity);
+      if (!stateBalance) continue;
+      const stateAvail = inputAvailability(stateBalance);
+      mergedAvailability ??= new Map();
+      const existing = mergedAvailability.get(commodity);
+      mergedAvailability.set(
+        commodity,
+        typeof existing === "number" ? Math.max(existing, stateAvail) : stateAvail
+      );
+    }
+  }
   const throughputRaw = market.throughputEnabled
-    ? computeThroughput(strategyDemand ?? {}, wideCommodityBalances, inputAvailability)
+    ? computeThroughput(strategyDemand ?? {}, wideCommodityBalances, mergedAvailability)
     : { throughput: 1, bindingInput: null };
   const throughputStartTurn =
     market.throughputEnabled && throughputRaw.throughput < 1

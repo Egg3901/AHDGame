@@ -317,6 +317,7 @@ export function processSector(
     strategySupply: strategyRates.supply,
     strategyDemand: strategyRates.demand,
     wideCommodityBalances,
+    stateBalances: lookups.rawStateBalances?.get(sector.stateId),
     stateId: sector.stateId,
     currentTurn,
     preFlipNameplateRevenue,
