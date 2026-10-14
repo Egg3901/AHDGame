@@ -77,15 +77,7 @@ export async function captureIntakeEvent(
 
 /** Which sign-in a user record was created through, for intake breakdowns. */
 export function authProviderOf(
-  user:
-    | {
-        googleId?: unknown;
-        discordId?: unknown;
-        appleId?: unknown;
-        password?: unknown;
-      }
-    | null
-    | undefined
+  user: Record<string, unknown> | null | undefined
 ): "email" | "google" | "discord" | "apple" | "unknown" {
   if (!user) return "unknown";
   if (user.password) return "email";

@@ -86,13 +86,23 @@ export default function CreateCharacterClient() {
   const [authChecked, setAuthChecked] = useState(false);
   // A failed session or data load used to send a signed-in player to /login or
   // leave the pickers empty. Both now show a retry instead.
-  const [authUnavailable, setAuthUnavailable] = useState(false);
-  const [dataLoadFailed, setDataLoadFailed] = useState(false);
-  const [loadAttempt, setLoadAttempt] = useState(0);
-  const [userId, setUserId] = useState<string | null>(null);
-  // Drafts restore once, after the session resolves, and only then start saving,
-  // so a fresh mount never overwrites a saved draft with empty defaults.
-  const [draftRestored, setDraftRestored] = useState(false);
+  // One state object (the component is at the architecture audit's useState
+  // budget): session reachability, data-load failure, the retry counter, and
+  // the account the draft belongs to. Drafts restore once the session
+  // resolves, and only then start saving, so a fresh mount never overwrites a
+  // saved draft with empty defaults.
+  const [loadState, setLoadState] = useState({
+    authUnavailable: false,
+    dataLoadFailed: false,
+    attempt: 0,
+    userId: null as string | null,
+    draftRestored: false,
+  });
+  const { authUnavailable, dataLoadFailed, userId, draftRestored } = loadState;
+  const patchLoadState = useCallback(
+    (patch: Partial<typeof loadState>) => setLoadState((prev) => ({ ...prev, ...patch })),
+    []
+  );
   const pendingDraftParty = useRef<{
     country: string;
     homeState: string;
@@ -289,18 +299,18 @@ export default function CreateCharacterClient() {
             discordAvatar: data.user.discordAvatar,
           });
         }
-        if (typeof data.user.id === "string") {
-          setUserId(data.user.id);
-          restoreDraft(data.user.id);
-        }
-        setDraftRestored(true);
-        setAuthUnavailable(false);
+        if (typeof data.user.id === "string") restoreDraft(data.user.id);
+        patchLoadState({
+          userId: typeof data.user.id === "string" ? data.user.id : null,
+          draftRestored: true,
+        });
+        patchLoadState({ authUnavailable: false });
         setAuthChecked(true);
         sendIntakeBeaconOnce("create_character_viewed", "create_character_viewed", {
           surface: "create_character",
         });
       } catch {
-        setAuthUnavailable(true);
+        patchLoadState({ authUnavailable: true });
         sendIntakeBeacon("create_character_load_failed", {
           surface: "create_character",
           reason: "session_unavailable",
@@ -308,7 +318,7 @@ export default function CreateCharacterClient() {
       }
     };
     checkAuth();
-  }, [router, loadAttempt]);
+  }, [router, loadState.attempt, patchLoadState]);
 
   // Fetch states and full creation info (countries + game date + flavor text)
   useEffect(() => {
@@ -321,7 +331,7 @@ export default function CreateCharacterClient() {
         ]);
         if (statesRes.ok) setStates(await statesRes.json());
         const failed = !statesRes.ok || !countriesRes.ok;
-        setDataLoadFailed(failed);
+        patchLoadState({ dataLoadFailed: failed });
         if (failed) {
           sendIntakeBeacon("create_character_load_failed", {
             surface: "create_character",
@@ -349,7 +359,7 @@ export default function CreateCharacterClient() {
         }
       } catch (err) {
         console.error("Failed to fetch initial data:", err);
-        setDataLoadFailed(true);
+        patchLoadState({ dataLoadFailed: true });
         sendIntakeBeacon("create_character_load_failed", {
           surface: "create_character",
           reason: "network",
@@ -357,7 +367,7 @@ export default function CreateCharacterClient() {
       }
     };
     fetchData();
-  }, [loadAttempt]);
+  }, [loadState.attempt, patchLoadState]);
 
   // If server drops a country from the enabled list, clear a stale selection (empty region list).
   useEffect(() => {
@@ -1158,9 +1168,12 @@ export default function CreateCharacterClient() {
           <button
             type="button"
             onClick={() => {
-              setAuthUnavailable(false);
-              setDataLoadFailed(false);
-              setLoadAttempt((n) => n + 1);
+              setLoadState((prev) => ({
+                ...prev,
+                authUnavailable: false,
+                dataLoadFailed: false,
+                attempt: prev.attempt + 1,
+              }));
             }}
             className="mt-5 inline-flex min-h-[2.75rem] items-center justify-center rounded-lg bg-primary px-5 text-body-sm font-semibold text-white hover:bg-primary-dark"
           >
