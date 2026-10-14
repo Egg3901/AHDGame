@@ -27,6 +27,8 @@ export const INTAKE_EVENTS = [
   // Server-side completions (every provider, consent independent)
   "account_registered",
   "character_registered",
+  // First completion of each onboarding checklist step (any player, no identity)
+  "onboarding_step_done",
 ] as const;
 export type IntakeEvent = (typeof INTAKE_EVENTS)[number];
 

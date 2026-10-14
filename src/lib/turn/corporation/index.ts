@@ -27,6 +27,7 @@ import { getLabourSystemMode, labourAtLeast } from "@/lib/labour/featureFlag";
 import { getMarketSystemMode, marketAtLeast } from "@/lib/market/featureFlag";
 import { buildMarketContext } from "@/lib/market/marketContext";
 import { normalizeCommodityFixStage } from "@/lib/market/commodityFixStages";
+import { placementRevenuePhaseStartTurnFrom } from "@/lib/market/placementRevenuePhase";
 import { isFairnessDoctrineInEffect } from "@/lib/mediaRegulation/rules";
 import { runClearingPrePass } from "./clearingPrePass";
 import { computeQualityUpdates } from "./brandQualityTurn";
@@ -269,6 +270,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
     marketGovernorConfig,
     turn ?? gameState?.currentTurn ?? 0
   );
+  lookups.placementRevenuePhaseStartTurn = placementRevenuePhaseStartTurnFrom(marketGovernorConfig);
   if (
     mediaProductSlatesEnabled &&
     lookups.mediaProductProjectsByCorpId &&
@@ -442,6 +444,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
   });
   market.explicitPlantCostsEnabled = marketGovernorConfig?.explicitPlantCostsEnabled === true;
   market.commodityFixStage = normalizeCommodityFixStage(marketGovernorConfig?.commodityFixStage);
+  market.shortageBuildSpeedupEnabled = marketGovernorConfig?.shortageBuildSpeedupEnabled === true;
   market.mediaRegulationEnabled = mediaRegulationEnabled;
   market.mediaEditorialEnabled = mediaEditorialEnabled;
   if (mediaRegulationEnabled) {

@@ -304,6 +304,8 @@ export interface CorporationLookups {
    * is what every read-only caller of the lookups gets.
    */
   extractionNoBuyerPhaseOutStartTurn?: number;
+  /** Turn the revenue-follows-placement phase-in started (gameConfig stamp). */
+  placementRevenuePhaseStartTurn?: number;
   /**
    * sectorId → revenue-weighted extraction capacity utilization (0..1) and the
    * most-binding resource, derived from computeExtractionCapacityMultipliers.
@@ -473,6 +475,8 @@ export interface SectorUpdateOp {
       $inc?: Record<string, number>;
       $push?: Record<string, unknown>;
     };
+    /** Positional filters, used by the shortage build speed-up. */
+    arrayFilters?: Record<string, unknown>[];
   };
 }
 

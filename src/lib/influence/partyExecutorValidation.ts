@@ -16,6 +16,7 @@ import { INFLUENCE_ACTIONS } from "./constants";
 import { activeNppElectionCandidacyFilter } from "@/lib/elections/nppCandidacyQuery";
 import { calculateRelocationCapacity } from "@/lib/npp/recruitment";
 import { getPartyFrontier, isInFrontier } from "@/lib/parties/partyFrontier";
+import { getRelocationTerritory, PARTY_TERRITORY_WARNING } from "@/lib/parties/relocationTerritory";
 
 function getNPPCountry(npp: NPP): CountryId {
   return npp.countryId as CountryId;
@@ -252,8 +253,13 @@ async function validateNppStateRelocationRequest(
   if (!isInFrontier(presence, frontier, targetStateId)) {
     return {
       valid: false,
-      error: `Your party is not established in or next to ${targetState.name}. Relocation can only move an NPP into a region the party already reaches.`,
+      error: `Your party is not established in or next to ${targetState.name}, or this region does not help reconnect its disconnected territory. Relocate into an existing or eligible connecting region.`,
     };
+  }
+
+  const territory = await getRelocationTerritory(db, countryId, npp.party, { nppId: npp._id });
+  if (!territory.canMoveTo(targetStateId)) {
+    return { valid: false, error: PARTY_TERRITORY_WARNING };
   }
 
   const targetStatePartyOrg = await db

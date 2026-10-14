@@ -27,6 +27,7 @@ import { applyPartyInfluenceEffects } from "./partyExecutorEffects";
 import type { ExecutePartyInfluenceInput } from "./partyExecutorTypes";
 import { calculateRelocationCapacity, calculateRelocationRequestCost } from "@/lib/npp/recruitment";
 import { getPartyFrontier, isInFrontier } from "@/lib/parties/partyFrontier";
+import { withPartyTerritoryMutation } from "@/lib/parties/territoryMutation";
 import {
   NPP_MANAGEMENT_AP_COST,
   nppActionPointCap,
@@ -621,7 +622,15 @@ export async function executeStatePartyInfluence(
 export async function executeNationalPartyInfluence(
   input: ExecutePartyInfluenceInput
 ): Promise<ExecutePartyInfluenceResult> {
-  return executeNationalPartyInfluenceCore(input);
+  if (input.influenceType !== "relocate_state") return executeNationalPartyInfluenceCore(input);
+  const db = await getDb();
+  const party = await findPartyForInfluence(db, input);
+  if (!party) return executeNationalPartyInfluenceCore(input);
+  return withPartyTerritoryMutation(
+    db,
+    [{ countryId: party.countryId, partyId: String(party.sequentialId) }],
+    () => executeNationalPartyInfluenceCore(input)
+  );
 }
 
 export { calculatePartyInfluenceChance } from "./partyExecutorCalculations";

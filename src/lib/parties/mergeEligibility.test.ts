@@ -17,6 +17,20 @@ const target = { ...source, _id: new ObjectId(), sequentialId: 2, chairId: new O
 let mock: ReturnType<typeof createMockDb>;
 let db: Db;
 const rows = (values: unknown[]) => ({ toArray: async () => values });
+function expectOnlyTerritoryClaims() {
+  const writes = mock.collection("politicalParties").updateOne.mock.calls as [
+    unknown,
+    { $set?: Record<string, unknown>; $unset?: Record<string, unknown>; $inc?: unknown },
+  ][];
+  expect(
+    writes.every(
+      ([, write]) =>
+        !write.$inc &&
+        ((write.$set && Object.keys(write.$set).every((key) => key === "territoryMutation")) ||
+          (write.$unset && Object.keys(write.$unset).every((key) => key === "territoryMutation")))
+    )
+  ).toBe(true);
+}
 function presence(sourceRegion: string, targetRegion: string, collection = "characters") {
   mock.collection(collection).find.mockReturnValue(
     rows([
@@ -36,6 +50,26 @@ beforeEach(() => {
     );
 });
 describe("live merger eligibility", () => {
+  it("reloads party status after acquiring claims before merger effects", async () => {
+    presence("CA", "OR");
+    let reads = 0;
+    mock.collection("politicalParties").findOne.mockImplementation(({ _id }: { _id: ObjectId }) => {
+      reads++;
+      const party = _id.equals(source._id) ? source : target;
+      return Promise.resolve(reads > 2 ? { ...party, isDefunct: true } : party);
+    });
+    await expect(
+      processMergeProposal(
+        db,
+        {
+          partyId: source._id,
+          merge: { targetPartyId: target._id },
+        } as CommitteeProposal,
+        10
+      )
+    ).rejects.toThrow("two active parties");
+    expect(mock.collection("characters").updateMany).not.toHaveBeenCalled();
+  });
   it.each(["characters", "electedOfficials", "npps"])(
     "accepts adjacency supplied by %s",
     async (collection) => {
@@ -90,7 +124,7 @@ describe("live merger eligibility", () => {
       )
     ).rejects.toBeInstanceOf(MergeEligibilityError);
     expect(mock.collection("characters").updateMany).not.toHaveBeenCalled();
-    expect(mock.collection("politicalParties").updateOne).not.toHaveBeenCalled();
+    expectOnlyTerritoryClaims();
   });
   it("stops a direct merge before any transfer", async () => {
     presence("CA", "WA");
@@ -102,7 +136,7 @@ describe("live merger eligibility", () => {
       )
     ).rejects.toBeInstanceOf(MergeEligibilityError);
     expect(mock.collection("characters").updateMany).not.toHaveBeenCalled();
-    expect(mock.collection("politicalParties").updateOne).not.toHaveBeenCalled();
+    expectOnlyTerritoryClaims();
   });
   it.each([false, true])(
     "rejects a disconnected fully approved merger cleanly (expiry %s)",
@@ -125,7 +159,7 @@ describe("live merger eligibility", () => {
       expect(updates.some(([, u]) => u.$set?.status === "rejected")).toBe(true);
       expect(updates.some(([, u]) => u.$set?.resolutionError?.includes("adjacent"))).toBe(true);
       expect(mock.collection("characters").updateMany).not.toHaveBeenCalled();
-      expect(mock.collection("politicalParties").updateOne).not.toHaveBeenCalled();
+      expectOnlyTerritoryClaims();
     }
   );
   it.each(["source", "target"])(
@@ -162,7 +196,7 @@ describe("live merger eligibility", () => {
         }
       );
       expect(mock.collection("characters").updateMany).not.toHaveBeenCalled();
-      expect(mock.collection("politicalParties").updateOne).not.toHaveBeenCalled();
+      expectOnlyTerritoryClaims();
       expect(mock.collection("states").find).not.toHaveBeenCalled();
     }
   );
@@ -187,6 +221,26 @@ describe("live merger eligibility", () => {
     expect(updates.some(([, u]) => u.$set?.status)).toBe(false);
     expect(updates.some(([, u]) => u.$set?.resolutionError === "Read unavailable")).toBe(true);
     expect(mock.collection("characters").updateMany).not.toHaveBeenCalled();
-    expect(mock.collection("politicalParties").updateOne).not.toHaveBeenCalled();
+    expectOnlyTerritoryClaims();
+  });
+  it("keeps an unapplied merger retryable when another geographic writer is active", async () => {
+    presence("CA", "OR");
+    const cursor = { limit: () => cursor, toArray: async () => [{ _id: target._id }] };
+    mock.collection("politicalParties").find.mockReturnValue(cursor);
+    const proposal = {
+      _id: new ObjectId(),
+      type: "merge",
+      status: "open",
+      partyId: source._id,
+      merge: { targetPartyId: target._id },
+      proposingVotes: [{ voterId: source.chairId, vote: "yes" }],
+      targetVotes: [{ voterId: target.chairId, vote: "yes" }],
+    } as CommitteeProposal;
+    await expect(attemptResolution(db, proposal, 10)).resolves.toBeUndefined();
+    expect(mock.collection("committeeProposals").updateOne).toHaveBeenCalledWith(
+      { _id: proposal._id, status: "open" },
+      { $unset: { resolutionInProgressAt: "" } }
+    );
+    expect(mock.collection("characters").updateMany).not.toHaveBeenCalled();
   });
 });

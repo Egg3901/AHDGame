@@ -187,6 +187,7 @@ export async function POST(
       actor: auth.character,
       actorRole: "self",
       consumeFreePartyMove,
+      skipGeographyCheck: auth.isAdmin === true,
     });
 
     const message = becameChair

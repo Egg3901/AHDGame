@@ -51,6 +51,10 @@ const mockCollections: Record<string, Record<string, Mock>> = {};
 function setMockCollection(name: string, overrides: Record<string, unknown> = {}) {
   const defaults: Record<string, Mock> = {
     findOne: vi.fn().mockResolvedValue(null),
+    find: vi.fn(() => {
+      const cursor = { limit: () => cursor, toArray: async () => [] };
+      return cursor;
+    }),
     updateOne: vi.fn().mockResolvedValue({ matchedCount: 1, modifiedCount: 1 }),
     updateMany: vi.fn().mockResolvedValue({ matchedCount: 0, modifiedCount: 0 }),
     ...overrides,
@@ -84,6 +88,8 @@ function makeArgs(db: Db) {
     isDefault: true,
     chairId: null,
   } as unknown as PoliticalParty;
+  const characters = mockCollections.characters ?? setMockCollection("characters");
+  characters.findOne.mockResolvedValue(character);
   return {
     db,
     character,
@@ -94,6 +100,7 @@ function makeArgs(db: Db) {
     autoChairWhenVacant: true,
     actor: { _id: character._id, name: character.name },
     actorRole: "self" as const,
+    skipGeographyCheck: true,
   };
 }
 
@@ -188,7 +195,7 @@ describe("applyCharacterPartyJoin — first-joiner auto-chair", () => {
       party: "1",
       factionId: new ObjectId(),
     } as unknown as Character;
-
+    mockCollections.characters.findOne.mockResolvedValue(args.character);
     await applyCharacterPartyJoin(args);
 
     expect(cleanupCaucusParticipationForCharacters).toHaveBeenCalledWith(
@@ -237,6 +244,7 @@ describe("applyCharacterPartyJoin — first-joiner auto-chair", () => {
     const db = makeDb();
     const args = makeArgs(db);
     args.character = { ...args.character, party: "1" } as Character;
+    mockCollections.characters.findOne.mockResolvedValue(args.character);
     const { transferIndependentCandidaciesToParty, withdrawFromMismatchedPrimaries } =
       await import("@/lib/utils/electionCandidacy");
 

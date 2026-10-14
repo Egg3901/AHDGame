@@ -47,6 +47,8 @@ export const STALE_PER_WORLD_GAME_CONFIG_UNSET: Readonly<Record<string, "">> = O
   marketGovernorGlideFloor: "",
   // No-buyer extraction phase-out start, stamped by the corporation turn.
   extractionNoBuyerPhaseOutStartTurn: "",
+  // Revenue-follows-placement phase-in start (operator-set turn on the old world).
+  placementRevenuePhaseStartTurn: "",
   marketGuardReferenceFundamentalMcap: "",
   marketGuardReferenceTurn: "",
   marketGuardTrippedAt: "",

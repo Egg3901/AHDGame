@@ -967,6 +967,12 @@ export interface SectorBuildOrder {
   /** First turn on which the capacity converts into `capitalStock`. */
   onlineTurn: number;
   /**
+   * True once the shortage build speed-up has shortened this order's remaining
+   * window (see turn/corporation/sectorTurn/shortageBuildSpeedup.ts). Each
+   * order is accelerated at most once.
+   */
+  accelerated?: boolean;
+  /**
    * When true, the order delivers capacity LINEARLY across
    * `[startTurn, onlineTurn]`, a slice per turn, instead of the whole
    * `unitsOrdered` landing at once on `onlineTurn`. Absent on legacy orders and

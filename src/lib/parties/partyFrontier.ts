@@ -2,7 +2,8 @@
  * Party growth frontier.
  *
  * A party may only grow into regions it already touches. The frontier is the
- * party's live presence set expanded by exactly one adjacency hop:
+ * party's live presence set expanded by exactly one adjacency hop, restricted
+ * to connecting paths when its current territory is disconnected:
  *
  *   presence(P) = regions holding >=1 member, >=1 elected official, or
  *                 >=1 active NPP of P
@@ -16,10 +17,24 @@
  * that cached flag only refreshes on membership events and lags, which is the
  * same reason the Build Org foothold rule re-checks presence live.
  */
-import type { Db } from "mongodb";
+import type { Db, ObjectId } from "mongodb";
 import { STATE_ADJACENCY, adjacentStates } from "@/lib/constants/stateAdjacency";
 import type { Character, ElectedOfficial, NPP, PoliticalParty, State } from "@/lib/db/types";
 import type { CountryId } from "@/lib/constants/countries";
+import { connectedGrowthFrontier, type TerritoryAdjacency } from "./rules/territory";
+
+/** Keep paths inside the country's current region set, including transferred regions. */
+export function getTerritoryAdjacency(
+  countryId: CountryId,
+  regions: readonly string[]
+): TerritoryAdjacency {
+  const graph = STATE_ADJACENCY[countryId] ?? {};
+  // Keep original neighbor lists so a transferred neighbor does not turn its
+  // former neighbor into an explicitly exempt island. Traversals use keys only.
+  return Object.fromEntries(
+    regions.filter((region) => graph[region] !== undefined).map((region) => [region, graph[region]])
+  );
+}
 
 /**
  * Regions the country's adjacency map lists with no neighbours at all (RU
@@ -97,7 +112,8 @@ export async function getPartyPresenceStates(
   db: Db,
   countryId: CountryId,
   partyId: string,
-  regionIds?: readonly string[]
+  regionIds?: readonly string[],
+  departing?: { characterId?: ObjectId; nppId?: ObjectId }
 ): Promise<Set<string>> {
   const regions = regionIds ?? (await getCountryRegionIds(db, countryId));
   const regionSet = new Set(regions);
@@ -105,17 +121,25 @@ export async function getPartyPresenceStates(
   const countryScope = { $or: [{ countryId }, { countryId: { $exists: false } }] };
 
   const [memberStates, officialStates, nppStates] = await Promise.all([
-    db
-      .collection<Character>("characters")
-      .distinct("homeState", { ...countryScope, party: partyId, homeState: inCountry }),
-    db
-      .collection<ElectedOfficial>("electedOfficials")
-      .distinct("state", { ...countryScope, party: partyId, state: inCountry }),
+    db.collection<Character>("characters").distinct("homeState", {
+      ...countryScope,
+      party: partyId,
+      homeState: inCountry,
+      ...(departing?.characterId ? { _id: { $ne: departing.characterId } } : {}),
+    }),
+    db.collection<ElectedOfficial>("electedOfficials").distinct("state", {
+      ...countryScope,
+      party: partyId,
+      state: inCountry,
+      ...(departing?.characterId ? { characterId: { $ne: departing.characterId } } : {}),
+      ...(departing?.nppId ? { nppId: { $ne: departing.nppId } } : {}),
+    }),
     db.collection<NPP>("npps").distinct("homeState", {
       ...countryScope,
       party: partyId,
       retiredAt: null,
       homeState: inCountry,
+      ...(departing?.nppId ? { _id: { $ne: departing.nppId } } : {}),
     }),
   ]);
 
@@ -133,18 +157,27 @@ export async function getPartyFrontier(
   partyId: string,
   regionIds?: readonly string[]
 ): Promise<{ presence: Set<string>; frontier: Set<string> }> {
-  const presence = await getPartyPresenceStates(db, countryId, partyId, regionIds);
-  return { presence, frontier: expandFrontier(countryId, presence) };
+  const regions = regionIds ?? (await getCountryRegionIds(db, countryId));
+  const presence = await getPartyPresenceStates(db, countryId, partyId, regions);
+  return {
+    presence,
+    frontier: connectedGrowthFrontier(
+      presence,
+      expandFrontier(countryId, presence),
+      getTerritoryAdjacency(countryId, regions)
+    ),
+  };
 }
 
 /** Batch live presence for a country's parties without expanding adjacency. */
 export async function getPartyPresenceMap(
   db: Db,
   countryId: CountryId,
-  partyIds: string[]
+  partyIds: string[],
+  regionIds?: readonly string[]
 ): Promise<Map<string, Set<string>>> {
   if (partyIds.length === 0) return new Map();
-  const regions = await getCountryRegionIds(db, countryId);
+  const regions = regionIds ?? (await getCountryRegionIds(db, countryId));
   const party = { $in: partyIds };
   const homeState = { $in: regions };
   const countryScope = { $or: [{ countryId }, { countryId: { $exists: false } }] };
@@ -181,11 +214,21 @@ export async function getPartyFrontiers(
   countryId: CountryId,
   partyIds: string[]
 ): Promise<Map<string, string[] | null>> {
-  const presence = await getPartyPresenceMap(db, countryId, partyIds);
+  if (partyIds.length === 0) return new Map();
+  const regions = await getCountryRegionIds(db, countryId);
+  const presence = await getPartyPresenceMap(db, countryId, partyIds, regions);
   return new Map(
     [...presence].map(([id, states]) => [
       id,
-      states.size === 0 ? null : [...expandFrontier(countryId, states)].sort(),
+      states.size === 0
+        ? null
+        : [
+            ...connectedGrowthFrontier(
+              states,
+              expandFrontier(countryId, states),
+              getTerritoryAdjacency(countryId, regions)
+            ),
+          ].sort(),
     ])
   );
 }
@@ -224,6 +267,6 @@ export async function canCharacterJoinParty(
   if (isInFrontier(presence, frontier, character.homeState)) return { ok: true };
   return {
     ok: false,
-    error: `${party.name} is not established in or next to your home region. You can only join a party that already has a presence nearby.`,
+    error: `${party.name} is not established in or next to your home region, or this region does not help reconnect its disconnected territory. Join an existing or eligible connecting region.`,
   };
 }
