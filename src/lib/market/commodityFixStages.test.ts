@@ -13,7 +13,7 @@ import {
   shortagePolicyHeadroom,
   stockCoverCapTurnsForStage,
 } from "./commodityFixStages";
-import { computeRetailDemandMultiplier } from "@/lib/constants/commodities";
+import { computeRetailDemandMultiplier, type CommodityType } from "@/lib/constants/commodities";
 
 describe("commodityFixStages", () => {
   it("normalises garbage and clamps to [0, 6]", () => {
@@ -53,8 +53,9 @@ describe("commodityFixStages", () => {
   });
 
   it("stage 4 gives shortage headroom only to positive policy in a deep shortage", () => {
-    const short = new Map([["energy", { supply: 60, demand: 100 }]]); // 40% unmet
-    const balanced = new Map([["energy", { supply: 100, demand: 100 }]]);
+    type Balances = Map<CommodityType, { supply: number; demand: number }>;
+    const short: Balances = new Map([["energy", { supply: 60, demand: 100 }]]); // 40% unmet
+    const balanced: Balances = new Map([["energy", { supply: 100, demand: 100 }]]);
     const rates = { energy: 1 };
     expect(
       shortagePolicyHeadroom({ stage: 3, policyLevel: 25, supplyRates: rates, balances: short })
@@ -74,7 +75,7 @@ describe("commodityFixStages", () => {
       shortagePolicyHeadroom({ stage: 4, policyLevel: 12.5, supplyRates: rates, balances: short })
     ).toBeCloseTo(1 + SHORTAGE_HEADROOM_MAX_BONUS * 0.1, 10);
     // a total shortage at full policy reaches the max bonus
-    const empty = new Map([["energy", { supply: 0, demand: 100 }]]);
+    const empty: Balances = new Map([["energy", { supply: 0, demand: 100 }]]);
     expect(
       shortagePolicyHeadroom({ stage: 4, policyLevel: 25, supplyRates: rates, balances: empty })
     ).toBeCloseTo(1 + SHORTAGE_HEADROOM_MAX_BONUS, 10);
