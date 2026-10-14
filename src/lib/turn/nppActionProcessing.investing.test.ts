@@ -51,8 +51,12 @@ function label(id: ObjectId): string {
   return `${hex.slice(0, 2)}:${parseInt(hex.slice(2), 16)}`;
 }
 
-/** One market per country: NPPs with cash, listed corps, bonds, and NPP holdings. */
-function buildFixture(): Db {
+/**
+ * One market per country: NPPs with cash, listed corps, bonds, and NPP
+ * holdings. `valueBias` multiplies every fundamental in a country, to make
+ * one market cheap and another dear.
+ */
+function buildFixture(valueBias: Partial<Record<string, number>> = {}): Db {
   const rand = lcg(1953);
   const db = createInMemoryDb();
   const npps: Record<string, unknown>[] = [];
@@ -81,7 +85,8 @@ function buildFixture(): Db {
     for (let c = 0; c < 12; c++) {
       const sharePrice = 5 + Math.floor(rand() * 95);
       // Value ratio spread across roughly 0.6x to 1.6x of the price.
-      const fundamentalSharePrice = Math.round(sharePrice * (0.6 + rand()) * 100) / 100;
+      const fundamentalSharePrice =
+        Math.round(sharePrice * (0.6 + rand()) * (valueBias[country.id] ?? 1) * 100) / 100;
       const holders = [0, 1, 2, 3].map((k) => ({
         nppId: countryNpps[(c * 7 + k * 13) % countryNpps.length],
         shares: 100 + Math.floor(rand() * 5_000),
@@ -236,5 +241,98 @@ describe("NPP market sweeps below v6", () => {
         "stock": 225,
       }
     `);
+  });
+});
+
+/** Sweep counts summed over `turns`, at v6 or below. */
+async function sweepCounts(
+  engine6: boolean,
+  turns: readonly number[],
+  fixture = () => buildFixture()
+) {
+  const counts = { stock: 0, bond: 0, sell: 0, stockByCountry: {} as Record<string, number> };
+  for (const turn of turns) {
+    vi.clearAllMocks();
+    await investNppStockSurplus(fixture(), turn, null, undefined, undefined, engine6);
+    await investNppBondSurplus(fixture(), turn, null, undefined, undefined, engine6);
+    await sellNppStockSurplus(fixture(), turn, null, undefined, engine6);
+    counts.stock += buyCalls().length;
+    counts.bond += bondCalls().length;
+    counts.sell += sellCalls().length;
+    for (const [, corpId] of vi.mocked(nppBuyShares).mock.calls.map(([, n, c]) => [n, c])) {
+      const country =
+        COUNTRIES[Math.floor(parseInt((corpId as ObjectId).toHexString().slice(2), 16) / 12)].id;
+      counts.stockByCountry[country] = (counts.stockByCountry[country] ?? 0) + 1;
+    }
+  }
+  return counts;
+}
+
+const MANY_TURNS = Array.from({ length: 40 }, (_, i) => 200 + i * 4);
+
+describe("NPP market sweeps at v6 (opportunity-driven investing)", () => {
+  it("keeps trade volume close to engine 5", async () => {
+    const before = await sweepCounts(false, MANY_TURNS);
+    const after = await sweepCounts(true, MANY_TURNS);
+    for (const key of ["stock", "bond", "sell"] as const) {
+      expect(after[key]).toBeGreaterThan(before[key] * 0.8);
+      expect(after[key]).toBeLessThan(before[key] * 1.2);
+    }
+  }, 60_000);
+
+  it("moves buying toward the cheap market and away from the dear one", async () => {
+    // UK trades near the floor of what NPPs accept, JP well under fundamentals.
+    const fixture = () => buildFixture({ UK: 0.75, JP: 1.6 });
+    const before = await sweepCounts(false, MANY_TURNS, fixture);
+    const after = await sweepCounts(true, MANY_TURNS, fixture);
+    const share = (c: typeof before, id: string) => (c.stockByCountry[id] ?? 0) / c.stock;
+    expect(share(after, "JP")).toBeGreaterThan(share(before, "JP"));
+    expect(share(after, "UK")).toBeLessThan(share(before, "UK"));
+  }, 60_000);
+
+  it("sells overvalued holdings more often than fairly valued ones", async () => {
+    const soldRatio = async (engine6: boolean) => {
+      let total = 0;
+      let n = 0;
+      for (const turn of MANY_TURNS) {
+        vi.clearAllMocks();
+        const db = buildFixture();
+        const corps = await db.collection("corporations").find({}).toArray();
+        await sellNppStockSurplus(db, turn, null, undefined, engine6);
+        for (const [, , corpId] of vi.mocked(nppSellShares).mock.calls) {
+          const corp = corps.find((c) => c._id.equals(corpId))!;
+          total += corp.sharePrice / corp.fundamentalSharePrice;
+          n++;
+        }
+      }
+      return total / n;
+    };
+    expect(await soldRatio(true)).toBeGreaterThan(await soldRatio(false));
+  }, 60_000);
+
+  it("buys the same things whether currency partitions settle together or one at a time", async () => {
+    for (const turn of [100, 104, 108]) {
+      vi.clearAllMocks();
+      await investNppStockSurplus(buildFixture(), turn, null, undefined, undefined, true, 1);
+      const sequential = buyCalls().sort();
+      vi.clearAllMocks();
+      await investNppStockSurplus(buildFixture(), turn, null, undefined, undefined, true, 8);
+      expect(buyCalls().sort()).toEqual(sequential);
+      expect(sequential.length).toBeGreaterThan(0);
+    }
+  });
+
+  it("hands the sweep's preloaded equity pools to every buy", async () => {
+    await investNppStockSurplus(buildFixture(), 100, null, undefined, undefined, true);
+    const pools = vi.mocked(nppBuyShares).mock.calls.map((call) => call[7]);
+    expect(pools.length).toBeGreaterThan(0);
+    for (const map of pools) expect(map).toBe(pools[0]);
+  });
+
+  it("skips NPPs whose lane is not up before scoring them", async () => {
+    await investNppStockSurplus(buildFixture(), 100, null, undefined, () => false, true);
+    await investNppBondSurplus(buildFixture(), 100, null, undefined, () => false, true);
+    expect(buyCalls()).toEqual([]);
+    expect(bondCalls()).toEqual([]);
   });
 });

@@ -10,7 +10,7 @@
 
 import { withBondPoolLedgerSnapshot } from "@/lib/bonds/marketPoolLedger";
 import { boundedParallelMap } from "@/lib/indexFunds/boundedParallelMap";
-import { equityPoolCurrency } from "@/lib/equities/marketPool";
+import { equityPoolCurrency, loadEquityPoolsByCurrency } from "@/lib/equities/marketPool";
 import { substepMarker } from "@/lib/observability/phaseSubsteps";
 import type { Db, ObjectId } from "mongodb";
 import type {
@@ -58,6 +58,14 @@ import {
 } from "@/lib/nppAutonomy/featureFlag";
 import { NPP_ENGINE_LEVEL } from "@/lib/nppAutonomy/engineVersion";
 import { NPP_ACTION_INTERVAL, nppActsThisTurn } from "@/lib/nppAutonomy/v6/rules/actionCadence";
+import {
+  OPPORTUNITY_BUY_CAP,
+  OPPORTUNITY_SELL_CAP,
+  bondBuyOpportunity,
+  stockBuyOpportunity,
+  stockSellOpportunity,
+  volumeNormalizedMultipliers,
+} from "@/lib/nppAutonomy/v6/rules/opportunityInvesting";
 import { planNppRally, type NppRallyWrite } from "@/lib/turn/npp/nppRally";
 import { getAllCountryAccess } from "@/lib/countryAccess";
 import { careerArchetypeModifiersContinuous } from "@/lib/nppAutonomy/v3/careerArchetype";
@@ -690,12 +698,28 @@ async function runNppActions(db: Db, currentTurn: number): Promise<NppActionProc
     // The two per-NPP buy sweeps follow the NPP's lane at v6. The other three
     // iterate corporations, party organisations and a capped founding pool
     // rather than NPPs, so they stay on the shared cycle turn.
-    await investNppBondSurplus(db, currentTurn, econScopeCountries, preset, actsThisTurn);
+    // At v6 all three trade on opportunity rather than a flat roll; see
+    // v6/rules/opportunityInvesting.ts.
+    await investNppBondSurplus(
+      db,
+      currentTurn,
+      econScopeCountries,
+      preset,
+      actsThisTurn,
+      staggered
+    );
     step.mark("bondInvesting");
-    await investNppStockSurplus(db, currentTurn, econScopeCountries, preset, actsThisTurn);
+    await investNppStockSurplus(
+      db,
+      currentTurn,
+      econScopeCountries,
+      preset,
+      actsThisTurn,
+      staggered
+    );
     step.mark("stockInvesting");
     if (!cycleTurn) return result;
-    await sellNppStockSurplus(db, currentTurn, econScopeCountries, preset);
+    await sellNppStockSurplus(db, currentTurn, econScopeCountries, preset, staggered);
     step.mark("stockSelling");
     await buildNppPartyOrgSurplus(db, currentTurn, econScopeCountries);
     step.mark("partyOrgBuilding");
@@ -723,8 +747,12 @@ export async function investNppBondSurplus(
   currentTurn: number,
   countryScope: CountryId[] | null = null,
   preset?: string,
-  actsThisTurn?: (id: ObjectId) => boolean
+  actsThisTurn?: (id: ObjectId) => boolean,
+  engine6 = false
 ): Promise<void> {
+  if (engine6) {
+    return investNppBondSurplusV6(db, currentTurn, countryScope, preset, actsThisTurn);
+  }
   // Investment capital is the personal forex account (₳), NOT campaign funds
   // and NOT savings — the full campaign/economy wall.
   const cursor = db.collection<NPP>("npps").find(
@@ -778,64 +806,27 @@ export async function investNppBondSurplus(
         .toArray();
       bondsByCountry.set(countryId, bonds);
     }
-    // Candidate selection used to be "always the single highest couponRate bond
-    // in the country", which meant every NPP in a country bought the same issue —
-    // maximally predictable and maximally concentrated. Rank by CURRENT yield
-    // (coupon relative to what the bond actually costs, which is the number an
-    // investor would care about), then sample from the top few weighted by yield,
-    // sharpened by risk tolerance so a cautious NPP is likelier to take the safe
-    // obvious pick and an aggressive one reaches further down the list.
-    const eligibleBonds = bondsByCountry
-      .get(countryId)!
-      .filter(
-        (b) =>
-          (b.currencyCode ?? COUNTRY_CURRENCY_MAP[countryId] ?? "USD") === homeCurrency &&
-          b.publicFloat > 0 &&
-          b.marketPrice > 0
-      );
-    if (eligibleBonds.length === 0) continue;
-
-    const scoredBonds = eligibleBonds
-      .map((b) => ({ bond: b, yield: b.couponRate / b.marketPrice }))
-      .sort((a, b) => b.yield - a.yield)
-      .slice(0, NPP_BOND_CANDIDATE_POOL);
+    // Sample from the top few by current yield, weighted by yield and sharpened
+    // by risk tolerance so a cautious NPP is likelier to take the safe obvious
+    // pick and an aggressive one reaches further down the list.
+    const scoredBonds = bondCandidates(bondsByCountry.get(countryId)!, countryId, homeCurrency);
+    if (scoredBonds.length === 0) continue;
 
     // Nothing worth buying — capital simply stays put. An NPP declining to
     // invest is a decision, and it is the one that stops them from mechanically
     // buying whatever is least bad every single cycle.
     if (scoredBonds[0].yield < NPP_BOND_MIN_YIELD_PCT) continue;
 
-    const bondWeights = scoredBonds.map((s) => Math.pow(s.yield, riskToleranceMult));
-    const bondTotal = bondWeights.reduce((s, w) => s + w, 0);
-    let bondRoll = rng() * bondTotal;
-    let bond = scoredBonds[scoredBonds.length - 1].bond;
-    for (let i = 0; i < scoredBonds.length; i++) {
-      bondRoll -= bondWeights[i];
-      if (bondRoll <= 0) {
-        bond = scoredBonds[i].bond;
-        break;
-      }
-    }
+    const bond =
+      scoredBonds[
+        pickIndexByWeight(
+          scoredBonds.map((s) => Math.pow(s.yield, riskToleranceMult)),
+          rng()
+        )
+      ].bond;
 
-    // Size the buy in ₳, then convert to LOCAL to count units at local prices.
-    // saveInvestAppetiteMult finally does something here: it was defined, tested
-    // and clamped but read by nothing, so every NPP allocated an identical
-    // fraction of surplus. Stewards (0.8) now commit roughly double what
-    // reformers (0.3) do — variance in SIZE, not just in timing.
     const homeRate = fxByCcy.get(homeCurrency) ?? 1;
-    const appetite = Math.min(Math.max(saveInvestAppetiteMult / 0.4, 0.5), 2.0);
-    const investAmountAnchor =
-      (cashAnchor - NPP_BOND_INVEST_RESERVE_FLOOR) * NPP_BOND_INVEST_FRACTION * appetite;
-    const investAmountLocal = investAmountAnchor * (homeRate > 0 ? homeRate : 1);
-    const unitCost = BOND_UNIT_FACE_VALUE * bond.marketPrice;
-    // Never clear an issue: leave a reserve of the float so a player always has
-    // something to buy. Being quietly outbid on every bond in the country is the
-    // most annoying kind of competition — there's no event to read and nothing
-    // to react to, the market is just empty.
-    const units = Math.min(
-      Math.floor(investAmountLocal / unitCost),
-      politeFloatLimit(bond.publicFloat)
-    );
+    const units = bondBuyUnits(cashAnchor, saveInvestAppetiteMult, homeRate, bond);
     if (units < 1) continue;
 
     // nppBuyBond debits nppInvestmentCashAnchor atomically (guarded); a failed
@@ -844,6 +835,246 @@ export async function investNppBondSurplus(
     if (result.ok) {
       bond.publicFloat -= units;
     }
+  }
+}
+
+/** A bond on offer to an NPP, with its current yield in percent. */
+type ScoredBond = { bond: Bond; yield: number };
+
+/**
+ * The bonds an NPP of `countryId` can buy, best current yield first, cut to
+ * the sampling pool. Candidate selection used to be "always the single
+ * highest couponRate bond in the country", which meant every NPP in a country
+ * bought the same issue. Ranking by CURRENT yield (coupon relative to what the
+ * bond actually costs) is the number an investor would care about.
+ */
+function bondCandidates(
+  bonds: readonly Bond[],
+  countryId: CountryId,
+  homeCurrency: string
+): ScoredBond[] {
+  return bonds
+    .filter(
+      (b) =>
+        (b.currencyCode ?? COUNTRY_CURRENCY_MAP[countryId] ?? "USD") === homeCurrency &&
+        b.publicFloat > 0 &&
+        b.marketPrice > 0
+    )
+    .map((b) => ({ bond: b, yield: b.couponRate / b.marketPrice }))
+    .sort((a, b) => b.yield - a.yield)
+    .slice(0, NPP_BOND_CANDIDATE_POOL);
+}
+
+/**
+ * Index drawn from `weights` by a uniform `roll` in [0, 1): walk the
+ * cumulative weight, falling back to the last entry on rounding.
+ */
+function pickIndexByWeight(weights: readonly number[], roll: number): number {
+  const total = weights.reduce((sum, w) => sum + w, 0);
+  let remaining = roll * total;
+  for (let i = 0; i < weights.length; i++) {
+    remaining -= weights[i];
+    if (remaining <= 0) return i;
+  }
+  return weights.length - 1;
+}
+
+/**
+ * Units of `bond` an NPP buys. Sized in ₳, then converted to LOCAL to count
+ * units at local prices. saveInvestAppetiteMult varies the SIZE: stewards
+ * (0.8) commit roughly double what reformers (0.3) do. Never clears an issue:
+ * a reserve of the float is left so a player always has something to buy.
+ */
+function bondBuyUnits(
+  cashAnchor: number,
+  saveInvestAppetiteMult: number,
+  homeRate: number,
+  bond: Pick<Bond, "marketPrice" | "publicFloat">
+): number {
+  const appetite = Math.min(Math.max(saveInvestAppetiteMult / 0.4, 0.5), 2.0);
+  const investAmountAnchor =
+    (cashAnchor - NPP_BOND_INVEST_RESERVE_FLOOR) * NPP_BOND_INVEST_FRACTION * appetite;
+  const investAmountLocal = investAmountAnchor * (homeRate > 0 ? homeRate : 1);
+  const unitCost = BOND_UNIT_FACE_VALUE * bond.marketPrice;
+  return Math.min(Math.floor(investAmountLocal / unitCost), politeFloatLimit(bond.publicFloat));
+}
+
+/** An NPP weighing a market buy this sweep, with its v6 chance. */
+type InvestDecider = {
+  npp: Pick<NPP, "_id" | "countryId" | "personality" | "nppInvestmentCashAnchor">;
+  countryId: CountryId;
+  homeCurrency: CurrencyCode;
+  cashAnchor: number;
+  riskToleranceMult: number;
+  saveInvestAppetiteMult: number;
+  /** Engine 5 chance to act: the base probability times risk tolerance. */
+  baseProbability: number;
+  /** v6 opportunity multiplier on `baseProbability`. */
+  multiplier: number;
+};
+
+/** Acting NPPs above the investment floor, in a stable `_id` order. */
+async function loadInvestDeciders(
+  db: Db,
+  floor: number,
+  baseProbability: number,
+  countryScope: CountryId[] | null,
+  preset: string | undefined,
+  actsThisTurn: ((id: ObjectId) => boolean) | undefined
+): Promise<InvestDecider[]> {
+  const npps = await db
+    .collection<NPP>("npps")
+    .find(
+      {
+        retiredAt: null,
+        nppInvestmentCashAnchor: { $gt: floor },
+        ...countryScopeFilter(countryScope),
+      },
+      { projection: { countryId: 1, personality: 1, nppInvestmentCashAnchor: 1 } }
+    )
+    .sort({ _id: 1 })
+    .toArray();
+  const deciders: InvestDecider[] = [];
+  for (const npp of npps) {
+    if (actsThisTurn && !actsThisTurn(npp._id)) continue;
+    const cashAnchor = npp.nppInvestmentCashAnchor ?? 0;
+    if (cashAnchor <= floor) continue;
+    const countryId = (npp.countryId ?? "US") as CountryId;
+    const homeCurrency = (
+      preset ? getSeedCurrencyCode(countryId, preset) : (COUNTRY_CURRENCY_MAP[countryId] ?? "USD")
+    ) as CurrencyCode;
+    const { riskToleranceMult, saveInvestAppetiteMult } = careerArchetypeModifiersContinuous(
+      npp.personality
+    );
+    deciders.push({
+      npp,
+      countryId,
+      homeCurrency,
+      cashAnchor,
+      riskToleranceMult,
+      saveInvestAppetiteMult,
+      baseProbability: baseProbability * riskToleranceMult,
+      multiplier: 1,
+    });
+  }
+  return deciders;
+}
+
+/**
+ * Score every decider, keep those with something worth buying, and set each
+ * one's volume-normalized opportunity multiplier. The expected purchase count
+ * over the kept deciders equals the engine 5 expectation on the same set,
+ * sum(base x risk); see v6/rules/opportunityInvesting.ts.
+ */
+function applyOpportunityMultipliers(
+  deciders: InvestDecider[],
+  score: (decider: InvestDecider) => number
+): InvestDecider[] {
+  const scored = deciders
+    .map((decider) => ({ decider, score: score(decider) }))
+    .filter((entry) => entry.score > 0);
+  const base = scored.map((entry) => entry.decider.baseProbability);
+  const multipliers = volumeNormalizedMultipliers(
+    scored.map((entry) => entry.score),
+    base,
+    base.reduce((sum, p) => sum + p, 0),
+    OPPORTUNITY_BUY_CAP
+  );
+  return scored.map((entry, i) => ({ ...entry.decider, multiplier: multipliers[i] }));
+}
+
+/**
+ * v6 bond-investment sweep (NPP engine 6). Same candidates, sampling and
+ * sizing as the engine 5 sweep above, but each NPP looks at the market before
+ * deciding: its chance scales with the best current yield on offer against
+ * the yield floor, normalized so the expected number of purchases is
+ * unchanged. Bonds are read once for every country in the sweep.
+ */
+async function investNppBondSurplusV6(
+  db: Db,
+  currentTurn: number,
+  countryScope: CountryId[] | null,
+  preset: string | undefined,
+  actsThisTurn: ((id: ObjectId) => boolean) | undefined
+): Promise<void> {
+  const deciders = await loadInvestDeciders(
+    db,
+    NPP_BOND_INVEST_RESERVE_FLOOR,
+    NPP_BOND_INVEST_BASE_PROBABILITY,
+    countryScope,
+    preset,
+    actsThisTurn
+  );
+  if (deciders.length === 0) return;
+
+  const countries = [...new Set(deciders.map((d) => d.countryId))];
+  const bonds = await db
+    .collection<Bond>("bonds")
+    .find(
+      {
+        countryId: { $in: countries },
+        maturityTurn: { $gt: currentTurn },
+        publicFloat: { $gt: 0 },
+      },
+      {
+        projection: {
+          currencyCode: 1,
+          countryId: 1,
+          publicFloat: 1,
+          marketPrice: 1,
+          couponRate: 1,
+          maturityTurn: 1,
+          issuerType: 1,
+          defaulted: 1,
+          issuerName: 1,
+        },
+      }
+    )
+    .sort({ couponRate: -1 })
+    .toArray();
+  const bondsByCountry = new Map<CountryId, Bond[]>(countries.map((c) => [c, []]));
+  for (const bond of bonds) bondsByCountry.get(bond.countryId as CountryId)?.push(bond);
+
+  const acting = applyOpportunityMultipliers(deciders, (d) => {
+    const best = bondCandidates(bondsByCountry.get(d.countryId)!, d.countryId, d.homeCurrency)[0];
+    return best && best.yield >= NPP_BOND_MIN_YIELD_PCT
+      ? bondBuyOpportunity(best.yield, NPP_BOND_MIN_YIELD_PCT)
+      : 0;
+  });
+  if (acting.length === 0) return;
+
+  const rng = makeSeededRng(`npp-bond-invest:${currentTurn}${NPP_ACTION_RNG_SALT}`);
+  const fxByCcy = await loadFxRatesByCurrency(db);
+  for (const d of acting) {
+    if (rng() >= d.baseProbability * d.multiplier) continue;
+    // Live candidates: an earlier buy this sweep may have thinned a float.
+    const scoredBonds = bondCandidates(
+      bondsByCountry.get(d.countryId)!,
+      d.countryId,
+      d.homeCurrency
+    );
+    if (scoredBonds.length === 0 || scoredBonds[0].yield < NPP_BOND_MIN_YIELD_PCT) continue;
+    const bond =
+      scoredBonds[
+        pickIndexByWeight(
+          scoredBonds.map((s) => Math.pow(s.yield, d.riskToleranceMult)),
+          rng()
+        )
+      ].bond;
+    const homeRate = fxByCcy.get(d.homeCurrency) ?? 1;
+    const units = bondBuyUnits(d.cashAnchor, d.saveInvestAppetiteMult, homeRate, bond);
+    if (units < 1) continue;
+    const result = await nppBuyBond(
+      db,
+      d.npp,
+      bond._id,
+      units,
+      currentTurn,
+      homeRate,
+      bond,
+      preset
+    );
+    if (result.ok) bond.publicFloat -= units;
   }
 }
 
@@ -875,8 +1106,21 @@ export async function investNppStockSurplus(
   currentTurn: number,
   countryScope: CountryId[] | null = null,
   preset?: string,
-  actsThisTurn?: (id: ObjectId) => boolean
+  actsThisTurn?: (id: ObjectId) => boolean,
+  engine6 = false,
+  /** Currency partitions settled at once at v6; tests compare 1 against the default. */
+  partitionConcurrency = NPP_SWEEP_PARTITION_CONCURRENCY
 ): Promise<void> {
+  if (engine6) {
+    return investNppStockSurplusV6(
+      db,
+      currentTurn,
+      countryScope,
+      preset,
+      actsThisTurn,
+      partitionConcurrency
+    );
+  }
   void currentTurn; // kept for signature symmetry with the bond sweep; not needed by nppBuyShares.
 
   const cursor = db.collection<NPP>("npps").find(
@@ -946,59 +1190,20 @@ export async function investNppStockSurplus(
     // (fundamentalSharePrice ÷ execution price, already projected above and
     // previously unused), and sample. Risk-tolerant NPPs weight size and chase
     // momentum; cautious ones weight the discount and refuse to overpay.
-    const eligibleCorps = corpsByCountry
-      .get(countryId)!
-      .filter((c) => (c.liquidCurrencyCode ?? "USD") === homeCurrency && (c.publicFloat ?? 0) > 0)
-      .slice(0, NPP_STOCK_CANDIDATE_POOL);
-    if (eligibleCorps.length === 0) continue;
-
-    // Risk tolerance relaxes the "don't overpay" floor: a cautious NPP wants the
-    // share at or below fundamentals, an aggressive one will pay well above.
-    // Clamped at 1.0 so the cautious end never becomes a bar nothing clears —
-    // and so a corp with no `fundamentalSharePrice` (ratio defaults to 1) is
-    // always eligible rather than silently excluded from every NPP's universe.
-    const minValueRatio = Math.min(
-      Math.max(NPP_STOCK_MIN_VALUE_RATIO * (2 - riskToleranceMult), NPP_STOCK_VALUE_FLOOR_MIN),
-      NPP_STOCK_VALUE_FLOOR_MAX
+    const scoredCorps = stockCandidates(
+      corpsByCountry.get(countryId)!,
+      homeCurrency,
+      riskToleranceMult
     );
-    const scoredCorps = eligibleCorps
-      .map((c) => {
-        const price = resolveShareExecutionPrice(c);
-        const marketCap = (c.sharePrice ?? 0) * (c.totalShares ?? 0);
-        const valueRatio = price > 0 ? (c.fundamentalSharePrice ?? price) / price : 0;
-        return { corp: c, price, valueRatio, marketCap };
-      })
-      .filter((s) => s.price > 0 && s.valueRatio >= minValueRatio);
-    // Everything on offer is overvalued for this NPP's taste — hold the cash.
+    // Nothing listed, or everything on offer is overvalued for this NPP's
+    // taste: hold the cash.
     if (scoredCorps.length === 0) continue;
 
-    const corpWeights = scoredCorps.map((s) =>
-      nppStockCandidateWeight(s.marketCap, s.valueRatio, riskToleranceMult)
-    );
-    const corpTotal = corpWeights.reduce((sum, w) => sum + w, 0);
-    let corpRoll = rng() * corpTotal;
-    let chosen = scoredCorps[scoredCorps.length - 1];
-    for (let i = 0; i < scoredCorps.length; i++) {
-      corpRoll -= corpWeights[i];
-      if (corpRoll <= 0) {
-        chosen = scoredCorps[i];
-        break;
-      }
-    }
+    const chosen = scoredCorps[pickStockCandidate(scoredCorps, riskToleranceMult, rng())];
     const corp = chosen.corp;
-    const executionPrice = chosen.price;
 
-    // Size the buy in ₳, then convert to LOCAL to count shares at local prices.
     const homeRate = fxByCcy.get(homeCurrency) ?? 1;
-    const appetite = Math.min(Math.max(saveInvestAppetiteMult / 0.4, 0.5), 2.0);
-    const investAmountAnchor =
-      (cashAnchor - NPP_STOCK_INVEST_RESERVE_FLOOR) * NPP_STOCK_INVEST_FRACTION * appetite;
-    const investAmountLocal = investAmountAnchor * (homeRate > 0 ? homeRate : 1);
-    // Leave a reserve of the float untouched — see the bond sweep.
-    const shares = Math.min(
-      Math.floor(investAmountLocal / executionPrice),
-      politeFloatLimit(corp.publicFloat ?? 0)
-    );
+    const shares = stockBuyShares(cashAnchor, saveInvestAppetiteMult, homeRate, chosen);
     if (shares < 1) continue;
 
     // nppBuyShares debits nppInvestmentCashAnchor atomically (guarded); a failed
@@ -1012,6 +1217,217 @@ export async function investNppStockSurplus(
 
 /** Partitions (countries, currencies) whose sweep work runs at once. */
 const NPP_SWEEP_PARTITION_CONCURRENCY = 8;
+
+/** A listed corporation on offer to an NPP, priced and valued. */
+type ScoredStock = {
+  corp: StockCandidateCorp;
+  price: number;
+  valueRatio: number;
+  marketCap: number;
+};
+
+/**
+ * The least fundamental-to-price ratio an NPP accepts. Risk tolerance relaxes
+ * the "don't overpay" floor: a cautious NPP wants the share at or below
+ * fundamentals, an aggressive one will pay well above. Clamped at 1.0 so the
+ * cautious end never becomes a bar nothing clears, and so a corp with no
+ * `fundamentalSharePrice` (ratio defaults to 1) is always eligible rather than
+ * silently excluded from every NPP's universe.
+ */
+function stockMinValueRatio(riskToleranceMult: number): number {
+  return Math.min(
+    Math.max(NPP_STOCK_MIN_VALUE_RATIO * (2 - riskToleranceMult), NPP_STOCK_VALUE_FLOOR_MIN),
+    NPP_STOCK_VALUE_FLOOR_MAX
+  );
+}
+
+/**
+ * The corporations an NPP may buy: the top of its market by size in its home
+ * currency, scored on value (fundamentalSharePrice / execution price), and
+ * kept only where the value clears this NPP's floor. Selection used to be the
+ * single largest corp, forever; risk-tolerant NPPs now weight size and chase
+ * momentum, cautious ones weight the discount and refuse to overpay.
+ */
+function stockCandidates(
+  corps: readonly StockCandidateCorp[],
+  homeCurrency: string,
+  riskToleranceMult: number
+): ScoredStock[] {
+  const minValueRatio = stockMinValueRatio(riskToleranceMult);
+  return corps
+    .filter((c) => (c.liquidCurrencyCode ?? "USD") === homeCurrency && (c.publicFloat ?? 0) > 0)
+    .slice(0, NPP_STOCK_CANDIDATE_POOL)
+    .map((c) => {
+      const price = resolveShareExecutionPrice(c);
+      const marketCap = (c.sharePrice ?? 0) * (c.totalShares ?? 0);
+      const valueRatio = price > 0 ? (c.fundamentalSharePrice ?? price) / price : 0;
+      return { corp: c, price, valueRatio, marketCap };
+    })
+    .filter((s) => s.price > 0 && s.valueRatio >= minValueRatio);
+}
+
+/** Weighted draw over the candidates from a uniform `roll` in [0, 1). */
+function pickStockCandidate(
+  candidates: readonly ScoredStock[],
+  riskToleranceMult: number,
+  roll: number
+): number {
+  return pickIndexByWeight(
+    candidates.map((s) => nppStockCandidateWeight(s.marketCap, s.valueRatio, riskToleranceMult)),
+    roll
+  );
+}
+
+/**
+ * Shares an NPP buys. Sized in ₳, then converted to LOCAL to count shares at
+ * local prices, leaving a reserve of the float untouched (see the bond sweep).
+ */
+function stockBuyShares(
+  cashAnchor: number,
+  saveInvestAppetiteMult: number,
+  homeRate: number,
+  chosen: Pick<ScoredStock, "corp" | "price">
+): number {
+  const appetite = Math.min(Math.max(saveInvestAppetiteMult / 0.4, 0.5), 2.0);
+  const investAmountAnchor =
+    (cashAnchor - NPP_STOCK_INVEST_RESERVE_FLOOR) * NPP_STOCK_INVEST_FRACTION * appetite;
+  const investAmountLocal = investAmountAnchor * (homeRate > 0 ? homeRate : 1);
+  return Math.min(
+    Math.floor(investAmountLocal / chosen.price),
+    politeFloatLimit(chosen.corp.publicFloat ?? 0)
+  );
+}
+
+/**
+ * v6 stock-investment sweep (NPP engine 6). Same candidates, sampling and
+ * sizing as the engine 5 sweep, with two changes.
+ *
+ * Decision: each NPP looks at its market before deciding. Its chance scales
+ * with the best value ratio on offer against its own value floor, normalized
+ * so the expected number of purchases is unchanged; see
+ * v6/rules/opportunityInvesting.ts.
+ *
+ * Cost: the sweep is split by home currency. A buy reads and writes only its
+ * NPP, a corporation of the NPP's country, and that currency's equity pool,
+ * so partitions share no document. Each partition draws from its own seeded
+ * stream and keeps its NPPs in `_id` order, so the outcome does not depend on
+ * how many partitions run at once, and they run concurrently. Equity pools
+ * are read once for the sweep instead of once per buy; the settlement keeps
+ * each snapshot's cash in step with its own credit.
+ */
+async function investNppStockSurplusV6(
+  db: Db,
+  currentTurn: number,
+  countryScope: CountryId[] | null,
+  preset: string | undefined,
+  actsThisTurn: ((id: ObjectId) => boolean) | undefined,
+  partitionConcurrency: number
+): Promise<void> {
+  const deciders = await loadInvestDeciders(
+    db,
+    NPP_STOCK_INVEST_RESERVE_FLOOR,
+    NPP_STOCK_INVEST_BASE_PROBABILITY,
+    countryScope,
+    preset,
+    actsThisTurn
+  );
+  if (deciders.length === 0) return;
+
+  const countries = [...new Set(deciders.map((d) => d.countryId))];
+  const corps = await db
+    .collection<Corporation>("corporations")
+    .find(
+      {
+        countryId: { $in: countries },
+        isPrivate: { $ne: true },
+        hiddenFromExchange: { $ne: true },
+        isNationalized: { $ne: true },
+        countryOwnerId: { $exists: false },
+        sharePrice: { $gt: 0 },
+        totalShares: { $gt: 0 },
+        publicFloat: { $gt: 0 },
+      },
+      {
+        projection: {
+          liquidCurrencyCode: 1,
+          countryId: 1,
+          isPrivate: 1,
+          isNationalized: 1,
+          countryOwnerId: 1,
+          sharePrice: 1,
+          fundamentalSharePrice: 1,
+          totalShares: 1,
+          publicFloat: 1,
+          shareBuybackMode: 1,
+        },
+      }
+    )
+    .sort({ _id: 1 })
+    .toArray();
+  corps.sort((a, b) => b.sharePrice * b.totalShares - a.sharePrice * a.totalShares);
+  const corpsByCountry = new Map<CountryId, StockCandidateCorp[]>(countries.map((c) => [c, []]));
+  for (const corp of corps) corpsByCountry.get(corp.countryId as CountryId)?.push(corp);
+
+  const acting = applyOpportunityMultipliers(deciders, (d) => {
+    const candidates = stockCandidates(
+      corpsByCountry.get(d.countryId)!,
+      d.homeCurrency,
+      d.riskToleranceMult
+    );
+    if (candidates.length === 0) return 0;
+    const best = Math.max(...candidates.map((c) => c.valueRatio));
+    return stockBuyOpportunity(best, stockMinValueRatio(d.riskToleranceMult));
+  });
+  if (acting.length === 0) return;
+
+  const [fxByCcy, pools] = await Promise.all([
+    loadFxRatesByCurrency(db),
+    loadEquityPoolsByCurrency(db),
+  ]);
+  const partitions = groupInOrder(acting, (d) => d.homeCurrency);
+  // A corp without a liquid currency settles in its country's default pool,
+  // which can differ from the partition's currency under a seed preset. Then
+  // two partitions could share a pool, so they settle one at a time instead.
+  const disjoint = acting.every((d) =>
+    corpsByCountry
+      .get(d.countryId)!
+      .every(
+        (c) =>
+          (c.liquidCurrencyCode ?? "USD") !== d.homeCurrency ||
+          equityPoolCurrency(c) === d.homeCurrency
+      )
+  );
+
+  await boundedParallelMap(partitions, disjoint ? partitionConcurrency : 1, async (partition) => {
+    const currency = partition[0].homeCurrency;
+    const rng = makeSeededRng(`npp-stock-invest:${currentTurn}:${currency}${NPP_ACTION_RNG_SALT}`);
+    const homeRate = fxByCcy.get(currency) ?? 1;
+    for (const d of partition) {
+      if (rng() >= d.baseProbability * d.multiplier) continue;
+      // Live candidates: an earlier buy this sweep may have thinned a float.
+      const candidates = stockCandidates(
+        corpsByCountry.get(d.countryId)!,
+        d.homeCurrency,
+        d.riskToleranceMult
+      );
+      if (candidates.length === 0) continue;
+      const chosen = candidates[pickStockCandidate(candidates, d.riskToleranceMult, rng())];
+      const shares = stockBuyShares(d.cashAnchor, d.saveInvestAppetiteMult, homeRate, chosen);
+      if (shares < 1) continue;
+      const result = await nppBuyShares(
+        db,
+        d.npp,
+        chosen.corp._id,
+        shares,
+        homeRate,
+        chosen.corp,
+        preset,
+        pools
+      );
+      if (result.ok) chosen.corp.publicFloat = (chosen.corp.publicFloat ?? 0) - shares;
+    }
+  });
+}
 
 /** Group items by key, keeping both first-seen key order and item order. */
 export function groupInOrder<T>(items: readonly T[], keyOf: (item: T) => string): T[][] {
@@ -1160,7 +1576,8 @@ export async function sellNppStockSurplus(
   db: Db,
   currentTurn: number,
   countryScope: CountryId[] | null = null,
-  preset?: string
+  preset?: string,
+  engine6 = false
 ): Promise<void> {
   const corps = await db
     .collection<Corporation>("corporations")
@@ -1217,8 +1634,17 @@ export async function sellNppStockSurplus(
     sharesToSell: number;
     homeRate: number;
   }[] = [];
+  // Every holding that may be sold, with its price signal and engine 5 chance.
+  // A risk-tolerant holder is slower to bail; a cautious one takes the gain.
+  const candidates: {
+    corp: (typeof corps)[number];
+    holding: NonNullable<(typeof corps)[number]["shareholders"]>[number];
+    nppId: ObjectId;
+    priceRatio: number;
+    riskMult: number;
+  }[] = [];
   for (const corp of corps) {
-    // Sell pressure now responds to price. Above fundamentals, NPPs take profits;
+    // Sell pressure responds to price. Above fundamentals, NPPs take profits;
     // underwater, they sit on the position. That's loss aversion, and it's what
     // makes a flat 3% coin flip stop looking like a random number generator with
     // a brokerage account.
@@ -1232,27 +1658,37 @@ export async function sellNppStockSurplus(
       if (corp.ceoId?.equals(holding.nppId)) continue; // never sweep-sell a CEO's own stake
 
       const personality = personalityById.get(holding.nppId.toString());
-      // A risk-tolerant holder is slower to bail; a cautious one takes the gain.
       const riskMult = personality
         ? careerArchetypeModifiersContinuous(personality).riskToleranceMult
         : 1;
-      const sellProbability = NPP_STOCK_SELL_BASE_PROBABILITY * priceRatio * (2 - riskMult);
-      if (rng() >= sellProbability) continue;
-
-      // Trim size varies with conviction rather than being a flat half every time.
-      const sellFraction = NPP_STOCK_SELL_FRACTION * Math.min(Math.max(priceRatio, 0.6), 1.4);
-      const sharesToSell = Math.floor(holding.shares * Math.min(sellFraction, 1));
-      if (sharesToSell < 1) continue;
-
-      const countryId = countryById.get(holding.nppId.toString()) as CountryId | undefined;
-      if (!countryId) continue;
-      const homeCurrency = preset
-        ? getSeedCurrencyCode(countryId as CountryId, preset)
-        : (COUNTRY_CURRENCY_MAP[countryId as CountryId] ?? "USD");
-      const homeRate = fxByCcy.get(homeCurrency) ?? 1;
-
-      sales.push({ corp, holding, nppId: holding.nppId, countryId, sharesToSell, homeRate });
+      candidates.push({ corp, holding, nppId: holding.nppId, priceRatio, riskMult });
     }
+  }
+
+  // Engine 5 scales each chance by the clamped price ratio. At v6 (NPP engine
+  // 6) the response to overvaluation is sharper, normalized so the expected
+  // number of sales over these holdings is the engine 5 one and no holding's
+  // chance exceeds the engine 5 ceiling; see v6/rules/opportunityInvesting.ts.
+  const sellProbabilities = engine6
+    ? v6SellProbabilities(candidates)
+    : candidates.map((c) => NPP_STOCK_SELL_BASE_PROBABILITY * c.priceRatio * (2 - c.riskMult));
+
+  for (const [i, { corp, holding, nppId, priceRatio }] of candidates.entries()) {
+    if (rng() >= sellProbabilities[i]) continue;
+
+    // Trim size varies with conviction rather than being a flat half every time.
+    const sellFraction = NPP_STOCK_SELL_FRACTION * Math.min(Math.max(priceRatio, 0.6), 1.4);
+    const sharesToSell = Math.floor(holding.shares * Math.min(sellFraction, 1));
+    if (sharesToSell < 1) continue;
+
+    const countryId = countryById.get(nppId.toString()) as CountryId | undefined;
+    if (!countryId) continue;
+    const homeCurrency = preset
+      ? getSeedCurrencyCode(countryId as CountryId, preset)
+      : (COUNTRY_CURRENCY_MAP[countryId as CountryId] ?? "USD");
+    const homeRate = fxByCcy.get(homeCurrency) ?? 1;
+
+    sales.push({ corp, holding, nppId, countryId, sharesToSell, homeRate });
   }
 
   // Each draw above reads only the preloaded book, so the sales are fixed
@@ -1283,6 +1719,20 @@ export async function sellNppStockSurplus(
       }
     }
   );
+}
+
+/** Per-holding v6 sell chances; see the call site in `sellNppStockSurplus`. */
+function v6SellProbabilities(
+  candidates: readonly { priceRatio: number; riskMult: number }[]
+): number[] {
+  const base = candidates.map((c) => NPP_STOCK_SELL_BASE_PROBABILITY * (2 - c.riskMult));
+  const multipliers = volumeNormalizedMultipliers(
+    candidates.map((c) => stockSellOpportunity(c.priceRatio)),
+    base,
+    candidates.reduce((sum, c, i) => sum + base[i] * c.priceRatio, 0),
+    OPPORTUNITY_SELL_CAP
+  );
+  return base.map((p, i) => p * multipliers[i]);
 }
 
 /**
