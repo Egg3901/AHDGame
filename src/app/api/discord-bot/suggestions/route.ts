@@ -10,6 +10,7 @@ import { getNextSuggestionNumber } from "@/lib/suggestionCounter";
 import { createPlayerSuggestionGitHubIssue } from "@/lib/github";
 import { createNotification } from "@/lib/notifications";
 import { notifyNewSuggestionDiscord } from "@/lib/discordWebhooks";
+import { resolveSuggestionReporterIdentity } from "@/lib/suggestions/reporterIdentity";
 import { getSuggestionsCollection } from "@/lib/db/collections/suggestions";
 import type { Suggestion, User } from "@/lib/db/types";
 import type { SuggestionCategory, SuggestionGameSystem } from "@/lib/db/types/suggestion";
@@ -49,6 +50,12 @@ const schema = z.object({
   discordUsername: z.string().optional(),
   /** Discord global display name (from the bot) — shown in-game and on webhook embeds when unlinked. */
   discordDisplayName: z.string().max(128).optional(),
+  /** Discord CDN avatar URL of the submitter, shown on the webhook post when unlinked. */
+  discordAvatarUrl: z
+    .string()
+    .max(512)
+    .regex(/^https:\/\/cdn\.discordapp\.com\//)
+    .optional(),
 });
 
 // POST /api/discord-bot/suggestions — Submit a suggestion from Discord (/suggest command).
@@ -116,6 +123,7 @@ export async function POST(request: Request) {
             ...(body.discordDisplayName?.trim()
               ? { discordSubmitDisplayName: body.discordDisplayName.trim().slice(0, 128) }
               : {}),
+            ...(body.discordAvatarUrl ? { discordSubmitAvatarUrl: body.discordAvatarUrl } : {}),
           }
         : {}),
       category: body.category as SuggestionCategory,
@@ -186,6 +194,7 @@ export async function POST(request: Request) {
         detailUrl,
         githubIssueUrl,
         gameSystem: doc.gameSystem,
+        reporterIdentity: await resolveSuggestionReporterIdentity(db, doc, baseUrl),
       });
       if (discordStatus === "posted") {
         await coll.updateOne(

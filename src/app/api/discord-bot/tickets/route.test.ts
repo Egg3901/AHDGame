@@ -508,3 +508,108 @@ describe("POST /api/discord-bot/tickets filing context", () => {
     expect(db.collectionMocks.tickets.insertOne).not.toHaveBeenCalled();
   });
 });
+
+describe("PATCH /api/discord-bot/tickets merge", () => {
+  let db: MockDb;
+  const tickets: Record<number, Record<string, unknown>> = {};
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    db = createMockDb();
+    const { getDb } = await import("@/lib/mongodb");
+    vi.mocked(getDb).mockResolvedValue(db as unknown as Db);
+    db.collection("tickets");
+    for (const k of Object.keys(tickets)) delete tickets[Number(k)];
+    tickets[1539] = { ticketNumber: 1539, status: "open", category: "incident" };
+    tickets[1540] = { ticketNumber: 1540, status: "open", category: "bug", discordUserId: "777" };
+    db.collectionMocks.tickets.findOne.mockImplementation(
+      async (filter: { ticketNumber?: number }) => {
+        const t = filter.ticketNumber != null ? tickets[filter.ticketNumber] : undefined;
+        return t ? { ...t } : null;
+      }
+    );
+    db.collectionMocks.tickets.updateOne.mockResolvedValue({ matchedCount: 1, modifiedCount: 1 });
+  });
+
+  const merge = async (body: Record<string, unknown>) => {
+    const { PATCH } = await import("./route");
+    return PATCH(
+      new Request("https://example.com/api/discord-bot/tickets", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action: "merge", ...body }),
+      })
+    );
+  };
+
+  it("closes the repeat ticket and records it on the incident once", async () => {
+    const res = await merge({
+      ticketNumber: 1540,
+      targetTicketNumber: 1539,
+      mergedBy: "333",
+      reason: "same outage",
+    });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual(
+      expect.objectContaining({ ok: true, targetTicketNumber: 1539, targetCategory: "incident" })
+    );
+    const calls = db.collectionMocks.tickets.updateOne.mock.calls;
+    expect(calls[0][0]).toEqual({
+      ticketNumber: 1539,
+      "mergedTickets.ticketNumber": { $ne: 1540 },
+    });
+    expect(calls[0][1].$push.mergedTickets).toEqual(
+      expect.objectContaining({ ticketNumber: 1540, discordUserId: "777", mergedBy: "333" })
+    );
+    expect(calls[1][0]).toEqual({
+      ticketNumber: 1540,
+      $or: [{ mergedInto: { $exists: false } }, { mergedInto: 1539 }],
+    });
+    expect(calls[1][1].$set).toEqual(
+      expect.objectContaining({
+        status: "closed",
+        mergedInto: 1539,
+        mergedBy: "333",
+        closedBy: "333",
+      })
+    );
+    expect(calls[1][1].$push.statusHistory.note).toBe("merged into #1539: same outage");
+  });
+
+  it("is idempotent once the merge is recorded", async () => {
+    tickets[1540] = { ...tickets[1540], status: "closed", mergedInto: 1539 };
+    const res = await merge({ ticketNumber: 1540, targetTicketNumber: 1539 });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual(expect.objectContaining({ alreadyMerged: true }));
+    expect(db.collectionMocks.tickets.updateOne).toHaveBeenCalledTimes(1);
+  });
+
+  it("refuses self merges, closed targets, missing tickets and a second target", async () => {
+    expect((await merge({ ticketNumber: 1539, targetTicketNumber: 1539 })).status).toBe(400);
+    tickets[1539].status = "closed";
+    expect((await merge({ ticketNumber: 1540, targetTicketNumber: 1539 })).status).toBe(409);
+    expect((await merge({ ticketNumber: 1540, targetTicketNumber: 9999 })).status).toBe(404);
+    expect((await merge({ ticketNumber: 4242, targetTicketNumber: 1539 })).status).toBe(404);
+    tickets[1539].status = "open";
+    tickets[1540] = { ...tickets[1540], mergedInto: 1500 };
+    expect((await merge({ ticketNumber: 1540, targetTicketNumber: 1539 })).status).toBe(409);
+    expect(db.collectionMocks.tickets.updateOne).not.toHaveBeenCalled();
+  });
+
+  it("accepts the incident category on create", async () => {
+    const { POST } = await import("./route");
+    db.collectionMocks.tickets.insertOne.mockResolvedValue({ insertedId: "x" });
+    const res = await POST(
+      new Request("https://example.com/api/discord-bot/tickets", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          category: "incident",
+          title: "Turn processing stalled",
+          description: "Turn 180 has not processed for 40 minutes.",
+        }),
+      })
+    );
+    expect(res.status).toBeLessThan(300);
+  });
+});

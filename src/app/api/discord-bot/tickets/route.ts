@@ -103,7 +103,8 @@ const ticketStatusEnum = z.enum([
 ]);
 
 const createSchema = z.object({
-  category: z.enum(["bug", "moderation", "account", "gameplay", "other"]),
+  // `incident` is staff-only; the bot checks the opener's roles before calling.
+  category: z.enum(["bug", "moderation", "account", "gameplay", "other", "incident"]),
   // .trim() before .min(1) so whitespace-only titles/descriptions are rejected.
   title: z.string().trim().min(1).max(200),
   description: z.string().trim().min(1).max(5000),
@@ -197,6 +198,14 @@ const updateSchema = z
       resolution: z.string().max(5000).optional(),
     }),
     z.object({ action: z.literal("retriage"), ...ticketIdFields }),
+    z.object({
+      /** Close the identified ticket as a repeat of `targetTicketNumber` (usually an incident). */
+      action: z.literal("merge"),
+      ...ticketIdFields,
+      targetTicketNumber: z.number().int().positive(),
+      mergedBy: z.string().max(128).optional(),
+      reason: z.string().max(500).optional(),
+    }),
     z.object({
       action: z.literal("resolution-channel-delivered"),
       ...ticketIdFields,
@@ -667,6 +676,93 @@ export async function PATCH(request: Request) {
         return errorResponse(404, "Ticket not found");
       }
       return NextResponse.json({ ok: true });
+    }
+
+    if (body.action === "merge") {
+      const source = await coll.findOne(filter, {
+        projection: { ticketNumber: 1, status: 1, mergedInto: 1, discordUserId: 1 },
+      });
+      if (!source) return errorResponse(404, "Ticket not found");
+      if (source.ticketNumber === body.targetTicketNumber) {
+        return errorResponse(400, "A ticket cannot be merged into itself");
+      }
+      if (source.mergedInto != null && source.mergedInto !== body.targetTicketNumber) {
+        return errorResponse(409, `Ticket was already merged into #${source.mergedInto}`);
+      }
+      const target = await coll.findOne(
+        { ticketNumber: body.targetTicketNumber },
+        { projection: { ticketNumber: 1, status: 1, category: 1, mergedInto: 1 } }
+      );
+      if (!target) return errorResponse(404, "Target ticket not found");
+      if (target.mergedInto != null) {
+        return errorResponse(409, `Target was itself merged into #${target.mergedInto}`);
+      }
+      if (target.status === "closed" || target.status === "wont_fix") {
+        return errorResponse(409, "Target ticket is closed");
+      }
+      const mergedBy = body.mergedBy?.slice(0, 128);
+      const note =
+        `merged into #${body.targetTicketNumber}${body.reason ? `: ${body.reason}` : ""}`.slice(
+          0,
+          600
+        );
+      // Record the link on the target once, then close the source. Both writes
+      // are guarded so a retry after a partial failure completes the merge
+      // without duplicating the entry or the history event.
+      await coll.updateOne(
+        {
+          ticketNumber: body.targetTicketNumber,
+          "mergedTickets.ticketNumber": { $ne: source.ticketNumber },
+        },
+        {
+          $set: { updatedAt: now },
+          $push: {
+            mergedTickets: {
+              ticketNumber: source.ticketNumber,
+              ...(source.discordUserId ? { discordUserId: source.discordUserId } : {}),
+              mergedAt: now,
+              ...(mergedBy ? { mergedBy } : {}),
+            },
+          },
+        }
+      );
+      if (source.mergedInto === body.targetTicketNumber && source.status === "closed") {
+        return NextResponse.json({
+          ok: true,
+          alreadyMerged: true,
+          targetTicketNumber: body.targetTicketNumber,
+        });
+      }
+      await coll.updateOne(
+        {
+          ticketNumber: source.ticketNumber,
+          $or: [{ mergedInto: { $exists: false } }, { mergedInto: body.targetTicketNumber }],
+        },
+        {
+          $set: {
+            status: "closed",
+            mergedInto: body.targetTicketNumber,
+            mergedAt: now,
+            closedAt: now,
+            updatedAt: now,
+            ...(mergedBy ? { mergedBy, closedBy: mergedBy } : {}),
+          },
+          $push: {
+            statusHistory: {
+              status: "closed",
+              at: now,
+              source: "bot",
+              note,
+              ...(mergedBy ? { by: mergedBy } : {}),
+            },
+          },
+        }
+      );
+      return NextResponse.json({
+        ok: true,
+        targetTicketNumber: body.targetTicketNumber,
+        targetCategory: target.category,
+      });
     }
 
     if (body.action === "retriage") {
