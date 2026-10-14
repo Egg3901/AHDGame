@@ -136,6 +136,7 @@ export async function processNppMortality(
   let deaths = 0;
   let replacements = 0;
   const deadIds: ObjectId[] = [];
+  const successions: Array<{ deadId: ObjectId; successor: NPP }> = [];
 
   for (const npp of candidates) {
     // Belt-and-braces with the query filter above. The pure eligibility rule
@@ -204,47 +205,13 @@ export async function processNppMortality(
         );
     }
 
-    // The successor also inherits the dead NPP's cabinet posts and national
-    // leadership, so neither keeps pointing at a retired NPP.
-    await db
-      .collection<CabinetMember>("cabinetMembers")
-      .updateMany(
-        { nppId: npp._id },
-        { $set: { nppId: replacement._id, characterName: replacement.name, updatedAt: now } }
-      );
-    await db
-      .collection<CountryLeaderState>("countryLeaderStates")
-      .updateMany({ leaderNppId: npp._id }, { $set: { leaderNppId: replacement._id } });
-
-    // A player company the dead NPP was caretaking keeps a caretaker: the
-    // successor takes the seat, and the owner's stashed CEO and mandate stay.
-    const caretaken = await db
-      .collection<Corporation>("corporations")
-      .find({ ceoId: npp._id, caretakerCeo: { $exists: true } }, { projection: { _id: 1 } })
-      .toArray();
-    if (caretaken.length > 0) {
-      await db
-        .collection<Corporation>("corporations")
-        .updateMany(
-          { _id: { $in: caretaken.map((corp) => corp._id) } },
-          { $set: { ceoId: replacement._id as ObjectId, updatedAt: now } }
-        );
-      if (opts.turn != null) {
-        for (const corp of caretaken) {
-          await closeCeoTenure(db, corp._id, { holderId: npp._id as ObjectId, turn: opts.turn });
-          await openCeoTenure(db, corp._id, {
-            holderId: replacement._id as ObjectId,
-            ceoType: "npp",
-            turn: opts.turn,
-          });
-        }
-      }
-    }
-
+    successions.push({ deadId: npp._id as ObjectId, successor: replacement });
     deadIds.push(npp._id as ObjectId);
     deaths += 1;
     replacements += 1;
   }
+
+  if (successions.length > 0) await seatSuccessors(db, successions, now, opts.turn);
 
   // A dead NPP must not stay on as a company's CEO. Its NPP-run companies are
   // marked vacant, so the caretaker step seats a living NPP next turn (by
@@ -259,4 +226,76 @@ export async function processNppMortality(
   }
 
   return { deaths, replacements };
+}
+
+/**
+ * The successor also takes the dead NPP's cabinet posts, its national
+ * leadership, and any player company it was caretaking (the owner's stash and
+ * mandate stay). One batched write per collection for the whole pass.
+ */
+async function seatSuccessors(
+  db: Db,
+  successions: Array<{ deadId: ObjectId; successor: NPP }>,
+  now: Date,
+  turn: number | undefined
+): Promise<void> {
+  const successorOf = new Map(successions.map((s) => [s.deadId.toHexString(), s.successor]));
+
+  await db.collection<CabinetMember>("cabinetMembers").bulkWrite(
+    successions.map(({ deadId, successor }) => ({
+      updateMany: {
+        filter: { nppId: deadId },
+        update: {
+          $set: {
+            nppId: successor._id as ObjectId,
+            characterName: successor.name,
+            updatedAt: now,
+          },
+        },
+      },
+    })),
+    { ordered: false }
+  );
+  await db.collection<CountryLeaderState>("countryLeaderStates").bulkWrite(
+    successions.map(({ deadId, successor }) => ({
+      updateMany: {
+        filter: { leaderNppId: deadId },
+        update: { $set: { leaderNppId: successor._id as ObjectId } },
+      },
+    })),
+    { ordered: false }
+  );
+
+  const caretaken = await db
+    .collection<Corporation>("corporations")
+    .find(
+      { ceoId: { $in: successions.map((s) => s.deadId) }, caretakerCeo: { $exists: true } },
+      { projection: { _id: 1, ceoId: 1 } }
+    )
+    .toArray();
+  const reseats = caretaken.flatMap((corp) => {
+    const successor = corp.ceoId ? successorOf.get(corp.ceoId.toHexString()) : undefined;
+    return successor && corp.ceoId ? [{ corp, deadId: corp.ceoId, successor }] : [];
+  });
+  if (reseats.length === 0) return;
+  await db.collection<Corporation>("corporations").bulkWrite(
+    reseats.map(({ corp, successor }) => ({
+      updateOne: {
+        filter: { _id: corp._id },
+        update: { $set: { ceoId: successor._id as ObjectId, updatedAt: now } },
+      },
+    })),
+    { ordered: false }
+  );
+  if (turn == null) return;
+  await Promise.all(
+    reseats.map(async ({ corp, deadId, successor }) => {
+      await closeCeoTenure(db, corp._id, { holderId: deadId, turn });
+      await openCeoTenure(db, corp._id, {
+        holderId: successor._id as ObjectId,
+        ceoType: "npp",
+        turn,
+      });
+    })
+  );
 }

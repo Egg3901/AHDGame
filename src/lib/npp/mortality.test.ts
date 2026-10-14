@@ -201,7 +201,7 @@ describe("processNppMortality", () => {
     db.collection("countryLeaderStates");
     db.collection("corporations");
     db.collectionMocks["corporations"].find.mockReturnValue({
-      toArray: vi.fn().mockResolvedValue([{ _id: caretakenCorpId }]),
+      toArray: vi.fn().mockResolvedValue([{ _id: caretakenCorpId, ceoId: dead._id }]),
     });
     seedNpps([dead]);
 
@@ -212,26 +212,43 @@ describe("processNppMortality", () => {
       mintReplacement: mintStub,
     });
 
-    expect(db.collectionMocks["cabinetMembers"].updateMany).toHaveBeenCalledWith(
-      { nppId: dead._id },
-      expect.objectContaining({
-        $set: expect.objectContaining({
-          nppId: expect.any(ObjectId),
-          characterName: "Replacement Person",
-        }),
-      })
+    expect(db.collectionMocks["cabinetMembers"].bulkWrite).toHaveBeenCalledWith(
+      [
+        {
+          updateMany: {
+            filter: { nppId: dead._id },
+            update: {
+              $set: expect.objectContaining({
+                nppId: expect.any(ObjectId),
+                characterName: "Replacement Person",
+              }),
+            },
+          },
+        },
+      ],
+      { ordered: false }
     );
-    expect(db.collectionMocks["countryLeaderStates"].updateMany).toHaveBeenCalledWith(
-      { leaderNppId: dead._id },
-      { $set: { leaderNppId: expect.any(ObjectId) } }
+    expect(db.collectionMocks["countryLeaderStates"].bulkWrite).toHaveBeenCalledWith(
+      [
+        {
+          updateMany: {
+            filter: { leaderNppId: dead._id },
+            update: { $set: { leaderNppId: expect.any(ObjectId) } },
+          },
+        },
+      ],
+      { ordered: false }
     );
-    expect(db.collectionMocks["corporations"].find).toHaveBeenCalledWith(
-      { ceoId: dead._id, caretakerCeo: { $exists: true } },
-      { projection: { _id: 1 } }
-    );
-    expect(db.collectionMocks["corporations"].updateMany).toHaveBeenCalledWith(
-      { _id: { $in: [caretakenCorpId] } },
-      expect.objectContaining({ $set: expect.objectContaining({ ceoId: expect.any(ObjectId) }) })
+    expect(db.collectionMocks["corporations"].bulkWrite).toHaveBeenCalledWith(
+      [
+        {
+          updateOne: {
+            filter: { _id: caretakenCorpId },
+            update: { $set: expect.objectContaining({ ceoId: expect.any(ObjectId) }) },
+          },
+        },
+      ],
+      { ordered: false }
     );
   });
 
