@@ -27,6 +27,8 @@ export interface GroupDirection {
   objective: GroupObjective;
   regions: string[];
   allowInvestment: boolean;
+  /** Optional opt-in mandate; absent preserves unrestricted industry selection. */
+  primaryIndustryOnly?: boolean;
   setTurn: number;
   response: "pending" | "acknowledged" | "declined";
   /** Binds player responses to the operator who received the suggestion. */

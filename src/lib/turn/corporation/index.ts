@@ -96,7 +96,7 @@ import {
   emitCorporationTurnTx,
 } from "./corporationTurnPhases";
 import { getGameState } from "@/lib/gameState";
-import { unprotectedConstructionPropertyFilter } from "@/lib/corporations/securedConstructionProperty";
+import { deleteDivestedNppSectors } from "../npp/divestmentPersistence";
 import { requestConstructionFinance } from "@/lib/banking/constructionFinance";
 import { makeSeededRng } from "@/lib/events/substrate/rng";
 import { logger } from "../../observability/logger";
@@ -846,12 +846,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
   }
 
   // Divest losing NPP sectors, remove from corporateSectors
-  if (nppDivestedSectorIds.length > 0) {
-    await db.collection("corporateSectors").deleteMany({
-      _id: { $in: nppDivestedSectorIds },
-      ...unprotectedConstructionPropertyFilter(),
-    });
-  }
+  await deleteDivestedNppSectors(db, nppDivestedSectorIds);
 
   // v2: persist the per-state labour wage index (+ v2-3b: automation index) to
   // stateMetrics, see persistLabourIndices for the prior-value delta capture.

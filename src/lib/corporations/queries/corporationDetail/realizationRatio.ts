@@ -46,11 +46,14 @@ export async function computeRevenueRealizationRatio(
     return sum + (toCorpCurrency(sector.revenue, sector) * multiplier) / TURNS_PER_DAY;
   }, 0);
 
-  const realizedHourly = typeof latest?.revenue === "number" ? latest.revenue : null;
+  const latestRevenue = latest?.revenue;
+  const realizedHourly =
+    typeof latestRevenue === "number" && Number.isFinite(latestRevenue) ? latestRevenue : null;
 
   // No history yet (brand-new corp) or a degenerate nameplate total ⇒ there is
   // no correction we can trust. Fall back to the pre-fix nameplate behaviour
   // rather than dividing by ~0 or applying a ratio computed from nothing.
-  if (realizedHourly == null || nameplateHourly <= 0) return 1;
-  return Math.max(0, realizedHourly / nameplateHourly);
+  if (realizedHourly == null || !Number.isFinite(nameplateHourly) || nameplateHourly <= 0) return 1;
+  const ratio = realizedHourly / nameplateHourly;
+  return Number.isFinite(ratio) ? Math.max(0, ratio) : 1;
 }

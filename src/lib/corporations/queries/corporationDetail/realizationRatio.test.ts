@@ -75,6 +75,16 @@ describe("computeRevenueRealizationRatio (#587 / #925 / #2958)", () => {
     expect(ratio).toBeCloseTo(0.25, 10);
   });
 
+  it("falls back safely when history contains a non-finite revenue", async () => {
+    const db = {
+      collection: () => ({
+        findOne: vi.fn().mockResolvedValue({ revenue: Number.NaN }),
+      }),
+    } as unknown as Db;
+    const ratio = await computeRevenueRealizationRatio(db, CORP, [sector(1000)], identity);
+    expect(ratio).toBe(1);
+  });
+
   it("never returns a negative ratio", async () => {
     const ratio = await computeRevenueRealizationRatio(
       dbWith(-100),
