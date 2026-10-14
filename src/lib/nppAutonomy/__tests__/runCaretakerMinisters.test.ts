@@ -62,4 +62,40 @@ describe("runCaretakerMinisters", () => {
     expect(result.ran).toBe(true);
     expect(result.ordersIssued).toBe(0);
   });
+
+  it("reads every caretaker's setting and the country's active orders in one query each", async () => {
+    atLeastMock.mockResolvedValue(true);
+    const seat = (positionId: string) => ({
+      _id: new ObjectId(),
+      countryId: "US",
+      positionId,
+      isNPP: true,
+      nppId: new ObjectId(),
+      appointedByCharacterId: new ObjectId(),
+      ministerialActions: 0,
+    });
+    const seats = [seat("secretary_of_education"), seat("secretary_of_state")];
+    vi.mocked(db.collection("cabinetMembers").find).mockReturnValue(membersCursor(seats) as never);
+    vi.mocked(db.collection("npps").find).mockReturnValue(
+      membersCursor(
+        seats.map((s) => ({
+          _id: s.nppId,
+          personality: { ambition: 50, stubbornness: 50, loyalty: 50 },
+          policies: { economic: 0, social: 0 },
+        }))
+      ) as never
+    );
+    await runCaretakerMinisters(db as unknown as Db, "US", 100, now);
+    const settings = db.collectionMocks["cabinetSettings"];
+    expect(settings.find).toHaveBeenCalledTimes(1);
+    expect(settings.find.mock.calls[0][0]).toEqual({
+      _id: { $in: ["US_secretary_of_education", "US_secretary_of_state"] },
+    });
+    expect(settings.findOne).not.toHaveBeenCalled();
+    const orderReads = db.collectionMocks["ministerialOrders"].find.mock.calls.filter(
+      (call) => call[0]?.countryId === "US"
+    );
+    expect(orderReads).toEqual([[{ countryId: "US", active: true }]]);
+    expect(db.collectionMocks["ministerialOrders"].insertOne).not.toHaveBeenCalled();
+  });
 });

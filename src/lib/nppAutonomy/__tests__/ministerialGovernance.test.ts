@@ -325,11 +325,169 @@ describe("runMinisterialGovernance (I/O)", () => {
     const res = await runMinisterialGovernance(db as unknown as Db, "IE", 100, now);
     expect(res.ran).toBe(true);
     expect(res.ordersIssued).toBeGreaterThan(0);
-    const insertOne = db.collectionMocks["ministerialOrders"].insertOne as ReturnType<typeof vi.fn>;
-    const inserted = insertOne.mock.calls[0][0];
-    expect(inserted.isNPP).toBe(true);
-    expect(inserted.characterId).toBeNull();
-    expect(inserted.nppId).toBe(nppId);
+    const insertMany = db.collectionMocks["ministerialOrders"].insertMany as ReturnType<
+      typeof vi.fn
+    >;
+    expect(insertMany).toHaveBeenCalledTimes(1);
+    const inserted = insertMany.mock.calls[0][0];
+    expect(inserted).toHaveLength(res.ordersIssued);
+    expect(inserted[0].isNPP).toBe(true);
+    expect(inserted[0].characterId).toBeNull();
+    expect(inserted[0].nppId).toBe(nppId);
+    // One guarded spend covers every issued order.
+    const spend = db.collectionMocks["cabinetMembers"].updateOne as ReturnType<typeof vi.fn>;
+    expect(spend).toHaveBeenCalledTimes(1);
+    expect(spend.mock.calls[0][0].ministerialActions).toEqual({ $gte: res.ordersIssued });
+    expect(spend.mock.calls[0][1]).toEqual({ $inc: { ministerialActions: -res.ordersIssued } });
+  });
+
+  it("falls back to one-action spends when the guarded spend finds the pool short", async () => {
+    setup({
+      gov: {
+        _id: "IE",
+        status: "formed",
+        pmNppId: nppId,
+        governingAgenda: {
+          items: [{ domain: "economic_growth", target: 65, direction: "raise", priority: 1 }],
+        },
+      },
+      ministers: [
+        {
+          _id: new ObjectId(),
+          countryId: "IE",
+          positionId: "taoiseach",
+          isNPP: true,
+          nppId,
+          ministerialActions: 2,
+        },
+      ],
+      npps: [{ _id: nppId, personality: { ambition: 80, stubbornness: 20, loyalty: 50 } }],
+    });
+    const spend = db.collectionMocks["cabinetMembers"].updateOne as ReturnType<typeof vi.fn>;
+    // Guarded multi-action spend fails, then the pool covers exactly one more action.
+    spend
+      .mockReset()
+      .mockResolvedValueOnce({ modifiedCount: 0 })
+      .mockResolvedValueOnce({ modifiedCount: 1 })
+      .mockResolvedValue({ modifiedCount: 0 });
+    const res = await runMinisterialGovernance(db as unknown as Db, "IE", 100, now);
+    const planned = spend.mock.calls[0][0].ministerialActions.$gte as number;
+    expect(spend.mock.calls[0][1]).toEqual({ $inc: { ministerialActions: -planned } });
+    // Fallback: one-action spends until the pool runs dry (one succeeds, the
+    // next fails, unless the plan only wanted one).
+    expect(spend).toHaveBeenCalledTimes(planned > 1 ? 3 : 2);
+    expect(spend.mock.calls[1][0].ministerialActions).toEqual({ $gte: 1 });
+    expect(res.ordersIssued).toBe(1);
+    const insertMany = db.collectionMocks["ministerialOrders"].insertMany as ReturnType<
+      typeof vi.fn
+    >;
+    expect(insertMany.mock.calls[0][0]).toHaveLength(1);
+  });
+
+  it("issues nothing when the pool is empty under both spend paths", async () => {
+    setup({
+      gov: {
+        _id: "IE",
+        status: "formed",
+        pmNppId: nppId,
+        governingAgenda: {
+          items: [{ domain: "economic_growth", target: 65, direction: "raise", priority: 1 }],
+        },
+      },
+      ministers: [
+        {
+          _id: new ObjectId(),
+          countryId: "IE",
+          positionId: "taoiseach",
+          isNPP: true,
+          nppId,
+          ministerialActions: 2,
+        },
+      ],
+      npps: [{ _id: nppId, personality: { ambition: 80, stubbornness: 20, loyalty: 50 } }],
+    });
+    const spend = db.collectionMocks["cabinetMembers"].updateOne as ReturnType<typeof vi.fn>;
+    spend.mockReset().mockResolvedValue({ modifiedCount: 0 });
+    const res = await runMinisterialGovernance(db as unknown as Db, "IE", 100, now);
+    expect(res.ordersIssued).toBe(0);
+    expect(db.collectionMocks["ministerialOrders"].insertMany).not.toHaveBeenCalled();
+  });
+
+  it("reads settings and active orders once per country and batches tier writes", async () => {
+    setup({
+      gov: {
+        _id: "UK",
+        status: "formed",
+        pmNppId: nppId,
+        governingAgenda: {
+          items: [{ domain: "public_safety", target: 65, direction: "raise", priority: 1 }],
+        },
+      },
+      ministers: [
+        {
+          _id: new ObjectId(),
+          countryId: "UK",
+          positionId: "justice_secretary",
+          isNPP: true,
+          nppId,
+          ministerialActions: 0,
+        },
+        {
+          _id: new ObjectId(),
+          countryId: "UK",
+          positionId: "home_secretary",
+          isNPP: true,
+          nppId,
+          ministerialActions: 0,
+        },
+      ],
+      npps: [{ _id: nppId, personality: { ambition: 80, stubbornness: 20, loyalty: 50 } }],
+    });
+    const settings = db.collectionMocks["cabinetSettings"];
+    // The Home Secretary already stands on the best-aligned tier; the Justice
+    // Secretary has no setting row yet.
+    settings.find.mockReturnValue(
+      createAsyncIterableCursor([
+        {
+          _id: "UK_home_secretary",
+          countryId: "UK",
+          positionId: "home_secretary",
+          tierSetting: "strict",
+          lastChangedTurn: 10,
+        },
+      ])
+    );
+    const res = await runMinisterialGovernance(db as unknown as Db, "UK", 100, now);
+    expect(settings.find).toHaveBeenCalledTimes(1);
+    expect(settings.find.mock.calls[0][0]).toEqual({
+      _id: { $in: ["UK_justice_secretary", "UK_home_secretary"] },
+    });
+    expect(settings.findOne).not.toHaveBeenCalled();
+    expect(settings.updateOne).not.toHaveBeenCalled();
+    const orderFinds = (
+      db.collectionMocks["ministerialOrders"].find as ReturnType<typeof vi.fn>
+    ).mock.calls.filter((call) => call[0]?.countryId === "UK");
+    expect(orderFinds).toEqual([[{ countryId: "UK", active: true }]]);
+    expect(res.tiersSet).toBe(1);
+    expect(settings.bulkWrite).toHaveBeenCalledTimes(1);
+    const ops = settings.bulkWrite.mock.calls[0][0];
+    expect(ops).toEqual([
+      {
+        updateOne: {
+          filter: { _id: "UK_justice_secretary" },
+          update: {
+            $set: expect.objectContaining({
+              positionId: "justice_secretary",
+              tierSetting: "strict",
+              lastChangedTurn: 100,
+              isNPP: true,
+              characterId: null,
+            }),
+          },
+          upsert: true,
+        },
+      },
+    ]);
   });
 
   it("reshuffles a badly-underperforming minister under a reshuffle-prone head", () => {
