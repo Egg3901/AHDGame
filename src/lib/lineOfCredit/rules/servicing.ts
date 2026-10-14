@@ -20,6 +20,10 @@ export interface LocServiceInput {
   centralBankSpread: number;
   incomeInternal: number;
 }
+function floorCurrencyAmount(amount: number, currency: CurrencyCode): number {
+  return currency === "JPY" ? Math.floor(amount + 1e-9) : Math.floor(amount * 100 + 1e-9) / 100;
+}
+
 /** Original service arithmetic, shared by first delivery and refused-savings requotes. */
 export function quoteLocService(input: LocServiceInput) {
   const { loc, rates, spread, incomeInternal } = input;
@@ -102,7 +106,7 @@ export function quoteLocService(input: LocServiceInput) {
     if (cRate && cRate > 0) scheduledInternalTotal += toInternalUnits(scheduled, cRate);
 
     const walletC = availableBalance[c] ?? 0;
-    let pay = Math.min(scheduled, walletC);
+    let pay = floorCurrencyAmount(Math.min(scheduled, walletC), c);
     const walletPay = pay;
 
     // If the loan-currency wallet falls short, convert from other currencies.
