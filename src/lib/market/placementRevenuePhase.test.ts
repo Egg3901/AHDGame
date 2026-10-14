@@ -73,3 +73,50 @@ describe("placementRevenuePhaseStartTurnFrom", () => {
     expect(placementRevenuePhaseStartTurnFrom({ placementRevenuePhaseStartTurn: 205 })).toBe(205);
   });
 });
+
+describe("revenue placement excludes freight-limited output", () => {
+  it("merges placed and delivery-limited shares, capped at 1", async () => {
+    const { revenuePlacementRatios } = await import("./rules/outputPlacement");
+    const merged = revenuePlacementRatios(
+      new Map([
+        ["iron", 0.3],
+        ["coal", 0.9],
+      ]),
+      new Map([
+        ["iron", 0.7],
+        ["coal", 0.5],
+      ])
+    )!;
+    expect(merged.get("iron")).toBeCloseTo(1, 10);
+    expect(merged.get("coal")).toBe(1);
+    expect(revenuePlacementRatios(undefined, new Map())).toBeUndefined();
+  });
+
+  it("a freight-limited seller keeps its revenue at full phase, a glutted one does not", () => {
+    const sell = (revenuePlacementByCommodity?: Partial<Record<"coal", number>>) =>
+      computeClearingFactors({
+        sectors: [
+          {
+            sectorId: "mine",
+            revenue: 0,
+            supplyRates: { coal: 1 },
+            producedUnits: 100,
+            posture: 0,
+            offerPlacementByCommodity: { coal: 0.3 },
+            ...(revenuePlacementByCommodity ? { revenuePlacementByCommodity } : {}),
+          },
+        ],
+        balances: new Map([["coal", { supply: 100, demand: 1000 }]]),
+        priceRatioByCommodity: new Map(),
+        basePrices: COMMODITY_BASE_PRICES,
+        plantsEnabled: true,
+        placementRevenuePhase: 1,
+      }).get("mine")!.soldFraction;
+    // 30% placed, the other 70% stuck behind freight: revenue placement 1.
+    expect(sell({ coal: 1 })).toBeCloseTo(1, 6);
+    // 30% placed, the rest had no buyer: revenue placement 0.3.
+    expect(sell({ coal: 0.3 })).toBeCloseTo(0.3, 6);
+    // No revenue figure: falls back to the offer placement.
+    expect(sell()).toBeCloseTo(0.3, 6);
+  });
+});
