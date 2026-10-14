@@ -213,7 +213,10 @@ export async function creditNppPickup(
       targetGrowthRate: 0,
       currentGrowthRate: 0,
       currentGrowthCost: 0,
-      // Host-currency nameplate, restated from capacity on the next turn.
+      // PLANTS-GATED: pickups only run under plants (`disposeLeavingSectors`
+      // filters on `plantsEnabled`), so this host-currency nameplate is the
+      // donor's scaled with the carved capacity and is restated from
+      // `capitalStock` on the next turn.
       revenue: Math.round((sector.revenue ?? 0) * share),
       profitMargin: sector.profitMargin,
       workers,
@@ -288,35 +291,59 @@ export async function disposeLeavingSectors(
       pickup: NonNullable<CorporateSector["nppPickup"]>;
     }> = [];
 
+    // 1. Choose a receiver for every row not already marked by an earlier try.
+    const proposals = new Map<string, NonNullable<CorporateSector["nppPickup"]>>();
     for (const sector of eligible) {
+      if (sector.nppPickup) continue;
       const hostCountry = hostByState.get(sector.stateId) ?? sector.countryId;
-      let pickup = sector.nppPickup;
-      if (!pickup) {
-        const receiver = await chooseNppPickupReceiver(
-          db,
-          owner,
-          sector,
-          hostCountry,
-          nppCorpIds,
-          now
-        );
-        if (!receiver) {
-          remainders.push(sector);
-          continue;
-        }
-        const proposed = { key: `npp-pickup:${sector._id.toHexString()}`, ...receiver };
+      const receiver = await chooseNppPickupReceiver(
+        db,
+        owner,
+        sector,
+        hostCountry,
+        nppCorpIds,
+        now
+      );
+      if (receiver) {
+        proposals.set(sector._id.toHexString(), {
+          key: `npp-pickup:${sector._id.toHexString()}`,
+          ...receiver,
+        });
+      }
+    }
+
+    // 2. Commit the receivers before any capacity moves, then read back what
+    //    won (a concurrent retry may have marked a row first).
+    if (proposals.size > 0) {
+      await db.collection<CorporateSector>("corporateSectors").bulkWrite(
+        [...proposals].map(([id, proposed]) => ({
+          updateOne: {
+            filter: { _id: new ObjectId(id), nppPickup: { $exists: false } },
+            update: { $set: { nppPickup: proposed } },
+          },
+        })),
+        { ordered: false }
+      );
+    }
+    const storedMarkers = new Map(
+      (
         await db
           .collection<CorporateSector>("corporateSectors")
-          .updateOne(
-            { _id: sector._id, nppPickup: { $exists: false } },
-            { $set: { nppPickup: proposed } }
-          );
-        const stored = await db
-          .collection<CorporateSector>("corporateSectors")
-          .findOne({ _id: sector._id }, { projection: { nppPickup: 1 } });
-        pickup = stored?.nppPickup ?? proposed;
-      }
+          .find({ _id: { $in: eligible.map((s) => s._id) } })
+          .project<Pick<CorporateSector, "_id" | "nppPickup">>({ nppPickup: 1 })
+          .toArray()
+      ).map((row) => [row._id.toHexString(), row.nppPickup])
+    );
 
+    // 3. Credit each receiver and queue the kept share for the pool.
+    for (const sector of eligible) {
+      const id = sector._id.toHexString();
+      const pickup = storedMarkers.get(id) ?? sector.nppPickup ?? proposals.get(id);
+      if (!pickup) {
+        remainders.push(sector);
+        continue;
+      }
+      const hostCountry = hostByState.get(sector.stateId) ?? sector.countryId;
       const fields = readSectorPlantFields(sector);
       const opening = seedPlantLedger(
         sector.sectorType as CorporationType,
@@ -367,36 +394,46 @@ async function repointContracts(
     ).map((c) => [c._id.toHexString(), c.countryId])
   );
 
-  const defence = db.collection<DefenceContract>("defenceContracts");
-  for (const { sector, pickup } of handedOff) {
-    await defence.updateMany(
-      {
+  const defenceOps = handedOff.map(({ sector, pickup }) => ({
+    updateMany: {
+      filter: {
         corporationId: ownerId,
         sectorId: sector._id,
         countryId: receiverCountry.get(pickup.receiverCorporationId.toHexString()) as CountryId,
       },
-      {
+      update: {
         $set: { corporationId: pickup.receiverCorporationId, sectorId: pickup.receiverSectorId },
-      }
-    );
-  }
+      },
+    },
+  }));
+  await db.collection<DefenceContract>("defenceContracts").bulkWrite(defenceOps, {
+    ordered: false,
+  });
 
-  const leavingIds = new Set(handedOff.map((h) => h.sector._id.toHexString()));
-  const contracts = await getExtractionContractsCollection(db);
-  const handledStates = new Set<string>();
+  const extractionReceiverByState = new Map<string, ObjectId>();
   for (const { sector, pickup } of handedOff) {
-    if (sector.sectorType !== "extraction" || handledStates.has(sector.stateId)) continue;
-    handledStates.add(sector.stateId);
-    const stillOperating = await db.collection<CorporateSector>("corporateSectors").countDocuments({
+    if (sector.sectorType === "extraction" && !extractionReceiverByState.has(sector.stateId)) {
+      extractionReceiverByState.set(sector.stateId, pickup.receiverCorporationId);
+    }
+  }
+  if (extractionReceiverByState.size === 0) return;
+  const stillOperating = new Set(
+    await db.collection<CorporateSector>("corporateSectors").distinct("stateId", {
       corporationId: ownerId,
-      stateId: sector.stateId,
+      stateId: { $in: [...extractionReceiverByState.keys()] },
       sectorType: "extraction",
-      _id: { $nin: [...leavingIds].map((id) => new ObjectId(id)) },
-    });
-    if (stillOperating > 0) continue;
-    await contracts.updateMany(
-      { corporationId: ownerId, stateId: sector.stateId, ...activeExtractionContractFilter() },
-      { $set: { corporationId: pickup.receiverCorporationId, updatedAt: now } }
-    );
+      _id: { $nin: handedOff.map((h) => h.sector._id) },
+    })
+  );
+  const contractOps = [...extractionReceiverByState]
+    .filter(([stateId]) => !stillOperating.has(stateId))
+    .map(([stateId, receiverId]) => ({
+      updateMany: {
+        filter: { corporationId: ownerId, stateId, ...activeExtractionContractFilter() },
+        update: { $set: { corporationId: receiverId, updatedAt: now } },
+      },
+    }));
+  if (contractOps.length > 0) {
+    await (await getExtractionContractsCollection(db)).bulkWrite(contractOps, { ordered: false });
   }
 }

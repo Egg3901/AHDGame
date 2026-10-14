@@ -91,7 +91,7 @@ describe("POST /api/corporations/[id]/sectors/[sectorId]/abandon", () => {
 
     expect(response.status).toBe(200);
     expect(data.success).toBe(true);
-    expect(data.message).toContain("returned to the unowned pool");
+    expect(data.message).toContain("Its market reopens to builders");
     expect(db.collectionMocks.unownedSectors.findOneAndUpdate).toHaveBeenCalledTimes(1);
     expect(db.collectionMocks.corporateSectors.findOneAndUpdate).toHaveBeenCalledWith(
       expect.objectContaining({ _id: sectorId, corporationId: corpId }),
