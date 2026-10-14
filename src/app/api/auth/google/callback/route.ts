@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { captureIntakeEvent } from "@/lib/analytics/intakeEvents";
 import { cookies } from "next/headers";
 import { ObjectId } from "mongodb";
 import { randomBytes, randomUUID } from "crypto";
@@ -427,6 +428,12 @@ async function handleGoogleLogin(
     action: "account_created",
     username,
     details: `Registered via Google (${googleUser.email})`,
+  });
+
+  // Anonymous, consent-independent signup count (see intakeEvents.ts).
+  await captureIntakeEvent("account_registered", {
+    auth_provider: "google",
+    has_referral: Boolean(referredByObjectId),
   });
 
   // Identity history runs. Recorded after the insert so the run carries the

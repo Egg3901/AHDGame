@@ -3,6 +3,7 @@ import { handleRouteError } from "@/lib/api/errors";
 import { getDb } from "@/lib/mongodb";
 import type { GameConfig } from "@/lib/db/types";
 import { isAppleSignInConfigured } from "@/lib/auth/apple";
+import { computeIntakeStatus, type IntakeStatus } from "@/lib/auth/intakeStatus";
 
 /**
  * Which ways of signing up actually work on THIS deployment.
@@ -22,6 +23,10 @@ export interface SignupMethods {
   discord: { available: boolean; reason: "not_configured" | "test_mode" | null };
   google: { available: boolean; reason: "not_configured" | "test_mode" | null };
   apple: { available: boolean; reason: "not_configured" | "test_mode" | null };
+  /** Whether new accounts are accepted at all right now, and why not. */
+  registration: IntakeStatus["registration"];
+  /** Expected reopen time while maintenance is on, else null. */
+  expectedEnd: string | null;
 }
 
 // GET /api/auth/signup-methods — Which registration methods this deployment supports.
@@ -30,10 +35,19 @@ export interface SignupMethods {
 export async function GET() {
   try {
     const db = await getDb();
-    const config = await db
-      .collection<GameConfig>("gameConfig")
-      .findOne({ _id: "default" }, { projection: { testMode: 1 } });
+    const config = await db.collection<GameConfig>("gameConfig").findOne(
+      { _id: "default" },
+      {
+        projection: {
+          testMode: 1,
+          maintenanceMode: 1,
+          registrationEnabled: 1,
+          maintenanceExpectedEnd: 1,
+        },
+      }
+    );
     const testMode = config?.testMode === true;
+    const intake = computeIntakeStatus(config);
 
     const discordConfigured = Boolean(
       process.env.DISCORD_CLIENT_ID && process.env.DISCORD_REDIRECT_URI
@@ -61,6 +75,8 @@ export async function GET() {
         available: appleConfigured && !testMode,
         reason: !appleConfigured ? "not_configured" : testMode ? "test_mode" : null,
       },
+      registration: intake.registration,
+      expectedEnd: intake.expectedEnd,
     };
 
     return NextResponse.json(body);
