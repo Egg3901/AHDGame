@@ -106,7 +106,7 @@ number.
   (shipped in 6.14.1). Running worlds never change level on their own, and the
   live multiplayer world keeps its own setting.
 
-## 6.17.0 (unreleased)
+## 6.17.0 (game 1.16.0, 2026-10-14)
 
 Stage 3 (corporations).
 
@@ -122,7 +122,7 @@ Stage 3 (corporations).
   above), its NPP-run companies now get a new CEO the next turn instead of
   keeping the dead one.
 
-## 6.16.1 (unreleased)
+## 6.16.1 (game 1.16.0, 2026-10-14)
 
 - **Faster share buying (v6).** At v6 the NPP share-buying sweep runs each
   currency's market separately and in parallel, and reads each market's pool
@@ -130,7 +130,7 @@ Stage 3 (corporations).
   still balances to the cent and the result matches buying one at a time.
   Decisions are unchanged.
 
-## 6.16.0 (unreleased)
+## 6.16.0 (game 1.16.0, 2026-10-14)
 
 Stage 3 (corporations).
 
@@ -142,7 +142,7 @@ Stage 3 (corporations).
   likely to be sold. Across the market the total amount of buying and selling
   stays about the same as before; it just goes where the value is.
 
-## 6.15.0 (unreleased)
+## 6.15.0 (game 1.16.0, 2026-10-14)
 
 Stage 2 (governing).
 
@@ -157,14 +157,14 @@ Stage 2 (governing).
   - A minister appointed after the failure is not blamed for it.
   - Minimum tenure, cooldowns and the limit on repeated reshuffles still apply.
 
-## 6.14.3 (unreleased)
+## 6.14.3 (game 1.16.0, 2026-10-14)
 
 - **Ministers save their work in batches.** NPP and caretaker ministers load
   their settings and orders once per country and save changes in single
   batched writes, instead of several database trips per minister. Applies at
   every autonomy level; decisions are unchanged.
 
-## 6.14.2 (unreleased)
+## 6.14.2 (game 1.16.0, 2026-10-14)
 
 - **Governments plan in parallel (v6).** At v6 the NPP governing phase runs up
   to four countries' domestic steps at once, then foreign policy one country
@@ -172,14 +172,14 @@ Stage 2 (governing).
   the next. Below v6 it runs one country at a time as before. Decisions are
   unchanged.
 
-## 6.14.1 (unreleased)
+## 6.14.1 (game 1.16.0, 2026-10-14)
 
 - **V6 is the default for new local worlds.** New singleplayer and simulation
   worlds now start on autonomy v6, so they run every engine 6 change. Existing
   worlds keep their level, and the live multiplayer world stays on its own
   setting. The desktop client lists V6 and recommends it. No decision changes.
 
-## 6.14.0 (unreleased)
+## 6.14.0 (game 1.16.0, 2026-10-14)
 
 Stage 3 (corporations).
 
@@ -189,14 +189,14 @@ Stage 3 (corporations).
   turn and never takes favorability below zero. Business interest is no
   longer free: an NPP that votes its holdings pays a small price with voters.
 
-## 6.13.1 (unreleased)
+## 6.13.1 (game 1.16.0, 2026-10-14)
 
 - **Business interests are visible (v6).** When an NPP's own companies pull
   its vote (6.8.0), the vote forecast on its profile now says so, naming
   whether the bill helps or hurts a company it runs or holds. Players and
   opponents can see the conflict. No decision changes.
 
-## 6.13.0 (unreleased)
+## 6.13.0 (game 1.16.0, 2026-10-14)
 
 Stage 2 (governing).
 
@@ -214,7 +214,7 @@ Stage 2 (governing).
   - A band set by a player is never touched, and government-held rates, pegs
     and shared currencies are left alone.
 
-## 6.12.0 (unreleased)
+## 6.12.0 (game 1.16.0, 2026-10-14)
 
 Stage 1 (running for office).
 
@@ -226,7 +226,7 @@ Stage 1 (running for office).
   its most local races instead, where it can still win seats. The same races
   are contested either way.
 
-## 6.11.0 (unreleased)
+## 6.11.0 (game 1.16.0, 2026-10-14)
 
 Stage 2 (governing).
 
@@ -239,7 +239,7 @@ Stage 2 (governing).
   bill's merits, home region and donors like any other member. The pre-filing
   vote count from 6.5.0 uses the same rule.
 
-## 6.10.0 (unreleased)
+## 6.10.0 (game 1.16.0, 2026-10-14)
 
 Stage 2 (governing).
 
@@ -250,7 +250,7 @@ Stage 2 (governing).
   includes it, so the sponsor judges a goal bill the way it will actually be
   voted.
 
-## 6.9.0 (unreleased)
+## 6.9.0 (game 1.16.0, 2026-10-14)
 
 Stage 1 (running for office).
 
@@ -264,7 +264,7 @@ Stage 1 (running for office).
   filled the ordinary way. A party chair's slate assignment still takes
   precedence, and nationwide races are not part of the ladder.
 
-## 6.8.0 (unreleased)
+## 6.8.0 (game 1.16.0, 2026-10-14)
 
 The first stage 3 change (corporations).
 
@@ -281,7 +281,7 @@ The first stage 3 change (corporations).
   - Players can use this: a sector bill can win over the NPPs invested in that
     sector.
 
-## 6.7.0 (unreleased)
+## 6.7.0 (game 1.16.0, 2026-10-14)
 
 Stage 2 (governing).
 
@@ -296,7 +296,7 @@ Stage 2 (governing).
   - It is never applied in a party with a player as chair or vice-chair.
   - It is never applied to members of other parties.
 
-## 6.6.0 (unreleased)
+## 6.6.0 (game 1.16.0, 2026-10-14)
 
 Stage 2 (governing).
 
@@ -315,7 +315,7 @@ Stage 2 (governing).
   - Pegged currencies and currencies under a shared central bank are not
     affected.
 
-## 6.5.0 (unreleased)
+## 6.5.0 (game 1.16.0, 2026-10-14)
 
 The first stage 2 change (governing).
 
@@ -330,7 +330,7 @@ The first stage 2 change (governing).
   votes, it files nothing that turn and keeps its slot. Tax-rate bills, whose
   rate is set when they are filed, are not counted.
 
-## 6.4.0 (unreleased)
+## 6.4.0 (game 1.16.0, 2026-10-14)
 
 Stage 1 (running for office).
 
@@ -344,7 +344,7 @@ Stage 1 (running for office).
 - **No late challengers (v6).** NPP challengers no longer enter a primary in
   those last 12 turns, so a field that has consolidated stays consolidated.
 
-## 6.3.0 (unreleased)
+## 6.3.0 (game 1.16.0, 2026-10-14)
 
 Stage 1 (running for office).
 
@@ -358,7 +358,7 @@ Stage 1 (running for office).
   same as in other primaries. Presidential primaries in countries with players
   are not challenged.
 
-## 6.2.0 (unreleased)
+## 6.2.0 (game 1.16.0, 2026-10-14)
 
 Stage 1 (running for office).
 
@@ -376,7 +376,7 @@ Stage 1 (running for office).
   - Players can rally once a turn. An NPP rallies at most once per action
     cycle, which is once every four turns.
 
-## 6.1.0 (unreleased)
+## 6.1.0 (game 1.16.0, 2026-10-14)
 
 The first stage 1 change (running for office).
 
@@ -391,7 +391,7 @@ The first stage 1 change (running for office).
   slot goes to its strongest available NPP instead of the NPP with the lowest
   id.
 
-## 6.0.0 (unreleased)
+## 6.0.0 (game 1.16.0, 2026-10-14)
 
 The foundation for the overhaul.
 
