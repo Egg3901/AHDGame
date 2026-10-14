@@ -1,8 +1,12 @@
 import type { Db, ObjectId } from "mongodb";
 import { ObjectId as Oid } from "mongodb";
-import type { Corporation, NPP } from "@/lib/db/types";
 import type { CountryId } from "@/lib/constants/countries";
-import { buildCeoAffiliations, chooseNppCorpCeo } from "@/lib/admin/nppCorpCeoSelection";
+import type { OperatingSectorType } from "@/lib/constants/corporations";
+import { chooseNppCorpCeo } from "@/lib/admin/nppCorpCeoSelection";
+import {
+  gatherNppCeoAffiliations,
+  nppCeoSelectionLane,
+} from "@/lib/corporations/nppCeoAffiliations";
 import { createNPP } from "@/lib/npp/generator";
 
 /**
@@ -10,55 +14,23 @@ import { createNPP } from "@/lib/npp/generator";
  * participating parties — mirrors the spawn-NPP-corp path. Used by spin-off when
  * the appointed CEO is an NPP. Returns the NPP `_id`.
  *
- * Affiliation gathering is inlined here (as in caretakerCeo) to avoid importing
- * the heavyweight spawn module.
+ * Affiliation gathering is shared (`nppCeoAffiliations`) to avoid importing the
+ * heavyweight spawn module. `lane` is the new corp's operating lane; at v6 it
+ * makes the picker prefer a good CEO record there.
  */
 export async function pickOrCreateNppCeoForNewCorp(
   db: Db,
   countryId: CountryId,
   headquartersState: string,
-  forcedNppId?: string
+  forcedNppId?: string,
+  lane?: OperatingSectorType
 ): Promise<ObjectId> {
-  const partyDocs = await db
-    .collection("politicalParties")
-    .find({ countryId, isDefunct: { $ne: true } })
-    .project<{ sequentialId: number }>({ sequentialId: 1 })
-    .toArray();
-  const nonDefunctPartyIds = partyDocs.map((p) => String(p.sequentialId));
-
-  const corps = await db
-    .collection<Corporation>("corporations")
-    .find({ ceoType: "npp", countryId })
-    .project<{ ceoId: ObjectId }>({ ceoId: 1 })
-    .toArray();
-  const ceoIds = corps.map((c) => c.ceoId).filter(Boolean);
-  const ceoNppDocs = ceoIds.length
-    ? await db
-        .collection<NPP>("npps")
-        .find({ _id: { $in: ceoIds } })
-        .project<{ _id: ObjectId; party: string }>({ _id: 1, party: 1 })
-        .toArray()
-    : [];
-  const existingCorpCeos = ceoNppDocs.map((n) => ({ nppId: n._id.toString(), party: n.party }));
-
-  const activeNppDocs = await db
-    .collection<NPP>("npps")
-    .find({ countryId, retiredAt: null })
-    .project<{ _id: ObjectId; party: string; politicalInfluence: number; sequentialId?: number }>({
-      _id: 1,
-      party: 1,
-      politicalInfluence: 1,
-      sequentialId: 1,
-    })
-    .toArray();
-  const activeNpps = activeNppDocs.map((n) => ({
-    id: n._id.toString(),
-    party: n.party,
-    influence: n.politicalInfluence ?? 0,
-    seq: n.sequentialId ?? Number.MAX_SAFE_INTEGER,
-  }));
-
-  const affiliations = buildCeoAffiliations({ nonDefunctPartyIds, existingCorpCeos, activeNpps });
+  // NPP engine 6: an unforced pick prefers a good CEO record in the new corp's
+  // lane. A forced (player-chosen) NPP is honored as before.
+  const sectorLane = forcedNppId ? undefined : await nppCeoSelectionLane(db, countryId, lane);
+  const affiliations = await gatherNppCeoAffiliations(db, countryId, {
+    withTrackRecords: sectorLane != null,
+  });
 
   // Honor a forced free NPP if it is genuinely free; else balance.
   if (forcedNppId) {
@@ -66,7 +38,7 @@ export async function pickOrCreateNppCeoForNewCorp(
     if (isFree) return new Oid(forcedNppId);
   }
 
-  const choice = chooseNppCorpCeo({ affiliations });
+  const choice = chooseNppCorpCeo({ affiliations, ...(sectorLane ? { sectorLane } : {}) });
   if (choice.kind === "existing") return new Oid(choice.nppId);
 
   const npp = await createNPP({

@@ -9,7 +9,16 @@
  * This module performs no I/O — the caller gathers the per-affiliation counts and
  * free-NPP candidates from the database and passes them in, which keeps the
  * branching logic exhaustively unit-testable.
+ *
+ * NPP engine 6: when the caller passes the company's operating lane (v6 only),
+ * a free NPP with a good CEO record in that lane is preferred over the party
+ * balance. Without a lane, or when nobody has a good record, the rule above
+ * applies unchanged.
  */
+
+import type { OperatingSectorType } from "@/lib/constants/corporations";
+import type { NppCeoTrackRecord } from "@/lib/db/types/npp";
+import { ceoRecordScore, hasGoodCeoRecord } from "@/lib/nppAutonomy/v6/rules/ceoTrackRecord";
 
 export const INDEPENDENT_PARTY = "independent";
 
@@ -20,6 +29,8 @@ export interface FreeNpp {
   influence: number;
   /** `sequentialId` — lower breaks influence ties. */
   seq: number;
+  /** CEO track record, loaded only for v6 selection. */
+  trackRecord?: NppCeoTrackRecord;
 }
 
 export interface NppCorpCeoAffiliation {
@@ -39,6 +50,11 @@ export interface ChooseNppCorpCeoInput {
    * Defunct parties must be excluded by the caller.
    */
   affiliations: NppCorpCeoAffiliation[];
+  /**
+   * NPP engine 6 (v6 only): the company's operating lane. When set, a free NPP
+   * with a good record in this lane wins over the party balance.
+   */
+  sectorLane?: OperatingSectorType;
 }
 
 export type CeoChoice =
@@ -50,7 +66,13 @@ export interface BuildCeoAffiliationsInput {
   /** One entry per existing NPP-corp: its CEO's NPP id and party. */
   existingCorpCeos: Array<{ nppId: string; party: string }>;
   /** Every active (non-retired) NPP in the country. */
-  activeNpps: Array<{ id: string; party: string; influence: number; seq: number }>;
+  activeNpps: Array<{
+    id: string;
+    party: string;
+    influence: number;
+    seq: number;
+    trackRecord?: NppCeoTrackRecord;
+  }>;
 }
 
 /**
@@ -77,7 +99,12 @@ export function buildCeoAffiliations(input: BuildCeoAffiliationsInput): NppCorpC
     if (ceoIds.has(n.id)) continue; // already runs a corp
     if (!participating.has(n.party)) continue; // defunct / non-participating
     const list = freeByParty.get(n.party) ?? [];
-    list.push({ id: n.id, influence: n.influence, seq: n.seq });
+    list.push({
+      id: n.id,
+      influence: n.influence,
+      seq: n.seq,
+      ...(n.trackRecord ? { trackRecord: n.trackRecord } : {}),
+    });
     freeByParty.set(n.party, list);
   }
 
@@ -99,8 +126,45 @@ function pickBestNpp(freeNpps: FreeNpp[]): FreeNpp {
   return [...freeNpps].sort((a, b) => b.influence - a.influence || a.seq - b.seq)[0];
 }
 
+/**
+ * NPP engine 6: the free NPP with the best good record in `lane` across
+ * `pool`, or null when nobody has one. Ties go to the party running fewer
+ * companies, then influence, then lower sequentialId.
+ */
+function pickByTrackRecord(
+  pool: NppCorpCeoAffiliation[],
+  lane: OperatingSectorType
+): { party: string; nppId: string } | null {
+  let best: { party: string; corpCount: number; npp: FreeNpp; score: number } | null = null;
+  for (const a of pool) {
+    for (const npp of a.freeNpps) {
+      if (!hasGoodCeoRecord(npp.trackRecord, lane)) continue;
+      const score = ceoRecordScore(npp.trackRecord, lane) ?? 0;
+      const better =
+        !best ||
+        score > best.score ||
+        (score === best.score &&
+          (a.corpCount - best.corpCount ||
+            partyOrder(a.party) - partyOrder(best.party) ||
+            best.npp.influence - npp.influence ||
+            npp.seq - best.npp.seq) < 0);
+      if (better) best = { party: a.party, corpCount: a.corpCount, npp, score };
+    }
+  }
+  return best ? { party: best.party, nppId: best.npp.id } : null;
+}
+
 export function chooseNppCorpCeo(input: ChooseNppCorpCeoInput): CeoChoice {
-  const { forcedParty, affiliations } = input;
+  const { forcedParty, affiliations, sectorLane } = input;
+
+  if (sectorLane) {
+    const pool =
+      forcedParty != null && forcedParty !== ""
+        ? affiliations.filter((a) => a.party === forcedParty)
+        : affiliations;
+    const byRecord = pickByTrackRecord(pool, sectorLane);
+    if (byRecord) return { kind: "existing", ...byRecord };
+  }
 
   if (forcedParty != null && forcedParty !== "") {
     const target = affiliations.find((a) => a.party === forcedParty);
