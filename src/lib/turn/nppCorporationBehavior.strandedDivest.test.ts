@@ -94,6 +94,25 @@ const stranded = (over: Partial<CorporateSector> = {}) =>
   });
 
 describe("NPP stranded-plant divest (section 1b)", () => {
+  it.each([
+    { buildQueue: [{ unitsOrdered: 25, startTurn: 1, onlineTurn: 37 }] },
+    { constructionInProgressAnchor: 100 },
+    { plantsStartTurn: TURN - 1 },
+  ])(
+    "protects unfinished or immature sectors from both loss and low-fill exits: %o",
+    (protection) => {
+      for (const margin of [20, -90]) {
+        const bad = stranded({
+          ...protection,
+          profitMargin: margin,
+          effectiveProfitMargin: margin,
+        } as Partial<CorporateSector>);
+        const d = decide(corp(), [bad, sector()]);
+        expect(d.divestedSectorIds ?? []).not.toContainEqual(bad._id);
+      }
+    }
+  );
+
   it("divests a non-core plant stranded for STRANDED_DIVEST_TURNS", () => {
     const bad = stranded();
     const d = decide(corp(), [bad, sector()]);

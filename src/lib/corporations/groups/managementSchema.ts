@@ -17,6 +17,7 @@ export const groupManagementSchema = z.discriminatedUnion("action", [
       objective: z.enum(["balanced", "profit", "capacity", "expansion", "regional", "stability"]),
       regions: z.array(z.string().trim().min(1).max(80)).max(8),
       allowInvestment: z.boolean(),
+      primaryIndustryOnly: z.boolean().optional(),
     })
     .strict()
     .refine((v) => v.objective !== "regional" || v.regions.length > 0, {

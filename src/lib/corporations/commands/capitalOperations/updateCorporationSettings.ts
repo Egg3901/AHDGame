@@ -7,6 +7,10 @@ import { updateCorporationSettingsSchema } from "@/lib/api/schemas/corporations"
 import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { resolveCorporation, requireCeo } from "@/lib/api/corporations/resolveQuery";
 import { getGameState } from "@/lib/gameState";
+import { loadFxRatesByCurrency } from "@/lib/currency/corporationCapital";
+import { buildSectorCurrencyRestatement } from "@/lib/corporations/queries/corporationDetail/currencyRestatement";
+import { computeRevenueRealizationRatio } from "@/lib/corporations/queries/corporationDetail/realizationRatio";
+import { sectorDailyRevenueBasis } from "@/lib/corporations/dailyRevenueBasis";
 import {
   TYPE_SWITCH_COOLDOWN_TURNS,
   TYPE_SWITCH_PENALTY_TURNS,
@@ -18,7 +22,7 @@ import {
 import { migrateUnlockedTechOnPrimaryTypeSwitch } from "@/lib/corporations/techTree/migrateUnlocksOnTypeSwitch";
 import { getOperatingSectorType } from "@/lib/constants/sectorStrategies";
 import { STARTING_YEAR, TURNS_PER_YEAR } from "@/lib/constants/turnTime";
-import type { Corporation } from "@/lib/db/types";
+import type { Corporation, CorporateSector } from "@/lib/db/types";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -90,21 +94,50 @@ export async function updateCorporationSettings(request: Request, { params }: Ro
       rdBudget !== undefined ||
       ceoSalary !== undefined;
     if (hasBudgetUpdate) {
-      const sectors = await db
-        .collection("corporateSectors")
-        .find({ corporationId: corporation._id }, { projection: { revenue: 1 } })
-        .toArray();
+      const [sectors, fxByCurrency] = await Promise.all([
+        db
+          .collection<CorporateSector>("corporateSectors")
+          .find(
+            { corporationId: corporation._id },
+            {
+              projection: {
+                countryId: 1,
+                revenue: 1,
+                realizedRevenue: 1,
+                freightBillingCredit: 1,
+                productionPolicyLevel: 1,
+              },
+            }
+          )
+          .toArray(),
+        loadFxRatesByCurrency(db),
+      ]);
+      const restatement = buildSectorCurrencyRestatement(corporation, fxByCurrency);
+      const revenueRealizationRatio = await computeRevenueRealizationRatio(
+        db,
+        corporation,
+        sectors,
+        restatement.toCorpCurrency
+      );
       const totalDailyRevenue = sectors.reduce(
-        (sum, s) => sum + ((s as { revenue?: number }).revenue ?? 0),
+        (sum, sector) =>
+          sum +
+          sectorDailyRevenueBasis(sector, revenueRealizationRatio, restatement.toCorpCurrency)
+            .financialRevenueLocal,
         0
       );
+      // buildFinancials rounds the same summed basis before the CEO panel uses
+      // it, so keep the server boundary identical at fractional currency values.
+      const revenueForBudgetCap = Number.isFinite(totalDailyRevenue)
+        ? Math.max(0, Math.round(totalDailyRevenue))
+        : 0;
       // Bug #0728: CEO salary alone cannot exceed 1.25x daily gross revenue,
       // including when revenue is 0 (a zero-revenue shell may not set any
       // positive salary, which closes the bond-mint → salary drain). Gross
       // revenue excludes bond proceeds (these land in liquidCapital) and bond
       // coupon income (a separate line).
       if (ceoSalary !== undefined) {
-        const maxCeoSalary = totalDailyRevenue * CEO_SALARY_MAX_REVENUE_MULTIPLE;
+        const maxCeoSalary = revenueForBudgetCap * CEO_SALARY_MAX_REVENUE_MULTIPLE;
         if (ceoSalary > maxCeoSalary) {
           return errorResponse(
             400,
@@ -122,13 +155,13 @@ export async function updateCorporationSettings(request: Request, { params }: Ro
         (corporation.logisticsBudget ?? 0) +
         (corporation.rdBudget ?? 0) +
         (corporation.ceoSalary ?? 0);
-      const overheadCeiling = totalDailyRevenue * CORP_OVERHEAD_MAX_REVENUE_MULTIPLE;
+      const overheadCeiling = revenueForBudgetCap * CORP_OVERHEAD_MAX_REVENUE_MULTIPLE;
       if (combined > overheadCeiling && combined > storedCombined) {
         return errorResponse(
           400,
           `Combined operating budgets cannot exceed 150% of daily gross revenue ` +
             `($${Math.round(overheadCeiling).toLocaleString()}/day).` +
-            (totalDailyRevenue <= 0
+            (revenueForBudgetCap <= 0
               ? ` A corporation with no gross revenue cannot set positive operating budgets.`
               : ``)
         );

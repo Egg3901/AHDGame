@@ -52,6 +52,16 @@ function mount(value = data, save = vi.fn().mockResolvedValue(true), busy = fals
 }
 afterEach(cleanup);
 describe("Subsidiary direction", () => {
+  it("saves a primary-only mandate for an NPP subsidiary", async () => {
+    const save = mount();
+    fireEvent.click(screen.getByRole("button", { name: "Edit direction" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Primary industry only" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save objective" }));
+    await waitFor(() =>
+      expect(save).toHaveBeenCalledWith(expect.objectContaining({ primaryIndustryOnly: true }))
+    );
+  });
+
   it("shows saved configuration, regional chips, investment constraints and readable response status", () => {
     mount();
     expect(screen.getByText(/90.0% voting control/)).toBeTruthy();
@@ -88,6 +98,7 @@ describe("Subsidiary direction", () => {
         objective: "regional",
         regions: ["r9"],
         allowInvestment: true,
+        primaryIndustryOnly: false,
       })
     );
     await waitFor(() => expect(screen.queryByRole("combobox")).toBeNull());

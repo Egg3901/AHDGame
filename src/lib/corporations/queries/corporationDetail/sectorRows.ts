@@ -28,7 +28,7 @@ import {
   roundOwnershipTerms,
 } from "@/lib/nationalization/ownershipMarginTerms";
 import { isStateOwned } from "@/lib/nationalization/nationalCorporation";
-import { getRevenueMultiplier, getInputMultiplier } from "@/lib/utils/productionPolicy";
+import { getInputMultiplier } from "@/lib/utils/productionPolicy";
 import { priceRealizationFactor } from "@/lib/market/priceRealization";
 import { isLabourWagesEnabled } from "@/lib/labour/featureFlag";
 import { getMarketSystemModeForDb, marketAtLeast } from "@/lib/market/featureFlag";
@@ -40,6 +40,7 @@ import { computeFillRate, fillRateBand } from "@/lib/corporations/financialFogOf
 import { summarizeBuildQueue } from "@/lib/corporations/sectorBuildQueue";
 import { queueUndeliveredCost } from "@/lib/corporations/buildDelivery";
 import { readPlantsPnl } from "@/lib/corporations/plantsPnlBasis";
+import { sectorDailyRevenueBasis } from "@/lib/corporations/dailyRevenueBasis";
 import { seedPlantLedger } from "@/lib/corporations/plantLedger";
 import {
   getForeignTariffMarginModifier,
@@ -442,30 +443,23 @@ export function buildSectorDetails(ctx: SectorRowContext) {
       }))
     );
 
-    const revenueMultiplier = getRevenueMultiplier(sector.productionPolicyLevel ?? 0);
-    // Realized revenue for this sector (#3001/#3002). Prefer the exact,
-    // per-sector `realizedRevenue` the turn processor now persists (nameplate ×
-    // every realization leg, same daily basis + currency as `revenue`). This
-    // replaces the legacy uniform per-corp `revenueRealizationRatio` (#2958),
-    // which smeared one corp-wide ratio across sectors with heterogeneous
-    // haircuts and lagged a turn behind CorporationHistory. The blended ratio
-    // survives only as a fallback for sectors not yet reprocessed since the
-    // field shipped — a single turn of processing backfills every active sector.
-    // Restate this sector's stored (host-currency) fields into the corp's
-    // currency so all the per-sector math below is single-currency.
-    const sectorRevenueLocal = sectorFieldToCorpCcy(sector.revenue, sector);
+    // Realized revenue for this sector (#3001/#3002). Keep the CEO statement
+    // and settings cap on one basis: exact per-sector realization when present,
+    // otherwise the history-derived corp ratio, plus freight credits. Every
+    // stored sector amount is restated from host to corp currency first.
+    const revenueBasis = sectorDailyRevenueBasis(
+      sector,
+      revenueRealizationRatio,
+      sectorFieldToCorpCcy
+    );
+    const sectorRevenueLocal = revenueBasis.nameplateRevenueLocal;
     const sectorGrowthCostLocal = sectorFieldToCorpCcy(sector.currentGrowthCost, sector);
-    const sectorRealizedRevenueLocal =
-      typeof sector.realizedRevenue === "number"
-        ? sectorFieldToCorpCcy(sector.realizedRevenue, sector)
-        : null;
+    const sectorRealizedRevenueLocal = revenueBasis.realizedRevenueLocal;
     const sectorLaborCostLocal =
       typeof sector.laborCost === "number" ? sectorFieldToCorpCcy(sector.laborCost, sector) : null;
     const freightCost = sectorFieldToCorpCcy(sector.freightBillingCharge ?? 0, sector);
-    const freightIncome = sectorFieldToCorpCcy(sector.freightBillingCredit ?? 0, sector);
-    const financialRevenue =
-      (sectorRealizedRevenueLocal ??
-        sectorRevenueLocal * revenueMultiplier * revenueRealizationRatio) + freightIncome;
+    const freightIncome = revenueBasis.freightIncomeLocal;
+    const financialRevenue = revenueBasis.financialRevenueLocal;
     // Ownership terms the turn applies inside the margin stack: SOE efficiency
     // (spec §11.3), expropriation risk (spec §12.4 feed 1), economic-model
     // alignment (§6.2). Same shared functions and inputs as the turn.
