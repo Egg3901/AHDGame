@@ -3,7 +3,7 @@ date: 2026-10-15
 title: Six new weekly contests and a tidier Contests page
 summary: Rookie of the week, Backbencher of the week, Public image, Statehouse approval, Kingmaker and Comeback of the week join the weekly contests, and the page now groups contests into rows you can open.
 tags: [contests]
-badges: [feature]
+badges: [minor]
 areas: [fullstack]
 ---
 
