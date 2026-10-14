@@ -240,6 +240,7 @@ export interface CorporationLookups {
   freightSupplyByOriginState?: Map<string, number>;
   ownRouteDeliveredByKey?: Map<string, number>;
   ownRouteFreightByCorp?: Map<string, Map<string, Map<CommodityType, number>>>;
+  ownRouteGroupMembersByRoot?: Map<string, Set<string>>;
   /**
    * The transfer's other half: per origin state, LAST turn's haul revenue its
    * freight network earned. Same gate and source as

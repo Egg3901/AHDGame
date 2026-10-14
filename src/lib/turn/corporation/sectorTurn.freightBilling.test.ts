@@ -7,6 +7,7 @@ import type { CorporationLookups } from "./types";
 import { processSector, type SectorTurnEnv } from "./sectorTurn";
 import { buildFreightBillingBySector } from "./freightBillingTurn";
 import type { CommodityType } from "@/lib/constants/commodities";
+import { recordedGroupRouteMembers } from "@/lib/market/internalSupply/rules";
 import { computeSectorCommodityUnits } from "@/lib/corporations/corpCommodityFlows";
 
 /**
@@ -208,6 +209,8 @@ describe("buildFreightBillingBySector — corp-phase glue", () => {
     freightHaulRevenueByOriginState?: Map<string, number>;
     freightDemandByDestState?: Map<string, Map<CommodityType, number>>;
     freightSupplyByOriginState?: Map<string, number>;
+    ownRouteFreightByCorp?: CorporationLookups["ownRouteFreightByCorp"];
+    ownRouteGroupMembersByRoot?: CorporationLookups["ownRouteGroupMembersByRoot"];
   }) {
     const corp = makeCorp();
     const buyer = makeSector({ _id: BUYER_ID, stateId: "US-NY", sectorType: "manufacturing" });
@@ -308,6 +311,91 @@ describe("buildFreightBillingBySector — corp-phase glue", () => {
     expect(billing.unapportionedCharges).toBe(0);
     expect(billing.unapportionedHaulRevenue).toBe(0);
   });
+
+  it("includes wholly owned group destination plants for recorded route freight", () => {
+    const childId = new ObjectId();
+    const childSectorId = new ObjectId();
+    const childCorp = { ...makeCorp(), _id: childId };
+    const childSector = makeSector({
+      _id: childSectorId,
+      corporationId: childId,
+      stateId: "US-NY",
+    });
+    const lookups = glueLookups({
+      ownRouteFreightByCorp: new Map([
+        ["group:" + CORP_ID.toString(), new Map([["US-NY", new Map([["iron", 500]])]])],
+      ]),
+      ownRouteGroupMembersByRoot: new Map([
+        [CORP_ID.toString(), new Set([CORP_ID.toString(), childId.toString()])],
+      ]),
+    });
+    lookups.sectorsByCorp.set(childId.toString(), [childSector]);
+    lookups.corpById.set(childId.toString(), childCorp);
+    const buyer = lookups.sectorsByCorp.get(CORP_ID.toString())![0]!;
+    const childUnits = computeSectorCommodityUnits(childSector, 1000).demand.get("iron") ?? 0;
+    const parentUnits = computeSectorCommodityUnits(buyer, 1000).demand.get("iron") ?? 0;
+
+    const billing = buildFreightBillingBySector({
+      lookups,
+      currentTurn: 1000,
+      plantsEnabled: false,
+      currentYear: undefined,
+      commandEconomyEnabled: false,
+    });
+
+    expect(billing.chargeBySectorId.get(BUYER_ID.toString())).toBeCloseTo(
+      (500 * parentUnits) / (parentUnits + childUnits)
+    );
+    expect(billing.chargeBySectorId.get(childSectorId.toString())).toBeCloseTo(
+      (500 * childUnits) / (parentUnits + childUnits)
+    );
+    expect(billing.unapportionedCharges).toBe(0);
+  });
+
+  it.each(["market", "own", "group"] as const)(
+    "bills a subsidiary's completed haul after shipping is disabled under %s",
+    (priority) => {
+      const childId = new ObjectId();
+      const childSectorId = new ObjectId();
+      const root = CORP_ID.toString();
+      const members = recordedGroupRouteMembers(
+        [
+          {
+            id: root,
+            totalShares: 100,
+            holders: [{ shares: 100 }],
+            policy: { priority, discount: 0, ownFirstAcrossStates: false },
+          },
+          {
+            id: childId.toString(),
+            totalShares: 100,
+            holders: [{ corporationId: root, shares: 100 }],
+          },
+        ],
+        ["group:" + root]
+      );
+      const lookups = glueLookups({
+        ownRouteFreightByCorp: new Map([
+          ["group:" + root, new Map([["US-NY", new Map([["iron", 500]])]])],
+        ]),
+        ownRouteGroupMembersByRoot: members,
+      });
+      lookups.sectorsByCorp.set(root, []);
+      lookups.sectorsByCorp.set(childId.toString(), [
+        makeSector({ _id: childSectorId, corporationId: childId, stateId: "US-NY" }),
+      ]);
+      lookups.corpById.set(childId.toString(), { ...makeCorp(), _id: childId });
+      const billing = buildFreightBillingBySector({
+        lookups,
+        currentTurn: 1000,
+        plantsEnabled: false,
+        currentYear: undefined,
+        commandEconomyEnabled: false,
+      });
+      expect(billing.chargeBySectorId.get(childSectorId.toString())).toBeCloseTo(500);
+      expect(billing.unapportionedCharges).toBe(0);
+    }
+  );
 
   it("routes money nobody can own to the unapportioned remainders", () => {
     const billing = buildFreightBillingBySector({
