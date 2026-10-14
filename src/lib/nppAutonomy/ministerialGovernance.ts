@@ -54,7 +54,9 @@ import { METRIC_TO_DOMAIN } from "./selectNppBill";
 import { deriveGoverningArchetype, governingArchetypeModifiers } from "./governingArchetype";
 import { loadDomainHealth } from "./governingMetrics";
 import { nppAutonomyAtLeast } from "./featureFlag";
-import { ministerialCommitmentHolds } from "./v5/rules/governingGoals";
+import { ministerialCommitmentHolds, type GoverningGoalRecord } from "./v5/rules/governingGoals";
+import { judgeMinisterOnGoals, reshuffleThresholdMet } from "./v6/rules/ministerGoalJudgement";
+import { NPP_ENGINE_LEVEL } from "./engineVersion";
 import {
   evaluateReshuffleEligibility,
   governmentKeyForReshuffle,
@@ -309,6 +311,12 @@ const INACTIVE: MinisterialGovernanceResult = {
   ordersIssued: 0,
   reshuffled: 0,
 };
+
+/** A seat's appointment turn, or null for a legacy unstamped seat. */
+function seatAppointedTurn(minister: unknown): number | null {
+  const turn = (minister as { appointedTurn?: unknown }).appointedTurn;
+  return typeof turn === "number" && Number.isFinite(turn) ? turn : null;
+}
 
 /** The cabinet-member fields a minister needs to act through its levers. */
 type ActingMinister = {
@@ -608,6 +616,16 @@ export async function runMinisterialGovernance(
       : null;
   let guardStateDirty = false;
 
+  // v6: ministers judged on their goal. Read once per call; below v6 the list
+  // stays empty so the reshuffle threshold is the shortfall rule alone.
+  const standingGoals: GoverningGoalRecord[] = (await nppAutonomyAtLeast(
+    db,
+    countryId,
+    NPP_ENGINE_LEVEL
+  ))
+    ? (gov.governingGoals?.goals ?? [])
+    : [];
+
   let reshuffled = 0;
   const survivors: typeof ministers = [];
   // Shortfall per surviving minister, computed once here and reused by the V5
@@ -619,7 +637,27 @@ export async function runMinisterialGovernance(
       ? ministerShortfall(positionDomains(mechanics), agendaByDomain, domainHealth)
       : 0;
     shortfallByPosition.set(minister.positionId, shortfall);
-    if (!mechanics || !shouldReshuffleMinister(shortfall, reshufflePropensity)) {
+    if (!mechanics) {
+      survivors.push(minister);
+      continue;
+    }
+    const shortfallMet = shouldReshuffleMinister(shortfall, reshufflePropensity);
+    // v6: a minister whose brief carries a standing goal is judged on that
+    // goal's record. Below v6 `standingGoals` is empty and this is the
+    // shortfall verdict unchanged.
+    const goalJudgement =
+      standingGoals.length > 0
+        ? judgeMinisterOnGoals({
+            domains: positionDomains(mechanics),
+            goals: standingGoals,
+            domainHealth,
+            appointedTurn: seatAppointedTurn(minister),
+          })
+        : null;
+    const thresholdMet = goalJudgement
+      ? reshuffleThresholdMet(goalJudgement, shortfallMet)
+      : shortfallMet;
+    if (!thresholdMet) {
       survivors.push(minister);
       continue;
     }
@@ -666,10 +704,11 @@ export async function runMinisterialGovernance(
     });
     portfolios[minister.positionId] = record;
     govLastReshuffleTurn = currentTurn;
+    const goalFailed = goalJudgement?.verdict === "goal-failed";
     lastReplacement = {
       positionId: minister.positionId,
       turn: currentTurn,
-      reason: "underperformance",
+      reason: goalFailed ? "goal-failed" : "underperformance",
       priorTenureTurns: tenureTurns,
       shortfall,
       consecutiveReshuffles: record.consecutiveReshuffles,
@@ -678,7 +717,7 @@ export async function runMinisterialGovernance(
     guardStateDirty = true;
     console.log(
       `[nppAutonomy] ${countryId}: reshuffled ${minister.positionId} ` +
-        `(shortfall ${shortfall.toFixed(2)}, tenure ${tenureTurns === null ? "legacy" : `${tenureTurns}t`}, ` +
+        `(${goalFailed ? `failed ${goalJudgement?.domain} goal, ` : ""}shortfall ${shortfall.toFixed(2)}, tenure ${tenureTurns === null ? "legacy" : `${tenureTurns}t`}, ` +
         `consecutive ${record.consecutiveReshuffles})`
     );
   }
