@@ -272,16 +272,24 @@ export async function getLegacyLeaderboardData(
   for (const r of retired) referencedUserIds.set(String(r.userId), r.userId);
 
   const users = await db
-    .collection<{ _id: ObjectId; isBanned?: boolean; legacyDisplayCharacterId?: string }>("users")
+    .collection<{
+      _id: ObjectId;
+      isBanned?: boolean;
+      legacyDisplayCharacterId?: string;
+      activeCharacterId?: ObjectId;
+    }>("users")
     .find(
       { _id: { $in: [...referencedUserIds.values()] } },
-      { projection: { isBanned: 1, legacyDisplayCharacterId: 1 } }
+      { projection: { isBanned: 1, legacyDisplayCharacterId: 1, activeCharacterId: 1 } }
     )
     .toArray();
 
   const eligibleUserIds = new Set(users.filter((u) => !u.isBanned).map((u) => String(u._id)));
   const preferenceByUser = new Map(
     users.map((u) => [String(u._id), u.legacyDisplayCharacterId ?? null])
+  );
+  const currentIdentityByUser = new Map(
+    users.map((u) => [String(u._id), u.activeCharacterId?.toString() ?? null])
   );
   const achievementCountByUser = new Map(achievementCounts.map((a) => [String(a._id), a.count]));
 
@@ -497,7 +505,9 @@ export async function getLegacyLeaderboardData(
         isActive: life.isActive,
         retiredAtMs: life.retiredAt?.getTime() ?? null,
       })),
-      preference
+      preference && preference !== "current"
+        ? preference
+        : (currentIdentityByUser.get(userId) ?? "current")
     );
     const displayLife = lives.find((life) => life.characterId === displayId) ?? bestLife;
     const displayName = displayLife.name;
@@ -525,7 +535,7 @@ export async function getLegacyLeaderboardData(
       achievementCount: bestLife.achievementCount,
       highestOffice: bestLife.highestOffice,
       avatarUrl: displayLife.avatarUrl,
-      isActive: bestLife.isActive,
+      isActive: displayLife.isActive,
       lifetimeLives: lives.length,
     });
   }

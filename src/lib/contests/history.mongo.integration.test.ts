@@ -288,6 +288,7 @@ describe.skipIf(!uri)("contest records and career ranking on isolated Mongo", ()
     expect(all.lifetimeLives).toBe(2);
     expect(all.scoringCharacterName).toBe("Historic Career");
     expect(all.displayName).toBe("New Life");
+    expect(all.isActive).toBe(true);
     const current = (await getLegacyLeaderboardData(db, null, { scope: "current" })).entries[0];
     expect(current.enactedBills).toBe(1);
     expect(current.contestWins).toBe(1);

@@ -70,7 +70,7 @@ export interface LegacyLeaderboardEntry {
   achievementCount: number;
   highestOffice: string | null;
   avatarUrl: string | null;
-  /** True when the scoring life is the user's current, still-active character. */
+  /** True when the displayed identity is a still-active character. */
   isActive: boolean;
   /** Total number of lives (current + retired) this user has on record, across all time regardless of scope. */
   lifetimeLives: number;
