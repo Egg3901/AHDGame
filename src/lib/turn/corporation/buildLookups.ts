@@ -46,7 +46,10 @@ import { buildFtaCoverageLookup, loadActiveFtaPairs } from "@/lib/tariffs/ftaOve
 import { reconcileSignedTariffBills } from "@/lib/tariffs/reconcileTariffs";
 import { reconcileSignedEmbargoBills } from "@/lib/trade/reconcileEmbargoes";
 import { buildTradeAffinity } from "@/lib/trade/tradeAffinity";
-import { buildCountryClearingBooks } from "@/lib/market/tradePartition";
+import {
+  buildCountryClearingBooks,
+  overlayReachableClearingBooks,
+} from "@/lib/market/tradePartition";
 import { sectorCountryForClearing } from "./sectorCountry";
 import { getRegisteredCountryIds } from "@/lib/country/registeredCountries";
 import {
@@ -1101,6 +1104,9 @@ export async function buildCorporationLookups(
       capUnitsFor,
       importCostMultiplierFor,
     });
+    // The stored national balances are post-trade; the price turn's persisted
+    // reachable books are the pre-trade clearing the books are meant to be.
+    overlayReachableClearingBooks(countryClearingBooks, tradeSnapshotDoc?.books);
   }
   const marketShareBySectorId = buildMarketShareBySectorId({
     sectors: allSectors,
