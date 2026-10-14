@@ -179,12 +179,12 @@ function scalarConfig(
 }
 
 /**
- * Autonomy tier the run forces. Defaults to v3, matching every previous run of
- * this harness. Pass `--autonomy=v4` to exercise the global tier — running the
- * same seed at v3 and v4 is the A/B that tells you whether letting autonomy into
- * player-enabled countries changed the balance.
+ * Autonomy tier the run forces. Defaults to v6 (NPP engine 6), the default for
+ * new simulation worlds since 2026-10-14; it was v3 before. Comparison runs
+ * must name both levels explicitly (`--autonomy=v5` against `--autonomy=v6`),
+ * so a default change never moves a baseline under an A/B.
  */
-const AUTONOMY_LEVEL = (arg("autonomy") ?? "v3") as "v3" | "v4" | "v5" | "v6";
+const AUTONOMY_LEVEL = (arg("autonomy") ?? "v6") as "v3" | "v4" | "v5" | "v6";
 if (!(["v3", "v4", "v5", "v6"] as const).includes(AUTONOMY_LEVEL)) {
   throw new Error(`--autonomy must be v3, v4, v5, or v6 (got "${AUTONOMY_LEVEL}")`);
 }

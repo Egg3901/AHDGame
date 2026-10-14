@@ -100,11 +100,18 @@ number.
 - Step down the income NPPs receive without acting until those measures match
   engine 5. The election modifiers are not changed.
 
-### Engine 7: default
+### Stage 6: default for new worlds
 
-- Autonomy v6 becomes the default for new singleplayer and simulation worlds,
-  after the engine 6 stages are validated. Running worlds never change level on
-  their own.
+- Autonomy v6 becomes the default for new singleplayer and simulation worlds
+  (shipped in 6.14.1). Running worlds never change level on their own, and the
+  live multiplayer world keeps its own setting.
+
+## 6.14.1 (unreleased)
+
+- **V6 is the default for new local worlds.** New singleplayer and simulation
+  worlds now start on autonomy v6, so they run every engine 6 change. Existing
+  worlds keep their level, and the live multiplayer world stays on its own
+  setting. The desktop client lists V6 and recommends it. No decision changes.
 
 ## 6.14.0 (unreleased)
 

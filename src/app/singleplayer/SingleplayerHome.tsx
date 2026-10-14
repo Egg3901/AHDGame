@@ -57,7 +57,7 @@ export function SingleplayerHome({ status }: Props) {
   const [displayName, setDisplayName] = useState("");
   const [mode, setMode] = useState<"normal" | "head-of-state" | "worldsim">("normal");
   const [difficulty, setDifficulty] = useState<"easy" | "normal" | "hard">("normal");
-  const [autonomyLevel, setAutonomyLevel] = useState<NppAutonomyLevel>("v4");
+  const [autonomyLevel, setAutonomyLevel] = useState<NppAutonomyLevel>("v6");
   const [featureFlags, setFeatureFlags] = useState(DEFAULT_SINGLEPLAYER_FEATURE_FLAGS);
   const [phase, setPhase] = useState<"idle" | "running" | "done" | "error">("idle");
   const [logs, setLogs] = useState<string[]>([]);
@@ -229,6 +229,7 @@ export function SingleplayerHome({ status }: Props) {
                   <option value="v3">V3</option>
                   <option value="v4">V4</option>
                   <option value="v5">V5</option>
+                  <option value="v6">V6 (NPP engine 6)</option>
                 </select>
               </label>
             </div>
