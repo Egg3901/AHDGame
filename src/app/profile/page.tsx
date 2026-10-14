@@ -89,6 +89,9 @@ import { OnboardingFlaggedCard } from "./components/OnboardingFlaggedCard";
 import { isOnboardingChecklistEnabled } from "@/lib/onboarding/featureFlag";
 import { isOnboardingDismissed, loadOnboardingChecklist } from "@/lib/onboarding/checklist";
 import { recordOnboardingProgress } from "@/lib/onboarding/stepStamps";
+import { loadFirstDays, type FirstDaysData } from "@/lib/onboarding/firstDays";
+import { FirstDaysPanel } from "./components/FirstDaysPanel";
+import { partiesUrl } from "@/lib/urls";
 import { onboardingRewardAmount } from "@/lib/onboarding/reward";
 import { onboardingRewardLocalAmount } from "@/lib/onboarding/rules";
 import { CURRENCY_SYMBOLS, getCountryIdForCurrency } from "@/lib/constants/currencies";
@@ -209,6 +212,10 @@ async function getCharacterData() {
   // the card is shown), after the response so the page never waits on it.
   // No-op once a character is past its onboarding window.
   after(() => recordOnboardingProgress(db, character));
+
+  // First-days panel for a new character (null once past the first days or
+  // every goal is done). Never let it break the profile.
+  const firstDays: FirstDaysData | null = await loadFirstDays(db, character).catch(() => null);
 
   // New-player onboarding checklist: derive step completion only while the
   // card is actually shown (flag on, not dismissed, reward not yet claimed).
@@ -428,6 +435,7 @@ async function getCharacterData() {
     rpgStatsEnabled,
     onboardingChecklistEnabled,
     onboardingChecklist,
+    firstDays,
     nationalNpiOrdinalRank,
     conflictsEnabled: !!gameState?.conflictsEnabled,
     ...conflictExtras,
@@ -492,6 +500,7 @@ export default async function ProfilePage() {
     rpgStatsEnabled,
     onboardingChecklistEnabled,
     onboardingChecklist,
+    firstDays,
     nationalNpiOrdinalRank,
     gameDateAnchor,
     preset,
@@ -789,6 +798,13 @@ export default async function ProfilePage() {
         notices={
           <>
             <ConstituencySelector />
+            {firstDays && (
+              <FirstDaysPanel
+                data={firstDays}
+                year={gameYear}
+                partiesHref={partiesUrl(character.countryId)}
+              />
+            )}
             {/* New player onboarding: checklist when the flag is on, legacy banner otherwise */}
             {onboardingChecklistEnabled ? (
               <OnboardingFlaggedCard

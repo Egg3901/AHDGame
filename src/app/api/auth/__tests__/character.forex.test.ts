@@ -191,6 +191,31 @@ describe("POST /api/auth/character — forex enabled (JP)", () => {
     expect(inserted.autoConvertEnabled).toBe(true);
   });
 
+  it("starts a new character at the NPP influence seed of 10 even when the config says 0", async () => {
+    const { getDb } = await import("@/lib/mongodb");
+    const { db, insertOne } = makeDb();
+    vi.mocked(getDb).mockResolvedValue(db as never);
+
+    const req = new Request("http://localhost/api/auth/character", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: "Influence Test",
+        homeState: "jp_tokyo",
+        countryId: "JP",
+        party: "1",
+        policies: { economic: 1, social: 1 },
+        demographics: { race: "asian", gender: "male", education: "college", wealth: "middle" },
+      }),
+    });
+
+    const res = await POST(req);
+    expect(res.status).toBe(201);
+    const inserted = insertOne.mock.calls[0][0];
+    expect(inserted.politicalInfluence).toBe(10);
+    expect(inserted.startingPoliticalInfluence).toBe(10);
+  });
+
   it("uses the stored world base for creation grants and their preview", async () => {
     const { getDb } = await import("@/lib/mongodb");
     const { db, insertOne } = makeDb(360);

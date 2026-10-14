@@ -160,8 +160,10 @@ function OnboardingCohortTable({ cohorts }: { cohorts: OnboardingCohorts }) {
     <div className="overflow-x-auto rounded-xl border border-card-border bg-card p-4 shadow-sm">
       <p className="mb-1 text-body-sm font-medium text-muted">First days of new characters</p>
       <p className="mb-3 text-xs text-muted">
-        Target for joiners of a running world: Campaign within 24h at 70% or more, zero influence
-        after 72h at 25% or less. Step counts exist from the stamp rollout onward.
+        Target for joiners of a running world: Campaign within 24h at 70% or more, no influence
+        growth after 72h at 25% or less (45% before 1.16). From 1.16 new characters start at 10
+        influence, so growth is measured against each character&apos;s own start; &quot;started at
+        10&quot; counts them. Step counts exist from the stamp rollout onward.
       </p>
       <table className="w-full text-sm">
         <thead>
@@ -169,7 +171,8 @@ function OnboardingCohortTable({ cohorts }: { cohorts: OnboardingCohorts }) {
             <th className="py-1 pr-3 font-medium">Cohort</th>
             <th className="py-1 pr-3 font-medium tabular-nums">Characters</th>
             <th className="py-1 pr-3 font-medium">Campaigned in 24h</th>
-            <th className="py-1 pr-3 font-medium">Zero influence after 72h</th>
+            <th className="py-1 pr-3 font-medium">No influence growth after 72h</th>
+            <th className="py-1 pr-3 font-medium tabular-nums">Started at 10</th>
             {Object.keys(STEP_LABELS).map((id) => (
               <th key={id} className="py-1 pr-3 font-medium">
                 {STEP_LABELS[id]}
@@ -186,9 +189,10 @@ function OnboardingCohortTable({ cohorts }: { cohorts: OnboardingCohorts }) {
                 {c.campaignedWithin24h} ({pct(c.campaignedWithin24h, c.characters)})
               </td>
               <td className="py-1.5 pr-3 tabular-nums">
-                {c.zeroInfluenceAfter72h} of {c.atLeast72h} (
-                {pct(c.zeroInfluenceAfter72h, c.atLeast72h)})
+                {c.noInfluenceGrowthAfter72h} of {c.atLeast72h} (
+                {pct(c.noInfluenceGrowthAfter72h, c.atLeast72h)})
               </td>
+              <td className="py-1.5 pr-3 tabular-nums">{c.startedWithInfluence}</td>
               {Object.keys(STEP_LABELS).map((id) => (
                 <td key={id} className="py-1.5 pr-3 tabular-nums">
                   {c.steps[id] ?? 0}

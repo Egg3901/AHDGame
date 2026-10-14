@@ -244,6 +244,27 @@
       "title": "Profillink kopieren",
       "copied": "Kopiert",
       "share": "Teilen"
+    },
+    "firstDays": {
+      "aria": "Deine ersten Tage",
+      "title": "Deine ersten Tage",
+      "titleYear": "Deine ersten Tage im Jahr {year}",
+      "intro": "Die Welt läuft schon. Mit diesen drei Schritten legst du heute los, egal was du hier vorhast.",
+      "campaignTitle": "Wahlkampf in deiner Heimatregion ({done} von {goal})",
+      "campaignBody": "Wahlkampf ist die einzige Aktion, die Politischen Einfluss erhöht, und Einfluss vervielfacht jede Spendenaktion und trägt dich in Wahlen. Du hast gerade {influence}.",
+      "campaignButton": "Jetzt Wahlkampf machen",
+      "campaignFailed": "Der Wahlkampf hat nicht geklappt. Versuche es noch einmal.",
+      "allActions": "Alle Aktionen",
+      "partyTitle": "Tritt einer Partei bei",
+      "partyBody": "Eine Partei gibt dir eine Vorwahl, einen gemeinsamen Aktionspool und Leute zum Planen. Wähle eine, die Mitglieder aus deiner Heimatregion aufnimmt.",
+      "partyDone": "Du bist in einer Partei.",
+      "raceTitle": "Tritt in eine Wahl ein, die noch offen ist",
+      "raceBody": "Diese Wahlen in deiner Heimatregion nehmen noch Kandidaten an, die am frühesten schließenden zuerst.",
+      "raceCloses": "schließt in {hours} {hours, plural, one {Stunde} other {Stunden}}, {count} {count, plural, one {Kandidat} other {Kandidaten}}",
+      "raceCandidates": "{count} {count, plural, one {Kandidat} other {Kandidaten}}",
+      "raceNone": "Gerade nimmt keine Wahl in deiner Heimatregion Kandidaten an. Mach weiter Wahlkampf; die nächste öffnet bald, und du startest mit Vorsprung.",
+      "raceDone": "Du bist im Rennen.",
+      "skippedTour": "Du hast die Tour übersprungen. Die <link>Grundlagen in zwei Minuten</link> findest du hier, wann immer du willst."
     }
   }
 }

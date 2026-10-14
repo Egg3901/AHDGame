@@ -22,6 +22,15 @@ export const POLITICAL_INFLUENCE_DECAY_RATE = 0.0075;
 export const NPP_POLITICAL_INFLUENCE_FLOOR = 10;
 
 /**
+ * New player characters start with the same 10 influence NPPs are seeded at,
+ * so a player who joins a running world does not begin below every rival.
+ * Applied at character creation only, as a minimum over
+ * `gameConfig.startingPoliticalInfluence`; existing characters are untouched
+ * and the player decay floor stays 0.
+ */
+export const NEW_CHARACTER_STARTING_INFLUENCE = NPP_POLITICAL_INFLUENCE_FLOOR;
+
+/**
  * Favorability Above-Threshold Penalty
  * Favorability is stable at or below 60%. When above 60%, a per-turn
  * penalty pulls it back down — the further above 60%, the steeper the drain.

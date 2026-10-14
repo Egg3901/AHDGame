@@ -1,3 +1,4 @@
+import { NEW_CHARACTER_STARTING_INFLUENCE } from "@shared/constants/formulas";
 import {
   campaignAnchorToLocal,
   campaignLocalRate,
@@ -277,6 +278,10 @@ export async function POST(request: Request) {
           }
         }
 
+        const startingInfluence = Math.max(
+          gameConfig.startingPoliticalInfluence ?? 0,
+          NEW_CHARACTER_STARTING_INFLUENCE
+        );
         const character: Omit<Character, "_id"> = {
           userId: new ObjectId(userId),
           ...(singleplayerConfig?.mode === "head-of-state"
@@ -290,10 +295,13 @@ export async function POST(request: Request) {
           // character start" (ticket 1107).
           startingCountryId: countryId,
 
-          // Core Stats (10% bonus if referred, except donorBase)
-          politicalInfluence: isReferred
-            ? Math.floor(gameConfig.startingPoliticalInfluence * 1.1)
-            : gameConfig.startingPoliticalInfluence,
+          // Core Stats (10% bonus if referred, except donorBase). Starting
+          // influence never goes below the NPP seed of 10.
+          politicalInfluence: isReferred ? Math.floor(startingInfluence * 1.1) : startingInfluence,
+          // Recorded so onboarding metrics can tell real growth from the start.
+          startingPoliticalInfluence: isReferred
+            ? Math.floor(startingInfluence * 1.1)
+            : startingInfluence,
           favorability: isReferred
             ? Math.floor(gameConfig.startingFavorability * 1.1)
             : gameConfig.startingFavorability,
