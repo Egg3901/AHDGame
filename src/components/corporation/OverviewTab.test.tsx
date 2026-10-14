@@ -106,6 +106,7 @@ function renderOverview(props: Record<string, unknown> = {}) {
 
 describe("OverviewTab", () => {
   beforeEach(() => {
+    localStorage.clear();
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve([]) })
@@ -171,6 +172,44 @@ describe("OverviewTab", () => {
     expect(screen.getByText("Logistics")).toBeTruthy();
     expect(screen.getByText("R&D score")).toBeTruthy();
     expect(screen.queryByText(/^[+-]?\d+\.\d{2}$/)).toBeNull();
+  });
+
+  it("opens in Pro without the old headline tiles", () => {
+    renderOverview();
+    expect(screen.getByRole("radio", { name: "Pro" }).getAttribute("aria-checked")).toBe("true");
+    expect(screen.getByText("Key statistics")).toBeTruthy();
+    // Net income appears once, in the statistics list, not again in a tile row.
+    expect(screen.getAllByText("Net income/turn").length).toBe(1);
+  });
+
+  it("switches to Simple, remembers it, and saves it to the account", () => {
+    renderOverview();
+    fireEvent.click(screen.getByRole("radio", { name: "Simple" }));
+    expect(screen.getByText("Needs attention")).toBeTruthy();
+    expect(screen.getByText("At a glance")).toBeTruthy();
+    expect(screen.queryByText("Key statistics")).toBeNull();
+    expect(localStorage.getItem("ahd-corp-overview-mode")).toBe("simple");
+  });
+
+  it("opens in Simple when that was the saved choice", () => {
+    localStorage.setItem("ahd-corp-overview-mode", "simple");
+    renderOverview();
+    expect(screen.getByText("Biggest sectors")).toBeTruthy();
+    expect(screen.getByText("Nothing needs you right now.")).toBeTruthy();
+    // Top five only, largest first.
+    const rows = screen.getAllByRole("row").filter((r) => within(r).queryByText(/^Region \d+$/));
+    expect(rows).toHaveLength(5);
+    expect(within(rows[0]).getByText("Region 12")).toBeTruthy();
+  });
+
+  it("lists losing sectors in Simple and opens the Sectors tab from the item", () => {
+    localStorage.setItem("ahd-corp-overview-mode", "simple");
+    const { onTabChange } = renderOverview({
+      sectors: [sector(1, 2_400), { ...sector(2, 4_800), profit: -300 }],
+    });
+    expect(screen.getByText("1 sector losing money")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Open" }));
+    expect(onTabChange).toHaveBeenCalledWith("sectors");
   });
 
   it("still shows a zero per-turn change when the value is known", () => {
