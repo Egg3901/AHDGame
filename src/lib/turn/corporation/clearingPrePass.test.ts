@@ -651,3 +651,32 @@ describe("runClearingPrePass with clearing enabled", () => {
     }
   );
 });
+
+describe("mixed extraction output placement", () => {
+  it("keeps coal available when another output has no placement", () => {
+    const { sector, lookups } = makeSectorWorld();
+    Object.assign(sector, { sectorType: "extraction", stateId: "WY", strategyId: "standard" });
+    lookups.statePlacementRatioByState = new Map([
+      [
+        "WY",
+        new Map([
+          ["coal", 0.5],
+          ["timber", 0],
+        ]),
+      ],
+    ]);
+    lookups.globalCommodityBalances = new Map([
+      ["coal", { supply: 1_000_000, demand: 1_000_000 }],
+      ["timber", { supply: 1_000_000, demand: 1_000_000 }],
+    ]);
+    const market = {
+      clearingEnabled: true,
+      plantsEnabled: true,
+      mediaRegulationEnabled: true,
+    } as MarketContext;
+    runClearingPrePass(makeInput({ lookups, market, freightSettlementActive: true }));
+    const clearing = market.clearingBySectorId?.get("sector1");
+    expect(clearing?.deliveredUnitsByCommodity?.coal).toBeGreaterThan(0);
+    expect(clearing?.deliveredUnitsByCommodity?.timber).toBe(0);
+  });
+});
