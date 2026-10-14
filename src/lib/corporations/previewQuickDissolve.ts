@@ -146,8 +146,8 @@ export async function previewQuickDissolve(
   // contribute to the cash payout preview. Held bonds (redeemed at face),
   // liquidCapital, and the operating-sector salvage below form the returned cash.
 
-  // Operating sectors are abandoned to the unowned market on dissolution, so a
-  // salvage fraction of their capitalized NPV is realized as cash — mirrors the
+  // Operating sectors leave the corporation on dissolution (to NPP successors,
+  // or the unowned market), so a salvage fraction of their capitalized NPV is realized as cash — mirrors the
   // dissolve route and the bond-default settlement. Same helper as the route so
   // the quote matches what executes.
   const sectorSalvageAnchor = await computeDissolutionSectorSalvageAnchor(

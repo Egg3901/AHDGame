@@ -20,6 +20,7 @@ export async function recordCorporationExit(
   params: {
     reason: CorporationExitReason;
     successorId?: ObjectId;
+    successorIds?: ObjectId[];
     now?: Date;
     turn?: number;
     strict?: boolean;
@@ -39,6 +40,7 @@ export async function recordCorporationExit(
       turn,
       lastRevenue: last?.revenue,
       successorId: params.successorId,
+      successorIds: params.successorIds,
       now: params.now ?? new Date(),
     });
     const { _id, ...fields } = exit;

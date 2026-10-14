@@ -17,7 +17,7 @@ import { buildPrimeRateMap, sumDefaultedBondPrincipal } from "@/lib/bonds/corpor
 import { sectorExitValueByIdAnchor } from "@/lib/bonds/sectorExitBasis";
 import { getMarketSystemModeForDb, marketAtLeast } from "@/lib/market/featureFlag";
 import { getGameState } from "@/lib/gameState";
-import { restoreSectorsToUnowned } from "@/lib/corporations/restoreSectorsToUnowned";
+import { disposeLeavingSectors } from "@/lib/corporations/nppPickup";
 import { previewRestructure } from "@/lib/bonds/restructure";
 import { emitTxBulk, loadTxThresholds } from "@/lib/financialTxLog/emit";
 import { logWireEvent, wireHeadlineCorpRestructured } from "@/lib/wireEvent";
@@ -215,10 +215,11 @@ export async function executeCorporationBondRestructure(
       { $inc: { liquidCapital: proceedsLocal - costLocal }, $set: { updatedAt: now } }
     );
 
-  // 2. Liquidate the selected sectors to the unowned market (idempotent, not
-  //    transaction-safe — must run outside any transaction).
+  // 2. Liquidate the selected sectors (idempotent, not transaction-safe, must
+  //    run outside any transaction). NPP operators take over most of each
+  //    plant's capacity; the rest returns to the unowned market.
   if (sectorsToLiquidate.length > 0) {
-    await restoreSectorsToUnowned(db, sectorsToLiquidate, now);
+    await disposeLeavingSectors(db, refreshed, sectorsToLiquidate, now);
   }
 
   // 3. Cure the defaulted bonds.

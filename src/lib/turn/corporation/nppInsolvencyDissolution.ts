@@ -33,11 +33,12 @@ import { SETTLEMENT_HISTORY_EXCLUDED } from "@/lib/banking/settlementHistory";
  * liquidCapital (anchor-converted) has fallen below a deep-negative threshold —
  * i.e. terminally insolvent, not a transient dip — is wound down via the same
  * `executeCorporationBondDefaultDissolution` used when a character is deleted.
- * That returns its sectors to the unowned market pool (so survivors/new
- * foundings can re-absorb the freed revenue), settles/cleans its share-market
- * activity and index-fund holdings, and removes the corp. The result is a
- * self-cleaning corporate economy: over-crowded sectors shed their weakest
- * corps until the survivors are viable.
+ * That hands its sectors to NPP successor corporations so the plants keep
+ * producing (a successor that fails in turn returns its sectors to the unowned
+ * market pool for survivors and new foundings to re-absorb), settles/cleans its
+ * share-market activity and index-fund holdings, and removes the corp. The
+ * successors' NPP operators mothball chronically loss-making plants, so
+ * over-crowded sectors still shed capacity without a supply cliff.
  *
  * Issue #3237: the deep threshold alone was toothless against slow bleeders.
  * 1953-era 250-turn sims ended with ~31% of corps persistently negative —

@@ -45,5 +45,7 @@ export interface CorporationExit {
   finalRevenue: number;
   /** The surviving corporation, set when the exit was a merger or acquisition. */
   successorId?: ObjectId;
+  /** NPP corporations that took over capacity from the dissolved corporation. */
+  successorIds?: ObjectId[];
   createdAt: Date;
 }
