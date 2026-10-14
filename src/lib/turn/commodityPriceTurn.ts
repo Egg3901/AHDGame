@@ -72,6 +72,10 @@ import {
   retailGdpParamsForStage,
   stockCoverCapTurnsForStage,
 } from "@/lib/market/commodityFixStages";
+import {
+  inputDemandRealPhaseProgress,
+  inputDemandRealPhaseStartTurnFrom,
+} from "@/lib/market/inputDemandRealPhase";
 import { GOVERNMENT_DEMAND_SUPPLY_CAP } from "@/lib/turn/commodity/rules/healthcareDemandCap";
 import { STOCK_COVER_CAP_TURNS } from "@/lib/market/inventory";
 import { computeExtractionCapacityMultipliers } from "@/lib/turn/extraction/extractionCapacity";
@@ -244,6 +248,10 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
             industryModel: 1,
             mediaDiscriminator: 1,
             revenue: 1,
+            // Realized price leg (clearing factor / sold fraction) for the
+            // input-demand deflator (src/lib/market/inputDemandRealPhase.ts).
+            clearingFactor: 1,
+            soldFraction: 1,
             countryId: 1,
             stateId: 1,
             corporationId: 1,
@@ -533,8 +541,12 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
   const fixStageCfg = await db
     .collection<GameConfig>("gameConfig")
     .findOne({ _id: "default" } as Record<string, unknown>, {
-      projection: { commodityFixStage: 1 },
+      projection: { commodityFixStage: 1, inputDemandRealPhaseStartTurn: 1 },
     });
+  const inputDemandRealPhase = inputDemandRealPhaseProgress(
+    inputDemandRealPhaseStartTurnFrom(fixStageCfg),
+    turn
+  );
   const commodityFixStage = normalizeCommodityFixStage(fixStageCfg?.commodityFixStage);
   const retailGdpParams = retailGdpParamsForStage(commodityFixStage, {
     scale: RETAIL_GDP_DEMAND_SCALE,
@@ -644,7 +656,8 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
       demandCalibration,
       activePreset,
       sectorUnits,
-      retailGdpParams
+      retailGdpParams,
+      inputDemandRealPhase
     );
 
   // Plants-tier produced/sold units for the inventory advance (see module).
