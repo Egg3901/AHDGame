@@ -118,6 +118,105 @@ export function updateScarcityMultiplier(
 }
 
 /**
+ * Momentum mode (commodity treadmill fix, stage 1). The level integrator
+ * above reads a PINNED residual as a severe shortage: when final demand is
+ * capped at k x prior supply, unmet share can never fall below 1 - 1/k however
+ * much capacity is built, and the multiplier marches to its target and stays
+ * there (prod t179: eight commodities at 2.068 after stepping up every turn
+ * since turn 1). This variant integrates CHANGE in imbalance instead: the
+ * multiplier steps toward the severity target only while the shortage is
+ * WORSENING against its trailing median, steps toward 1 while it is EASING,
+ * and decays toward 1 when it is flat. A chronic but stable shortage keeps
+ * its honest level-function price (1 + 0.7 ln D/S) and loses the runaway
+ * memory; a deteriorating one still signals.
+ */
+export const SCARCITY_MOMENTUM_HISTORY_TURNS = 12;
+/** Minimum history before a trailing reference exists; before that, flat. */
+export const SCARCITY_MOMENTUM_MIN_HISTORY = 4;
+/** Imbalance change (share points) inside which the market reads as flat. */
+export const SCARCITY_MOMENTUM_DEAD_BAND = 0.02;
+
+/** Signed imbalance: unmet share of demand minus surplus share of supply. */
+export function scarcityImbalance(supplyUnits: number, demandUnits: number): number {
+  const supply = Number.isFinite(supplyUnits) ? Math.max(0, supplyUnits) : 0;
+  const demand = Number.isFinite(demandUnits) ? Math.max(0, demandUnits) : 0;
+  const unmetShare = demand > 0 ? Math.max(0, demand - supply) / demand : 0;
+  const surplusShare = supply > 0 ? Math.max(0, supply - demand) / supply : 0;
+  return unmetShare - surplusShare;
+}
+
+function median(values: readonly number[]): number {
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 1 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+}
+
+function sanitizeHistory(history: readonly number[] | null | undefined): number[] {
+  if (!Array.isArray(history)) return [];
+  return history
+    .filter((v): v is number => typeof v === "number" && Number.isFinite(v))
+    .slice(-SCARCITY_MOMENTUM_HISTORY_TURNS);
+}
+
+/**
+ * Advance one commodity's scarcity multiplier in momentum mode. Pure. Returns
+ * the next multiplier and the trailing imbalance history to persist (the
+ * current turn appended, oldest dropped past the window).
+ */
+export function updateScarcityMultiplierMomentum(
+  previous: number | null | undefined,
+  supplyUnits: number,
+  demandUnits: number,
+  history: readonly number[] | null | undefined
+): { multiplier: number; history: number[] } {
+  const prev = clampMultiplier(previous ?? 1);
+  const supply = Number.isFinite(supplyUnits) ? Math.max(0, supplyUnits) : 0;
+  const demand = Number.isFinite(demandUnits) ? Math.max(0, demandUnits) : 0;
+  const past = sanitizeHistory(history);
+  if (supply <= 0 && demand <= 0) {
+    return { multiplier: decayToward1(prev), history: past };
+  }
+  const current = scarcityImbalance(supply, demand);
+  const nextHistory = [...past, current].slice(-SCARCITY_MOMENTUM_HISTORY_TURNS);
+  if (past.length < SCARCITY_MOMENTUM_MIN_HISTORY) {
+    // No trailing reference yet: hold, decaying toward neutral.
+    return { multiplier: decayToward1(prev), history: nextHistory };
+  }
+  const delta = current - median(past);
+  if (delta > SCARCITY_MOMENTUM_DEAD_BAND) {
+    // Worsening. Shortage worsening: step up toward the severity target.
+    // Glut worsening (imbalance falling further below 0): step down.
+    if (current > 0) {
+      const unmetShare = demand > 0 ? Math.max(0, demand - supply) / demand : 0;
+      const target =
+        1 +
+        (SCARCITY_DRIFT_MAX - 1) *
+          severityFraction(unmetShare, SCARCITY_DRIFT_UNMET_THRESHOLD, SCARCITY_DRIFT_SEVERE_UNMET);
+      return { multiplier: stepToward(prev, Math.max(prev, target)), history: nextHistory };
+    }
+    return { multiplier: stepToward(prev, 1), history: nextHistory };
+  }
+  if (delta < -SCARCITY_MOMENTUM_DEAD_BAND) {
+    // Easing. Shortage easing: step down toward 1. Glut deepening
+    // (imbalance falling): step down toward the glut target.
+    if (current < 0) {
+      const surplusShare = supply > 0 ? Math.max(0, supply - demand) / supply : 0;
+      const target =
+        1 -
+        (1 - SCARCITY_DRIFT_MIN) *
+          severityFraction(
+            surplusShare,
+            SCARCITY_DRIFT_SURPLUS_THRESHOLD,
+            SCARCITY_DRIFT_SEVERE_SURPLUS
+          );
+      return { multiplier: stepToward(prev, Math.min(prev, target)), history: nextHistory };
+    }
+    return { multiplier: stepToward(prev, 1), history: nextHistory };
+  }
+  return { multiplier: decayToward1(prev), history: nextHistory };
+}
+
+/**
  * Move `prev` one clamped step toward `target`, reusing the original ratchet
  * step size (prev·(1+STEP) up, prev÷(1+STEP) down) but stopping at the target
  * rather than overshooting toward the hard cap. When prev is already past the

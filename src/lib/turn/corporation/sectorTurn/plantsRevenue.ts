@@ -100,6 +100,8 @@ export interface PlantsRevenueInput {
   priorProductionUnitRatio: number;
   disasterOutputFactor: number;
   newPolicyLevel: number;
+  /** >= 1; commodity treadmill fix stage 4 shortage headroom (default 1). */
+  policyHeadroomFactor?: number;
   plantsCapacity: number;
   plantsMixPrice: number;
   plantsStartTurn: number | undefined | null;
@@ -379,7 +381,7 @@ export function resolvePlantsRevenue(input: PlantsRevenueInput): PlantsRevenueRe
   // worlds are untouched — there `producedUnits` is the revenue nameplate and
   // the ledger still owns the output curve on that path.
   const policyTonnageMultiplier = plantsEnabled
-    ? getOutputMultiplier(newPolicyLevel)
+    ? getOutputMultiplier(newPolicyLevel) * (input.policyHeadroomFactor ?? 1)
     : revenueMultiplier;
   const productionFactor =
     disasterOutputFactor *

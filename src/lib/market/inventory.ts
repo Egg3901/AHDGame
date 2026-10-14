@@ -113,6 +113,8 @@ export function advanceStock(args: {
   supplyUnits: number;
   demandUnits: number;
   coverCapEnabled?: boolean;
+  /** Cover cap in turns of demand; defaults to STOCK_COVER_CAP_TURNS. */
+  coverCapTurns?: number;
   /** Plants: units physically produced this turn (defaults to the flow model). */
   producedUnits?: number | null;
   /** Plants: units that actually cleared this turn. */
@@ -136,7 +138,11 @@ export function advanceStock(args: {
   let stock = afterFlow - baseSpoiled;
   let excessSpoiledUnits = 0;
   if (coverCapEnabled === true && demandUnits > 0) {
-    const capUnits = STOCK_COVER_CAP_TURNS * demandUnits;
+    const coverTurns =
+      typeof args.coverCapTurns === "number" && args.coverCapTurns > 0
+        ? args.coverCapTurns
+        : STOCK_COVER_CAP_TURNS;
+    const capUnits = coverTurns * demandUnits;
     const excess = Math.max(0, stock - capUnits);
     excessSpoiledUnits = excess * EXCESS_STOCK_SPOILAGE_RATE;
     stock -= excessSpoiledUnits;

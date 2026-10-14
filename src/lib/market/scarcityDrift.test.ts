@@ -4,7 +4,11 @@ import {
   SCARCITY_DRIFT_MAX,
   SCARCITY_DRIFT_MIN,
   SCARCITY_DRIFT_STEP,
+  SCARCITY_MOMENTUM_HISTORY_TURNS,
+  SCARCITY_MOMENTUM_MIN_HISTORY,
+  scarcityImbalance,
   updateScarcityMultiplier,
+  updateScarcityMultiplierMomentum,
 } from "./scarcityDrift";
 
 describe("updateScarcityMultiplier", () => {
@@ -93,5 +97,71 @@ describe("updateScarcityMultiplier", () => {
     let mult = 1;
     for (let i = 0; i < 10_000; i++) mult = updateScarcityMultiplier(mult, 40, 100); // 60% unmet
     expect(mult).toBe(SCARCITY_DRIFT_MAX);
+  });
+});
+
+describe("updateScarcityMultiplierMomentum (commodity treadmill fix stage 1)", () => {
+  const run = (
+    start: number,
+    series: Array<[number, number]>,
+    history: number[] = []
+  ): { multiplier: number; history: number[] } => {
+    let state = { multiplier: start, history };
+    for (const [supply, demand] of series) {
+      state = updateScarcityMultiplierMomentum(state.multiplier, supply, demand, state.history);
+    }
+    return state;
+  };
+
+  it("a pinned residual (demand = 1.5x supply every turn) stops climbing and decays", () => {
+    // Level mode marched 2.068 -> 2.5 here. Momentum mode must not step up.
+    const series: Array<[number, number]> = Array.from({ length: 40 }, () => [100, 150]);
+    const { multiplier, history } = run(2.068, series);
+    expect(multiplier).toBeLessThan(2.068);
+    expect(history.length).toBe(SCARCITY_MOMENTUM_HISTORY_TURNS);
+    // decays at the balanced-turn rate once the trailing reference exists
+    const afterRef = run(2.068, series.slice(0, SCARCITY_MOMENTUM_MIN_HISTORY + 1));
+    expect(afterRef.multiplier).toBeCloseTo(
+      1 + (2.068 - 1) * SCARCITY_DRIFT_DECAY ** (SCARCITY_MOMENTUM_MIN_HISTORY + 1),
+      6
+    );
+  });
+
+  it("keeps the live multiplier on the first turns (no reset step)", () => {
+    const next = updateScarcityMultiplierMomentum(2.068, 100, 150, undefined);
+    expect(next.multiplier).toBeCloseTo(1 + (2.068 - 1) * SCARCITY_DRIFT_DECAY, 10);
+    expect(next.history).toEqual([scarcityImbalance(100, 150)]);
+  });
+
+  it("a worsening shortage still steps up toward the severity target", () => {
+    const flat: Array<[number, number]> = Array.from({ length: 8 }, () => [100, 120]);
+    const base = run(1, flat);
+    const worse = updateScarcityMultiplierMomentum(base.multiplier, 100, 200, base.history);
+    expect(worse.multiplier).toBeCloseTo(base.multiplier * (1 + SCARCITY_DRIFT_STEP), 10);
+  });
+
+  it("an easing shortage steps down toward 1", () => {
+    const flat: Array<[number, number]> = Array.from({ length: 8 }, () => [100, 200]);
+    const base = run(1.8, flat);
+    const easing = updateScarcityMultiplierMomentum(base.multiplier, 100, 140, base.history);
+    expect(easing.multiplier).toBeCloseTo(base.multiplier / (1 + SCARCITY_DRIFT_STEP), 10);
+  });
+
+  it("a deepening glut steps down toward the glut target, an easing glut steps up", () => {
+    const flat: Array<[number, number]> = Array.from({ length: 8 }, () => [120, 100]);
+    const base = run(0.8, flat);
+    const deeper = updateScarcityMultiplierMomentum(base.multiplier, 200, 100, base.history);
+    expect(deeper.multiplier).toBeCloseTo(base.multiplier / (1 + SCARCITY_DRIFT_STEP), 10);
+    const easing = updateScarcityMultiplierMomentum(base.multiplier, 105, 100, base.history);
+    expect(easing.multiplier).toBeCloseTo(base.multiplier * (1 + SCARCITY_DRIFT_STEP), 10);
+  });
+
+  it("never leaves the hard bounds and drops garbage history", () => {
+    const { multiplier, history } = run(SCARCITY_DRIFT_MAX, [[0, 100]], [Number.NaN, 0.1]);
+    expect(multiplier).toBeLessThanOrEqual(SCARCITY_DRIFT_MAX);
+    expect(history.every((v) => Number.isFinite(v))).toBe(true);
+    expect(run(SCARCITY_DRIFT_MIN, [[100, 0]]).multiplier).toBeGreaterThanOrEqual(
+      SCARCITY_DRIFT_MIN
+    );
   });
 });

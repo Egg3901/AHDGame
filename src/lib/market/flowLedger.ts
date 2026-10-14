@@ -31,6 +31,8 @@ export function buildCommodityFlowDocs(args: {
    * Default off → behaviour identical to before the cap existed.
    */
   coverCapEnabled?: boolean;
+  /** Per-commodity cover cap in turns (commodity treadmill fix stage 5). */
+  coverCapTurnsFor?: (commodity: CommodityType) => number;
   /**
    * Plants tier: per commodity, the units corporate plants physically produced
    * and the units they actually sold this turn. Lets the stock advance book
@@ -48,6 +50,7 @@ export function buildCommodityFlowDocs(args: {
     nationalPricesByCommodity,
     prevStockByCommodity,
     coverCapEnabled,
+    coverCapTurnsFor,
     plantsUnitsByCommodity,
     turn,
     now,
@@ -89,6 +92,7 @@ export function buildCommodityFlowDocs(args: {
       supplyUnits: bal.supply,
       demandUnits: bal.demand,
       coverCapEnabled,
+      coverCapTurns: coverCapTurnsFor?.(commodity),
       producedUnits,
       soldUnits,
     });

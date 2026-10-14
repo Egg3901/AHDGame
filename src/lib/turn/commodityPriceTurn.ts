@@ -47,6 +47,8 @@ import {
   type SectorUnitsOut,
   type CommodityType,
   type ExtractableResource,
+  RETAIL_GDP_DEMAND_SCALE,
+  RETAIL_GDP_MULTIPLIER_MAX,
 } from "@/lib/constants/commodities";
 import { retailLegacyDemandFactor } from "@/lib/market/retailDemandTransition";
 import {
@@ -60,7 +62,18 @@ import {
   getDemographicsDemandEnabled,
   getHouseholdConsumptionEnabled,
 } from "@/lib/market/featureFlag";
-import { plantsHouseholdUnitScale } from "@/lib/turn/householdConsumption";
+import {
+  plantsHouseholdUnitScale,
+  PLANTS_HOUSEHOLD_SUPPLY_CAP,
+} from "@/lib/turn/householdConsumption";
+import {
+  demandSupplyCapForStage,
+  normalizeCommodityFixStage,
+  retailGdpParamsForStage,
+  stockCoverCapTurnsForStage,
+} from "@/lib/market/commodityFixStages";
+import { GOVERNMENT_DEMAND_SUPPLY_CAP } from "@/lib/turn/commodity/rules/healthcareDemandCap";
+import { STOCK_COVER_CAP_TURNS } from "@/lib/market/inventory";
 import { computeExtractionCapacityMultipliers } from "@/lib/turn/extraction/extractionCapacity";
 import { getStateResourceCapacityCollection } from "@/lib/db/collections/stateResourceCapacity";
 import {
@@ -496,6 +509,25 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
   const extractionOutputScaleEnabled = await getExtractionOutputScaleEnabled();
   const demographicsDemandEnabled = await getDemographicsDemandEnabled();
   const householdConsumptionEnabled = await getHouseholdConsumptionEnabled();
+  // Commodity treadmill fix stage (0..6), advanced one per turn by an operator.
+  const fixStageCfg = await db
+    .collection<GameConfig>("gameConfig")
+    .findOne({ _id: "default" } as Record<string, unknown>, {
+      projection: { commodityFixStage: 1 },
+    });
+  const commodityFixStage = normalizeCommodityFixStage(fixStageCfg?.commodityFixStage);
+  const retailGdpParams = retailGdpParamsForStage(commodityFixStage, {
+    scale: RETAIL_GDP_DEMAND_SCALE,
+    max: RETAIL_GDP_MULTIPLIER_MAX,
+  });
+  const householdSupplyCap = demandSupplyCapForStage(
+    commodityFixStage,
+    PLANTS_HOUSEHOLD_SUPPLY_CAP
+  );
+  const governmentSupplyCap = demandSupplyCapForStage(
+    commodityFixStage,
+    GOVERNMENT_DEMAND_SUPPLY_CAP
+  );
   const retailSelfLoopFactor =
     plantsLedgerEnabled && householdConsumptionEnabled
       ? retailLegacyDemandFactor(ledgerConfig, turn)
@@ -591,7 +623,8 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
       // Ticket 1370: the 1.5x cap bounds CALIBRATED demand. See the parameter.
       demandCalibration,
       activePreset,
-      sectorUnits
+      sectorUnits,
+      retailGdpParams
     );
 
   // Plants-tier produced/sold units for the inventory advance (see module).
@@ -644,6 +677,7 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
     householdFinalDemandByState = applyHouseholdDemand(
       {
         eraUnitScale: ledgerEraUnitScale,
+        supplyCapMultiple: householdSupplyCap,
         // Plants worlds: re-anchor household demand onto the physical unit basis
         // plants supply uses, clamped per commodity against prior supply. Legacy
         // worlds pass 1/undefined and are byte-identical (ticket #1027).
@@ -716,6 +750,7 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
   applyGovernmentDemand(
     {
       federalBudgets,
+      supplyCapMultiple: governmentSupplyCap,
       ledgerBasePrices: LEDGER_BASE_PRICES,
       fxRateForCountry,
       ledgerCurrentYear,
@@ -752,6 +787,7 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
       otherDemandByState: healthcareOtherDemandByState,
       truncated: demandTruncated,
       demandCalibration,
+      supplyCapMultiple: governmentSupplyCap,
     });
   }
 
@@ -964,6 +1000,7 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
     ledgerBasePrices: LEDGER_BASE_PRICES,
     commodityNominalPriceIndex,
     scarcityDriftEnabled,
+    commodityFixStage,
     commandEconomyEnabled,
     priceCurrentYear,
     freightSettlementActive,
@@ -1021,6 +1058,8 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
       ledgerBasePrices: LEDGER_BASE_PRICES,
       commodityNominalPriceIndex,
       stockCoverCapEnabled,
+      coverCapTurnsFor: (commodity) =>
+        stockCoverCapTurnsForStage(commodityFixStage, commodity, STOCK_COVER_CAP_TURNS),
       plantsUnitsByCommodity: plantsLedgerEnabled ? plantsUnitsByCommodity : undefined,
       tradeClearing,
       reachableBooks,
