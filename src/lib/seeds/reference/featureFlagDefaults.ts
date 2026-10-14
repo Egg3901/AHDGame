@@ -117,6 +117,7 @@ export const FRESH_WORLD_GAME_CONFIG_FLAGS = {
   shortageResponsiveSourcingEnabled: true,
   commodityScarcityDriftEnabled: true,
   stockCoverCapEnabled: true,
+  shortageBuildSpeedupEnabled: true,
   extractionOutputScaleEnabled: true,
   qualityPremiumPricingEnabled: true,
   sectorQualityEnabled: true,

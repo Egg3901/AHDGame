@@ -444,6 +444,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
   });
   market.explicitPlantCostsEnabled = marketGovernorConfig?.explicitPlantCostsEnabled === true;
   market.commodityFixStage = normalizeCommodityFixStage(marketGovernorConfig?.commodityFixStage);
+  market.shortageBuildSpeedupEnabled = marketGovernorConfig?.shortageBuildSpeedupEnabled === true;
   market.mediaRegulationEnabled = mediaRegulationEnabled;
   market.mediaEditorialEnabled = mediaEditorialEnabled;
   if (mediaRegulationEnabled) {

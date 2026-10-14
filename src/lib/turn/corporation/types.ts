@@ -475,6 +475,8 @@ export interface SectorUpdateOp {
       $inc?: Record<string, number>;
       $push?: Record<string, unknown>;
     };
+    /** Positional filters, used by the shortage build speed-up. */
+    arrayFilters?: Record<string, unknown>[];
   };
 }
 

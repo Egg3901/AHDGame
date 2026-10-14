@@ -428,6 +428,12 @@ export interface GameConfig {
    */
   commodityFixStage?: number;
   /**
+   * When true, outstanding build orders in sectors whose output is in deep
+   * shortage have their remaining build time halved, once per order. See
+   * turn/corporation/sectorTurn/shortageBuildSpeedup.ts.
+   */
+  shortageBuildSpeedupEnabled?: boolean;
+  /**
    * Money wiring (interstate-logistics plan step 5, phase A): when true, a
    * sector's input bill adds the landed-price premium for out-of-state
    * sourcing (last turn's sourcingNetworkLoad doc) on top of the global lagged

@@ -55,6 +55,8 @@ export interface MarketContext {
   explicitPlantCostsEnabled?: boolean;
   /** Commodity treadmill fix stage (0..6); stage 4 adds shortage policy headroom. */
   commodityFixStage?: number;
+  /** Halve remaining build time for orders in deep-shortage sectors. */
+  shortageBuildSpeedupEnabled?: boolean;
   /** Default off: ownership limits and censorship constrain media delivery. */
   mediaRegulationEnabled?: boolean;
   /** Default off: enacted pre-repeal US fairness doctrine affects outlet reach. */
