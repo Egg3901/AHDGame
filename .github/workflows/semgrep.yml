@@ -22,8 +22,17 @@ jobs:
       image: mirror.gcr.io/returntocorp/semgrep:latest
     steps:
       - uses: actions/checkout@v4
+      - name: Record checked tree
+        id: tree
+        run: |
+          checked_tree=$(git -c safe.directory="$GITHUB_WORKSPACE" rev-parse 'HEAD^{tree}')
+          test "${#checked_tree}" -eq 40
+          case "$checked_tree" in *[!a-f0-9]*) exit 1 ;; esac
+          printf 'tree=%s\n' "$checked_tree" >> "$GITHUB_OUTPUT"
       - name: Semgrep (AHD project rules)
         run: semgrep scan --config .semgrep/ --error --quiet
+      - name: qualified-tree-${{ steps.tree.outputs.tree }}
+        run: echo "Project security rules passed for this checked tree."
 
   # Advisory scan against maintained community rulesets. Findings surface as
   # code-scanning alerts, they do not block merges (the rulesets are broad and
