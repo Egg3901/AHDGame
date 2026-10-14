@@ -26,6 +26,8 @@ export interface TurnPersistenceInputs {
   ledgerBasePrices: Record<CommodityType, number>;
   commodityNominalPriceIndex: number;
   stockCoverCapEnabled: boolean;
+  /** Per-commodity cover cap in turns (commodity treadmill fix stage 5). */
+  coverCapTurnsFor?: (commodity: CommodityType) => number;
   plantsUnitsByCommodity?: Map<CommodityType, PlantsUnits>;
   tradeClearing: ReturnType<typeof clearAllCommodities>;
   reachableBooks: ReturnType<typeof buildReachableBooks>;
@@ -91,6 +93,7 @@ export async function persistTurnOutputs(
     ledgerBasePrices,
     commodityNominalPriceIndex,
     stockCoverCapEnabled,
+    coverCapTurnsFor,
     plantsUnitsByCommodity,
     tradeClearing,
     reachableBooks,
@@ -153,6 +156,7 @@ export async function persistTurnOutputs(
       nationalPricesByCommodity: appliedNationalPrices,
       prevStockByCommodity,
       coverCapEnabled: stockCoverCapEnabled,
+      coverCapTurnsFor,
       plantsUnitsByCommodity,
       turn,
       now,

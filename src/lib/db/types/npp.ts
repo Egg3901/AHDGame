@@ -3,12 +3,37 @@ import type { PolicyPositions } from "./character";
 import type { OfficeType, LineOfCreditState } from "./character";
 import type { CountryId } from "../../constants/countries";
 import type { CurrencyCode } from "../../constants/currencies";
+import type { OperatingSectorType } from "../../constants/corporations";
 
 export interface NPPPersonality {
   loyalty: number;
   ambition: number;
   stubbornness: number;
 }
+
+/**
+ * One sector's line in an NPP's CEO track record (NPP engine 6). Sampled once a
+ * game day for every NPP running a company with operating sectors in that lane.
+ */
+export interface NppCeoSectorRecord {
+  /** Turns observed running a company in this lane. Capped at CEO_RECORD_MAX_TURNS. */
+  turns: number;
+  /**
+   * Turn-weighted mean of the company's operating margin minus its sector
+   * peers' (same country, same lane, other companies), in percentage points.
+   * Currency-neutral. Clamped to plus or minus CEO_RECORD_REL_CLAMP_PP.
+   */
+  relMarginPp: number;
+  /** Turn of the last sample, so a replayed record pass is a no-op. */
+  lastTurn: number;
+}
+
+/**
+ * Per-NPP CEO track record keyed by operating lane. Bounded by the number of
+ * operating lanes; there is no per-tenure list. See
+ * `src/lib/nppAutonomy/v6/rules/ceoTrackRecord.ts`.
+ */
+export type NppCeoTrackRecord = Partial<Record<OperatingSectorType, NppCeoSectorRecord>>;
 
 export type NPPGender = "male" | "female";
 export type NPPEthnicity = "white" | "black" | "hispanic" | "asian" | "other";
@@ -125,6 +150,12 @@ export interface NPP {
    * fast roster filtering and faction-grouped views without a join.
    */
   factionId?: ObjectId | null;
+  /**
+   * NPP engine 6: results as a company CEO, by operating lane. Written by the
+   * daily record pass at every autonomy level (bookkeeping only); read only by
+   * v6 CEO selection. Absent until the NPP has run a company.
+   */
+  ceoTrackRecord?: NppCeoTrackRecord;
   /** Technocrat NPPs are excluded from election entry, bill voting, action AI, and fund generation. */
   isTechnocrat?: boolean;
   technocratRole?: string;

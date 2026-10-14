@@ -22,13 +22,16 @@ export function capHealthcareDemandToLocalSupply(args: {
   /** Existing demand outside household and government buyers is unchanged. */
   otherDemandByState?: ReadonlyMap<string, number>;
   demandCalibration?: (commodity: CommodityType) => number;
+  /** Shared ceiling multiple (default GOVERNMENT_DEMAND_SUPPLY_CAP). */
+  supplyCapMultiple?: number;
 }): void {
   const commodity: CommodityType = "healthcare_services";
+  const capMultiple = args.supplyCapMultiple ?? GOVERNMENT_DEMAND_SUPPLY_CAP;
   const calibration = calibrationMultiplier(args.demandCalibration, commodity);
   for (const [stateId, balances] of args.byState) {
     const balance = balances.get(commodity);
     if (!balance || !(Number.isFinite(balance.supply) && balance.supply > 0)) continue;
-    const cap = (balance.supply * GOVERNMENT_DEMAND_SUPPLY_CAP) / calibration;
+    const cap = (balance.supply * capMultiple) / calibration;
     const otherDemand = args.otherDemandByState?.get(stateId) ?? 0;
     const finalDemand = balance.demand - otherDemand;
     if (!(finalDemand > cap)) continue;

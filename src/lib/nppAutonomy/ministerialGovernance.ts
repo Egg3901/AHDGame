@@ -20,11 +20,12 @@
  * orders are never duplicated against an already-active order.
  */
 
-import type { Db } from "mongodb";
+import type { AnyBulkWriteOperation, Db } from "mongodb";
 import { ObjectId } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
 import type { NPP, NPPPersonality } from "@/lib/db/types/npp";
 import type { MinisterialOrder } from "@/lib/db/types/ministerialOrder";
+import type { CabinetSetting } from "@/lib/db/types/cabinetSetting";
 import type {
   CabinetPositionMechanics,
   MetricConfig,
@@ -53,7 +54,9 @@ import { METRIC_TO_DOMAIN } from "./selectNppBill";
 import { deriveGoverningArchetype, governingArchetypeModifiers } from "./governingArchetype";
 import { loadDomainHealth } from "./governingMetrics";
 import { nppAutonomyAtLeast } from "./featureFlag";
-import { ministerialCommitmentHolds } from "./v5/rules/governingGoals";
+import { ministerialCommitmentHolds, type GoverningGoalRecord } from "./v5/rules/governingGoals";
+import { judgeMinisterOnGoals, reshuffleThresholdMet } from "./v6/rules/ministerGoalJudgement";
+import { NPP_ENGINE_LEVEL } from "./engineVersion";
 import {
   evaluateReshuffleEligibility,
   governmentKeyForReshuffle,
@@ -309,6 +312,12 @@ const INACTIVE: MinisterialGovernanceResult = {
   reshuffled: 0,
 };
 
+/** A seat's appointment turn, or null for a legacy unstamped seat. */
+function seatAppointedTurn(minister: unknown): number | null {
+  const turn = (minister as { appointedTurn?: unknown }).appointedTurn;
+  return typeof turn === "number" && Number.isFinite(turn) ? turn : null;
+}
+
 /** The cabinet-member fields a minister needs to act through its levers. */
 type ActingMinister = {
   _id: ObjectId;
@@ -318,15 +327,78 @@ type ActingMinister = {
 };
 
 /**
+ * One country's ministerial reads and writes, shared across its ministers so a
+ * call costs a fixed number of round trips instead of several per minister.
+ *
+ * Reads: every acting seat's setting (`_id $in`) and the country's active
+ * orders, loaded once after `expireMinisterialOrders`. Writes: tier changes
+ * (one settings `bulkWrite`) and issued orders (one `insertMany`), flushed once
+ * by `flushMinisterialBatch`. The action spend stays a per-minister write
+ * because its guard decides how many orders issue.
+ *
+ * The in-memory views are updated as each minister acts, so a later minister
+ * reads exactly what the old per-minister findOne/find would have returned,
+ * even if two seats ever shared a position id.
+ */
+interface MinisterialBatch {
+  settingsById: Map<string, CabinetSetting>;
+  activeOrdersByPosition: Map<string, MinisterialOrder[]>;
+  settingWrites: AnyBulkWriteOperation<CabinetSetting>[];
+  orderInserts: MinisterialOrder[];
+}
+
+async function loadMinisterialBatch(
+  db: Db,
+  countryId: CountryId,
+  positionIds: string[]
+): Promise<MinisterialBatch> {
+  const settingIds = [...new Set(positionIds)].map((positionId) => `${countryId}_${positionId}`);
+  const [settings, activeOrders] = await Promise.all([
+    settingIds.length > 0
+      ? getCabinetSettingsCollection(db)
+          .find({ _id: { $in: settingIds } })
+          .toArray()
+      : Promise.resolve([] as CabinetSetting[]),
+    getMinisterialOrdersCollection(db).find({ countryId, active: true }).toArray(),
+  ]);
+  const activeOrdersByPosition = new Map<string, MinisterialOrder[]>();
+  for (const order of activeOrders) {
+    const list = activeOrdersByPosition.get(order.positionId);
+    if (list) list.push(order);
+    else activeOrdersByPosition.set(order.positionId, [order]);
+  }
+  return {
+    settingsById: new Map(settings.map((setting) => [setting._id, setting])),
+    activeOrdersByPosition,
+    settingWrites: [],
+    orderInserts: [],
+  };
+}
+
+/** Persist the batched tier changes and issued orders. Safe to call when empty. */
+async function flushMinisterialBatch(db: Db, batch: MinisterialBatch): Promise<void> {
+  if (batch.settingWrites.length > 0) {
+    await getCabinetSettingsCollection(db).bulkWrite(batch.settingWrites, { ordered: true });
+    batch.settingWrites = [];
+  }
+  if (batch.orderInserts.length > 0) {
+    await getMinisterialOrdersCollection(db).insertMany(batch.orderInserts, { ordered: true });
+    batch.orderInserts = [];
+  }
+}
+
+/**
  * Apply one minister's planned levers — tier setting (cooldown-guarded) and
  * action-costed orders — against `agenda`. Shared by the V1 government-wide
  * `runMinisterialGovernance` and the V2.1 player-country `runCaretakerMinisters`
  * so both speak the identical, already-clamped cabinet-effect pipeline; only the
  * agenda each passes differs (government-wide vs. the caretaker's own portfolio).
- * Returns whether a tier was set and how many orders were issued.
+ * Reads and writes go through the country's `MinisterialBatch`; the caller
+ * flushes it. Returns whether a tier was set and how many orders were issued.
  */
 async function applyMinisterialPlanForMinister(
   db: Db,
+  batch: MinisterialBatch,
   args: {
     countryId: CountryId;
     minister: ActingMinister;
@@ -353,15 +425,11 @@ async function applyMinisterialPlanForMinister(
   } = args;
   if (!minister.nppId) return { tierSet: false, ordersIssued: 0 };
 
-  const settingsCol = getCabinetSettingsCollection(db);
-  const ordersCol = getMinisterialOrdersCollection(db);
   const membersCol = getCabinetMembersCollection(db);
 
   const settingId = `${countryId}_${minister.positionId}`;
-  const setting = await settingsCol.findOne({ _id: settingId });
-  const activeOrders = await ordersCol
-    .find({ countryId, positionId: minister.positionId, active: true })
-    .toArray();
+  const setting = batch.settingsById.get(settingId) ?? null;
+  const activeOrders = batch.activeOrdersByPosition.get(minister.positionId) ?? [];
   const activeOrderIds = new Set(
     activeOrders.filter((o) => isMinisterialOrderActive(o, currentTurn)).map((o) => o.orderId)
   );
@@ -384,65 +452,84 @@ async function applyMinisterialPlanForMinister(
     setting?.lastChangedTurn === undefined ||
     currentTurn - setting.lastChangedTurn >= SETTING_CHANGE_COOLDOWN_TURNS;
   if (plan.tier && tierCooldownOk) {
-    await settingsCol.updateOne(
-      { _id: settingId },
-      {
-        $set: {
-          countryId,
-          positionId: minister.positionId,
-          characterId: null,
-          isNPP: true,
-          nppId: minister.nppId,
-          tierSetting: plan.tier,
-          lastChangedTurn: currentTurn,
-          updatedAt: now,
-        },
-      },
-      { upsert: true }
-    );
+    const fields = {
+      countryId,
+      positionId: minister.positionId,
+      characterId: null,
+      isNPP: true,
+      nppId: minister.nppId,
+      tierSetting: plan.tier,
+      lastChangedTurn: currentTurn,
+      updatedAt: now,
+    };
+    batch.settingWrites.push({
+      updateOne: { filter: { _id: settingId }, update: { $set: fields }, upsert: true },
+    });
+    batch.settingsById.set(settingId, {
+      ...(setting ?? { _id: settingId }),
+      ...fields,
+    } as CabinetSetting);
     tierSet = true;
   }
 
   // Orders — spend an action per order, mirroring the order API's spend-guard.
   const positionMetrics = [...mechanics.nationalMetrics, ...mechanics.regionalMetrics];
   const ordersConfig = getMinisterialOrders(countryId, minister.positionId);
-  let ordersIssued = 0;
-  for (const orderId of plan.orderIds) {
-    const config = ordersConfig.find((o) => o.id === orderId);
-    if (!config) continue;
-    const spend = await membersCol.updateOne(
-      { _id: minister._id, ministerialActions: { $gte: 1 } },
-      { $inc: { ministerialActions: -1 } }
-    );
-    if (spend.modifiedCount === 0) break; // pool exhausted
+  const configs = plan.orderIds
+    .map((orderId) => ordersConfig.find((o) => o.id === orderId))
+    .filter((config): config is MinisterialOrderConfig => !!config);
+  if (configs.length === 0) return { tierSet, ordersIssued: 0 };
 
-    const effects = config.effects.map((e) => ({
+  // One guarded spend for the whole plan. It succeeds exactly when the pool
+  // holds every action the plan needs, which is when the old one-action-at-a-
+  // time loop would have issued them all. If the pool is short (a concurrent
+  // spend since the cabinet read), fall back to that loop so the minister issues
+  // as many orders as the pool still covers, in plan order.
+  let affordable = 0;
+  const bulkSpend = await membersCol.updateOne(
+    { _id: minister._id, ministerialActions: { $gte: configs.length } },
+    { $inc: { ministerialActions: -configs.length } }
+  );
+  if (bulkSpend.modifiedCount === 1) {
+    affordable = configs.length;
+  } else {
+    for (let i = 0; i < configs.length; i++) {
+      const spend = await membersCol.updateOne(
+        { _id: minister._id, ministerialActions: { $gte: 1 } },
+        { $inc: { ministerialActions: -1 } }
+      );
+      if (spend.modifiedCount === 0) break; // pool exhausted
+      affordable++;
+    }
+  }
+
+  const issued: MinisterialOrder[] = configs.slice(0, affordable).map((config) => ({
+    _id: new ObjectId(),
+    countryId,
+    positionId: minister.positionId,
+    characterId: null,
+    isNPP: true,
+    nppId: minister.nppId,
+    orderId: config.id,
+    orderName: config.name,
+    effects: config.effects.map((e) => ({
       metric: resolveMetricPath(e.metric, positionMetrics),
       modifier: e.modifier,
       scope: e.scope,
-    }));
-    const order: MinisterialOrder = {
-      _id: new ObjectId(),
-      countryId,
-      positionId: minister.positionId,
-      characterId: null,
-      isNPP: true,
-      nppId: minister.nppId,
-      orderId: config.id,
-      orderName: config.name,
-      effects,
-      issuedAt: now,
-      issuedTurn: currentTurn,
-      duration: config.duration,
-      expiresTurn: computeMinisterialOrderExpiresTurn(currentTurn, config.duration),
-      active: true,
-      createdAt: now,
-    };
-    await ordersCol.insertOne(order);
-    ordersIssued++;
+    })),
+    issuedAt: now,
+    issuedTurn: currentTurn,
+    duration: config.duration,
+    expiresTurn: computeMinisterialOrderExpiresTurn(currentTurn, config.duration),
+    active: true,
+    createdAt: now,
+  }));
+  if (issued.length > 0) {
+    batch.orderInserts.push(...issued);
+    batch.activeOrdersByPosition.set(minister.positionId, [...activeOrders, ...issued]);
   }
 
-  return { tierSet, ordersIssued };
+  return { tierSet, ordersIssued: issued.length };
 }
 
 /**
@@ -529,6 +616,16 @@ export async function runMinisterialGovernance(
       : null;
   let guardStateDirty = false;
 
+  // v6: ministers judged on their goal. Read once per call; below v6 the list
+  // stays empty so the reshuffle threshold is the shortfall rule alone.
+  const standingGoals: GoverningGoalRecord[] = (await nppAutonomyAtLeast(
+    db,
+    countryId,
+    NPP_ENGINE_LEVEL
+  ))
+    ? (gov.governingGoals?.goals ?? [])
+    : [];
+
   let reshuffled = 0;
   const survivors: typeof ministers = [];
   // Shortfall per surviving minister, computed once here and reused by the V5
@@ -540,7 +637,27 @@ export async function runMinisterialGovernance(
       ? ministerShortfall(positionDomains(mechanics), agendaByDomain, domainHealth)
       : 0;
     shortfallByPosition.set(minister.positionId, shortfall);
-    if (!mechanics || !shouldReshuffleMinister(shortfall, reshufflePropensity)) {
+    if (!mechanics) {
+      survivors.push(minister);
+      continue;
+    }
+    const shortfallMet = shouldReshuffleMinister(shortfall, reshufflePropensity);
+    // v6: a minister whose brief carries a standing goal is judged on that
+    // goal's record. Below v6 `standingGoals` is empty and this is the
+    // shortfall verdict unchanged.
+    const goalJudgement =
+      standingGoals.length > 0
+        ? judgeMinisterOnGoals({
+            domains: positionDomains(mechanics),
+            goals: standingGoals,
+            domainHealth,
+            appointedTurn: seatAppointedTurn(minister),
+          })
+        : null;
+    const thresholdMet = goalJudgement
+      ? reshuffleThresholdMet(goalJudgement, shortfallMet)
+      : shortfallMet;
+    if (!thresholdMet) {
       survivors.push(minister);
       continue;
     }
@@ -587,10 +704,11 @@ export async function runMinisterialGovernance(
     });
     portfolios[minister.positionId] = record;
     govLastReshuffleTurn = currentTurn;
+    const goalFailed = goalJudgement?.verdict === "goal-failed";
     lastReplacement = {
       positionId: minister.positionId,
       turn: currentTurn,
-      reason: "underperformance",
+      reason: goalFailed ? "goal-failed" : "underperformance",
       priorTenureTurns: tenureTurns,
       shortfall,
       consecutiveReshuffles: record.consecutiveReshuffles,
@@ -599,7 +717,7 @@ export async function runMinisterialGovernance(
     guardStateDirty = true;
     console.log(
       `[nppAutonomy] ${countryId}: reshuffled ${minister.positionId} ` +
-        `(shortfall ${shortfall.toFixed(2)}, tenure ${tenureTurns === null ? "legacy" : `${tenureTurns}t`}, ` +
+        `(${goalFailed ? `failed ${goalJudgement?.domain} goal, ` : ""}shortfall ${shortfall.toFixed(2)}, tenure ${tenureTurns === null ? "legacy" : `${tenureTurns}t`}, ` +
         `consecutive ${record.consecutiveReshuffles})`
     );
   }
@@ -645,34 +763,48 @@ export async function runMinisterialGovernance(
   let tiersSet = 0;
   let ordersIssued = 0;
 
-  for (const minister of ministers) {
-    const mechanics = getCabinetMechanics(countryId, minister.positionId);
-    if (!mechanics) continue;
-    if (!minister.nppId) continue;
+  const acting = ministers.filter(
+    (minister) => !!minister.nppId && !!getCabinetMechanics(countryId, minister.positionId)
+  );
+  const batch = await loadMinisterialBatch(
+    db,
+    countryId,
+    acting.map((minister) => minister.positionId)
+  );
+  try {
+    for (const minister of acting) {
+      const mechanics = getCabinetMechanics(countryId, minister.positionId);
+      if (!mechanics) continue;
+      if (!minister.nppId) continue;
 
-    const personality =
-      personalityByNpp.get(minister.nppId.toString()) ??
-      ({ loyalty: 50, ambition: 50, stubbornness: 50 } as NPPPersonality);
-    const applied = await applyMinisterialPlanForMinister(db, {
-      countryId,
-      minister,
-      mechanics,
-      agenda,
-      personality,
-      domainHealth,
-      currentTurn,
-      now,
-      ...(commitmentPolicy
-        ? {
-            commitment: {
-              shortfall: shortfallByPosition.get(minister.positionId) ?? 0,
-              policy: commitmentPolicy,
-            },
-          }
-        : {}),
-    });
-    if (applied.tierSet) tiersSet++;
-    ordersIssued += applied.ordersIssued;
+      const personality =
+        personalityByNpp.get(minister.nppId.toString()) ??
+        ({ loyalty: 50, ambition: 50, stubbornness: 50 } as NPPPersonality);
+      const applied = await applyMinisterialPlanForMinister(db, batch, {
+        countryId,
+        minister,
+        mechanics,
+        agenda,
+        personality,
+        domainHealth,
+        currentTurn,
+        now,
+        ...(commitmentPolicy
+          ? {
+              commitment: {
+                shortfall: shortfallByPosition.get(minister.positionId) ?? 0,
+                policy: commitmentPolicy,
+              },
+            }
+          : {}),
+      });
+      if (applied.tierSet) tiersSet++;
+      ordersIssued += applied.ordersIssued;
+    }
+  } finally {
+    // Flush even when a later minister throws: earlier ministers already spent
+    // their actions, so their orders and tiers must land as they did before.
+    await flushMinisterialBatch(db, batch);
   }
 
   if (tiersSet > 0 || ordersIssued > 0) {
@@ -751,68 +883,79 @@ export async function runCaretakerMinisters(
   // length, but only the UK hook reads them.
   let resignationApproval: number | null = null;
   let resignationTurnMs: number | null = null;
-  for (const minister of ministers) {
-    // Validate before anything else: a caretaker with no portfolio mechanics
-    // or no backing NPP doc is not a seat the hook may resign, steer, or
-    // count — skip it before the resignation roll below.
-    const mechanics = getCabinetMechanics(countryId, minister.positionId);
-    if (!mechanics) continue;
-    const npp = nppById.get(minister.nppId.toString());
-    if (!npp) continue;
+  // Resignation never touches settings or orders, so preloading every
+  // caretaker's seat up front reads the same rows the per-minister reads did.
+  const batch = await loadMinisterialBatch(
+    db,
+    countryId,
+    ministers.map((minister) => minister.positionId)
+  );
+  try {
+    for (const minister of ministers) {
+      // Validate before anything else: a caretaker with no portfolio mechanics
+      // or no backing NPP doc is not a seat the hook may resign, steer, or
+      // count — skip it before the resignation roll below.
+      const mechanics = getCabinetMechanics(countryId, minister.positionId);
+      if (!mechanics) continue;
+      const npp = nppById.get(minister.nppId.toString());
+      if (!npp) continue;
 
-    // NPP resignation (issue #859, UK only): a caretaker whose government
-    // stands badly may quit of its own accord. The seat is left vacant for
-    // the player head to re-appoint; the flat gauge hit lands in the shell.
-    // eslint-disable-next-line local/no-country-literals -- the NPP resignation hook and confidence gauge are UK-specific structures
-    if (countryId === "UK") {
-      if (resignationApproval === null) {
-        resignationApproval = await readApprovalForResignation(db, countryId);
+      // NPP resignation (issue #859, UK only): a caretaker whose government
+      // stands badly may quit of its own accord. The seat is left vacant for
+      // the player head to re-appoint; the flat gauge hit lands in the shell.
+      // eslint-disable-next-line local/no-country-literals -- the NPP resignation hook and confidence gauge are UK-specific structures
+      if (countryId === "UK") {
+        if (resignationApproval === null) {
+          resignationApproval = await readApprovalForResignation(db, countryId);
+        }
+        if (resignationTurnMs === null) {
+          resignationTurnMs = (await loadTurnLengthMinutes(db)) * 60_000;
+        }
+        const appointedAt = (minister as { appointedAt?: Date }).appointedAt;
+        const turnsInPost =
+          appointedAt instanceof Date && resignationTurnMs > 0
+            ? Math.max(0, Math.floor((now.getTime() - appointedAt.getTime()) / resignationTurnMs))
+            : Number.MAX_SAFE_INTEGER;
+        const { resigned } = await resignNppCaretakerMinister(db, {
+          countryId,
+          memberId: minister._id,
+          positionId: minister.positionId,
+          input: { approval: resignationApproval, turnsInPost },
+          rng,
+          now,
+        });
+        if (resigned) {
+          resignations += 1;
+          continue;
+        }
       }
-      if (resignationTurnMs === null) {
-        resignationTurnMs = (await loadTurnLengthMinutes(db)) * 60_000;
-      }
-      const appointedAt = (minister as { appointedAt?: Date }).appointedAt;
-      const turnsInPost =
-        appointedAt instanceof Date && resignationTurnMs > 0
-          ? Math.max(0, Math.floor((now.getTime() - appointedAt.getTime()) / resignationTurnMs))
-          : Number.MAX_SAFE_INTEGER;
-      const { resigned } = await resignNppCaretakerMinister(db, {
+
+      // The caretaker's own portfolio agenda: conditions + its ideology, ranked
+      // and clamped by its archetype. No crises (no NPP government owns them here).
+      const agenda = computeGoverningAgenda({
+        conditions,
+        ideology: { economic: npp.policies?.economic ?? 0, social: npp.policies?.social ?? 0 },
+        personality: npp.personality,
+        ...(mandate ? { mandate: mandate.domains } : {}),
+        crises: {},
+        currentTurn,
+      }).items;
+
+      const applied = await applyMinisterialPlanForMinister(db, batch, {
         countryId,
-        memberId: minister._id,
-        positionId: minister.positionId,
-        input: { approval: resignationApproval, turnsInPost },
-        rng,
+        minister,
+        mechanics,
+        agenda,
+        personality: npp.personality,
+        domainHealth,
+        currentTurn,
         now,
       });
-      if (resigned) {
-        resignations += 1;
-        continue;
-      }
+      if (applied.tierSet) tiersSet++;
+      ordersIssued += applied.ordersIssued;
     }
-
-    // The caretaker's own portfolio agenda: conditions + its ideology, ranked
-    // and clamped by its archetype. No crises (no NPP government owns them here).
-    const agenda = computeGoverningAgenda({
-      conditions,
-      ideology: { economic: npp.policies?.economic ?? 0, social: npp.policies?.social ?? 0 },
-      personality: npp.personality,
-      ...(mandate ? { mandate: mandate.domains } : {}),
-      crises: {},
-      currentTurn,
-    }).items;
-
-    const applied = await applyMinisterialPlanForMinister(db, {
-      countryId,
-      minister,
-      mechanics,
-      agenda,
-      personality: npp.personality,
-      domainHealth,
-      currentTurn,
-      now,
-    });
-    if (applied.tierSet) tiersSet++;
-    ordersIssued += applied.ordersIssued;
+  } finally {
+    await flushMinisterialBatch(db, batch);
   }
 
   if (tiersSet > 0 || ordersIssued > 0 || resignations > 0) {

@@ -33,6 +33,7 @@ import {
 } from "./constants";
 import { fetchSectorMarketSharePercent } from "@/lib/corporations/marketShare";
 import { pickOrCreateNppCeoForNewCorp } from "@/lib/corporations/subsidiaries/nppCeoSelection";
+import { operatingSectorTypeFor } from "@/lib/constants/corporations";
 import { getDefaultLegalStructureId } from "@/lib/corporations/legalStructure";
 import { loadWorldEraUnitScale } from "@/lib/currency/gdpAnchorRate";
 import {
@@ -249,7 +250,17 @@ export async function privatizeAsset(
   let ceoVacant = true;
   let ceoType: "npp" | undefined;
   if (!isAuction) {
-    ceoId = await pickOrCreateNppCeoForNewCorp(db, params.countryId, headquartersState);
+    ceoId = await pickOrCreateNppCeoForNewCorp(
+      db,
+      params.countryId,
+      headquartersState,
+      undefined,
+      operatingSectorTypeFor(
+        firstSector.sectorType,
+        firstSector.industryModel,
+        firstSector.mediaDiscriminator
+      )
+    );
     ceoUserId = SYSTEM_USER;
     ceoVacant = false;
     ceoType = "npp";

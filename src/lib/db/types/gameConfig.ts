@@ -417,6 +417,12 @@ export interface GameConfig {
    */
   commodityScarcityDriftEnabled?: boolean;
   /**
+   * Commodity treadmill fix stage, 0..6, advanced one per turn by an operator.
+   * See src/lib/market/commodityFixStages.ts for what each stage changes.
+   * Unset or 0 keeps every pre-fix constant.
+   */
+  commodityFixStage?: number;
+  /**
    * Money wiring (interstate-logistics plan step 5, phase A): when true, a
    * sector's input bill adds the landed-price premium for out-of-state
    * sourcing (last turn's sourcingNetworkLoad doc) on top of the global lagged

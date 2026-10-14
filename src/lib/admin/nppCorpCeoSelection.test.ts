@@ -175,3 +175,90 @@ describe("chooseNppCorpCeo — forced party override", () => {
     expect(choice).toEqual({ kind: "new", party: "7" });
   });
 });
+
+describe("chooseNppCorpCeo NPP engine 6 CEO choice by record", () => {
+  const good = { energy: { turns: 96, relMarginPp: 4, lastTurn: 96 } };
+  const better = { energy: { turns: 240, relMarginPp: 6, lastTurn: 240 } };
+  const bad = { energy: { turns: 240, relMarginPp: -3, lastTurn: 240 } };
+  const withRecord = (id: string, trackRecord: object, influence = 1, seq = 9) => ({
+    ...npp(id, influence, seq),
+    trackRecord,
+  });
+  const affiliations = [
+    { party: "1", corpCount: 0, freeNpps: [npp("balanced", 9, 1)] },
+    {
+      party: "2",
+      corpCount: 5,
+      freeNpps: [withRecord("good", good), withRecord("better", better), withRecord("bad", bad)],
+    },
+  ];
+
+  it("without a lane, records are ignored and the party balance decides (below v6 pin)", () => {
+    expect(chooseNppCorpCeo({ affiliations })).toEqual({
+      kind: "existing",
+      party: "1",
+      nppId: "balanced",
+    });
+  });
+
+  it("with a lane, the best good record in that lane wins over the balance", () => {
+    expect(chooseNppCorpCeo({ affiliations, sectorLane: "energy" })).toEqual({
+      kind: "existing",
+      party: "2",
+      nppId: "better",
+    });
+  });
+
+  it("falls back to the balance when nobody has a good record in the lane", () => {
+    expect(chooseNppCorpCeo({ affiliations, sectorLane: "financial" })).toEqual({
+      kind: "existing",
+      party: "1",
+      nppId: "balanced",
+    });
+    const onlyBad = [
+      { party: "1", corpCount: 0, freeNpps: [npp("balanced", 9, 1)] },
+      { party: "2", corpCount: 5, freeNpps: [withRecord("bad", bad)] },
+    ];
+    expect(chooseNppCorpCeo({ affiliations: onlyBad, sectorLane: "energy" })).toMatchObject({
+      nppId: "balanced",
+    });
+  });
+
+  it("a short record does not count yet", () => {
+    const short = { energy: { turns: 12, relMarginPp: 20, lastTurn: 12 } };
+    const rows = [
+      { party: "1", corpCount: 0, freeNpps: [npp("balanced", 9, 1)] },
+      { party: "2", corpCount: 5, freeNpps: [withRecord("short", short)] },
+    ];
+    expect(chooseNppCorpCeo({ affiliations: rows, sectorLane: "energy" })).toMatchObject({
+      nppId: "balanced",
+    });
+  });
+
+  it("a forced party keeps the search inside that party", () => {
+    expect(chooseNppCorpCeo({ affiliations, forcedParty: "1", sectorLane: "energy" })).toEqual({
+      kind: "existing",
+      party: "1",
+      nppId: "balanced",
+    });
+    expect(chooseNppCorpCeo({ affiliations, forcedParty: "2", sectorLane: "energy" })).toEqual({
+      kind: "existing",
+      party: "2",
+      nppId: "better",
+    });
+  });
+
+  it("buildCeoAffiliations carries track records onto free NPPs", () => {
+    const rows = buildCeoAffiliations({
+      nonDefunctPartyIds: ["1"],
+      existingCorpCeos: [],
+      activeNpps: [{ id: "a", party: "1", influence: 1, seq: 1, trackRecord: good }],
+    });
+    expect(rows.find((r) => r.party === "1")!.freeNpps[0]).toEqual({
+      id: "a",
+      influence: 1,
+      seq: 1,
+      trackRecord: good,
+    });
+  });
+});

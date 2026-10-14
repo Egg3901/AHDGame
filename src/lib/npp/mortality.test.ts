@@ -142,6 +142,25 @@ describe("processNppMortality", () => {
     expect(inserted.birthYear).toBe(1975);
   });
 
+  it("vacates the CEO seat of companies the dead NPP ran", async () => {
+    vi.mocked(nppAutonomyAtLeast).mockResolvedValue(true);
+    const dead = npp({ birthYear: 1900 });
+    db.collection("corporations");
+    seedNpps([dead]);
+
+    await processNppMortality(db as unknown as Db, {
+      now: new Date("2019-01-01T00:00:00Z"),
+      year: 2019,
+      rng: () => 0,
+      mintReplacement: mintStub,
+    });
+
+    expect(db.collectionMocks["corporations"].updateMany).toHaveBeenCalledWith(
+      { ceoId: { $in: [dead._id] }, caretakerCeo: { $exists: false }, ceoVacant: { $ne: true } },
+      expect.objectContaining({ $set: expect.objectContaining({ ceoVacant: true }) })
+    );
+  });
+
   it("repoints head-of-government formation ids to the successor", async () => {
     vi.mocked(nppAutonomyAtLeast).mockResolvedValue(true);
     const dead = npp({ birthYear: 1900 });

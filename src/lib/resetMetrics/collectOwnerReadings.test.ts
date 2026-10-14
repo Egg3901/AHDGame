@@ -436,6 +436,97 @@ describe("first live v2 metric owners", () => {
     expect(readings["US:national"]!.updates["58"]).toBeUndefined();
   });
 
+  it("moves a provisional metric toward its funded-law settlement and back when the law lapses", async () => {
+    const db = createMockDb();
+    mockOwnerSources(db);
+    const board = boards.find((candidate) => candidate._id === "JP:KAN")!;
+    const opening = board.observations["26"]!.value!;
+    db.collection("resetLawPrograms").find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([
+        {
+          _id: "test-world:JP:national:L25",
+          country: "JP",
+          scope: "national",
+          familyId: "L25",
+          fundingAccountId: "JP:jp_land_ministry",
+          primaryMetricEffects: [{ metricId: "26", favorableNormalizedPoints: 0.89 }],
+        },
+      ]),
+    });
+    db.collection("resetDepartmentAccounts").find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([
+        {
+          _id: "JP:jp_land_ministry",
+          countryId: "JP",
+          externallySettled: false,
+          lastProgramDelivery: { L25: { implementationFactor: 1 } },
+        },
+      ]),
+    });
+    // Turn 13: the 12-turn infrastructure cadence is due for the first time.
+    const funded = await collectResetMetricOwnerReadings(db as unknown as Db, [board], 13);
+    const lifted = funded[board._id]!.updates["26"]!;
+    expect(lifted.status).toBe("proxy");
+    expect(lifted.value!).toBeGreaterThan(opening);
+    expect(lifted.source).toContain("moved by enacted-law and Cabinet pressure");
+    // A metric the law does not target is still a plain carry-forward.
+    expect(funded[board._id]!.updates["27"]!.value).toBe(board.observations["27"]!.value);
+    expect(funded[board._id]!.updates["27"]!.source).toBe("provisional continuity owner: transit");
+    // Live owners are untouched by pressure.
+    expect(funded[board._id]!.updates["05"]).toBeUndefined();
+
+    // Defunded: the delivery factor drops to zero, and the line drifts back.
+    db.collection("resetDepartmentAccounts").find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([
+        {
+          _id: "JP:jp_land_ministry",
+          countryId: "JP",
+          externallySettled: false,
+          lastProgramDelivery: { L25: { implementationFactor: 0 } },
+        },
+      ]),
+    });
+    const advanced = refreshResetMetricBoard({
+      board,
+      turn: 13,
+      allowCatchUp: true,
+      ...funded[board._id]!,
+    }).board;
+    const lapsed = await collectResetMetricOwnerReadings(db as unknown as Db, [advanced], 25);
+    const relaxed = lapsed[advanced._id]!.updates["26"]!.value!;
+    expect(relaxed).toBeLessThan(lifted.value!);
+    expect(relaxed).toBeGreaterThan(opening);
+  });
+
+  it("applies an active national Cabinet initiative to the regional boards it reaches", async () => {
+    const db = createMockDb();
+    mockOwnerSources(db);
+    const board = boards.find((candidate) => candidate._id === "JP:KAN")!;
+    db.collection("resetCabinetActionStates").find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([
+        {
+          _id: "JP",
+          active: [
+            {
+              actionId: "JP:land_minister:1",
+              country: "JP",
+              seatId: "land_minister",
+              scope: "Nat",
+              target: "M26",
+              strength: 0.14,
+              startsTurn: 10,
+              expiresTurn: 30,
+            },
+          ],
+        },
+      ]),
+    });
+    const readings = await collectResetMetricOwnerReadings(db as unknown as Db, [board], 13);
+    expect(readings[board._id]!.updates["26"]!.value!).toBeGreaterThan(
+      board.observations["26"]!.value!
+    );
+  });
+
   it("provides an explicitly provisional owner for every non-physical due metric", async () => {
     const db = createMockDb();
     mockOwnerSources(db);

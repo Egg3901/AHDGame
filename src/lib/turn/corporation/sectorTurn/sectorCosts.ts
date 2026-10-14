@@ -139,6 +139,8 @@ export interface PhysicalCostsInput {
   producedUnits: number;
   retoolCapacityRatio: number;
   newPolicyLevel: number;
+  /** >= 1; commodity treadmill fix stage 4 shortage headroom scales inputs too. */
+  policyHeadroomFactor?: number;
   mothballed: boolean;
   stateId: string;
   landedPremiumByState: CorporationLookups["landedPremiumByState"];
@@ -302,7 +304,7 @@ export function decomposePhysicalCosts(input: PhysicalCostsInput): PhysicalCosts
         priceRatios:
           reachableInputPriceRatiosByCountry?.get(sectorCountryId) ?? priceRatioByCommodity,
         utilization: plantsCapacity > 0 ? producedUnits / plantsCapacity : 1,
-        inputMultiplier: getInputMultiplier(newPolicyLevel),
+        inputMultiplier: getInputMultiplier(newPolicyLevel) * (input.policyHeadroomFactor ?? 1),
         turnsPerDay: TURNS_PER_DAY,
         mothballed,
         // Money wiring (step 5, phase A): empty map when the flag is off, so

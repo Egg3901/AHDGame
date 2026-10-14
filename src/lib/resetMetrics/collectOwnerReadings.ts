@@ -23,6 +23,10 @@ import { fiscalOwnerReadings } from "./rules/fiscalOwner";
 import { nationalForceReadiness } from "./rules/forceReadiness";
 import { provisionalRealPurchasingPower } from "./rules/realPurchasingPower";
 import { dueResetMetricIds } from "./rules/refresh";
+import { driftProxyValue } from "./rules/policyDrift";
+import { loadResetPolicyPressure } from "./loadPolicyPressure";
+import { primaryMetricById } from "./catalog";
+import { TURNS_PER_YEAR } from "@/lib/constants/turnTime";
 import type { ResetMetricSnapshot } from "./rules/snapshot";
 import type { MetricOwnerTurnReadingsByBoard } from "./refreshTurn";
 
@@ -167,6 +171,12 @@ export async function collectResetMetricOwnerReadings(
           .toArray()
       : Promise.resolve([]),
   ]);
+  const pressureByBoard = await loadResetPolicyPressure(db, {
+    worldId: boards[0]!.worldId,
+    boards,
+    turn,
+  });
+  const scoreYear = year ?? 1991 + Math.floor((turn - 1) / TURNS_PER_YEAR);
   const macroById = new Map(macro.map((row) => [String(row._id), row]));
   const budgetByCountry = new Map(budgets.map((row) => [row.countryId, row]));
   const healthById = new Map(healthStocks.map((row) => [String(row._id), row]));
@@ -378,19 +388,44 @@ export async function collectResetMetricOwnerReadings(
         }
       }
       // Several v2 outcomes do not yet have a more granular physical ledger in
-      // the game. They retain their last owned value instead of reading the
-      // retired v1 political score. This is deliberately labelled as a
-      // game-calibrated continuity estimate so the UI never presents it as a
-      // fresh measurement. Owners with live ledgers above remain fail-closed.
+      // the game. They carry their opening value forward instead of reading the
+      // retired v1 political score, and the funded law and Cabinet pressure the
+      // board already displays moves them toward its settlement on each refresh
+      // (ticket 1539: the pressure used to be display-only, so energy security
+      // sat at its opening value for 170 turns of enacted energy law). This is
+      // deliberately labelled as a game-calibrated estimate so the UI never
+      // presents it as a fresh measurement. Owners with live ledgers above
+      // remain fail-closed.
+      const pressure = pressureByBoard.get(board._id) ?? {};
       for (const id of dueIds) {
         if (updates[id] || FAIL_CLOSED_OWNER_IDS.has(id)) continue;
         const prior = board.observations[id];
         if (typeof prior?.value !== "number" || !Number.isFinite(prior.value)) continue;
+        const metric = primaryMetricById(id);
+        const openingValue = board.history?.[id]?.[0]?.value;
+        const points = pressure[id] ?? 0;
+        const value =
+          metric && typeof openingValue === "number" && Number.isFinite(openingValue)
+            ? driftProxyValue({
+                metric,
+                currentValue: prior.value,
+                openingValue,
+                pressure: points,
+                countryId: board.countryId,
+                year: scoreYear,
+              })
+            : prior.value;
+        const moved = points !== 0 || value !== prior.value;
         updates[id] = {
           ...prior,
+          value,
           status: "proxy",
-          source: `provisional continuity owner: ${prior.owner}`,
-          note: "Game-calibrated carry-forward until this owner has a physical live ledger. Laws and actions affect underlying systems where implemented; this estimate does not invent a direct bonus.",
+          source: moved
+            ? `provisional continuity owner: ${prior.owner}, moved by enacted-law and Cabinet pressure`
+            : `provisional continuity owner: ${prior.owner}`,
+          note: moved
+            ? "Game-calibrated estimate until this owner has a physical live ledger: funded laws and active Cabinet initiatives move this line toward their settlement each refresh, and it returns toward its opening when they lapse."
+            : "Game-calibrated carry-forward until this owner has a physical live ledger. Laws and actions affect underlying systems where implemented; this estimate does not invent a direct bonus.",
         };
       }
       return [board._id, { updates, cohortDue, electionDue: false }];
