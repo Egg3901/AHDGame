@@ -3113,7 +3113,7 @@ const SECTOR: Partial<Record<OperatingSectorType, Record<string, NodeSpec[]>>> =
     "2019": [
       {
         name: "Modular Construction",
-        description: "Volumetric modules unlock the Modular Construction method.",
+        description: "Volumetric modules unlock the Factory-built Modular Construction method.",
         effects: [
           { kind: "unlockStrategy", strategyId: "modular_construction" },
           { kind: "growthCostReduction", pct: 0.06 },

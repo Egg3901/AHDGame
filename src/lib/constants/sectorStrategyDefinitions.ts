@@ -773,7 +773,7 @@ export const SECTOR_STRATEGIES: Record<OperatingSectorType, SectorStrategy[]> = 
       id: "modular_construction",
       requiresTechUnlock: true,
       minDecade: "2019",
-      name: "Modular Construction",
+      name: "Factory-built Modular Construction",
       description:
         "Factory-built room modules: faster, higher output that shifts cost to freight and steel.",
       supply: { construction_services: 0.5, building_materials: 0.15 },
