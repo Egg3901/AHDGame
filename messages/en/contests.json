@@ -50,6 +50,30 @@
       "party_growth": {
         "title": "Party growth",
         "rules": "Most members gained by a party chaired by a player. The same chair must lead the party for the whole round."
+      },
+      "rookie_influence": {
+        "title": "Rookie of the week",
+        "rules": "Most National Influence gained by a character created in the two weeks before the round opened."
+      },
+      "backbench_influence": {
+        "title": "Backbencher of the week",
+        "rules": "Most National Influence gained by a character who opened the round in the lower half of the field."
+      },
+      "favorability_gain": {
+        "title": "Public image",
+        "rules": "Most favorability gained by a player character during the round."
+      },
+      "governor_approval": {
+        "title": "Statehouse approval",
+        "rules": "Most approval points gained in a state led by a player governor. The same governor must hold office for the whole round."
+      },
+      "kingmaker": {
+        "title": "Kingmaker",
+        "rules": "Most races won by candidates you endorsed. The endorsement must stand when voting closes, and endorsing yourself does not count."
+      },
+      "corp_comeback": {
+        "title": "Comeback of the week",
+        "rules": "Percent growth in market cap for player-run corporations that lost at least 10% of their value in the week before the round. Capital you inject during the round does not count."
       }
     },
     "scores": {
@@ -58,7 +82,8 @@
       "approval": "{value} pts",
       "referrals": "{count, plural, one {# referral} other {# referrals}}",
       "bills": "{count, plural, one {# bill enacted} other {# bills enacted}}",
-      "members": "{value} members"
+      "members": "{value} members",
+      "races": "{count, plural, one {# race called} other {# races called}}"
     },
     "referrals": {
       "since": "Counting since",
@@ -137,6 +162,37 @@
       "player": "Player",
       "placing": "Finished #{rank} of {count}"
     },
-    "contestViews": "Contest rounds and results"
+    "contestViews": "Contest rounds and results",
+    "categories": {
+      "business": {
+        "title": "Business",
+        "blurb": "Grow companies and personal wealth."
+      },
+      "politics": {
+        "title": "Politics",
+        "blurb": "Influence, image and the races you call."
+      },
+      "government": {
+        "title": "Government",
+        "blurb": "Laws, approval and party strength."
+      },
+      "referrals": {
+        "title": "Referrals",
+        "blurb": "Bring new players in."
+      }
+    },
+    "yours": {
+      "title": "Where you stand",
+      "none": "You have no entries this round yet.",
+      "leading": "Leading",
+      "rank": "#{rank} of {count}"
+    },
+    "row": {
+      "leader": "Leader",
+      "you": "You",
+      "open": "Show standings",
+      "noLeader": "No leader yet",
+      "contests": "{count, plural, one {# contest} other {# contests}}"
+    }
   }
 }

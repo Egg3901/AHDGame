@@ -280,6 +280,11 @@ export interface SectorClearingInput {
   outputUnitsByCommodity?: Partial<Record<CommodityType, number>>;
   /** Fraction of each physical offer reachable by current media product titles. */
   offerAvailabilityByCommodity?: Partial<Record<CommodityType, number>>;
+  /**
+   * Placement share used for REVENUE by the revenue-follows-placement phase:
+   * placed plus freight-limited. Absent falls back to `offerPlacementByCommodity`.
+   */
+  revenuePlacementByCommodity?: Partial<Record<CommodityType, number>>;
   /** Host-state placement cap for each output, independent of other commodities. */
   offerPlacementByCommodity?: Partial<Record<CommodityType, number>>;
   /** Conserved nominal output value by commodity, used to weight sector realization. */
@@ -1296,7 +1301,7 @@ export function computeClearingFactors(args: {
       // Placement shrank the offer; without this leg the sold fraction is a
       // share of that shrunken offer, so output nobody bought was still paid.
       const placementLeg = placementRevenueLeg(
-        s.offerPlacementByCommodity?.[commodity],
+        s.revenuePlacementByCommodity?.[commodity] ?? s.offerPlacementByCommodity?.[commodity],
         args.placementRevenuePhase ?? 0
       );
       const sold = offeredSold * availability * placementLeg;

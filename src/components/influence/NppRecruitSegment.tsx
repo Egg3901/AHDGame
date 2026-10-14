@@ -151,10 +151,10 @@ export function NppRecruitSegment({
             ? `${st.stateName} is out of your party's reach`
             : avail <= 0
               ? `No slots available in ${st.stateName}`
-              : !st.canRecruit
-                ? "Party NPP capacity reached"
-                : !affordable
-                  ? "Insufficient action points or funds"
+              : !affordable
+                ? "Insufficient action points or funds"
+                : !st.canRecruit
+                  ? "Party NPP capacity reached"
                   : busy
                     ? "Recruiting…"
                     : `Recruit NPP in ${st.stateName}`}

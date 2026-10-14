@@ -162,7 +162,7 @@ export async function loadContestsPage(
       logoUrl: subject?.logoUrl ?? null,
       logoColor: subject?.color ?? null,
       partyId: isParty(kind) ? (subject?.partyId ?? null) : null,
-      subjectHref: subject?.href ?? null,
+      subjectHref: subject?.href ?? placeHref(kind, e.subjectId),
       avatarUrl: characters.get(e.characterId)?.avatarUrl ?? null,
       characterHref: characters.get(e.characterId)?.href ?? null,
     };
@@ -192,6 +192,13 @@ export async function loadContestsPage(
       })),
     },
   };
+}
+
+/** Government entries link to the country or state they govern. */
+function placeHref(kind: ContestRecordKind, subjectId: string): string | null {
+  if (kind === "approval_gain") return `/country/${subjectId}`;
+  if (kind === "governor_approval") return `/state/${subjectId}`;
+  return null;
 }
 
 function characterHref(c: Pick<Character, "_id" | "sequentialId"> | undefined): string | null {
