@@ -174,8 +174,8 @@ jobs:
           else
             npm run lint
           fi
-      - name: Promotion qualification proof tests
-        run: node --test scripts/ci/staging-qualification.test.mjs
+      - name: Build recovery and promotion qualification tests
+        run: node --test scripts/ci/staging-qualification.test.mjs scripts/build-with-cache-recovery.test.mjs
       - name: Architecture audit
         run: npm run architecture:audit
 
