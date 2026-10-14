@@ -59,7 +59,8 @@ export type PlayerReportReason =
   "harassment" | "hate" | "sexual" | "violence" | "spam" | "impersonation" | "other";
 
 /** Where the reported content was seen, so moderators can find it quickly. */
-export type PlayerReportContext = "profile" | "news" | "party" | "corporation" | "other";
+export type PlayerReportContext =
+  "profile" | "news" | "party" | "corporation" | "suggestion" | "other";
 
 /**
  * A player's report of another player's user-generated content (name, bio,

@@ -33,6 +33,7 @@ export const PLAYER_REPORT_CONTEXTS: readonly PlayerReportContext[] = [
   "news",
   "party",
   "corporation",
+  "suggestion",
   "other",
 ];
 

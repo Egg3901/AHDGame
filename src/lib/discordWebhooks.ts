@@ -524,6 +524,11 @@ export function buildPlayerSuggestionDiscordEmbed(
   if (input.githubIssueUrl) {
     fields.push({ name: "GitHub", value: input.githubIssueUrl, inline: false });
   }
+  fields.push({
+    name: "Join the discussion",
+    value: `[Reply and vote on the site](${input.detailUrl}) · [Report](${input.detailUrl}?report=1)`,
+    inline: false,
+  });
 
   const body = `**${truncateDiscordText(input.title, 500)}**\n\n${input.description}`;
   return {
