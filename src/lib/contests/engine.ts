@@ -10,10 +10,18 @@ import type {
   Bill,
   Character,
   Corporation,
+  ElectedOfficial,
+  Election,
+  ElectionCandidate,
   GovernmentApproval,
+  PlayerEndorsement,
   PoliticalParty,
+  State,
   User,
 } from "@/lib/db/types";
+import type { StateApprovalHistory } from "@/lib/db/types/stateApproval";
+import { resolveExecutiveOffice } from "@/lib/states/regionalExecutive";
+import { getStateDisplayName } from "@/lib/commodity-map/commodityRegionMappings";
 import type { StateBill } from "@/lib/db/types/stateBill";
 import type { CorporationHistory } from "@/lib/db/types/corporationHistory";
 import type {
@@ -31,7 +39,12 @@ import { getHeadOfGovernmentCharacterIds } from "@/lib/api/headOfGovernment";
 import {
   CONTEST_KINDS,
   CONTEST_ROUND_MS,
+  CORP_CONTEST_KINDS,
   approvalEntryEligible,
+  comebackEligible,
+  countKingmakerCalls,
+  lowerHalfIds,
+  rookieEligible,
   contestRoundId,
   corpGrowthScore,
   corpMinOpeningAnchor,
@@ -47,6 +60,8 @@ import {
   REFERRAL_ALT_LINK_THRESHOLD,
   iterationChanged,
   type CorpOpening,
+  type KingmakerEndorsement,
+  type ResolvedRace,
 } from "./rules";
 import { reconcileContestAchievements } from "./achievements";
 import { awardReferralContest } from "./referralAward";
@@ -57,8 +72,9 @@ import { getContestRoundsCollection } from "./collection";
 
 type PlayerCharacter = Pick<
   Character,
-  "_id" | "userId" | "name" | "countryId" | "nationalInfluence" | "sequentialId"
->;
+  "_id" | "userId" | "name" | "countryId" | "nationalInfluence" | "sequentialId" | "favorability"
+> &
+  Partial<Pick<Character, "createdAt">>;
 
 interface ContestWorld {
   turn: number;
@@ -88,6 +104,8 @@ async function loadPlayers(db: Db): Promise<Map<string, PlayerCharacter>> {
           countryId: 1,
           nationalInfluence: 1,
           sequentialId: 1,
+          favorability: 1,
+          createdAt: 1,
         },
       }
     )
@@ -279,6 +297,228 @@ async function loadEnactedBillCounts(
   return counts;
 }
 
+/**
+ * Each player corporation's market cap about a week ago, in its own currency:
+ * the latest snapshot written in the day before the one-week mark.
+ */
+async function loadWeekAgoCaps(
+  db: Db,
+  world: ContestWorld,
+  corporationIds: string[]
+): Promise<Map<string, number>> {
+  const caps = new Map<string, number>();
+  if (corporationIds.length === 0) return caps;
+  const weekAgo = world.now.getTime() - CONTEST_ROUND_MS;
+  const rows = await db
+    .collection<CorporationHistory>("corporationHistory")
+    .find(
+      {
+        corporationId: { $in: corporationIds.map((id) => new ObjectId(id)) },
+        createdAt: { $gte: new Date(weekAgo - 24 * 60 * 60 * 1000), $lte: new Date(weekAgo) },
+      },
+      { projection: { corporationId: 1, marketCap: 1, createdAt: 1 } }
+    )
+    .sort({ createdAt: 1 })
+    .toArray();
+  // Ascending, so the last row seen per corporation is the one nearest the mark.
+  for (const row of rows) {
+    if (Number.isFinite(row.marketCap)) caps.set(row.corporationId.toString(), row.marketCap);
+  }
+  return caps;
+}
+
+const REGIONAL_EXECUTIVE_OFFICES = ["governor", "ministerPresident"];
+
+interface StateExecutiveRow {
+  stateId: string;
+  countryId: CountryId;
+  characterId: string | null;
+}
+
+/**
+ * The sitting regional executive of every state that has one, keyed by state
+ * id. Where stale rows overlap, the most recently elected holder counts, as
+ * getRegionalExecutive decides.
+ */
+async function loadStateExecutives(db: Db): Promise<Map<string, StateExecutiveRow>> {
+  const officials = await db
+    .collection<ElectedOfficial>("electedOfficials")
+    .find(
+      { officeType: { $in: REGIONAL_EXECUTIVE_OFFICES } },
+      { projection: { countryId: 1, state: 1, officeType: 1, characterId: 1, electedAt: 1 } }
+    )
+    .toArray();
+  const latest = new Map<string, { row: StateExecutiveRow; electedAt: number }>();
+  for (const o of officials) {
+    if (!o.countryId || !o.state) continue;
+    if (resolveExecutiveOffice(o.countryId, o.state)?.officeType !== o.officeType) continue;
+    const electedAt = o.electedAt ? new Date(o.electedAt).getTime() : 0;
+    const key = o.state.toUpperCase();
+    const prior = latest.get(key);
+    if (prior && prior.electedAt > electedAt) continue;
+    latest.set(key, {
+      electedAt,
+      row: { stateId: key, countryId: o.countryId, characterId: o.characterId?.toString() ?? null },
+    });
+  }
+  return new Map([...latest].map(([key, v]) => [key, v.row]));
+}
+
+async function loadStateApprovals(
+  db: Db,
+  stateIds: string[]
+): Promise<Map<string, { approval: number; name: string }>> {
+  if (stateIds.length === 0) return new Map();
+  const [approvals, states] = await Promise.all([
+    db
+      .collection<StateApprovalHistory>("stateApprovalHistory")
+      .find({ _id: { $in: stateIds } }, { projection: { _id: 1, countryId: 1, approvalRating: 1 } })
+      .toArray(),
+    db
+      .collection<State>("states")
+      .find({ _id: { $in: stateIds } }, { projection: { _id: 1, name: 1 } })
+      .toArray(),
+  ]);
+  const names = new Map(states.map((st) => [st._id, st.name]));
+  const out = new Map<string, { approval: number; name: string }>();
+  for (const a of approvals) {
+    if (!Number.isFinite(a.approvalRating)) continue;
+    out.set(a._id, {
+      approval: a.approvalRating,
+      name: names.get(a._id) || getStateDisplayName(a.countryId, a._id),
+    });
+  }
+  return out;
+}
+
+const candidateKey = (c: {
+  isNPP?: boolean;
+  nppId?: ObjectId | null;
+  characterId?: ObjectId | null;
+}) =>
+  c.isNPP && c.nppId
+    ? `n:${c.nppId.toString()}`
+    : c.characterId
+      ? `c:${c.characterId.toString()}`
+      : null;
+
+/**
+ * Races called by each player since the round opened: races that closed after
+ * the opening turn whose endorsed candidate took office during the round.
+ */
+async function loadKingmakerCalls(
+  db: Db,
+  world: ContestWorld,
+  round: Pick<ContestRound, "startTurn" | "startedAt">
+): Promise<Map<string, number>> {
+  const elections = await db
+    .collection<Election>("elections")
+    .find(
+      {
+        status: { $in: ["completed", "resolved"] },
+        endTurn: { $gt: round.startTurn, $lte: world.turn },
+      },
+      { projection: { _id: 1, countryId: 1, endTime: 1 } }
+    )
+    .toArray();
+  if (elections.length === 0) return new Map();
+
+  const electionIds = elections.map((e) => e._id);
+  const endorsements = await db
+    .collection<PlayerEndorsement>("playerEndorsements")
+    .find(
+      { electionId: { $in: electionIds }, characterId: { $in: playerObjectIds(world) } },
+      {
+        projection: { characterId: 1, electionId: 1, candidateId: 1, createdAt: 1, withdrawnAt: 1 },
+      }
+    )
+    .toArray();
+  if (endorsements.length === 0) return new Map();
+
+  const [candidates, officials] = await Promise.all([
+    db
+      .collection<ElectionCandidate>("electionCandidates")
+      .find(
+        { _id: { $in: endorsements.map((e) => e.candidateId) } },
+        { projection: { _id: 1, characterId: 1, isNPP: 1, nppId: 1 } }
+      )
+      .toArray(),
+    db
+      .collection<ElectedOfficial>("electedOfficials")
+      .find(
+        {
+          electedAt: { $gt: round.startedAt, $lte: world.now },
+          isAppointment: { $ne: true },
+        },
+        { projection: { countryId: 1, characterId: 1, nppId: 1, isNPP: 1 } }
+      )
+      .toArray(),
+  ]);
+  const keyByCandidate = new Map(candidates.map((c) => [c._id.toString(), candidateKey(c)]));
+  const winnersByCountry = new Map<string, Set<string>>();
+  for (const o of officials) {
+    const key = o.nppId
+      ? `n:${o.nppId.toString()}`
+      : o.characterId
+        ? `c:${o.characterId.toString()}`
+        : null;
+    if (!key || !o.countryId) continue;
+    const set = winnersByCountry.get(o.countryId) ?? new Set<string>();
+    set.add(key);
+    winnersByCountry.set(o.countryId, set);
+  }
+
+  const races = new Map<string, ResolvedRace>();
+  for (const e of elections) {
+    races.set(e._id.toString(), {
+      endsAtMs: e.endTime ? new Date(e.endTime).getTime() : null,
+      winnerKeys: winnersByCountry.get(e.countryId) ?? new Set(),
+    });
+  }
+  const rows: KingmakerEndorsement[] = [];
+  for (const e of endorsements) {
+    const key = keyByCandidate.get(e.candidateId.toString());
+    if (!key) continue;
+    rows.push({
+      endorserId: e.characterId.toString(),
+      electionId: e.electionId.toString(),
+      candidateKey: key,
+      createdAtMs: new Date(e.createdAt).getTime(),
+      withdrawnAtMs: e.withdrawnAt ? new Date(e.withdrawnAt).getTime() : null,
+    });
+  }
+  return countKingmakerCalls(rows, races, new Set(world.players.keys()));
+}
+
+/** A character entry scored on absolute gain in one of its own fields. */
+function characterGainStandings(
+  world: ContestWorld,
+  baselines: readonly ContestBaseline[],
+  read: (c: PlayerCharacter) => number
+): ContestStanding[] {
+  const standings: ContestStanding[] = [];
+  for (const b of baselines) {
+    const c = world.players.get(b.characterId);
+    if (!c) continue;
+    const current = read(c);
+    const score = gainScore(b.value, current);
+    if (score === null) continue;
+    standings.push({
+      subjectId: b.subjectId,
+      subjectName: c.name,
+      characterId: b.characterId,
+      characterName: c.name,
+      baseline: b.value,
+      current,
+      score,
+    });
+  }
+  return rankStandings(standings);
+}
+
+const influenceOf = (c: PlayerCharacter) => c.nationalInfluence ?? 0;
+const favorabilityOf = (c: PlayerCharacter) => c.favorability ?? 0;
+
 const playerObjectIds = (world: ContestWorld, ids?: string[]) =>
   (ids ?? [...world.players.keys()]).map((id) => new ObjectId(id));
 
@@ -316,13 +556,79 @@ async function openingBaselines(
     });
   }
 
+  if (kinds.includes("corp_comeback")) {
+    const corps = await loadCorpRows(db, world);
+    const weekAgo = await loadWeekAgoCaps(db, world, [...corps.keys()]);
+    const floor = corpMinOpeningAnchor(world.preset);
+    out.set("corp_comeback", {
+      baselines: [...corps.values()]
+        .filter(
+          (c) =>
+            c.capAnchor >= floor && comebackEligible(weekAgo.get(c.corporationId) ?? 0, c.capLocal)
+        )
+        .map((c) => ({
+          subjectId: c.corporationId,
+          characterId: c.ceoCharacterId,
+          value: c.capLocal,
+          injected: 0,
+        })),
+    });
+  }
+
+  const characterBaseline = (c: PlayerCharacter, value: number): ContestBaseline => ({
+    subjectId: c._id.toString(),
+    characterId: c._id.toString(),
+    value,
+  });
+  const players = [...world.players.values()];
+
   if (kinds.includes("influence_gain")) {
     out.set("influence_gain", {
-      baselines: [...world.players.values()].map((c) => ({
-        subjectId: c._id.toString(),
-        characterId: c._id.toString(),
-        value: c.nationalInfluence ?? 0,
-      })),
+      baselines: players.map((c) => characterBaseline(c, influenceOf(c))),
+    });
+  }
+
+  if (kinds.includes("rookie_influence")) {
+    out.set("rookie_influence", {
+      baselines: players
+        .filter((c) => rookieEligible(c.createdAt?.getTime(), world.now.getTime()))
+        .map((c) => characterBaseline(c, influenceOf(c))),
+    });
+  }
+
+  if (kinds.includes("backbench_influence")) {
+    const lower = lowerHalfIds(
+      players.map((c) => ({ id: c._id.toString(), value: influenceOf(c) }))
+    );
+    out.set("backbench_influence", {
+      baselines: players
+        .filter((c) => lower.has(c._id.toString()))
+        .map((c) => characterBaseline(c, influenceOf(c))),
+    });
+  }
+
+  if (kinds.includes("favorability_gain")) {
+    out.set("favorability_gain", {
+      baselines: players.map((c) => characterBaseline(c, favorabilityOf(c))),
+    });
+  }
+
+  if (kinds.includes("governor_approval")) {
+    const executives = [...(await loadStateExecutives(db)).values()].filter(
+      (e) => e.characterId && world.players.has(e.characterId)
+    );
+    const approvals = await loadStateApprovals(
+      db,
+      executives.map((e) => e.stateId)
+    );
+    out.set("governor_approval", {
+      baselines: executives
+        .filter((e) => approvals.has(e.stateId))
+        .map((e) => ({
+          subjectId: e.stateId,
+          characterId: e.characterId!,
+          value: approvals.get(e.stateId)!.approval,
+        })),
     });
   }
 
@@ -357,8 +663,9 @@ async function openingBaselines(
     });
   }
 
-  // Legislator and referral rounds count from the opening; there is no baseline.
+  // Legislator, kingmaker and referral rounds count from the opening; there is no baseline.
   if (kinds.includes("legislator_bills")) out.set("legislator_bills", { baselines: [] });
+  if (kinds.includes("kingmaker")) out.set("kingmaker", { baselines: [] });
   if (kinds.includes("referrals_weekly")) out.set("referrals_weekly", { baselines: [] });
 
   return out;
@@ -463,7 +770,7 @@ async function computeRawStandings(
   const standings: ContestStanding[] = [];
   const baselines = round.baselines;
 
-  if (kind === "corp_growth_small" || kind === "corp_growth_large") {
+  if (CORP_CONTEST_KINDS.includes(kind)) {
     const corps = await loadCorpRows(db, world);
     // Injections accumulate across refreshes so the round never depends on
     // financialTxLog rows outliving their retention window.
@@ -498,21 +805,55 @@ async function computeRawStandings(
     return { standings: rankStandings(standings), baselines: updated };
   }
 
-  if (kind === "influence_gain") {
+  if (kind === "influence_gain" || kind === "rookie_influence" || kind === "backbench_influence") {
+    return { standings: characterGainStandings(world, baselines, influenceOf), baselines };
+  }
+
+  if (kind === "favorability_gain") {
+    return { standings: characterGainStandings(world, baselines, favorabilityOf), baselines };
+  }
+
+  if (kind === "governor_approval") {
+    const [executives, approvals] = await Promise.all([
+      loadStateExecutives(db),
+      loadStateApprovals(
+        db,
+        baselines.map((b) => b.subjectId)
+      ),
+    ]);
     for (const b of baselines) {
-      const c = world.players.get(b.characterId);
-      if (!c) continue;
-      const current = c.nationalInfluence ?? 0;
-      const score = gainScore(b.value, current);
+      const state = approvals.get(b.subjectId);
+      const sitting = executives.get(b.subjectId)?.characterId ?? null;
+      if (!state || !approvalEntryEligible(b.characterId, sitting)) continue;
+      const governor = world.players.get(b.characterId);
+      if (!governor) continue;
+      const score = gainScore(b.value, state.approval);
       if (score === null) continue;
       standings.push({
         subjectId: b.subjectId,
-        subjectName: c.name,
+        subjectName: state.name,
         characterId: b.characterId,
-        characterName: c.name,
+        characterName: governor.name,
         baseline: b.value,
-        current,
+        current: state.approval,
         score,
+      });
+    }
+    return { standings: rankStandings(standings), baselines };
+  }
+
+  if (kind === "kingmaker") {
+    const calls = await loadKingmakerCalls(db, world, round);
+    for (const [characterId, count] of calls) {
+      const c = world.players.get(characterId)!;
+      standings.push({
+        subjectId: characterId,
+        subjectName: c.name,
+        characterId,
+        characterName: c.name,
+        baseline: 0,
+        current: count,
+        score: count,
       });
     }
     return { standings: rankStandings(standings), baselines };

@@ -23,6 +23,12 @@ export const CONTEST_KIND_TITLES: Record<ContestKind, string> = {
   legislator_bills: "Legislator of the Week",
   wealth_growth: "Personal Wealth Growth",
   party_growth: "Party Growth",
+  rookie_influence: "Rookie of the Week",
+  backbench_influence: "Backbencher of the Week",
+  favorability_gain: "Public Image",
+  governor_approval: "Statehouse Approval",
+  kingmaker: "Kingmaker",
+  corp_comeback: "Comeback of the Week",
 };
 
 const PLACE_LABELS: Record<number, string> = { 2: "second", 3: "third" };

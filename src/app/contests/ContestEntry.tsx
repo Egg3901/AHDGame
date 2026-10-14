@@ -80,7 +80,7 @@ export function ContestEntry({
         </MaybeLink>
       )}
       <span className="min-w-0 truncate">
-        <MaybeLink href={hasLogo ? subjectHref : characterHref} className="text-foreground">
+        <MaybeLink href={subjectHref ?? characterHref} className="text-foreground">
           {subjectName}
         </MaybeLink>
         {showOwner && (

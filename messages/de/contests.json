@@ -50,6 +50,30 @@
       "party_growth": {
         "title": "Parteiwachstum",
         "rules": "Die meisten neuen Mitglieder einer Partei unter einem Spieler als Vorsitz. Derselbe Vorsitz muss die Partei die ganze Runde führen."
+      },
+      "rookie_influence": {
+        "title": "Neuling der Woche",
+        "rules": "Der größte Zuwachs an nationalem Einfluss bei einem Charakter, der in den zwei Wochen vor Rundenbeginn erstellt wurde."
+      },
+      "backbench_influence": {
+        "title": "Hinterbänkler der Woche",
+        "rules": "Der größte Zuwachs an nationalem Einfluss bei einem Charakter, der die Runde in der unteren Hälfte des Feldes begonnen hat."
+      },
+      "favorability_gain": {
+        "title": "Öffentliches Ansehen",
+        "rules": "Der größte Zuwachs an Beliebtheit eines Spielercharakters während der Runde."
+      },
+      "governor_approval": {
+        "title": "Zustimmung im Bundesstaat",
+        "rules": "Die meisten gewonnenen Zustimmungspunkte in einem Bundesstaat unter einem Spieler als Gouverneur. Derselbe Gouverneur muss die ganze Runde im Amt bleiben."
+      },
+      "kingmaker": {
+        "title": "Königsmacher",
+        "rules": "Die meisten Rennen, die von dir unterstützte Kandidaten gewonnen haben. Die Unterstützung muss bei Wahlschluss bestehen, und dich selbst zu unterstützen zählt nicht."
+      },
+      "corp_comeback": {
+        "title": "Comeback der Woche",
+        "rules": "Prozentuales Wachstum der Marktkapitalisierung von Spielerunternehmen, die in der Woche vor der Runde mindestens 10 % ihres Werts verloren haben. Kapital, das du während der Runde einbringst, zählt nicht."
       }
     },
     "scores": {
@@ -58,7 +82,8 @@
       "approval": "{value} Pkt.",
       "referrals": "{count, plural, one {# Empfehlung} other {# Empfehlungen}}",
       "bills": "{count, plural, one {# Gesetz in Kraft} other {# Gesetze in Kraft}}",
-      "members": "{value} Mitglieder"
+      "members": "{value} Mitglieder",
+      "races": "{count, plural, one {# Rennen richtig} other {# Rennen richtig}}"
     },
     "referrals": {
       "since": "Gezählt seit",
@@ -137,6 +162,37 @@
       "player": "Spieler",
       "placing": "Platz {rank} von {count}"
     },
-    "contestViews": "Wettbewerbsrunden und Ergebnisse"
+    "contestViews": "Wettbewerbsrunden und Ergebnisse",
+    "categories": {
+      "business": {
+        "title": "Wirtschaft",
+        "blurb": "Unternehmen und Privatvermögen wachsen lassen."
+      },
+      "politics": {
+        "title": "Politik",
+        "blurb": "Einfluss, Ansehen und die richtigen Kandidaten."
+      },
+      "government": {
+        "title": "Regierung",
+        "blurb": "Gesetze, Zustimmung und Parteistärke."
+      },
+      "referrals": {
+        "title": "Empfehlungen",
+        "blurb": "Neue Spieler werben."
+      }
+    },
+    "yours": {
+      "title": "Dein Stand",
+      "none": "Du hast in dieser Runde noch keine Teilnahme.",
+      "leading": "In Führung",
+      "rank": "Platz {rank} von {count}"
+    },
+    "row": {
+      "leader": "Führend",
+      "you": "Du",
+      "open": "Rangliste anzeigen",
+      "noLeader": "Noch niemand in Führung",
+      "contests": "{count, plural, one {# Wettbewerb} other {# Wettbewerbe}}"
+    }
   }
 }

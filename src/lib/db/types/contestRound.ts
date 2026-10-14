@@ -15,6 +15,14 @@ import type { CurrencyCode } from "@/lib/constants/currencies";
  * - legislator_bills: bills a player sponsored that were enacted during the round.
  * - wealth_growth: percent growth in a player's net worth, net of wires and loans.
  * - party_growth: members gained by a party with a player chair.
+ * - rookie_influence: National Influence gained by characters under two weeks old.
+ * - backbench_influence: National Influence gained by characters who opened
+ *   the round in the lower half of the field.
+ * - favorability_gain: favorability points gained by a player character.
+ * - governor_approval: state approval gained under the same player governor.
+ * - kingmaker: races won this round by candidates a player endorsed.
+ * - corp_comeback: percent growth for player corporations whose market cap
+ *   fell at least 10% in the week before the round, net of injected capital.
  */
 export type ContestKind =
   | "corp_growth_small"
@@ -24,7 +32,13 @@ export type ContestKind =
   | "referrals_weekly"
   | "legislator_bills"
   | "wealth_growth"
-  | "party_growth";
+  | "party_growth"
+  | "rookie_influence"
+  | "backbench_influence"
+  | "favorability_gain"
+  | "governor_approval"
+  | "kingmaker"
+  | "corp_comeback";
 
 /**
  * The iteration referral contest is not a weekly round: it runs from one
@@ -33,7 +47,7 @@ export type ContestKind =
 export type ContestRecordKind = ContestKind | "referrals_iteration";
 
 export interface ContestBaseline {
-  /** Corporation id, character id, or country id, depending on kind. */
+  /** Corporation, character, party, country or state id, depending on kind. */
   subjectId: string;
   /** Starting value for this entry: market cap, National Influence, or approval rating. */
   value: number;
