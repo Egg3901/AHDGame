@@ -4,7 +4,11 @@
  * chair alignment; see stanceMatchesTaylorTarget.
  */
 import type { ChairAlignment } from "@/lib/centralBank/chairAlignment";
-import { computeNppChairRateTarget } from "@/lib/nppAutonomy/rules/chairRateTarget";
+import {
+  computeNppChairActivityTarget,
+  computeNppChairRateTarget,
+  type ChairActivityInputs,
+} from "@/lib/nppAutonomy/rules/chairRateTarget";
 
 /** Existing corridor tolerance: 0.5 percentage points around policy target. */
 export const CREDIBILITY_TARGET_BAND = 0.5;
@@ -16,13 +20,23 @@ export function stanceMatchesTaylorTarget(params: {
   targetInflation: number;
   gdpGrowth: number;
   alignment?: ChairAlignment | null;
+  /** Present for AI-run national chairs: judge against the activity rule they follow. */
+  activity?: ChairActivityInputs;
 }): boolean {
-  const targetRate = computeNppChairRateTarget({
-    neutralRate: params.neutralRate,
-    inflationRate: params.inflation,
-    targetInflation: params.targetInflation,
-    gdpGrowth: params.gdpGrowth,
-    alignment: params.alignment,
-  });
+  const targetRate = params.activity
+    ? computeNppChairActivityTarget({
+        neutralRate: params.neutralRate,
+        inflationRate: params.inflation,
+        targetInflation: params.targetInflation,
+        activity: params.activity,
+        alignment: params.alignment,
+      })
+    : computeNppChairRateTarget({
+        neutralRate: params.neutralRate,
+        inflationRate: params.inflation,
+        targetInflation: params.targetInflation,
+        gdpGrowth: params.gdpGrowth,
+        alignment: params.alignment,
+      });
   return Math.abs(params.primeRate - targetRate) < CREDIBILITY_TARGET_BAND;
 }

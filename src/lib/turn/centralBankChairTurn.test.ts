@@ -80,6 +80,7 @@ describe("processCentralBankChairTurn", () => {
     vi.clearAllMocks();
     collectionMocks.clear();
     processNppChairAutoRateMock.mockResolvedValue(undefined);
+    getCollectionMock("states").find.mockReturnValue({ toArray: async () => [] });
     testBudgetInflation = 2.0;
     testGdpGrowth = 2.0;
     testBanks = [
