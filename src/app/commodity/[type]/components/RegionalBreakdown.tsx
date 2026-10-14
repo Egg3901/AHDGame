@@ -13,6 +13,9 @@ import {
 } from "@/lib/commodity-map/commodityPriceDisplay";
 import { useCountryDisplayName } from "@/contexts/RegisteredCountriesContext";
 
+/** Regions shown per country before the list folds. */
+const REGION_PREVIEW_ROWS = 8;
+
 interface RegionalBreakdownProps {
   stateSupply: Record<string, number>;
   stateDemand: Record<string, number>;
@@ -37,14 +40,25 @@ export default function RegionalBreakdown({
   const resolveCountryName = useCountryDisplayName();
   const [isOpen, setIsOpen] = useState(true);
 
-  const stateIds = Object.keys(stateCountryMap).sort((a, b) => {
-    const aCountry = stateCountryMap[a];
-    const bCountry = stateCountryMap[b];
-    if (aCountry !== bCountry) return aCountry.localeCompare(bCountry);
-    const aSupply = stateSupply[a] ?? 0;
-    const bSupply = stateSupply[b] ?? 0;
-    return bSupply - aSupply;
-  });
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+
+  const stateIds = Object.keys(stateCountryMap);
+  const byCountry = new Map<string, string[]>();
+  for (const stateId of stateIds) {
+    const country = stateCountryMap[stateId];
+    const list = byCountry.get(country) ?? [];
+    list.push(stateId);
+    byCountry.set(country, list);
+  }
+  // Largest market first, and the biggest regions first inside each one.
+  const volume = (id: string) => (stateSupply[id] ?? 0) + (stateDemand[id] ?? 0);
+  const groups = [...byCountry.entries()]
+    .map(([country, ids]) => ({
+      country,
+      ids: ids.sort((a, b) => volume(b) - volume(a)),
+      total: ids.reduce((sum, id) => sum + volume(id), 0),
+    }))
+    .sort((a, b) => b.total - a.total);
 
   return (
     <div className="rounded-xl border border-card-border bg-card mb-6 overflow-hidden">
@@ -69,65 +83,71 @@ export default function RegionalBreakdown({
         </svg>
       </button>
       {isOpen && (
-        <div className="px-6 pb-6 border-t border-card-border/50">
-          <div className="space-y-2 pt-3">
-            <div className="grid grid-cols-5 text-sm font-semibold text-foreground pb-2 border-b border-card-border">
-              <div>Region</div>
-              <div className="text-right">Price</div>
-              <div className="text-right">Supply</div>
-              <div className="text-right">Demand</div>
-              <div className="text-right">Balance</div>
-            </div>
-            {(() => {
-              let lastCountry = "";
-              return stateIds.map((stateId) => {
-                const country = stateCountryMap[stateId];
-                const showHeader = country !== lastCountry;
-                lastCountry = country;
+        <div className="relative overflow-x-auto border-t border-card-border/50 px-6 pb-4">
+          <table className="w-full min-w-[640px] text-sm">
+            <thead>
+              <tr className="border-b border-card-border text-left text-xs font-semibold text-muted">
+                <th className="py-2 font-semibold">Region</th>
+                <th className="py-2 text-right font-semibold">Price</th>
+                <th className="py-2 text-right font-semibold">Supply</th>
+                <th className="py-2 text-right font-semibold">Demand</th>
+                <th className="py-2 text-right font-semibold">Balance</th>
+                <th className="w-[18%] py-2 pl-4 font-semibold">
+                  <span className="sr-only">Supply share</span>
+                </th>
+              </tr>
+            </thead>
+            {groups.map(({ country, ids }) => {
+              const currencyCode = getCommodityDisplayCurrency(country as CountryId);
+              const isExpanded = expanded[country] ?? false;
+              const visible = isExpanded ? ids : ids.slice(0, REGION_PREVIEW_ROWS);
+              const hidden = ids.length - visible.length;
 
-                const supply = stateSupply[stateId] ?? 0;
-                const demand = stateDemand[stateId] ?? 0;
-                const stateBalance = supply - demand;
-                const stateTotal = supply + demand;
-                const stateSupplyPct = stateTotal > 0 ? (supply / stateTotal) * 100 : 50;
-                const stateDemandPct = 100 - stateSupplyPct;
-                const currencyCode = getCommodityDisplayCurrency(country as CountryId);
-
-                return (
-                  <div key={stateId}>
-                    {showHeader && (
-                      <div className="flex items-center gap-2 mt-3 mb-1">
-                        <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
-                          <CountryFlag country={country as CountryId} size="sm" />
-                          {resolveCountryName(country as CountryId)}
+              return (
+                <tbody key={country}>
+                  <tr>
+                    <td colSpan={6} className="pb-1 pt-4">
+                      <span className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                        <CountryFlag country={country as CountryId} size="sm" />
+                        {resolveCountryName(country as CountryId)}
+                        <span className="font-normal normal-case tracking-normal text-muted">
+                          {ids.length} regions
                         </span>
-                        <div className="flex-1 h-px bg-card-border" />
-                      </div>
-                    )}
-                    <div className="border-b border-card-border/30 last:border-b-0 py-1.5">
-                      <div className="grid grid-cols-5 text-sm">
-                        <div
-                          className="text-foreground font-medium"
-                          title={getStateDisplayName(country as CountryId, stateId)}
+                      </span>
+                    </td>
+                  </tr>
+                  {visible.map((stateId) => {
+                    const supply = stateSupply[stateId] ?? 0;
+                    const demand = stateDemand[stateId] ?? 0;
+                    const stateBalance = supply - demand;
+                    const stateTotal = supply + demand;
+                    const stateSupplyPct = stateTotal > 0 ? (supply / stateTotal) * 100 : 50;
+                    const name = getStateDisplayName(country as CountryId, stateId);
+
+                    return (
+                      <tr key={stateId} className="border-b border-card-border/30">
+                        <td
+                          className="max-w-[12rem] truncate py-1.5 pr-3 font-medium text-foreground"
+                          title={name}
                         >
-                          {getStateDisplayName(country as CountryId, stateId)}
-                        </div>
-                        <div className="text-right font-mono text-foreground tabular-nums">
+                          {name}
+                        </td>
+                        <td className="py-1.5 text-right font-mono tabular-nums text-foreground">
                           {formatCommodityPrice(
                             statePrices[stateId] ?? globalPrice,
                             currencyCode,
                             forexEnabled,
                             exchangeRates
                           )}
-                        </div>
-                        <div className="text-right text-success tabular-nums">
+                        </td>
+                        <td className="py-1.5 text-right tabular-nums text-success">
                           {formatUnits(supply, unit)}
-                        </div>
-                        <div className="text-right text-error tabular-nums">
+                        </td>
+                        <td className="py-1.5 text-right tabular-nums text-error">
                           {formatUnits(demand, unit)}
-                        </div>
-                        <div
-                          className={`text-right tabular-nums text-xs font-medium ${
+                        </td>
+                        <td
+                          className={`py-1.5 text-right tabular-nums font-medium ${
                             stateBalance > 0
                               ? "text-success"
                               : stateBalance < 0
@@ -136,27 +156,44 @@ export default function RegionalBreakdown({
                           }`}
                         >
                           {stateBalance > 0 ? "+" : ""}
-                          {formatUnits(Math.abs(stateBalance), unit)}
-                        </div>
-                      </div>
-                      {stateTotal > 0 && (
-                        <div className="flex h-1 w-full rounded-full overflow-hidden bg-card-elevated mt-1.5">
-                          <div
-                            className="h-full bg-success/60"
-                            style={{ width: `${stateSupplyPct}%` }}
-                          />
-                          <div
-                            className="h-full bg-error/60"
-                            style={{ width: `${stateDemandPct}%` }}
-                          />
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                );
-              });
-            })()}
-          </div>
+                          {formatUnits(stateBalance, unit)}
+                        </td>
+                        <td className="py-1.5 pl-4">
+                          {stateTotal > 0 && (
+                            <div
+                              className="flex h-1.5 w-full overflow-hidden rounded-full bg-card-elevated"
+                              title={`${Math.round(stateSupplyPct)}% of local volume is supply`}
+                            >
+                              <div
+                                className="h-full bg-success/60"
+                                style={{ width: `${stateSupplyPct}%` }}
+                              />
+                              <div className="h-full flex-1 bg-error/60" />
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {(hidden > 0 || isExpanded) && ids.length > REGION_PREVIEW_ROWS && (
+                    <tr>
+                      <td colSpan={6} className="pt-1.5">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setExpanded((prev) => ({ ...prev, [country]: !isExpanded }))
+                          }
+                          className="text-xs font-medium text-primary hover:underline"
+                        >
+                          {isExpanded ? "Show fewer" : `Show all ${ids.length} regions`}
+                        </button>
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              );
+            })}
+          </table>
         </div>
       )}
     </div>
