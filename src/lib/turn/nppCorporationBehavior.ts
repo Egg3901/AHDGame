@@ -262,6 +262,11 @@ export async function processNppCorporationDecisions(
             stateId: 1,
             countryId: 1,
             sectorType: 1,
+            // Lane identity: without these an entertainment or vehicles sector
+            // keys as plain media/manufacturing, so its bucket never reads as
+            // covered or state-controlled.
+            industryModel: 1,
+            mediaDiscriminator: 1,
             revenue: 1,
             corporationId: 1,
             nationalizedAtTurn: 1,
