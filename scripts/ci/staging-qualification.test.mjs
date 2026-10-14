@@ -47,10 +47,11 @@ function fixture() {
   const jobs = {
     total_count: 2,
     jobs: [
-      { name: "verify", status: "completed", conclusion: "success" },
+      { name: "lint", status: "completed", conclusion: "success" },
       {
         id: 300,
-        name: jobName,
+        name: "verify",
+        steps: [{ name: jobName, status: "completed", conclusion: "success" }],
         status: "completed",
         conclusion: "success",
         check_run_url: `https://api.github.com/repos/${repo}/check-runs/300`,
@@ -59,7 +60,7 @@ function fixture() {
   };
   const check = {
     id: 300,
-    name: jobName,
+    name: "verify",
     head_sha: dev,
     status: "completed",
     conclusion: "success",
@@ -230,6 +231,12 @@ const invalid = {
     f.state.jobs.jobs.pop();
     f.state.jobs.total_count = 1;
   },
+  "missing native tree step": (f) => {
+    f.state.jobs.jobs[1].steps = [];
+  },
+  "failed native tree step": (f) => {
+    f.state.jobs.jobs[1].steps[0].conclusion = "failure";
+  },
   "failed receipt": (f) => {
     f.state.jobs.jobs[1].conclusion = "failure";
   },
@@ -258,7 +265,7 @@ const invalid = {
     f.state.previous.base.ref = "main";
   },
   "different receipt tree": (f) => {
-    f.state.jobs.jobs[1].name = `qualified-development-staging-tree-${sha("0")}`;
+    f.state.jobs.jobs[1].steps[0].name = `qualified-development-staging-tree-${sha("0")}`;
   },
   "incomplete jobs response": (f) => {
     f.state.jobs.total_count = 101;

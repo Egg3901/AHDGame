@@ -210,10 +210,10 @@ export async function findStagingQualification({
         );
         if (!Array.isArray(jobs?.jobs) || jobs.total_count !== jobs.jobs.length) continue;
         const name = `qualified-development-staging-tree-${checkout.tree}`;
-        const receipt = jobs.jobs.find((j) => j.name === name && success(j));
-        if (!receipt || !jobs.jobs.some((j) => j.name === "verify" && success(j))) continue;
+        const receipt = jobs.jobs.find((j) => j.name === "verify" && success(j));
+        if (!receipt?.steps?.some((step) => step.name === name && success(step))) continue;
         if (
-          !(await nativeCheck(receipt, candidate, name)) ||
+          !(await nativeCheck(receipt, candidate, "verify")) ||
           !(await securityPassed(prior.head.sha))
         )
           continue;

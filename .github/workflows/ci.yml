@@ -370,31 +370,6 @@ jobs:
           docker logs federation-mongo || true
           docker rm --force federation-mongo || true
 
-  # This native Actions job is the tree receipt. It runs only after every full
-  # correctness gate, in a separate runner that never executes PR application
-  # code. Consumers verify its workflow and source blobs through GitHub's API.
-  qualification:
-    name: qualified-${{ github.head_ref || github.ref_name }}-${{ github.base_ref || github.ref_name }}-tree-${{ needs.changes.outputs.tree }}
-    needs:
-      [
-        changes,
-        lint,
-        format,
-        typecheck,
-        test,
-        bootstrap-integration,
-        build,
-        federation-transactions,
-      ]
-    if: needs.changes.outputs.full_suite == 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 2
-    steps:
-      - name: Bind successful full qualification to the tested tree
-        env:
-          TREE: ${{ needs.changes.outputs.tree }}
-        run: '[[ "$TREE" =~ ^[a-f0-9]{40}$ ]]'
-
   # The operator recognizes this job only after independently checking native
   # workflow/run/job provenance and the trusted workflow and helper blobs.
   reuse-staging-qualification:
@@ -428,7 +403,6 @@ jobs:
         bootstrap-integration,
         build,
         federation-transactions,
-        qualification,
         reuse-staging-qualification,
       ]
     runs-on: ubuntu-latest
@@ -441,7 +415,6 @@ jobs:
           REUSE_QUALIFICATION: ${{ needs.changes.outputs.reuse }}
           CAN_REUSE: ${{ (github.event_name == 'pull_request' && github.head_ref == 'staging' && github.base_ref == 'main' && github.event.pull_request.head.repo.id == github.event.repository.id && github.event.pull_request.base.repo.id == github.event.repository.id) || (github.event_name == 'push' && github.ref == 'refs/heads/main') }}
           REUSE_RESULT: ${{ needs['reuse-staging-qualification'].result }}
-          QUALIFICATION_RESULT: ${{ needs.qualification.result }}
           CONTENT_RESULT: ${{ needs.content-checks.result }}
           LINT_RESULT: ${{ needs.lint.result }}
           FORMAT_RESULT: ${{ needs.format.result }}
@@ -485,8 +458,14 @@ jobs:
                 "$TYPECHECK_RESULT" != "success" || \
                 "$TEST_RESULT" != "success" || \
                 "$BOOTSTRAP_RESULT" != "success" || \
-                "$QUALIFICATION_RESULT" != "success" || \
                 "$BUILD_RESULT" != "success" || \
                 "$FEDERATION_RESULT" != "success" ]]; then
             exit 1
           fi
+      # No checkout or application code runs here. This native successful step
+      # binds full qualification to the exact checked tree without another runner.
+      - name: qualified-${{ github.head_ref || github.ref_name }}-${{ github.base_ref || github.ref_name }}-tree-${{ needs.changes.outputs.tree }}
+        if: needs.changes.outputs.full_suite == 'true'
+        env:
+          TREE: ${{ needs.changes.outputs.tree }}
+        run: '[[ "$TREE" =~ ^[a-f0-9]{40}$ ]]'

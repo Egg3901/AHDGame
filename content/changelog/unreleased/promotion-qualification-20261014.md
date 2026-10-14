@@ -13,7 +13,7 @@ areas: [backend]
 ## What changed
 
 - Keep every unit test while reducing work per hosted runner from four shards to six.
-- Record the exact tested Git tree in native GitHub Actions qualification jobs.
+- Record the exact tested Git tree in native GitHub Actions qualification steps.
 - Reuse a recent full development-to-staging qualification for the same staging-to-main
   tree, including the matching main-branch push, after verifying workflow, repository,
   branch, run, native job and required security-gate provenance.
