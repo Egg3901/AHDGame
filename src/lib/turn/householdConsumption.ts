@@ -223,6 +223,8 @@ export interface HouseholdConsumptionState {
 export interface HouseholdConsumptionInput {
   /** Country demand impulse from settled fiscal cash and observed bank credit. */
   financialDemandByCountry?: ReadonlyMap<string, number>;
+  /** Ceiling multiple of prior supply (default PLANTS_HOUSEHOLD_SUPPLY_CAP). */
+  supplyCapMultiple?: number;
   states: HouseholdConsumptionState[];
   /** stateId → household signals (from `stateMetrics.economic`). */
   metricsByState: Map<string, HouseholdStateSignals>;
@@ -312,6 +314,7 @@ export function computeHouseholdConsumption(
     plantsUnitScale = 1,
     priorGlobalSupply,
     demandCalibration,
+    supplyCapMultiple = PLANTS_HOUSEHOLD_SUPPLY_CAP,
   } = input;
   const basePrices = eraScaledBasePrices(eraUnitScale);
   const unitScale = plantsUnitScale > 0 ? plantsUnitScale : 1;
@@ -394,7 +397,7 @@ export function computeHouseholdConsumption(
       // Bounds calibrated demand: divide by the calibration the caller applies
       // later, and record the truncation in those same calibrated units.
       const calibration = calibrationMultiplier(demandCalibration, commodity);
-      const cap = (supply * PLANTS_HOUSEHOLD_SUPPLY_CAP) / calibration;
+      const cap = (supply * supplyCapMultiple) / calibration;
       if (total <= cap) continue;
       const factor = cap / total;
       truncated.set(commodity, (total - cap) * calibration);

@@ -12,6 +12,7 @@ import type { NPP } from "@/lib/db/types/npp";
 import type { ElectedOfficial } from "@/lib/db/types/officials";
 import type { ElectionCandidate } from "@/lib/db/types/election";
 import type { GovernmentFormation } from "@/lib/db/types/governmentFormation";
+import type { Corporation } from "@/lib/db/types/corporation";
 import { nppAutonomyAtLeast } from "@/lib/nppAutonomy/featureFlag";
 import { generateNPP } from "@/lib/npp/generator";
 import { getNextSequentialId } from "@/lib/db/sequentialId";
@@ -129,6 +130,7 @@ export async function processNppMortality(
 
   let deaths = 0;
   let replacements = 0;
+  const deadIds: ObjectId[] = [];
 
   for (const npp of candidates) {
     // Belt-and-braces with the query filter above. The pure eligibility rule
@@ -197,8 +199,21 @@ export async function processNppMortality(
         );
     }
 
+    deadIds.push(npp._id as ObjectId);
     deaths += 1;
     replacements += 1;
+  }
+
+  // A dead NPP must not stay on as a company's CEO. Its NPP-run companies are
+  // marked vacant, so the caretaker step seats a living NPP next turn (by
+  // sector record at v6). A player company's caretaker is left to its owner.
+  if (deadIds.length > 0) {
+    await db
+      .collection<Corporation>("corporations")
+      .updateMany(
+        { ceoId: { $in: deadIds }, caretakerCeo: { $exists: false }, ceoVacant: { $ne: true } },
+        { $set: { ceoVacant: true, updatedAt: now } }
+      );
   }
 
   return { deaths, replacements };

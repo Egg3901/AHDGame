@@ -53,6 +53,8 @@ export interface MarketContext {
   plantsEnabled: boolean;
   /** Default off: explicit positive overhead replaces the margin residual. */
   explicitPlantCostsEnabled?: boolean;
+  /** Commodity treadmill fix stage (0..6); stage 4 adds shortage policy headroom. */
+  commodityFixStage?: number;
   /** Default off: ownership limits and censorship constrain media delivery. */
   mediaRegulationEnabled?: boolean;
   /** Default off: enacted pre-repeal US fairness doctrine affects outlet reach. */

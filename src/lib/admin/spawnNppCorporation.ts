@@ -1,12 +1,13 @@
 import { chooseNppCorporationName } from "@/lib/corporations/names/rules";
 import type { Db } from "mongodb";
 import { ObjectId } from "mongodb";
-import type { Corporation, CorporateSector, GameState, NPP, PoliticalParty } from "@/lib/db/types";
+import type { Corporation, CorporateSector, GameState, NPP } from "@/lib/db/types";
+import { chooseNppCorpCeo, type NppCorpCeoAffiliation } from "./nppCorpCeoSelection";
 import {
-  buildCeoAffiliations,
-  chooseNppCorpCeo,
-  type NppCorpCeoAffiliation,
-} from "./nppCorpCeoSelection";
+  gatherNppCeoAffiliations,
+  nppCeoSelectionLane,
+  type GatherNppCeoAffiliationsOptions,
+} from "@/lib/corporations/nppCeoAffiliations";
 import type { State } from "@/lib/db/types/state";
 import type { CountryId } from "@/lib/constants/countries";
 import {
@@ -194,49 +195,10 @@ class UnownedSeedCapacityExhaustedError extends Error {}
  */
 export async function gatherNppCorpCeoAffiliations(
   db: Db,
-  countryId: CountryId
+  countryId: CountryId,
+  options: GatherNppCeoAffiliationsOptions = {}
 ): Promise<NppCorpCeoAffiliation[]> {
-  const partyDocs = await db
-    .collection<PoliticalParty>("politicalParties")
-    .find({ countryId, isDefunct: { $ne: true } })
-    .project<{ sequentialId: number }>({ sequentialId: 1 })
-    .toArray();
-  const nonDefunctPartyIds = partyDocs.map((p) => String(p.sequentialId));
-
-  const corps = await db
-    .collection<Corporation>("corporations")
-    .find({ ceoType: "npp", countryId })
-    .project<{ ceoId: ObjectId }>({ ceoId: 1 })
-    .toArray();
-  const ceoIds = corps.map((c) => c.ceoId).filter(Boolean);
-
-  const ceoNppDocs = ceoIds.length
-    ? await db
-        .collection<NPP>("npps")
-        .find({ _id: { $in: ceoIds } })
-        .project<{ _id: ObjectId; party: string }>({ _id: 1, party: 1 })
-        .toArray()
-    : [];
-  const existingCorpCeos = ceoNppDocs.map((n) => ({ nppId: n._id.toString(), party: n.party }));
-
-  const activeNppDocs = await db
-    .collection<NPP>("npps")
-    .find({ countryId, retiredAt: null })
-    .project<{ _id: ObjectId; party: string; politicalInfluence: number; sequentialId?: number }>({
-      _id: 1,
-      party: 1,
-      politicalInfluence: 1,
-      sequentialId: 1,
-    })
-    .toArray();
-  const activeNpps = activeNppDocs.map((n) => ({
-    id: n._id.toString(),
-    party: n.party,
-    influence: n.politicalInfluence ?? 0,
-    seq: n.sequentialId ?? Number.MAX_SAFE_INTEGER,
-  }));
-
-  return buildCeoAffiliations({ nonDefunctPartyIds, existingCorpCeos, activeNpps });
+  return gatherNppCeoAffiliations(db, countryId, options);
 }
 
 export interface SpawnNppCorporationResult {
@@ -359,8 +321,20 @@ export async function spawnNppCorporation(
 
   // Choose the CEO: prefer an existing NPP without a corp (balanced across
   // active parties + independents); only create a new NPP when none is free.
-  const affiliations = await gatherNppCorpCeoAffiliations(db, countryId);
-  const choice = chooseNppCorpCeo({ forcedParty: nppPartyId, affiliations });
+  // NPP engine 6: at v6 a free NPP with a good record in this lane wins.
+  const sectorLane = await nppCeoSelectionLane(
+    db,
+    countryId,
+    getOperatingSectorType(type, industryModel, mediaDiscriminator)
+  );
+  const affiliations = await gatherNppCorpCeoAffiliations(db, countryId, {
+    withTrackRecords: sectorLane != null,
+  });
+  const choice = chooseNppCorpCeo({
+    forcedParty: nppPartyId,
+    affiliations,
+    ...(sectorLane ? { sectorLane } : {}),
+  });
 
   let npp: NPP | null = null;
   if (choice.kind === "existing") {

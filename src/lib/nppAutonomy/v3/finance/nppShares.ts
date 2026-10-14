@@ -88,7 +88,15 @@ export async function nppBuyShares(
   homeRate?: number,
   /** Candidate from the turn sweep; the share credit still checks live state. */
   corpSnapshot?: NppShareBuySnapshot,
-  preset?: string
+  preset?: string,
+  /**
+   * Every equity pool keyed by currency, preloaded once by a sweep that
+   * settles many buys in sequence (v6). The settlement keeps each pool's
+   * `cashLocal` in step with its own credit, so the next quote sees what a
+   * fresh read would, provided nothing else writes that pool meanwhile.
+   * Omitted, the pool is read per trade as before.
+   */
+  pools?: Map<CurrencyCode, EquityMarketPool>
 ): Promise<NppShareBuyResult> {
   if (!Number.isInteger(shares) || shares <= 0) {
     return { ok: false, reason: "Shares must be a positive integer." };
@@ -119,8 +127,8 @@ export async function nppBuyShares(
     return { ok: false, reason: "NPPs only buy shares in their home currency." };
   }
 
-  const pools = await loadTradePool(db, corp);
-  const executionPrice = (await loadEquityQuote(db, corp, { pools })).askPriceLocal;
+  const tradePools = pools ?? (await loadTradePool(db, corp));
+  const executionPrice = (await loadEquityQuote(db, corp, { pools: tradePools })).askPriceLocal;
   const orderFlowEligible = isOrderFlowPriceEligible(corp.publicFloat, corp.totalShares);
   const cost = Math.round(shares * executionPrice * 100) / 100;
   // Share price is LOCAL; the economic account is ₳ — convert at the FX boundary.
@@ -189,7 +197,10 @@ export async function nppBuyShares(
   // Treasury-backed market maker: the buyer's payment is injected into the
   // issuer's liquidCapital so a float buy conserves money instead of
   // vanishing, matching the player buy route.
-  await applyFloatBuyCredit(db, corp, shares * executionPrice, { sharesBought: shares, pools });
+  await applyFloatBuyCredit(db, corp, shares * executionPrice, {
+    sharesBought: shares,
+    pools: tradePools,
+  });
 
   return {
     ok: true,

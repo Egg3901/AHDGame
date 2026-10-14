@@ -30,7 +30,9 @@ import { ObjectId } from "mongodb";
 import type { Corporation } from "@/lib/db/types";
 import type { CorporationLookups } from "./types";
 import { nppAutonomyAtLeast } from "@/lib/nppAutonomy/featureFlag";
+import { NPP_ENGINE_LEVEL } from "@/lib/nppAutonomy/engineVersion";
 import {
+  corporationLane,
   gatherCaretakerAffiliations,
   pickCaretakerNpp,
   installCaretakerForVacantCorp,
@@ -88,11 +90,20 @@ export async function installCaretakersForVacantCorps(
   for (const [countryId, corps] of byCountry) {
     if (!(await nppAutonomyAtLeast(db, countryId, "v2"))) continue;
 
+    // NPP engine 6: at v6 each pick prefers a good CEO record in the corp's lane.
+    const byRecord = await nppAutonomyAtLeast(db, countryId, NPP_ENGINE_LEVEL);
+
     // One free-NPP pool per country; each assignment removes its NPP so we never
     // seat the same NPP twice. When the pool is dry, the rest stay vacant.
-    let affiliations = await gatherCaretakerAffiliations(db, countryId);
+    let affiliations = await gatherCaretakerAffiliations(db, countryId, {
+      withTrackRecords: byRecord,
+    });
     for (const corp of corps) {
-      const nppId = pickCaretakerNpp(affiliations);
+      const nppId = pickCaretakerNpp(
+        affiliations,
+        undefined,
+        byRecord ? corporationLane(corp) : undefined
+      );
       if (!nppId) break;
 
       const prevCeoId = corp.ceoId;

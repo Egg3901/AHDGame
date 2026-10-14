@@ -47,7 +47,8 @@ import { getGovernmentFormationsCollection } from "@/lib/db/collections/governme
 import { getRegisteredCountryIds } from "@/lib/country/registeredCountries";
 import { isPlannedEconomy, plannedShare } from "@/lib/constants/commandEconomy";
 import { loadConditionsSignal } from "@/lib/turn/npp/billSponsorship";
-import { nppAutonomyAtLeast } from "./featureFlag";
+import { getNppAutonomyLevel, nppAutonomyAtLeast, nppAutonomyLevelAtLeast } from "./featureFlag";
+import { NPP_ENGINE_LEVEL } from "./engineVersion";
 import {
   commitGoverningGoals,
   reviewGoverningGoals,
@@ -75,6 +76,7 @@ import { isCountryEnabledForPlayers } from "@/lib/countryAccess";
 import { caretakerDecisionAllowed } from "@/lib/world/playerHandoff";
 import { processAutonomousForeignPolicy } from "./foreignPolicy";
 import { TURNS_PER_YEAR } from "@/lib/constants/turnTime";
+import { boundedParallelMap } from "@/lib/indexFunds/boundedParallelMap";
 import {
   agendaReviewSnapshot,
   annualPerformanceReviewDue,
@@ -86,6 +88,9 @@ import {
  * Material conditions and crisis changes can prompt an earlier re-plan.
  */
 export const AGENDA_RECOMPUTE_INTERVAL_TURNS = TURNS_PER_YEAR;
+
+/** Parallel lanes for the per-country domestic pass of `runNppGovernmentPhases`. */
+export const NPP_GOVERNMENT_LANES = 4;
 
 export interface NppGovernmentResult {
   /** Whether the v1 gate was met and the strategic batch ran for this country. */
@@ -131,13 +136,50 @@ export async function processNppGovernment(
   commandEconomyEnabled?: boolean,
   preset?: string
 ): Promise<NppGovernmentResult> {
-  if (!(await nppAutonomyAtLeast(db, countryId, "v1"))) return INACTIVE;
+  const domestic = await processNppGovernmentDomestic(
+    db,
+    countryId,
+    currentTurn,
+    now,
+    currentYear,
+    commandEconomyEnabled,
+    preset
+  );
+  if (!domestic.foreignPolicyDue) return domestic.result;
+  const foreignPolicy = await processAutonomousForeignPolicy(db, countryId, currentTurn, now);
+  return { ...domestic.result, foreignPolicyDecisionRecorded: foreignPolicy.decisionRecorded };
+}
+
+interface DomesticGovernmentOutcome {
+  result: NppGovernmentResult;
+  /** True when the strategic batch ran and step 6 (foreign policy) is owed. */
+  foreignPolicyDue: boolean;
+}
+
+/**
+ * Steps 1-5 of the governing brain: everything except foreign policy. Split
+ * out so `runNppGovernmentPhases` can run the domestic work of every country in
+ * parallel lanes and then take the foreign-policy step serially in country
+ * order (see the independence note there).
+ */
+async function processNppGovernmentDomestic(
+  db: Db,
+  countryId: CountryId,
+  currentTurn: number,
+  now: Date,
+  currentYear?: number | null,
+  commandEconomyEnabled?: boolean,
+  preset?: string
+): Promise<DomesticGovernmentOutcome> {
+  if (!(await nppAutonomyAtLeast(db, countryId, "v1"))) {
+    return { result: INACTIVE, foreignPolicyDue: false };
+  }
 
   // Tier-1 strategic stagger (#3724): claim the six-hour bucket before acting so
   // a restarted worker cannot double-fire. Economic accounting is not gated here.
   const slot = await claimTier1NppDecisionSlot(db, countryId, currentTurn, now);
   if (!slot.run) {
-    return { ...INACTIVE, skipReason: slot.reason };
+    return { result: { ...INACTIVE, skipReason: slot.reason }, foreignPolicyDue: false };
   }
 
   // Player-enabled countries: humans own country-level strategy. Do not also run
@@ -152,13 +194,16 @@ export async function processNppGovernment(
       ? await runCaretakerMinisters(db, countryId, currentTurn, now)
       : { ordersIssued: 0 };
     return {
-      ran: true,
-      seatedExecutive: false,
-      agendaUpdated: false,
-      cabinetPostsFilled: 0,
-      ministerialOrdersIssued: caretaker.ordersIssued,
-      foreignPolicyDecisionRecorded: false,
-      skipReason: "player-controlled",
+      result: {
+        ran: true,
+        seatedExecutive: false,
+        agendaUpdated: false,
+        cabinetPostsFilled: 0,
+        ministerialOrdersIssued: caretaker.ordersIssued,
+        foreignPolicyDecisionRecorded: false,
+        skipReason: "player-controlled",
+      },
+      foreignPolicyDue: false,
     };
   }
 
@@ -197,21 +242,22 @@ export async function processNppGovernment(
   //    and as a no-op below the comingle tier.
   const caretaker = await runCaretakerMinisters(db, countryId, currentTurn, now);
 
-  // 6. Foreign policy. This stays inside the claimed Tier-1 slot so each
-  //    autonomous government takes at most one diplomatic ACTION per six-hour
-  //    cycle. Ballots are not rationed by that slot — a bloc vote has a deadline
-  //    and a tariff does not, and making them compete let a member sit out every
-  //    ballot it was eligible for (#1257). Shadow mode only writes its audit
-  //    decision.
-  const foreignPolicy = await processAutonomousForeignPolicy(db, countryId, currentTurn, now);
-
+  // 6. Foreign policy is owed by the caller. It stays inside the claimed Tier-1
+  //    slot so each autonomous government takes at most one diplomatic ACTION
+  //    per six-hour cycle. Ballots are not rationed by that slot — a bloc vote
+  //    has a deadline and a tariff does not, and making them compete let a
+  //    member sit out every ballot it was eligible for (#1257). Shadow mode only
+  //    writes its audit decision.
   return {
-    ran: true,
-    seatedExecutive,
-    agendaUpdated,
-    cabinetPostsFilled: cabinet.filled,
-    ministerialOrdersIssued: ministerial.ordersIssued + caretaker.ordersIssued,
-    foreignPolicyDecisionRecorded: foreignPolicy.decisionRecorded,
+    result: {
+      ran: true,
+      seatedExecutive,
+      agendaUpdated,
+      cabinetPostsFilled: cabinet.filled,
+      ministerialOrdersIssued: ministerial.ordersIssued + caretaker.ordersIssued,
+      foreignPolicyDecisionRecorded: false,
+    },
+    foreignPolicyDue: true,
   };
 }
 
@@ -482,16 +528,75 @@ export async function runNppGovernmentPhases(gameNow: Date, currentTurn: number)
   // a ghost government legislating and declaring for a country that no longer
   // exists.
   const registered = new Set(await getRegisteredCountryIds(db));
-  for (const countryId of Object.keys(COUNTRY_CONFIGS) as CountryId[]) {
-    if (!registered.has(countryId)) continue;
-    await processNppGovernment(
-      db,
-      countryId,
-      currentTurn,
-      gameNow,
-      currentYear,
-      commandEconomyEnabled,
-      gameState?.preset
-    );
+  const countries = (Object.keys(COUNTRY_CONFIGS) as CountryId[]).filter((countryId) =>
+    registered.has(countryId)
+  );
+
+  // Two passes, chosen so the outcome matches the old serial loop exactly.
+  //
+  // Pass 1 runs steps 1-5 (executive, agenda, cabinet, ministers, caretakers)
+  // in bounded parallel lanes. That work is independent per country: every
+  // read and write is keyed to the country's own documents (its
+  // governmentFormation, countryGameStates slot claim, electedOfficials,
+  // cabinetMembers, cabinetSettings, ministerialOrders, crises, budget and
+  // metrics rows, and NPPs filtered by countryId). The one cross-country write,
+  // expireMinisterialOrders, is an idempotent sweep keyed on the shared turn, and
+  // every order issued this turn expires at least 24 turns out, so no
+  // interleaving changes what it deactivates. Autonomy level and country access
+  // snapshots are AsyncLocalStorage scopes, which every lane inherits; there is
+  // no module-level cache on this path.
+  //
+  // Pass 2 runs step 6 (foreign policy) serially in country order. It is NOT
+  // independent: one government's tariff bill, embargo, organization vote or
+  // war order is read by the next government's opinion scoring, so its order
+  // is kept. Its reads of other countries go only through those diplomatic
+  // collections, which pass 1 never writes, and pass 1 never reads what
+  // foreign policy writes, so moving every country's step 6 after every
+  // country's steps 1-5 changes nothing.
+  //
+  // Failure: once a country throws, no new country starts (lanes already in
+  // flight finish their domestic step); foreign policy runs
+  // for the countries ordered before the failure (what the serial loop would
+  // have finished), then the earliest-ordered error is rethrown.
+  //
+  // Lanes run only at v6 (NPP engine 6). Below it a single lane reproduces the
+  // old serial loop exactly, including the order of the caretaker-resignation
+  // draws and which countries a failure stops.
+  const lanes = nppAutonomyLevelAtLeast(await getNppAutonomyLevel(db), NPP_ENGINE_LEVEL)
+    ? NPP_GOVERNMENT_LANES
+    : 1;
+  let failed = false;
+  const domestic = await boundedParallelMap(
+    countries,
+    lanes,
+    async (countryId): Promise<{ outcome?: DomesticGovernmentOutcome; error?: unknown }> => {
+      if (failed) return {};
+      try {
+        return {
+          outcome: await processNppGovernmentDomestic(
+            db,
+            countryId,
+            currentTurn,
+            gameNow,
+            currentYear,
+            commandEconomyEnabled,
+            gameState?.preset
+          ),
+        };
+      } catch (error) {
+        failed = true;
+        return { error };
+      }
+    }
+  );
+
+  for (let i = 0; i < countries.length; i++) {
+    const entry = domestic[i]!;
+    // Lanes claim countries in order, so a country skipped after a failure
+    // always sits after the failing one and this throws before reaching it.
+    if (!entry.outcome) throw entry.error;
+    if (entry.outcome.foreignPolicyDue) {
+      await processAutonomousForeignPolicy(db, countries[i]!, currentTurn, gameNow);
+    }
   }
 }

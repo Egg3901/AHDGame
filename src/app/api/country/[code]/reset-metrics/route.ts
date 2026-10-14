@@ -23,20 +23,10 @@ import { resetCabinetActions } from "@/lib/resetCabinet/catalog";
 import type { ResetLawOpeningBoard } from "@/lib/resetLegislation/rules/openingBoard";
 import { buildMetricLawStatuses } from "@/lib/resetLegislation/rules/metricPolicyStatus";
 import { isResetV2Country } from "@/lib/resetVersions/rules";
+import { cabinetActionApplies } from "@/lib/resetMetrics/loadPolicyPressure";
 import type { ResetCountry } from "@/lib/resetLegislation/fundingOwner";
 
 const cabinetActionTitles = new Map(resetCabinetActions.map((action) => [action.id, action.title]));
-
-function actionApplies(scope: string, boardScope: "national" | "regional", regionId?: string) {
-  if (scope === "Nat") return true;
-  if (scope === "Vet") return boardScope === "regional";
-  return (
-    boardScope === "regional" &&
-    ((scope === "NI" && regionId === "NIR") ||
-      (scope === "SCT" && regionId === "SCO") ||
-      (scope === "WAL" && regionId === "WAL"))
-  );
-}
 
 /** V2 primary board. V1 countries keep their existing metrics API unchanged. */
 export async function GET(request: Request, { params }: { params: Promise<{ code: string }> }) {
@@ -136,7 +126,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ code
     const temporaryEffects = new Map(
       mergeApplicableActionEffects(
         combineActiveActionEffects(actionState?.active ?? [], board.board.asOfTurn)
-          .filter((effect) => actionApplies(effect.scope, board.board.scope, board.board.regionId))
+          .filter((effect) =>
+            cabinetActionApplies(effect.scope, board.board.scope, board.board.regionId)
+          )
           .filter((effect) => /^M\d{2}$/.test(effect.target))
       ).map((effect) => [effect.target.slice(1), effect])
     );

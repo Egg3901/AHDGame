@@ -13,7 +13,11 @@ import {
 import { costPassThroughMultiplier } from "@/lib/market/costPassThrough";
 import { computeGlobalCommodityPrice } from "@/lib/market/globalCommodityPrice";
 import { getPriceSoftKnee } from "@/lib/constants/commodities";
-import { updateScarcityMultiplier } from "@/lib/market/scarcityDrift";
+import {
+  updateScarcityMultiplier,
+  updateScarcityMultiplierMomentum,
+} from "@/lib/market/scarcityDrift";
+import { COMMODITY_FIX_STAGE, commodityFixStageActive } from "@/lib/market/commodityFixStages";
 import { administeredNationalPrice, dualTrackPrice } from "@/lib/economy/administeredPricing";
 import { isPlannedEconomy, plannedShare } from "@/lib/constants/commandEconomy";
 import { buildReachableBooks } from "@/lib/trade/reachableBook";
@@ -59,6 +63,8 @@ export interface CommodityPricingContext {
   ledgerBasePrices: Record<CommodityType, number>;
   commodityNominalPriceIndex: number;
   scarcityDriftEnabled: boolean;
+  /** Commodity treadmill fix stage (0..6); >= 1 switches the ratchet to momentum mode. */
+  commodityFixStage?: number;
   commandEconomyEnabled: boolean;
   priceCurrentYear: number | null;
   freightSettlementActive: boolean;
@@ -115,6 +121,7 @@ export function priceCommodity(
     ledgerBasePrices,
     commodityNominalPriceIndex,
     scarcityDriftEnabled,
+    commodityFixStage,
     commandEconomyEnabled,
     priceCurrentYear,
     freightSettlementActive,
@@ -145,9 +152,31 @@ export function priceCommodity(
   // aggregate balance, then scale the base price so the global, national
   // and state legs (and the price/base realization ratio) all inherit the
   // scarcity memory consistently. Pegs/nudges still take precedence below.
-  const scarcityMult = scarcityDriftEnabled
-    ? updateScarcityMultiplier(existing?.scarcityMult, globalBal.supply, globalBal.demand)
-    : 1;
+  // Momentum mode (commodity treadmill fix stage 1): the ratchet integrates
+  // the CHANGE in imbalance against a trailing window, so a residual pinned by
+  // the final-demand caps no longer reads as an ever-worsening shortage.
+  const momentumMode = commodityFixStageActive(
+    commodityFixStage,
+    COMMODITY_FIX_STAGE.RATCHET_MOMENTUM
+  );
+  let scarcityImbalanceHistory: number[] | undefined;
+  let scarcityMult = 1;
+  if (scarcityDriftEnabled && momentumMode) {
+    const next = updateScarcityMultiplierMomentum(
+      existing?.scarcityMult,
+      globalBal.supply,
+      globalBal.demand,
+      existing?.scarcityImbalanceHistory
+    );
+    scarcityMult = next.multiplier;
+    scarcityImbalanceHistory = next.history;
+  } else if (scarcityDriftEnabled) {
+    scarcityMult = updateScarcityMultiplier(
+      existing?.scarcityMult,
+      globalBal.supply,
+      globalBal.demand
+    );
+  }
   scarcityMultByCommodity.set(commodity, scarcityMult);
   // Per-country scarcity drift on the REACHABLE book (#1077 follow-up).
   // The wide leg already prices the reachable market, but the base it
@@ -160,15 +189,28 @@ export function priceCommodity(
   // wide-leg pricing below so the integrator and the level formula read
   // the same book.
   const scarcityMultByCountry: Record<string, number> = {};
+  const scarcityImbalanceHistoryByCountry: Record<string, number[]> = {};
   if (scarcityDriftEnabled) {
     for (const countryId of reachableBooks.keys()) {
       const book = reachableBooks.get(countryId)?.get(commodity);
       if (!book || (book.supply <= 0 && book.demand <= 0)) continue;
-      scarcityMultByCountry[countryId] = updateScarcityMultiplier(
-        existing?.scarcityMultByCountry?.[countryId] ?? existing?.scarcityMult,
-        book.supply + NATIONAL_COMMODITY_STABILIZER,
-        book.demand + NATIONAL_COMMODITY_STABILIZER
-      );
+      const prevCountry = existing?.scarcityMultByCountry?.[countryId] ?? existing?.scarcityMult;
+      if (momentumMode) {
+        const next = updateScarcityMultiplierMomentum(
+          prevCountry,
+          book.supply + NATIONAL_COMMODITY_STABILIZER,
+          book.demand + NATIONAL_COMMODITY_STABILIZER,
+          existing?.scarcityImbalanceHistoryByCountry?.[countryId]
+        );
+        scarcityMultByCountry[countryId] = next.multiplier;
+        scarcityImbalanceHistoryByCountry[countryId] = next.history;
+      } else {
+        scarcityMultByCountry[countryId] = updateScarcityMultiplier(
+          prevCountry,
+          book.supply + NATIONAL_COMMODITY_STABILIZER,
+          book.demand + NATIONAL_COMMODITY_STABILIZER
+        );
+      }
     }
   }
   // Producer cost pass-through (>= 1, capped): when the inputs to MAKE this
@@ -419,6 +461,12 @@ export function priceCommodity(
             stateNudges: {},
             scarcityMult,
             scarcityMultByCountry,
+            ...(momentumMode
+              ? {
+                  scarcityImbalanceHistory: scarcityImbalanceHistory ?? [],
+                  scarcityImbalanceHistoryByCountry,
+                }
+              : {}),
             reachablePrices,
             priceAttribution,
             updatedAt: now,
