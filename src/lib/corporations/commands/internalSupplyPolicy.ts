@@ -13,6 +13,7 @@ import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { getMarketSystemMode, marketAtLeast } from "@/lib/market/featureFlag";
 import {
   DEFAULT_INTERNAL_SUPPLY_POLICY,
+  ownRouteIdentity,
   resolveSupplyPolicies,
 } from "@/lib/market/internalSupply/rules";
 import type { SourcingNetworkDoc } from "@/lib/logistics/sourcingLedger";
@@ -100,8 +101,13 @@ export async function internalSupplyPolicy(request: Request, { params }: Params)
       const network = await db
         .collection<SourcingNetworkDoc>("sourcingNetworkLoad")
         .findOne({}, { sort: { turn: -1 }, projection: { turn: 1, ownRouteDelivered: 1 } });
+      const routeIdentity = ownRouteIdentity(corporation._id.toString(), effective);
       const ownHauls = (network?.ownRouteDelivered ?? [])
-        .filter((r) => r.corporationId === corporation._id.toString() && r.units > 0)
+        .filter(
+          (r) =>
+            (r.corporationId === corporation._id.toString() || r.corporationId === routeIdentity) &&
+            r.units > 0
+        )
         .map((r) => ({
           commodity: r.commodity,
           originStateId: r.originStateId,
