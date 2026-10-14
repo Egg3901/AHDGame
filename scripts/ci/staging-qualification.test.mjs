@@ -111,7 +111,7 @@ function fixture() {
     })
   );
   const commits = Object.fromEntries(
-    [head, merge, trusted].map((id) => [id, { sha: id, commit: { tree: { sha: tree } } }])
+    [head, merge, trusted, dev].map((id) => [id, { sha: id, commit: { tree: { sha: tree } } }])
   );
   const blobs = {
     ".github/workflows/ci.yml": sha("1"),
@@ -130,6 +130,8 @@ function fixture() {
     blobs,
     repository,
     security,
+    development: { name: "development", protected: true, commit: { sha: sha("9") } },
+    comparison: { status: "ahead", base_commit: { sha: dev }, merge_base_commit: { sha: dev } },
     rules: [
       {
         type: "required_status_checks",
@@ -144,7 +146,10 @@ function fixture() {
   const api = async (path) => {
     calls.push(path);
     if (path === "") return state.repository;
-    if (path === "rules/branches/staging") return state.rules;
+    if (path === "rules/branches/staging" || path === "rules/branches/development")
+      return state.rules;
+    if (path === "branches/development") return state.development;
+    if (path.startsWith("compare/")) return state.comparison;
     for (const [file, gate] of Object.entries(state.security)) {
       if (path === `actions/workflows/${file}`) return gate.info;
       if (path.startsWith(`actions/workflows/${file}/runs?`)) return { workflow_runs: [gate.run] };
@@ -327,3 +332,103 @@ test("a newly required unsupported branch gate falls back to full checks", async
   f.state.rules[0].parameters.required_status_checks.push({ context: "new-security-gate" });
   assert.equal((await findStagingQualification(f.input)).reuse, false);
 });
+
+function frozenFixture() {
+  const f = fixture();
+  f.state.previous.head.ref = "release/frozen-snapshot";
+  for (const run of [f.state.run, ...Object.values(f.state.security).map((gate) => gate.run)])
+    run.head_branch = f.state.previous.head.ref;
+  f.state.jobs.jobs[1].steps[0].name = `qualified-release/frozen-snapshot-staging-tree-${f.tree}`;
+  return f;
+}
+
+test("a frozen protected-development ancestor can reuse exact native qualification", async () => {
+  const f = frozenFixture();
+  assert.equal((await findStagingQualification(f.input)).reuse, true);
+  assert.ok(
+    f.calls.includes(`compare/${f.state.previous.head.sha}...${f.state.development.commit.sha}`)
+  );
+});
+
+const invalidFrozen = {
+  "snapshot is ahead of development": (f) => {
+    f.state.comparison.status = "behind";
+  },
+  "comparison status is unknown": (f) => {
+    f.state.comparison.status = "unknown";
+  },
+  "snapshot is unrelated to protected development": (f) => {
+    f.state.comparison.status = "diverged";
+  },
+  "snapshot only shares an older merge base": (f) => {
+    f.state.comparison.merge_base_commit.sha = sha("0");
+  },
+  "comparison is for another source": (f) => {
+    f.state.comparison.base_commit.sha = sha("0");
+  },
+  "development is unprotected": (f) => {
+    f.state.development.protected = false;
+  },
+  "development identity is missing": (f) => {
+    delete f.state.development.commit;
+  },
+  "development has no required verify": (f) => {
+    f.state.rules = [];
+  },
+  "snapshot tree differs from candidate": (f) => {
+    f.state.commits[f.state.previous.head.sha].commit.tree.sha = sha("0");
+  },
+  "run branch differs from prior PR": (f) => {
+    f.state.run.head_branch = "development";
+  },
+  "security run branch differs from prior PR": (f) => {
+    f.state.security["semgrep.yml"].run.head_branch = "development";
+  },
+  "receipt branch differs from prior PR": (f) => {
+    f.state.jobs.jobs[1].steps[0].name = `qualified-development-staging-tree-${f.tree}`;
+  },
+  "snapshot comes from a fork": (f) => {
+    f.state.previous.head.repo = { id: 10, full_name: "other/game" };
+  },
+};
+for (const [name, mutate] of Object.entries(invalidFrozen))
+  test(`${name} cannot reuse a frozen qualification`, async () => {
+    const f = frozenFixture();
+    mutate(f);
+    assert.equal((await findStagingQualification(f.input)).reuse, false);
+  });
+for (const [name, mutate] of Object.entries(invalid))
+  test(`frozen snapshot: ${name} still falls back`, async () => {
+    const f = frozenFixture();
+    mutate(f);
+    assert.equal((await findStagingQualification(f.input)).reuse, false);
+  });
+
+test("a frozen snapshot at the current protected tip also qualifies", async () => {
+  const f = frozenFixture();
+  f.state.development.commit.sha = f.state.previous.head.sha;
+  f.state.comparison.status = "identical";
+  assert.equal((await findStagingQualification(f.input)).reuse, true);
+});
+test("a reused or content-only success is not a full snapshot qualification", async () => {
+  const f = frozenFixture();
+  f.state.jobs.jobs[1].steps[0].status = "completed";
+  f.state.jobs.jobs[1].steps[0].conclusion = "skipped";
+  assert.equal((await findStagingQualification(f.input)).reuse, false);
+});
+test("unavailable development ancestry fails closed", async () => {
+  const f = frozenFixture(),
+    api = f.input.api;
+  f.input.api = async (path) => {
+    if (path.startsWith("compare/")) throw new Error("unavailable");
+    return api(path);
+  };
+  assert.equal((await findStagingQualification(f.input)).reuse, false);
+});
+for (const file of ["semgrep.yml", "dependency-review.yml"])
+  for (const kind of ["failure", "cancelled", "timed_out"])
+    test(`frozen snapshot cannot hide ${file} ${kind}`, async () => {
+      const f = frozenFixture();
+      f.state.security[file].run.conclusion = kind;
+      assert.equal((await findStagingQualification(f.input)).reuse, false);
+    });
