@@ -1,6 +1,8 @@
 import { ObjectId } from "mongodb";
 import type { Achievement } from "@/lib/db/types";
 
+import { CONTEST_ACHIEVEMENTS } from "@/lib/contests/achievementDefinitions";
+
 const now = new Date();
 
 /**
@@ -8,6 +10,16 @@ const now = new Date();
  * Order determines display order (lower = first).
  */
 export const ACHIEVEMENT_SEED: Omit<Achievement, "_id">[] = [
+  ...CONTEST_ACHIEVEMENTS.map((definition, index) => ({
+    ...definition,
+    icon: "Trophy",
+    category: "milestone" as const,
+    triggerType: "contest_result",
+    isHidden: false,
+    order: 600 + index,
+    createdAt: now,
+    updatedAt: now,
+  })),
   // Special
   {
     slug: "alpha_tester",

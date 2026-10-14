@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { captureIntakeEvent } from "@/lib/analytics/intakeEvents";
 import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { timingSafeCompare } from "@/lib/api/timingSafeCompare";
 import bcrypt from "bcryptjs";
@@ -353,6 +354,15 @@ export async function POST(request: Request) {
       username: username.toLowerCase(),
       details: isAdmin ? "Created with admin privileges" : undefined,
     });
+
+    // Anonymous, consent-independent signup count (see intakeEvents.ts).
+    // Admin-key registrations are staff, not intake.
+    if (!isAdmin) {
+      await captureIntakeEvent("account_registered", {
+        auth_provider: "email",
+        has_referral: Boolean(referredByObjectId),
+      });
+    }
 
     if (gateDecision.softAllow) {
       // Surfaces the cgNAT bypass in the admin log so moderators can review

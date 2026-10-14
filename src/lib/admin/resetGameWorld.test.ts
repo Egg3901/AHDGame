@@ -293,6 +293,16 @@ describe("resetGameWorld", () => {
       countryName: "United States",
     });
     expect(db.collectionMocks.actionLogs.deleteMany).toHaveBeenCalled();
+    const retiredAt = vi.mocked(retireCharacter).mock.invocationCallOrder[0];
+    expect(retiredAt).toBeLessThan(db.collectionMocks.bills.deleteMany.mock.invocationCallOrder[0]);
+    expect(retiredAt).toBeLessThan(
+      db.collectionMocks.stateBills.deleteMany.mock.invocationCallOrder[0]
+    );
+    expect(vi.mocked(retireCharacter).mock.calls[0]?.[4]?.careerLegislation).toBeInstanceOf(Map);
+    expect(vi.mocked(retireCharacter).mock.calls[0]?.[4]?.iteration).toEqual({
+      type: "Iteration",
+      number: 4,
+    });
   });
 
   it("preserves account join dates while retiring profiles for a new iteration", async () => {

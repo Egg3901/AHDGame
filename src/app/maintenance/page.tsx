@@ -44,10 +44,14 @@ export default async function MaintenancePage() {
   // auto-opens it once on first login. Character creation stays blocked: this
   // page is the maintenance wall for every non-public route.
   let recap: CharacterRecap | null = null;
+  // A signed-in account with no past character is a newcomer who signed up
+  // during the down-window (or just before it). "Your season has ended" means
+  // nothing to them; they need to know the account is saved and when to return.
+  let newAccount = false;
   try {
     const authUser = await getAuthUser();
     if (authUser) {
-      const [gs, retired] = await Promise.all([
+      const [gs, retired, anyRetired] = await Promise.all([
         db
           .collection<GameState>("gameState")
           .findOne({ _id: "current" }, { projection: { seasonRecapEnabled: 1 } }),
@@ -57,8 +61,12 @@ export default async function MaintenancePage() {
             { userId: new ObjectId(authUser.userId), recap: { $exists: true } },
             { sort: { retiredAt: -1 }, projection: { recap: 1 } }
           ),
+        db
+          .collection<RetiredCharacter>("retiredCharacters")
+          .countDocuments({ userId: new ObjectId(authUser.userId) }, { limit: 1 }),
       ]);
       if (isSeasonRecapEnabled(gs) && retired?.recap) recap = retired.recap;
+      newAccount = anyRetired === 0 && !authUser.isAdmin;
     }
   } catch {
     // best-effort — never let the recap lookup break the maintenance wall
@@ -105,12 +113,18 @@ export default async function MaintenancePage() {
 
         {/* Heading */}
         <h1 className="mb-3 text-2xl font-bold tracking-tight sm:text-3xl">
-          {recap ? "Between iterations" : "Under maintenance"}
+          {recap
+            ? "Between iterations"
+            : newAccount
+              ? "Your account is ready"
+              : "Under maintenance"}
         </h1>
         <p className="mb-6 text-sm leading-relaxed text-muted sm:text-base">
           {recap
-            ? "Your season has ended, and a fresh world is being prepared for the next iteration. New characters open when it begins — until then, relive your run below."
-            : "A House Divided is currently down for scheduled maintenance. We’ll be back shortly."}
+            ? "Your season has ended, and a fresh world is being prepared for the next iteration. New characters open when it begins. Until then, relive your run below."
+            : newAccount
+              ? "Your account is saved. The game is closed for maintenance, so character creation opens when it is back. Sign in then and you will go straight to creating your character."
+              : "A House Divided is currently down for scheduled maintenance. We’ll be back shortly."}
         </p>
 
         {recap && (

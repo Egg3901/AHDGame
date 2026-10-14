@@ -25,6 +25,7 @@ interface LegacyLeaderboardClientProps {
   selfUserId: string | null;
   initialScope: LegacyLeaderboardScope;
   initialRankBy: LegacyRankBy;
+  embedded?: boolean;
 }
 
 const SCORE_BREAKDOWN_ROWS: {
@@ -35,11 +36,13 @@ const SCORE_BREAKDOWN_ROWS: {
   { key: "partyInfluence", label: "Party power" },
   { key: "achievements", label: "Achievements" },
   { key: "officeTier", label: "Highest office held" },
-  { key: "wealth", label: "Personal wealth" },
+  { key: "wealth", label: "Business and net worth" },
+  { key: "legislation", label: "Enacted sponsored laws" },
+  { key: "contests", label: "Contest results" },
   { key: "infamyPenalty", label: "Infamy penalty" },
 ];
 
-/** ₳ is this game's internal-currency symbol — see formatters.ts. Net worth is forex-normalized to it so amounts are comparable across countries. */
+/** ₳ is this game's internal-currency symbol: see formatters.ts. Net worth is forex-normalized to it so amounts are comparable across countries. */
 function formatNetWorth(value: number): string {
   return value < 0 ? `-₳${formatCompactNumber(Math.abs(value))}` : `₳${formatCompactNumber(value)}`;
 }
@@ -72,7 +75,7 @@ function ScoreBreakdownModal({
     <Modal
       open={row !== null}
       onClose={onClose}
-      title={row ? `${row.displayName}'s ${isNetWorth ? "Net Worth" : "Legacy Score"}` : ""}
+      title={row ? `${row.displayName}'s ${isNetWorth ? "Net Worth" : "Career Score"}` : ""}
       maxWidthClass="max-w-sm"
     >
       {row &&
@@ -85,6 +88,7 @@ function ScoreBreakdownModal({
                 { key: "shares", label: "Corporation shares" },
                 { key: "bonds", label: "Bonds" },
                 { key: "indexFunds", label: "Index fund positions" },
+                { key: "debt", label: "Outstanding personal loans" },
               ] as const
             ).map(({ key, label }) => (
               <div key={key} className="flex items-center justify-between py-1.5 text-sm">
@@ -100,7 +104,7 @@ function ScoreBreakdownModal({
             </div>
             <p className="mt-2 text-xs text-muted">
               Forex-normalized so amounts are comparable across countries. Reflects the balance at
-              retirement (or now, if still active) — not necessarily the highest this life ever held
+              retirement (or now, if still active): not necessarily the highest this life ever held
               mid-game.
             </p>
           </div>
@@ -110,7 +114,14 @@ function ScoreBreakdownModal({
               const value = row.scoreBreakdown[key];
               return (
                 <div key={key} className="flex items-center justify-between py-1.5 text-sm">
-                  <span className="text-muted">{label}</span>
+                  <span className="text-muted">
+                    {label}
+                    {key === "legislation"
+                      ? ` (${row.enactedBills})`
+                      : key === "contests"
+                        ? ` (${row.contestWins} wins, ${row.contestPodiums} placings)`
+                        : ""}
+                  </span>
                   <span
                     className={`font-mono font-medium ${value < 0 ? "text-error" : "text-foreground"}`}
                   >
@@ -119,8 +130,16 @@ function ScoreBreakdownModal({
                 </div>
               );
             })}
+            <p className="pt-2 text-xs text-muted">
+              Politics, business, legislation, contests and gameplay achievements each contribute up
+              to 1,000 points. Influence has diminishing returns. Only offices actually held,
+              enacted sponsored laws and settled contest placings count. Special, paid and manual
+              achievements earn no points. Infamy subtracts up to 500; total has a floor of zero.
+              Political and business career: {row.scoringCharacterName}. Enacted laws and contest
+              results cover every career in the selected scope. Scoring version {row.scoreVersion}.
+            </p>
             <div className="mt-2 flex items-center justify-between border-t border-card-border pt-2 text-sm font-semibold">
-              <span className="text-foreground">Total legacy score</span>
+              <span className="text-foreground">Total career score</span>
               <span className="font-mono text-foreground">{formatCompactNumber(row.score)}</span>
             </div>
           </div>
@@ -129,12 +148,18 @@ function ScoreBreakdownModal({
   );
 }
 
-function buildLegacyUrl(scope: LegacyLeaderboardScope, rankBy: LegacyRankBy): string {
+function buildLegacyUrl(
+  scope: LegacyLeaderboardScope,
+  rankBy: LegacyRankBy,
+  embedded: boolean
+): string {
   const params = new URLSearchParams();
+  if (embedded) params.set("view", "rankings");
   if (scope === "current") params.set("scope", "current");
   if (rankBy === "netWorth") params.set("rankBy", "netWorth");
   const qs = params.toString();
-  return qs ? `/world/legacy?${qs}` : "/world/legacy";
+  const base = embedded ? "/contests" : "/world/legacy";
+  return qs ? `${base}?${qs}` : base;
 }
 
 export default function LegacyLeaderboardClient({
@@ -143,6 +168,7 @@ export default function LegacyLeaderboardClient({
   selfUserId,
   initialScope,
   initialRankBy,
+  embedded = false,
 }: LegacyLeaderboardClientProps) {
   const router = useRouter();
   const [entries, setEntries] = useState(data.entries);
@@ -170,7 +196,7 @@ export default function LegacyLeaderboardClient({
     if (nextScope === scope) return;
     setScope(nextScope);
     setLoading(true);
-    router.replace(buildLegacyUrl(nextScope, rankBy), { scroll: false });
+    router.replace(buildLegacyUrl(nextScope, rankBy, embedded), { scroll: false });
     try {
       await refetch(nextScope, rankBy);
     } finally {
@@ -182,7 +208,7 @@ export default function LegacyLeaderboardClient({
     if (nextRankBy === rankBy) return;
     setRankBy(nextRankBy);
     setLoading(true);
-    router.replace(buildLegacyUrl(scope, nextRankBy), { scroll: false });
+    router.replace(buildLegacyUrl(scope, nextRankBy, embedded), { scroll: false });
     try {
       await refetch(scope, nextRankBy);
     } finally {
@@ -201,8 +227,9 @@ export default function LegacyLeaderboardClient({
         feature: "legacy-leaderboard-display-name",
       });
       await refetch(scope, rankBy);
+      if (embedded) router.refresh();
     } catch {
-      setSaveError("Couldn't save — try again.");
+      setSaveError("Couldn't save: try again.");
     } finally {
       setSaving(false);
     }
@@ -239,7 +266,9 @@ export default function LegacyLeaderboardClient({
             </div>
             <div className="flex items-center gap-1 text-xs text-muted">
               <CountryFlag country={row.countryId} size="sm" />
-              <span>{row.iterationLabel}</span>
+              <span>
+                {row.scoringCharacterName} · {row.iterationLabel}
+              </span>
             </div>
           </div>
         </div>
@@ -247,7 +276,7 @@ export default function LegacyLeaderboardClient({
     },
     {
       key: "score",
-      header: isNetWorth ? "Net worth" : "Legacy score",
+      header: isNetWorth ? "Net worth" : "Career score",
       render: (row) => (
         <button
           type="button"
@@ -280,7 +309,7 @@ export default function LegacyLeaderboardClient({
       key: "office",
       header: "Highest office",
       hideOnMobile: true,
-      render: (row) => <span className="text-sm text-muted">{row.highestOffice ?? "—"}</span>,
+      render: (row) => <span className="text-sm text-muted">{row.highestOffice ?? "-"}</span>,
     },
     {
       key: "achievements",
@@ -297,34 +326,41 @@ export default function LegacyLeaderboardClient({
   ];
 
   return (
-    <div className="min-h-screen bg-background pb-20">
-      <main className="mx-auto max-w-7xl space-y-8 px-4 py-10 sm:px-6 lg:px-8">
-        <header className="relative overflow-hidden rounded-2xl border border-card-border bg-card p-6 shadow-card sm:p-8">
-          <div
-            className="absolute -right-10 -top-10 h-40 w-40 rounded-full bg-primary/10"
-            aria-hidden="true"
-          />
-          <div className="relative max-w-3xl">
-            <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl border border-primary/20 bg-primary/10 text-primary">
-              <Trophy className="h-6 w-6" aria-hidden="true" />
+    <div className={embedded ? "" : "min-h-screen bg-background pb-20"}>
+      <div
+        className={
+          embedded ? "space-y-6" : "mx-auto max-w-7xl space-y-8 px-4 py-10 sm:px-6 lg:px-8"
+        }
+      >
+        {!embedded && (
+          <header className="relative overflow-hidden rounded-2xl border border-card-border bg-card p-6 shadow-card sm:p-8">
+            <div
+              className="absolute -right-10 -top-10 h-40 w-40 rounded-full bg-primary/10"
+              aria-hidden="true"
+            />
+            <div className="relative max-w-3xl">
+              <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl border border-primary/20 bg-primary/10 text-primary">
+                <Trophy className="h-6 w-6" aria-hidden="true" />
+              </div>
+              <p className="text-body-sm font-medium text-primary">
+                {scope === "all" ? "Across every iteration" : "This iteration"}
+              </p>
+              <h1 className="mt-2 text-3xl font-extrabold tracking-tight text-foreground sm:text-4xl">
+                Hall of fame
+              </h1>
+              <p className="mt-3 max-w-2xl text-base leading-relaxed text-muted">
+                Every player, ranked by their best career plus account achievements across every
+                iteration. Retiring a character or resetting the world doesn&apos;t erase your
+                legacy.
+              </p>
+              <p className="mt-2 max-w-2xl text-sm text-muted">
+                {isNetWorth
+                  ? "Net worth includes all currency balances, shares, bonds and funds, less personal loans, converted to anchor currency."
+                  : "Career score balances politics, business, enacted laws, contest results and earned gameplay achievements. Each area contributes up to 1,000 points."}
+              </p>
             </div>
-            <p className="text-body-sm font-medium text-primary">
-              {scope === "all" ? "Across every iteration" : "This iteration"}
-            </p>
-            <h1 className="mt-2 text-3xl font-extrabold tracking-tight text-foreground sm:text-4xl">
-              Hall of fame
-            </h1>
-            <p className="mt-3 max-w-2xl text-base leading-relaxed text-muted">
-              Every player, ranked by their single best life — Alpha, Beta, and every iteration
-              since. Retiring a character or resetting the world doesn&apos;t erase your legacy.
-            </p>
-            <p className="mt-2 max-w-2xl text-sm text-muted">
-              {isNetWorth
-                ? "Net Worth ranks by personal wealth plus savings, forex-normalized so every country is comparable — pure richest-ever bragging rights."
-                : "Legacy Score rewards what a life actually built up — national influence, party power, achievements, and the highest office held — not a snapshot of political influence or favorability, which rise and fall day to day."}
-            </p>
-          </div>
-        </header>
+          </header>
+        )}
 
         <div className="flex flex-wrap items-center gap-3">
           <div
@@ -334,7 +370,7 @@ export default function LegacyLeaderboardClient({
           >
             {(
               [
-                { value: "legacy", label: "Legacy score" },
+                { value: "legacy", label: "Career score" },
                 { value: "netWorth", label: "Net worth" },
               ] as const
             ).map((opt) => (
@@ -418,7 +454,7 @@ export default function LegacyLeaderboardClient({
                     htmlFor="legacy-display-choice"
                     className="mb-2 block text-body-sm font-medium text-muted"
                   >
-                    Hall of Fame display name
+                    Ranking display name
                   </label>
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
                     <select
@@ -427,10 +463,10 @@ export default function LegacyLeaderboardClient({
                       onChange={(e) => setPendingChoice(e.target.value)}
                       className="min-h-10 w-full rounded-lg border border-card-border bg-background px-3 py-2 text-sm text-foreground sm:w-auto"
                     >
-                      <option value="">Best life (default)</option>
+                      <option value="">Current or latest character (default)</option>
                       {self.lives.map((life) => (
                         <option key={life.characterId} value={life.characterId}>
-                          {life.name} — {life.iterationLabel}
+                          {life.name}: {life.iterationLabel}
                           {life.isActive ? " (current)" : ""}
                         </option>
                       ))}
@@ -469,7 +505,7 @@ export default function LegacyLeaderboardClient({
                 </p>
                 <h2 className="mt-1 text-xl font-bold text-foreground">
                   {isNetWorth ? "Richest ever" : "All-time rankings"}
-                  {scope === "current" ? " — this iteration" : ""}
+                  {scope === "current" ? ": this iteration" : ""}
                 </h2>
               </div>
               <p className="text-xs text-muted">
@@ -484,7 +520,7 @@ export default function LegacyLeaderboardClient({
             />
           </section>
         )}
-      </main>
+      </div>
 
       <ScoreBreakdownModal
         row={breakdownRow}

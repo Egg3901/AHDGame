@@ -112,7 +112,7 @@ export interface User {
   /**
    * Which life's name to show on the cross-iteration Hall of Fame leaderboard:
    * "current" (active character), a characterId (must belong to this user, current
-   * or retired), or unset (defaults to the name of the user's highest-scoring life).
+   * or retired), or unset (defaults to the user's current or most recent character).
    */
   legacyDisplayCharacterId?: string;
   /**

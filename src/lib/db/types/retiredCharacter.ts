@@ -11,6 +11,8 @@ import type { CharacterRecap } from "@/lib/recap/types";
 
 export interface RetiredCharacterSnapshot {
   name: string;
+  /** Harness lives remain excluded from public rankings after retirement. */
+  isSynthetic?: boolean;
   countryId: CountryId;
   homeState: string;
   party: string;
@@ -38,6 +40,12 @@ export interface RetiredCharacterSnapshot {
      * the value was already released with no record by the time this field
      * was added, unrecoverable).
      */
+    /** Frozen retirement values avoid repricing historical balances with a later world's FX. */
+    cashValueAnchor?: number;
+    debtValueAnchor?: number;
+    savingsValueAnchor?: number;
+    /** Enacted sponsored laws captured before the world resets its bill collections. */
+    enactedBills?: number;
     shareValueAnchor?: number;
     bondValueAnchor?: number;
     indexFundValueAnchor?: number;

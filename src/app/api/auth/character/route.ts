@@ -13,7 +13,8 @@ import { setCharacterGateCookie } from "@/lib/auth/characterGateCookie";
 import { MongoServerError, ObjectId, type Db } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import type { Character, GameConfig, State } from "@/lib/db/types";
-import { normalizeMaintenanceMode } from "@/lib/maintenanceStatus";
+import { computeIntakeStatus } from "@/lib/auth/intakeStatus";
+import { accountAgeBand, authProviderOf, captureIntakeEvent } from "@/lib/analytics/intakeEvents";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
 import { createCharacterSchema } from "@/lib/api/schemas/settings";
@@ -208,11 +209,9 @@ export async function POST(request: Request) {
     // create a character while the site was sealed. Mirrors the same guard on
     // `POST /api/auth/register`, and reads `gameConfig` directly so it agrees
     // with the admin panel and `/api/maintenance`.
-    if (
-      !isSingleplayer() &&
-      !isAdmin &&
-      normalizeMaintenanceMode(gameConfig.maintenanceMode) !== "off"
-    ) {
+    // `computeIntakeStatus` is the same derivation /create-character reads
+    // before it shows the form, so the page and this route cannot disagree.
+    if (!isAdmin && !computeIntakeStatus(gameConfig).characterCreation.open) {
       return errorResponse(
         503,
         "Character creation is disabled during maintenance. Please try again later."
@@ -572,6 +571,15 @@ export async function POST(request: Request) {
         { $set: { characterName: name } }
       );
     }
+
+    // Anonymous, consent-independent count (see intakeEvents.ts): nothing in
+    // it identifies the account.
+    await captureIntakeEvent("character_registered", {
+      auth_provider: authProviderOf(user),
+      account_age_band: accountAgeBand(user?.createdAt),
+      first_character: activeCount === 0,
+      nation_id: (stateDoc.countryId ?? requestedCountryId).toLowerCase(),
+    });
 
     if (parsed.data.analyticsConsent) {
       await rememberCharacterActivation(db, result.insertedId.toString(), {
