@@ -38,11 +38,13 @@ describe("equity market pools migration", () => {
       _id: string;
       cashLocal: number;
       targetCashLocal: number;
+      seedLocal: number;
     }>;
     expect(docs.map((doc) => doc._id)).toEqual(["FRF", "GBP", "USD"]);
     expect(docs.find((doc) => doc._id === "USD")).toMatchObject({
       cashLocal: 50_000,
       targetCashLocal: 50_000,
+      seedLocal: 50_000,
     });
     expect(docs.find((doc) => doc._id === "FRF")).toMatchObject({
       cashLocal: 0,
