@@ -77,7 +77,11 @@ function bump(map: Record<string, number>, key: string) {
   map[key] = (map[key] ?? 0) + 1;
 }
 
-export async function computeIntakeSummary(db: Db, days: number, now = new Date()): Promise<IntakeSummary> {
+export async function computeIntakeSummary(
+  db: Db,
+  days: number,
+  now = new Date()
+): Promise<IntakeSummary> {
   const end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
   const since = new Date(end.getTime() - (days - 1) * DAY_MS);
 
@@ -113,10 +117,7 @@ export async function computeIntakeSummary(db: Db, days: number, now = new Date(
           referrerDomain: "$acquisition.referrerDomain",
           utmSource: "$acquisition.utmSource",
           firstCharacterAt: {
-            $min: [
-              { $first: "$characters.first" },
-              { $first: "$retiredCharacters.first" },
-            ],
+            $min: [{ $first: "$characters.first" }, { $first: "$retiredCharacters.first" }],
           },
         },
       },
@@ -139,8 +140,11 @@ export async function computeIntakeSummary(db: Db, days: number, now = new Date(
     if (!day) continue;
     const created = row.createdAt.getTime();
     const signupDayEnd =
-      Date.UTC(row.createdAt.getUTCFullYear(), row.createdAt.getUTCMonth(), row.createdAt.getUTCDate()) +
-      DAY_MS;
+      Date.UTC(
+        row.createdAt.getUTCFullYear(),
+        row.createdAt.getUTCMonth(),
+        row.createdAt.getUTCDate()
+      ) + DAY_MS;
     const firstChar = row.firstCharacterAt instanceof Date ? row.firstCharacterAt.getTime() : null;
     const seen = row.lastSeenAt instanceof Date ? row.lastSeenAt.getTime() : null;
 
