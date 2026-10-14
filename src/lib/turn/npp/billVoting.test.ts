@@ -1644,11 +1644,19 @@ describe("processBillVoting — engine 6.8 business interest (v6)", () => {
     const ops = (
       predictions[0] as [Array<{ updateOne: { update: { $set: { forces: { donors: number } } } } }>]
     )[0];
+    lastDonorsLabel = (ops[0].updateOne.update.$set as unknown as { donorsLabel: string })
+      .donorsLabel;
     return ops[0].updateOne.update.$set.forces.donors;
   }
+  let lastDonorsLabel = "";
 
   it("pulls a CEO toward a subsidy for its own sector at v6", async () => {
     expect(await donorsForceOn(true)).toBe(40);
+  });
+
+  it("names the business interest on the forecast at v6", async () => {
+    await donorsForceOn(true);
+    expect(lastDonorsLabel).toContain("Own business interest");
   });
 
   it("leaves the donors force alone below v6", async () => {

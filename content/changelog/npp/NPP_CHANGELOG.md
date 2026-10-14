@@ -79,9 +79,9 @@ number.
 - **CEO choice by record.** NPP-run companies choose CEOs from NPPs with a
   track record running companies in the same sector. Needs a record of each
   NPP's results as a CEO first; none is kept yet.
-- **Consequences across politics and business.** NPP officeholders who hold or
-  run companies weigh those holdings in votes (shipped in 6.8.0) and
-  sponsorship, and opponents and voters can see and react to the conflict.
+- **Consequences across politics and business.** NPP officeholders weigh their
+  holdings in votes (6.8.0) and the conflict is shown on their profile
+  (6.13.1). Still to come: voters reacting to it.
 - **Batched purchases.** The share-buying sweep is the largest single NPP cost
   in a turn (18.0 seconds and 1,465 database round trips on live turn 168); it
   moves to one batched settlement per country.
@@ -105,6 +105,13 @@ number.
 - Autonomy v6 becomes the default for new singleplayer and simulation worlds,
   after the engine 6 stages are validated. Running worlds never change level on
   their own.
+
+## 6.13.1 (unreleased)
+
+- **Business interests are visible (v6).** When an NPP's own companies pull
+  its vote (6.8.0), the vote forecast on its profile now says so, naming
+  whether the bill helps or hurts a company it runs or holds. Players and
+  opponents can see the conflict. No decision changes.
 
 ## 6.13.0 (unreleased)
 

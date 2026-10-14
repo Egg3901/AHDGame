@@ -80,6 +80,7 @@ import {
 import {
   buildNppBusinessStakes,
   businessInterestForce,
+  businessInterestLabel,
   hasBusinessProvision,
   type NppBusinessStakes,
 } from "@/lib/nppAutonomy/v6/rules/businessInterest";
@@ -513,7 +514,7 @@ export async function processBillVoting(ctx: NPPContext): Promise<number> {
 
       // Compute the four cross-pressure forces and the resulting verdict.
       const homeStateDemographics = stateDemographicsMap.get(npp.homeState) ?? null;
-      const { forces, donorsLabel } = computeCrossPressureForces(npp, bill, {
+      const { forces, donorsLabel: baseDonorsLabel } = computeCrossPressureForces(npp, bill, {
         legislationType,
         homeStateDemographics,
         whips: {
@@ -535,10 +536,13 @@ export async function processBillVoting(ctx: NPPContext): Promise<number> {
         forces.ideology = constitutionalConsentForce(bill.referendumConsent, npp.party);
 
       // Engine 6.8 (v6): the NPP's own companies, folded into the donors bucket.
+      // Engine 6.13.1: and named on the forecast, so the conflict is visible.
+      let donorsLabel = baseDonorsLabel;
       if (businessCountries.has(billCountry)) {
         const interest = businessInterestForce(bill.provisions, stakesByNpp.get(nppIdStr));
         if (interest !== 0) {
           forces.donors = Math.max(-100, Math.min(100, forces.donors + interest));
+          donorsLabel = `${baseDonorsLabel}. ${businessInterestLabel(interest)}`;
         }
       }
 
