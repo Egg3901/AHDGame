@@ -5,6 +5,7 @@
 import * as Sentry from "@sentry/nextjs";
 import { NextResponse } from "next/server";
 import { alertOps } from "@/lib/observability/alertOps";
+import { PartyTerritoryError } from "@/lib/parties/territoryErrors";
 import {
   defaultMessageFor,
   errorCodeForStatus,
@@ -195,6 +196,7 @@ export interface RouteErrorContext {
  * already tied to a user; this adds endpoint/method/entity context.
  */
 export function handleRouteError(error: unknown, context?: RouteErrorContext): NextResponse {
+  if (error instanceof PartyTerritoryError) return errorResponse(409, error.message);
   if (error instanceof ApiError) {
     // Expected 4xx business errors are returned to the client and intentionally
     // NOT sent to Sentry — they are not faults.

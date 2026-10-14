@@ -141,6 +141,7 @@ export async function POST(
       currentTurn,
       now,
       autoChairWhenVacant: false,
+      skipGeographyCheck: authResult.user.isAdmin === true,
       actor: character,
       actorRole: "chair",
     });

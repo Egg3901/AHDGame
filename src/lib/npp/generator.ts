@@ -22,6 +22,8 @@ import { getNextSequentialId } from "@/lib/db/sequentialId";
 import { deriveDomainPositions } from "./domainPositions";
 import { NPP_ECONOMY_DEFAULTS } from "./economyDefaults";
 import { NPP_POLITICAL_INFLUENCE_FLOOR } from "@shared/constants/formulas";
+import { getPartyFrontier, isInFrontier } from "@/lib/parties/partyFrontier";
+import { withPartyTerritoryMutation } from "@/lib/parties/territoryMutation";
 import fs from "fs";
 import path from "path";
 import { JP_ETHNICITY_WEIGHTS } from "@/lib/countries/jp/data/jpNppEthnicity";
@@ -582,15 +584,29 @@ export async function createNPP(
   context?: NPPGenerationContext
 ): Promise<NPP> {
   const db = await getDb();
-  const npp = await generateNPP(config, context, db);
+  const countryId = config.countryId ?? "US";
+  return withPartyTerritoryMutation(db, [{ countryId, partyId: config.party }], async () => {
+    let effectiveConfig = config;
+    const sequentialPartyId = parseInt(config.party, 10);
+    if (Number.isSafeInteger(sequentialPartyId) && sequentialPartyId > 0) {
+      effectiveConfig = { ...config, party: String(sequentialPartyId) };
+      const { presence, frontier } = await getPartyFrontier(db, countryId, effectiveConfig.party);
+      if (!isInFrontier(presence, frontier, config.state)) {
+        // Economic/justice generators must not create distant partisan footholds
+        // as a side effect. Keep the requested NPP, but independent affiliation.
+        effectiveConfig = { ...config, party: "independent" };
+      }
+    }
+    const npp = await generateNPP(effectiveConfig, context, db);
 
-  // Assign sequential ID
-  const sequentialId = await getNextSequentialId(db, "npp");
-  const nppWithId: NPP = { ...npp, sequentialId };
+    // Assign sequential ID
+    const sequentialId = await getNextSequentialId(db, "npp");
+    const nppWithId: NPP = { ...npp, sequentialId };
 
-  await db.collection<NPP>("npps").insertOne(nppWithId);
+    await db.collection<NPP>("npps").insertOne(nppWithId);
 
-  return nppWithId;
+    return nppWithId;
+  });
 }
 
 /**

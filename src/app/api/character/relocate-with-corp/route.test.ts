@@ -96,6 +96,11 @@ beforeEach(() => {
 async function setupDb() {
   const { getDb } = await import("@/lib/mongodb");
   vi.mocked(getDb).mockResolvedValue(db as unknown as import("mongodb").Db);
+  const { requireAuthWithCharacter } = await import("@/lib/api/requireAuth");
+  db.collection("characters").findOne.mockImplementation(async () => {
+    const current = await requireAuthWithCharacter();
+    return current.ok ? current.user.character : null;
+  });
 }
 
 describe("POST /api/character/relocate-with-corp", () => {

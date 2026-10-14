@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { ObjectId, type Db } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
@@ -23,6 +23,12 @@ vi.mock("@/lib/corporations/ceoResidency", () => ({
   findActiveResidentCeoCorporation: vi.fn(async () => null),
 }));
 let db: MockDb;
+// Route module loading includes the corporation relocation graph. Keep cold
+// compilation in fixture setup, not inside the first behavior assertion.
+beforeAll(async () => {
+  await import("./route");
+  await import("../relocate-with-corp/route");
+}, 60_000);
 beforeEach(async () => {
   vi.clearAllMocks();
   db = createMockDb();
@@ -37,6 +43,10 @@ beforeEach(async () => {
       character: { _id: new ObjectId(), countryId: "UK", homeState: "SCO", party: "7" },
     },
   } as never);
+  db.collection("characters").findOne.mockImplementation(async () => {
+    const current = await requireAuthWithCharacter();
+    return current.ok ? current.user.character : null;
+  });
   db.collection("states").findOne.mockResolvedValue({
     _id: "LON",
     countryId: "UK",
@@ -60,6 +70,45 @@ function request(confirmPartyDeparture = false) {
   });
 }
 describe("relocation departure consent", () => {
+  it.each(["character", "combined"])(
+    "rejects %s bridge removal even with departure confirmation",
+    async (mode) => {
+      const { requireAuthWithCharacter } = await import("@/lib/api/requireAuth");
+      const id = new ObjectId();
+      vi.mocked(requireAuthWithCharacter).mockResolvedValue({
+        ok: true,
+        user: {
+          userId: new ObjectId().toString(),
+          isAdmin: false,
+          character: { _id: id, countryId: "UK", homeState: "YHU", party: "7" },
+        },
+      } as never);
+      db.collection("states").findOne.mockResolvedValue({
+        _id: "LON",
+        countryId: "UK",
+        name: "London",
+      });
+      db.collection("states").find.mockReturnValue({
+        toArray: async () => ["NEE", "YHU", "EMI", "LON"].map((_id) => ({ _id })),
+      });
+      db.collection("characters").distinct.mockImplementation(
+        async (_field: string, filter: Record<string, unknown>) =>
+          filter._id ? ["NEE", "EMI"] : ["NEE", "YHU", "EMI"]
+      );
+      const { POST } =
+        mode === "character"
+          ? await import("./route")
+          : await import("../relocate-with-corp/route");
+      const response = await POST(request(true));
+      expect(response.status).toBe(409);
+      expect(await response.json()).toMatchObject({ error: expect.stringContaining("disconnect") });
+      const { performRelocation } = await import("@/lib/character/performRelocation");
+      expect(performRelocation).not.toHaveBeenCalled();
+      expect(db.collection("characters").updateOne).not.toHaveBeenCalled();
+      expect(db.collection("corporations").updateOne).not.toHaveBeenCalled();
+    }
+  );
+
   it.each(["character", "combined"])(
     "requires party consent for %s moves across countries with identical region IDs",
     async (mode) => {
@@ -109,10 +158,27 @@ describe("relocation departure consent", () => {
       expect(await response.json()).toMatchObject({ partyDepartureRequired: true });
       const { performRelocation } = await import("@/lib/character/performRelocation");
       expect(performRelocation).not.toHaveBeenCalled();
-      for (const collection of Object.values(db.collectionMocks)) {
-        expect(collection.updateOne).not.toHaveBeenCalled();
+      for (const [name, collection] of Object.entries(db.collectionMocks)) {
+        if (name === "politicalParties") {
+          const writes = [
+            ...collection.updateOne.mock.calls,
+            ...collection.updateMany.mock.calls,
+          ] as [
+            unknown,
+            { $set?: Record<string, unknown>; $unset?: Record<string, unknown>; $inc?: unknown },
+          ][];
+          expect(
+            writes.every(
+              ([, write]) =>
+                !write.$inc &&
+                Object.keys(write.$set ?? write.$unset ?? {}).every(
+                  (key) => key === "territoryMutation"
+                )
+            )
+          ).toBe(true);
+        } else expect(collection.updateOne).not.toHaveBeenCalled();
         expect(collection.insertOne).not.toHaveBeenCalled();
-        expect(collection.updateMany).not.toHaveBeenCalled();
+        if (name !== "politicalParties") expect(collection.updateMany).not.toHaveBeenCalled();
       }
     }
   );

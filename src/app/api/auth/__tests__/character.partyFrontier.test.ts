@@ -98,6 +98,7 @@ describe("starting party frontier", () => {
     expect((await POST(request())).status).toBe(201);
   });
   it("counts NPP presence as well as members", async () => {
+    db.collection("characters").distinct.mockResolvedValue([]);
     db.collection("npps").distinct.mockResolvedValue(["OR"]);
     const { POST } = await import("../character/route");
     expect((await POST(request())).status).toBe(201);

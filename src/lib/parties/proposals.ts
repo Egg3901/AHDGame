@@ -14,6 +14,8 @@ import type {
 } from "@/lib/db/types";
 import { MAX_NATIONAL_CAMPAIGNERS } from "./access";
 import { assertMergeEligibility, MergeEligibilityError } from "./mergeEligibility";
+import { withPartyTerritoryMutation } from "./territoryMutation";
+import { PartyTerritoryError } from "./relocationTerritory";
 import type { StatePartyOrg } from "@/lib/db/types/statePartyOrg";
 import type { StateRegistrationPool } from "@/lib/db/types/stateRegistrationPool";
 import type { ElectedOfficial } from "@/lib/db/types/officials";
@@ -576,408 +578,441 @@ export async function processMergeProposal(
   ]);
   if (!proposingParty) throw new Error("Proposing party not found");
   if (!targetParty) throw new Error("Target party not found");
+  return withPartyTerritoryMutation(
+    db,
+    [
+      { countryId: proposingParty.countryId, partyId: String(proposingParty.sequentialId) },
+      { countryId: targetParty.countryId, partyId: String(targetParty.sequentialId) },
+    ],
+    async () => {
+      // Another merger may have completed between the initial lookup and claim.
+      // Use fresh party status, balances and membership after admission.
+      const [proposingParty, targetParty] = await Promise.all([
+        db.collection<PoliticalParty>("politicalParties").findOne({ _id: proposal.partyId }),
+        db
+          .collection<PoliticalParty>("politicalParties")
+          .findOne({ _id: proposal.merge!.targetPartyId }),
+      ]);
+      if (!proposingParty || !targetParty) {
+        throw new MergeEligibilityError(
+          "A merger requires two active parties in the same country."
+        );
+      }
+      // Check before moving anyone: incoming members must not validate their own merger.
+      await assertMergeEligibility(db, proposingParty, targetParty);
 
-  // Check before moving anyone: incoming members must not validate their own merger.
-  await assertMergeEligibility(db, proposingParty, targetParty);
+      const proposingStrId = String(proposingParty.sequentialId);
+      const targetStrId = String(targetParty.sequentialId);
+      const countryId = proposingParty.countryId;
+      const now = new Date();
 
-  const proposingStrId = String(proposingParty.sequentialId);
-  const targetStrId = String(targetParty.sequentialId);
-  const countryId = proposingParty.countryId;
-  const now = new Date();
+      // Captured before step 1 re-points them: their live candidacies move in 4d.
+      const absorbedCharacterIds = (
+        await db
+          .collection("characters")
+          .find({ party: proposingStrId, countryId }, { projection: { _id: 1 } })
+          .toArray()
+      ).map((c) => c._id as ObjectId);
 
-  // Captured before step 1 re-points them: their live candidacies move in 4d.
-  const absorbedCharacterIds = (
-    await db
-      .collection("characters")
-      .find({ party: proposingStrId, countryId }, { projection: { _id: 1 } })
-      .toArray()
-  ).map((c) => c._id as ObjectId);
-
-  // 1. Transfer characters — move party membership, halve partyInfluence
-  await db.collection("characters").updateMany({ party: proposingStrId, countryId }, [
-    {
-      $set: {
-        party: targetStrId,
-        // Membership continues through a merger; keep the original tenure.
-        partyInfluence: {
-          $floor: { $multiply: [{ $ifNull: ["$partyInfluence", 0] }, 0.5] },
+      // 1. Transfer characters — move party membership, halve partyInfluence
+      await db.collection("characters").updateMany({ party: proposingStrId, countryId }, [
+        {
+          $set: {
+            party: targetStrId,
+            // Membership continues through a merger; keep the original tenure.
+            partyInfluence: {
+              $floor: { $multiply: [{ $ifNull: ["$partyInfluence", 0] }, 0.5] },
+            },
+          },
         },
-      },
-    },
-    // The absorbed party is gone, so its founders carry no leadership
-    // exemption into the surviving one (see leadershipTenure.ts).
-    { $unset: "foundedPartyId" },
-  ]);
+        // The absorbed party is gone, so its founders carry no leadership
+        // exemption into the surviving one (see leadershipTenure.ts).
+        { $unset: "foundedPartyId" },
+      ]);
 
-  // 2. NPP transfer is deferred to step 4c — it must run *after* the state-org
-  //    merge (step 4) so the per-state recruitment cap is sized off the
-  //    surviving party's POST-merge organization.
+      // 2. NPP transfer is deferred to step 4c — it must run *after* the state-org
+      //    merge (step 4) so the per-state recruitment cap is sized off the
+      //    surviving party's POST-merge organization.
 
-  // 3. Transfer national treasury
-  if (proposingParty.treasury > 0) {
-    await db
-      .collection<PoliticalParty>("politicalParties")
-      .updateOne(
-        { _id: targetParty._id },
-        { $inc: { treasury: proposingParty.treasury }, $set: { updatedAt: now } }
-      );
-  }
+      // 3. Transfer national treasury
+      if (proposingParty.treasury > 0) {
+        await db
+          .collection<PoliticalParty>("politicalParties")
+          .updateOne(
+            { _id: targetParty._id },
+            { $inc: { treasury: proposingParty.treasury }, $set: { updatedAt: now } }
+          );
+      }
 
-  // 4. Merge state org. Organization percentages are cached bucket shares, so
-  // transfer half of the absorbed party's durable units rather than mutating
-  // the percentage directly.
-  const statePartyOrgCol = db.collection<StatePartyOrg>("statePartyOrg");
-  const proposingOrgs = await statePartyOrgCol
-    .find({ partyId: proposingStrId, countryId })
-    .toArray();
+      // 4. Merge state org. Organization percentages are cached bucket shares, so
+      // transfer half of the absorbed party's durable units rather than mutating
+      // the percentage directly.
+      const statePartyOrgCol = db.collection<StatePartyOrg>("statePartyOrg");
+      const proposingOrgs = await statePartyOrgCol
+        .find({ partyId: proposingStrId, countryId })
+        .toArray();
 
-  const affectedStateIds = [...new Set(proposingOrgs.map((org) => org.stateId))];
-  const regionalRows =
-    affectedStateIds.length > 0
-      ? await statePartyOrgCol.find({ countryId, stateId: { $in: affectedStateIds } }).toArray()
-      : [];
-  const rowsByState = new Map<string, StatePartyOrg[]>();
-  for (const row of regionalRows) {
-    const rows = rowsByState.get(row.stateId) ?? [];
-    rows.push(row);
-    rowsByState.set(row.stateId, rows);
-  }
+      const affectedStateIds = [...new Set(proposingOrgs.map((org) => org.stateId))];
+      const regionalRows =
+        affectedStateIds.length > 0
+          ? await statePartyOrgCol.find({ countryId, stateId: { $in: affectedStateIds } }).toArray()
+          : [];
+      const rowsByState = new Map<string, StatePartyOrg[]>();
+      for (const row of regionalRows) {
+        const rows = rowsByState.get(row.stateId) ?? [];
+        rows.push(row);
+        rowsByState.set(row.stateId, rows);
+      }
 
-  const targetOrgWrites: AnyBulkWriteOperation<StatePartyOrg>[] = [];
-  for (const org of proposingOrgs) {
-    const stateRows = rowsByState.get(org.stateId) ?? [org];
-    const resolved = deriveOrganizationShares(
-      stateRows.map((row) => ({
-        id: row._id ?? `${row.stateId}_${row.partyId}`,
-        organization: row.organization ?? 0,
-        organizationUnits: row.organizationUnits,
-        lastOrganizationBuildTurn: row.lastOrganizationBuildTurn,
-      }))
-    );
-    const sourceId = org._id ?? `${org.stateId}_${proposingStrId}`;
-    const sourceUnits =
-      resolved.rows.find((row) => row.id === sourceId)?.organizationUnits ??
-      resolveOrganizationUnits(org);
-    const bonusUnits = Math.floor(sourceUnits * 0.5 * 1_000_000) / 1_000_000;
-    if (bonusUnits <= 0) continue;
-    const targetOrgId = `${org.stateId}_${targetStrId}`;
-    const target = stateRows.find((row) => row._id === targetOrgId || row.partyId === targetStrId);
-    const targetUnits =
-      resolved.rows.find((row) => row.id === (target?._id ?? targetOrgId))?.organizationUnits ?? 0;
+      const targetOrgWrites: AnyBulkWriteOperation<StatePartyOrg>[] = [];
+      for (const org of proposingOrgs) {
+        const stateRows = rowsByState.get(org.stateId) ?? [org];
+        const resolved = deriveOrganizationShares(
+          stateRows.map((row) => ({
+            id: row._id ?? `${row.stateId}_${row.partyId}`,
+            organization: row.organization ?? 0,
+            organizationUnits: row.organizationUnits,
+            lastOrganizationBuildTurn: row.lastOrganizationBuildTurn,
+          }))
+        );
+        const sourceId = org._id ?? `${org.stateId}_${proposingStrId}`;
+        const sourceUnits =
+          resolved.rows.find((row) => row.id === sourceId)?.organizationUnits ??
+          resolveOrganizationUnits(org);
+        const bonusUnits = Math.floor(sourceUnits * 0.5 * 1_000_000) / 1_000_000;
+        if (bonusUnits <= 0) continue;
+        const targetOrgId = `${org.stateId}_${targetStrId}`;
+        const target = stateRows.find(
+          (row) => row._id === targetOrgId || row.partyId === targetStrId
+        );
+        const targetUnits =
+          resolved.rows.find((row) => row.id === (target?._id ?? targetOrgId))?.organizationUnits ??
+          0;
 
-    if (target) {
-      targetOrgWrites.push({
-        updateOne: {
-          filter: { _id: targetOrgId },
-          update: [
-            {
-              $set: {
-                organizationUnits: {
-                  $add: [
-                    { $max: [{ $ifNull: ["$organizationUnits", targetUnits] }, 0] },
-                    bonusUnits,
-                  ],
+        if (target) {
+          targetOrgWrites.push({
+            updateOne: {
+              filter: { _id: targetOrgId },
+              update: [
+                {
+                  $set: {
+                    organizationUnits: {
+                      $add: [
+                        { $max: [{ $ifNull: ["$organizationUnits", targetUnits] }, 0] },
+                        bonusUnits,
+                      ],
+                    },
+                    lastOrganizationBuildTurn: currentTurn,
+                    hasPresence: true,
+                    updatedAt: now,
+                  },
                 },
+              ],
+            },
+          });
+        } else {
+          // Create minimal state org record for target in this state
+          targetOrgWrites.push({
+            insertOne: {
+              document: {
+                _id: targetOrgId,
+                countryId,
+                stateId: org.stateId,
+                partyId: targetStrId,
+                organization: 0,
+                organizationUnits: bonusUnits,
                 lastOrganizationBuildTurn: currentTurn,
+                chairId: null,
+                viceChairId: null,
+                treasurerId: null,
+                treasury: 0,
+                stateTaxRate: 0,
+                politicalStrength: 0,
                 hasPresence: true,
+                createdAt: now,
                 updatedAt: now,
               },
             },
-          ],
-        },
+          });
+        }
+      }
+      if (targetOrgWrites.length > 0) {
+        await statePartyOrgCol.bulkWrite(targetOrgWrites, { ordered: false });
+      }
+
+      // 4b. Wipe the absorbed party's state footprint. The target kept 50% of each
+      //     state org (transferred above); the *remainder* is not carried over.
+      //     Release any registration back to the state's unregistered pool so the
+      //     0..100 reg invariant is preserved (the merged party's lean is lost, not
+      //     inherited), then delete the rows so the defunct party stops surfacing in
+      //     state Org/Reg views.
+      for (const org of proposingOrgs) {
+        const reg = typeof org.registration === "number" ? org.registration : 0;
+        if (reg > 0) {
+          await db
+            .collection<StateRegistrationPool>("stateRegistrationPool")
+            .updateOne(
+              { _id: `${countryId}_${org.stateId}` },
+              { $inc: { unregistered: reg }, $set: { updatedAt: now } }
+            );
+        }
+      }
+      await statePartyOrgCol.deleteMany({ partyId: proposingStrId, countryId });
+
+      // Refresh the cached shares after the absorbed rows are gone. Unit filters
+      // prevent this compatibility write from overwriting a concurrent Build Org
+      // contribution.
+      if (affectedStateIds.length > 0) {
+        const remainingRows = await statePartyOrgCol
+          .find({ countryId, stateId: { $in: affectedStateIds } })
+          .toArray();
+        const remainingByState = new Map<string, StatePartyOrg[]>();
+        for (const row of remainingRows) {
+          const rows = remainingByState.get(row.stateId) ?? [];
+          rows.push(row);
+          remainingByState.set(row.stateId, rows);
+        }
+        const shareWrites = [...remainingByState.values()].flatMap((rows) => {
+          const result = deriveOrganizationShares(
+            rows.map((row) => ({
+              id: row._id,
+              organization: row.organization ?? 0,
+              organizationUnits: row.organizationUnits,
+              lastOrganizationBuildTurn: row.lastOrganizationBuildTurn,
+            }))
+          );
+          const sourceById = new Map(rows.map((row) => [row._id, row]));
+          return result.rows.map((row) => {
+            const source = sourceById.get(row.id);
+            return {
+              updateOne: {
+                filter:
+                  source?.organizationUnits === undefined
+                    ? { _id: row.id, organizationUnits: { $exists: false } }
+                    : { _id: row.id, organizationUnits: row.organizationUnits },
+                update: {
+                  $set: {
+                    organization: row.organization,
+                    ...(source?.organizationUnits === undefined
+                      ? { organizationUnits: row.organizationUnits }
+                      : {}),
+                    updatedAt: now,
+                  },
+                },
+              },
+            };
+          });
+        });
+        if (shareWrites.length > 0) await statePartyOrgCol.bulkWrite(shareWrites);
+      }
+
+      // 4c. Transfer NPPs with the per-state recruitment cap enforced. The target
+      //     keeps all its own NPPs, even if already over a cap. Incoming active NPPs
+      //     fill the remaining slots in each home state (strongest first). Any over the cap
+      //     are hard-deleted so a merge can't stack a region past the limit a fresh
+      //     recruit would face. Retired NPPs carry no cap weight and always re-point
+      //     to the target for historical continuity.
+      const proposingActiveNpps = await db
+        .collection<NPP>("npps")
+        .find(
+          { party: proposingStrId, countryId, retiredAt: null },
+          { projection: { homeState: 1, politicalInfluence: 1, favorability: 1 } }
+        )
+        .toArray();
+
+      // Surviving party's POST-merge org per state (re-read after step 4 merged it).
+      const targetOrgs = await db
+        .collection<StatePartyOrg>("statePartyOrg")
+        .find({ partyId: targetStrId, countryId })
+        .toArray();
+      const targetOrgByState = new Map<string, number>(
+        targetOrgs.map((o) => [o.stateId, o.organization ?? 0])
+      );
+
+      // Surviving party's existing active NPP count per state — these consume slots
+      // before any incoming NPP does.
+      const targetActiveNpps = await db
+        .collection<NPP>("npps")
+        .find({ party: targetStrId, countryId, retiredAt: null }, { projection: { homeState: 1 } })
+        .toArray();
+      const targetActiveCountByState = new Map<string, number>();
+      for (const n of targetActiveNpps) {
+        targetActiveCountByState.set(
+          n.homeState,
+          (targetActiveCountByState.get(n.homeState) ?? 0) + 1
+        );
+      }
+
+      const { keep, cull } = selectMergeNppCull({
+        proposingNpps: proposingActiveNpps,
+        targetActiveCountByState,
+        targetOrgByState,
       });
-    } else {
-      // Create minimal state org record for target in this state
-      targetOrgWrites.push({
-        insertOne: {
-          document: {
-            _id: targetOrgId,
-            countryId,
-            stateId: org.stateId,
-            partyId: targetStrId,
-            organization: 0,
-            organizationUnits: bonusUnits,
-            lastOrganizationBuildTurn: currentTurn,
+      // Members have already moved in step 1, so this counts the combined party's
+      // distinct, non-banned active players at resolution, not at proposal time.
+      const { maxNpps } = await getPartyNppCapacity(db, countryId, targetStrId, now);
+      const toRank = (n: NPP) => ({
+        id: n._id.toString(),
+        politicalInfluence: n.politicalInfluence,
+        favorability: n.favorability,
+      });
+      const nationalCull = new Set(
+        selectNationalMergeNppCull({
+          survivingNpps: targetActiveNpps.map((n) => ({ id: n._id.toString() })),
+          incomingNpps: keep.map(toRank),
+          maxNpps,
+        })
+      );
+      const cullIds = [
+        ...cull.map((n) => n._id),
+        ...keep.filter((n) => nationalCull.has(n._id.toString())).map((n) => n._id),
+      ];
+
+      // Re-point every absorbed NPP that survives (kept active + all retired) to the
+      // target in a single pass; the cull set is excluded.
+      await db
+        .collection<NPP>("npps")
+        .updateMany(
+          { party: proposingStrId, countryId, _id: { $nin: cullIds } },
+          { $set: { party: targetStrId } }
+        );
+
+      // Hard-delete the over-cap overflow and cascade-clean their references so no
+      // seat or candidacy row points at a deleted NPP (mirrors the admin NPP delete
+      // cascade; senate vacancies notify the governor as in the party-delete route).
+      if (cullIds.length > 0) {
+        const heldOfficials = await db
+          .collection<ElectedOfficial>("electedOfficials")
+          .find({ nppId: { $in: cullIds } })
+          .toArray();
+        if (heldOfficials.length > 0) {
+          await db
+            .collection<ElectedOfficial>("electedOfficials")
+            .deleteMany({ _id: { $in: heldOfficials.map((o) => o._id) } });
+          for (const o of heldOfficials) {
+            if (o.officeType === "senate") {
+              await notifyGovernorOfSenateVacancy(db, o.state, o.senateClass);
+            }
+          }
+        }
+        // Live NPP candidacies also use characterId; do not leave a deleted NPP
+        // on the ballot or permit its campaign to continue accumulating votes.
+        await db.collection("electionCandidates").deleteMany({
+          $or: [{ nppId: { $in: cullIds } }, { characterId: { $in: cullIds } }],
+        });
+        await db.collection("campaigns").updateMany(
+          { candidateId: { $in: cullIds }, status: { $ne: "archived" } },
+          {
+            $set: {
+              status: "archived",
+              archivedAt: now,
+              archivedReason: "removed",
+              updatedAt: now,
+            },
+          }
+        );
+        await db.collection<NPP>("npps").deleteMany({ _id: { $in: cullIds } });
+      }
+
+      // 4d. Live candidacies follow their candidates. A candidacy keeps the party
+      //     it was filed under, so one left on the absorbed party seats its winner
+      //     back into the dead party when the race resolves (ticket 1376). NPP
+      //     candidacies carry the NPP's id as `characterId`. Selected by member
+      //     rather than by country because legacy candidacies have no countryId.
+      const cullIdSet = new Set(cullIds.map((id) => id.toString()));
+      const movedCandidateIds = [
+        ...absorbedCharacterIds,
+        ...proposingActiveNpps.map((n) => n._id).filter((id) => !cullIdSet.has(id.toString())),
+      ];
+      if (movedCandidateIds.length > 0) {
+        await db
+          .collection("electionCandidates")
+          .updateMany(
+            { party: proposingStrId, status: "active", characterId: { $in: movedCandidateIds } },
+            { $set: { party: targetStrId } }
+          );
+        await db.collection("campaigns").updateMany(
+          {
+            party: proposingStrId,
+            candidateId: { $in: movedCandidateIds },
+            status: { $ne: "archived" },
+          },
+          { $set: { party: targetStrId, updatedAt: now } }
+        );
+      }
+
+      // 5. Transfer elected seats — re-point all of the absorbed party's elected
+      //    officials (any chamber) to the target so its legislative seats move with
+      //    it. Country-scoped: `party` (sequentialId) is not globally unique.
+      await db
+        .collection<ElectedOfficial>("electedOfficials")
+        .updateMany(
+          { party: proposingStrId, countryId },
+          { $set: { party: targetStrId, updatedAt: now } }
+        );
+
+      // 6. Collapse the absorbed party out of any coalitions — transfer its slot to
+      //    the target and strip dangling invites/requests addressed to it.
+      const { absorbPartyIntoCoalitions } = await import("@/lib/coalitions/absorbParty");
+      await absorbPartyIntoCoalitions(db, { countryId, proposingParty, targetParty, now });
+
+      // 7. Rebuild the parliamentary seat snapshot from the re-pointed officials and
+      //    updated coalition membership. Only when the country tracks a government
+      //    formation (parliamentary systems); presidential systems read seats live.
+      const govCol = db.collection<GovernmentFormation>("governmentFormations");
+      const gov = await govCol.findOne({ _id: countryId });
+      if (gov) {
+        const govSet: Record<string, unknown> = {};
+        if (gov.governingPartyId === proposingStrId) govSet.governingPartyId = targetStrId;
+        if (
+          Array.isArray(gov.coalitionPartyIds) &&
+          gov.coalitionPartyIds.includes(proposingStrId)
+        ) {
+          govSet.coalitionPartyIds = Array.from(
+            new Set(gov.coalitionPartyIds.map((id) => (id === proposingStrId ? targetStrId : id)))
+          );
+        }
+        if (Object.keys(govSet).length > 0) {
+          await govCol.updateOne({ _id: countryId }, { $set: { ...govSet, updatedAt: now } });
+        }
+        const { updateParliamentaryGovernmentSeats } =
+          await import("@/lib/turn/parliamentaryGovernment");
+        await updateParliamentaryGovernmentSeats(db, countryId);
+      }
+
+      // 8. Recount target party member count after transfer
+      const newMemberCount = await db
+        .collection("characters")
+        .countDocuments({ party: targetStrId, countryId: targetParty.countryId });
+
+      // 9. Defunct the proposing party — clear leadership and mark dissolved
+      await db.collection<PoliticalParty>("politicalParties").updateOne(
+        { _id: proposingParty._id },
+        {
+          $set: {
+            isDefunct: true,
+            defunctAtTurn: currentTurn,
+            mergedIntoPartyId: targetParty._id,
             chairId: null,
             viceChairId: null,
             treasurerId: null,
+            committeeIds: [],
+            memberCount: 0,
             treasury: 0,
-            stateTaxRate: 0,
-            politicalStrength: 0,
-            hasPresence: true,
-            createdAt: now,
             updatedAt: now,
           },
-        },
-      });
-    }
-  }
-  if (targetOrgWrites.length > 0) {
-    await statePartyOrgCol.bulkWrite(targetOrgWrites, { ordered: false });
-  }
+        }
+      );
 
-  // 4b. Wipe the absorbed party's state footprint. The target kept 50% of each
-  //     state org (transferred above); the *remainder* is not carried over.
-  //     Release any registration back to the state's unregistered pool so the
-  //     0..100 reg invariant is preserved (the merged party's lean is lost, not
-  //     inherited), then delete the rows so the defunct party stops surfacing in
-  //     state Org/Reg views.
-  for (const org of proposingOrgs) {
-    const reg = typeof org.registration === "number" ? org.registration : 0;
-    if (reg > 0) {
+      // 10. Update target party member count
       await db
-        .collection<StateRegistrationPool>("stateRegistrationPool")
+        .collection<PoliticalParty>("politicalParties")
         .updateOne(
-          { _id: `${countryId}_${org.stateId}` },
-          { $inc: { unregistered: reg }, $set: { updatedAt: now } }
+          { _id: targetParty._id },
+          { $set: { memberCount: newMemberCount, updatedAt: now } }
         );
     }
-  }
-  await statePartyOrgCol.deleteMany({ partyId: proposingStrId, countryId });
-
-  // Refresh the cached shares after the absorbed rows are gone. Unit filters
-  // prevent this compatibility write from overwriting a concurrent Build Org
-  // contribution.
-  if (affectedStateIds.length > 0) {
-    const remainingRows = await statePartyOrgCol
-      .find({ countryId, stateId: { $in: affectedStateIds } })
-      .toArray();
-    const remainingByState = new Map<string, StatePartyOrg[]>();
-    for (const row of remainingRows) {
-      const rows = remainingByState.get(row.stateId) ?? [];
-      rows.push(row);
-      remainingByState.set(row.stateId, rows);
-    }
-    const shareWrites = [...remainingByState.values()].flatMap((rows) => {
-      const result = deriveOrganizationShares(
-        rows.map((row) => ({
-          id: row._id,
-          organization: row.organization ?? 0,
-          organizationUnits: row.organizationUnits,
-          lastOrganizationBuildTurn: row.lastOrganizationBuildTurn,
-        }))
-      );
-      const sourceById = new Map(rows.map((row) => [row._id, row]));
-      return result.rows.map((row) => {
-        const source = sourceById.get(row.id);
-        return {
-          updateOne: {
-            filter:
-              source?.organizationUnits === undefined
-                ? { _id: row.id, organizationUnits: { $exists: false } }
-                : { _id: row.id, organizationUnits: row.organizationUnits },
-            update: {
-              $set: {
-                organization: row.organization,
-                ...(source?.organizationUnits === undefined
-                  ? { organizationUnits: row.organizationUnits }
-                  : {}),
-                updatedAt: now,
-              },
-            },
-          },
-        };
-      });
-    });
-    if (shareWrites.length > 0) await statePartyOrgCol.bulkWrite(shareWrites);
-  }
-
-  // 4c. Transfer NPPs with the per-state recruitment cap enforced. The target
-  //     keeps all its own NPPs, even if already over a cap. Incoming active NPPs
-  //     fill the remaining slots in each home state (strongest first). Any over the cap
-  //     are hard-deleted so a merge can't stack a region past the limit a fresh
-  //     recruit would face. Retired NPPs carry no cap weight and always re-point
-  //     to the target for historical continuity.
-  const proposingActiveNpps = await db
-    .collection<NPP>("npps")
-    .find(
-      { party: proposingStrId, countryId, retiredAt: null },
-      { projection: { homeState: 1, politicalInfluence: 1, favorability: 1 } }
-    )
-    .toArray();
-
-  // Surviving party's POST-merge org per state (re-read after step 4 merged it).
-  const targetOrgs = await db
-    .collection<StatePartyOrg>("statePartyOrg")
-    .find({ partyId: targetStrId, countryId })
-    .toArray();
-  const targetOrgByState = new Map<string, number>(
-    targetOrgs.map((o) => [o.stateId, o.organization ?? 0])
   );
-
-  // Surviving party's existing active NPP count per state — these consume slots
-  // before any incoming NPP does.
-  const targetActiveNpps = await db
-    .collection<NPP>("npps")
-    .find({ party: targetStrId, countryId, retiredAt: null }, { projection: { homeState: 1 } })
-    .toArray();
-  const targetActiveCountByState = new Map<string, number>();
-  for (const n of targetActiveNpps) {
-    targetActiveCountByState.set(n.homeState, (targetActiveCountByState.get(n.homeState) ?? 0) + 1);
-  }
-
-  const { keep, cull } = selectMergeNppCull({
-    proposingNpps: proposingActiveNpps,
-    targetActiveCountByState,
-    targetOrgByState,
-  });
-  // Members have already moved in step 1, so this counts the combined party's
-  // distinct, non-banned active players at resolution, not at proposal time.
-  const { maxNpps } = await getPartyNppCapacity(db, countryId, targetStrId, now);
-  const toRank = (n: NPP) => ({
-    id: n._id.toString(),
-    politicalInfluence: n.politicalInfluence,
-    favorability: n.favorability,
-  });
-  const nationalCull = new Set(
-    selectNationalMergeNppCull({
-      survivingNpps: targetActiveNpps.map((n) => ({ id: n._id.toString() })),
-      incomingNpps: keep.map(toRank),
-      maxNpps,
-    })
-  );
-  const cullIds = [
-    ...cull.map((n) => n._id),
-    ...keep.filter((n) => nationalCull.has(n._id.toString())).map((n) => n._id),
-  ];
-
-  // Re-point every absorbed NPP that survives (kept active + all retired) to the
-  // target in a single pass; the cull set is excluded.
-  await db
-    .collection<NPP>("npps")
-    .updateMany(
-      { party: proposingStrId, countryId, _id: { $nin: cullIds } },
-      { $set: { party: targetStrId } }
-    );
-
-  // Hard-delete the over-cap overflow and cascade-clean their references so no
-  // seat or candidacy row points at a deleted NPP (mirrors the admin NPP delete
-  // cascade; senate vacancies notify the governor as in the party-delete route).
-  if (cullIds.length > 0) {
-    const heldOfficials = await db
-      .collection<ElectedOfficial>("electedOfficials")
-      .find({ nppId: { $in: cullIds } })
-      .toArray();
-    if (heldOfficials.length > 0) {
-      await db
-        .collection<ElectedOfficial>("electedOfficials")
-        .deleteMany({ _id: { $in: heldOfficials.map((o) => o._id) } });
-      for (const o of heldOfficials) {
-        if (o.officeType === "senate") {
-          await notifyGovernorOfSenateVacancy(db, o.state, o.senateClass);
-        }
-      }
-    }
-    // Live NPP candidacies also use characterId; do not leave a deleted NPP
-    // on the ballot or permit its campaign to continue accumulating votes.
-    await db.collection("electionCandidates").deleteMany({
-      $or: [{ nppId: { $in: cullIds } }, { characterId: { $in: cullIds } }],
-    });
-    await db.collection("campaigns").updateMany(
-      { candidateId: { $in: cullIds }, status: { $ne: "archived" } },
-      {
-        $set: {
-          status: "archived",
-          archivedAt: now,
-          archivedReason: "removed",
-          updatedAt: now,
-        },
-      }
-    );
-    await db.collection<NPP>("npps").deleteMany({ _id: { $in: cullIds } });
-  }
-
-  // 4d. Live candidacies follow their candidates. A candidacy keeps the party
-  //     it was filed under, so one left on the absorbed party seats its winner
-  //     back into the dead party when the race resolves (ticket 1376). NPP
-  //     candidacies carry the NPP's id as `characterId`. Selected by member
-  //     rather than by country because legacy candidacies have no countryId.
-  const cullIdSet = new Set(cullIds.map((id) => id.toString()));
-  const movedCandidateIds = [
-    ...absorbedCharacterIds,
-    ...proposingActiveNpps.map((n) => n._id).filter((id) => !cullIdSet.has(id.toString())),
-  ];
-  if (movedCandidateIds.length > 0) {
-    await db
-      .collection("electionCandidates")
-      .updateMany(
-        { party: proposingStrId, status: "active", characterId: { $in: movedCandidateIds } },
-        { $set: { party: targetStrId } }
-      );
-    await db.collection("campaigns").updateMany(
-      {
-        party: proposingStrId,
-        candidateId: { $in: movedCandidateIds },
-        status: { $ne: "archived" },
-      },
-      { $set: { party: targetStrId, updatedAt: now } }
-    );
-  }
-
-  // 5. Transfer elected seats — re-point all of the absorbed party's elected
-  //    officials (any chamber) to the target so its legislative seats move with
-  //    it. Country-scoped: `party` (sequentialId) is not globally unique.
-  await db
-    .collection<ElectedOfficial>("electedOfficials")
-    .updateMany(
-      { party: proposingStrId, countryId },
-      { $set: { party: targetStrId, updatedAt: now } }
-    );
-
-  // 6. Collapse the absorbed party out of any coalitions — transfer its slot to
-  //    the target and strip dangling invites/requests addressed to it.
-  const { absorbPartyIntoCoalitions } = await import("@/lib/coalitions/absorbParty");
-  await absorbPartyIntoCoalitions(db, { countryId, proposingParty, targetParty, now });
-
-  // 7. Rebuild the parliamentary seat snapshot from the re-pointed officials and
-  //    updated coalition membership. Only when the country tracks a government
-  //    formation (parliamentary systems); presidential systems read seats live.
-  const govCol = db.collection<GovernmentFormation>("governmentFormations");
-  const gov = await govCol.findOne({ _id: countryId });
-  if (gov) {
-    const govSet: Record<string, unknown> = {};
-    if (gov.governingPartyId === proposingStrId) govSet.governingPartyId = targetStrId;
-    if (Array.isArray(gov.coalitionPartyIds) && gov.coalitionPartyIds.includes(proposingStrId)) {
-      govSet.coalitionPartyIds = Array.from(
-        new Set(gov.coalitionPartyIds.map((id) => (id === proposingStrId ? targetStrId : id)))
-      );
-    }
-    if (Object.keys(govSet).length > 0) {
-      await govCol.updateOne({ _id: countryId }, { $set: { ...govSet, updatedAt: now } });
-    }
-    const { updateParliamentaryGovernmentSeats } =
-      await import("@/lib/turn/parliamentaryGovernment");
-    await updateParliamentaryGovernmentSeats(db, countryId);
-  }
-
-  // 8. Recount target party member count after transfer
-  const newMemberCount = await db
-    .collection("characters")
-    .countDocuments({ party: targetStrId, countryId: targetParty.countryId });
-
-  // 9. Defunct the proposing party — clear leadership and mark dissolved
-  await db.collection<PoliticalParty>("politicalParties").updateOne(
-    { _id: proposingParty._id },
-    {
-      $set: {
-        isDefunct: true,
-        defunctAtTurn: currentTurn,
-        mergedIntoPartyId: targetParty._id,
-        chairId: null,
-        viceChairId: null,
-        treasurerId: null,
-        committeeIds: [],
-        memberCount: 0,
-        treasury: 0,
-        updatedAt: now,
-      },
-    }
-  );
-
-  // 10. Update target party member count
-  await db
-    .collection<PoliticalParty>("politicalParties")
-    .updateOne({ _id: targetParty._id }, { $set: { memberCount: newMemberCount, updatedAt: now } });
 }
 
 // ─── Resolution ───────────────────────────────────────────────────────────────
@@ -1107,6 +1142,15 @@ export async function attemptResolution(
     }
     await markResolved(db, proposal._id, outcome, currentTurn);
   } catch (error) {
+    if (error instanceof PartyTerritoryError) {
+      // A busy territory writer prevented all merger effects. Let the next
+      // vote/expiry retry rather than permanently claiming an unapplied merge.
+      await coll.updateOne(
+        { _id: proposal._id, status: "open" },
+        { $unset: { resolutionInProgressAt: "" } }
+      );
+      return;
+    }
     if (error instanceof MergeEligibilityError) {
       // Geography can change during voting. Reject cleanly rather than leaving
       // a claimed, permanently open proposal requiring an operator to repair it.
