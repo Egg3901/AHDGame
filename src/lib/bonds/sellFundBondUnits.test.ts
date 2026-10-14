@@ -36,6 +36,29 @@ beforeEach(() => {
 });
 
 describe("sellFundBondHoldingsForCash", () => {
+  it.each([100, 7])("an infinite need sells all held units up to depth %i", async (depth) => {
+    const bonds = [10, 20].map((units) => ({
+      _id: new ObjectId(),
+      currencyCode: "USD",
+      marketPrice: 1,
+      holders: [{ fundId, units }],
+    }));
+    db.collectionMocks.bonds.find.mockReturnValue({ toArray: async () => bonds });
+    vi.mocked(loadBondQuote).mockResolvedValue({
+      bidPerUnit: 980,
+      depthUnitsAtBid: depth,
+    } as never);
+    db.collectionMocks.bondMarketPools.findOneAndUpdate.mockResolvedValue({ cashLocal: 1 });
+    db.collectionMocks.bonds.updateOne.mockResolvedValue({ matchedCount: 1, modifiedCount: 1 });
+    const result = await sellFundBondHoldingsForCash(
+      db as unknown as Db,
+      fund,
+      Number.POSITIVE_INFINITY
+    );
+    const sold = Math.min(10, depth) + Math.min(20, depth);
+    expect(result).toEqual({ unitsSold: sold, proceedsAnchor: sold * 980, bondsTouched: 2 });
+  });
+
   it("sells enough units at the bid to cover the need, converts to anchor, and releases units to the pool", async () => {
     const bond = {
       _id: new ObjectId(),
