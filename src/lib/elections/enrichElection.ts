@@ -530,6 +530,12 @@ export async function _enrichElection(
         election as { districtCampaignBoosts?: Record<string, Record<string, number>> }
       ).districtCampaignBoosts,
       now: new Date(),
+      ...(deps.preloadedDistricts
+        ? {
+            preloadedDistricts: deps.preloadedDistricts.filter((d) => d.stateId === election.state),
+          }
+        : {}),
+      preloadedParties: parties,
     });
     if (districted?.seatsEstimate && Object.keys(districted.seatsEstimate).length > 0) {
       seatsEstimate = districted.seatsEstimate;

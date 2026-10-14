@@ -68,6 +68,7 @@ import { makeSeededRng } from "@/lib/events/substrate/rng";
 import { NPP_ENGINE_LEVEL } from "@/lib/nppAutonomy/engineVersion";
 import {
   compareStrongestFirst,
+  partyCompetitiveInRegion,
   placementOrder,
 } from "@/lib/nppAutonomy/v6/rules/candidatePlacement";
 import { isCareerClimber, pickCareerStep } from "@/lib/nppAutonomy/v6/rules/careerLadder";
@@ -559,6 +560,15 @@ export async function processElectionEntry(ctx: NPPContext): Promise<number> {
 
   const parties = [...new Set(allNPPs.map((n) => n.party))];
 
+  // Engine 6.12 (v6): the leading party organization per region, for placement.
+  const leadingOrganizationByRegion = new Map<string, number>();
+  for (const org of ctx.statePartyOrgs?.values() ?? []) {
+    const current = leadingOrganizationByRegion.get(org.stateId) ?? 0;
+    if (Number.isFinite(org.organization) && org.organization > current) {
+      leadingOrganizationByRegion.set(org.stateId, org.organization);
+    }
+  }
+
   for (const party of parties) {
     for (const [state, primaries] of primariesByState) {
       const primaryCountryId = primaries[0]?.countryId;
@@ -611,8 +621,14 @@ export async function processElectionEntry(ctx: NPPContext): Promise<number> {
           return true;
         });
         const pool = [...availableNPPs].sort(compareStrongestFirst);
+        // Engine 6.12: a party weak across the region puts its strongest NPPs
+        // in its most local races, which it can still win.
+        const competitive = partyCompetitiveInRegion(
+          ctx.statePartyOrgs?.get(`${state}_${party}`)?.organization,
+          leadingOrganizationByRegion.get(state)
+        );
         for (const primary of placementOrder(unfilled, pool.length, (p) =>
-          getRacePriority(p.electionType)
+          competitive ? getRacePriority(p.electionType) : -getRacePriority(p.electionType)
         )) {
           for (const npp of pool) {
             if (await enterPrimary(npp, primary)) {

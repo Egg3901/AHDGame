@@ -1486,3 +1486,65 @@ describe("processElectionEntry — engine 6.9 career ladder (v6)", () => {
     expect(filedIn()).toContain(house._id.toString());
   });
 });
+
+describe("processElectionEntry — engine 6.12 placement by chance of winning (v6)", () => {
+  let db: MockDb;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(makeSeededRng).mockReturnValue(() => 0.99);
+    db = createMockDb();
+    db.collection("slateCandidates");
+    db.collectionMocks.slateCandidates.find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([]),
+    });
+    db.collection("electionCandidates");
+    db.collection("gameState");
+    db.collectionMocks.gameState.findOne.mockResolvedValue({ nppAutonomyLevel: "v6" });
+  });
+
+  function scenario(democratOrganization: number) {
+    const stateSenate = createTestElection({ electionType: "stateSenate", state: "CA" });
+    const governor = createTestElection({ electionType: "governor", state: "CA" });
+    const weak = createTestNpp({ currentOffice: null, politicalInfluence: 10, favorability: 10 });
+    const strong = createTestNpp({ currentOffice: null, politicalInfluence: 80, favorability: 80 });
+    const ctx = buildContext(db, stateSenate, [weak, strong], []);
+    ctx.openPrimaries = [stateSenate, governor];
+    ctx.candidatesByElection = new Map([
+      [stateSenate._id.toString(), []],
+      [governor._id.toString(), []],
+    ]);
+    const org = (partyId: string, organization: number) =>
+      ({ _id: `CA_${partyId}`, stateId: "CA", partyId, organization, hasPresence: true }) as never;
+    ctx.statePartyOrgs = new Map([
+      ["CA_democrat", org("democrat", democratOrganization)],
+      ["CA_republican", org("republican", 50)],
+    ]);
+    return { ctx, stateSenate, governor, weak, strong };
+  }
+
+  const filed = () =>
+    new Map(
+      db.collectionMocks.electionCandidates.insertOne.mock.calls.map(([doc]) => [
+        doc.electionId.toString(),
+        doc.characterId.toString(),
+      ])
+    );
+
+  it("a weak regional party runs its strongest NPP in the local race", async () => {
+    const { ctx, stateSenate, governor, weak, strong } = scenario(20);
+
+    await processElectionEntry(ctx);
+
+    expect(filed().get(stateSenate._id.toString())).toBe(strong._id.toString());
+    expect(filed().get(governor._id.toString())).toBe(weak._id.toString());
+  });
+
+  it("a competitive party keeps its strongest NPP in the senior race", async () => {
+    const { ctx, governor, strong } = scenario(45);
+
+    await processElectionEntry(ctx);
+
+    expect(filed().get(governor._id.toString())).toBe(strong._id.toString());
+  });
+});
