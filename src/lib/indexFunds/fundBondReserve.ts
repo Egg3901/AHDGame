@@ -93,16 +93,33 @@ export function isGlobalFundBondEligible(
 }
 
 export function rankSovereignIssuesForBreadth(bonds: Bond[]): Bond[] {
-  return [...bonds].sort((a, b) => {
-    const aHeld = a.holders.some((holder) => holder.units > 0) ? 1 : 0;
-    const bHeld = b.holders.some((holder) => holder.units > 0) ? 1 : 0;
-    return (
-      aHeld - bHeld ||
-      String(a.countryId ?? "").localeCompare(String(b.countryId ?? "")) ||
-      a.maturityTurn - b.maturityTurn ||
-      a._id.toString().localeCompare(b._id.toString())
-    );
-  });
+  const isHeld = (bond: Bond) => bond.holders.some((holder) => holder.units > 0);
+  const byMaturityThenId = (a: Bond, b: Bond) =>
+    a.maturityTurn - b.maturityTurn || a._id.toString().localeCompare(b._id.toString());
+  const ranked: Bond[] = [];
+  // Unheld issues first; within each held tier, interleave issuers
+  // round-robin so a capped slice spreads across countries instead of
+  // being filled by whichever countryId sorts first.
+  for (const heldTier of [false, true]) {
+    const byCountry = new Map<string, Bond[]>();
+    for (const bond of bonds) {
+      if (isHeld(bond) !== heldTier) continue;
+      const key = String(bond.countryId ?? "");
+      const group = byCountry.get(key);
+      if (group) group.push(bond);
+      else byCountry.set(key, [bond]);
+    }
+    const groups = [...byCountry.keys()]
+      .sort((a, b) => a.localeCompare(b))
+      .map((key) => [...byCountry.get(key)!].sort(byMaturityThenId));
+    const roundCount = groups.reduce((max, group) => Math.max(max, group.length), 0);
+    for (let round = 0; round < roundCount; round++) {
+      for (const group of groups) {
+        if (round < group.length) ranked.push(group[round]!);
+      }
+    }
+  }
+  return ranked;
 }
 
 function ratingIndex(rating: string | undefined, fallback: CreditRating = "BBB"): number {

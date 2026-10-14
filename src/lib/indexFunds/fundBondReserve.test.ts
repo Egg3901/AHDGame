@@ -17,6 +17,7 @@ import {
   bondAllocationBudgetForIssue,
   deployBondReserveFromCash,
   isGlobalFundBondEligible,
+  MAX_GLOBAL_SOVEREIGN_ISSUES_PER_PASS,
   rankSovereignIssuesForBreadth,
   ratingWithinUniverse,
   resolveFundBondCountryId,
@@ -36,15 +37,16 @@ beforeEach(() => {
 });
 
 function bond(input: {
-  countryId: "US" | "UK";
+  countryId: "US" | "UK" | "AT" | "DE";
   holders?: Bond["holders"];
   maturityTurn: number;
+  _id?: ObjectId;
 }): Bond {
   return {
-    _id: new ObjectId(),
+    _id: input._id ?? new ObjectId(),
     issuerType: "sovereign",
     countryId: input.countryId,
-    currencyCode: input.countryId === "US" ? "USD" : "GBP",
+    currencyCode: input.countryId === "US" ? "USD" : input.countryId === "UK" ? "GBP" : "EUR",
     holders: input.holders ?? [],
     maturityTurn: input.maturityTurn,
   } as Bond;
@@ -128,6 +130,105 @@ describe("global sovereign demand", () => {
       unheld._id,
       held._id,
     ]);
+  });
+
+  it("spreads the capped global pass across issuers round-robin", () => {
+    const at = Array.from({ length: 60 }, (_, i) =>
+      bond({ countryId: "AT", maturityTurn: 100 + i })
+    );
+    const de = Array.from({ length: 3 }, (_, i) =>
+      bond({ countryId: "DE", maturityTurn: 100 + i })
+    );
+    const us = Array.from({ length: 3 }, (_, i) =>
+      bond({ countryId: "US", maturityTurn: 100 + i })
+    );
+
+    const ranked = rankSovereignIssuesForBreadth([...at, ...de, ...us]);
+    const pass = ranked.slice(0, MAX_GLOBAL_SOVEREIGN_ISSUES_PER_PASS);
+    expect(MAX_GLOBAL_SOVEREIGN_ISSUES_PER_PASS).toBe(48);
+    expect(pass).toHaveLength(48);
+    const passIds = new Set(pass.map((row) => row._id.toString()));
+    for (const issue of [...de, ...us]) {
+      expect(passIds.has(issue._id.toString())).toBe(true);
+    }
+    expect(ranked.slice(0, 3).map((row) => row.countryId)).toEqual(["AT", "DE", "US"]);
+    expect(ranked).toHaveLength(66);
+  });
+
+  it("keeps unheld issues before held ones regardless of country", () => {
+    const heldAt = bond({
+      countryId: "AT",
+      maturityTurn: 10,
+      holders: [{ fundId: new ObjectId(), units: 1 }],
+    });
+    const heldDe = bond({
+      countryId: "DE",
+      maturityTurn: 10,
+      holders: [{ fundId: new ObjectId(), units: 5 }],
+    });
+    const unheldUs = bond({ countryId: "US", maturityTurn: 200 });
+    const unheldAt = bond({ countryId: "AT", maturityTurn: 300 });
+
+    const ranked = rankSovereignIssuesForBreadth([heldAt, unheldUs, heldDe, unheldAt]);
+    expect(ranked.map((row) => row._id)).toEqual([
+      unheldAt._id,
+      unheldUs._id,
+      heldAt._id,
+      heldDe._id,
+    ]);
+    const lastUnheld = ranked.map((row) => row._id).indexOf(unheldUs._id);
+    const firstHeld = ranked.map((row) => row._id).indexOf(heldAt._id);
+    expect(lastUnheld).toBeLessThan(firstHeld);
+  });
+
+  it("keeps single-country ranking sorted by maturityTurn then _id", () => {
+    const late = bond({
+      countryId: "AT",
+      maturityTurn: 90,
+      _id: new ObjectId("000000000000000000000003"),
+    });
+    const tieB = bond({
+      countryId: "AT",
+      maturityTurn: 50,
+      _id: new ObjectId("000000000000000000000002"),
+    });
+    const tieA = bond({
+      countryId: "AT",
+      maturityTurn: 50,
+      _id: new ObjectId("000000000000000000000001"),
+    });
+    const early = bond({
+      countryId: "AT",
+      maturityTurn: 10,
+      _id: new ObjectId("0000000000000000000000ff"),
+    });
+
+    expect(rankSovereignIssuesForBreadth([late, tieB, early, tieA]).map((row) => row._id)).toEqual([
+      early._id,
+      tieA._id,
+      tieB._id,
+      late._id,
+    ]);
+  });
+
+  it("is deterministic for the same input in shuffled order", () => {
+    const issues = [
+      bond({ countryId: "AT", maturityTurn: 30 }),
+      bond({ countryId: "AT", maturityTurn: 20 }),
+      bond({ countryId: "DE", maturityTurn: 25 }),
+      bond({ countryId: "US", maturityTurn: 15 }),
+      bond({
+        countryId: "DE",
+        maturityTurn: 10,
+        holders: [{ fundId: new ObjectId(), units: 1 }],
+      }),
+      bond({ countryId: "US", maturityTurn: 40 }),
+    ];
+    const shuffled = [issues[3]!, issues[0]!, issues[5]!, issues[1]!, issues[4]!, issues[2]!];
+
+    expect(rankSovereignIssuesForBreadth(shuffled).map((row) => row._id)).toEqual(
+      rankSovereignIssuesForBreadth(issues).map((row) => row._id)
+    );
   });
 
   it("widens only enabled global funds beyond their home bond market", async () => {
