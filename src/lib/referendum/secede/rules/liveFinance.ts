@@ -111,19 +111,10 @@ export function splitLiveDepartmentAccounts(
       0
     );
   }
-  for (const row of moved) {
-    const total = Object.values(row.programAllocationPercents).reduce(
-      (sum, value) => sum + value,
-      0
-    );
-    if (total > 0)
-      row.programAllocationPercents = Object.fromEntries(
-        Object.entries(row.programAllocationPercents).map(([key, value]) => [
-          key,
-          (value * 100) / total,
-        ])
-      );
-  }
+  // Cabinet requests are independent whole percents of each law family's
+  // enacted claim (0 to 200), not shares that sum to 100. Carry them over as
+  // they are; rescaling halved every request and produced fractional values
+  // the allocation rules reject.
   return { kept, moved, idMap };
 }
 

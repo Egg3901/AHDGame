@@ -9,6 +9,7 @@ import {
   isMarketPollingTeardown,
   isValuelessNonErrorRejection,
 } from "@/lib/observability/sentryFilters";
+import { isTauriAclRefusalMessage, isTauriShell } from "@/lib/clientShell/tauriAclFallback";
 import { scrubSentryEvent } from "@/lib/observability/scrubSentryEvent";
 import {
   dropSentryLog,
@@ -118,6 +119,16 @@ export function initSentryClient(): typeof Sentry.captureRouterTransitionStart {
       // rejection carrying a real payload keeps its "...with value: <X>" message
       // and stays reported.
       if (isValuelessNonErrorRejection(message, hint?.originalException)) return null;
+
+      // AHDClient shell refusing a plugin command it injected into the page
+      // itself (link opener, confirm dialog). Handled and recovered by
+      // installTauriAclFallback; only dropped inside the shell.
+      if (
+        isTauriAclRefusalMessage(message) &&
+        typeof window !== "undefined" &&
+        isTauriShell(window)
+      )
+        return null;
 
       // Chrome extension messaging errors
       if (message.includes("runtime.sendMessage()")) return null;

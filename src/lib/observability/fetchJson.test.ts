@@ -60,7 +60,7 @@ describe("fetchJson", () => {
     expect(captureException).not.toHaveBeenCalled();
   });
 
-  it("still captures a timed out fetch", async () => {
+  it("does not capture a timed out fetch (transient, not an app fault)", async () => {
     const controller = new AbortController();
     const timeoutError = new DOMException("The operation timed out", "TimeoutError");
     Object.defineProperty(controller.signal, "reason", { value: timeoutError });
@@ -71,7 +71,26 @@ describe("fetchJson", () => {
     await expect(fetchJson("/api/x", { signal: controller.signal, feature: "test" })).rejects.toBe(
       abortError
     );
-    expect(captureException).toHaveBeenCalledTimes(1);
+    expect(captureException).not.toHaveBeenCalled();
+  });
+
+  it("does not capture a browser network drop", async () => {
+    for (const message of ["Failed to fetch", "Load failed"]) {
+      const netErr = new TypeError(message);
+      mockFetch(() => Promise.reject(netErr));
+      await expect(fetchJson("/api/x", { feature: "t" })).rejects.toBe(netErr);
+    }
+    expect(captureException).not.toHaveBeenCalled();
+  });
+
+  it("throws gateway statuses without capturing them", async () => {
+    for (const status of [502, 503, 504]) {
+      mockFetch(() => new Response("<html>bad gateway</html>", { status }));
+      const err = await fetchJson("/api/x", { feature: "t" }).catch((e) => e);
+      expect(err).toBeInstanceOf(HttpError);
+      expect(err.status).toBe(status);
+    }
+    expect(captureException).not.toHaveBeenCalled();
   });
 });
 

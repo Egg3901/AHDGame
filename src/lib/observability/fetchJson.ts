@@ -10,12 +10,15 @@
  * (network + 5xx) to Sentry tagged with the calling `feature`. Callers keep
  * their own try/catch to drive an error state.
  *
- * 4xx responses are thrown (so callers can react) but not captured — they are
- * usually expected (auth/validation). Pass `allowStatuses` to treat specific
+ * 4xx responses are thrown (so callers can react) but not captured: they are
+ * usually expected (auth/validation). Transient infrastructure failures (a
+ * dropped connection, a client timeout, a 502/503/504 from the edge during a
+ * deploy) are thrown but not captured either; see `@/lib/errors/transient`. Pass `allowStatuses` to treat specific
  * codes (e.g. 403 for a disabled feature) as a normal `null`-ish outcome the
  * caller handles, by checking `HttpError.status` in the catch.
  */
 import { parseErrorBody } from "@/lib/errors/catalog";
+import { isGatewayStatus, isTransportFailure } from "@/lib/errors/transient";
 import { captureClientException } from "@/lib/observability/sentryClientLazy";
 
 export class HttpError extends Error {
@@ -45,12 +48,12 @@ export async function fetchJson<T = unknown>(
   try {
     res = await fetch(input, rest);
   } catch (err) {
-    const expectedAbort =
-      err instanceof Error &&
-      err.name === "AbortError" &&
-      rest.signal?.aborted === true &&
-      rest.signal.reason?.name !== "TimeoutError";
-    if (!expectedAbort) {
+    // A caller cancellation is expected. A timeout surfaces as an AbortError
+    // whose signal reason is a TimeoutError; that, like a dropped connection,
+    // is transient and not an application fault.
+    const aborted =
+      err instanceof Error && err.name === "AbortError" && rest.signal?.aborted === true;
+    if (!aborted && !isTransportFailure(err)) {
       captureClientException(err, {
         tags: { kind: "fetch", phase: "network", feature },
         extra: { url: input },
@@ -70,8 +73,9 @@ export async function fetchJson<T = unknown>(
       // Non-JSON error body: status alone is the signal.
     }
     // 5xx is our fault and must be captured; 4xx is usually expected and is
-    // surfaced to the caller without adding noise.
-    if (res.status >= 500) {
+    // surfaced to the caller without adding noise. 502/503/504 come from the
+    // edge when the app is restarting or unreachable, not from app code.
+    if (res.status >= 500 && !isGatewayStatus(res.status)) {
       captureClientException(err, {
         tags: {
           kind: "fetch",
