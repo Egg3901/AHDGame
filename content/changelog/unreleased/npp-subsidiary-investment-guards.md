@@ -1,4 +1,5 @@
 ---
+date: 2026-10-13
 title: Protect NPP investments and focus subsidiary industries
 badges: [patch]
 areas: [engine, fullstack]
