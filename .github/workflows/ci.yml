@@ -295,6 +295,21 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci --no-audit --no-fund
+      # Persist compiler work only. The full build still runs on every job;
+      # runtime fetch caches and generated application outputs stay ephemeral.
+      - name: Restore Turbopack compiler cache
+        id: compiler-cache
+        uses: actions/cache@v4
+        continue-on-error: true
+        timeout-minutes: 2
+        with:
+          path: .next/cache/turbopack
+          key: ${{ runner.os }}-${{ runner.arch }}-node22-turbopack-v1-${{ hashFiles('package-lock.json', 'package.json', 'next.config.ts', 'tsconfig*.json', 'postcss.config.*') }}-${{ hashFiles('src/**', 'content/**', 'messages/**', 'public/**', 'sentry.*.config.ts') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ runner.arch }}-node22-turbopack-v1-${{ hashFiles('package-lock.json', 'package.json', 'next.config.ts', 'tsconfig*.json', 'postcss.config.*') }}-
+      - name: Discard an incomplete compiler cache restore
+        if: steps.compiler-cache.outcome == 'failure'
+        run: rm -rf .next/cache/turbopack
       # The compile reaches the 16 GB runner's limit (15.7 GB on the last good
       # build, then the agent killed mid-compile on every run from 2026-10-09).
       # Swap absorbs the peak instead of losing the runner.
@@ -324,6 +339,8 @@ jobs:
           # 2026-10-08 (killed at 568 of 758 pages). Static generation takes
           # about 8 s when healthy, so one worker costs little.
           NEXT_BUILD_CPUS: "1"
+      - name: Report compiler cache size
+        run: du -sh .next/cache/turbopack || true
 
   federation-transactions:
     needs: changes
