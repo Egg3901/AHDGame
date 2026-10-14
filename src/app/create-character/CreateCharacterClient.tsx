@@ -66,8 +66,15 @@ interface GameCreationInfo {
   countries: CountryCreationInfo[];
 }
 
+/** Uniform integer in [0, n). Not a secret, but the draft it feeds is saved. */
+function randomIndex(n: number): number {
+  const buf = new Uint32Array(1);
+  crypto.getRandomValues(buf);
+  return buf[0] % n;
+}
+
 function pick<T>(arr: readonly T[]): T {
-  return arr[Math.floor(Math.random() * arr.length)];
+  return arr[randomIndex(arr.length)];
 }
 
 /** Upload budget for the optional portrait/header, in ms. */
@@ -455,8 +462,8 @@ export default function CreateCharacterClient() {
     const randomParty = defaultParties.length > 0 ? pick(defaultParties).id : "independent";
 
     // Pick random policy positions
-    const randomEconomic = Math.floor(Math.random() * 11) - 5;
-    const randomSocial = Math.floor(Math.random() * 11) - 5;
+    const randomEconomic = randomIndex(11) - 5;
+    const randomSocial = randomIndex(11) - 5;
 
     setCountry(cId);
     // Randomize answers both open-default steps on the player's behalf.
