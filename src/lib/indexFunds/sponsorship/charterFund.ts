@@ -1,5 +1,5 @@
 import { fundCreationEligibility } from "./eligibility";
-import { bankMayManageFunds } from "./rules/eligibility";
+import { bankMayManageFunds, fundBankCharter } from "./rules/eligibility";
 import { validatePickedStocks, type PickedStockMandate } from "../rules/mandate";
 import { ObjectId, type Db } from "mongodb";
 import type { Corporation, FederalBudget } from "@/lib/db/types";
@@ -144,8 +144,9 @@ async function commitCharter(
   });
   if (eligibility) return { ok: false, status: 403, error: eligibility };
   let mandate: PickedStockMandate | undefined;
-  if (sponsor.bankCharter || input.pickedStocks) {
-    if (!bankMayManageFunds(sponsor.bankCharter))
+  const bank = fundBankCharter(sponsor.bankCharter);
+  if (bank || input.pickedStocks) {
+    if (!bankMayManageFunds(bank))
       return {
         ok: false,
         status: 403,
