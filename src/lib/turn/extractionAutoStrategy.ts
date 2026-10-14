@@ -195,6 +195,21 @@ export function isExtractionShortage(
       priceRatio >= EXTRACTION_AUTO_STRATEGY_SHORTAGE_PRICE_RATIO)
   );
 }
+/**
+ * Idle deposit room ranked by value: units times the resource's base price.
+ * Deposits are stated in each resource's own physical unit, so a raw unit
+ * count ranks a 25-per-unit gas field or a 120-per-unit iron field thousands
+ * of times above a 21,000-per-unit rare earth deposit of the same worth. Raw
+ * ranking let iron, coal and gas take every retool and placement slot while
+ * rare earth sat short at 2.6x base. Plant nameplate is value-normalized
+ * (retoolRescaleFields), so value is also what a new or retooled mine adds.
+ * A missing base price ranks on raw units.
+ */
+export function extractionHeadroomValue(units: number, basePrice: number | undefined): number {
+  const price =
+    typeof basePrice === "number" && Number.isFinite(basePrice) && basePrice > 0 ? basePrice : 1;
+  return Math.max(0, units) * price;
+}
 export const NPP_RESTRATEGIZE_MAX_PER_RUN = 3; // NPP expected-revenue switches per run
 export const EXTRACTION_PLACEMENT_MIN_COHORT_SIZE = 3;
 export const EXTRACTION_PLACEMENT_MIN_PROFITABLE_SHARE = 0.5;
@@ -352,7 +367,7 @@ export async function processExtractionAutoStrategy(
   // Shortage resources (global S/D < threshold), with per-state supply for headroom.
   const shortage = new Map<
     ExtractableResource,
-    { sd: number; weight: number; stateSupply: Record<string, number> }
+    { sd: number; weight: number; basePrice: number; stateSupply: Record<string, number> }
   >();
   // Per-commodity docs for the NPP expected-revenue pass. Scoring reads the
   // sector host country's reachable book (national, then global fallback) so a
@@ -361,7 +376,7 @@ export async function processExtractionAutoStrategy(
   // Placement reads its own, looser shortage set (see the constant's comment).
   const placementShortage = new Map<
     ExtractableResource,
-    { sd: number; weight: number; stateSupply: Record<string, number> }
+    { sd: number; weight: number; basePrice: number; stateSupply: Record<string, number> }
   >();
   const stateSupplyByResource = new Map<ExtractableResource, Record<string, number>>();
   for (const cp of prices) {
@@ -372,10 +387,15 @@ export async function processExtractionAutoStrategy(
     const priceRatio = laggedPriceRatioForCountry(cp, undefined);
     const weight = extractionShortageWeight(sd, priceRatio);
     if (isExtractionShortage(sd, priceRatio, EXTRACTION_AUTO_STRATEGY_SHORTAGE_SD)) {
-      shortage.set(r, { sd, weight, stateSupply: cp.stateSupply ?? {} });
+      shortage.set(r, { sd, weight, basePrice: cp.basePrice, stateSupply: cp.stateSupply ?? {} });
     }
     if (isExtractionShortage(sd, priceRatio, EXTRACTION_AUTO_STRATEGY_PLACEMENT_SHORTAGE_SD)) {
-      placementShortage.set(r, { sd, weight, stateSupply: cp.stateSupply ?? {} });
+      placementShortage.set(r, {
+        sd,
+        weight,
+        basePrice: cp.basePrice,
+        stateSupply: cp.stateSupply ?? {},
+      });
     }
     stateSupplyByResource.set(r, cp.stateSupply ?? {});
   }
@@ -505,8 +525,8 @@ export async function processExtractionAutoStrategy(
       if (!focus) continue;
       const strat = (SECTOR_STRATEGIES.extraction ?? []).find((x) => x.id === focus.id);
       if (!strat || isExtractionStrategyZeroYield(strat, stateRes)) continue;
-      // Prioritise scarcest resource × most idle local deposit.
-      const score = info.weight * Math.max(0, cap - stateSupplied);
+      // Prioritise scarcest resource × most idle local deposit, by value.
+      const score = info.weight * extractionHeadroomValue(cap - stateSupplied, info.basePrice);
       if (!best || score > best.score) best = { sector: s, resource, strategyId: focus.id, score };
     }
     if (best) picks.push(best);
@@ -868,7 +888,7 @@ export async function processExtractionAutoStrategy(
         countryId: capDoc.countryId,
         resource,
         strategyId: focus.id,
-        score: info.weight * Math.max(0, cap - stateSupplied),
+        score: info.weight * extractionHeadroomValue(cap - stateSupplied, info.basePrice),
       });
     }
   }
