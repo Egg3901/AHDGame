@@ -3,6 +3,12 @@ import type { ContestStanding } from "@/lib/db/types/contestRound";
 import {
   approvalEntryEligible,
   altPairKey,
+  comebackEligible,
+  CONTEST_CATEGORY,
+  CONTEST_KINDS,
+  countKingmakerCalls,
+  lowerHalfIds,
+  rookieEligible,
   contestPrizeAnchor,
   CONTEST_PRIZES_MODERN,
   corpGrowthScore,
@@ -233,5 +239,82 @@ describe("referralGrantDecision", () => {
     expect(
       referralGrantDecision({ tier: "supporter-plus", expiresAtMs: 2_000, provider: "stripe" }, now)
     ).toBe("already_supporter");
+  });
+});
+
+describe("narrowed contest fields", () => {
+  const day = 24 * 60 * 60 * 1000;
+
+  it("counts a character as a rookie for two weeks", () => {
+    expect(rookieEligible(0, 13 * day)).toBe(true);
+    expect(rookieEligible(0, 14 * day)).toBe(false);
+    expect(rookieEligible(undefined, 0)).toBe(false);
+  });
+
+  it("puts only entries strictly below the median in the lower half", () => {
+    const ids = (values: number[]) =>
+      [...lowerHalfIds(values.map((value, i) => ({ id: `c${i}`, value })))].sort();
+    expect(ids([5, 1, 3, 9])).toEqual(["c1", "c2"]);
+    expect(ids([4, 4, 4])).toEqual([]);
+    expect(ids([])).toEqual([]);
+  });
+
+  it("enters a comeback only after a fall of at least ten percent", () => {
+    expect(comebackEligible(100, 90)).toBe(true);
+    expect(comebackEligible(100, 91)).toBe(false);
+    expect(comebackEligible(0, 50)).toBe(false);
+    expect(comebackEligible(100, 0)).toBe(false);
+  });
+
+  it("files every weekly contest under a page category", () => {
+    for (const kind of CONTEST_KINDS) expect(CONTEST_CATEGORY[kind]).toBeDefined();
+  });
+});
+
+describe("countKingmakerCalls", () => {
+  const races = new Map([
+    ["r1", { endsAtMs: 100, winnerKeys: new Set(["c:win", "n:npp"]) }],
+    ["r2", { endsAtMs: null, winnerKeys: new Set(["c:win"]) }],
+  ]);
+  const e = (endorserId: string, electionId: string, candidateKey: string, extra = {}) => ({
+    endorserId,
+    electionId,
+    candidateKey,
+    createdAtMs: 50,
+    withdrawnAtMs: null as number | null,
+    ...extra,
+  });
+
+  it("counts each won race once per endorser", () => {
+    const calls = countKingmakerCalls(
+      [e("a", "r1", "c:win"), e("a", "r1", "n:npp"), e("a", "r2", "c:win"), e("b", "r1", "c:lose")],
+      races,
+      new Set(["a", "b"])
+    );
+    expect([...calls]).toEqual([["a", 2]]);
+  });
+
+  it("ignores self-endorsement, late or withdrawn endorsements, and ineligible endorsers", () => {
+    const calls = countKingmakerCalls(
+      [
+        e("win", "r1", "c:win"),
+        e("a", "r1", "c:win", { createdAtMs: 150 }),
+        e("b", "r1", "c:win", { withdrawnAtMs: 90 }),
+        e("c", "r2", "c:win", { withdrawnAtMs: 90 }),
+        e("x", "r1", "c:win"),
+      ],
+      races,
+      new Set(["win", "a", "b", "c"])
+    );
+    expect(calls.size).toBe(0);
+  });
+
+  it("keeps an endorsement withdrawn after voting closed", () => {
+    const calls = countKingmakerCalls(
+      [e("a", "r1", "c:win", { withdrawnAtMs: 120 })],
+      races,
+      new Set(["a"])
+    );
+    expect(calls.get("a")).toBe(1);
   });
 });

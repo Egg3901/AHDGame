@@ -7,6 +7,9 @@
  * entries with a positive score split contestPrizeAnchor in cash 50/30/20
  * (prizeShares), except government approval, where the leader takes it all.
  * The top three referrers of an iteration earn Supporter for the next one.
+ * Rookie, backbench, favorability, statehouse, kingmaker and comeback rounds
+ * narrow the same measures to a different field (rookieEligible,
+ * lowerHalfIds, comebackEligible, countKingmakerCalls).
  */
 import { getEraNominalAmount } from "@/lib/constants/sectorSeedEra";
 import { DEFAULT_ALT_SCORING_THRESHOLDS } from "@/lib/altDetection/config";
@@ -21,12 +24,40 @@ export const CONTEST_KINDS: readonly ContestKind[] = [
   "legislator_bills",
   "wealth_growth",
   "party_growth",
+  "rookie_influence",
+  "backbench_influence",
+  "favorability_gain",
+  "governor_approval",
+  "kingmaker",
+  "corp_comeback",
 ];
 
+/** Contests whose entries are player corporations scored on market cap growth. */
 export const CORP_CONTEST_KINDS: readonly ContestKind[] = [
   "corp_growth_small",
   "corp_growth_large",
+  "corp_comeback",
 ];
+
+export type ContestCategory = "business" | "politics" | "government" | "referrals";
+
+/** Where each contest sits on the Contests page. */
+export const CONTEST_CATEGORY: Readonly<Record<ContestKind, ContestCategory>> = {
+  corp_growth_small: "business",
+  corp_growth_large: "business",
+  corp_comeback: "business",
+  wealth_growth: "business",
+  influence_gain: "politics",
+  rookie_influence: "politics",
+  backbench_influence: "politics",
+  favorability_gain: "politics",
+  kingmaker: "politics",
+  legislator_bills: "government",
+  approval_gain: "government",
+  governor_approval: "government",
+  party_growth: "government",
+  referrals_weekly: "referrals",
+};
 
 /** One week of real time per round. */
 export const CONTEST_ROUND_MS = 7 * 24 * 60 * 60 * 1000;
@@ -41,6 +72,12 @@ export const CONTEST_PRIZES_MODERN: Readonly<Record<ContestKind, number>> = {
   legislator_bills: 7_500_000,
   wealth_growth: 7_500_000,
   party_growth: 7_500_000,
+  rookie_influence: 5_000_000,
+  backbench_influence: 5_000_000,
+  favorability_gain: 5_000_000,
+  governor_approval: 5_000_000,
+  kingmaker: 5_000_000,
+  corp_comeback: 5_000_000,
 };
 
 /**
@@ -51,6 +88,12 @@ export const CORP_MIN_OPENING_MODERN = 250_000;
 
 /** Characters opening below this modern-era net worth sit out the wealth round, for the same reason. */
 export const WEALTH_MIN_OPENING_MODERN = 250_000;
+
+/** A character younger than this when a round opens enters the rookie contest. */
+export const ROOKIE_MAX_AGE_MS = 14 * 24 * 60 * 60 * 1000;
+
+/** A corporation enters the comeback contest after losing at least this share of its value in a week. */
+export const COMEBACK_MIN_DROP = 0.1;
 
 /** Stored standings per round; the page shows the top of this list. */
 export const CONTEST_STANDINGS_LIMIT = 250;
@@ -126,6 +169,76 @@ export function approvalEntryEligible(
   currentHeadCharacterId: string | null
 ): boolean {
   return currentHeadCharacterId !== null && currentHeadCharacterId === entryCharacterId;
+}
+
+export function rookieEligible(createdAtMs: number | undefined, nowMs: number): boolean {
+  return (
+    createdAtMs !== undefined &&
+    Number.isFinite(createdAtMs) &&
+    nowMs - createdAtMs < ROOKIE_MAX_AGE_MS
+  );
+}
+
+/**
+ * Ids strictly below the median value. Everyone at or above it sits out, so a
+ * field where everyone is level has no lower half.
+ */
+export function lowerHalfIds(entries: readonly { id: string; value: number }[]): Set<string> {
+  const finite = entries.filter((e) => Number.isFinite(e.value));
+  if (finite.length === 0) return new Set();
+  const sorted = [...finite].sort((a, b) => a.value - b.value);
+  const median = sorted[Math.floor(sorted.length / 2)].value;
+  return new Set(finite.filter((e) => e.value < median).map((e) => e.id));
+}
+
+/** A corporation that lost at least COMEBACK_MIN_DROP of its value over the past week. */
+export function comebackEligible(weekAgo: number, current: number): boolean {
+  if (!(weekAgo > 0) || !Number.isFinite(current) || current <= 0) return false;
+  return current <= weekAgo * (1 - COMEBACK_MIN_DROP);
+}
+
+export interface KingmakerEndorsement {
+  endorserId: string;
+  electionId: string;
+  /** `c:<characterId>` or `n:<nppId>` of the endorsed candidate. */
+  candidateKey: string;
+  createdAtMs: number;
+  withdrawnAtMs: number | null;
+}
+
+export interface ResolvedRace {
+  /** When voting closed; null when the race has no recorded close. */
+  endsAtMs: number | null;
+  /** Candidate keys that took office from this race. */
+  winnerKeys: ReadonlySet<string>;
+}
+
+/**
+ * Races each player called: distinct resolved races where the candidate they
+ * endorsed took office. An endorsement counts only if it was made before
+ * voting closed and was not withdrawn before then; endorsing yourself never
+ * counts.
+ */
+export function countKingmakerCalls(
+  endorsements: readonly KingmakerEndorsement[],
+  races: ReadonlyMap<string, ResolvedRace>,
+  eligibleEndorsers: ReadonlySet<string>
+): Map<string, number> {
+  const called = new Map<string, Set<string>>();
+  for (const e of endorsements) {
+    if (!eligibleEndorsers.has(e.endorserId)) continue;
+    if (e.candidateKey === `c:${e.endorserId}`) continue;
+    const race = races.get(e.electionId);
+    if (!race || !race.winnerKeys.has(e.candidateKey)) continue;
+    if (race.endsAtMs !== null && e.createdAtMs > race.endsAtMs) continue;
+    if (e.withdrawnAtMs !== null && (race.endsAtMs === null || e.withdrawnAtMs < race.endsAtMs)) {
+      continue;
+    }
+    const set = called.get(e.endorserId) ?? new Set<string>();
+    set.add(e.electionId);
+    called.set(e.endorserId, set);
+  }
+  return new Map([...called].map(([id, set]) => [id, set.size]));
 }
 
 /** Highest score first; equal scores order by subject id so the ranking is stable. */

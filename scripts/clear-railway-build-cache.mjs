@@ -1,20 +1,34 @@
-import { readdirSync, rmSync } from "node:fs";
-import { join } from "node:path";
+import { lstatSync, readdirSync, rmSync } from "node:fs";
+import { join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 
-// A corrupted persistent Turbopack cache can panic during a Railway build.
-// Clear it before Next starts so a failed cache cannot block a live repair.
-//
-// `.next/cache` is a buildkit cache MOUNT on services with cache mounts
-// enabled, so the directory itself cannot be removed (rmSync fails EBUSY).
-// Empty its contents instead; and never let a cache sweep fail the build.
-if (process.env.RAILWAY_ENVIRONMENT_NAME) {
-  const cacheDir = join(process.cwd(), ".next", "cache");
+function directory(path) {
   try {
-    for (const entry of readdirSync(cacheDir)) {
-      rmSync(join(cacheDir, entry), { recursive: true, force: true });
-    }
-  } catch {
-    // Missing or partially-removed cache is the point of this sweep, not an
-    // error worth failing a deploy over.
+    const stat = lstatSync(path);
+    if (stat.isSymbolicLink() || !stat.isDirectory())
+      throw new Error(`Not a compiler-cache directory: ${path}`);
+    return true;
+  } catch (error) {
+    if (error.code === "ENOENT") return false;
+    throw error;
   }
+}
+
+// Explicit recovery only. Preserve BuildKit mount roots and never touch
+// fetch-cache, runtime responses, application output or dependency caches.
+export function clearCompilerCache(cwd = process.cwd()) {
+  const next = join(cwd, ".next");
+  const cache = join(next, "cache");
+  if (!directory(next) || !directory(cache)) return;
+  for (const kind of ["turbopack", "webpack"]) {
+    const dir = join(cache, kind);
+    if (!directory(dir)) continue;
+    for (const entry of readdirSync(dir))
+      rmSync(join(dir, entry), { recursive: true, force: true });
+  }
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
+  clearCompilerCache();
+  console.log("Compiler cache contents cleared; mount points and fetch cache preserved.");
 }

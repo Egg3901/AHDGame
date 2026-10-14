@@ -127,13 +127,13 @@ export async function findStagingQualification({
           `https://github.com/${repository}/actions/runs/${run.id}/job/${job.id}`
       );
     };
-    const validRun = (run, expectedWorkflow, head) => {
+    const validRun = (run, expectedWorkflow, head, branch) => {
       const age = now - Date.parse(run?.updated_at);
       return (
         run?.workflow_id === expectedWorkflow.id &&
         run.path === expectedWorkflow.path &&
         run.event === "pull_request" &&
-        run.head_branch === "development" &&
+        run.head_branch === branch &&
         run.head_sha === head &&
         run.repository?.id === repo.id &&
         run.head_repository?.id === repo.id &&
@@ -145,7 +145,7 @@ export async function findStagingQualification({
         run.run_attempt > 0
       );
     };
-    const securityPassed = async (head) => {
+    const securityPassed = async (head, branch) => {
       for (const { file, context } of SECURITY) {
         const info = await api(`actions/workflows/${file}`);
         if (
@@ -159,7 +159,7 @@ export async function findStagingQualification({
         );
         const run = runs?.workflow_runs?.[0];
         if (
-          !validRun(run, info, head) ||
+          !validRun(run, info, head, branch) ||
           ["failure", "cancelled", "timed_out"].includes(run.conclusion)
         )
           return false;
@@ -186,12 +186,41 @@ export async function findStagingQualification({
       if (
         !prior.merged_at ||
         prior.merge_commit_sha !== pr.head.sha ||
-        prior.head?.ref !== "development" ||
+        !prior.head?.ref ||
         prior.base?.ref !== "staging" ||
         !sameRepo(prior.head) ||
         !sameRepo(prior.base)
       )
         continue;
+      if (prior.head.ref !== "development") {
+        // A frozen branch name grants no trust. Establish its exact commit as
+        // an ancestor of a server-pinned, protected development tip instead.
+        const development = await api("branches/development");
+        if (
+          development?.name !== "development" ||
+          development.protected !== true ||
+          !SHA.test(development.commit?.sha || "")
+        )
+          continue;
+        const developmentRules = await api("rules/branches/development");
+        if (
+          !Array.isArray(developmentRules) ||
+          !developmentRules.some(
+            (rule) =>
+              rule.type === "required_status_checks" &&
+              rule.parameters?.required_status_checks?.some((gate) => gate.context === "verify")
+          ) ||
+          (await commitTree(prior.head.sha)) !== checkout.tree
+        )
+          continue;
+        const comparison = await api(`compare/${prior.head.sha}...${development.commit.sha}`);
+        if (
+          !["ahead", "identical"].includes(comparison?.status) ||
+          comparison.base_commit?.sha !== prior.head.sha ||
+          comparison.merge_base_commit?.sha !== prior.head.sha
+        )
+          continue;
+      }
       let trustedReceipt = true;
       for (const [file, blob] of expected) {
         if ((await api(`contents/${file}?ref=${prior.merge_commit_sha}`))?.sha !== blob)
@@ -203,18 +232,19 @@ export async function findStagingQualification({
       );
       // A later failed/restarted attempt must not be masked by an older pass.
       const candidate = listed?.workflow_runs?.[0];
-      if (!success(candidate) || !validRun(candidate, workflow, prior.head.sha)) continue;
+      if (!success(candidate) || !validRun(candidate, workflow, prior.head.sha, prior.head.ref))
+        continue;
       {
         const jobs = await api(
           `actions/runs/${candidate.id}/attempts/${candidate.run_attempt}/jobs?per_page=100`
         );
         if (!Array.isArray(jobs?.jobs) || jobs.total_count !== jobs.jobs.length) continue;
-        const name = `qualified-development-staging-tree-${checkout.tree}`;
+        const name = `qualified-${prior.head.ref}-staging-tree-${checkout.tree}`;
         const receipt = jobs.jobs.find((j) => j.name === "verify" && success(j));
         if (!receipt?.steps?.some((step) => step.name === name && success(step))) continue;
         if (
           !(await nativeCheck(receipt, candidate, "verify")) ||
-          !(await securityPassed(prior.head.sha))
+          !(await securityPassed(prior.head.sha, prior.head.ref))
         )
           continue;
         return {
@@ -223,7 +253,7 @@ export async function findStagingQualification({
           tree: checkout.tree,
           qualificationRun: candidate.id,
           qualificationPr: prior.number,
-          reason: "identical tree passed full development-to-staging qualification",
+          reason: "identical tree passed full protected-development staging qualification",
         };
       }
     }
