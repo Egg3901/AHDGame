@@ -23,7 +23,7 @@ import type { NppAutonomyLevel } from "@/lib/db/types/gameState";
  * `engineVersion.test.ts` fails when the two disagree. Tag the pull request
  * title `(npp engine X.Y.Z)`.
  */
-export const NPP_ENGINE_VERSION = "6.11.0";
+export const NPP_ENGINE_VERSION = "6.12.0";
 
 /** The autonomy tier that switches engine-6 behavior on. */
 export const NPP_ENGINE_LEVEL: NppAutonomyLevel = "v6";

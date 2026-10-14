@@ -38,10 +38,9 @@ number.
 
 ### Stage 1: running for office
 
-- **Race choice by chance of winning.** NPPs file where their home approval,
-  party strength and incumbency give them a real chance, instead of filling the
-  first open primary in a fixed office order. (Placing the strongest NPPs in the
-  senior races shipped in 6.1.0.)
+- **Race choice by chance of winning.** NPPs file where their party's strength
+  gives them a real chance. (Strongest NPPs in senior races shipped in 6.1.0;
+  weak parties putting them in winnable local races shipped in 6.12.0.)
 - **Campaigning tied to a race.** Campaign and advertising actions spend on the
   race the NPP is running in, weighted toward close races, instead of raising
   general influence and favorability. (Rallies in the NPP's own race shipped in
@@ -106,6 +105,18 @@ number.
 - Autonomy v6 becomes the default for new singleplayer and simulation worlds,
   after the engine 6 stages are validated. Running worlds never change level on
   their own.
+
+## 6.12.0 (unreleased)
+
+Stage 1 (running for office).
+
+- **Racing where the party can win (v6).** Since 6.1.0 a party runs its
+  strongest NPPs for its most senior races. Where the party is weak across the
+  whole region, those regionwide races are the ones it cannot win, so that
+  spent its best candidates on lost causes. Now a party whose organization in
+  the region is below 75% of the leading party's runs its strongest NPPs in
+  its most local races instead, where it can still win seats. The same races
+  are contested either way.
 
 ## 6.11.0 (unreleased)
 
