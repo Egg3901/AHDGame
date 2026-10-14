@@ -88,17 +88,17 @@ export default function DislocationPanel({
   };
 
   return (
-    <div className="mb-6 rounded-xl border border-border bg-surface p-4">
+    <div className="mb-6 rounded-xl border border-card-border bg-card p-4">
       <h3 className="text-sm font-semibold text-foreground">Where this market is out of balance</h3>
       <p className="mt-0.5 text-xs text-muted">
         Goods do not move for free, so one map can hold both a shortage and a glut. Building supply
         in a short state, or shipping out of a glutted one, is what closes the gap.
       </p>
-      <div className="mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="mt-3 grid gap-4">
         {short.length > 0 && (
           <div>
             <p className="text-xs font-medium text-foreground">Short: paying a premium</p>
-            <ul className="mt-1 divide-y divide-border/50">
+            <ul className="mt-1 divide-y divide-card-border/60">
               {short.map((s) => stateRow(s.id, `${s.ratio.toFixed(2)}x base price`))}
             </ul>
           </div>
@@ -106,7 +106,7 @@ export default function DislocationPanel({
         {stranded.length > 0 && (
           <div>
             <p className="text-xs font-medium text-foreground">Oversupplied: cannot sell locally</p>
-            <ul className="mt-1 divide-y divide-border/50">
+            <ul className="mt-1 divide-y divide-card-border/60">
               {stranded.map((s) => stateRow(s.id, `+${formatUnits(s.surplus, unit)} surplus`))}
             </ul>
           </div>
@@ -114,7 +114,7 @@ export default function DislocationPanel({
         {room.length > 0 && (
           <div>
             <p className="text-xs font-medium text-foreground">Deposits with room to grow</p>
-            <ul className="mt-1 divide-y divide-border/50">
+            <ul className="mt-1 divide-y divide-card-border/60">
               {room.map((s) => stateRow(s.id, `${formatUnits(s.headroom, unit)}/turn free`))}
             </ul>
           </div>

@@ -21,7 +21,7 @@ import {
 import { emitBuildCapexTx } from "@/lib/corporations/capexTxLog";
 import { OPERATING_SECTOR_TYPE_LABELS } from "@/lib/constants/corporations";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
-import { restoreSectorsToUnowned } from "@/lib/corporations/restoreSectorsToUnowned";
+import { disposeLeavingSectors } from "@/lib/corporations/nppPickup";
 import { applyBrandFacilityLoss } from "@/lib/corporations/brandFacilityLoss";
 import { requireCorporationActionsEnabled } from "@/lib/api/requireCorporationActions";
 import { unprotectedConstructionPropertyFilter } from "@/lib/corporations/securedConstructionProperty";
@@ -173,11 +173,16 @@ export async function abandonSector(request: Request, { params }: RouteParams) {
       }
     }
 
-    const restoreResult = await restoreSectorsToUnowned(db, [sector], now);
+    // An NPP operator takes over most of the built capacity so the market keeps
+    // its supply; the rest, and any undelivered orders, return to the pool.
+    const disposal = await disposeLeavingSectors(db, corporation, [sector], now);
 
     return NextResponse.json({
       success: true,
-      message: `Abandoned ${sectorLabel} sector in ${stateName}. $${Math.round(restoreResult.totalRevenueRestored).toLocaleString()}/day returned to the unowned pool.`,
+      message:
+        disposal.recipientIds.length > 0
+          ? `Abandoned ${sectorLabel} sector in ${stateName}. An NPP operator took over most of its plants; the rest of the market reopens to builders.`
+          : `Abandoned ${sectorLabel} sector in ${stateName}. Its market reopens to builders.`,
     });
   } catch (error) {
     return handleRouteError(error);

@@ -13,6 +13,7 @@ import {
 import CommodityRegionMap from "./CommodityRegionMap";
 import CommodityMapModeToggle, { type MapMode } from "./CommodityMapModeToggle";
 import CommodityMapLegend from "./CommodityMapLegend";
+import { formatUnits } from "../lib/helpers";
 
 interface CommodityCountryDrilldownViewProps {
   countryId: CountryId;
@@ -29,13 +30,6 @@ interface CommodityCountryDrilldownViewProps {
   forexEnabled: boolean;
   exchangeRates: Partial<Record<CurrencyCode, number>>;
   onBack: () => void;
-}
-
-function formatUnits(value: number, unit: string): string {
-  if (value >= 1000000) return `${(value / 1000000).toFixed(1)}M ${unit}`;
-  if (value >= 1000) return `${(value / 1000).toFixed(1)}K ${unit}`;
-  if (value >= 10) return `${Math.round(value)} ${unit}`;
-  return `${value.toFixed(1)} ${unit}`;
 }
 
 export default function CommodityCountryDrilldownView({

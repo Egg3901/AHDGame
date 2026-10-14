@@ -13,7 +13,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Record checked tree
+        id: tree
+        run: |
+          checked_tree=$(git -c safe.directory="$GITHUB_WORKSPACE" rev-parse 'HEAD^{tree}')
+          test "${#checked_tree}" -eq 40
+          case "$checked_tree" in *[!a-f0-9]*) exit 1 ;; esac
+          printf 'tree=%s\n' "$checked_tree" >> "$GITHUB_OUTPUT"
       - uses: actions/dependency-review-action@v4
         with:
           fail-on-severity: high
           comment-summary-in-pr: on-failure
+      - name: qualified-tree-${{ steps.tree.outputs.tree }}
+        run: echo "Dependency review passed for this checked tree."

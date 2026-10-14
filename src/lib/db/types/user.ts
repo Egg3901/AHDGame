@@ -172,6 +172,8 @@ export interface User {
    */
   enableExperimentalUI?: boolean;
   actionsViewMode?: "cards" | "compact";
+  /** Corporation Overview layout: a short at-a-glance view or the full table view. */
+  corpOverviewMode?: "simple" | "pro";
   notificationPreferences?: NotificationPreferences;
   referredBy?: ObjectId;
   referralCount?: number;

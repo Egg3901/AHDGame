@@ -18,9 +18,9 @@
  *                 + held bond portfolio at face
  *
  * The portfolio leg is the second half of #1198. `filterInsolventCorps` ignored
- * it outright, yet {@link
- * import("./executeCorporationBondDefaultDissolution").executeCorporationBondDefaultDissolution}
- * — the liquidation a default leads to — redeems those same creditor holdings
+ * it outright, yet `executeCorporationBondDefaultDissolution` (in
+ * executeCorporationBondDefaultDissolution.ts, the liquidation a default
+ * leads to) redeems those same creditor holdings
  * at face into `liquidCapital` before it settles anything. The decision to
  * liquidate refused to count assets the liquidation itself spends. #624 held
  * ₳1.79bn of them against a ₳1.40bn shortfall.

@@ -9,6 +9,7 @@ import type { Suggestion, SuggestionStatus } from "@/lib/db/types";
 import { getSuggestionsCollection } from "@/lib/db/collections/suggestions";
 import { computeUnreadCommentCounts, loadReadMapForSuggestions } from "@/lib/suggestions/readState";
 import { loadReporterDisplayMap, type ReporterDisplay } from "@/lib/suggestions/reporterDisplay";
+import { suggestionDiscordMessageUrl } from "@/lib/suggestions/discordLink";
 import {
   discordSubmitHandleForChip,
   discordSubmitPrimaryLabel,
@@ -84,6 +85,7 @@ async function handleGET(request: Request) {
     let sortSpec: Record<string, 1 | -1> = { createdAt: -1 };
     if (sort === "oldest") sortSpec = { createdAt: 1 };
     if (sort === "comments") sortSpec = { commentCount: -1, createdAt: -1 };
+    if (sort === "top") sortSpec = { "reactions.like": -1, createdAt: -1 };
 
     const [items, total] = await Promise.all([
       coll.find(filter).sort(sortSpec).skip(offset).limit(limit).toArray(),
@@ -121,8 +123,17 @@ async function handleGET(request: Request) {
       }
     }
 
+    const discordUrls = await Promise.all(
+      items.map((s) => suggestionDiscordMessageUrl(s.discordMessageId))
+    );
     const list = items.map((s, i) =>
-      serializeListItem(s, reporterMap, unreadList[i] ?? 0, userReactionMap.get(s._id.toString()) ?? null)
+      serializeListItem(
+        s,
+        reporterMap,
+        unreadList[i] ?? 0,
+        userReactionMap.get(s._id.toString()) ?? null,
+        discordUrls[i] ?? null
+      )
     );
 
     return NextResponse.json({ items: list, total, limit, offset });
@@ -137,7 +148,8 @@ function serializeListItem(
   s: Suggestion,
   reporterMap: Map<string, ReporterDisplay>,
   unreadCommentCount: number,
-  userReaction: "like" | "dislike" | null
+  userReaction: "like" | "dislike" | null,
+  discordUrl: string | null
 ) {
   const rid = s.userId?.toString();
   const rep = rid ? reporterMap.get(rid) : undefined;
@@ -160,6 +172,7 @@ function serializeListItem(
       dislike: Math.max(0, s.reactions?.dislike ?? 0),
     },
     userReaction,
+    discordUrl,
     reporterCharacterName: rep?.characterName ?? discordOnlyName,
     reporterDiscordUsername: rep?.discordUsername ?? discordOnlyHandle,
     reporterUsername: rep?.username ?? null,

@@ -3,19 +3,18 @@
 import { InlineError } from "@/components/ui/InlineError";
 import { apiErrorText } from "@/lib/errors/catalog";
 import { useCallback, useEffect, useState } from "react";
-import Image from "next/image";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { Button, CardSkeleton, Skeleton } from "@/components/ui";
+import { Button, Card, CardSkeleton, SectionLabel, Skeleton } from "@/components/ui";
 import { CategoryBadge } from "@/components/suggestions/CategoryBadge";
-import { CommentItem } from "@/components/suggestions/CommentItem";
-import { PlayerBadge } from "@/components/suggestions/PlayerBadge";
 import { StatusBadge } from "@/components/suggestions/StatusBadge";
-import { getCountryFlagUrlForEra } from "@/lib/constants";
-import { useActivePreset } from "@/contexts/RegisteredCountriesContext";
-import { getCountryConfig } from "@/lib/constants/countries";
+import { ForumPost, type ForumAuthor } from "@/components/suggestions/ForumPost";
+import { SuggestionVotes } from "@/components/suggestions/SuggestionVotes";
+import { SuggestionReportButton } from "@/components/suggestions/SuggestionReportButton";
+import { DiscordDiscussLink } from "@/components/suggestions/DiscordDiscussLink";
+import { SUGGESTION_CATEGORY_LABELS } from "@/components/FeedbackModal/constants";
+import { LocalTime, RelativeTime } from "@/components/time/LocalTime";
 import type { CountryId } from "@/lib/constants/countries";
-import { bypassNextImageOptimization } from "@/lib/images/bypassImageOptimization";
 
 interface Detail {
   issueNumber: number;
@@ -28,7 +27,11 @@ interface Detail {
   priority: number | null;
   screenshotUrl: string | null;
   githubIssueUrl: string | null;
+  discordUrl: string | null;
   commentCount: number;
+  reactions: { like: number; dislike: number };
+  userReaction: "like" | "dislike" | null;
+  reporterCharacterId: string | null;
   reporterUsername: string | null;
   reporterDiscordUsername: string | null;
   reporterCharacterName: string | null;
@@ -45,22 +48,29 @@ interface CommentRow {
   _id: string;
   authorName: string;
   authorAvatarUrl: string | null;
-  authorParty: string | null;
+  authorCharacterId: string | null;
   authorPartyAbbrev: string | null;
   authorStateCode: string | null;
   authorCountryId: string | null;
-  authorBorderKey: string | null;
-  authorTintColor: string | null;
   body: string;
   createdAt: string;
   userId: string;
 }
 
+interface Viewer {
+  id: string;
+  characterId: string | null;
+  isAdmin: boolean;
+  hasCharacter: boolean;
+}
+
+const COMMENTS_PAGE = 20;
+
 export default function FeedbackDetailPage() {
-  const preset = useActivePreset();
   const params = useParams();
-  const raw = params.issueNumber as string;
-  const issueNum = parseInt(raw, 10);
+  const issueNum = parseInt(params.issueNumber as string, 10);
+  // The Discord post links to `?report=1`.
+  const [openReport, setOpenReport] = useState(false);
 
   const [detail, setDetail] = useState<Detail | null>(null);
   const [comments, setComments] = useState<CommentRow[]>([]);
@@ -72,9 +82,8 @@ export default function FeedbackDetailPage() {
   const [commentBody, setCommentBody] = useState("");
   const [posting, setPosting] = useState(false);
   const [postError, setPostError] = useState("");
-  const [isAdmin, setIsAdmin] = useState(false);
-  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
-  const [_deletingCommentId, setDeletingCommentId] = useState<string | null>(null);
+  // undefined = still loading, null = logged out
+  const [viewer, setViewer] = useState<Viewer | null | undefined>(undefined);
 
   const loadDetail = useCallback(async () => {
     if (isNaN(issueNum) || issueNum < 1) {
@@ -82,7 +91,6 @@ export default function FeedbackDetailPage() {
       setLoading(false);
       return;
     }
-    setLoading(true);
     setError("");
     try {
       const res = await fetch(`/api/suggestions/public/${issueNum}`);
@@ -101,19 +109,18 @@ export default function FeedbackDetailPage() {
     }
   }, [issueNum]);
 
+  // Forum order: oldest reply first, composer at the bottom.
   const loadComments = useCallback(
     async (page: number, append = false) => {
       try {
         const res = await fetch(
-          `/api/suggestions/public/${issueNum}/comments?page=${page}&limit=20`
+          `/api/suggestions/public/${issueNum}/comments?page=${page}&limit=${COMMENTS_PAGE}&order=asc`
         );
         const data = await res.json();
         if (!res.ok) return;
-        if (append) {
-          setComments((prev) => [...prev, ...(data.comments ?? [])]);
-        } else {
-          setComments(data.comments ?? []);
-        }
+        setComments((prev) =>
+          append ? [...prev, ...(data.comments ?? [])] : (data.comments ?? [])
+        );
         setCommentsTotal(data.total ?? 0);
         setHasMoreComments(data.hasMore ?? false);
       } catch {
@@ -128,18 +135,28 @@ export default function FeedbackDetailPage() {
     void loadComments(1);
   }, [loadDetail, loadComments]);
 
-  // Check auth status
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setOpenReport(new URLSearchParams(window.location.search).get("report") === "1");
+  }, []);
+
   useEffect(() => {
     async function checkAuth() {
       try {
         const res = await fetch("/api/auth/me");
         const data = await res.json();
-        if (res.ok && data?.user) {
-          setIsAdmin(data.user.isAdmin === true);
-          setCurrentUserId(data.user.id ?? null);
-        }
+        setViewer(
+          res.ok && data?.user
+            ? {
+                id: data.user.id,
+                characterId: data.user.character?.id ?? null,
+                isAdmin: data.user.isAdmin === true,
+                hasCharacter: data.user.hasCharacter === true,
+              }
+            : null
+        );
       } catch {
-        /* ignore */
+        setViewer(null);
       }
     }
     void checkAuth();
@@ -161,14 +178,13 @@ export default function FeedbackDetailPage() {
         return;
       }
       setCommentBody("");
-      // New comments go at the top (newest first), so prepend
-      if (data.comment) {
-        setComments((prev) => [data.comment, ...prev]);
+      if (data.comment && !hasMoreComments) {
+        setComments((prev) => [...prev, data.comment]);
+        setCommentsTotal((n) => n + 1);
       } else {
+        setCommentsPage(1);
         void loadComments(1);
       }
-      // Refresh detail to update comment count
-      void loadDetail();
     } catch {
       setPostError("Network error");
     } finally {
@@ -177,7 +193,6 @@ export default function FeedbackDetailPage() {
   }
 
   async function deleteComment(commentId: string) {
-    setDeletingCommentId(commentId);
     try {
       const res = await fetch(`/api/suggestions/public/${issueNum}/comments/${commentId}`, {
         method: "DELETE",
@@ -185,12 +200,9 @@ export default function FeedbackDetailPage() {
       if (res.ok) {
         setComments((prev) => prev.filter((c) => c._id !== commentId));
         setCommentsTotal((prev) => prev - 1);
-        void loadDetail();
       }
     } catch {
       /* ignore */
-    } finally {
-      setDeletingCommentId(null);
     }
   }
 
@@ -201,9 +213,7 @@ export default function FeedbackDetailPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: newStatus }),
       });
-      if (res.ok) {
-        setDetail((prev) => (prev ? { ...prev, status: newStatus } : prev));
-      }
+      if (res.ok) setDetail((prev) => (prev ? { ...prev, status: newStatus } : prev));
     } catch {
       /* ignore */
     }
@@ -211,266 +221,292 @@ export default function FeedbackDetailPage() {
 
   if (loading) {
     return (
-      <div className="mx-auto min-h-[70vh] max-w-3xl px-4 py-8">
-        <Skeleton className="h-9 w-32" />
-        <div className="mt-4 flex items-start gap-3">
-          <Skeleton className="mt-1 h-10 w-10 shrink-0 rounded-full" />
-          <div className="space-y-2">
-            <Skeleton className="h-3 w-16" />
-            <Skeleton className="h-7 w-64" />
-            <Skeleton className="h-5 w-40 rounded-full" />
-          </div>
-        </div>
-        <CardSkeleton className="mt-6">
-          <div className="space-y-2">
-            <Skeleton className="h-4 w-full" />
-            <Skeleton className="h-4 w-5/6" />
-            <Skeleton className="h-4 w-2/3" />
+      <div className="mx-auto min-h-[70vh] max-w-4xl space-y-5 px-4 py-8">
+        <Skeleton className="h-4 w-48" />
+        <CardSkeleton>
+          <div className="space-y-3">
+            <Skeleton className="h-4 w-24" />
+            <Skeleton className="h-8 w-2/3" />
+            <Skeleton className="h-5 w-48" />
           </div>
         </CardSkeleton>
-        <div className="mt-10 space-y-4">
-          <Skeleton className="h-6 w-36" />
-          <Skeleton className="h-20 w-full rounded-lg" />
-        </div>
+        <Skeleton className="h-56 w-full rounded-xl" />
       </div>
     );
   }
 
   if (error || !detail) {
     return (
-      <div className="mx-auto max-w-3xl px-4 py-10">
+      <div className="mx-auto max-w-4xl px-4 py-10">
         <p className="text-error">{error || "Not found"}</p>
         <Link href="/feedback" className="mt-4 inline-block text-primary hover:underline">
-          &larr; Back to suggestions
+          Back to suggestions
         </Link>
       </div>
     );
   }
 
-  const countryCfg = detail.reporterCountryId ? getCountryConfig(detail.reporterCountryId) : null;
+  const isMerged = !!detail.mergedIntoLink;
+  const isAdmin = viewer?.isAdmin === true;
+  const categoryLabel =
+    SUGGESTION_CATEGORY_LABELS[detail.category as keyof typeof SUGGESTION_CATEGORY_LABELS] ??
+    detail.category;
+  const opAuthor: ForumAuthor = {
+    name: detail.reporterCharacterName ?? detail.reporterUsername,
+    avatarUrl: detail.reporterAvatarUrl,
+    characterId: detail.reporterCharacterId,
+    partyAbbrev: detail.reporterPartyAbbrev,
+    stateCode: detail.reporterStateCode,
+    countryId: detail.reporterCountryId,
+  };
+  const ownsSuggestion = !!viewer?.characterId && viewer.characterId === detail.reporterCharacterId;
 
   return (
-    <div className="mx-auto max-w-3xl px-4 py-8">
-      <Link
-        href="/feedback"
-        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-card border border-card-border text-sm font-medium text-foreground hover:bg-card-elevated transition-colors"
+    <div className="mx-auto max-w-4xl px-4 py-6 sm:py-8">
+      {/* Breadcrumb */}
+      <nav
+        aria-label="Breadcrumb"
+        className="flex flex-wrap items-center gap-1.5 text-xs text-muted"
       >
-        <svg
-          className="w-3.5 h-3.5 text-muted"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
+        <Link href="/feedback" className="font-medium hover:text-foreground">
+          Suggestions
+        </Link>
+        <span aria-hidden>/</span>
+        <Link
+          href={`/feedback?category=${encodeURIComponent(detail.category)}`}
+          className="hover:text-foreground"
         >
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-        </svg>
-        Suggestions
-      </Link>
+          {categoryLabel}
+        </Link>
+        <span aria-hidden>/</span>
+        <span className="font-mono text-foreground/80">S#{detail.issueNumber}</span>
+      </nav>
 
-      {/* Merged banner */}
-      {detail.mergedIntoLink && (
-        <div className="mt-4 rounded-lg border border-violet-500/30 bg-violet-500/10 px-4 py-3 text-sm text-violet-300">
-          This suggestion has been merged into{" "}
-          <Link
-            href={`/feedback/${detail.mergedIntoLink.issueNumber}`}
-            className="font-medium text-primary hover:underline"
-          >
-            S#{detail.mergedIntoLink.issueNumber}: {detail.mergedIntoLink.title}
-          </Link>
-        </div>
-      )}
-
-      {/* Header */}
-      <div className="mt-4 flex flex-wrap items-start justify-between gap-3">
-        <div className="flex items-start gap-3">
-          {/* Reporter avatar */}
-          {detail.reporterAvatarUrl ? (
-            <div className="mt-1 h-10 w-10 shrink-0 overflow-hidden rounded-full ring-1 ring-card-border">
-              <Image
-                src={detail.reporterAvatarUrl}
-                alt=""
-                width={40}
-                height={40}
-                className="h-full w-full object-cover"
-                unoptimized={bypassNextImageOptimization(detail.reporterAvatarUrl)}
+      {/* Thread header */}
+      <header className="mt-3 overflow-hidden rounded-2xl border border-card-border bg-gradient-to-br from-card-elevated via-card to-card shadow-lg">
+        <div className="flex flex-col items-start justify-between gap-4 px-5 py-5 sm:flex-row sm:px-6">
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <StatusBadge
+                status={detail.status}
+                onChange={isAdmin ? handleStatusChange : undefined}
               />
-            </div>
-          ) : detail.reporterCharacterName ? (
-            <div className="mt-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-card-elevated ring-1 ring-card-border text-sm font-medium text-muted">
-              {detail.reporterCharacterName.charAt(0).toUpperCase()}
-            </div>
-          ) : null}
-
-          <div>
-            <p className="font-mono text-xs text-muted">S#{detail.issueNumber}</p>
-            <h1 className="mt-0.5 text-2xl font-semibold text-foreground">{detail.title}</h1>
-
-            {/* Category + game system badges */}
-            <div className="mt-2">
               <CategoryBadge
                 category={detail.category as "feature_request"}
                 gameSystem={detail.gameSystem as "elections"}
               />
             </div>
-
-            {/* Reporter info with party badge */}
-            <div className="mt-2 flex flex-wrap items-center gap-2">
-              {detail.reporterCharacterName && (
-                <span className="rounded-md border border-card-border bg-card-elevated px-2.5 py-1 text-xs font-medium text-foreground">
-                  {detail.reporterCharacterName}
-                </span>
-              )}
-              <PlayerBadge
-                partyAbbrev={detail.reporterPartyAbbrev}
-                stateCode={detail.reporterStateCode}
-                countryId={detail.reporterCountryId}
-                size="md"
-              />
-              {detail.reporterDiscordUsername && (
-                <span className="rounded-md bg-indigo-500/15 px-2.5 py-1 text-xs text-indigo-300">
-                  Discord: {detail.reporterDiscordUsername}
-                </span>
-              )}
-              {countryCfg && (
-                <Link
-                  href={countryCfg.overviewPath}
-                  className="inline-flex shrink-0 items-center opacity-90 transition-opacity hover:opacity-100"
-                >
-                  <Image
-                    src={getCountryFlagUrlForEra(countryCfg.code, preset)}
-                    alt={countryCfg.name}
-                    width={22}
-                    height={15}
-                    className="h-3.5 w-auto max-h-3.5 rounded-sm object-cover ring-1 ring-card-border/50"
-                    unoptimized={bypassNextImageOptimization(
-                      getCountryFlagUrlForEra(countryCfg.code, preset)
-                    )}
-                  />
-                </Link>
-              )}
-            </div>
+            <h1 className="mt-2.5 text-2xl font-bold leading-tight text-foreground sm:text-[1.75rem]">
+              {detail.title}
+            </h1>
           </div>
+          {detail.discordUrl && <DiscordDiscussLink href={detail.discordUrl} />}
         </div>
-
-        {/* Status badge — admin-clickable */}
-        <StatusBadge status={detail.status} onChange={isAdmin ? handleStatusChange : undefined} />
-      </div>
-
-      {/* Merged-from links */}
-      {detail.mergedFromLinks.length > 0 && (
-        <div className="mt-4 rounded-lg border border-card-border bg-card-elevated px-4 py-3">
-          <p className="text-xs font-medium text-muted mb-2">Merged from:</p>
-          <div className="flex flex-wrap gap-2">
-            {detail.mergedFromLinks.map((link) => (
-              <Link
-                key={link.issueNumber}
-                href={`/feedback/${link.issueNumber}`}
-                className="rounded-md border border-card-border bg-card px-2.5 py-1 text-xs text-primary hover:underline"
-              >
-                S#{link.issueNumber}: {link.title}
-              </Link>
-            ))}
+        <dl className="grid grid-cols-3 divide-x divide-card-border border-t border-card-border bg-card-muted/60 text-center">
+          <div className="px-3 py-2.5">
+            <dt className="text-[11px] font-medium uppercase tracking-wide text-muted">Votes</dt>
+            <dd className="mt-0.5 text-sm font-semibold tabular-nums text-foreground">
+              <span className="text-success">{detail.reactions.like}</span>
+              <span className="mx-1 text-muted">/</span>
+              <span className="text-error">{detail.reactions.dislike}</span>
+            </dd>
           </div>
+          <div className="px-3 py-2.5">
+            <dt className="text-[11px] font-medium uppercase tracking-wide text-muted">Replies</dt>
+            <dd className="mt-0.5 text-sm font-semibold tabular-nums text-foreground">
+              {commentsTotal}
+            </dd>
+          </div>
+          <div className="px-3 py-2.5">
+            <dt className="text-[11px] font-medium uppercase tracking-wide text-muted">Posted</dt>
+            <dd className="mt-0.5 text-sm font-semibold text-foreground">
+              <LocalTime
+                value={detail.createdAt}
+                options={{ month: "short", day: "numeric", year: "numeric" }}
+              />
+            </dd>
+          </div>
+        </dl>
+      </header>
+
+      {detail.mergedIntoLink && (
+        <div className="mt-4 rounded-xl border border-primary/30 bg-primary/10 px-4 py-3 text-sm text-foreground">
+          Merged into{" "}
+          <Link
+            href={`/feedback/${detail.mergedIntoLink.issueNumber}`}
+            className="font-semibold text-primary hover:underline"
+          >
+            S#{detail.mergedIntoLink.issueNumber}: {detail.mergedIntoLink.title}
+          </Link>
+          . Vote and reply there.
         </div>
       )}
 
-      {/* Screenshot */}
-      {detail.screenshotUrl ? (
-        <div className="mt-6 overflow-hidden rounded-xl border border-card-border bg-card-elevated shadow-sm">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={detail.screenshotUrl}
-            alt="Screenshot attached to this suggestion"
-            className="max-h-[min(70vh,560px)] w-full object-contain"
-          />
-        </div>
-      ) : null}
-
-      {/* Description */}
-      <div className="mt-6 rounded-xl border border-card-border bg-card p-5">
-        <p className="whitespace-pre-wrap text-sm text-foreground">{detail.description}</p>
-        {detail.impact && (
-          <div className="mt-4 border-t border-card-border pt-4">
-            <p className="text-xs font-medium text-muted">Impact</p>
-            <p className="mt-1 whitespace-pre-wrap text-sm">{detail.impact}</p>
-          </div>
-        )}
-        {detail.priority != null && (
-          <div className="mt-3 flex items-center gap-2">
-            <span className="text-xs text-muted">Priority</span>
-            <div className="flex items-center gap-0.5">
-              {[1, 2, 3, 4, 5].map((i) => (
-                <div
-                  key={i}
-                  className={`h-2 w-2 rounded-full ${i <= detail.priority! ? "bg-primary" : "bg-card-border"}`}
-                />
-              ))}
-            </div>
-          </div>
-        )}
-        {detail.githubIssueUrl && (
-          <a
-            href={detail.githubIssueUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="mt-4 inline-flex items-center gap-1 text-sm text-primary hover:underline"
-          >
-            GitHub issue
-          </a>
-        )}
-      </div>
-
-      {/* Comments */}
-      <section className="mt-10">
-        <h2 className="text-lg font-semibold">Comments ({commentsTotal})</h2>
-
-        {/* Comment form at top — for new comments */}
-        <form onSubmit={submitComment} className="mt-4 space-y-3">
-          <textarea
-            value={commentBody}
-            onChange={(e) => setCommentBody(e.target.value.slice(0, 2000))}
-            rows={3}
-            maxLength={2000}
-            className="w-full rounded-lg border border-card-border bg-background px-3 py-2 text-sm placeholder:text-muted focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-            placeholder="Add a comment… (requires an active character)"
-          />
-          <div className="flex items-center gap-3">
-            <Button
-              type="submit"
-              variant="primary"
-              isLoading={posting}
-              disabled={!commentBody.trim()}
-              className="px-3 py-1.5 text-sm"
+      {detail.mergedFromLinks.length > 0 && (
+        <div className="mt-4 flex flex-wrap items-center gap-2 rounded-xl border border-card-border bg-card px-4 py-3">
+          <span className="text-xs font-medium text-muted">Merged from</span>
+          {detail.mergedFromLinks.map((link) => (
+            <Link
+              key={link.issueNumber}
+              href={`/feedback/${link.issueNumber}`}
+              className="rounded-md border border-card-border bg-card-elevated px-2 py-0.5 text-xs text-primary hover:underline"
             >
-              Post comment
-            </Button>
-            <InlineError error={postError} className="text-sm text-error" />
-          </div>
-        </form>
-
-        {/* Comment list — newest first */}
-        <div className="mt-6 space-y-4">
-          {comments.map((c) => (
-            <CommentItem
-              key={c._id}
-              _id={c._id}
-              authorName={c.authorName}
-              authorAvatarUrl={c.authorAvatarUrl}
-              authorParty={c.authorParty}
-              authorPartyAbbrev={c.authorPartyAbbrev}
-              authorStateCode={c.authorStateCode}
-              authorCountryId={c.authorCountryId}
-              authorBorderKey={c.authorBorderKey}
-              authorTintColor={c.authorTintColor}
-              body={c.body}
-              createdAt={c.createdAt}
-              userId={c.userId}
-              canDelete={isAdmin || c.userId === currentUserId}
-              onDelete={deleteComment}
-            />
+              S#{link.issueNumber}: {link.title}
+            </Link>
           ))}
         </div>
+      )}
 
-        {/* Load more */}
+      {/* Original post */}
+      <div className="mt-5">
+        <ForumPost
+          emphasis
+          author={opAuthor}
+          role="Original poster"
+          meta={
+            <>
+              <span className="font-mono">S#{detail.issueNumber}</span>
+              <span aria-hidden>·</span>
+              <RelativeTime value={detail.createdAt} />
+            </>
+          }
+          footer={
+            <>
+              <SuggestionVotes
+                issueNumber={detail.issueNumber}
+                reactions={detail.reactions}
+                userReaction={detail.userReaction}
+                disabled={isMerged}
+                size="md"
+              />
+              <div className="flex items-center gap-1">
+                {detail.githubIssueUrl && (
+                  <a
+                    href={detail.githubIssueUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="rounded-lg px-2 py-1 text-xs font-medium text-muted hover:bg-card-elevated hover:text-foreground"
+                  >
+                    GitHub issue
+                  </a>
+                )}
+                {detail.reporterCharacterId && !ownsSuggestion && (
+                  <SuggestionReportButton
+                    key={String(openReport)}
+                    issueNumber={detail.issueNumber}
+                    initiallyOpen={openReport}
+                  />
+                )}
+              </div>
+            </>
+          }
+        >
+          <p className="whitespace-pre-wrap text-[15px] leading-relaxed text-foreground">
+            {detail.description}
+          </p>
+          {detail.screenshotUrl && (
+            <div className="mt-4 overflow-hidden rounded-lg border border-card-border bg-card-muted">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={detail.screenshotUrl}
+                alt="Screenshot attached to this suggestion"
+                className="max-h-[min(70vh,560px)] w-full object-contain"
+              />
+            </div>
+          )}
+          {(detail.impact || detail.priority != null) && (
+            <div className="mt-4 space-y-2 rounded-lg border border-card-border bg-card-muted px-4 py-3">
+              {detail.impact && (
+                <div>
+                  <p className="text-xs font-semibold text-muted">Expected impact</p>
+                  <p className="mt-0.5 whitespace-pre-wrap text-sm text-foreground">
+                    {detail.impact}
+                  </p>
+                </div>
+              )}
+              {detail.priority != null && (
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-semibold text-muted">Priority to the poster</span>
+                  <span
+                    className="flex items-center gap-0.5"
+                    aria-label={`${detail.priority} of 5`}
+                  >
+                    {[1, 2, 3, 4, 5].map((i) => (
+                      <span
+                        key={i}
+                        className={`h-2 w-2 rounded-full ${i <= detail.priority! ? "bg-primary" : "bg-card-border"}`}
+                      />
+                    ))}
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
+        </ForumPost>
+      </div>
+
+      {/* Replies */}
+      <section className="mt-8" aria-label="Replies">
+        <SectionLabel>
+          {commentsTotal} {commentsTotal === 1 ? "reply" : "replies"}
+        </SectionLabel>
+
+        <div className="space-y-3">
+          {comments.map((c, index) => {
+            const own = viewer?.id === c.userId;
+            return (
+              <ForumPost
+                key={c._id}
+                id={`reply-${c._id}`}
+                author={{
+                  name: c.authorName,
+                  avatarUrl: c.authorAvatarUrl,
+                  characterId: c.authorCharacterId,
+                  partyAbbrev: c.authorPartyAbbrev,
+                  stateCode: c.authorStateCode,
+                  countryId: c.authorCountryId as CountryId | null,
+                }}
+                role={
+                  c.authorCharacterId && c.authorCharacterId === detail.reporterCharacterId
+                    ? "Poster"
+                    : undefined
+                }
+                meta={
+                  <>
+                    <a href={`#reply-${c._id}`} className="font-mono hover:text-foreground">
+                      #{index + 1}
+                    </a>
+                    <span aria-hidden>·</span>
+                    <RelativeTime value={c.createdAt} />
+                  </>
+                }
+                headerAction={
+                  <div className="flex items-center gap-1">
+                    {(isAdmin || own) && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (window.confirm("Delete this reply?")) void deleteComment(c._id);
+                        }}
+                        className="rounded-lg px-2 py-1 text-xs font-medium text-muted hover:bg-error/10 hover:text-error"
+                      >
+                        Delete
+                      </button>
+                    )}
+                    {!own && c.authorCharacterId && (
+                      <SuggestionReportButton issueNumber={detail.issueNumber} commentId={c._id} />
+                    )}
+                  </div>
+                }
+              >
+                <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">
+                  {c.body}
+                </p>
+              </ForumPost>
+            );
+          })}
+        </div>
+
         {hasMoreComments && (
           <div className="mt-4 text-center">
             <Button
@@ -482,13 +518,82 @@ export default function FeedbackDetailPage() {
               }}
               className="px-3 py-1.5 text-sm"
             >
-              Load more comments
+              Load more replies
             </Button>
           </div>
         )}
 
         {commentsTotal === 0 && (
-          <p className="mt-6 text-sm text-muted">No comments yet. Be the first to weigh in!</p>
+          <p className="rounded-xl border border-dashed border-card-border px-4 py-6 text-center text-sm text-muted">
+            No replies yet.
+          </p>
+        )}
+
+        {/* Composer */}
+        {!isMerged && (
+          <Card className="mt-5 shadow-md" title="Post a reply">
+            {viewer === undefined ? (
+              <Skeleton className="h-24 w-full rounded-lg" />
+            ) : viewer === null ? (
+              <p className="text-sm text-muted">
+                <Link href="/login" className="font-semibold text-primary hover:underline">
+                  Log in
+                </Link>{" "}
+                to vote and reply.
+              </p>
+            ) : !viewer.hasCharacter ? (
+              <p className="text-sm text-muted">
+                Replies are posted as your character.{" "}
+                <Link
+                  href="/create-character"
+                  className="font-semibold text-primary hover:underline"
+                >
+                  Create a character
+                </Link>{" "}
+                to join the thread.
+              </p>
+            ) : (
+              <form onSubmit={submitComment} className="space-y-3">
+                <textarea
+                  value={commentBody}
+                  onChange={(e) => setCommentBody(e.target.value.slice(0, 2000))}
+                  rows={4}
+                  maxLength={2000}
+                  className="w-full rounded-lg border border-card-border bg-card-muted px-3 py-2 text-sm placeholder:text-muted focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                  placeholder="Add to the discussion"
+                />
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <Button
+                      type="submit"
+                      variant="primary"
+                      isLoading={posting}
+                      disabled={!commentBody.trim()}
+                      className="px-4 py-1.5 text-sm"
+                    >
+                      Post reply
+                    </Button>
+                    <InlineError error={postError} className="text-sm text-error" />
+                  </div>
+                  <span className="text-xs tabular-nums text-muted">{commentBody.length}/2000</span>
+                </div>
+              </form>
+            )}
+            {detail.discordUrl && (
+              <p className="mt-3 border-t border-card-border pt-3 text-xs text-muted">
+                This suggestion is also posted in the Discord suggestions channel.{" "}
+                <a
+                  href={detail.discordUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-semibold text-primary hover:underline"
+                >
+                  Join the discussion there
+                </a>
+                .
+              </p>
+            )}
+          </Card>
         )}
       </section>
     </div>

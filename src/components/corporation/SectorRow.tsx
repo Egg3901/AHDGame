@@ -503,7 +503,7 @@ export function SectorRow({
               }}
               disabled={abandoningSectorId === sector._id}
               className="rounded px-2 py-1 text-left text-xs text-error hover:bg-error/10 disabled:opacity-50"
-              title="Abandon sector: revenue returns to the unowned pool"
+              title="Abandon sector: an NPP operator takes over most of its plants"
             >
               {abandoningSectorId === sector._id ? "Abandoning…" : "Abandon"}
             </button>
@@ -815,7 +815,7 @@ export function SectorRow({
           {isCeo &&
             (mobileAbandonConfirm ? (
               <span className="inline-flex items-center gap-2 text-xs text-error">
-                Abandon? Its revenue returns to the unowned pool.
+                Abandon? An NPP operator takes over most of its plants.
                 <button
                   type="button"
                   onClick={() => setMobileAbandonConfirm(false)}

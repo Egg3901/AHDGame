@@ -13,7 +13,8 @@ import { getSuggestionsCollection } from "@/lib/db/collections/suggestions";
 import { fetchBordersByUserIds } from "@/lib/db/patreonBorders";
 import { createNotification } from "@/lib/notifications";
 
-// GET /api/suggestions/public/[issueNumber]/comments — List comments (newest first, paginated).
+// GET /api/suggestions/public/[issueNumber]/comments — List comments (newest first, or ?order=asc
+// for oldest first; paginated).
 // Auth: public
 // Errors: 400, 404
 export async function GET(
@@ -38,12 +39,13 @@ export async function GET(
     const limit = Math.max(1, Math.min(50, parseInt(searchParams.get("limit") ?? "20", 10)));
     const page = Math.max(1, parseInt(searchParams.get("page") ?? "1", 10));
     const skip = (page - 1) * limit;
+    const order = searchParams.get("order") === "asc" ? 1 : -1;
 
     const coll = getSuggestionCommentsCollection(db);
     const [comments, total] = await Promise.all([
       coll
         .find({ suggestionId: s._id })
-        .sort({ createdAt: -1 })
+        .sort({ createdAt: order })
         .skip(skip)
         .limit(limit)
         .toArray(),
@@ -114,6 +116,7 @@ export async function GET(
         body: c.body,
         createdAt: c.createdAt.toISOString(),
         userId: c.userId.toString(),
+        authorCharacterId: char?._id.toString() ?? null,
       };
     });
 

@@ -1728,6 +1728,19 @@ export interface CorporateSector {
    * Asking price is locked at listing time so buyers see a stable quote even
    * if margins shift before purchase.
    */
+  /**
+   * NPP pickup in progress on a sector leaving its owner (abandon, dissolution,
+   * restructure liquidation). Written before any capacity moves so a retry
+   * credits the same receiver once. See `nppPickup.ts`.
+   */
+  nppPickup?: {
+    key: string;
+    receiverCorporationId: ObjectId;
+    receiverSectorId: ObjectId;
+    merge: boolean;
+  };
+  /** Pickup keys already credited to this row, newest last, capped. */
+  nppPickupReceipts?: string[];
   forSale?: {
     foreclosed?: boolean;
     pledged?: boolean;

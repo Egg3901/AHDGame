@@ -669,7 +669,7 @@ export default function CorporationDetailPage() {
   async function handleAbandonSector(sectorId: string) {
     if (
       !confirm(
-        "Abandon this sector? Its revenue will return to the unowned pool. This cannot be undone."
+        "Abandon this sector? An NPP operator takes over most of its built plants. This cannot be undone."
       )
     ) {
       return;
