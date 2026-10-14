@@ -88,6 +88,7 @@ export function createMediaProductAdvertisingObligation(input: {
       ...input.buyerDenomination,
     },
     sellers: input.sellers,
+    seed: `${input.turn}:${input.buyerCorporationId}:${input.projectId}`,
   });
   if (!quote) return null;
   return {

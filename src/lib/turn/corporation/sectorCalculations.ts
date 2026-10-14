@@ -1111,6 +1111,7 @@ export function processSectors(
             ...buyerDenomination,
           },
           sellers: sellerQuotes,
+          seed: `${currentTurn}:${corpId}:${project.id}`,
         });
         if (!quote) continue;
         const obligation = { projectId: project.id, turn: currentTurn, ...quote };
