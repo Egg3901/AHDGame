@@ -62,12 +62,11 @@ number.
 - **Whipping its own program.** A governing party whips co-partisans on the
   bills that serve its standing goals (shipped in 6.7.0). Opposition
   coordinates only against a government it can defeat (shipped in 6.11.0).
-- **Ministers judged on their goal.** Cabinet posts already go to NPPs ranked
-  on fit with the head of government, competence and the brief, and ministers
-  whose briefs badly miss target are already reshuffled. The remaining step is
-  judging a minister on the standing goal its brief serves.
+- **Ministers judged on their goal.** Cabinet posts go to NPPs ranked on fit
+  with the head of government, competence and the brief; ministers are judged
+  on the standing goal their brief serves (shipped in 6.15.0).
 - **Fewer writes.** Ministerial orders and settings are written in batches
-  per country.
+  per country (shipped in 6.14.3).
 
 - **Currency defence.** Central banks answer sharp currency moves with rates
   (6.6.0) and reserve-backed trading bands (6.13.0).
@@ -89,7 +88,7 @@ number.
 ### Stage 4: cost
 
 - NPP governing passes run countries in bounded parallel lanes instead of one
-  after another.
+  after another (shipped in 6.14.2).
 - Every engine 6 phase gets a per-turn round-trip budget, reported with the
   turn.
 
@@ -105,6 +104,36 @@ number.
 - Autonomy v6 becomes the default for new singleplayer and simulation worlds
   (shipped in 6.14.1). Running worlds never change level on their own, and the
   live multiplayer world keeps its own setting.
+
+## 6.15.0 (unreleased)
+
+Stage 2 (governing).
+
+- **Ministers judged on their goals (v6).** The head of an NPP government used
+  to judge each minister only on how far its domains sat below target. When
+  the government holds standing goals, a minister whose brief covers one is
+  now judged on that goal instead.
+  - A minister turning a failing domain around (at least 5 points of progress
+    since the attempt began) is kept.
+  - A minister in post when a goal on its brief failed, with no progress since,
+    can be replaced even if the shortfall looks small.
+  - A minister appointed after the failure is not blamed for it.
+  - Minimum tenure, cooldowns and the limit on repeated reshuffles still apply.
+
+## 6.14.3 (unreleased)
+
+- **Ministers save their work in batches.** NPP and caretaker ministers load
+  their settings and orders once per country and save changes in single
+  batched writes, instead of several database trips per minister. Applies at
+  every autonomy level; decisions are unchanged.
+
+## 6.14.2 (unreleased)
+
+- **Governments plan in parallel (v6).** At v6 the NPP governing phase runs up
+  to four countries' domestic steps at once, then foreign policy one country
+  at a time in the usual order, because one government's foreign moves shape
+  the next. Below v6 it runs one country at a time as before. Decisions are
+  unchanged.
 
 ## 6.14.1 (unreleased)
 

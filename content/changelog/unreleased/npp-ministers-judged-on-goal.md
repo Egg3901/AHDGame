@@ -19,4 +19,4 @@ areas: [backend, engine]
 
 ## Scope
 
-Worlds below autonomy v6 are unchanged.
+Worlds below autonomy v6 are unchanged. NPP engine version 6.15.0, recorded in the [NPP changelog](/changelog/npp).

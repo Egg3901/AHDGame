@@ -16,4 +16,4 @@ areas: [backend, engine]
 
 ## Scope
 
-Decisions are unchanged at every autonomy level. This applies to NPP governments and to caretaker ministers in player countries.
+Decisions are unchanged at every autonomy level. This applies to NPP governments and to caretaker ministers in player countries. NPP engine version 6.14.3.
