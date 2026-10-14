@@ -12,6 +12,10 @@ vi.mock("@/lib/api/rateLimit", () => ({
   checkRateLimit: vi.fn(),
   rateLimitResponse: vi.fn(),
 }));
+vi.mock("@/lib/currency/gdpAnchorRate", async (orig) => ({
+  ...(await orig<typeof import("@/lib/currency/gdpAnchorRate")>()),
+  loadWorldEraUnitScale: vi.fn().mockResolvedValue(1),
+}));
 vi.mock("@/lib/api/requireCorporationActions", () => ({
   requireCorporationActionsEnabled: vi.fn().mockResolvedValue(null),
 }));
@@ -176,5 +180,74 @@ describe("abandon construction settlement", () => {
         ([, update]) => update.$inc?.liquidCapital
       )
     ).toHaveLength(1);
+  });
+});
+
+describe("abandoning a sector that feeds the company's bank", () => {
+  async function setup(acknowledge: boolean) {
+    const corpId = new ObjectId();
+    const sectorId = new ObjectId();
+    const { getDb } = await import("@/lib/mongodb");
+    vi.mocked(getDb).mockResolvedValue(db as unknown as import("mongodb").Db);
+    const { requireBasicAuth } = await import("@/lib/api/requireAuth");
+    vi.mocked(requireBasicAuth).mockResolvedValue({
+      ok: true,
+      user: { userId: "user-1" },
+    } as never);
+    const { checkRateLimit } = await import("@/lib/api/rateLimit");
+    vi.mocked(checkRateLimit).mockReturnValue({
+      ok: true,
+      limit: 100,
+      remaining: 99,
+      resetAt: Date.now() + 60_000,
+    });
+    const { resolveCorporation, requireCeo } = await import("@/lib/api/corporations/resolveQuery");
+    vi.mocked(resolveCorporation).mockResolvedValue({
+      ok: true,
+      corporation: {
+        _id: corpId,
+        bankCharter: {
+          type: "retail",
+          status: "active",
+          branchCapacityShare: 0.8,
+          totalDeposits: 28_860_000,
+        },
+      },
+    } as never);
+    vi.mocked(requireCeo).mockReturnValue(null);
+    db.collectionMocks.corporateSectors.findOne.mockResolvedValue({
+      _id: sectorId,
+      sectorType: "financial",
+    });
+    db.collectionMocks.corporateSectors.find.mockReturnValue({
+      toArray: async () => [{ _id: sectorId, sectorType: "financial", capitalStock: 120 }],
+    });
+    const { POST } = await import("./route");
+    const response = await POST(
+      new Request("http://localhost/api/corporations/1/sectors/1/abandon", {
+        method: "POST",
+        body: JSON.stringify(acknowledge ? { acknowledgeBankImpact: true } : {}),
+      }),
+      { params: Promise.resolve({ id: "1", sectorId: sectorId.toString() }) }
+    );
+    return { response, data: await response.json() };
+  }
+
+  it("refuses the last financial sector until the CEO acknowledges the deposit ceiling falls to zero (ticket 1553)", async () => {
+    const { response, data } = await setup(false);
+    expect(response.status).toBe(409);
+    expect(data.code).toBe("BANK_CAPACITY_IMPACT");
+    expect(data.error).toMatch(/last financial sector/);
+    expect(data.bankImpact.ceilingBefore).toBeGreaterThan(0);
+    expect(data.bankImpact.ceilingAfter).toBe(0);
+    expect(data.bankImpact.lastFinancialSector).toBe(true);
+    expect(db.collectionMocks.corporateSectors.findOneAndUpdate).not.toHaveBeenCalled();
+  });
+
+  it("goes ahead once acknowledged", async () => {
+    db.collectionMocks.corporateSectors.findOneAndUpdate.mockResolvedValue(null);
+    const { response } = await setup(true);
+    expect(response.status).not.toBe(409);
+    expect(db.collectionMocks.corporateSectors.findOneAndUpdate).toHaveBeenCalled();
   });
 });

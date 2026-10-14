@@ -1,5 +1,6 @@
 "use client";
 
+import { abandonSectorRequest } from "@/lib/corporations/abandonSectorClient";
 import { getOperatingSectorType } from "@/lib/constants/sectorStrategies";
 import { useGameEvents } from "@/hooks/useGameEvents";
 
@@ -676,12 +677,10 @@ export default function CorporationDetailPage() {
     setAbandoningSectorId(sectorId);
     setSectorsMessage(null);
     try {
-      const res = await fetch(`/api/corporations/${id}/sectors/${sectorId}/abandon`, {
-        method: "POST",
-      });
-      const data = await res.json();
-      if (res.ok) {
-        setSectorsMessage({ type: "success", text: data.message });
+      const { ok, cancelled, data } = await abandonSectorRequest(String(id), sectorId);
+      if (cancelled) return;
+      if (ok) {
+        setSectorsMessage({ type: "success", text: String(data.message ?? "") });
         fetchCorporation();
       } else {
         setSectorsMessage({ type: "error", text: apiErrorText(data, "Failed to abandon sector") });

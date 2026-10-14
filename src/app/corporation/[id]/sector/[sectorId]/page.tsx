@@ -1,5 +1,6 @@
 "use client";
 
+import { abandonSectorRequest } from "@/lib/corporations/abandonSectorClient";
 import { useEffect, useCallback, useState } from "react";
 import { trackAction } from "@/lib/observability/actionBreadcrumb";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
@@ -441,14 +442,14 @@ export default function SectorDetailPage() {
   const handleAbandon = async () => {
     dispatch({ type: "SET_ABANDONING", value: true });
     try {
-      const res = await fetch(`/api/corporations/${corpId}/sectors/${sectorId}/abandon`, {
-        method: "POST",
-      });
-      if (res.ok) {
+      const { ok, cancelled, data } = await abandonSectorRequest(String(corpId), String(sectorId));
+      if (ok) {
         router.push(`/corporation/${corpId}`);
+      } else if (!cancelled) {
+        dispatch({ type: "SET_ERROR", value: apiErrorText(data, "Failed to abandon sector") });
       }
     } catch {
-      /* silent */
+      dispatch({ type: "SET_ERROR", value: "Network error" });
     } finally {
       dispatch({ type: "SET_ABANDONING", value: false });
       dispatch({ type: "SET_ABANDON_CONFIRM", value: false });

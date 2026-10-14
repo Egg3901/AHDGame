@@ -218,7 +218,26 @@ jobs:
       # job-total rather than a hard-coded 4, so adding or removing a shard in
       # the matrix above cannot silently desync the divisor and drop test files.
       - name: Unit tests (shard ${{ matrix.shard }}/${{ strategy.job-total }})
-        run: npm run test:ci -- --shard=${{ matrix.shard }}/${{ strategy.job-total }}
+        # This full-world fixture alone took 320 s in a 583 s shard. Give it
+        # an independent required job so it cannot strand the other shards.
+        run: npm run test:ci -- --shard=${{ matrix.shard }}/${{ strategy.job-total }} --exclude=src/lib/admin/seed/presetBootstrap.integration.test.ts
+        env:
+          NODE_OPTIONS: --max-old-space-size=6144
+
+  bootstrap-integration:
+    needs: changes
+    if: needs.changes.outputs.full_suite == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - name: Qualify every shipping bootstrap preset
+        run: npx vitest run src/lib/admin/seed/presetBootstrap.integration.test.ts --maxWorkers=1
         env:
           NODE_OPTIONS: --max-old-space-size=6144
 
@@ -314,7 +333,18 @@ jobs:
   # above has completed successfully.
   verify:
     if: always()
-    needs: [changes, content-checks, lint, format, typecheck, test, build, federation-transactions]
+    needs:
+      [
+        changes,
+        content-checks,
+        lint,
+        format,
+        typecheck,
+        test,
+        bootstrap-integration,
+        build,
+        federation-transactions,
+      ]
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:
@@ -327,6 +357,7 @@ jobs:
           FORMAT_RESULT: ${{ needs.format.result }}
           TYPECHECK_RESULT: ${{ needs.typecheck.result }}
           TEST_RESULT: ${{ needs.test.result }}
+          BOOTSTRAP_RESULT: ${{ needs['bootstrap-integration'].result }}
           BUILD_RESULT: ${{ needs.build.result }}
           FEDERATION_RESULT: ${{ needs['federation-transactions'].result }}
         run: |
@@ -349,12 +380,14 @@ jobs:
           printf 'lint=%s format=%s typecheck=%s test=%s build=%s\n' \
             "$LINT_RESULT" "$FORMAT_RESULT" "$TYPECHECK_RESULT" \
             "$TEST_RESULT" "$BUILD_RESULT"
+          printf 'bootstrap-integration=%s\n' "$BOOTSTRAP_RESULT"
           printf 'federation-transactions=%s\n' "$FEDERATION_RESULT"
 
           if [[ "$LINT_RESULT" != "success" || \
                 "$FORMAT_RESULT" != "success" || \
                 "$TYPECHECK_RESULT" != "success" || \
                 "$TEST_RESULT" != "success" || \
+                "$BOOTSTRAP_RESULT" != "success" || \
                 "$BUILD_RESULT" != "success" || \
                 "$FEDERATION_RESULT" != "success" ]]; then
             exit 1

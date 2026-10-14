@@ -117,3 +117,40 @@ export function buildCountryClearingBooks(args: {
 
   return books;
 }
+
+/**
+ * Overlay the price turn's persisted REACHABLE books onto the corporate
+ * clearing books, per country and commodity.
+ *
+ * `buildCountryClearingBooks` must run over PRE-trade national balances (see
+ * `BuildReachableBooksArgs.balances`). The corporation turn only has the
+ * stored `nationalSupply`/`nationalDemand`, which are written AFTER
+ * `applyTradeConvergence` has already relieved exporters' supply and
+ * importers' demand. Re-clearing those post-trade balances applies trade a
+ * second time, so an exporter's book demand came out at roughly half of what
+ * the trade graph actually lets it sell (prod t195: Brazil oil book demand
+ * ~13k against ~26k of exports; its main oil mine sold 36% of output). The
+ * price turn already persists the correct pre-trade books in
+ * `tradeFlowSnapshots.books`; use them wherever they exist.
+ */
+export function overlayReachableClearingBooks(
+  books: CountryClearingBooks,
+  reachable:
+    | Partial<Record<string, Partial<Record<CommodityType, { supply?: number; demand?: number }>>>>
+    | null
+    | undefined
+): void {
+  if (!reachable) return;
+  for (const [countryId, byCommodity] of Object.entries(reachable)) {
+    const target = books.get(countryId as CountryId);
+    if (!target || !byCommodity) continue;
+    for (const [commodity, entry] of Object.entries(byCommodity) as Array<
+      [CommodityType, { supply?: number; demand?: number } | undefined]
+    >) {
+      const supply = entry?.supply;
+      const demand = entry?.demand;
+      if (!Number.isFinite(supply) || !Number.isFinite(demand)) continue;
+      target.set(commodity, { supply: Math.max(0, supply!), demand: Math.max(0, demand!) });
+    }
+  }
+}
