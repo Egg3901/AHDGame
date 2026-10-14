@@ -3,7 +3,7 @@ date: 2026-10-14
 title: Enacted laws and Cabinet initiatives now move the V2 metrics they target
 summary: Metrics without a live source no longer sit at their opening value; funded laws and active Cabinet initiatives now move them toward their settlement each refresh.
 tags: [metrics, legislation, cabinet]
-badges: [fix]
+badges: [patch]
 areas: [engine]
 ---
 
