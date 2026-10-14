@@ -18,4 +18,10 @@ describe("leaderboard identity", () => {
     expect(leaderboardDisplayCharacterId(lives.slice(0, 2), null)).toBe("latest");
     expect(leaderboardDisplayCharacterId([], null)).toBeNull();
   });
+  it("uses the account's selected live character and ignores stale pointers", () => {
+    const multiple = [...lives, { characterId: "newer", isActive: true, retiredAtMs: null }];
+    expect(leaderboardDisplayCharacterId(multiple, null, "current")).toBe("current");
+    expect(leaderboardDisplayCharacterId(multiple, "old", "current")).toBe("old");
+    expect(leaderboardDisplayCharacterId(lives, "current", "old")).toBe("current");
+  });
 });

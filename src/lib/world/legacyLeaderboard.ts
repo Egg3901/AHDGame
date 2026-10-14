@@ -186,7 +186,7 @@ export async function getLegacyLeaderboardData(
           },
         },
         { $unwind: "$definition" },
-        { $match: { grantedBy: { $exists: false } } },
+        { $match: { grantedBy: null } },
         {
           $match: {
             "definition.category": { $ne: "special" },
@@ -505,9 +505,8 @@ export async function getLegacyLeaderboardData(
         isActive: life.isActive,
         retiredAtMs: life.retiredAt?.getTime() ?? null,
       })),
-      preference && preference !== "current"
-        ? preference
-        : (currentIdentityByUser.get(userId) ?? "current")
+      preference,
+      currentIdentityByUser.get(userId)
     );
     const displayLife = lives.find((life) => life.characterId === displayId) ?? bestLife;
     const displayName = displayLife.name;

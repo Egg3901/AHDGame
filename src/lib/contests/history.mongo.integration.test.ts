@@ -161,13 +161,16 @@ describe.skipIf(!uri)("contest records and career ranking on isolated Mongo", ()
     ]);
     const achievement = new ObjectId();
     const paidAchievement = new ObjectId();
+    const manualAchievement = new ObjectId();
     await db.collection("achievements").insertMany([
       { _id: achievement, category: "milestone", triggerType: "action_count" },
       { _id: paidAchievement, category: "special", triggerType: "manual_only" },
+      { _id: manualAchievement, category: "milestone", triggerType: "action_count" },
     ]);
     await db.collection("characterAchievements").insertMany([
-      { userId: user, characterId: character, achievementId: achievement },
+      { userId: user, characterId: character, achievementId: achievement, grantedBy: undefined },
       { userId: user, characterId: character, achievementId: paidAchievement },
+      { userId: user, characterId: character, achievementId: manualAchievement, grantedBy: other },
     ]);
     await getContestRoundsCollection(db).insertOne(
       round(1, {
