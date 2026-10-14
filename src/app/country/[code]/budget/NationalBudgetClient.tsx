@@ -414,6 +414,7 @@ export function NationalBudgetClient() {
               ratioGdp={resolveRatioGdp(budget)}
               gdpGrowth={budget.economicFactors.gdpGrowth}
               debtToGdp={budget.debtToGdpRatio}
+              debtPrincipal={budget.debt.principal}
               rating={budget.creditRating}
               treasuryReserve={treasuryBalance}
               treasuryCashLedgerEnabled={isLive && data.treasuryCashLedgerEnabled === true}
