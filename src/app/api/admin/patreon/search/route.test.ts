@@ -64,4 +64,41 @@ describe("GET /api/admin/patreon/search", () => {
       patreonTier: "supporter",
     });
   });
+
+  it("resolves the exact character selected in the player picker", async () => {
+    const userId = new ObjectId();
+    const characterId = new ObjectId();
+    const { requireAdmin } = await import("@/lib/api/requireAdmin");
+    vi.mocked(requireAdmin).mockResolvedValue({ ok: true } as never);
+    db.collectionMocks.characters.findOne.mockResolvedValue({
+      _id: characterId,
+      userId,
+      name: "John Doe",
+    });
+    db.collectionMocks.users.findOne.mockResolvedValue({
+      _id: userId,
+      username: "eggmaster",
+      patreonTier: "supporter-plus",
+    });
+
+    const { GET } = await import("./route");
+    const res = await GET(
+      new Request(
+        `http://localhost/api/admin/patreon/search?q=John%20Doe&characterId=${characterId}`
+      )
+    );
+
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.users).toEqual([
+      {
+        userId: userId.toString(),
+        username: "eggmaster",
+        characterName: "John Doe",
+        patreonTier: "supporter-plus",
+        patreonExpiresAt: null,
+        patreonUserId: null,
+      },
+    ]);
+  });
 });

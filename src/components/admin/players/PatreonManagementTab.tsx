@@ -27,12 +27,13 @@ export function PatreonManagementTab({ context = "admin" }: PatreonManagementTab
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  async function runSearch(query: string) {
+  async function runSearch(query: string, characterId: string) {
     setLoading(true);
     setError("");
     setMessage("");
     try {
-      const res = await fetch(`${apiBase}/patreon/search?q=${encodeURIComponent(query)}`);
+      const params = new URLSearchParams({ q: query, characterId });
+      const res = await fetch(`${apiBase}/patreon/search?${params}`);
       const data = await res.json();
       if (!res.ok) {
         setError(apiErrorText(data, "Search failed"));
@@ -136,7 +137,7 @@ export function PatreonManagementTab({ context = "admin" }: PatreonManagementTab
           ) : (
             <PlayerSelector
               onSelect={(char) => {
-                void runSearch(char.name);
+                void runSearch(char.name, char.id);
               }}
               placeholder="Search for a player…"
             />

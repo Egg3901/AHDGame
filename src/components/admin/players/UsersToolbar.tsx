@@ -9,6 +9,7 @@ interface UsersToolbarProps {
   error: string;
   onRefresh: () => void;
   totalUsers: number;
+  loadedUsers: number;
   filteredCount: number;
   duplicateGroupCount: number;
   duplicateCount: number;
@@ -23,6 +24,7 @@ export function UsersToolbar({
   error,
   onRefresh,
   totalUsers,
+  loadedUsers,
   filteredCount,
   duplicateGroupCount,
   duplicateCount,
@@ -80,6 +82,14 @@ export function UsersToolbar({
             <span className="text-muted">Total users:</span>
             <span className="font-semibold tabular-nums">{totalUsers}</span>
           </div>
+          {loadedUsers < totalUsers && (
+            <>
+              <div className="h-4 w-px bg-card-border" />
+              <span className="text-muted">
+                Search covers the newest {loadedUsers} loaded accounts.
+              </span>
+            </>
+          )}
           {(searchTerm || showDuplicatesOnly) && (
             <>
               <div className="h-4 w-px bg-card-border" />
