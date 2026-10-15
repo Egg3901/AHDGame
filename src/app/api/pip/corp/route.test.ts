@@ -1,4 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { ObjectId, type Db } from "mongodb";
+import { createMockDb } from "@/lib/test-utils/mockDb";
+import { createInMemoryDb } from "@/lib/test-utils/inMemoryDb";
 
 vi.mock("@/lib/mongodb", () => ({
   getDb: vi.fn(),
@@ -32,6 +35,33 @@ vi.mock("@/lib/currency/corpEconomyFields", () => ({
 describe("GET /api/pip/corp", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  it("keeps the player's business selected while they chair IMF", async () => {
+    const userId = new ObjectId();
+    const characterId = new ObjectId();
+    const businessId = new ObjectId();
+    const { getAuthUser } = await import("@/lib/auth");
+    vi.mocked(getAuthUser).mockResolvedValue({ userId: userId.toString() } as never);
+    const db = createMockDb();
+    db.collection("characters").findOne.mockResolvedValue({ _id: characterId, userId });
+    const memory = createInMemoryDb();
+    memory.seed("corporations", [
+      { _id: new ObjectId(), ceoId: characterId, name: "IMF", imfInstitution: true },
+      { _id: businessId, ceoId: characterId, name: "Example Media", type: "media" },
+    ]);
+    db.collection("corporations").findOne.mockImplementation((query) =>
+      memory.collection("corporations").findOne(query)
+    );
+    const { getDb } = await import("@/lib/mongodb");
+    vi.mocked(getDb).mockResolvedValue(db as unknown as Db);
+    const { GET } = await import("./route");
+    const response = await GET();
+    expect(response.status).toBe(200);
+    expect((await response.json()).playerCorp).toMatchObject({
+      id: businessId.toString(),
+      name: "Example Media",
+    });
   });
 
   it("does not populate playerCorp for a banned or revoked session", async () => {

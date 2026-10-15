@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ObjectId } from "mongodb";
+import { createInMemoryDb } from "@/lib/test-utils/inMemoryDb";
 import { CompactSign, SignJWT, jwtVerify } from "jose";
 import { AUTH_COOKIE_NAME } from "@/lib/authCookieName";
 
@@ -171,12 +172,16 @@ describe("GET /api/client-nav", () => {
           }
 
           if (name === "corporations") {
-            return {
-              findOne: vi.fn().mockResolvedValue({
+            const memory = createInMemoryDb();
+            memory.seed("corporations", [
+              { _id: new ObjectId(), sequentialId: 99, ceoId: characterId, imfInstitution: true },
+              {
                 _id: new ObjectId("100000000000000000000001"),
                 sequentialId: 42,
-              }),
-            };
+                ceoId: characterId,
+              },
+            ]);
+            return memory.collection("corporations");
           }
           if (name === "states") {
             return {

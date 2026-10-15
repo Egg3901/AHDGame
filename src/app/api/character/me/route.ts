@@ -127,7 +127,7 @@ export async function GET() {
     const [corporation, blockingRace, borderMap, forexEnabled, reconciledUnionLeaderOf] =
       await Promise.all([
         db.collection<Corporation>("corporations").findOne(
-          { ceoId: user.character._id, ceoVacant: { $ne: true } },
+          { ceoId: user.character._id, ceoVacant: { $ne: true }, imfInstitution: { $ne: true } },
           {
             projection: {
               _id: 1,

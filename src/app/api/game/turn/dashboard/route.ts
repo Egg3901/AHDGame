@@ -133,7 +133,10 @@ async function handleGET() {
       // hasCorp: is this character the CEO of an active corporation?
       db
         .collection<Corporation>("corporations")
-        .findOne({ ceoId: character._id, ceoVacant: { $ne: true } }, { projection: { _id: 1 } }),
+        .findOne(
+          { ceoId: character._id, ceoVacant: { $ne: true }, imfInstitution: { $ne: true } },
+          { projection: { _id: 1 } }
+        ),
       // Two most recent snapshots — used to compute portfolioChangePercent
       db
         .collection<PortfolioHistory>("portfolioHistory")
