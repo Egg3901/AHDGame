@@ -117,6 +117,13 @@ Stage 3 (corporations).
   technology near par. On live turn 199, NPP companies losing money averaged
   quality 43 against 70 for those above a 20% margin. Player companies at the
   same thin margins kept quality above 70.
+- **Losing companies change course sooner (v6).** A company's strategy used
+  to count as working whenever it did better than when it was adopted, so a
+  company that started expanding while losing money kept expanding as long as
+  it lost a little less, and was only re-judged every 48 turns. A strategy that
+  still loses money no longer counts as working, and a loss-making company is
+  re-judged after 8 turns. On live turn 199, 101 of the 120 loss-making NPP
+  companies were still on the expand strategy.
 - **Fix: a caretaker seat left empty is filled again.** A player company
   handed to a caretaker that was later marked as having no CEO stayed that
   way: the vacancy step skipped it because it was already caretaken. It now

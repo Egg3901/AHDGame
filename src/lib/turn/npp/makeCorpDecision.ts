@@ -308,6 +308,7 @@ export function makeNppCorpDecision(
         turn: ctx.turn,
         situation,
         eligible: ctx.strategyEligible === true,
+        engineSix: ctx.engineSix === true,
       })
     : null;
   const directionContext = {
