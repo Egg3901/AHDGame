@@ -106,6 +106,17 @@ number.
   (shipped in 6.14.1). Running worlds never change level on their own, and the
   live multiplayer world keeps its own setting.
 
+## 6.17.1 (game 1.16.0, 2026-10-15)
+
+- **Fix: a successor takes every seat a dead NPP held (v5).** When an NPP
+  dies, the NPP that replaces it now also takes its cabinet posts, its place
+  as national leader, and any player company it was running as caretaker. The
+  owner's caretaker arrangement stays in force. Before, those seats kept
+  pointing at the dead NPP.
+- **Fix: consolidation respects a party chair's slate (v6).** A trailing NPP
+  is no longer withdrawn from a primary its party chair slated it to, or from
+  any race the chair is managing for the party.
+
 ## 6.17.0 (game 1.16.0, 2026-10-14)
 
 Stage 3 (corporations).

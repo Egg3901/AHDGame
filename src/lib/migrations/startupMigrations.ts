@@ -1,4 +1,5 @@
 import { migration as contestAccountHistory } from "./entries/2026-10-14-contest-account-history";
+import { migration as liveWorldNppAutonomyV6 } from "./entries/2026-10-15-live-world-npp-autonomy-v6";
 import { migration as corporateFundPositions } from "./entries/2026-10-09-corporate-fund-positions";
 import { migration as bankFailurePoliticsIndex } from "./entries/2026-10-04-bank-failure-politics-index";
 import type { Db } from "mongodb";
@@ -81,6 +82,9 @@ export const REQUIRED_STARTUP_MIGRATIONS: readonly Migration[] = [
   supplyAgreementStatusIndex,
   corporateFundPositions,
   subhourWikiCadence,
+  // NPP engine 6 on the hosted world ships with the build that carries it;
+  // singleplayer worlds keep their chosen level.
+  liveWorldNppAutonomyV6,
 ];
 
 /** Index metadata can disappear on reset even when migration markers survive. */
