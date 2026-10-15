@@ -17,8 +17,8 @@
  * consumer are untouched; `constants/cabinet.ts` forwards here.
  */
 /**
- * Cabinet positions (15 principal officers).
- * Order matches presidential line of succession (after VP).
+ * Cabinet positions: the principal officers, in presidential line of
+ * succession order (after VP), then the cabinet-rank White House seat.
  */
 export const CABINET_POSITIONS = [
   {
@@ -160,6 +160,18 @@ export const CABINET_POSITIONS = [
     yearEnabled: 1946,
     description:
       "Directs the national intelligence service: foreign collection, the networks that carry it, and counter-intelligence at home. Sets which countries are worked and how hard, and answers for what happens when an operation is traced back.",
+  },
+  {
+    id: "chief_of_staff",
+    name: "White House Chief of Staff",
+    order: 17,
+    // The modern office dates from the 1946 reorganisation of the White House staff.
+    yearEnabled: 1946,
+    // Serves at the President's pleasure: no Senate vote, not in the line of succession.
+    appointedWithoutConfirmation: true,
+    outsideSuccession: true,
+    description:
+      "Runs the White House and the President's day. Controls who reaches the Oval Office, keeps the cabinet pulling in one direction, and sets how open or disciplined the administration is with the press and the public. Appointed by the President alone, with no Senate vote.",
   },
 ] as const;
 

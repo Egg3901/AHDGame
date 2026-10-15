@@ -2,6 +2,8 @@
   "worldOrganizations": {
     "cabinetActions": {
       "actionsTab": "Actions",
+      "allocationsTab": "Allocations",
+      "allocationsNotice": "Not every department has program allocations. Controls appear only for active programs funded by enacted laws, so a department without a related funded law may have none to set.",
       "unavailable": "Cabinet action records are unavailable. Refresh the office or contact an administrator.",
       "blocked": {
         "inactive_seat": "This office is not active in the current era.",

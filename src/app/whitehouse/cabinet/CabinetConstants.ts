@@ -6,6 +6,6 @@
 export const CABINET_HERO = {
   image: "/api/images/hero/cabinet",
   title: "Cabinet",
-  tagline: "15 principal officers · Advice and consent of the Senate",
+  tagline: "Principal officers · Advice and consent of the Senate",
   alt: "White House Cabinet Room",
 } as const;

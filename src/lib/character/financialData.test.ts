@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Db } from "mongodb";
 import { ObjectId } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
+import { createInMemoryDb } from "@/lib/test-utils/inMemoryDb";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 vi.mock("@/lib/corporations/dividendIncomeFromHistory", () => ({
@@ -64,6 +65,23 @@ describe("getFinancialData", () => {
     expect(result.bondIncomePerTurn).toBe(10);
   });
 
+  it("shows business finances when the same character also chairs IMF", async () => {
+    const charId = new ObjectId();
+    const memory = createInMemoryDb();
+    memory.seed("corporations", [
+      { _id: new ObjectId(), ceoId: charId, name: "IMF", imfInstitution: true },
+      { _id: new ObjectId(), ceoId: charId, name: "Example Media", sequentialId: 101 },
+    ]);
+    db.collectionMocks["corporations"]!.findOne.mockImplementation((query) =>
+      memory.collection("corporations").findOne(query)
+    );
+    db.collectionMocks["corporations"]!.find.mockReturnValue(makeCursor([]));
+    db.collectionMocks["bonds"]!.find.mockReturnValue(makeCursor([]));
+    db.collectionMocks["exchangeRates"]!.find.mockReturnValue(makeCursor([]));
+    const { getFinancialData } = await import("./financialData");
+    expect((await getFinancialData(charId)).corporation?.sequentialId).toBe(101);
+  });
+
   it("only treats non-vacant CEO corporations as active financial data", async () => {
     const charId = new ObjectId();
 
@@ -78,6 +96,7 @@ describe("getFinancialData", () => {
     expect(db.collectionMocks["corporations"]!.findOne).toHaveBeenCalledWith({
       ceoId: charId,
       ceoVacant: { $ne: true },
+      imfInstitution: { $ne: true },
     });
     expect(result.corporation).toBeNull();
     expect(db.collectionMocks["corporateSectors"]!.aggregate).not.toHaveBeenCalled();

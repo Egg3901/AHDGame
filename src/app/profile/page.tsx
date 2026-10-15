@@ -187,6 +187,7 @@ async function getCharacterData() {
       {
         ceoId: character._id,
         ceoVacant: { $ne: true },
+        imfInstitution: { $ne: true },
       },
       {
         projection: {
