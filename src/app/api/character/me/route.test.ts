@@ -3,6 +3,7 @@ import { z } from "zod";
 import { ObjectId } from "mongodb";
 import type { Db } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
+import { createInMemoryDb } from "@/lib/test-utils/inMemoryDb";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 vi.mock("@/lib/auth", () => ({ getAuthUser: vi.fn() }));
@@ -71,6 +72,47 @@ describe("GET /api/character/me caching", () => {
     const { getTotalPersonalLiquidWealth } = await import("@/lib/currency/characterFunds");
     vi.mocked(getTotalPersonalLiquidWealth).mockReturnValue(0);
   });
+
+  it.each([
+    { imfFirst: true, hasBusiness: true, vacant: false, expected: 101 },
+    { imfFirst: false, hasBusiness: true, vacant: false, expected: 101 },
+    { imfFirst: true, hasBusiness: false, vacant: false, expected: undefined },
+    { imfFirst: true, hasBusiness: true, vacant: true, expected: undefined },
+  ])(
+    "selects the personal business separately from IMF: %j",
+    async ({ imfFirst, hasBusiness, vacant, expected }) => {
+      const { requireAuthWithCharacter } = await import("@/lib/api/requireAuth");
+      const auth = await requireAuthWithCharacter();
+      if (!auth.ok) throw new Error("Missing test character");
+      const ceoId = auth.user.character._id;
+      const personal = {
+        _id: new ObjectId(),
+        sequentialId: 101,
+        name: "Example Media",
+        ceoId,
+        ceoVacant: vacant,
+      };
+      const imf = {
+        _id: new ObjectId(),
+        sequentialId: 102,
+        name: "International Monetary Fund",
+        ceoId,
+        imfInstitution: true,
+      };
+      const memory = createInMemoryDb();
+      memory.seed(
+        "corporations",
+        hasBusiness ? (imfFirst ? [imf, personal] : [personal, imf]) : [imf]
+      );
+      db.collection("corporations").findOne.mockImplementation((query: Record<string, unknown>) =>
+        memory.collection("corporations").findOne(query)
+      );
+      const { GET } = await import("./route");
+      const res = await GET();
+      expect(res.status).toBe(200);
+      expect((await res.json()).corporation?.sequentialId).toBe(expected);
+    }
+  );
 
   // Regression guard for the "corp doesn't appear until hard refresh" bug:
   // a stale max-age on this endpoint let the browser serve a pre-founding

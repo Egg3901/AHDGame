@@ -24,6 +24,7 @@ export async function getFinancialData(characterId: ObjectId) {
     db.collection<Corporation>("corporations").findOne({
       ceoId: characterId,
       ceoVacant: { $ne: true },
+      imfInstitution: { $ne: true },
     }),
     db
       .collection<Corporation>("corporations")

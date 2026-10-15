@@ -138,7 +138,7 @@ export async function GET() {
     if (character) {
       const corp = await db
         .collection<Corporation>("corporations")
-        .findOne({ ceoId: character._id, ceoVacant: { $ne: true } });
+        .findOne({ ceoId: character._id, ceoVacant: { $ne: true }, imfInstitution: { $ne: true } });
 
       if (corp) {
         const sectors = await db

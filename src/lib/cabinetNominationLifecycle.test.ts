@@ -297,6 +297,49 @@ describe("processCabinetNominationLifecycle — holder seating", () => {
     expect(db.collectionMocks.cabinetSettings.updateOne).not.toHaveBeenCalled();
   });
 
+  it("seats a Chief of Staff with no Senate votes cast", async () => {
+    const nomination = {
+      _id: new ObjectId(),
+      status: "active",
+      countryId: "US",
+      positionId: "chief_of_staff",
+      nomineeCharacterId: new ObjectId(),
+      nomineeCharacterName: "Chief Pick",
+      nomineeParty: "democrat",
+      proposedByPresidentId: new ObjectId(),
+      votes: {},
+    };
+    db.collectionMocks.cabinetNominations.find.mockImplementation(
+      (query: Record<string, unknown>) => {
+        const orClause = (query?.$or as Array<{ votingEndsOnTurn?: Record<string, unknown> }>)?.[0]
+          ?.votingEndsOnTurn;
+        const isExpiredQuery = !!orClause && "$lte" in orClause;
+        return {
+          toArray: vi.fn().mockResolvedValue(isExpiredQuery ? [nomination] : []),
+        } as never;
+      }
+    );
+    // An empty Senate tally would reject an ordinary seat.
+    const { computeCabinetNominationTally } =
+      await import("@/lib/congress/governmentVoteBreakdown");
+    vi.mocked(computeCabinetNominationTally).mockResolvedValue({
+      votesFor: 0,
+      votesAgainst: 0,
+      votesAbstain: 0,
+    } as never);
+
+    const { processCabinetNominationLifecycle } = await import("./cabinetNominationLifecycle");
+    await processCabinetNominationLifecycle(new Date(0));
+
+    expect(db.collectionMocks.cabinetMembers.insertOne).toHaveBeenCalledWith(
+      expect.objectContaining({ positionId: "chief_of_staff", characterName: "Chief Pick" })
+    );
+    expect(db.collectionMocks.cabinetNominations.updateOne).toHaveBeenCalledWith(
+      { _id: nomination._id },
+      { $set: expect.objectContaining({ status: "confirmed" }) }
+    );
+  });
+
   it("scopes NPP catch-up votes to the nomination's own country, not the US preload (#2889)", async () => {
     // A non-US (NG) active nomination must resolve its own country-scoped NPP
     // officials inside castNPPCabinetVotes, rather than reusing the US preload —

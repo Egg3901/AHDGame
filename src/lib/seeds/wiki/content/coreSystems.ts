@@ -113,7 +113,7 @@ Each hour the processor runs roughly a dozen top-level adapters that together ca
 
 Presidents and Prime Ministers appoint cabinets. In the US:
 
-- President nominates any character to one of **15 principal officer roles** (Secretary of State, Treasury, Defense, Attorney General, Interior, Agriculture, Commerce, Labor, HHS, HUD, Transportation, Energy, Education, Veterans Affairs, Homeland Security).
+- President nominates any character to the principal officer roles (Secretary of State, Treasury, Defense, Attorney General, Interior, Agriculture, Commerce, Labor, HHS, HUD, Transportation, Energy, Education, Veterans Affairs, Homeland Security, Director of Central Intelligence). The White House Chief of Staff is appointed by the President alone, with no Senate vote.
 - Senators vote For / Against / Abstain in a 24-hour window; simple majority confirms.
 - Confirmed members appear on the cabinet page and gain whatever role-specific benefits exist.
 - President can fire any confirmed member, and can bridge a vacancy with one 24-turn acting appointment per office per term (see [Cabinet](/wiki/cabinet)).
