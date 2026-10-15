@@ -19,7 +19,7 @@ export type CorporationExitSnapshot = Pick<
   | "liquidCurrencyCode"
   | "sharePrice"
   | "totalShares"
->;
+> & { userId?: Corporation["userId"] };
 
 export function exitOwnerKind(corp: CorporationExitSnapshot): CorporationExitOwnerKind {
   // Same test as `isStateOwned`, kept local so the rules module has no imports

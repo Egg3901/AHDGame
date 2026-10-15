@@ -642,8 +642,8 @@ export async function resetGameWorld(
     .collection<User>("users")
     .updateMany({ activeCharacterId: { $exists: true } }, { $unset: { activeCharacterId: "" } });
 
-  // Clear the turn-based corporation-founding cooldown on every (preserved)
-  // user. It gates founding off `currentTurn - lastCorporationFoundedTurn`,
+  // Clear the turn-based corporation refounding cooldown on every (preserved)
+  // user. The legacy-named field stores the last corporation-end turn,
   // and currentTurn resets to 1 below, so a stale high value would block
   // founding for the whole new game. `lastRetiredAt` is intentionally left
   // alone — it's a wall-clock anti-abuse cooldown, not game-turn state.

@@ -52,6 +52,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       async () =>
         executeCorporationBondDefaultDissolution(db, corp, {
           requireDefaultedBonds: false,
+          cooldownExempt: true,
         })
     );
 
