@@ -44,6 +44,7 @@ import {
 } from "@/lib/corporations/rules/energyProductivityRamp";
 import { getOutputMultiplier, getInputMultiplier } from "@/lib/utils/productionPolicy";
 import { TRADE_EMBARGO_EXPORT_LOSS_SHARE } from "@/lib/trade/constants";
+import { inputDemandDeflator } from "@/lib/market/inputDemandRealPhase";
 
 export const COMMODITY_TYPES = [
   "steel",
@@ -2056,6 +2057,12 @@ export function computeRawSupplyDemand(
      * units. Absent ⇒ 1, which is the pre-plants behaviour.
      */
     extractionRealizedFraction?: number | null;
+    /**
+     * Last turn's realized price leg (clearing factor / sold fraction). Divides
+     * the revenue that drives input demand as `inputDemandRealPhase` advances,
+     * so demand follows real output instead of the price level. Absent = 1.
+     */
+    priceLeg?: number | null;
   }[],
   gdpGrowthData?: GdpGrowthData,
   stateGdpMap?: Map<string, number>,
@@ -2158,7 +2165,9 @@ export function computeRawSupplyDemand(
   preset?: string,
   sectorUnitsOut?: SectorUnitsOut,
   /** Retail GDP amplifier override (commodity treadmill fix stage 2). */
-  retailGdpParams?: { scale: number; max: number }
+  retailGdpParams?: { scale: number; max: number },
+  /** Progress (0..1) of the input-demand-follows-real-output phase-in. */
+  inputDemandRealPhase = 0
 ): {
   global: Map<CommodityType, { supply: number; demand: number }>;
   byState: Map<string, Map<CommodityType, { supply: number; demand: number }>>;
@@ -2507,10 +2516,14 @@ export function computeRawSupplyDemand(
     // D12 residual: a mothballed plant buys nothing either. Before this, cold
     // capacity kept demanding its full nameplate inputs from the world ledger.
     if (!(suppressRetailConsumerDemand && st === "retail") && !plantsMothballed) {
+      // Input demand follows real output: revenue deflated by the sector's own
+      // realized price leg as the phase advances (inputDemandRealPhase.ts).
+      const demandRevenue =
+        sector.revenue / inputDemandDeflator(sector.priceLeg, inputDemandRealPhase);
       for (const [commodity, rate] of demandEntries) {
         const units =
           dollarsToUnits(
-            sector.revenue * rate * demandMultiplier,
+            demandRevenue * rate * demandMultiplier,
             COMMODITY_BASE_PRICES[commodity]
           ) *
           luScale *
