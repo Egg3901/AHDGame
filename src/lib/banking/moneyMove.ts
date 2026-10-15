@@ -702,24 +702,36 @@ async function deliverCreditLegsInBatch(
   legs: MoneyMoveRecordLeg[]
 ): Promise<Set<number>> {
   const delivered = new Set<number>();
-  // A fan-out pays one kind of holder. Batch the collection with the most
-  // eligible payees; legs elsewhere, and any repeated target, stay per-leg.
-  const byCollection = new Map<string, number[]>();
-  const seen = new Set<string>();
+  // Only batch the next collection run. Finish its fallback legs before
+  // touching another collection, so an earlier refusal still stops the move.
+  const collection = legs[indices[0]]?.collection;
+  const group: number[] = [];
+  const targetKey = (leg: MoneyMoveRecordLeg) =>
+    `${leg.collection}\u0000${String(leg.filter?._id)}`;
+  const seen = new Set(
+    legs
+      .slice(0, indices[0])
+      .filter((leg) => leg.kind === "credit")
+      .map(targetKey)
+  );
   for (const i of indices) {
     const leg = legs[i];
-    if (leg.kind !== "credit" || !leg.collection || !leg.path || leg.filter?._id === undefined)
-      continue;
+    if (
+      leg.kind !== "credit" ||
+      !leg.collection ||
+      leg.collection !== collection ||
+      !leg.path ||
+      leg.filter?._id === undefined ||
+      leg.refusal
+    )
+      break;
     if ([leg.path, ...Object.keys(leg.set ?? {})].some(reservedLegPath) || invalidLegInc(leg))
-      continue;
-    const targetKey = `${leg.collection}\u0000${String(leg.filter._id)}`;
-    if (seen.has(targetKey)) continue;
-    seen.add(targetKey);
-    byCollection.set(leg.collection, [...(byCollection.get(leg.collection) ?? []), i]);
+      break;
+    if (seen.has(targetKey(leg))) break;
+    seen.add(targetKey(leg));
+    group.push(i);
   }
-  const [collection, group] = [...byCollection.entries()].sort(
-    (a, b) => b[1].length - a[1].length
-  )[0] ?? ["", []];
+  if (!collection) return delivered;
   if (group.length < BATCHED_CREDIT_MIN_LEGS) return delivered;
 
   const targets = db.collection<LegTarget>(collection);
@@ -865,10 +877,10 @@ async function executeMoneyMove(
   }
   let failure: string | undefined;
   const order = legOrder(record.legs);
-  // Credits sort last. Once every debit and asset leg before them has landed,
-  // the credits of a wide fan-out are delivered together; the loop below then
-  // skips those and handles any the batch left behind one at a time.
+  // Credits sort last. Batch each collection run only when the loop reaches
+  // it, after all earlier fallback legs have succeeded.
   let batched = new Set<number>();
+  let batchThrough = -1;
   const bookkeeping = new Set<number>();
   for (let n = 0; n < order.length; n++) {
     const i = order[n];
@@ -877,13 +889,20 @@ async function executeMoneyMove(
     if (record.status === "rejected" && !leg.applied && !leg.refusal) continue;
     if (
       leg.kind === "credit" &&
-      batched.size === 0 &&
+      n > batchThrough &&
+      !leg.applied &&
+      !leg.refusal &&
       record.status === "partial" &&
       record.genericMoneyMoveVersion === 2
     ) {
-      const rest = order.slice(n).filter((k) => !record.legs[k].applied && !record.legs[k].refusal);
+      const rest = order.slice(n);
       batched = await deliverCreditLegsInBatch(db, key, rest, record.legs);
-      if (!batched.size) batched = new Set([-1]);
+      batchThrough = n;
+      while (
+        batchThrough + 1 < order.length &&
+        record.legs[order[batchThrough + 1]].collection === leg.collection
+      )
+        batchThrough++;
     }
     if (batched.has(i)) continue;
     if (leg.kind === "mint" || leg.kind === "burn") {

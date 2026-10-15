@@ -82,6 +82,62 @@ describe("treasury accrual stock-flow ownership", () => {
     expect(db.collection("bondMarketPools").docs[0].cashLocal).toBe(50);
   });
 
+  it.each([false, true])(
+    "pays mixed holders once on the first funded-cash turn with shadow=%s",
+    async (ledgerShadow) => {
+      const db = world(false);
+      const config = db.collection("gameConfig").docs[0];
+      config.ledgerShadow = ledgerShadow;
+      const nppIds = Array.from(
+        { length: 4 },
+        (_, i) => new ObjectId(`65000000000000000000009${i}`)
+      );
+      const fundIds = Array.from(
+        { length: 4 },
+        (_, i) => new ObjectId(`6500000000000000000000a${i}`)
+      );
+      db.seed(
+        "npps",
+        nppIds.map((_id) => ({ _id, nppInvestmentCashAnchor: 0 }))
+      );
+      db.seed(
+        "indexFunds",
+        fundIds.map((_id) => ({ _id, cashAnchor: 0 }))
+      );
+      db.seed("bonds", [
+        {
+          _id: new ObjectId("6500000000000000000000b0"),
+          issuerType: "sovereign",
+          countryId: "US",
+          currencyCode: "USD",
+          couponRate: 4.8,
+          maturityTurn: 48,
+          matured: false,
+          defaulted: false,
+          publicFloat: 0,
+          holders: [
+            ...nppIds.map((nppId) => ({ nppId, units: 10 })),
+            ...fundIds.map((fundId) => ({ fundId, units: 10 })),
+          ],
+        },
+      ]);
+      const budget = db.collection("federalBudget").docs[0];
+      budget.treasuryCashLocal = 1_000;
+      await processTreasuryTurn(9);
+      expect(db.collection("indexFunds").docs.every((row) => row.cashAnchor === 0)).toBe(true);
+      config.treasuryCashLedgerEnabled = true;
+      const nppWrites = vi.spyOn(db.collection("npps"), "bulkWrite");
+      const fundWrites = vi.spyOn(db.collection("indexFunds"), "bulkWrite");
+      await processTreasuryTurn(10);
+      await processTreasuryTurn(10);
+      expect(budget.treasuryCashLocal).toBe(920);
+      for (const row of db.collection("npps").docs) expect(row.nppInvestmentCashAnchor).toBe(10);
+      for (const row of db.collection("indexFunds").docs) expect(row.cashAnchor).toBe(10);
+      expect(nppWrites).toHaveBeenCalledTimes(2);
+      expect(fundWrites).toHaveBeenCalledTimes(2);
+    }
+  );
+
   it("pays frozen coupon arrears without accruing new coupons after maturity", async () => {
     const { db, bondId } = fundedCouponWorld(9, 0);
     await processTreasuryTurn(8);
