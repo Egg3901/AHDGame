@@ -8,6 +8,7 @@
 import { useEffect, useMemo, useState } from "react";
 import AccountDossier from "./AccountDossier";
 import type { AltContext } from "../../alts/altTypes";
+import { fetchAdminDirectoryUsers } from "../../userDirectory";
 
 interface UserOption {
   id: string;
@@ -32,11 +33,9 @@ export default function DossierTab({
 
   useEffect(() => {
     let live = true;
-    fetch(`${apiBase}/users?limit=2000`)
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
-      .then((data) => {
+    fetchAdminDirectoryUsers(apiBase)
+      .then((raw) => {
         if (!live) return;
-        const raw = Array.isArray(data) ? data : (data.users ?? []);
         setUsers(
           raw.map((u: { id?: string; _id?: string; username?: string }) => ({
             id: String(u.id ?? u._id ?? ""),

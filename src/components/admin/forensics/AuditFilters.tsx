@@ -8,6 +8,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { type AuditFilterState, CATEGORY_OPTIONS, EMPTY_FILTERS } from "./types";
+import { fetchAdminDirectoryUsers } from "../userDirectory";
 
 const INPUT_CLS =
   "h-10 rounded-lg border border-card-border bg-background px-3 text-sm transition-colors placeholder:text-muted/70 hover:border-muted/50 focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/25 motion-reduce:transition-none";
@@ -36,17 +37,13 @@ function useUserDirectory(apiBase: string) {
     if (loadedRef.current) return;
     loadedRef.current = true;
     setLoading(true);
-    fetch(`${apiBase}/users?limit=2000`)
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
-      .then((data) => {
-        const raw = Array.isArray(data) ? data : (data.users ?? []);
-        const opts: UserOption[] = raw.map(
-          (u: { id?: string; _id?: string; username?: string; characterName?: string | null }) => ({
-            id: String(u.id ?? u._id ?? ""),
-            username: u.username ?? "(no username)",
-            characterName: u.characterName ?? null,
-          })
-        );
+    fetchAdminDirectoryUsers(apiBase)
+      .then((raw) => {
+        const opts: UserOption[] = raw.map((u) => ({
+          id: String(u.id ?? u._id ?? ""),
+          username: u.username ?? "(no username)",
+          characterName: u.characterName ?? null,
+        }));
         setUsers(opts);
       })
       .catch(() => setUsers([]))
