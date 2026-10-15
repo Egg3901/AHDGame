@@ -99,6 +99,7 @@ export default function CabinetOfficePage() {
     data?.infraSummary ||
     data?.monetary
   );
+  const allocationsAvailable = Boolean(data?.departmentFinances?.length);
 
   // Deep-link to a tab via the URL hash, e.g. .../office#commands — how the
   // Commanding General's page links back to their command's structure.
@@ -124,6 +125,7 @@ export default function CabinetOfficePage() {
       competitionQueueApplies: true,
       cabinetVersion: data.cabinetVersion,
       flagshipAvailable,
+      allocationsAvailable,
     });
     setActiveTab((tab) => {
       if (firstForOffice)
@@ -132,7 +134,15 @@ export default function CabinetOfficePage() {
           : "overview";
       return available.some((entry) => entry.id === tab) ? tab : "overview";
     });
-  }, [data, countryId, positionId, mechanics, conflictsEnabled, flagshipAvailable]);
+  }, [
+    data,
+    countryId,
+    positionId,
+    mechanics,
+    conflictsEnabled,
+    flagshipAvailable,
+    allocationsAvailable,
+  ]);
 
   // A #competition hash can select the tab before the queue has answered. If the
   // answer is that the duty does not apply here, fall back rather than leave a
@@ -221,6 +231,7 @@ export default function CabinetOfficePage() {
     competitionQueueApplies: mergerQueue?.applies === true,
     cabinetVersion: data.cabinetVersion,
     flagshipAvailable,
+    allocationsAvailable,
   });
   const isFinance = isFinanceMinister(countryId, positionId);
   const isForeign = isForeignMinister(positionId);
@@ -345,18 +356,6 @@ export default function CabinetOfficePage() {
             <div className="min-w-0 flex-1 space-y-6">
               {activeTab === "overview" && (
                 <>
-                  {data.departmentFinances?.map((department) => (
-                    <DepartmentFinancePanel
-                      key={department.departmentId}
-                      department={department}
-                      currencySymbol={currencySymbol}
-                      canAct={canAct}
-                      countryCode={countryCode}
-                      positionId={positionId}
-                      currentTurn={data.currentTurn}
-                      onUpdate={refetch}
-                    />
-                  ))}
                   {data.departmentProgram && (
                     <DepartmentProgramPanel
                       program={data.departmentProgram}
@@ -474,6 +473,26 @@ export default function CabinetOfficePage() {
                     />
                   )}
                 </>
+              )}
+
+              {activeTab === "allocations" && data.departmentFinances && (
+                <div className="space-y-4">
+                  <p className="rounded-lg border border-card-border bg-card p-4 text-sm text-muted">
+                    {translateActions("allocationsNotice")}
+                  </p>
+                  {data.departmentFinances.map((department) => (
+                    <DepartmentFinancePanel
+                      key={department.departmentId}
+                      department={department}
+                      currencySymbol={currencySymbol}
+                      canAct={canAct}
+                      countryCode={countryCode}
+                      positionId={positionId}
+                      currentTurn={data.currentTurn}
+                      onUpdate={refetch}
+                    />
+                  ))}
+                </div>
               )}
 
               {(activeTab === "overview" || activeTab === "actions") &&
