@@ -1,4 +1,5 @@
 import { getOperatingSectorType } from "@/lib/constants/sectorStrategies";
+import { plantLaborShare } from "@/lib/corporations/plantCosts/rules";
 import type { CorporateSector } from "@/lib/db/types";
 import {
   accumulateAutomationIndex,
@@ -183,6 +184,8 @@ export interface SectorLabourEconomicsInput {
   currentYear?: number;
   hourlyRevenue: number;
   grossMaintenance: number;
+  /** Explicit physical costs distinguish semiconductor fabs from service technology. */
+  explicitPlantCostsEnabled?: boolean;
   computedWorkers: number;
   techLaborCostMultiplier: number;
   costOfLivingIndex?: number;
@@ -235,6 +238,7 @@ export function resolveSectorLabourEconomics({
   currentYear,
   hourlyRevenue,
   grossMaintenance,
+  explicitPlantCostsEnabled,
   computedWorkers,
   techLaborCostMultiplier,
   costOfLivingIndex,
@@ -289,11 +293,28 @@ export function resolveSectorLabourEconomics({
   const split = computeSectorLaborCost({
     hourlyRevenue,
     grossMaintenance,
-    // The labour share is a lane property: vehicle plants run the vehicles share.
-    laborShare0: getSectorLaborShare(
-      getOperatingSectorType(sector.sectorType, sector.industryModel, sector.mediaDiscriminator),
-      currentYear
-    ),
+    // Explicit plants distinguish production methods; legacy modes keep the lane share.
+    laborShare0: explicitPlantCostsEnabled
+      ? plantLaborShare({
+          sectorType: getOperatingSectorType(
+            sector.sectorType,
+            sector.industryModel,
+            sector.mediaDiscriminator
+          ),
+          strategyId: sector.strategyId,
+          transitionFromStrategyId: sector.transitionFromStrategyId,
+          transitionStartTurn: sector.transitionStartTurn,
+          currentTurn,
+          year: currentYear,
+        })
+      : getSectorLaborShare(
+          getOperatingSectorType(
+            sector.sectorType,
+            sector.industryModel,
+            sector.mediaDiscriminator
+          ),
+          currentYear
+        ),
     wageMultiplier,
   });
   const result: SectorLabourEconomicsResult = {

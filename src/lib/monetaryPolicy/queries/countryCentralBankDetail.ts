@@ -345,7 +345,10 @@ export async function loadCountryCentralBankDetail(params: {
   ] = await Promise.all([
     db
       .collection<GameConfig>("gameConfig")
-      .findOne({ _id: "default" }, { projection: { lineOfCreditEnabled: 1 } }),
+      .findOne(
+        { _id: "default" },
+        { projection: { lineOfCreditEnabled: 1, moneySupplyEnabled: 1 } }
+      ),
     nationalDocId
       ? db.collection<StateMetrics>("macroMetrics").findOne({ _id: nationalDocId })
       : Promise.resolve(null),
