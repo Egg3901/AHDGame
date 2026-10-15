@@ -103,7 +103,9 @@ describe("manufacturing product paid advertising", () => {
       developmentAdvertisingTurns: 12,
       lastAdvertisingReceiptTurn: 1,
     });
-    expect(db.collection("bankMoneyMoves").docs).toHaveLength(1);
+    // One order transition into the clearing pool and one clearing transition.
+    expect(db.collection("bankMoneyMoves").docs).toHaveLength(2);
+    expect(db.collection("productAdvertisingClearing").docs[0]?.cashLocal).toBe(0);
     expect(
       db.collection("corporations").docs.find((row) => String(row._id) === buyer._id.toString())
         ?.manufacturingProductAdvertisingReceiptV2
