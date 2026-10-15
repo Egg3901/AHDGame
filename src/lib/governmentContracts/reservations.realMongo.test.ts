@@ -9,10 +9,13 @@ import {
 import {
   reserveDefenceTender,
   convertDefenceReservation,
+  fenceDefenceReservation,
   expireGovernmentTenders,
 } from "./reservations";
 import { ensureGovernmentContractIndexes, tenders } from "./persistence";
 import { lockContractPlant, releaseContractPlant } from "./plantSlots";
+import { setContractFactories } from "@/lib/db/collections/defenceContracts";
+import { DEFENCE_FACTORY_SLOTS_PER_PLANT } from "@/lib/military/defenceLotEconomics";
 import { computeContractedShare } from "@/lib/extraction/computeContractedShare";
 import { listGovernmentTenders } from "./queries";
 import { migration } from "@/lib/migrations/entries/2026-10-14-government-contract-bidding";
@@ -101,6 +104,168 @@ describe.skipIf(!REAL_MONGO_ENABLED)("government tender standalone-Mongo account
     await expireGovernmentTenders(fixture.db, 2);
     const pot = await fixture.db.collection("federalBudget").findOne({ countryId: "US" });
     expect(pot?.defenseAppropriation.encumbered).toBe(100);
+  });
+  it("blocks holds from a publisher that resumes after cancellation", async () => {
+    const row = { ...tender(), status: "canceled" as const };
+    await tenders(fixture.db).insertOne(row);
+    await expireGovernmentTenders(fixture.db, 2);
+    expect(await reserveDefenceTender(fixture.db, row, 10000)).toBe(false);
+    expect(
+      (await fixture.db.collection("federalBudget").findOne({ countryId: "US" }))
+        ?.defenseAppropriation.encumbered
+    ).toBe(0);
+    expect(
+      (await fixture.db.collection("defenceProcurementAllocations").findOne({}))?.countryAmount
+    ).toBe(0);
+  });
+  it("blocks a late appropriation hold after quota cancellation", async () => {
+    const row = tender();
+    await tenders(fixture.db).insertOne(row);
+    let paused = false;
+    const interrupted = new Proxy(fixture.db, {
+      get(target, key) {
+        if (key !== "collection") {
+          const v = Reflect.get(target, key);
+          return typeof v === "function" ? v.bind(target) : v;
+        }
+        return (name: string) =>
+          new Proxy(target.collection(name), {
+            get(col, method) {
+              if (name === "federalBudget" && method === "updateOne")
+                return async (...args: unknown[]) => {
+                  const update = args[1] as { $set?: Record<string, { state?: string }> };
+                  if (
+                    !paused &&
+                    Object.values(update.$set ?? {}).some((v) => v?.state === "held")
+                  ) {
+                    paused = true;
+                    await tenders(fixture.db).updateOne(
+                      { _id: row._id },
+                      { $set: { status: "canceled" } }
+                    );
+                    await expireGovernmentTenders(fixture.db, 2);
+                  }
+                  return (col.updateOne as (...args: unknown[]) => Promise<unknown>).apply(
+                    col,
+                    args
+                  );
+                };
+              const v = Reflect.get(col, method);
+              return typeof v === "function" ? v.bind(col) : v;
+            },
+          });
+      },
+    }) as import("mongodb").Db;
+    expect(await reserveDefenceTender(interrupted, row, 10000)).toBe(false);
+    expect(paused).toBe(true);
+    expect(
+      (await fixture.db.collection("federalBudget").findOne({ countryId: "US" }))
+        ?.defenseAppropriation.encumbered
+    ).toBe(0);
+    expect(
+      (await fixture.db.collection("defenceProcurementAllocations").findOne({}))?.countryAmount
+    ).toBe(0);
+  });
+  it("fences stale requests from both reservation conversion and plant takeover", async () => {
+    const row = tender();
+    await tenders(fixture.db).insertOne(row);
+    await reserveDefenceTender(fixture.db, row, 10000);
+    expect(await fenceDefenceReservation(fixture.db, { ...row, awardLeaseRevision: 2 })).toBe(true);
+    expect(await fenceDefenceReservation(fixture.db, { ...row, awardLeaseRevision: 1 })).toBe(
+      false
+    );
+    expect(
+      await convertDefenceReservation(
+        fixture.db,
+        { ...row, awardLeaseRevision: 1 },
+        "a".repeat(24),
+        150,
+        10000,
+        false
+      )
+    ).toBe(false);
+    expect(
+      await convertDefenceReservation(
+        fixture.db,
+        { ...row, awardLeaseRevision: 2 },
+        "a".repeat(24),
+        150,
+        10000,
+        false
+      )
+    ).toBe(true);
+    const plant = new ObjectId();
+    await fixture.db.collection("corporateSectors").insertOne({ _id: plant });
+    expect(await lockContractPlant(fixture.db, plant, row._id, "new", 2)).toBeTruthy();
+    expect(await lockContractPlant(fixture.db, plant, row._id, "old", 1)).toBeNull();
+    await releaseContractPlant(fixture.db, plant, row._id, "old");
+    expect(await lockContractPlant(fixture.db, plant, "other")).toBeNull();
+  });
+  it("prevents a delayed CEO allocation from overbooking after a resumed allocation", async () => {
+    const plant = new ObjectId(),
+      a = new ObjectId(),
+      b = new ObjectId();
+    await fixture.db
+      .collection("corporateSectors")
+      .insertOne({ _id: plant, strategyId: "standard" });
+    await fixture.db.collection("defenceContracts").insertMany([
+      { _id: a, sectorId: plant, status: "active", assignedFactories: 0 },
+      { _id: b, sectorId: plant, status: "active", assignedFactories: 0 },
+    ]);
+    let signal!: () => void, release!: () => void;
+    const started = new Promise<void>((resolve) => {
+      signal = resolve;
+    });
+    const paused = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const delayed = new Proxy(fixture.db, {
+      get(target, key) {
+        if (key !== "collection") {
+          const v = Reflect.get(target, key);
+          return typeof v === "function" ? v.bind(target) : v;
+        }
+        return (name: string) =>
+          new Proxy(target.collection(name), {
+            get(col, method) {
+              if (name === "defenceContracts" && method === "updateOne")
+                return async (...args: unknown[]) => {
+                  const update = args[1] as { $set?: { assignedFactories?: number } };
+                  if (update.$set?.assignedFactories === DEFENCE_FACTORY_SLOTS_PER_PLANT) {
+                    signal();
+                    await paused;
+                  }
+                  return (col.updateOne as (...args: unknown[]) => Promise<unknown>).apply(
+                    col,
+                    args
+                  );
+                };
+              const v = Reflect.get(col, method);
+              return typeof v === "function" ? v.bind(col) : v;
+            },
+          });
+      },
+    }) as import("mongodb").Db;
+    const first = setContractFactories(delayed, a, DEFENCE_FACTORY_SLOTS_PER_PLANT);
+    await started;
+    try {
+      expect(await setContractFactories(fixture.db, a, DEFENCE_FACTORY_SLOTS_PER_PLANT / 2)).toBe(
+        true
+      );
+      expect(await setContractFactories(fixture.db, b, DEFENCE_FACTORY_SLOTS_PER_PLANT / 2)).toBe(
+        true
+      );
+    } finally {
+      release();
+    }
+    expect(await first).toBe(false);
+    const contracts = await fixture.db
+      .collection("defenceContracts")
+      .find({ sectorId: plant })
+      .toArray();
+    expect(contracts.reduce((total, c) => total + c.assignedFactories, 0)).toBe(
+      DEFENCE_FACTORY_SLOTS_PER_PLANT
+    );
   });
   it("cannot let two operations own a production plant", async () => {
     const plant = new ObjectId();
@@ -208,6 +373,10 @@ describe.skipIf(!REAL_MONGO_ENABLED)("government tender standalone-Mongo account
     ]);
     await migration.execute(fixture.db, { dryRun: false });
     await migration.execute(fixture.db, { dryRun: false });
+    expect(
+      (await fixture.db.collection("defenceContracts").findOne({ _id: pending }))?.termination
+        .lotsCancelled
+    ).toBe(2);
     expect(
       (await fixture.db.collection("federalBudget").findOne({ countryId: "US" }))
         ?.defenseAppropriation.encumbered

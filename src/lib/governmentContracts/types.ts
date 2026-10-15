@@ -60,6 +60,7 @@ export interface GovernmentTender {
   cancellationReason?: string;
   notificationSent?: boolean;
   awardLeaseKey?: string;
+  awardLeaseRevision?: number;
   awardAttemptId?: string;
   awardLeaseUntil?: Date;
   preparedDefence?: import("@/lib/db/types/defenceContract").DefenceContract;
@@ -70,11 +71,23 @@ export interface GovernmentTender {
 }
 export interface TenderView extends Omit<
   GovernmentTender,
-  "bids" | "bidHistory" | "updatedAt" | "publishedBy"
+  | "bids"
+  | "bidHistory"
+  | "updatedAt"
+  | "publishedBy"
+  | "preparedDefence"
+  | "preparedDefenseLine"
+  | "preparedStateOwned"
+  | "awardSelfDealing"
+  | "awardLeaseRevision"
+  | "awardLeaseKey"
+  | "awardLeaseUntil"
+  | "awardAttemptId"
 > {
   tab: TenderTab;
   bidCount: number;
   bids: Omit<ContractBid, "userId">[];
   bidHistory: Omit<ContractBid, "userId">[];
   canManage: boolean;
+  selfDealing?: { ministerName?: string; favorabilityPenalty: number };
 }

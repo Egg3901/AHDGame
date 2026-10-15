@@ -17,7 +17,7 @@ import {
 } from "@/lib/military/defenceLotEconomics";
 import { isStateOwned } from "@/lib/nationalization/nationalCorporation";
 import { resolveDefenseLineFrom } from "@/lib/turn/defenseEnvelope";
-import { convertDefenceReservation } from "./reservations";
+import { convertDefenceReservation, fenceDefenceReservation } from "./reservations";
 import { lockContractPlant, releaseContractPlant } from "./plantSlots";
 import { validateBid, ContractError } from "./eligibility";
 import { tenders } from "./persistence";
@@ -37,8 +37,14 @@ export async function activateDefenceBid(
     await finishAward(db, t, existing);
     return;
   }
+  if (!(await fenceDefenceReservation(db, t)))
+    throw new ContractError(
+      "A newer award request owns this reservation. Refresh before retrying."
+    );
   const sectorId = new ObjectId(bid.sectorId);
-  if (!(await lockContractPlant(db, sectorId, t._id, t.awardLeaseKey ?? t._id)))
+  if (
+    !(await lockContractPlant(db, sectorId, t._id, t.awardLeaseKey ?? t._id, t.awardLeaseRevision))
+  )
     throw new ContractError(
       "This plant is processing another contract operation. Resume that operation first."
     );
@@ -90,7 +96,13 @@ export async function activateDefenceBid(
         ...(t.awardSelfDealing ? { selfDealing: t.awardSelfDealing } : {}),
       };
       await tenders(db).updateOne(
-        { _id: t._id, preparedDefence: { $exists: false } },
+        {
+          _id: t._id,
+          status: "awarding",
+          awardLeaseKey: t.awardLeaseKey,
+          awardAttemptId: t.awardAttemptId,
+          preparedDefence: { $exists: false },
+        },
         {
           $set: {
             preparedDefence: prepared,
@@ -100,7 +112,14 @@ export async function activateDefenceBid(
         }
       );
       const frozen = await tenders(db).findOne({ _id: t._id });
-      if (!frozen?.preparedDefence) throw new Error("The award snapshot could not be persisted.");
+      if (
+        !frozen?.preparedDefence ||
+        frozen.awardLeaseKey !== t.awardLeaseKey ||
+        frozen.awardAttemptId !== t.awardAttemptId
+      )
+        throw new ContractError(
+          "A newer request owns the award preparation. Refresh before retrying."
+        );
       prepared = frozen.preparedDefence;
       defenseLine = frozen.preparedDefenseLine;
       stateOwned = frozen.preparedStateOwned;

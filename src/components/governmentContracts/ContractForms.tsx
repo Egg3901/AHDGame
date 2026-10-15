@@ -362,13 +362,15 @@ export function BidForm({
   onDone: () => void;
 }) {
   const t = useTranslations("corporations.governmentContracts");
-  const eligible = access.corporations.filter((c) =>
-    tender.terms.type === "defence"
-      ? c.countryId === tender.countryId && c.sectors.some((s) => s.type === "defense")
-      : c.type === "extraction" &&
-        c.sectors.some(
-          (s) => s.stateId === (tender.terms.type === "extraction" ? tender.terms.stateId : "")
-        )
+  const eligible = access.corporations.filter(
+    (c) =>
+      tender.bids.some((b) => b.corporationId === c._id && !b.withdrawn) ||
+      (tender.terms.type === "defence"
+        ? c.countryId === tender.countryId && c.sectors.some((s) => s.type === "defense")
+        : c.type === "extraction" &&
+          c.sectors.some(
+            (s) => s.stateId === (tender.terms.type === "extraction" ? tender.terms.stateId : "")
+          ))
   );
   const [corporationId, setCorporationId] = useState(eligible[0]?._id ?? "");
   const [busy, setBusy] = useState(false),

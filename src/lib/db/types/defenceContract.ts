@@ -87,6 +87,8 @@ export interface DefenceContract {
    * Absent on legacy contracts, where the default allocation reproduces the old even split.
    */
   assignedFactories?: number;
+  /** Plant-issued sequence fences delayed CEO allocation writes. */
+  factoryAllocationSequence?: number;
   /**
    * Why this contract shipped less than it could have on its last delivery turn, or absent
    * when it shipped everything it built.

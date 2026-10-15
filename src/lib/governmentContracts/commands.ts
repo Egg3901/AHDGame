@@ -239,7 +239,10 @@ export async function awardTender(
       _id: t._id,
       $or: [{ awardLeaseUntil: { $exists: false } }, { awardLeaseUntil: { $lte: now } }],
     },
-    { $set: { awardLeaseKey: leaseKey, awardLeaseUntil: new Date(now.getTime() + 120000) } },
+    {
+      $set: { awardLeaseKey: leaseKey, awardLeaseUntil: new Date(now.getTime() + 120000) },
+      $inc: { awardLeaseRevision: 1 },
+    },
     { returnDocument: "after" }
   );
   if (!lock)
@@ -345,10 +348,10 @@ async function awardLocked(
     await activateDefenceBid(db, t, bid, user, turn, now);
   } else {
     const settings = await loadContractIssuanceSettings(db);
-    if (!settings.contractIssuanceEnabled)
-      throw new ContractError("Extraction contract issuance is disabled.");
     const col = db.collection<ExtractionContract>("extractionContracts");
     let contract = await col.findOne({ _id: new ObjectId(t.contractId) });
+    if (!settings.contractIssuanceEnabled && !contract)
+      throw new ContractError("Extraction contract issuance is disabled.");
     if (!contract) {
       await validateBid(db, t, bid, turn);
       const created: ExtractionContract = {
@@ -377,6 +380,10 @@ async function awardLocked(
       contract = await col.findOne({ _id: created._id });
     }
     if (!contract) throw new ContractError("The award could not be prepared.", 500);
+    if (contract.signingFeeAttemptKey !== t.awardAttemptId)
+      throw new ContractError(
+        "A different award attempt owns this payment. Refresh before retrying."
+      );
     if (!contract.signingFeeSettled || contract.status !== "active") {
       const corp = await db
         .collection<Corporation>("corporations")
@@ -388,7 +395,8 @@ async function awardLocked(
         corp,
         turn,
         now,
-        settings.treasuryCashLedgerEnabled === true
+        settings.treasuryCashLedgerEnabled === true,
+        settings.contractIssuanceEnabled === true
       );
       if (!result.ok) {
         const removed = await col.deleteOne({

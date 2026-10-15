@@ -4,15 +4,36 @@ export async function lockContractPlant(
   db: Db,
   sectorId: ObjectId,
   owner: string,
-  operationKey = owner
+  operationKey = owner,
+  operationRevision?: number
 ) {
   return db.collection("corporateSectors").findOneAndUpdate(
     {
       _id: sectorId,
-      $or: [{ contractMutationOwner: { $exists: false } }, { contractMutationOwner: owner }],
+      $or: [
+        { contractMutationOwner: { $exists: false } },
+        {
+          contractMutationOwner: owner,
+          ...(operationRevision == null
+            ? {}
+            : {
+                $or: [
+                  { contractMutationRevision: { $exists: false } },
+                  { contractMutationRevision: { $lte: operationRevision } },
+                ],
+              }),
+        },
+      ],
     },
-    { $set: { contractMutationOwner: owner, contractMutationKey: operationKey } },
-    { returnDocument: "after", projection: { strategyId: 1 } }
+    {
+      $set: {
+        contractMutationOwner: owner,
+        contractMutationKey: operationKey,
+        ...(operationRevision == null ? {} : { contractMutationRevision: operationRevision }),
+      },
+      $inc: { contractMutationSequence: 1 },
+    },
+    { returnDocument: "after", projection: { strategyId: 1, contractMutationSequence: 1 } }
   );
 }
 export async function releaseContractPlant(
@@ -21,10 +42,14 @@ export async function releaseContractPlant(
   owner: string,
   operationKey = owner
 ) {
-  await db
-    .collection("corporateSectors")
-    .updateOne(
-      { _id: sectorId, contractMutationOwner: owner, contractMutationKey: operationKey },
-      { $unset: { contractMutationOwner: "", contractMutationKey: "" } }
-    );
+  await db.collection("corporateSectors").updateOne(
+    { _id: sectorId, contractMutationOwner: owner, contractMutationKey: operationKey },
+    {
+      $unset: {
+        contractMutationOwner: "",
+        contractMutationKey: "",
+        contractMutationRevision: "",
+      },
+    }
+  );
 }

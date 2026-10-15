@@ -8,6 +8,7 @@ import {
 } from "@/lib/test-utils/realMongoFixture";
 import type { AuthUserWithCharacter } from "@/lib/auth";
 import { publishTender, submitBid, awardTender } from "./commands";
+import { settleTenderSigningFee } from "./signingFee";
 import { tenders, ensureGovernmentContractIndexes } from "./persistence";
 import { tenderView } from "./queries";
 import { lotPrice } from "@/lib/military/arsenal";
@@ -312,6 +313,9 @@ describe.skipIf(!REAL_MONGO_ENABLED)(
         );
       } catch {}
       expect(injected).toBe(true);
+      await f.db
+        .collection("gameConfig")
+        .updateOne({ _id: "default" as never }, { $set: { contractIssuanceEnabled: false } });
       await awardTender(
         f.db,
         (await tenders(f.db).findOne({ _id: row._id }))!,
@@ -331,6 +335,59 @@ describe.skipIf(!REAL_MONGO_ENABLED)(
         await f.db.collection("extractionContracts").countDocuments({ status: "active" })
       ).toBe(1);
     });
+    it("lets the current CEO review and withdraw a predecessor bid without exposing it to the predecessor", async () => {
+      const row = await extraction();
+      const nextOwner = new ObjectId();
+      await f.db
+        .collection("corporations")
+        .updateOne({ _id: corpId }, { $set: { userId: nextOwner } });
+      const nextCeo = { ...ceo, userId: nextOwner.toHexString() };
+      expect((await tenderView(f.db, row, 1, ceo)).bids).toEqual([]);
+      expect((await tenderView(f.db, row, 1, nextCeo)).bids[0].revision).toBe(1);
+      await submitBid(
+        f.db,
+        row,
+        { corporationId: corpId.toHexString(), amount: 0, expectedRevision: 1, withdraw: true },
+        nextCeo,
+        1,
+        now
+      );
+      expect(
+        (await tenders(f.db).findOne({ _id: row._id }))?.bids[corpId.toHexString()].withdrawn
+      ).toBe(true);
+    });
+    it.each([0, 200])(
+      "does not start a new %s signing-fee settlement while issuance is paused",
+      async (amount) => {
+        const row = await extraction();
+        const contract = {
+          _id: new ObjectId(row.contractId),
+          tenderId: row._id,
+          corporationId: corpId,
+          countryId: "US",
+          stateId: "TX",
+          resource: "oil",
+          share: 0.3,
+          grantedBy: "US",
+          grantedByLevel: "national",
+          grantedTurn: 3,
+          status: "offered",
+          signingFeeAnchor: amount,
+          signingFeeAttemptKey: new ObjectId().toHexString(),
+        } as import("@/lib/db/types").ExtractionContract;
+        await f.db.collection("extractionContracts").insertOne(contract);
+        const corp = await f.db
+          .collection<import("@/lib/db/types").Corporation>("corporations")
+          .findOne({ _id: corpId });
+        await expect(
+          settleTenderSigningFee(f.db, contract, corp!, 3, now, false, false)
+        ).rejects.toThrow(/disabled/);
+        expect(await f.db.collection("bankMoneyMoves").countDocuments({})).toBe(0);
+        expect(
+          (await f.db.collection("corporations").findOne({ _id: corpId }))?.liquidCapital
+        ).toBe(1000);
+      }
+    );
     it("rejects stale bid revisions and bids at the exact closing turn", async () => {
       const row = await extraction();
       await expect(

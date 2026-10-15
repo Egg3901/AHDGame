@@ -296,7 +296,12 @@ function TenderDetails({
   useEffect(() => {
     const c = new AbortController();
     readJson<{ tender: TenderView; currentTurn: number }>(api, c.signal)
-      .then(setDetail)
+      .then((data) => {
+        if (!c.signal.aborted) {
+          setDetail(data);
+          setError("");
+        }
+      })
       .catch((e) => {
         if (!c.signal.aborted) setError(e.message);
       });
@@ -322,6 +327,11 @@ function TenderDetails({
     return (
       <div className="mt-4" role={error ? "alert" : "status"}>
         {error || t("loading")}
+        {error && (
+          <button type="button" className="ml-3 text-primary" onClick={reload}>
+            {t("retry")}
+          </button>
+        )}
       </div>
     );
   const row = detail.tender,
@@ -447,11 +457,11 @@ function TenderDetails({
       {row.tab === "awarded" && (
         <p className="text-sm">{t("contractReference", { id: row.contractId })}</p>
       )}
-      {row.tab === "awarded" && row.preparedDefence?.selfDealing && (
+      {row.tab === "awarded" && row.selfDealing && (
         <p className="text-sm text-warning">
           {t("selfDealing", {
-            name: row.preparedDefence.selfDealing.ministerName ?? "",
-            penalty: row.preparedDefence.selfDealing.favorabilityPenalty,
+            name: row.selfDealing.ministerName ?? "",
+            penalty: row.selfDealing.favorabilityPenalty,
           })}
         </p>
       )}

@@ -11,9 +11,14 @@ export function visibleBidHistory(
   history: ContractBid[],
   closesTurn: number,
   turn: number,
-  userId?: string
+  userId?: string,
+  ownedCorporationIds?: ReadonlySet<string>
 ): ContractBid[] {
-  return history.filter((b) => turn >= closesTurn || b.userId === userId);
+  return history.filter(
+    (b) =>
+      turn >= closesTurn ||
+      (ownedCorporationIds ? ownedCorporationIds.has(b.corporationId) : b.userId === userId)
+  );
 }
 
 /** Maximum funding held by an untargeted defence tender; concessions hold capacity instead. */
@@ -30,6 +35,12 @@ export function extractionBidError(input: {
   amount: number;
   minimum: number;
 }): string | null {
+  if (
+    ![input.amount, input.minimum].every(Number.isFinite) ||
+    input.amount < 0 ||
+    input.minimum < 0
+  )
+    return "The signing fee must be a valid nonnegative amount.";
   if (input.corporationType !== "extraction")
     return "Only extraction corporations may bid on this concession.";
   if (!input.hasOperations) return "The corporation must operate in this state.";
@@ -47,6 +58,22 @@ export function defenceBidError(input: {
   supplierRemainingLots: number;
   lots: number;
 }): string | null {
+  if (
+    ![
+      input.supplierGrade,
+      input.eraGrade ?? 3,
+      input.requiredGrade,
+      input.amount,
+      input.maximum,
+      input.floor,
+      input.ceiling,
+      input.supplierRemainingLots,
+      input.lots,
+    ].every((v) => typeof v === "number" && Number.isFinite(v)) ||
+    input.amount <= 0 ||
+    input.lots <= 0
+  )
+    return "The procurement values must be finite and valid.";
   if (Math.min(input.supplierGrade, input.eraGrade ?? 3) < input.requiredGrade)
     return "The plant cannot supply the required equipment grade.";
   if (
@@ -86,10 +113,13 @@ export function canAward(
 export function visibleBids(
   tender: Pick<GovernmentTender, "bids" | "closesTurn">,
   turn: number,
-  userId?: string
+  userId?: string,
+  ownedCorporationIds?: ReadonlySet<string>
 ): ContractBid[] {
   return Object.values(tender.bids).filter(
-    (b) => b.userId === userId || (!b.withdrawn && turn >= tender.closesTurn)
+    (b) =>
+      (ownedCorporationIds ? ownedCorporationIds.has(b.corporationId) : b.userId === userId) ||
+      (!b.withdrawn && turn >= tender.closesTurn)
   );
 }
 export function compareBids(

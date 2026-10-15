@@ -1,5 +1,5 @@
 /** Country contract boards paginate ten public tenders; sealed bid values are projected out until closing. */
-import type { Db, Filter } from "mongodb";
+import { ObjectId, type Db, type Filter } from "mongodb";
 import type { AuthUserWithCharacter } from "@/lib/auth";
 import { managementAuthority } from "./authority";
 import {
@@ -46,14 +46,29 @@ export async function tenderView(
   turn: number,
   user?: AuthUserWithCharacter | null
 ): Promise<TenderView> {
+  const ownedCorporationIds = new Set<string>();
+  if (user && ObjectId.isValid(user.userId)) {
+    const owned = await db
+      .collection("corporations")
+      .find(
+        { userId: new ObjectId(user.userId), ceoVacant: { $ne: true } },
+        { projection: { _id: 1 } }
+      )
+      .toArray();
+    for (const corporation of owned) ownedCorporationIds.add(corporation._id.toHexString());
+  }
   const {
     bids,
     bidHistory,
     awardSelfDealing: _awardInterest,
+    preparedDefence: _prepared,
+    preparedDefenseLine: _defenseLine,
+    preparedStateOwned: _stateOwned,
     updatedAt: _updated,
     publishedBy: _publisher,
     awardAttemptId: _attempt,
     awardLeaseKey: _lease,
+    awardLeaseRevision: _leaseRevision,
     awardLeaseUntil: _leaseUntil,
     ...rest
   } = t;
@@ -61,12 +76,24 @@ export async function tenderView(
     ...rest,
     tab: tenderTab(t, turn),
     bidCount: Object.values(bids ?? {}).filter((b) => !b.withdrawn).length,
-    bids: visibleBids({ ...t, bids: bids ?? {} }, turn, user?.userId)
+    bids: visibleBids({ ...t, bids: bids ?? {} }, turn, user?.userId, ownedCorporationIds)
       .sort((a, b) => compareBids(t.terms.type, a, b))
       .map(({ userId: _userId, ...bid }) => bid),
-    bidHistory: visibleBidHistory(bidHistory ?? [], t.closesTurn, turn, user?.userId).map(
-      ({ userId: _userId, ...bid }) => bid
-    ),
+    bidHistory: visibleBidHistory(
+      bidHistory ?? [],
+      t.closesTurn,
+      turn,
+      user?.userId,
+      ownedCorporationIds
+    ).map(({ userId: _userId, ...bid }) => bid),
+    ...(t.status === "awarded" && t.preparedDefence?.selfDealing
+      ? {
+          selfDealing: {
+            ministerName: t.preparedDefence.selfDealing.ministerName,
+            favorabilityPenalty: t.preparedDefence.selfDealing.favorabilityPenalty,
+          },
+        }
+      : {}),
     canManage:
       !!user && !!(await managementAuthority(db, t.countryId, t.terms, user, t.issuerLevel)),
   };
@@ -93,6 +120,7 @@ export async function listGovernmentTenders(
           preparedStateOwned: 0,
           awardAttemptId: 0,
           awardLeaseKey: 0,
+          awardLeaseRevision: 0,
           awardLeaseUntil: 0,
         },
       })

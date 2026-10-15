@@ -985,6 +985,8 @@ export interface CorporateSector {
   contractMutationOwner?: string;
   /** Request fence: an earlier request cannot release a resumed operation. */
   contractMutationKey?: string;
+  contractMutationRevision?: number;
+  contractMutationSequence?: number;
   corporationId: ObjectId;
   /** Country where this sector operates */
   countryId: CountryId;

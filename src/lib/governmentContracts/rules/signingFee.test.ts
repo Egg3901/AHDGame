@@ -16,5 +16,8 @@ describe("tender signing fee currency rules", () => {
     expect(signingFeeCredit(100, 0, 1)).toBeNull();
     expect(signingFeeCredit(100, 1, NaN)).toBeNull();
     expect(signingFeeCredit(-1, 1, 1)).toBeNull();
+    expect(signingFeeCredit(Number.MAX_VALUE, Number.MIN_VALUE, 1)).toBeNull();
+    expect(signingFeeCredit(1, 1, Number.MAX_VALUE)).not.toBeNull();
+    expect(signingFeeCredit(2, 1, Number.MAX_VALUE)).toBeNull();
   });
 });

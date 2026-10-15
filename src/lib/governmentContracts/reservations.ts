@@ -84,6 +84,32 @@ export async function reserveDefenceTender(
     .collection("federalBudget")
     .findOne({ countryId: t.countryId, [`${p}.state`]: "held" }, { projection: { _id: 1 } }));
 }
+/** Fence older in-flight requests before they may convert the held quota. */
+export async function fenceDefenceReservation(db: Db, t: GovernmentTender): Promise<boolean> {
+  const m = marker(t._id);
+  const revision = t.awardLeaseRevision ?? 0;
+  await db.collection("defenceProcurementAllocations").updateOne(
+    {
+      _id: t.allocationWindowId as never,
+      [`${m}.state`]: "held",
+      $or: [
+        { [`${m}.leaseRevision`]: { $exists: false } },
+        { [`${m}.leaseRevision`]: { $lte: revision } },
+      ],
+    },
+    { $set: { [`${m}.leaseRevision`]: revision } }
+  );
+  return !!(await db.collection("defenceProcurementAllocations").findOne(
+    {
+      _id: t.allocationWindowId as never,
+      $or: [
+        { [`${m}.state`]: "held", [`${m}.leaseRevision`]: revision },
+        { [`${m}.state`]: "converted" },
+      ],
+    },
+    { projection: { _id: 1 } }
+  ));
+}
 export async function convertDefenceReservation(
   db: Db,
   t: GovernmentTender,
@@ -102,6 +128,7 @@ export async function convertDefenceReservation(
     {
       _id: t.allocationWindowId as never,
       [`${m}.state`]: "held",
+      ...(t.awardLeaseRevision == null ? {} : { [`${m}.leaseRevision`]: t.awardLeaseRevision }),
       $expr: {
         $and: [
           { $lte: [{ $ifNull: [`$${field}`, 0] }, cap - amount] },
@@ -172,6 +199,7 @@ export async function expireGovernmentTenders(db: Db, turn: number): Promise<voi
           allocationWindowId: 1,
           reservedAmount: 1,
           "terms.type": 1,
+          publishedTurn: 1,
         },
       }
     )
@@ -182,22 +210,87 @@ export async function expireGovernmentTenders(db: Db, turn: number): Promise<voi
     await db.collection("federalBudget").bulkWrite(
       defence.map((t) => ({
         updateOne: {
-          filter: { countryId: t.countryId, [`${potMarker(t._id)}.state`]: "held" },
-          update: {
-            $inc: { "defenseAppropriation.encumbered": -t.reservedAmount },
-            $set: { [`${potMarker(t._id)}.state`]: "released" },
-          },
+          filter: { countryId: t.countryId },
+          // A release tombstone also blocks a publishing request that resumes
+          // after cancellation, before it has written its appropriation hold.
+          update: [
+            {
+              $set: {
+                "defenseAppropriation.encumbered": {
+                  $subtract: [
+                    { $ifNull: ["$defenseAppropriation.encumbered", 0] },
+                    {
+                      $cond: [
+                        { $eq: ["$" + potMarker(t._id) + ".state", "held"] },
+                        t.reservedAmount,
+                        0,
+                      ],
+                    },
+                  ],
+                },
+                [potMarker(t._id)]: {
+                  $cond: [
+                    { $eq: ["$" + potMarker(t._id) + ".state", "converted"] },
+                    "$" + potMarker(t._id),
+                    { state: "released", amount: t.reservedAmount },
+                  ],
+                },
+              },
+            },
+          ],
         },
       }))
     );
     await db.collection("defenceProcurementAllocations").bulkWrite(
       defence.map((t) => ({
         updateOne: {
-          filter: { _id: t.allocationWindowId as never, [`${marker(t._id)}.state`]: "held" },
-          update: {
-            $inc: { countryAmount: -t.reservedAmount },
-            $set: { [`${marker(t._id)}.state`]: "released" },
-          },
+          filter: { _id: t.allocationWindowId as never },
+          upsert: true,
+          update: [
+            {
+              $set: {
+                countryId: { $ifNull: ["$countryId", t.countryId] },
+                windowIndex: {
+                  $ifNull: [
+                    "$windowIndex",
+                    defenceContractWindow(t.countryId, t.publishedTurn).index,
+                  ],
+                },
+                startTurn: {
+                  $ifNull: [
+                    "$startTurn",
+                    defenceContractWindow(t.countryId, t.publishedTurn).startTurn,
+                  ],
+                },
+                endTurn: {
+                  $ifNull: [
+                    "$endTurn",
+                    defenceContractWindow(t.countryId, t.publishedTurn).endTurn,
+                  ],
+                },
+                supplierAmounts: { $ifNull: ["$supplierAmounts", {}] },
+                countryAmount: {
+                  $subtract: [
+                    { $ifNull: ["$countryAmount", 0] },
+                    {
+                      $cond: [
+                        { $eq: ["$" + marker(t._id) + ".state", "held"] },
+                        t.reservedAmount,
+                        0,
+                      ],
+                    },
+                  ],
+                },
+                [marker(t._id)]: {
+                  $cond: [
+                    { $eq: ["$" + marker(t._id) + ".state", "converted"] },
+                    "$" + marker(t._id),
+                    { state: "released", amount: t.reservedAmount },
+                  ],
+                },
+              },
+            },
+          ],
         },
       }))
     );

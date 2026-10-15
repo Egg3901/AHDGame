@@ -12,5 +12,7 @@ export function signingFeeCredit(
   )
     return null;
   const anchor = debitedLocal / sourceLocalPerAnchor;
-  return { anchor, destinationLocal: anchor * destinationLocalPerAnchor };
+  const destinationLocal = anchor * destinationLocalPerAnchor;
+  if (!Number.isFinite(anchor) || !Number.isFinite(destinationLocal)) return null;
+  return { anchor, destinationLocal };
 }

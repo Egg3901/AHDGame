@@ -34,8 +34,7 @@ export const migration: Migration = {
       .collection<{ _id: string; currentTurn: number }>("gameState")
       .findOne({ _id: "current" }, { projection: { currentTurn: 1 } });
     const turn = state?.currentTurn ?? 1;
-    await defence.updateMany(
-      { status: "pending", tenderId: { $exists: false } },
+    await defence.updateMany({ status: "pending", tenderId: { $exists: false } }, [
       {
         $set: {
           status: "cancelled",
@@ -43,13 +42,23 @@ export const migration: Migration = {
           termination: {
             basis: "withdrawal",
             fee: 0,
-            lotsCancelled: 0,
+            lotsCancelled: {
+              $max: [
+                0,
+                {
+                  $subtract: [
+                    { $ifNull: ["$lotsOrdered", { $ifNull: ["$allocatedLots", 0] }] },
+                    { $ifNull: ["$lotsDelivered", 0] },
+                  ],
+                },
+              ],
+            },
             favorabilityPenalty: 0,
             turn,
           },
         },
-      }
-    );
+      },
+    ]);
     const release = await defence
       .find(
         { biddingCutover: true, biddingCutoverReleased: { $ne: true } },

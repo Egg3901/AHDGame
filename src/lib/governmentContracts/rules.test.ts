@@ -83,6 +83,8 @@ describe("government tender rules", () => {
     expect(defenceBidError(input)).toContain("grade");
     expect(defenceBidError({ ...input, eraGrade: 2 })).toBeNull();
     expect(defenceBidError({ ...input, eraGrade: 3, supplierGrade: 1 })).toContain("grade");
+    expect(defenceBidError({ ...input, floor: NaN })).toContain("finite");
+    expect(defenceBidError({ ...input, supplierGrade: Infinity })).toContain("finite");
   });
   it("fixes pagination at ten and rejects invalid/unsafe page inputs", () => {
     expect(CONTRACTS_PAGE_SIZE).toBe(10);

@@ -29,12 +29,15 @@ export async function settleTenderSigningFee(
   corp: Corporation,
   turn: number,
   now: Date,
-  funded: boolean
+  funded: boolean,
+  allowNewSettlement = true
 ): Promise<{ ok: boolean; error?: string }> {
   if (!contract.tenderId)
     throw new ContractError("Only a winning tender may use this signing fee command.", 400);
   const col = db.collection<ExtractionContract>("extractionContracts");
   const amount = contract.signingFeeAnchor ?? 0;
+  if (!allowNewSettlement && amount === 0 && !contract.signingFeeSettled)
+    throw new ContractError("Extraction contract issuance is disabled.");
   if (amount > 0) {
     if (!contract.signingFeeAttemptKey)
       throw new Error("Tender signing fee is missing its frozen settlement identity.");
@@ -45,6 +48,9 @@ export async function settleTenderSigningFee(
     let result;
     if (prior) result = await resumeSettlement(db, key);
     else {
+      // Paused issuance permits recovery only of an already journaled payment.
+      // It never prepares a new financial transition or zero-fee concession.
+      if (!allowNewSettlement) throw new ContractError("Extraction contract issuance is disabled.");
       const sourceCurrency = resolveCorpLiquidCurrencyCode(corp) ?? "USD";
       const sourceRate = await getCorpFxRate(db, corp);
       const sourceLocal = anchorToCorpLiquidCapital(amount, corp, sourceRate);
