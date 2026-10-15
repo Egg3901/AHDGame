@@ -12,7 +12,8 @@ describe("singleplayer creation feature catalog", () => {
         ([key, value]) =>
           typeof value === "boolean" &&
           key !== "nppAutonomyEnabled" &&
-          key !== "frontierEntryExperimentEnabled"
+          key !== "frontierEntryExperimentEnabled" &&
+          key !== "stateGdpAnchoredDemand"
       )
       .map(([key]) => key)
       .sort();

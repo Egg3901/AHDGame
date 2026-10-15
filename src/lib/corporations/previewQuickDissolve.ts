@@ -50,6 +50,7 @@ import {
   type GdpGrowthData,
 } from "@/lib/constants/commodities";
 import { NATIONAL_SCOPE_IDS } from "@/lib/constants/nationalScope";
+import { buildStateLookups } from "@/lib/turn/commodity/sectorLedger";
 
 export type CommodityGlobalDeltaPreview = {
   commodity: CommodityType;
@@ -247,7 +248,12 @@ export async function previewQuickDissolve(
   const ceoIsSoleShareholder = totalRealHolders <= 1 && !!ceoRow;
 
   const gameState = await db
-    .collection<{ _id: string; currentTurn: number }>("gameState")
+    .collection<{
+      _id: string;
+      currentTurn: number;
+      preset?: string;
+      stateGdpAnchoredDemand?: boolean;
+    }>("gameState")
     .findOne({ _id: "current" });
   const currentTurn = gameState?.currentTurn ?? 0;
 
@@ -310,11 +316,12 @@ export async function previewQuickDissolve(
     });
   }
 
-  const stateGdpMap = new Map<string, number>();
-  for (const state of allStates) {
-    if (NATIONAL_SCOPE_IDS.has(state._id)) continue;
-    if (state.gdp && state.gdp > 0) stateGdpMap.set(state._id, state.gdp);
-  }
+  // Same GDP reading as the turn's commodity ledger, so the preview matches.
+  const { stateGdpMap } = buildStateLookups(
+    allStates,
+    [],
+    gameState?.stateGdpAnchoredDemand === true ? (gameState.preset ?? null) : null
+  );
 
   const gdpByState = new Map<string, number>();
   let gdpWeightedSum = 0;

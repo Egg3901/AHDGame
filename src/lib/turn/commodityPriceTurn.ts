@@ -438,7 +438,7 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
       // `currentYear` rides along for the planned-economy output remap below —
       // widening this projection rather than adding a read, so the positional
       // fetch order the turn tests mock stays exactly as it is.
-      projection: { preset: 1, currentYear: 1 },
+      projection: { preset: 1, currentYear: 1, stateGdpAnchoredDemand: 1 },
     }
   );
   const activePreset = presetState?.preset ?? "";
@@ -489,9 +489,12 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
   }
 
   // ── Supply-ledger inputs ──────────────────────────────────────────────
+  // Worlds reset after the state GDP unit fix read anchor GDP; older worlds keep
+  // the raw stored figure so their demand does not shift mid-game.
   const { stateGdpMap, stateToCountry, roadConditionByState } = buildStateLookups(
     allStates,
-    allStateMetrics
+    allStateMetrics,
+    presetState?.stateGdpAnchoredDemand === true ? activePreset : null
   );
 
   // Plants tier: the world ledger reads real production instead of the revenue

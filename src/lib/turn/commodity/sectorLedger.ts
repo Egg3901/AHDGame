@@ -2,6 +2,8 @@ import { freshMilitaryDiversion } from "@/lib/military/arsenal";
 import type { CorporateSector, Corporation, StateMetrics } from "@/lib/db/types";
 import type { State } from "@/lib/db/types/state";
 import type { CurrencyCode } from "@/lib/constants/currencies";
+import type { CountryId } from "@/lib/constants/countries";
+import { gdpToAnchor } from "@/lib/currency/gdpAnchorRate";
 import { readCorpEconomicAnchor } from "@/lib/currency/corpEconomyFields";
 import {
   fxRateForSectorHostFromMap,
@@ -39,10 +41,20 @@ export interface StateLookups {
  * State GDP map + stateId->countryId lookup + road-condition map.
  * The country lookup feeds both national aggregation and the sector
  * countryId stamp for sectorDemandModifier lookups.
+ *
+ * `State.gdp` is stored in each era seed's own denomination (Japan's 1991
+ * regions are yen millions: Kansai ~2.2e8 against California ~1.0e6). Every
+ * macro demand leg multiplies this map by a fraction of GDP, so reading the raw
+ * figure handed Japan roughly 134x its share of GDP-driven demand. With
+ * `gdpAnchorPreset` the map holds anchor GDP instead, converted with the same
+ * denomination rate the seed uses for sector pools (`gdpToAnchor`). Omitted, the
+ * raw figure is kept for worlds seeded before the fix (see
+ * `GameState.stateGdpAnchoredDemand`).
  */
 export function buildStateLookups(
   allStates: Pick<State, "_id" | "countryId" | "gdp">[],
-  allStateMetrics: StateMetrics[]
+  allStateMetrics: StateMetrics[],
+  gdpAnchorPreset?: string | null
 ): StateLookups {
   const stateGdpMap = new Map<string, number>();
   const stateToCountry = new Map<string, string>();
@@ -51,7 +63,11 @@ export function buildStateLookups(
     if (NATIONAL_SCOPE_IDS.has(state._id)) continue;
     stateToCountry.set(state._id, state.countryId);
     if (state.gdp && state.gdp > 0) {
-      stateGdpMap.set(state._id, state.gdp);
+      const gdp =
+        gdpAnchorPreset != null
+          ? gdpToAnchor(state.gdp, state.countryId as CountryId, gdpAnchorPreset)
+          : state.gdp;
+      if (gdp > 0) stateGdpMap.set(state._id, gdp);
     }
   }
   for (const metrics of allStateMetrics) {
