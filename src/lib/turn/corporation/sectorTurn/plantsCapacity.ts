@@ -64,6 +64,11 @@ export interface PlantsCapacityInput {
   /** Proportional governor glide (see `MarketContext.governorGlide`). */
   governorGlide?: GovernorGlide | null;
   embargoLegacyMothball: boolean;
+  /**
+   * Country recession capacity factor for this turn (countryRecession.ts),
+   * applied as extra depreciation so the paid basis falls with it. Absent = 1.
+   */
+  recessionCapacityFactor?: number;
 }
 
 export interface PlantsCapacityResult {
@@ -93,6 +98,12 @@ export interface PlantsCapacityResult {
    * this, or the flip turn is not a no-op.
    */
   plantsRampLambda: number;
+}
+
+function recessionFactorOf(factor: number | undefined): number {
+  return typeof factor === "number" && Number.isFinite(factor) && factor > 0 && factor <= 1
+    ? factor
+    : 1;
 }
 
 export function computePlantsCapacity(input: PlantsCapacityInput): PlantsCapacityResult {
@@ -234,7 +245,7 @@ export function computePlantsCapacity(input: PlantsCapacityInput): PlantsCapacit
         // which tier it was born in. Hoisted to `plantsBaseStock` above.
         prevStock: plantsPrevStock,
         currentGrowthRate: 0,
-      })
+      }) * recessionFactorOf(input.recessionCapacityFactor)
     : 0;
   const plantLedger = plantsEnabled
     ? seedPlantLedger(
