@@ -345,6 +345,28 @@ export async function installCaretakerForVacantCorp(
 }
 
 /**
+ * Re-seat a caretaker on a corp that still carries the owner's `caretakerCeo`
+ * stash but was marked vacant. The stash and mandate stay as they are; only the
+ * operating seat is filled again, so the corp stops shedding sectors.
+ */
+export async function reseatStrandedCaretaker(
+  db: Db,
+  args: { corp: Corporation; nppId: string; turn: number; now: Date }
+): Promise<void> {
+  const { corp, nppId, turn, now } = args;
+  const nppOid = new ObjectId(nppId);
+  await db.collection<Corporation>("corporations").updateOne(
+    { _id: corp._id },
+    {
+      $set: { ceoId: nppOid, ceoType: "npp", ceoVacant: false, ceoSalary: 0, updatedAt: now },
+      $unset: { ceoVacantSinceTurn: "", pendingCeoCharacterId: "" },
+    }
+  );
+  if (corp.ceoId != null) await closeCeoTenure(db, corp._id, { holderId: corp.ceoId, turn });
+  await openCeoTenure(db, corp._id, { holderId: nppOid, ceoType: "npp", turn });
+}
+
+/**
  * Gather the per-affiliation free-NPP view for `countryId` that the picker
  * needs. Delegates to the shared gatherer; kept as a named export because the
  * turn-loop installer and its tests address it here.

@@ -90,6 +90,8 @@ import {
 import { loadWorldEraUnitScale } from "@/lib/currency/gdpAnchorRate";
 
 import { loadNppBehaviorConfig } from "@/lib/turn/npp/behaviorConfig";
+import { nppAutonomyAtLeast } from "@/lib/nppAutonomy/featureFlag";
+import { NPP_ENGINE_LEVEL } from "@/lib/nppAutonomy/engineVersion";
 import {
   boundNppConstructionFinanceCandidates,
   loadNppConstructionFundingPool,
@@ -425,6 +427,12 @@ export async function processNppCorporationDecisions(
 
   const autopilotAlerts: Array<{ corp: Corporation; kinds: CorpAutopilotAdvisory[] }> = [];
 
+  // NPP engine 6 corporate decisions, resolved once per country.
+  const engineSixByCountry = new Map<string, boolean>();
+  for (const countryId of new Set(nppCorps.map((corp) => corp.countryId))) {
+    engineSixByCountry.set(countryId, await nppAutonomyAtLeast(db, countryId, NPP_ENGINE_LEVEL));
+  }
+
   for (const corp of nppCorps) {
     const sectors = sectorsByCorp.get(corp._id.toString()) ?? [];
     const autopilot = isAutopilotRun(corp);
@@ -470,6 +478,7 @@ export async function processNppCorporationDecisions(
       currentYear: techCurrentYear > 0 ? techCurrentYear : undefined,
       techTreesEnabled,
       frontierEntry: autopilot ? undefined : frontierEntryTurn,
+      engineSix: engineSixByCountry.get(corp.countryId) === true,
     };
     let decision = makeNppCorpDecision(
       decisionContext,
