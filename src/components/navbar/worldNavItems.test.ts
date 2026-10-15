@@ -7,10 +7,10 @@ import {
 } from "./worldNavItems";
 
 describe("buildWorldNavItems", () => {
-  it("includes leaderboard and trade for all users", () => {
+  it("keeps world routes without duplicating the Contests Hall of Fame", () => {
     const items = visibleWorldNavItems({ countryId: "US" });
     const labels = items.map((i) => i.label);
-    expect(labels).toContain("Hall of Fame");
+    expect(labels).not.toContain("Hall of Fame");
     expect(labels).toContain("Trade");
     expect(labels).toContain("Nations & World Map");
   });
@@ -134,12 +134,11 @@ describe("buildWorldNavSections / looseWorldNavItems", () => {
   });
 
   // Order is traffic-derived: Economy leads on Stock Market (2.82% of all
-  // pageviews), Leaderboards is last because Hall of Fame drew no measurable
-  // traffic at all. See WORLD_NAV_GROUPS for the full breakdown.
-  it("keeps group order stable: Economy, Diplomacy, Other, Leaderboards", () => {
+  // pageviews). See WORLD_NAV_GROUPS for the full breakdown.
+  it("keeps group order stable: Economy, Diplomacy, Other", () => {
     const items = visibleWorldNavItems({ conflictsEnabled: true, unionsEnabled: true });
     const titles = buildWorldNavSections(items).map((g) => g.title);
-    expect(titles).toEqual(["Economy", "Diplomacy", "Other", "Leaderboards"]);
+    expect(titles).toEqual(["Economy", "Diplomacy", "Other"]);
   });
 
   it("includes Banking in the Economy group", () => {
