@@ -19,6 +19,7 @@ export function UsersTab({ context = "admin" }: UsersTabProps) {
   const apiBase = context === "moderator" ? "/api/moderator" : "/api/admin";
   const isModeratorContext = context === "moderator";
   const [users, setUsers] = useState<UserData[]>([]);
+  const [totalUsers, setTotalUsers] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [showDuplicatesOnly, setShowDuplicatesOnly] = useState(false);
@@ -58,16 +59,22 @@ export function UsersTab({ context = "admin" }: UsersTabProps) {
   const fetchUsers = useCallback(async () => {
     try {
       setLoading(true);
-      const res = await fetch(`${apiBase}/users`);
+      // The admin endpoint defaults to the newest 500 accounts. Load its
+      // supported maximum so local name/email/character search covers a much
+      // larger player set without fetching the entire identity dataset.
+      const usersUrl = isModeratorContext ? `${apiBase}/users` : `${apiBase}/users?limit=2000`;
+      const res = await fetch(usersUrl);
       const data = await res.json();
-      if (res.ok) setUsers(data.users);
-      else setError(apiErrorText(data, "Failed to fetch users"));
+      if (res.ok) {
+        setUsers(data.users);
+        setTotalUsers(typeof data.total === "number" ? data.total : data.users.length);
+      } else setError(apiErrorText(data, "Failed to fetch users"));
     } catch {
       setError("Network error - please try again");
     } finally {
       setLoading(false);
     }
-  }, [apiBase]);
+  }, [apiBase, isModeratorContext]);
 
   useEffect(() => {
     fetchUsers();
@@ -414,7 +421,8 @@ export function UsersTab({ context = "admin" }: UsersTabProps) {
         loading={loading}
         error={error}
         onRefresh={fetchUsers}
-        totalUsers={users.length}
+        totalUsers={totalUsers}
+        loadedUsers={users.length}
         filteredCount={filtered.length}
         duplicateGroupCount={duplicateGroups.length}
         duplicateCount={duplicateCount}

@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { AchievementIcon } from "@/lib/utils/achievementIcons";
 import { apiErrorText } from "@/lib/errors/catalog";
+import { fetchAdminDirectoryUsers } from "../userDirectory";
 
 interface AchievementRow {
   id: string;
@@ -44,36 +45,31 @@ export function AchievementsTab({ context = "admin" }: AchievementsTabProps) {
   const [seedLoading, setSeedLoading] = useState(false);
   const [syncLoading, setSyncLoading] = useState(false);
 
-  useEffect(() => {
-    fetchData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [achRes, charRes] = await Promise.all([
+      const [achRes, directoryUsers] = await Promise.all([
         fetch(`${apiBase}/achievements`),
-        fetch(`${apiBase}/users`),
+        fetchAdminDirectoryUsers(apiBase),
       ]);
       const achData = await achRes.json();
-      const charData = await charRes.json();
       if (achRes.ok) setAchievements(achData.achievements ?? []);
-      if (charRes.ok) {
-        const chars = (charData.users ?? [])
-          .filter((u: { characterId: string | null }) => u.characterId)
-          .map((u: { characterId: string; characterName: string }) => ({
-            id: u.characterId,
-            name: u.characterName,
-          }));
-        setCharacters(chars);
-      }
+      const chars = directoryUsers
+        .filter((u) => u.characterId)
+        .map((u) => ({ id: u.characterId!, name: u.characterName ?? "Unknown character" }));
+      setCharacters(chars);
     } catch {
       setError("Failed to load data");
     } finally {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- initial async data load
+    fetchData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleGrant = async (e: React.FormEvent) => {
     e.preventDefault();

@@ -3,6 +3,7 @@ import { getDb } from "@/lib/mongodb";
 import { requireModerator } from "@/lib/api/requireModerator";
 import { handleRouteError } from "@/lib/api/errors";
 import type { Character, User } from "@/lib/db/types";
+import { ObjectId } from "mongodb";
 
 function escapeRegex(input: string): string {
   return input.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -18,12 +19,41 @@ export async function GET(request: Request) {
 
     const { searchParams } = new URL(request.url);
     const q = searchParams.get("q")?.trim() ?? "";
-    if (!q) {
+    const characterId = searchParams.get("characterId") ?? "";
+    if (!q && !ObjectId.isValid(characterId)) {
       return NextResponse.json({ users: [] });
     }
 
-    const regex = new RegExp(escapeRegex(q), "i");
     const db = await getDb();
+
+    // Resolve the exact selected character instead of taking an arbitrary
+    // first match from the bounded typeahead results.
+    if (ObjectId.isValid(characterId)) {
+      const character = await db
+        .collection<Character>("characters")
+        .findOne({ _id: new ObjectId(characterId) });
+      const user = character
+        ? await db
+            .collection<User>("users")
+            .findOne({ _id: character.userId, role: { $ne: "admin" } })
+        : null;
+      return NextResponse.json({
+        users: user
+          ? [
+              {
+                userId: user._id.toString(),
+                username: user.username,
+                characterName: character?.name ?? null,
+                patreonTier: user.patreonTier ?? null,
+                patreonExpiresAt: user.patreonExpiresAt ?? null,
+                patreonUserId: user.patreonUserId ?? null,
+              },
+            ]
+          : [],
+      });
+    }
+
+    const regex = new RegExp(escapeRegex(q), "i");
 
     const [users, characters] = await Promise.all([
       db.collection<User>("users").find({ username: regex }).limit(10).toArray(),
