@@ -5,10 +5,10 @@ export function GET(): Response {
 
   const body = [
     "Contact: mailto:admin@ahousedividedgame.com",
-    "Contact: https://github.com/Egg3901/AHDGame/security/advisories/new",
+    "Contact: https://github.com/lakesidegamedev/AHDGame/security/advisories/new",
     `Expires: ${expires}`,
     "Canonical: https://ahousedividedgame.com/.well-known/security.txt",
-    "Policy: https://github.com/Egg3901/AHDGame/blob/main/SECURITY.md",
+    "Policy: https://github.com/lakesidegamedev/AHDGame/blob/main/SECURITY.md",
     "Preferred-Languages: en",
     "",
   ].join("\n");
