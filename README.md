@@ -37,7 +37,7 @@ Stack: Next.js 16, React 19, TypeScript, Tailwind 4, MongoDB, Vitest and Playwri
 Requires Node 20+ (CI runs Node 22) and a MongoDB instance.
 
 ```bash
-git clone https://github.com/Egg3901/AHDGame.git
+git clone https://github.com/lakesidegamedev/AHDGame.git
 cd AHDGame
 npm ci
 cp .env.example .env.local
@@ -110,7 +110,7 @@ The machine-readable catalog at `/api/public/v1/meta` includes MCP setup metadat
 
 ## Documentation
 
-[docs.lakesidegames.net](https://docs.lakesidegames.net) has the player wiki, design docs, and engineering guides in one place. Doc sources live in [Egg3901/ahd-docs](https://github.com/Egg3901/ahd-docs); the player wiki is seeded from `src/lib/seeds/wiki/` in this repo. Docs suffixed `-as-shipped` are grounded in current code and win over older design docs where they disagree.
+[docs.lakesidegames.net](https://docs.lakesidegames.net) has the player wiki, design docs, and engineering guides in one place. Doc sources live in [lakesidegamedev/ahd-docs](https://github.com/lakesidegamedev/ahd-docs); the player wiki is seeded from `src/lib/seeds/wiki/` in this repo. Docs suffixed `-as-shipped` are grounded in current code and win over older design docs where they disagree.
 
 ## Contributing
 

@@ -6,7 +6,7 @@ A House Divided is a live game with real players, so contributions are held to a
 
 - Bug fixes with a reproduction and a test
 - UI, accessibility, and mobile polish
-- Documentation fixes (site docs go to [ahd-docs](https://github.com/Egg3901/ahd-docs), wiki content lives in `src/lib/seeds/wiki/` here)
+- Documentation fixes (site docs go to [ahd-docs](https://github.com/lakesidegamedev/ahd-docs), wiki content lives in `src/lib/seeds/wiki/` here)
 - Country content: seeds, region maps, cabinet catalogs, following an existing country as the pattern
 - Tests for under-tested systems
 - Performance work with before/after numbers
