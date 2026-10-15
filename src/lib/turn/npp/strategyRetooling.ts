@@ -1,8 +1,12 @@
 import type { ObjectId } from "mongodb";
 import type { Corporation, CorporateSector } from "@/lib/db/types";
 import type { CommodityType } from "@/lib/constants/commodities";
-import type { CorporationType } from "@/lib/constants/corporations";
-import { SECTOR_STRATEGIES, STRATEGY_COOLDOWN_TURNS } from "@/lib/constants/sectorStrategies";
+import type { CorporationType, OperatingSectorType } from "@/lib/constants/corporations";
+import {
+  getOperatingSectorType,
+  SECTOR_STRATEGIES,
+  STRATEGY_COOLDOWN_TURNS,
+} from "@/lib/constants/sectorStrategies";
 import { getStrategyAvailability } from "@/lib/constants/techTree/strategyAvailability";
 import { retoolRescaleFields } from "@/lib/corporations/retoolRescale";
 import type { CommodityPriceRatioFn } from "@/lib/turn/npp/marketSignals";
@@ -82,7 +86,12 @@ export function chooseNppStrategyRetool(ctx: StrategyRetoolContext): StrategyRet
     }
     if (sector.transitionFromStrategyId) continue;
 
-    const strategies = SECTOR_STRATEGIES[sector.sectorType as CorporationType];
+    const operatingType = getOperatingSectorType(
+      sector.sectorType,
+      sector.industryModel,
+      sector.mediaDiscriminator
+    );
+    const strategies = SECTOR_STRATEGIES[operatingType as OperatingSectorType];
     if (!strategies || strategies.length < 2) continue;
     const countryId = sector.countryId ?? ctx.corp.countryId;
     const currentId = sector.strategyId ?? "standard";
