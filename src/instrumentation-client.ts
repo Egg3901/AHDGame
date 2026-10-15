@@ -12,6 +12,8 @@
 // Early hydration errors on deferred routes can be missed; that tradeoff is
 // deliberate for anonymous marketing traffic. App routes keep eager load.
 
+import { installTauriAclFallback } from "@/lib/clientShell/tauriAclFallback";
+
 type RouterTransitionStart = (...args: unknown[]) => void;
 
 let captureRouterTransitionStartImpl: RouterTransitionStart = () => {};
@@ -97,6 +99,9 @@ function bootSentry(): void {
 }
 
 if (typeof window !== "undefined") {
+  // Inside the AHDClient shell, reopen new-tab links the shell refuses to open
+  // itself and mark those refusals handled. No-op in a normal browser.
+  installTauriAclFallback(window);
   bootSentry();
 }
 

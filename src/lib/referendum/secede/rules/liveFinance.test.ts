@@ -107,6 +107,25 @@ describe("live independence finance", () => {
     expect(split.kept.lastPaid!.mandatory).toBe(51);
     expect(split.moved.lastPaid!.existing).toBe(50);
   });
+  it("carries Cabinet requests over as whole percents instead of rescaling them", () => {
+    const source = {
+      ...account("UK"),
+      familyGrossAnnualDemand: { L01: 1003, L02: 500, L03: 200 },
+      familyAnnualDemand: { L01: 1003, L02: 500, L03: 200 },
+      grossAnnualClaim: 1703,
+      annualAuthority: 1703,
+      programAllocationPercents: { L01: 100, L02: 150, L03: 100 },
+    };
+    const accounts = splitLiveDepartmentAccounts(
+      [source],
+      [account("SCO")],
+      DEPARTMENT_DEFINITIONS,
+      0.3,
+      299
+    );
+    expect(accounts.moved[0].programAllocationPercents).toEqual({ L01: 100, L02: 150, L03: 100 });
+    expect(accounts.kept[0].programAllocationPercents).toEqual({ L01: 100, L02: 150, L03: 100 });
+  });
   it("refuses a partially advanced cash book", () => {
     expect(() =>
       splitLiveDepartmentAccounts(
