@@ -378,6 +378,7 @@ export async function GET() {
                   {
                     ceoId: character._id,
                     ceoVacant: { $ne: true },
+                    imfInstitution: { $ne: true },
                   },
                   { projection: { sequentialId: 1, type: 1, countryId: 1 } }
                 )
