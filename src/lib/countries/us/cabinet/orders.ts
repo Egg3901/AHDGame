@@ -1,6 +1,6 @@
 /**
  * US Ministerial Orders configuration.
- * Defines the 2 available orders per cabinet position (30 total).
+ * Defines the 2 available orders per cabinet position.
  * Orders are time-limited metric bonuses costing 1 ministerial action each.
  * Imported by the order-issuing API, turn processing, and the UI order panel.
  */
@@ -311,6 +311,28 @@ export const US_MINISTERIAL_ORDERS: Record<string, MinisterialOrderConfig[]> = {
         "Launch a border security operation to manage migration flows and strengthen enforcement, for a temporary adjustment to migration.",
       duration: DEFAULT_ORDER_DURATION,
       effects: [{ metric: "population.migrationRate", modifier: -0.03, scope: "national" }],
+    },
+  ],
+
+  // ── 17. White House Chief of Staff ───────────────────────────────────────
+  chief_of_staff: [
+    {
+      id: "message_of_the_week",
+      name: "Message of the Week",
+      description:
+        "Put the whole administration behind one message for a week, for a temporary drop in media polarization.",
+      duration: DEFAULT_ORDER_DURATION,
+      effects: [
+        { metric: "mediaInformation.mediaPolarization", modifier: -0.03, scope: "national" },
+      ],
+    },
+    {
+      id: "cabinet_accountability_review",
+      name: "Cabinet Accountability Review",
+      description:
+        "Publish a review of every department's progress against the President's agenda, for a temporary rise in public trust.",
+      duration: DEFAULT_ORDER_DURATION,
+      effects: [{ metric: "governance.publicTrust", modifier: 0.04, scope: "national" }],
     },
   ],
 };

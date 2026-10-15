@@ -48,56 +48,41 @@ export function CabinetVoteRow({
 
   if (!isSenator) return null;
 
+  // A table row: rendered inside the administration table's Senate-votes block.
   return (
-    <div className="flex flex-col sm:flex-row sm:items-center gap-4 rounded-xl border border-card-border bg-card p-4 shadow-sm">
-      <div className="flex-1 min-w-0">
-        <p className="font-medium text-foreground">
-          {nomination.nomineeCharacterName} → {positionName}
-        </p>
-        <p className="text-sm text-muted">
-          {nomination.votesFor} for · {nomination.votesAgainst} against · {nomination.votesAbstain}{" "}
-          abstain
-          {nomination.votingEndsAt && ` · ${countdown}`}
-        </p>
-        {nomination.myVote && (
-          <p className="text-xs text-muted mt-1">Your vote: {nomination.myVote}</p>
-        )}
-      </div>
-      <div className="flex flex-wrap gap-2 shrink-0">
-        <button
-          onClick={() => onVote(nomination.id, "for")}
-          disabled={votingId !== null}
-          className={`min-h-[44px] min-w-[64px] touch-manipulation rounded-lg px-3 py-2 text-xs font-medium transition-colors ${
-            nomination.myVote === "for"
-              ? "bg-success/20 text-success border border-success/50"
-              : "border border-card-border bg-card hover:bg-card-elevated text-foreground"
-          }`}
-        >
-          For
-        </button>
-        <button
-          onClick={() => onVote(nomination.id, "against")}
-          disabled={votingId !== null}
-          className={`min-h-[44px] min-w-[64px] touch-manipulation rounded-lg px-3 py-2 text-xs font-medium transition-colors ${
-            nomination.myVote === "against"
-              ? "bg-error/20 text-error border border-error/50"
-              : "border border-card-border bg-card hover:bg-card-elevated text-foreground"
-          }`}
-        >
-          Against
-        </button>
-        <button
-          onClick={() => onVote(nomination.id, "abstain")}
-          disabled={votingId !== null}
-          className={`min-h-[44px] min-w-[64px] touch-manipulation rounded-lg px-3 py-2 text-xs font-medium transition-colors ${
-            nomination.myVote === "abstain"
-              ? "bg-muted/20 text-muted border border-muted/50"
-              : "border border-card-border bg-card hover:bg-card-elevated text-foreground"
-          }`}
-        >
-          Abstain
-        </button>
-      </div>
-    </div>
+    <tr className="border-t border-card-border/50 first:border-t-0">
+      <td className="px-4 py-2.5">
+        <p className="font-medium text-foreground">{nomination.nomineeCharacterName}</p>
+        <p className="text-[11px] text-muted">{positionName}</p>
+      </td>
+      <td className="px-3 py-2.5 text-xs text-muted tabular-nums">
+        {nomination.votesFor} for · {nomination.votesAgainst} against · {nomination.votesAbstain}{" "}
+        abstain
+        {nomination.votingEndsAt && <span className="ml-1.5 font-mono">{countdown}</span>}
+        {nomination.myVote && <span className="mt-0.5 block">Your vote: {nomination.myVote}</span>}
+      </td>
+      <td className="px-4 py-2.5">
+        <div className="flex justify-end gap-1.5">
+          {(["for", "against", "abstain"] as const).map((v) => (
+            <button
+              key={v}
+              onClick={() => onVote(nomination.id, v)}
+              disabled={votingId !== null}
+              className={`min-h-[36px] min-w-[64px] touch-manipulation rounded-md border px-3 py-1 text-xs font-medium transition-colors disabled:opacity-50 ${
+                nomination.myVote === v
+                  ? v === "for"
+                    ? "border-success/50 bg-success/20 text-success"
+                    : v === "against"
+                      ? "border-error/50 bg-error/20 text-error"
+                      : "border-muted/50 bg-muted/20 text-muted"
+                  : "border-card-border bg-card text-foreground hover:bg-card-elevated"
+              }`}
+            >
+              {v === "for" ? "For" : v === "against" ? "Against" : "Abstain"}
+            </button>
+          ))}
+        </div>
+      </td>
+    </tr>
   );
 }

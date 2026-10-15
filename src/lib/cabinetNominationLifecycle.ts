@@ -10,6 +10,7 @@ import { getDb } from "@/lib/mongodb";
 import { ObjectId } from "mongodb";
 import { createNotifications, type NotificationInput } from "@/lib/notifications";
 import { getCabinetPositionById } from "@/lib/constants";
+import { isDirectAppointmentSeat } from "@/lib/constants/cabinetMechanics";
 import { didPass } from "@/lib/billLifecycleHelpers";
 import { computeCabinetNominationTally } from "@/lib/congress/governmentVoteBreakdown";
 import { getOfficeLabel } from "@/lib/utils/politics";
@@ -399,8 +400,15 @@ export async function processCabinetNominationLifecycle(
     );
     const isVpNomination = nom.positionId === "vicePresident";
 
+    const directAppointment =
+      !isVpNomination && isDirectAppointmentSeat(nom.countryId ?? "US", nom.positionId);
+
     let passed: boolean;
-    if (isVpNomination) {
+    if (directAppointment) {
+      // No Senate vote for this seat (e.g. US Chief of Staff): the nominee is
+      // seated when the zero-length window closes.
+      passed = true;
+    } else if (isVpNomination) {
       // VP nominations require majority in BOTH House and Senate (25th Amendment)
       const senatePassed = didPass(reTally.votesFor, reTally.votesAgainst);
       const housePassed = didPass(reTally.houseVotesFor ?? 0, reTally.houseVotesAgainst ?? 0);

@@ -398,6 +398,7 @@ export const US_REGIONAL_BILL_ASSENT_OFFICE_KEY = "governor";
  * and fails only under `npm run typecheck` -- eslint and the test suite both pass.
  */
 export const US_CABINET_GROUPS: Record<string, CabinetGroup> = {
+  chief_of_staff: "Centre",
   director_of_intelligence: "Security & Foreign",
   secretary_of_state: "Security & Foreign",
   secretary_of_defense: "Security & Foreign",

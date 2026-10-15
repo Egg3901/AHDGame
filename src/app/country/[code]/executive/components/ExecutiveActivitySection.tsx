@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { getExecutiveSurface, termClockBadge } from "@/lib/constants/executiveSurface";
 import { getExecutiveTermLimit } from "@/lib/elections/executiveTermLimits";
@@ -54,6 +54,8 @@ export function ExecutiveActivitySection({
   cabinetSource,
   clock,
   ledgerFooter,
+  showRoster = true,
+  children,
 }: {
   countryId: CountryId;
   /**
@@ -65,6 +67,13 @@ export function ExecutiveActivitySection({
   /** Clock tile content from the hub (tenure/formation info); degrades when absent. */
   clock?: ExecutiveClockTile;
   ledgerFooter?: { href: string; label: string };
+  /**
+   * Render the slim roster beside the ledger. Off where the hub already shows
+   * the full cabinet as a table (the White House overview).
+   */
+  showRoster?: boolean;
+  /** Rendered between the instrument strip and the acts ledger. */
+  children?: ReactNode;
 }) {
   const surface = getExecutiveSurface(countryId);
   const [acts, setActs] = useState<LedgerAct[] | null>(null);
@@ -170,24 +179,34 @@ export function ExecutiveActivitySection({
   return (
     <div className="space-y-4">
       <InstrumentStrip tiles={tiles} />
-      <div className="grid items-start gap-4 lg:grid-cols-[1.55fr_0.85fr]">
+      {children}
+      {!showRoster ? (
         <ActsLedger
           acts={acts ?? []}
           actLabels={surface.actLabels}
           ordersFilterLabel={titleCaseActLabel(surface.actLabels.order)}
           footer={ledgerFooter}
         />
-        <ExecutiveRoster
-          title={surface.rosterTitle}
-          rows={(roster?.rows ?? []).slice(0, 8)}
-          filled={roster?.filled}
-          total={roster?.total}
-          footer={{
-            href: `${COUNTRY_CONFIGS[countryId].executivePath}/cabinet`,
-            label: "All positions",
-          }}
-        />
-      </div>
+      ) : (
+        <div className="grid items-start gap-4 lg:grid-cols-[1.55fr_0.85fr]">
+          <ActsLedger
+            acts={acts ?? []}
+            actLabels={surface.actLabels}
+            ordersFilterLabel={titleCaseActLabel(surface.actLabels.order)}
+            footer={ledgerFooter}
+          />
+          <ExecutiveRoster
+            title={surface.rosterTitle}
+            rows={(roster?.rows ?? []).slice(0, 8)}
+            filled={roster?.filled}
+            total={roster?.total}
+            footer={{
+              href: `${COUNTRY_CONFIGS[countryId].executivePath}/cabinet`,
+              label: "All positions",
+            }}
+          />
+        </div>
+      )}
     </div>
   );
 }

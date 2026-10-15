@@ -165,6 +165,30 @@ export default function ImpeachmentPanel({
           }
         : null;
 
+  // No case open: one quiet line, not a panel. The full panel is for a live vote.
+  if (!active) {
+    return (
+      <section className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 rounded-lg border border-card-border/70 px-4 py-2.5 text-xs">
+        <p className="text-muted">
+          <span className="font-semibold text-foreground">Impeachment</span>
+          <span className="mx-2 text-card-border">|</span>
+          No case open against {targetName ?? `the ${officeLabel}`}.
+        </p>
+        {!isViewerTarget && (
+          <button
+            type="button"
+            onClick={file}
+            disabled={busy}
+            className="font-semibold text-error/80 transition-colors hover:text-error disabled:opacity-50"
+          >
+            File articles of impeachment
+          </button>
+        )}
+        {message && <p className="w-full text-error">{message}</p>}
+      </section>
+    );
+  }
+
   return (
     <section className="rounded-xl border border-card-border bg-card p-4 sm:p-5">
       <div className="flex items-center justify-between gap-2 flex-wrap">
@@ -176,84 +200,66 @@ export default function ImpeachmentPanel({
         )}
       </div>
 
-      {!active ? (
-        <div className="mt-3">
-          <p className="text-xs text-muted">
-            No impeachment is in progress against {targetName ?? `the ${officeLabel}`}.
-          </p>
-          {!isViewerTarget && (
-            <button
-              type="button"
-              onClick={file}
-              disabled={busy}
-              className="mt-3 rounded-lg border border-error/40 bg-error/10 px-3 py-1.5 text-xs font-semibold text-error hover:bg-error/20 disabled:opacity-50 transition-colors"
-            >
-              File articles of impeachment
-            </button>
-          )}
-        </div>
-      ) : (
-        <div className="mt-3 space-y-3">
-          <p className="text-xs text-muted">
-            {active.stage === "house"
-              ? "The lower chamber is voting on articles of impeachment. Passage needs a majority of ALL seats, not just votes cast."
-              : isGovernor
-                ? "The state legislature is voting on conviction. Removal needs two-thirds of ALL seats, not just votes cast."
-                : "The upper chamber is voting on conviction. Removal needs two-thirds of ALL seats, not just votes cast."}{" "}
-            Abstentions and seats that never vote count against passage.
-          </p>
-          {votes && (
-            <div className="flex gap-4 text-sm">
-              <Tally label="For" value={votes.for} tone="success" />
-              <Tally label="Against" value={votes.against} tone="error" />
-              <Tally label="Abstain" value={votes.abstain} tone="muted" />
-            </div>
-          )}
-          {active.chamber && (
-            <div className="text-xs text-muted">
-              <span className="font-semibold text-foreground">
-                {active.chamber.needed} of {active.chamber.seats} seats
-              </span>{" "}
-              needed to {active.stage === "house" ? "impeach" : "convict"}. Currently{" "}
-              {votes?.for ?? 0} aye.
-            </div>
-          )}
-          {active.myWhippedFromOriginal && (
-            <div>
-              <WhippedBadge
-                originalVote={active.myWhippedFromOriginal}
-                originalLabel={
-                  active.myWhippedFromOriginal === "for"
-                    ? "AYE"
-                    : active.myWhippedFromOriginal === "against"
-                      ? "NAY"
-                      : active.myWhippedFromOriginal === "abstain"
-                        ? "ABSTAIN"
-                        : "no prior vote"
-                }
-                onRevert={async (v) => {
-                  if (v === "for") await vote("aye");
-                  else if (v === "against") await vote("nay");
-                  else if (v === "abstain") await vote("abstain");
-                }}
-              />
-            </div>
-          )}
-          <div className="flex gap-2">
-            {(["aye", "nay", "abstain"] as const).map((v) => (
-              <button
-                key={v}
-                type="button"
-                onClick={() => vote(v)}
-                disabled={busy}
-                className="rounded-lg border border-card-border bg-card-elevated/40 px-3 py-1.5 text-xs font-medium text-foreground hover:border-primary/40 hover:bg-primary/5 disabled:opacity-50 transition-colors"
-              >
-                {v === "aye" ? "Aye" : v === "nay" ? "Nay" : "Abstain"}
-              </button>
-            ))}
+      <div className="mt-3 space-y-3">
+        <p className="text-xs text-muted">
+          {active.stage === "house"
+            ? "The lower chamber is voting on articles of impeachment. Passage needs a majority of ALL seats, not just votes cast."
+            : isGovernor
+              ? "The state legislature is voting on conviction. Removal needs two-thirds of ALL seats, not just votes cast."
+              : "The upper chamber is voting on conviction. Removal needs two-thirds of ALL seats, not just votes cast."}{" "}
+          Abstentions and seats that never vote count against passage.
+        </p>
+        {votes && (
+          <div className="flex gap-4 text-sm">
+            <Tally label="For" value={votes.for} tone="success" />
+            <Tally label="Against" value={votes.against} tone="error" />
+            <Tally label="Abstain" value={votes.abstain} tone="muted" />
           </div>
+        )}
+        {active.chamber && (
+          <div className="text-xs text-muted">
+            <span className="font-semibold text-foreground">
+              {active.chamber.needed} of {active.chamber.seats} seats
+            </span>{" "}
+            needed to {active.stage === "house" ? "impeach" : "convict"}. Currently{" "}
+            {votes?.for ?? 0} aye.
+          </div>
+        )}
+        {active.myWhippedFromOriginal && (
+          <div>
+            <WhippedBadge
+              originalVote={active.myWhippedFromOriginal}
+              originalLabel={
+                active.myWhippedFromOriginal === "for"
+                  ? "AYE"
+                  : active.myWhippedFromOriginal === "against"
+                    ? "NAY"
+                    : active.myWhippedFromOriginal === "abstain"
+                      ? "ABSTAIN"
+                      : "no prior vote"
+              }
+              onRevert={async (v) => {
+                if (v === "for") await vote("aye");
+                else if (v === "against") await vote("nay");
+                else if (v === "abstain") await vote("abstain");
+              }}
+            />
+          </div>
+        )}
+        <div className="flex gap-2">
+          {(["aye", "nay", "abstain"] as const).map((v) => (
+            <button
+              key={v}
+              type="button"
+              onClick={() => vote(v)}
+              disabled={busy}
+              className="rounded-lg border border-card-border bg-card-elevated/40 px-3 py-1.5 text-xs font-medium text-foreground hover:border-primary/40 hover:bg-primary/5 disabled:opacity-50 transition-colors"
+            >
+              {v === "aye" ? "Aye" : v === "nay" ? "Nay" : "Abstain"}
+            </button>
+          ))}
         </div>
-      )}
+      </div>
 
       {message && <p className="mt-3 text-xs text-muted">{message}</p>}
     </section>
