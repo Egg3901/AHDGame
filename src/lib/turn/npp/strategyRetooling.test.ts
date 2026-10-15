@@ -21,7 +21,11 @@ function sector(overrides: Partial<CorporateSector> = {}): CorporateSector {
   } as CorporateSector;
 }
 
-function decide(item: CorporateSector, prices: Record<string, number> = {}) {
+function decide(
+  item: CorporateSector,
+  prices: Record<string, number> = {},
+  overrides: Partial<Parameters<typeof chooseNppStrategyRetool>[0]> = {}
+) {
   return chooseNppStrategyRetool({
     corp: makeCorporation({
       _id: item.corporationId,
@@ -29,6 +33,7 @@ function decide(item: CorporateSector, prices: Record<string, number> = {}) {
       industryModel: item.industryModel,
       mediaDiscriminator: item.mediaDiscriminator,
       countryId: "US",
+      ceoType: "npp",
     }),
     sectors: [item],
     divestedSectorIds: [],
@@ -38,10 +43,81 @@ function decide(item: CorporateSector, prices: Record<string, number> = {}) {
     techTreesEnabled: true,
     plantsEnabled: true,
     priceRatioOf: (commodity) => prices[commodity] ?? 1,
+    ...overrides,
   });
 }
 
 describe("NPP strategy choice respects the plant's operating lane", () => {
+  it.each([
+    { sectorType: "media", mediaDiscriminator: "entertainment", strategyId: "legacy_broadcast" },
+    { sectorType: "manufacturing", industryModel: "vehicles", strategyId: "heavy_metals" },
+    {
+      sectorType: "manufacturing",
+      industryModel: "vehicles",
+      strategyId: "electronics_manufacturing",
+    },
+  ] as const)("gradually corrects obsolete parent recipe $strategyId", (overrides) => {
+    const item = sector({ mediaDiscriminator: null, ...overrides });
+    const before = structuredClone(item);
+    const decision = decide(item);
+    expect(decision?.updates).toMatchObject({
+      strategyId: "standard",
+      transitionFromStrategyId: overrides.strategyId,
+      transitionStartTurn: 100,
+      retoolRescaleApplied: true,
+    });
+    expect(item).toEqual(before);
+  });
+
+  it("does not restart an obsolete recipe that is still transitioning", () => {
+    expect(
+      decide(
+        sector({
+          strategyId: "legacy_broadcast",
+          transitionFromStrategyId: "standard",
+          transitionStartTurn: 95,
+        })
+      )
+    ).toBeNull();
+  });
+
+  it("leaves an unknown recipe outside the bounded correction alone", () => {
+    expect(decide(sector({ strategyId: "unknown_recipe" }))).toBeNull();
+  });
+
+  it.each([{ mothballed: true }, { transitionCooldownUntilTurn: 101 }])(
+    "keeps existing operating guards for obsolete recipes: %j",
+    (guard) => {
+      expect(decide(sector({ strategyId: "legacy_broadcast", ...guard }))).toBeNull();
+    }
+  );
+
+  it("does not take a player's obsolete recipe or a divested sector", () => {
+    const item = sector({ strategyId: "legacy_broadcast" });
+    expect(decide(item, {}, { corp: makeCorporation({ ceoType: "character" }) })).toBeNull();
+    expect(decide(item, {}, { divestedSectorIds: [item._id] })).toBeNull();
+  });
+
+  it("keeps an explicit advanced recipe outside the obsolete-id correction", () => {
+    expect(decide(sector({ strategyId: "live_service" }))).toBeNull();
+  });
+
+  it("prioritizes one corrective retool over a price-driven shift", () => {
+    const ordinary = sector({ mediaDiscriminator: null });
+    const obsolete = sector({
+      _id: new ObjectId("000000000000000000000102"),
+      strategyId: "legacy_broadcast",
+    });
+    for (const sectors of [
+      [ordinary, obsolete],
+      [obsolete, ordinary],
+    ]) {
+      const decision = decide(ordinary, { advertising: 4 }, { sectors });
+      expect(decision?.sectorId).toEqual(obsolete._id);
+      expect(decision?.updates.strategyId).toBe("standard");
+    }
+  });
+
   it("does not put an entertainment plant onto a parent media recipe", () => {
     const item = sector();
     const decision = decide(item, { advertising: 4, entertainment_services: 0.5 });

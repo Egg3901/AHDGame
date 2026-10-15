@@ -135,6 +135,29 @@ describe("extraction placement headroom", () => {
 });
 
 describe("NPP input-squeeze strategy shift (section 2e)", () => {
+  it("corrects one obsolete recipe only in the corporation's normal cohort", () => {
+    const a = sector({
+      sectorType: "media",
+      mediaDiscriminator: "entertainment",
+      strategyId: "legacy_broadcast",
+    });
+    const b = sector({ ...a, _id: new ObjectId() });
+    const eligible = corp();
+    const sets = strategySets(decide(eligible, [a, b], () => null));
+    expect(sets).toHaveLength(1);
+    expect(sets[0].update.$set).toMatchObject({
+      strategyId: "standard",
+      transitionFromStrategyId: "legacy_broadcast",
+      transitionStartTurn: TURN,
+    });
+    expect(
+      strategySets(decide(corp({ _id: idWithEligibility(false) }), [a, b], () => null))
+    ).toHaveLength(0);
+    expect(strategySets(decide(corp({ countryOwnerId: "US" }), [a, b], () => null))).toHaveLength(
+      0
+    );
+  });
+
   it("switches a bleeding chemical sector onto the fertilizer recipe with transition + cooldown", () => {
     const s = sector();
     const d = decide(corp(), [s], fertilizerSqueeze);
