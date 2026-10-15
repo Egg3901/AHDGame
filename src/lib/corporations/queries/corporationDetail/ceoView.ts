@@ -10,6 +10,7 @@ import {
 export interface CeoShareWindow {
   capShares: number;
   acquiredShares: number;
+  reservedShares: number;
   remainingShares: number;
   freesUpInTurns: number;
   capPercent: number;
@@ -41,6 +42,7 @@ export async function loadCeoViewFlags(
   if (
     viewerUserId &&
     corporation.userId?.toString() === viewerUserId &&
+    corporation.isPrivate !== true &&
     corporation.ceoVacant !== true &&
     corporation.ceoId
   ) {
@@ -54,6 +56,7 @@ export async function loadCeoViewFlags(
     ceoShareWindow = {
       capShares: w.capShares,
       acquiredShares: w.acquiredShares,
+      reservedShares: w.reservedShares,
       remainingShares: w.remainingShares,
       freesUpInTurns: w.freesUpInTurns,
       capPercent: Math.round(CEO_SELF_ACQUISITION_CAP_FRACTION * 100),
