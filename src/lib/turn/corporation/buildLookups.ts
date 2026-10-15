@@ -1309,6 +1309,7 @@ export async function buildCorporationLookups(
     {
       projection: {
         preset: 1,
+        hardwareInputReliefStartTurn: 1,
         currentYear: 1,
         currentTurn: 1,
         startingYear: 1,
@@ -1499,6 +1500,7 @@ export async function buildCorporationLookups(
 
   return {
     preset: marketSharePreset,
+    hardwareInputReliefStartTurn: gameState?.hardwareInputReliefStartTurn,
     eraYear,
     eraUnitScale,
     corporations,

@@ -118,6 +118,7 @@ export function buildFreightBillingBySector(args: {
           currentTurn,
           {
             preset: lookups.preset,
+            hardwareInputReliefStartTurn: lookups.hardwareInputReliefStartTurn,
             plantsEnabled,
             isNatcorp,
             eraUnitScale: lookups.eraUnitScale,
