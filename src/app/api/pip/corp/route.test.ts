@@ -50,7 +50,7 @@ describe("GET /api/pip/corp", () => {
       { _id: new ObjectId(), ceoId: characterId, name: "IMF", imfInstitution: true },
       { _id: businessId, ceoId: characterId, name: "Example Media", type: "media" },
     ]);
-    db.collection("corporations").findOne.mockImplementation((query) =>
+    db.collection("corporations").findOne.mockImplementation((query: Record<string, unknown>) =>
       memory.collection("corporations").findOne(query)
     );
     const { getDb } = await import("@/lib/mongodb");

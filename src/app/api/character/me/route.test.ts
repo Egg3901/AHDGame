@@ -104,7 +104,7 @@ describe("GET /api/character/me caching", () => {
         "corporations",
         hasBusiness ? (imfFirst ? [imf, personal] : [personal, imf]) : [imf]
       );
-      db.collection("corporations").findOne.mockImplementation((query) =>
+      db.collection("corporations").findOne.mockImplementation((query: Record<string, unknown>) =>
         memory.collection("corporations").findOne(query)
       );
       const { GET } = await import("./route");
