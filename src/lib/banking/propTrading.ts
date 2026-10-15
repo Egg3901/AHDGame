@@ -218,34 +218,101 @@ function forexMarkByCurrency(positions: PropPosition[]): Map<string, number> {
   return map;
 }
 
+type MarkCorp = Pick<Corporation, "_id" | "sharePrice" | "liquidCurrencyCode" | "countryId">;
+type MarkBond = Pick<Bond, "_id" | "marketPrice" | "faceValue" | "countryId" | "corporationId">;
+
+/** Price inputs for a set of positions, keyed by `_id` hex string. */
+interface MarkInputs {
+  corporations: Map<string, MarkCorp>;
+  indexFunds: Map<string, Pick<IndexFund, "_id" | "quotedNav">>;
+  bonds: Map<string, MarkBond>;
+}
+
+function uniqueObjectIds(refs: string[]): ObjectId[] {
+  return [...new Set(refs.filter((ref) => ObjectId.isValid(ref)))].map((ref) => new ObjectId(ref));
+}
+
 /**
- * Resolve a single position's mark value in the bank's home currency.
- * Price sources:
- * - equity: corporation.sharePrice (local) via shareTradeAnchorValue → home FX
- * - indexUnit: indexFunds.quotedNav (anchor) → home FX
- * - bond: units × BOND_UNIT_FACE_VALUE × marketPrice in bond currency → home FX
- * - forex: foreign units converted through FX rates (local per ₳)
+ * Batch-load every price source a set of positions needs: one read per asset
+ * collection plus one for bond issuers not already loaded, instead of one or two
+ * reads per position (Sentry N+1 on the prop positions route).
  */
-export async function markPositionValue(
+async function loadMarkInputs(
   db: Db,
+  positions: Pick<PropPosition, "asset" | "ref" | "units">[]
+): Promise<MarkInputs> {
+  const priced = positions.filter((p) => finiteOrZero(p.units) > 0);
+  const refsFor = (asset: PropPosition["asset"]) =>
+    uniqueObjectIds(priced.filter((p) => p.asset === asset).map((p) => p.ref));
+  const equityIds = refsFor("equity");
+  const fundIds = refsFor("indexUnit");
+  const bondIds = refsFor("bond");
+
+  const [corps, funds, bonds] = await Promise.all([
+    equityIds.length > 0
+      ? db
+          .collection<Corporation>("corporations")
+          .find(
+            { _id: { $in: equityIds } },
+            { projection: { sharePrice: 1, liquidCurrencyCode: 1, countryId: 1 } }
+          )
+          .toArray()
+      : Promise.resolve([] as Corporation[]),
+    fundIds.length > 0
+      ? db
+          .collection<IndexFund>("indexFunds")
+          .find({ _id: { $in: fundIds } }, { projection: { quotedNav: 1 } })
+          .toArray()
+      : Promise.resolve([] as IndexFund[]),
+    bondIds.length > 0
+      ? db
+          .collection<Bond>("bonds")
+          .find(
+            { _id: { $in: bondIds } },
+            { projection: { marketPrice: 1, faceValue: 1, countryId: 1, corporationId: 1 } }
+          )
+          .toArray()
+      : Promise.resolve([] as Bond[]),
+  ]);
+
+  const corporations = new Map<string, MarkCorp>(corps.map((c) => [c._id.toString(), c]));
+  const issuerIds = [
+    ...new Map(
+      bonds
+        .filter((b) => b.corporationId && !corporations.has(b.corporationId.toString()))
+        .map((b) => [b.corporationId!.toString(), b.corporationId!])
+    ).values(),
+  ];
+  if (issuerIds.length > 0) {
+    const issuers = await db
+      .collection<Corporation>("corporations")
+      .find({ _id: { $in: issuerIds } }, { projection: { liquidCurrencyCode: 1, countryId: 1 } })
+      .toArray();
+    for (const issuer of issuers) corporations.set(issuer._id.toString(), issuer);
+  }
+
+  return {
+    corporations,
+    indexFunds: new Map(funds.map((f) => [f._id.toString(), f])),
+    bonds: new Map(bonds.map((b) => [b._id.toString(), b])),
+  };
+}
+
+/** Pure mark of one position against preloaded price inputs. */
+function markFromInputs(
   position: Pick<PropPosition, "asset" | "ref" | "units">,
   homeCurrency: CurrencyCode,
-  fxRates?: Map<CurrencyCode, number>
-): Promise<number> {
+  rates: Map<CurrencyCode, number>,
+  inputs: MarkInputs
+): number {
   const units = finiteOrZero(position.units);
   if (!(units > 0)) return 0;
 
-  const rates = fxRates ?? (await loadFxRatesByCurrency(db));
   const homeRate = rates.get(homeCurrency) ?? 1;
 
   if (position.asset === "equity") {
     if (!ObjectId.isValid(position.ref)) return 0;
-    const corp = await db
-      .collection<Corporation>("corporations")
-      .findOne(
-        { _id: new ObjectId(position.ref) },
-        { projection: { sharePrice: 1, liquidCurrencyCode: 1, countryId: 1 } }
-      );
+    const corp = inputs.corporations.get(new ObjectId(position.ref).toString());
     if (!corp) return 0;
     const corpCode = resolveCorpLiquidCurrencyCode(corp);
     const corpRate = corpCode ? (rates.get(corpCode) ?? 1) : 1;
@@ -255,21 +322,14 @@ export async function markPositionValue(
 
   if (position.asset === "indexUnit") {
     if (!ObjectId.isValid(position.ref)) return 0;
-    const fund = await db
-      .collection<IndexFund>("indexFunds")
-      .findOne({ _id: new ObjectId(position.ref) }, { projection: { quotedNav: 1 } });
+    const fund = inputs.indexFunds.get(new ObjectId(position.ref).toString());
     const navAnchor = finiteOrZero(fund?.quotedNav ?? 0);
     return anchorToCorpCapital(units * navAnchor, homeCurrency, homeRate);
   }
 
   if (position.asset === "bond") {
     if (!ObjectId.isValid(position.ref)) return 0;
-    const bond = await db
-      .collection<Bond>("bonds")
-      .findOne(
-        { _id: new ObjectId(position.ref) },
-        { projection: { marketPrice: 1, faceValue: 1, countryId: 1, corporationId: 1 } }
-      );
+    const bond = inputs.bonds.get(new ObjectId(position.ref).toString());
     if (!bond) return 0;
     const face = finiteOrZero(bond.faceValue) || BOND_UNIT_FACE_VALUE;
     const price = finiteOrZero(bond.marketPrice);
@@ -277,12 +337,7 @@ export async function markPositionValue(
     // Bond face is in the issuer's currency; resolve via issuer corp when possible.
     let bondCurrency: CurrencyCode | undefined;
     if (bond.corporationId) {
-      const issuer = await db
-        .collection<Corporation>("corporations")
-        .findOne(
-          { _id: bond.corporationId },
-          { projection: { liquidCurrencyCode: 1, countryId: 1 } }
-        );
+      const issuer = inputs.corporations.get(bond.corporationId.toString()) ?? null;
       bondCurrency = resolveCorpLiquidCurrencyCode(issuer) ?? undefined;
     }
     if (bondCurrency && bondCurrency !== homeCurrency) {
@@ -302,18 +357,44 @@ export async function markPositionValue(
   return anchorToCorpCapital(anchor, homeCurrency, homeRate);
 }
 
-/** Mark every position; returns a new array with fresh markValue fields. */
+/**
+ * Resolve a single position's mark value in the bank's home currency.
+ * Price sources:
+ * - equity: corporation.sharePrice (local) via shareTradeAnchorValue → home FX
+ * - indexUnit: indexFunds.quotedNav (anchor) → home FX
+ * - bond: units × BOND_UNIT_FACE_VALUE × marketPrice in bond currency → home FX
+ * - forex: foreign units converted through FX rates (local per ₳)
+ */
+export async function markPositionValue(
+  db: Db,
+  position: Pick<PropPosition, "asset" | "ref" | "units">,
+  homeCurrency: CurrencyCode,
+  fxRates?: Map<CurrencyCode, number>
+): Promise<number> {
+  if (!(finiteOrZero(position.units) > 0)) return 0;
+  const rates = fxRates ?? (await loadFxRatesByCurrency(db));
+  const inputs = await loadMarkInputs(db, [position]);
+  return markFromInputs(position, homeCurrency, rates, inputs);
+}
+
+/**
+ * Mark every position; returns a new array with fresh markValue fields.
+ * Price sources load in one batch per collection, not one read per position.
+ */
 export async function markBook(db: Db, charter: BankCharter): Promise<MarkBookResult> {
   const homeCurrency = charter.currency as CurrencyCode;
   const book = charter.propBook ?? [];
   if (book.length === 0) {
     return { positions: [], propBookMarkValue: 0 };
   }
-  const fxRates = await loadFxRatesByCurrency(db);
+  const [fxRates, inputs] = await Promise.all([
+    loadFxRatesByCurrency(db),
+    loadMarkInputs(db, book),
+  ]);
   const positions: PropPosition[] = [];
   let total = 0;
   for (const p of book) {
-    const markValue = await markPositionValue(db, p, homeCurrency, fxRates);
+    const markValue = markFromInputs(p, homeCurrency, fxRates, inputs);
     positions.push({ ...p, markValue });
     total += markValue;
   }

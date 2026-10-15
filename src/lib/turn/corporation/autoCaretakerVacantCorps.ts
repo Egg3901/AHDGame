@@ -36,6 +36,7 @@ import {
   gatherCaretakerAffiliations,
   pickCaretakerNpp,
   installCaretakerForVacantCorp,
+  reseatStrandedCaretaker,
 } from "@/lib/corporations/caretakerCeo";
 
 /**
@@ -65,6 +66,23 @@ export function isEligibleForAutoCaretaker(
 }
 
 /**
+ * A caretaken player corp whose operating seat was marked vacant. Without a
+ * re-seat it sheds sectors every turn while its owner's stash says an NPP is
+ * running it, and the plain vacancy path above skips it because of the stash.
+ */
+export function isStrandedCaretaker(
+  corp: Pick<
+    Corporation,
+    "ceoVacant" | "caretakerCeo" | "countryOwnerId" | "isNationalized" | "suspended"
+  >
+): boolean {
+  if (corp.countryOwnerId != null) return false;
+  if (corp.isNationalized) return false;
+  if (corp.suspended) return false;
+  return corp.caretakerCeo != null && corp.ceoVacant === true;
+}
+
+/**
  * Install caretakers on every eligible vacant corp whose country is at autonomy
  * v2+. Mutates the in-memory `lookups` corp docs so the same-turn vacant/inactive
  * sheds and `processSectors` see the corp as CEO'd (not shedding), and the
@@ -76,7 +94,9 @@ export async function installCaretakersForVacantCorps(
   args: { turn: number; now: Date }
 ): Promise<{ installed: number }> {
   const { turn, now } = args;
-  const candidates = lookups.corporations.filter(isEligibleForAutoCaretaker);
+  const candidates = lookups.corporations.filter(
+    (corp) => isEligibleForAutoCaretaker(corp) || isStrandedCaretaker(corp)
+  );
   if (candidates.length === 0) return { installed: 0 };
 
   const byCountry = new Map<Corporation["countryId"], Corporation[]>();
@@ -106,16 +126,21 @@ export async function installCaretakersForVacantCorps(
       );
       if (!nppId) break;
 
+      const stranded = isStrandedCaretaker(corp);
       const prevCeoId = corp.ceoId;
       const prevUserId = corp.userId;
-      await installCaretakerForVacantCorp(db, { corp, nppId, turn, now });
+      if (stranded) {
+        await reseatStrandedCaretaker(db, { corp, nppId, turn, now });
+      } else {
+        await installCaretakerForVacantCorp(db, { corp, nppId, turn, now });
+      }
 
       // Reflect the install in the snapshot the rest of this turn reads from.
       corp.ceoId = new ObjectId(nppId);
       corp.ceoType = "npp";
       corp.ceoVacant = false;
       corp.ceoSalary = 0;
-      if (prevUserId != null) {
+      if (!stranded && prevUserId != null) {
         corp.caretakerCeo = {
           ...(prevCeoId != null ? { underlyingCharacterId: prevCeoId } : {}),
           underlyingUserId: prevUserId,

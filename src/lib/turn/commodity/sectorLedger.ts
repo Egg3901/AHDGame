@@ -27,6 +27,7 @@ import { realizedOutputFraction } from "@/lib/extraction/realizedOutputFraction"
 import type { ExtractionSectorInput } from "@/lib/turn/extraction/extractionCapacity";
 import { NATIONAL_SCOPE_IDS } from "@/lib/constants/nationalScope";
 import type { PlantsUnits, SectorLedgerRow } from "./ledgerTypes";
+import { sectorPriceLeg } from "@/lib/market/inputDemandRealPhase";
 
 export interface StateLookups {
   stateGdpMap: Map<string, number>;
@@ -111,6 +112,8 @@ export function buildSectorRows(inputs: SectorRowInputs): SectorLedgerRow[] {
       industryModel: s.industryModel,
       mediaDiscriminator: s.mediaDiscriminator,
       revenue: readCorpEconomicAnchor(s.revenue, hostCurrencyCode, hostFxRate),
+      // Last turn's realized price leg, which deflates revenue-driven input demand.
+      priceLeg: sectorPriceLeg(s.clearingFactor, s.soldFraction),
       stateId: s.stateId,
       sectorId: s._id.toString(),
       corporationId: s.corporationId,

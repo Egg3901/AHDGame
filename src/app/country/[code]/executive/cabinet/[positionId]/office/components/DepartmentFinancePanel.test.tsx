@@ -191,6 +191,59 @@ describe("DepartmentFinancePanel", () => {
     expect(remaining.querySelector("dd")?.className).toContain("text-success");
   });
 
+  it.each(["1005", "12.5"])("keeps the panel up while a request is typed as %s", (typed) => {
+    render(
+      <DepartmentFinancePanel
+        currencySymbol="$"
+        canAct
+        countryCode="us"
+        positionId="secretary_of_commerce"
+        currentTurn={1}
+        department={{
+          enabled: true,
+          allocationMode: "demand",
+          departmentId: "us_commerce_department",
+          departmentName: "Commerce",
+          kind: "spending_department",
+          explanation: "Paid funds limit delivery.",
+          annualAuthority: 4_800,
+          balance: 100,
+          availableBalance: 80,
+          encumbered: 0,
+          arrears: 0,
+          programs: [
+            {
+              enabled: true,
+              departmentName: "Commerce",
+              programId: "L30",
+              programName: "Export support",
+              explanation: "Existing service",
+              status: "operating",
+              annualDemand: 4_800,
+              allocationPercent: 100,
+            },
+          ],
+        }}
+      />
+    );
+
+    fireEvent.change(screen.getByLabelText("Export support allocation percent"), {
+      target: { value: typed },
+    });
+    expect(screen.getByText("Enter a whole number from 0 to 200.")).toBeTruthy();
+    expect(screen.queryByText("Total funding requested")).toBeNull();
+    const save = screen
+      .getAllByRole("button")
+      .find((button) => /save/i.test(button.textContent ?? ""));
+    expect(save?.hasAttribute("disabled")).toBe(true);
+
+    fireEvent.change(screen.getByLabelText("Export support allocation percent"), {
+      target: { value: "120" },
+    });
+    expect(screen.queryByText("Enter a whole number from 0 to 200.")).toBeNull();
+    expect(screen.getByText("Total funding requested")).toBeTruthy();
+  });
+
   it("locks legal obligations and removes meaningless zero-cost controls", () => {
     render(
       <DepartmentFinancePanel

@@ -12,6 +12,10 @@ export const PRIMARY_KEY_INDEX_POLICIES: Readonly<Record<string, string>> = {
     "Turn number is _id; only the bounded 48-turn retention scan uses another key.",
   capacityDecisionFunnels:
     "Turn number is _id; only the bounded 48-turn retention scan uses another key.",
+  productAdvertisingClearing: "One pool per family and currency, read and upserted by _id.",
+  productAdvertisingPayables:
+    "Holds only owed payables, deleted once cleared; the clearing reads its family's small owed set.",
+  productAdvertisingClearances: "Append-only receipts, inserted and looked up by payable _id.",
 };
 
 export function missingCollectionIndexPolicies(

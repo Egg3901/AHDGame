@@ -1,68 +1,36 @@
 /**
  * Title advertising moves the buyer's frozen native cash to the quoted outlets.
- * `settleMediaProductAdvertisingObligations` guards denominations and publishes only funded receipts.
+ * `settleProductAdvertisingObligations` debits each funded order into the
+ * clearing pool, publishes its receipt, then pays every owed seller in one
+ * netted clearing transition (see productAdvertisingClearing.ts).
  */
 import { ObjectId, type Db } from "mongodb";
 import type { Corporation, MediaProductAdvertisingObligationV1 } from "@/lib/db/types";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import type { ProductAdvertisingDenominationWitness } from "@/lib/products/rules/productAdvertising";
-import type { BankingTransition } from "@/lib/banking/rules/boundary";
+import type { BankingTransition, TransitionLeg } from "@/lib/banking/rules/boundary";
 import { oid } from "@/lib/banking/rules/boundary";
 import { MONEY_MOVE_COLLECTION } from "@/lib/banking/moneyMove";
 import { resumeSettlement, settleTransition } from "@/lib/banking/settlementJournal";
 import {
-  productAdvertisingDenominationWitness,
   quoteFundedProductAdvertising,
   type ProductAdvertisingObligation,
   type ProductAdvertisingSellerQuote,
 } from "@/lib/products/rules/productAdvertising";
+import {
+  ADVERTISING_FAMILY,
+  CLEARING_POOL_BALANCE_PATH,
+  PRODUCT_ADVERTISING_CLEARING_COLLECTION,
+  PRODUCT_ADVERTISING_PAYABLES_COLLECTION,
+  clearProductAdvertisingPayables,
+  clearingPoolId,
+  denominationConditions,
+  ensureClearingPool,
+  type ProductAdvertisingFamily,
+  type ProductAdvertisingPayable,
+} from "@/lib/products/productAdvertisingClearing";
 
-export type ProductAdvertisingFamily = "media" | "manufacturing";
-
-const ADVERTISING_FAMILY = {
-  media: {
-    journalPrefix: "media-product-advertising",
-    kind: "media.product.advertising",
-    command: "turn.mediaProductAdvertising",
-    obligationsField: "mediaProductAdvertisingObligationsV1",
-    receiptField: "mediaProductAdvertisingReceiptV1",
-  },
-  manufacturing: {
-    journalPrefix: "manufacturing-product-advertising",
-    kind: "manufacturing.product.advertising",
-    command: "turn.manufacturingProductAdvertising",
-    obligationsField: "manufacturingProductAdvertisingObligationsV2",
-    receiptField: "manufacturingProductAdvertisingReceiptV2",
-  },
-} as const satisfies Record<
-  ProductAdvertisingFamily,
-  {
-    journalPrefix: string;
-    kind: string;
-    command: string;
-    obligationsField: string;
-    receiptField: string;
-  }
->;
-
-function denominationConditions(
-  witness: MediaProductAdvertisingObligationV1["buyerDenomination"]
-): Record<string, unknown>[] {
-  const frozen = witness ?? productAdvertisingDenominationWitness({});
-  const check = (
-    field: "liquidCurrencyCode" | "countryId",
-    present: boolean,
-    value: string | null
-  ) => {
-    if (!present) return [{ [field]: { $exists: false } }];
-    if (value === null) return [{ [field]: null }, { [field]: { $exists: true } }];
-    return [{ [field]: value }];
-  };
-  return [
-    ...check("liquidCurrencyCode", frozen.liquidCurrencyCodePresent, frozen.liquidCurrencyCode),
-    ...check("countryId", frozen.countryIdPresent, frozen.countryId),
-  ];
-}
+export type { ProductAdvertisingFamily } from "@/lib/products/productAdvertisingClearing";
 
 export type MediaAdvertisingSellerQuote = ProductAdvertisingSellerQuote;
 
@@ -113,6 +81,121 @@ export function productAdvertisingSettlementKey(
   return `${definition.journalPrefix}:${obligation.turn}:${corporationId}:${obligation.projectId}`;
 }
 
+/** Refuse a frozen order whose seller split does not add back up to the buyer debit. */
+function assertBalancedOrder(key: string, obligation: ProductAdvertisingObligation): void {
+  const buyerAnchor = obligation.buyerAmountLocal / obligation.buyerLocalPerAnchor;
+  const sellerAnchor = obligation.sellerAllocations.reduce(
+    (sum, seller) => sum + seller.amountLocal / seller.localPerAnchor,
+    0
+  );
+  if (
+    !Number.isFinite(buyerAnchor) ||
+    buyerAnchor <= 0 ||
+    obligation.sellerAllocations.length === 0
+  ) {
+    throw new Error(`Invalid frozen media advertising obligation ${key}`);
+  }
+  if (Math.abs(buyerAnchor - sellerAnchor) > 1e-6) {
+    throw new Error(`Frozen media advertising allocations do not balance for ${key}`);
+  }
+}
+
+/** The guarded buyer debit, identical in the pooled and legacy transitions. */
+function buyerDebitLeg(
+  corporationId: ObjectId,
+  obligation: ProductAdvertisingObligation
+): TransitionLeg {
+  return {
+    kind: "debit",
+    amount: obligation.buyerAmountLocal,
+    valuation: {
+      currencyCode: obligation.buyerCurrencyCode,
+      localPerAnchor: obligation.buyerLocalPerAnchor,
+    },
+    collection: "corporations",
+    filter: {
+      _id: oid(corporationId.toHexString()),
+      liquidCapital: { $gte: obligation.buyerAmountLocal },
+      $expr: {
+        $eq: [
+          {
+            $size: {
+              $filter: {
+                input: {
+                  $objectToArray: {
+                    $ifNull: ["$operatingCashArrearsByCurrency", {}],
+                  },
+                },
+                as: "arrear",
+                cond: { $gt: ["$$arrear.v", 0] },
+              },
+            },
+          },
+          0,
+        ],
+      },
+      $and: denominationConditions(obligation.buyerDenomination),
+    },
+    path: "liquidCapital",
+    note: "Pay the frozen title advertising order from funded cash",
+  };
+}
+
+function receiptProjection(
+  corporationId: ObjectId,
+  obligation: ProductAdvertisingObligation,
+  family: ProductAdvertisingFamily
+): BankingTransition["projections"][number] {
+  const definition = ADVERTISING_FAMILY[family];
+  return {
+    collection: "corporations",
+    filter: {
+      _id: oid(corporationId.toHexString()),
+      [definition.receiptField]: { $exists: false },
+    },
+    update: {
+      $set: {
+        [definition.receiptField]: {
+          projectId: obligation.projectId,
+          turn: obligation.turn,
+          amountAnchor: obligation.amountAnchor,
+          sellerCorporationIds: obligation.sellerAllocations.map((seller) => seller.corporationId),
+        },
+      } as Record<string, unknown>,
+      $pull: {
+        [definition.obligationsField]: {
+          projectId: obligation.projectId,
+          turn: obligation.turn,
+        },
+      } as Record<string, unknown>,
+    },
+    note: "Publish funded title advertising and clear its frozen obligation",
+  };
+}
+
+function orderEvent(
+  corporationId: ObjectId,
+  obligation: ProductAdvertisingObligation,
+  family: ProductAdvertisingFamily
+): BankingTransition["event"] {
+  return {
+    kind: "monetary.executed",
+    command: ADVERTISING_FAMILY[family].command,
+    subjectType: "corporation",
+    subjectId: corporationId.toHexString(),
+    amount: obligation.amountAnchor,
+    meta: {
+      projectId: obligation.projectId,
+      advertisingAmountAnchor: obligation.amountAnchor,
+    },
+  };
+}
+
+/**
+ * Stage 1 of a funded order: the buyer debit lands in the clearing pool, the
+ * order's frozen per-seller payables are recorded as owed, and the receipt is
+ * published. Sellers are paid by the per-turn clearing transition.
+ */
 export function productAdvertisingTransition(
   corporationId: ObjectId,
   obligation: ProductAdvertisingObligation,
@@ -120,34 +203,91 @@ export function productAdvertisingTransition(
 ): BankingTransition {
   const definition = ADVERTISING_FAMILY[family];
   const key = productAdvertisingSettlementKey(corporationId.toHexString(), obligation, family);
-  const buyerAnchor = obligation.buyerAmountLocal / obligation.buyerLocalPerAnchor;
-  let sellerAnchorAssigned = 0;
-  const sellerLegs = obligation.sellerAllocations.map((seller, index) => {
-    const sellerAmountAnchor = seller.amountLocal / seller.localPerAnchor;
-    sellerAnchorAssigned += sellerAmountAnchor;
-    return {
-      kind: "credit" as const,
-      amount: seller.amountLocal,
-      valuation: {
-        currencyCode: seller.currencyCode,
-        localPerAnchor: seller.localPerAnchor,
-      },
-      collection: "corporations",
-      filter: {
-        _id: oid(seller.corporationId),
-        $and: denominationConditions(seller.denomination),
-      },
-      path: "liquidCapital",
-      note: `Fund title advertising allocation ${index + 1}`,
-    };
-  });
-  if (!Number.isFinite(buyerAnchor) || buyerAnchor <= 0 || sellerLegs.length === 0) {
-    throw new Error(`Invalid frozen media advertising obligation ${key}`);
+  assertBalancedOrder(key, obligation);
+  if (obligation.sellerAllocations.some((seller) => !seller.denomination)) {
+    throw new Error(`Frozen media advertising seller witness missing for ${key}`);
   }
-  if (Math.abs(buyerAnchor - sellerAnchorAssigned) > 1e-6) {
-    throw new Error(`Frozen media advertising allocations do not balance for ${key}`);
-  }
+  const poolId = clearingPoolId(family, obligation.buyerCurrencyCode);
+  const payable: ProductAdvertisingPayable = {
+    _id: key,
+    clearingVersion: 1,
+    family,
+    turn: obligation.turn,
+    buyerCorporationId: corporationId.toHexString(),
+    projectId: obligation.projectId,
+    poolId,
+    poolCurrencyCode: obligation.buyerCurrencyCode,
+    poolLocalPerAnchor: obligation.buyerLocalPerAnchor,
+    poolAmountLocal: obligation.buyerAmountLocal,
+    sellerAllocations: obligation.sellerAllocations.map((seller) => ({
+      corporationId: seller.corporationId,
+      amountLocal: seller.amountLocal,
+      currencyCode: seller.currencyCode,
+      localPerAnchor: seller.localPerAnchor,
+      denomination: seller.denomination!,
+    })),
+  };
+  return {
+    key,
+    kind: definition.kind,
+    turn: obligation.turn,
+    currency: obligation.buyerCurrencyCode,
+    legs: [
+      buyerDebitLeg(corporationId, obligation),
+      {
+        kind: "credit",
+        amount: obligation.buyerAmountLocal,
+        valuation: {
+          currencyCode: obligation.buyerCurrencyCode,
+          localPerAnchor: obligation.buyerLocalPerAnchor,
+        },
+        collection: PRODUCT_ADVERTISING_CLEARING_COLLECTION,
+        filter: { _id: poolId },
+        path: CLEARING_POOL_BALANCE_PATH,
+        note: "Hold the title advertising order in the clearing pool",
+      },
+    ],
+    projections: [
+      {
+        collection: PRODUCT_ADVERTISING_PAYABLES_COLLECTION,
+        insert: payable as unknown as Record<string, unknown>,
+        note: "Record the order's frozen seller payables as owed",
+      },
+      receiptProjection(corporationId, obligation, family),
+    ],
+    event: orderEvent(corporationId, obligation, family),
+  };
+}
 
+/**
+ * The pre-clearing shape: one credit leg per seller in the order's own
+ * transition. Orders journaled in this shape resume from their own record
+ * through `resumeSettlement`; this builder is kept so tests and repair tools
+ * can reproduce exactly what those records contain.
+ */
+export function legacyProductAdvertisingTransition(
+  corporationId: ObjectId,
+  obligation: ProductAdvertisingObligation,
+  family: ProductAdvertisingFamily = "media"
+): BankingTransition {
+  const definition = ADVERTISING_FAMILY[family];
+  const key = productAdvertisingSettlementKey(corporationId.toHexString(), obligation, family);
+  assertBalancedOrder(key, obligation);
+  const sellerLegs: TransitionLeg[] = obligation.sellerAllocations.map((seller, index) => ({
+    kind: "credit" as const,
+    amount: seller.amountLocal,
+    valuation: {
+      currencyCode: seller.currencyCode,
+      localPerAnchor: seller.localPerAnchor,
+    },
+    collection: "corporations",
+    filter: {
+      _id: oid(seller.corporationId),
+      $and: denominationConditions(seller.denomination),
+    },
+    path: "liquidCapital",
+    note: `Fund title advertising allocation ${index + 1}`,
+  }));
   return {
     key,
     kind: definition.kind,
@@ -157,82 +297,9 @@ export function productAdvertisingTransition(
     // denomination guard temporarily refuses them. The buyer debit remains
     // terminal and is never replayed.
     retryCreditLegOnGuardFailure: true,
-    legs: [
-      {
-        kind: "debit",
-        amount: obligation.buyerAmountLocal,
-        valuation: {
-          currencyCode: obligation.buyerCurrencyCode,
-          localPerAnchor: obligation.buyerLocalPerAnchor,
-        },
-        collection: "corporations",
-        filter: {
-          _id: oid(corporationId.toHexString()),
-          liquidCapital: { $gte: obligation.buyerAmountLocal },
-          $expr: {
-            $eq: [
-              {
-                $size: {
-                  $filter: {
-                    input: {
-                      $objectToArray: {
-                        $ifNull: ["$operatingCashArrearsByCurrency", {}],
-                      },
-                    },
-                    as: "arrear",
-                    cond: { $gt: ["$$arrear.v", 0] },
-                  },
-                },
-              },
-              0,
-            ],
-          },
-          $and: denominationConditions(obligation.buyerDenomination),
-        },
-        path: "liquidCapital",
-        note: "Pay the frozen title advertising order from funded cash",
-      },
-      ...sellerLegs,
-    ],
-    projections: [
-      {
-        collection: "corporations",
-        filter: {
-          _id: oid(corporationId.toHexString()),
-          [definition.receiptField]: { $exists: false },
-        },
-        update: {
-          $set: {
-            [definition.receiptField]: {
-              projectId: obligation.projectId,
-              turn: obligation.turn,
-              amountAnchor: obligation.amountAnchor,
-              sellerCorporationIds: obligation.sellerAllocations.map(
-                (seller) => seller.corporationId
-              ),
-            },
-          } as Record<string, unknown>,
-          $pull: {
-            [definition.obligationsField]: {
-              projectId: obligation.projectId,
-              turn: obligation.turn,
-            },
-          } as Record<string, unknown>,
-        },
-        note: "Publish funded title advertising and clear its frozen obligation",
-      },
-    ],
-    event: {
-      kind: "monetary.executed",
-      command: definition.command,
-      subjectType: "corporation",
-      subjectId: corporationId.toHexString(),
-      amount: obligation.amountAnchor,
-      meta: {
-        projectId: obligation.projectId,
-        advertisingAmountAnchor: obligation.amountAnchor,
-      },
-    },
+    legs: [buyerDebitLeg(corporationId, obligation), ...sellerLegs],
+    projections: [receiptProjection(corporationId, obligation, family)],
+    event: orderEvent(corporationId, obligation, family),
   };
 }
 
@@ -248,38 +315,45 @@ export async function settleProductAdvertisingObligations(
   db: Db,
   corporationIds: readonly ObjectId[],
   currentTurn: number,
-  family: ProductAdvertisingFamily = "media"
+  family: ProductAdvertisingFamily = "media",
+  options: {
+    /** Tests stop after stage 1 to model a turn that died before clearing. */
+    skipClearing?: boolean;
+  } = {}
 ): Promise<ObjectId[]> {
-  if (corporationIds.length === 0) return [];
-  const definition = ADVERTISING_FAMILY[family];
-  const obligationsField = definition.obligationsField;
-  const receiptField = definition.receiptField;
-  const rows = await db
-    .collection<Corporation>("corporations")
-    .find(
-      {
-        _id: { $in: [...corporationIds] },
-        $or: [
-          { [`${obligationsField}.0`]: { $exists: true } },
-          { [receiptField]: { $exists: true } },
-        ],
-      },
-      {
-        projection: {
-          _id: 1,
-          [obligationsField]: 1,
-          [receiptField]: 1,
-        },
-      }
-    )
-    .toArray();
-  const journal = db.collection<{ _id: string }>(MONEY_MOVE_COLLECTION);
   const touched = new Map<string, ObjectId>();
   const touchCorporation = (id: string) => {
     if (!ObjectId.isValid(id)) return;
     const corporationId = new ObjectId(id);
     touched.set(corporationId.toHexString(), corporationId);
   };
+  const definition = ADVERTISING_FAMILY[family];
+  const obligationsField = definition.obligationsField;
+  const receiptField = definition.receiptField;
+  const rows =
+    corporationIds.length === 0
+      ? []
+      : await db
+          .collection<Corporation>("corporations")
+          .find(
+            {
+              _id: { $in: [...corporationIds] },
+              $or: [
+                { [`${obligationsField}.0`]: { $exists: true } },
+                { [receiptField]: { $exists: true } },
+              ],
+            },
+            {
+              projection: {
+                _id: 1,
+                [obligationsField]: 1,
+                [receiptField]: 1,
+              },
+            }
+          )
+          .toArray();
+  const journal = db.collection<{ _id: string }>(MONEY_MOVE_COLLECTION);
+  const pools = new Set<string>();
 
   for (const row of rows) {
     const fields = row as unknown as Record<string, unknown>;
@@ -317,20 +391,29 @@ export async function settleProductAdvertisingObligations(
         );
         continue;
       }
+      if (!prior) {
+        const poolId = clearingPoolId(family, obligation.buyerCurrencyCode);
+        if (!pools.has(poolId)) {
+          await ensureClearingPool(db, family, obligation.buyerCurrencyCode);
+          pools.add(poolId);
+        }
+      }
+      // An existing key resumes from its own journal record, whatever its
+      // shape: pre-clearing records still pay their sellers directly.
       const result = prior
         ? await resumeSettlement(db, key)
         : await settleTransition(db, productAdvertisingTransition(row._id, obligation, family));
-      if (result.appliedLegs.length > 0) {
+      const moved =
+        result.appliedLegs.length > 0 ||
+        result.status === "applied" ||
+        (result.status === "replayed" && !result.error);
+      if (moved) {
         touchCorporation(row._id.toHexString());
-        for (const seller of obligation.sellerAllocations) {
-          touchCorporation(seller.corporationId);
+        if (prior) {
+          for (const seller of obligation.sellerAllocations) touchCorporation(seller.corporationId);
         }
       }
       if (result.status === "applied" || (result.status === "replayed" && !result.error)) {
-        touchCorporation(row._id.toHexString());
-        for (const seller of obligation.sellerAllocations) {
-          touchCorporation(seller.corporationId);
-        }
         // A corporation can have legacy duplicate obligations. Publish at
         // most one receipt per handoff, leaving later orders and journals intact.
         break;
@@ -351,6 +434,13 @@ export async function settleProductAdvertisingObligations(
         // obligations so their receipts cannot overtake this original order.
         break;
       }
+    }
+  }
+  // Stage 2 runs even when no order settled this call: payables a crash or a
+  // deferred seller left owed are paid by the next clearing.
+  if (!options.skipClearing) {
+    for (const sellerId of await clearProductAdvertisingPayables(db, family, currentTurn)) {
+      touchCorporation(sellerId.toHexString());
     }
   }
   return [...touched.values()];

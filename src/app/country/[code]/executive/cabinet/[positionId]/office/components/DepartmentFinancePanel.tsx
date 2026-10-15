@@ -15,6 +15,11 @@ function money(value: number, symbol: string): string {
   return `${symbol}${Math.round(value).toLocaleString()}`;
 }
 
+/** A demand-mode request: a whole percent of the enacted claim, 0 to 200. */
+function isDemandPercent(value: number): boolean {
+  return Number.isSafeInteger(value) && value >= 0 && value <= 200;
+}
+
 function signedMoney(value: number, symbol: string): string {
   return value < 0 ? `-${money(Math.abs(value), symbol)}` : money(value, symbol);
 }
@@ -103,26 +108,41 @@ export function DepartmentFinancePanel({
   const allocationLocked =
     currentTurn !== undefined && department.lastAllocationChangedTurn === currentTurn;
   const previewTurn = Math.max(1, (currentTurn ?? 0) + 1);
-  const fundingRequestByProgram = demandMode
+  // The number box accepts anything while the player types (1005, 12.5). An
+  // out-of-range draft must not reach the request math, which throws on it:
+  // that crashed the whole panel mid-typing. Such a draft has no preview and
+  // cannot be saved until it is a whole number from 0 to 200.
+  const fundingRequestByProgram: Record<string, number | null> = demandMode
     ? Object.fromEntries(
-        allocatablePrograms.map((program) => [
-          program.programId!,
-          program.fundingControl === "no_separate_allocation" || program.annualDemand === undefined
-            ? 0
-            : programFundingRequestPerTurn(
-                program.annualDemand,
-                allocations[program.programId!] ?? 100,
-                previewTurn
-              ),
-        ])
+        allocatablePrograms
+          .filter(
+            (program) =>
+              program.fundingControl !== "no_separate_allocation" &&
+              program.annualDemand !== undefined
+          )
+          .map((program) => {
+            const percent = allocations[program.programId!] ?? 100;
+            return [
+              program.programId!,
+              isDemandPercent(percent)
+                ? programFundingRequestPerTurn(program.annualDemand!, percent, previewTurn)
+                : null,
+            ];
+          })
       )
     : {};
-  const totalFundingRequested = Object.values(fundingRequestByProgram).reduce(
-    (sum, amount) => sum + amount,
+  const fundingRequestsValid = Object.values(fundingRequestByProgram).every(
+    (amount) => amount !== null
+  );
+  const totalFundingRequested = Object.values(fundingRequestByProgram).reduce<number>(
+    (sum, amount) => sum + (amount ?? 0),
     0
   );
   const fundingPreview =
-    demandMode && department.annualAuthority !== undefined && department.balance !== undefined
+    demandMode &&
+    fundingRequestsValid &&
+    department.annualAuthority !== undefined &&
+    department.balance !== undefined
       ? departmentFundingPreview({
           annualAuthority: department.annualAuthority,
           balance: department.balance,
@@ -463,6 +483,7 @@ export function DepartmentFinancePanel({
                     program.annualDemand !== undefined
                       ? fundingRequestByProgram[programId]
                       : undefined;
+                  const draftInvalid = fundingPerTurn === null;
                   return (
                     <div
                       key={programId}
@@ -482,7 +503,11 @@ export function DepartmentFinancePanel({
                             </span>
                           )}
                         </span>
-                        {fundingPerTurn !== undefined ? (
+                        {draftInvalid ? (
+                          <span className="mt-1 block text-xs text-error">
+                            Enter a whole number from 0 to 200.
+                          </span>
+                        ) : fundingPerTurn !== undefined ? (
                           <span className="mt-1 block text-xs tabular-nums text-muted">
                             Funding request per turn: {money(fundingPerTurn, currencySymbol)}
                           </span>

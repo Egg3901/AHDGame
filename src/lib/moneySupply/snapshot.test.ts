@@ -275,6 +275,26 @@ describe("snapshotMoneySupply", () => {
     expect(options.projection).toHaveProperty("bankPropForexFee", 1);
   });
 
+  it("counts advertising cash held in the clearing pool as corporate money", async () => {
+    db.collectionMocks.gameState.findOne.mockResolvedValue({ preset: "2027-default" });
+    db.collectionMocks.corporations.find.mockReturnValue(
+      cursorWith([{ countryId: "US", liquidCurrencyCode: "USD", liquidCapital: 100 }])
+    );
+    db.collection("productAdvertisingClearing");
+    db.collectionMocks.productAdvertisingClearing.find.mockReturnValue(
+      cursorWith([
+        { _id: "media:USD", currencyCode: "USD", cashLocal: 30 },
+        { _id: "manufacturing:USD", currencyCode: "USD", cashLocal: 0 },
+      ])
+    );
+
+    await snapshotMoneySupply(db as unknown as Db, 12);
+
+    const snapshots = db.collectionMocks[MONEY_SUPPLY_SNAPSHOTS_COLLECTION].replaceOne.mock.calls;
+    const usd = snapshots.find((call) => call[1].currencyCode === "USD")?.[1];
+    expect(usd?.corporateLiquid).toBe(130);
+  });
+
   it("counts funded construction cash once in its native currency only when both ledgers are enabled", async () => {
     db.collectionMocks.gameConfig.findOne.mockResolvedValue({
       moneySupplyEnabled: true,

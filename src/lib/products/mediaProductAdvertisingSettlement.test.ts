@@ -49,7 +49,15 @@ describe("media product advertising denomination recovery", () => {
       kind: "manufacturing.product.advertising",
       event: { command: "turn.manufacturingProductAdvertising" },
     });
-    expect(manufacturing.projections[0]?.update).toEqual({
+    expect(manufacturing.projections[0]).toMatchObject({
+      collection: "productAdvertisingPayables",
+      insert: {
+        _id: `manufacturing-product-advertising:8:${buyerId.toHexString()}:shared-project`,
+        poolId: "manufacturing:USD",
+        poolAmountLocal: 10,
+      },
+    });
+    expect(manufacturing.projections[1]?.update).toEqual({
       $set: {
         manufacturingProductAdvertisingReceiptV2: {
           projectId: "shared-project",
@@ -164,8 +172,10 @@ describe("media product advertising denomination recovery", () => {
     expect(transition.legs[0]?.filter).toMatchObject({
       $and: [{ liquidCurrencyCode: "USD" }, { countryId: "US" }],
     });
-    expect(transition.legs[1]?.filter).toMatchObject({
-      $and: [{ liquidCurrencyCode: "USD" }, { countryId: "US" }],
+    expect(transition.legs[1]).toMatchObject({
+      kind: "credit",
+      collection: "productAdvertisingClearing",
+      filter: { _id: "media:USD" },
     });
 
     const db = createInMemoryDb();
@@ -205,7 +215,7 @@ describe("media product advertising denomination recovery", () => {
     expect(move?.legs?.some((leg) => leg.applied)).toBe(false);
   });
 
-  it("keeps the original debit frozen when a quoted seller changes denomination", async () => {
+  it("funds the order into the pool and defers a seller whose denomination changed", async () => {
     const buyerId = new ObjectId();
     const sellerId = new ObjectId();
     const obligation = createMediaProductAdvertisingObligation({
@@ -254,20 +264,35 @@ describe("media product advertising denomination recovery", () => {
 
     const buyer = await db.collection("corporations").findOne({ _id: buyerId });
     const seller = await db.collection("corporations").findOne({ _id: sellerId });
+    // The buyer's order is funded and published; the seller's frozen payable
+    // waits in the clearing pool until its denomination guard passes again.
     expect(buyer?.liquidCapital).toBe(80);
-    expect(buyer?.mediaProductAdvertisingReceiptV1).toBeUndefined();
-    expect(buyer?.mediaProductAdvertisingObligationsV1).toHaveLength(1);
+    expect(buyer?.mediaProductAdvertisingReceiptV1).toMatchObject({ projectId: "title-seller-fx" });
+    expect(buyer?.mediaProductAdvertisingObligationsV1).toEqual([]);
     expect(seller?.liquidCapital).toBe(50);
-    const move = (await db.collection("bankMoneyMoves").find({}).toArray())[0] as
-      { status?: string; legs?: Array<{ applied?: boolean }> } | undefined;
-    expect(move?.status).toBe("partial");
-    expect(move?.legs?.map((leg) => leg.applied)).toEqual([true, false]);
-    expect(touched.map((id) => id.toHexString()).sort()).toEqual(
-      [buyerId.toHexString(), sellerId.toHexString()].sort()
-    );
+    expect(
+      (await db.collection("productAdvertisingClearing").findOne({ _id: "media:USD" }))?.cashLocal
+    ).toBe(20);
+    const order = (await db
+      .collection("bankMoneyMoves")
+      .findOne({ kind: "media.product.advertising" })) as {
+      status?: string;
+      legs?: Array<{ applied?: boolean }>;
+    } | null;
+    expect(order?.status).toBe("applied");
+    expect(order?.legs?.map((leg) => leg.applied)).toEqual([true, true]);
+    // The ineligible seller is deferred before any clearing claims a key.
+    expect(
+      await db
+        .collection("bankMoneyMoves")
+        .countDocuments({ kind: "media.product.advertising.clearing" })
+    ).toBe(0);
+    expect(await db.collection("productAdvertisingPayables").countDocuments({})).toBe(1);
+    // Only the buyer's cash moved this call.
+    expect(touched.map((id) => id.toHexString())).toEqual([buyerId.toHexString()]);
   });
 
-  it("retries only the original seller credit after its denomination returns", async () => {
+  it("pays the deferred seller payable once its denomination returns", async () => {
     const buyerId = new ObjectId();
     const sellerId = new ObjectId();
     const obligation = createMediaProductAdvertisingObligation({
@@ -317,9 +342,9 @@ describe("media product advertising denomination recovery", () => {
     expect((await db.collection("corporations").findOne({ _id: sellerId }))?.liquidCapital).toBe(
       50
     );
-    const pendingMove = (await db.collection("bankMoneyMoves").find({}).toArray())[0] as
-      { retryCreditLegOnGuardFailure?: boolean } | undefined;
-    expect(pendingMove?.retryCreditLegOnGuardFailure).toBe(true);
+    expect(
+      (await db.collection("productAdvertisingClearing").findOne({ _id: "media:USD" }))?.cashLocal
+    ).toBe(20);
 
     await db
       .collection("corporations")
@@ -337,13 +362,20 @@ describe("media product advertising denomination recovery", () => {
     });
     expect(buyer?.mediaProductAdvertisingObligationsV1).toEqual([]);
     expect(seller?.liquidCapital).toBe(70);
-    const move = (await db.collection("bankMoneyMoves").find({}).toArray())[0] as
-      { status?: string; legs?: Array<{ applied?: boolean }> } | undefined;
+    const move = (await db
+      .collection("bankMoneyMoves")
+      .findOne({ kind: "media.product.advertising.clearing" })) as {
+      status?: string;
+      legs?: Array<{ applied?: boolean }>;
+    } | null;
     expect(move?.status).toBe("applied");
     expect(move?.legs?.map((leg) => leg.applied)).toEqual([true, true]);
-    expect(touched.map((id) => id.toHexString()).sort()).toEqual(
-      [buyerId.toHexString(), sellerId.toHexString()].sort()
-    );
+    expect(await db.collection("bankMoneyMoves").countDocuments({})).toBe(2);
+    expect(await db.collection("productAdvertisingPayables").countDocuments({})).toBe(0);
+    expect(
+      (await db.collection("productAdvertisingClearing").findOne({ _id: "media:USD" }))?.cashLocal
+    ).toBe(0);
+    expect(touched.map((id) => id.toHexString())).toContain(sellerId.toHexString());
   });
 
   it("keeps later obligations behind the single unconsumed receipt slot", async () => {
@@ -404,7 +436,7 @@ describe("media product advertising denomination recovery", () => {
     expect(buyer?.mediaProductAdvertisingReceiptV1).toMatchObject({ projectId: "title-first" });
     expect(buyer?.mediaProductAdvertisingObligationsV1).toHaveLength(1);
     expect(seller?.liquidCapital).toBe(70);
-    expect(await db.collection("bankMoneyMoves").countDocuments({})).toBe(1);
+    expect(await db.collection("bankMoneyMoves").countDocuments({})).toBe(2);
 
     await db
       .collection("corporations")
@@ -416,6 +448,6 @@ describe("media product advertising denomination recovery", () => {
     expect(buyer?.mediaProductAdvertisingReceiptV1).toMatchObject({ projectId: "title-second" });
     expect(buyer?.mediaProductAdvertisingObligationsV1).toEqual([]);
     expect(seller?.liquidCapital).toBe(90);
-    expect(await db.collection("bankMoneyMoves").countDocuments({})).toBe(2);
+    expect(await db.collection("bankMoneyMoves").countDocuments({})).toBe(4);
   });
 });

@@ -79,19 +79,50 @@ describe("corporation load errors", () => {
     expect(captureClientExceptionWithId).not.toHaveBeenCalled();
   });
 
-  it("captures network failures and displays the returned event reference", async () => {
-    const error = new TypeError("Failed to fetch");
+  it.each([
+    new TypeError("Failed to fetch"),
+    new TypeError("Load failed"),
+    new DOMException("signal timed out", "TimeoutError"),
+  ])("shows a retryable network error for %s without reporting it", async (error) => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(error));
+    render(<CorporationDetailPage />);
+    expect(
+      await screen.findByText(
+        "Could not reach the server. Check your connection and try again. (NETWORK_ERROR)"
+      )
+    ).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Retry" })).toBeTruthy();
+    expect(screen.queryByTitle(/Click to copy/)).toBeNull();
+    expect(captureClientExceptionWithId).not.toHaveBeenCalled();
+  });
+
+  it("reports an unexpected application error with its event reference", async () => {
+    const error = new RangeError("Invalid array length");
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(error));
     render(<CorporationDetailPage />);
     await waitFor(() =>
       expect(captureClientExceptionWithId).toHaveBeenCalledWith(
         error,
         expect.objectContaining({
-          tags: { feature: "corporation-detail", error_code: "NETWORK_ERROR" },
+          tags: expect.objectContaining({ feature: "corporation-detail" }),
         })
       )
     );
     expect(await screen.findByTitle("Click to copy: sentry-event-1234567890")).toBeTruthy();
+  });
+
+  it("shows the gateway message for a 502 from the edge without reporting it", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("<html>bad gateway</html>", { status: 502 }))
+    );
+    render(<CorporationDetailPage />);
+    expect(
+      await screen.findByText(
+        "The service is temporarily unavailable. Try again shortly. (SERVICE_UNAVAILABLE)"
+      )
+    ).toBeTruthy();
+    expect(captureClientExceptionWithId).not.toHaveBeenCalled();
   });
 
   it.each(["", "<html>bad gateway</html>"])(
@@ -223,18 +254,7 @@ describe("corporation load errors", () => {
           "Could not reach the server. Check your connection and try again. (NETWORK_ERROR)"
         )
       ).toBeTruthy();
-      await waitFor(() =>
-        expect(captureClientExceptionWithId).toHaveBeenCalledWith(
-          networkError,
-          expect.objectContaining({
-            tags: { feature: "corporation-detail", error_code: "NETWORK_ERROR" },
-          })
-        )
-      );
-      expect(captureClientExceptionWithId).not.toHaveBeenCalledWith(
-        expect.objectContaining({ name: "CorporationResponseError" }),
-        expect.anything()
-      );
+      expect(captureClientExceptionWithId).not.toHaveBeenCalled();
     }
   );
 

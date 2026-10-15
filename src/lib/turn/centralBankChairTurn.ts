@@ -29,6 +29,8 @@ import type { FederalBudget } from "@/lib/db/types/budget";
 import type { GameState } from "@/lib/db/types/gameState";
 import type { GameConfig } from "@/lib/db/types/gameConfig";
 import type { StateMetrics } from "@/lib/db/types/stateMetrics";
+import type { State } from "@/lib/db/types/state";
+import { nationalOutputGap } from "@/lib/metricEngine/outputTrend";
 import type { Character } from "@/lib/db/types";
 import { getNationalDocId } from "@/lib/constants/nationalScope";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
@@ -206,11 +208,42 @@ export async function processCentralBankChairTurn(
           .collection<StateMetrics>("macroMetrics")
           .find(
             { _id: { $in: Array.from(nationalDocIdSet) } },
-            { projection: { "economic.gdpGrowth.value": 1 } }
+            { projection: { "economic.gdpGrowth.value": 1, "economic.unemploymentRate.value": 1 } }
           )
           .toArray()
       : [];
   const metricsById = new Map(nationalMetricsDocs.map((m) => [m._id.toString(), m]));
+
+  // Measured output gap per country for AI-run chairs' credibility check: they
+  // follow the activity rule (nppChairAutoRate), so their stance is judged
+  // against it. One read for every country with an AI chair.
+  const nppCountries = banks
+    .filter((b) => b.chairMode === "npp" && COUNTRY_CONFIGS[b.countryId as CountryId])
+    .map((b) => b.countryId as CountryId);
+  const gapRegions =
+    nppCountries.length > 0
+      ? ((await db
+          .collection<State>("states")
+          .find(
+            { countryId: { $in: nppCountries } },
+            {
+              projection: {
+                countryId: 1,
+                gdp: 1,
+                outputGap: 1,
+                outputTrendGrowth: 1,
+                realOutputStartTurn: 1,
+              },
+            }
+          )
+          ?.toArray()) ?? [])
+      : [];
+  const regionsByCountry = new Map<string, State[]>();
+  for (const r of gapRegions) {
+    const list = regionsByCountry.get(r.countryId) ?? [];
+    list.push(r);
+    regionsByCountry.set(r.countryId, list);
+  }
 
   // World era: chair scrutiny and the NPP auto-rate rule must judge inflation
   // against the era-authored target, not the modern/1979 constants. Keyed on
@@ -322,7 +355,19 @@ export async function processCentralBankChairTurn(
             targetInflation,
             neutralRate,
             gdpGrowth,
-            bank.chairMode === "npp" ? bank.chairAlignment : undefined
+            bank.chairMode === "npp" ? bank.chairAlignment : undefined,
+            bank.chairMode === "npp" && !area
+              ? {
+                  outputGap: (() => {
+                    const m = nationalOutputGap(regionsByCountry.get(countryId) ?? [], currentTurn);
+                    return m ? m.gap * m.weight : null;
+                  })(),
+                  unemploymentRate: finiteOr(
+                    nationalMetricsDoc?.economic?.unemploymentRate?.value,
+                    Number.NaN
+                  ),
+                }
+              : undefined
           ),
           previousStreak: previousResolveStreak,
         });

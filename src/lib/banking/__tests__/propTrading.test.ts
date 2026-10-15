@@ -293,6 +293,67 @@ describe("propTrading open/close/mark", () => {
     expect(liveCorp.bankCharter!.cashReserves).toBe(cashBefore);
   });
 
+  it("markBook batches price reads: one read per collection however large the book", async () => {
+    const fundIds = [new ObjectId(), new ObjectId(), new ObjectId()];
+    db.seed(
+      "indexFunds",
+      fundIds.map((_id, i) => ({ _id, quotedNav: 10 * (i + 1) }))
+    );
+    const issuerId = new ObjectId();
+    db.seed("corporations", [
+      { _id: issuerId, name: "Issuer", liquidCurrencyCode: "USD", countryId: "US" },
+    ]);
+    const bondIds = [new ObjectId(), new ObjectId()];
+    db.seed(
+      "bonds",
+      bondIds.map((_id) => ({ _id, marketPrice: 0.5, faceValue: 100, corporationId: issuerId }))
+    );
+    liveCorp.bankCharter = makeCharter({
+      propBook: [
+        ...fundIds.map((id) => ({
+          asset: "indexUnit" as const,
+          ref: id.toString(),
+          units: 2,
+          costBasis: 1,
+        })),
+        // Duplicate ref and an unpriceable ref both stay in place.
+        { asset: "indexUnit", ref: fundIds[0]!.toString(), units: 1, costBasis: 1 },
+        { asset: "indexUnit", ref: new ObjectId().toString(), units: 1, costBasis: 1 },
+        { asset: "equity", ref: equityCorp._id.toString(), units: 10, costBasis: 1 },
+        ...bondIds.map((id) => ({
+          asset: "bond" as const,
+          ref: id.toString(),
+          units: 3,
+          costBasis: 1,
+        })),
+        { asset: "forex", ref: "EUR", units: 7, costBasis: 1 },
+      ],
+    });
+
+    const counts: Record<string, number> = {};
+    for (const name of ["indexFunds", "corporations", "bonds"]) {
+      const col = db.collection(name);
+      const find = col.find.bind(col);
+      const findOne = col.findOne.bind(col);
+      vi.spyOn(col, "find").mockImplementation((...args: Parameters<typeof find>) => {
+        counts[name] = (counts[name] ?? 0) + 1;
+        return find(...args);
+      });
+      vi.spyOn(col, "findOne").mockImplementation(async (...args: Parameters<typeof findOne>) => {
+        counts[name] = (counts[name] ?? 0) + 1;
+        return findOne(...args);
+      });
+    }
+
+    const marked = await markBook(db as unknown as Db, liveCorp.bankCharter);
+
+    // Before: one indexFunds read per index position, one corporations read per
+    // equity position, and two reads per bond position.
+    expect(counts).toEqual({ indexFunds: 1, corporations: 2, bonds: 1 });
+    expect(marked.positions.map((p) => p.markValue)).toEqual([20, 40, 60, 10, 0, 100, 150, 150, 7]);
+    expect(marked.propBookMarkValue).toBe(537);
+  });
+
   it("force liquidation shrinks mark to leverage cap and returns cash", async () => {
     // L=50k + P=50k + M=1M - D=850k → equity=250k; ratio=4 > 3 → force
     liveCorp.bankCharter = makeCharter({
