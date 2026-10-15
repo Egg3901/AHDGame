@@ -1,5 +1,63 @@
 import { describe, expect, it } from "vitest";
-import { PLANT_OVERHEAD_FIXED_SHARE, computePlantOverhead } from "./rules";
+import { PLANT_OVERHEAD_FIXED_SHARE, computePlantOverhead, plantLaborShare } from "./rules";
+import { getSectorLaborShare } from "@/lib/labour/laborCost";
+
+describe("explicit production-method payroll", () => {
+  const args = { sectorType: "technology", strategyId: "hardware", currentTurn: 100, year: 1991 };
+
+  it.each([
+    [1953, 0.375],
+    [1991, 0.33],
+    [2027, 0.3],
+  ])("restores hardware intensity in %s", (year, expected) => {
+    expect(plantLaborShare({ ...args, year })).toBeCloseTo(expected, 12);
+  });
+
+  it("retains the service setting and other industries", () => {
+    for (const strategyId of [
+      undefined,
+      "standard",
+      "software",
+      "quantum_computing",
+      "ai_platforms",
+    ])
+      expect(plantLaborShare({ ...args, strategyId })).toBe(
+        getSectorLaborShare("technology", 1991)
+      );
+    expect(plantLaborShare({ ...args, sectorType: "manufacturing" })).toBe(
+      getSectorLaborShare("manufacturing", 1991)
+    );
+  });
+
+  it.each([
+    ["software", "hardware", 100, 0.44],
+    ["software", "hardware", 106, 0.385],
+    ["software", "hardware", 112, 0.33],
+    ["hardware", "software", 100, 0.33],
+    ["hardware", "software", 106, 0.385],
+    ["hardware", "software", 112, 0.44],
+    ["hardware", "software", 99, 0.33],
+    ["hardware", "software", 113, 0.44],
+  ])(
+    "blends %s to %s at turn %s",
+    (transitionFromStrategyId, strategyId, currentTurn, expected) => {
+      expect(
+        plantLaborShare({
+          ...args,
+          transitionFromStrategyId,
+          strategyId,
+          currentTurn,
+          transitionStartTurn: 100,
+        })
+      ).toBeCloseTo(expected, 12);
+    }
+  );
+
+  it("uses the target when transition metadata is incomplete", () => {
+    expect(plantLaborShare({ ...args, transitionFromStrategyId: "software" })).toBeCloseTo(0.33);
+    expect(plantLaborShare({ ...args, transitionStartTurn: 99 })).toBeCloseTo(0.33);
+  });
+});
 
 const base = {
   nominalDailyRevenue: 240_000,

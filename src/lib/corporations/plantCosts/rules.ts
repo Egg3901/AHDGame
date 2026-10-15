@@ -1,3 +1,32 @@
+import { STRATEGY_TRANSITION_TURNS } from "@/lib/constants/sectorStrategyTypes";
+import { eraLaborMultiplier, getSectorLaborShare } from "@/lib/labour/laborCost";
+
+/** Hardware retains the technology payroll intensity from before the service-payroll increase. */
+export const HARDWARE_LABOR_INTENSITY = 0.3;
+
+/** Explicit plants price payroll for their production method, including a retool in progress. */
+export function plantLaborShare(args: {
+  sectorType: string;
+  strategyId?: string;
+  transitionFromStrategyId?: string | null;
+  transitionStartTurn?: number | null;
+  currentTurn: number;
+  year?: number;
+}): number {
+  const baseline = getSectorLaborShare(args.sectorType, args.year);
+  if (args.sectorType !== "technology") return baseline;
+  const share = (strategyId: string | undefined) =>
+    strategyId === "hardware" ? HARDWARE_LABOR_INTENSITY * eraLaborMultiplier(args.year) : baseline;
+  const target = share(args.strategyId);
+  if (!args.transitionFromStrategyId || args.transitionStartTurn == null) return target;
+  const progress = Math.min(
+    1,
+    Math.max(0, (args.currentTurn - args.transitionStartTurn) / STRATEGY_TRANSITION_TURNS)
+  );
+  const source = share(args.transitionFromStrategyId);
+  return source + (target - source) * progress;
+}
+
 /** Plant services per unit, priced at the era's nominal output basket. */
 export const PLANT_OVERHEAD_OUTPUT_SHARE = 0.04;
 

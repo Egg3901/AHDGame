@@ -133,10 +133,11 @@ function run(
   mode: "capital" | "plants",
   sector: CorporateSector,
   currentTurn = 1000,
-  mutate?: (env: SectorTurnEnv) => void
+  mutate?: (env: SectorTurnEnv) => void,
+  corp = makeCorp()
 ) {
   const env = makeEnv(mode, currentTurn, mutate);
-  const result = processSector(env, makeCorp(), sector, 1, undefined, 1);
+  const result = processSector(env, corp, sector, 1, undefined, 1);
   return { result, update: sectorUpdateOf(env), env };
 }
 
@@ -153,6 +154,39 @@ const INPUT_COMMODITY = (Object.keys(DEMAND) as CommodityType[]).find(
 )!;
 
 const profitOf = (r: ReturnType<typeof run>) => r.result.hourlyRevenue - r.result.costs;
+
+describe("technology physical operating costs", () => {
+  it.each(["hardware", "software", "standard"])(
+    "can cover %s operating costs at base prices with full staffing and sales",
+    (strategyId) => {
+      const rates = getEffectiveStrategyRates("technology", strategyId, undefined, undefined, 0);
+      const units = impliedOutputUnits(DAILY_REVENUE, rates.supply, COMMODITY_BASE_PRICES, 1);
+      const r = run(
+        "plants",
+        makeSector({
+          sectorType: "technology",
+          strategyId,
+          profitMargin: 35,
+          currentGrowthRate: 0,
+          targetGrowthRate: 0,
+          capitalStock: units * CAPITAL_SEED_HEADROOM,
+          plantsStartTurn: 800,
+          wageLevel: 1,
+        }),
+        1000,
+        (env) => {
+          env.market.explicitPlantCostsEnabled = true;
+          env.currentYear = 1991;
+          env.lookups.marginLevelTrimPp = 8;
+        },
+        { ...makeCorp(), type: "technology" }
+      );
+      const pnl = r.update.plantsPnl as NonNullable<CorporateSector["plantsPnl"]>;
+      expect(r.update.labourStaffingFactor).toBe(1);
+      expect(pnl.profit).toBeGreaterThan(0);
+    }
+  );
+});
 
 describe("P3.5 — calibration identity", () => {
   it("uses explicit overhead without changing legacy calibration fields", () => {
