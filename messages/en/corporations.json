@@ -892,6 +892,38 @@
       "historyEntry": "{corporation}: revision {revision}, turn {turn}, amount {amount, number}. {status}.",
       "notAuthorized": "You no longer hold authority to publish this type of tender. Open the country board to review current opportunities.",
       "actionsLoadFailed": "Contract actions could not be loaded. Try again before publishing or bidding."
+    },
+    "marketGroups": {
+      "showNpp": "Show NPP groups ({count})",
+      "footprint": "{regions, plural, one {# operating region} other {# operating regions}} across {countries, plural, one {# country} other {# countries}}",
+      "tab": "Sub. Groups",
+      "title": "Subsidiary groups",
+      "overview": "Overview",
+      "sections": "Group sections",
+      "back": "Back to The Market",
+      "name": "Name",
+      "country": "Home country",
+      "members": "Member corporations",
+      "equityValueAnchor": "External equity value",
+      "cashAnchor": "Cash",
+      "revenueAnchor": "Revenue / turn",
+      "sectorCount": "Sectors",
+      "basis": "Each group includes its parent and all formalized descendants, including nested groups. External equity value uses current share prices and excludes stakes held by another member. Groups overlap; their totals must not be added together. Totals are unavailable when any member has private or unavailable accounts.",
+      "publicNote": "This overview is visible to signed-in players. Financial history, directions and supply management remain private.",
+      "search": "Search groups or member corporations",
+      "industry": "Industry",
+      "allIndustries": "All industries",
+      "sort": "Sort by",
+      "ascending": "Ascending",
+      "descending": "Descending",
+      "empty": "No subsidiary groups match these filters.",
+      "unavailable": "Unavailable",
+      "previous": "Previous",
+      "next": "Next",
+      "pagination": "Page {page} of {pages} ({count, plural, one {# group} other {# groups}})",
+      "parentGroup": "View owning group",
+      "viewGroup": "View subsidiary group",
+      "memberSummary": "{revenue} revenue / turn, {count, plural, one {# direct subsidiary} other {# direct subsidiaries}}"
     }
   }
 }

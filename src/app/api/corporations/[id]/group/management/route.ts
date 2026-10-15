@@ -18,9 +18,14 @@ export async function GET(_request: Request, { params }: Context) {
       { id } = await params,
       resolved = await resolveCorporation(db, id);
     if (!resolved.ok) return resolved.response;
-    return NextResponse.json({
-      management: await groupManagementView(db, resolved.corporation, auth.user.userId),
-    });
+    const management = await groupManagementView(db, resolved.corporation, auth.user.userId);
+    if (
+      management &&
+      !management.canManage &&
+      !management.members.some((m) => Array.isArray(m.history))
+    )
+      return errorResponse(403, "Group management is private to its player CEOs.");
+    return NextResponse.json({ management });
   } catch (error) {
     return handleRouteError(error);
   }

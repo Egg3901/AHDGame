@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useTranslations } from "next-intl";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type { CommodityData } from "@/app/country/[code]/stockmarket/types";
@@ -22,6 +23,7 @@ import { DEFAULT_OFFER_FILTERS, offersQuery } from "./supplyOfferUi";
 import { StockMarketChart } from "@/app/country/[code]/stockmarket/components/MarketOverview";
 import { useMarketJson } from "./useMarketJson";
 
+import { SubsidiaryGroupsPanel } from "./SubsidiaryGroupsPanel";
 import { MarketCorporationAction } from "./MarketCorporationAction";
 import { useEnabledCountries, useCountryDisplayName } from "@/contexts/RegisteredCountriesContext";
 import { buildRuntimeExchangeMeta } from "@/app/country/[code]/stockmarket/stockMarketRouting";
@@ -59,6 +61,7 @@ function useChartOpen(): [boolean, (open: boolean) => void] {
 }
 
 export function MarketHub() {
+  const groupT = useTranslations("corporations.marketGroups");
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -206,13 +209,18 @@ export function MarketHub() {
                     : "border-transparent text-muted hover:text-foreground"
                 }`}
               >
-                {t.label}
+                {t.key === "sub-groups" ? groupT("tab") : t.label}
               </button>
             ))}
           </div>
         </div>
 
-        <div role="tabpanel" aria-label={MARKET_TABS.find((t) => t.key === tab)?.label}>
+        <div
+          role="tabpanel"
+          aria-label={
+            tab === "sub-groups" ? groupT("tab") : MARKET_TABS.find((t) => t.key === tab)?.label
+          }
+        >
           {tab === "overview" && (
             <MarketOverview
               commodities={list}
@@ -224,6 +232,7 @@ export function MarketHub() {
           {tab === "stocks" && <StocksPanel exchange={exchangeApi} />}
           {tab === "bonds" && <BondsPanel />}
           {tab === "funds" && <FundsPanel />}
+          {tab === "sub-groups" && <SubsidiaryGroupsPanel country={exchangeFilter} />}
           {tab === "wealth" && <WealthPanel exchange={exchangeApi} />}
           {tab === "sectors" && <SectorsPanel />}
           {tab === "commodities" && (

@@ -3,6 +3,7 @@ export const MARKET_TABS = [
   { key: "stocks", label: "Stocks" },
   { key: "bonds", label: "Bonds" },
   { key: "funds", label: "Funds" },
+  { key: "sub-groups", label: "Sub. Groups" },
   { key: "wealth", label: "Wealth list" },
   { key: "sectors", label: "Sectors for sale" },
   { key: "commodities", label: "Commodities" },
