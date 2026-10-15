@@ -6,7 +6,7 @@ areas: [fullstack, engine]
 tags: [government, corporations, contracts]
 ---
 
-Governments publish defence procurement and resource extraction tenders for corporate bids. Each country has a Government Contracts board with Active Bidding, Bidding Closed, Awarded and Canceled tabs, type filters and ten results per page. Cabinet Offices link to their country's contract board, with publishing and award authority following the existing departmental and licensing rules.
+Governments publish defence procurement and resource extraction tenders for corporate bids. Each country has a Government Contracts board with Active Bidding, Bidding Closed, Awarded and Canceled tabs, type filters and ten results per page. Economy pages and Cabinet Offices link to their country's contract board, with publishing and award authority following the existing departmental and licensing rules.
 
 Bid management follows the corporation's current CEO, and interrupted awards and production allocations recover without creating duplicate obligations.
 
