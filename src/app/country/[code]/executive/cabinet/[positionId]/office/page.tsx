@@ -7,6 +7,7 @@ import { useCabinetOffice } from "./useCabinetOffice";
 import { useMergerReviewQueue } from "./useMergerReviewQueue";
 import IntelligenceTab from "./components/IntelligenceTab";
 import { MergerReviewQueuePanel } from "./components/MergerReviewQueuePanel";
+import { IndexListingQueuePanel } from "./components/IndexListingQueuePanel";
 import { CabinetOfficeLayout } from "./components/CabinetOfficeLayout";
 import { RestrictedOfficeNotice } from "./components/RestrictedOfficeNotice";
 import { CabinetStatStrip } from "./components/CabinetStatStrip";
@@ -603,11 +604,14 @@ export default function CabinetOfficePage() {
               )}
 
               {activeTab === "competition" && (
-                <MergerReviewQueuePanel
-                  data={mergerQueue}
-                  canAct={canAct}
-                  onDecided={refetchMergerQueue}
-                />
+                <>
+                  <MergerReviewQueuePanel
+                    data={mergerQueue}
+                    canAct={canAct}
+                    onDecided={refetchMergerQueue}
+                  />
+                  <IndexListingQueuePanel canAct={canAct} />
+                </>
               )}
 
               {activeTab === "intelligence" && isIntelligence && conflictsEnabled && (
