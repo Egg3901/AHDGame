@@ -3,6 +3,8 @@ import {
   IDLE_RETIRE_GRACE_TURNS,
   IDLE_RETIRE_HEADROOM,
   IDLE_RETIRE_RATE,
+  IDLE_RETIRE_STRUCTURAL_GRACE_TURNS,
+  IDLE_RETIRE_STRUCTURAL_HEADROOM,
   idleCapacityRetirement,
   type IdleCapacityRetirementInput,
 } from "./idleCapacityRetirement";
@@ -87,5 +89,42 @@ describe("idleCapacityRetirement", () => {
       full / 2,
       12
     );
+  });
+});
+
+describe("idleCapacityRetirement: NPP engine 6 structural overcapacity", () => {
+  // Sold out (fill 1.0) yet held at 40% of capacity by the throttle.
+  const soldOut = (over: Partial<IdleCapacityRetirementInput> = {}) =>
+    glut({ demandThrottleFactor: 0.4, demandFill: 1, ...over });
+
+  it("leaves a sold-out plant alone without the NPP engine 6 flag", () => {
+    expect(idleCapacityRetirement(soldOut({ priorStreak: 100 }))).toEqual({
+      streak: 0,
+      retireFraction: 0,
+    });
+  });
+
+  it("counts the structural streak through the longer grace", () => {
+    const r = idleCapacityRetirement(
+      soldOut({ nppStructural: true, priorStreak: IDLE_RETIRE_STRUCTURAL_GRACE_TURNS - 1 })
+    );
+    expect(r).toEqual({ streak: IDLE_RETIRE_STRUCTURAL_GRACE_TURNS, retireFraction: 0 });
+  });
+
+  it("retires toward the run with the wider headroom once the grace has run", () => {
+    const r = idleCapacityRetirement(
+      soldOut({ nppStructural: true, priorStreak: IDLE_RETIRE_STRUCTURAL_GRACE_TURNS })
+    );
+    expect(r.retireFraction).toBeCloseTo(
+      IDLE_RETIRE_RATE * (1 - 0.4 * (1 + IDLE_RETIRE_STRUCTURAL_HEADROOM)),
+      12
+    );
+  });
+
+  it("does not fire for a plant running above the structural throttle", () => {
+    const r = idleCapacityRetirement(
+      soldOut({ nppStructural: true, demandThrottleFactor: 0.8, priorStreak: 100 })
+    );
+    expect(r).toEqual({ streak: 0, retireFraction: 0 });
   });
 });
