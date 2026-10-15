@@ -23,7 +23,8 @@ import { useConflictsEnabled } from "@/contexts/AuthDataContext";
 import { getExecutiveSurface } from "@/lib/constants/executiveSurface";
 import { getExecutiveSeal } from "@/lib/constants/executiveSeals";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
-import { OfficePlaques } from "@/app/country/[code]/executive/components/OfficePlaques";
+import { AdministrationTable } from "@/app/country/[code]/executive/cabinet/AdministrationTable";
+import { usePresidentialCabinet } from "@/app/country/[code]/executive/cabinet/usePresidentialCabinet";
 import { ExecutiveActivitySection } from "@/app/country/[code]/executive/components/ExecutiveActivitySection";
 import { approvalApiUrl, approvalUrl, scotusUrl } from "@/lib/urls";
 import { ApprovalTooltip } from "@/components/ApprovalTooltip";
@@ -82,7 +83,7 @@ export default function WhiteHouseClient({ countryId = "US" }: { countryId?: Cou
     if (openable) setActiveTab(requested);
   }, [data, searchParams]);
   const [bills, setBills] = useState<PendingBill[]>([]);
-  const [activeNominationsCount, setActiveNominationsCount] = useState(0);
+  const cabinet = usePresidentialCabinet(countryId);
   const [loading, setLoading] = useState(true);
   const [appointModal, setAppointModal] = useState<"president" | "vicePresident" | null>(null);
   const [characters, setCharacters] = useState<Character[]>([]);
@@ -136,10 +137,9 @@ export default function WhiteHouseClient({ countryId = "US" }: { countryId?: Cou
     setLoading(true);
     try {
       const countryParam = `?country=${countryId.toLowerCase()}`;
-      const [whRes, billsRes, cabinetRes] = await Promise.all([
+      const [whRes, billsRes] = await Promise.all([
         fetch(`/api/whitehouse${countryParam}`),
         fetch(`/api/whitehouse/bills${countryParam}`),
-        fetch(`/api/whitehouse/cabinet${countryParam}`),
       ]);
       if (whRes.ok) {
         const whData = await whRes.json();
@@ -148,13 +148,6 @@ export default function WhiteHouseClient({ countryId = "US" }: { countryId?: Cou
       if (billsRes.ok) {
         const b = await billsRes.json();
         setBills(b.bills ?? []);
-      }
-      if (cabinetRes.ok) {
-        const c = await cabinetRes.json();
-        const count = (c.positions ?? []).filter(
-          (p: { nomination?: { status: string } }) => p.nomination?.status === "active"
-        ).length;
-        setActiveNominationsCount(count);
       }
     } finally {
       setLoading(false);
@@ -608,16 +601,39 @@ export default function WhiteHouseClient({ countryId = "US" }: { countryId?: Cou
 
         {activeTab === "overview" && (
           <>
-            {/* President & Vice President — B office plaques */}
-            <section className="mb-8 space-y-3">
-              <h2 className="text-sm font-semibold text-muted mb-4">Executive leadership</h2>
-              <OfficePlaques
-                countryId={countryId}
-                identity={getExecutiveIdentity(countryId)}
-                plaques={[
+            {/* Instruments, then the whole administration as one table, then
+                the desk and the acts ledger. Tables, not cards: every office is
+                one row with its holder, party, status and the President's
+                controls. */}
+            <ExecutiveActivitySection
+              countryId={countryId}
+              cabinetSource="presidential"
+              showRoster={false}
+              clock={
+                daysInOffice !== null
+                  ? {
+                      value: `${daysInOffice}d`,
+                      subline: "in office",
+                      currentTerm: data.presidentCurrentTerm ?? undefined,
+                    }
+                  : undefined
+              }
+              ledgerFooter={{
+                href: countryId === COUNTRY_CONFIGS.US.id ? "/congress?tab=bills" : legislaturePath,
+                label: `${config.legislature.name} page`,
+              }}
+            >
+              <AdministrationTable
+                cabinet={cabinet}
+                title="The administration"
+                leadRows={[
                   {
-                    title: data.president?.isActing ? "Acting President" : "President",
-                    sealGlyph: "P",
+                    key: "president",
+                    office: data.president?.isActing ? "Acting President" : "President",
+                    note:
+                      countryId === COUNTRY_CONFIGS.US.id
+                        ? "Elected by the Electoral College"
+                        : "Directly elected head of state",
                     holder: data.president
                       ? {
                           name: data.president.characterName,
@@ -628,15 +644,15 @@ export default function WhiteHouseClient({ countryId = "US" }: { countryId?: Cou
                           partyColor: data.president.partyColor,
                         }
                       : null,
-                    vacancyNote:
-                      countryId === COUNTRY_CONFIGS.US.id
-                        ? "Elected by the Electoral College."
-                        : "Directly elected head of state.",
-                    tenureLine: sinceChip ?? undefined,
+                    status: data.president
+                      ? { label: data.president.isActing ? "Acting" : "Elected", tone: "success" }
+                      : { label: "Vacant", tone: "default" },
+                    statusNote: sinceChip ?? undefined,
                   },
                   {
-                    title: "Vice president",
-                    sealGlyph: "VP",
+                    key: "vice-president",
+                    office: "Vice President",
+                    note: `Presides over the ${upperChamberShort}`,
                     holder: data.vicePresident
                       ? {
                           name: data.vicePresident.characterName,
@@ -647,268 +663,207 @@ export default function WhiteHouseClient({ countryId = "US" }: { countryId?: Cou
                           partyColor: data.vicePresident.partyColor,
                         }
                       : null,
-                    vacancyNote: "Elected on the presidential ticket.",
-                    tenureLine: `presides over the ${upperChamberShort}`,
+                    status: data.vicePresident
+                      ? { label: "Elected", tone: "success" }
+                      : data.vpNomination
+                        ? { label: "Congress vote", tone: "info" }
+                        : { label: "Vacant", tone: "default" },
+                    statusNote:
+                      !data.vicePresident && data.vpNomination
+                        ? `Nominee ${data.vpNomination.nomineeCharacterName}`
+                        : undefined,
+                    actions: (
+                      <>
+                        {data.isVicePresident && (
+                          <Link
+                            href={`/country/${countryId.toLowerCase()}/executive/vice-president`}
+                            className="whitespace-nowrap rounded-md border border-primary/40 px-2.5 py-1 text-xs font-medium text-primary transition-colors hover:bg-primary/10"
+                          >
+                            VP office
+                          </Link>
+                        )}
+                        {data.isVicePresident && (
+                          <button
+                            onClick={handleResignVp}
+                            disabled={resignLoading}
+                            className="whitespace-nowrap rounded-md border border-error/30 px-2.5 py-1 text-xs font-medium text-error transition-colors hover:bg-error/10 disabled:opacity-50"
+                          >
+                            {resignLoading ? "Resigning..." : "Resign"}
+                          </button>
+                        )}
+                        {/* The 25th-Amendment VP nomination is a US mechanic; other
+                            presidential countries fill the VP on the elected ticket. */}
+                        {countryId === COUNTRY_CONFIGS.US.id &&
+                          data.isPresident &&
+                          !data.vicePresident &&
+                          !data.vpNomination && (
+                            <button
+                              onClick={() => {
+                                setVpNominateModal(true);
+                                setVpNomineeCharId("");
+                                setVpNominateError("");
+                              }}
+                              className="whitespace-nowrap rounded-md border border-card-border px-2.5 py-1 text-xs font-medium text-foreground transition-colors hover:bg-card-elevated"
+                            >
+                              Nominate
+                            </button>
+                          )}
+                        {data.isPresident && data.vpNomination && (
+                          <button
+                            onClick={() => handleWithdrawVpNomination(data.vpNomination!.id)}
+                            disabled={submitting}
+                            className="whitespace-nowrap rounded-md border border-error/30 px-2.5 py-1 text-xs font-medium text-error transition-colors hover:bg-error/10 disabled:opacity-50"
+                          >
+                            Withdraw
+                          </button>
+                        )}
+                      </>
+                    ),
                   },
                 ]}
-              />
-              <div className="flex flex-wrap gap-2">
-                {data.isVicePresident && (
-                  <Link
-                    href={`/country/${countryId.toLowerCase()}/executive/vice-president`}
-                    className="rounded-lg border border-primary/40 px-3 py-1.5 text-xs font-medium text-primary hover:bg-primary/10 transition-colors"
-                  >
-                    Open VP office
-                  </Link>
-                )}
-                {data.isVicePresident && (
-                  <button
-                    onClick={handleResignVp}
-                    disabled={resignLoading}
-                    className="rounded-lg border border-error/40 px-3 py-1.5 text-xs font-medium text-error hover:bg-error/10 disabled:opacity-50 transition-colors"
-                  >
-                    {resignLoading ? "Resigning…" : "Resign as vice president"}
-                  </button>
-                )}
-                {/* The 25th-Amendment VP nomination is a US mechanic; other
-                    presidential countries fill the VP on the elected ticket. */}
-                {countryId === COUNTRY_CONFIGS.US.id &&
-                  data.isPresident &&
-                  !data.vicePresident &&
-                  !data.vpNomination && (
-                    <button
-                      onClick={() => {
-                        setVpNominateModal(true);
-                        setVpNomineeCharId("");
-                        setVpNominateError("");
-                      }}
-                      className="rounded-lg border border-primary/40 px-3 py-1.5 text-xs font-medium text-primary hover:bg-primary/10 transition-colors"
-                    >
-                      Nominate vice president
-                    </button>
-                  )}
-                {/* SCOTUS is a US-only mechanic (#3581) — other presidential
-                    countries have no judiciary subsystem modeled yet. */}
-                {countryId === COUNTRY_CONFIGS.US.id && (
-                  <Link
-                    href={scotusUrl(countryId)}
-                    className="rounded-lg border border-card-border px-3 py-1.5 text-xs font-medium text-foreground hover:bg-card-elevated transition-colors"
-                  >
-                    Supreme Court
-                  </Link>
-                )}
-              </div>
-            </section>
-
-            {/* X instruments + acts ledger + cabinet roster */}
-            <section className="mb-8">
-              <ExecutiveActivitySection
-                countryId={countryId}
-                cabinetSource="presidential"
-                clock={
-                  daysInOffice !== null
-                    ? {
-                        value: `${daysInOffice}d`,
-                        subline: "in office",
-                        currentTerm: data.presidentCurrentTerm ?? undefined,
-                      }
-                    : undefined
-                }
-                ledgerFooter={{
-                  href:
-                    countryId === COUNTRY_CONFIGS.US.id ? "/congress?tab=bills" : legislaturePath,
-                  label: `${config.legislature.name} page`,
-                }}
-              />
-            </section>
-
-            {/* VP Nomination Status */}
-            {data.vpNomination && (
-              <section className="mb-8">
-                <h2 className="text-sm font-semibold text-muted mb-4">
-                  VP nomination: Senate confirmation vote
-                </h2>
-                <div className="rounded-2xl border border-card-border bg-card p-5 shadow-sm space-y-4">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                    <div>
-                      <p className="font-semibold text-foreground">
-                        {data.vpNomination.nomineeCharacterName}
-                      </p>
-                      <p className="text-xs text-muted mt-0.5">
-                        Nominated for Vice President · Senate vote open 24 hours
-                      </p>
-                    </div>
-                    {data.isPresident && (
-                      <button
-                        onClick={() => handleWithdrawVpNomination(data.vpNomination!.id)}
-                        disabled={submitting}
-                        className="rounded-lg border border-error/40 px-3 py-1.5 text-xs font-medium text-error hover:bg-error/10 disabled:opacity-50 transition-colors shrink-0"
+                headerAction={
+                  <>
+                    {/* SCOTUS is a US-only mechanic (#3581) — other presidential
+                        countries have no judiciary subsystem modeled yet. */}
+                    {countryId === COUNTRY_CONFIGS.US.id && (
+                      <Link
+                        href={scotusUrl(countryId)}
+                        className="rounded-md border border-card-border px-2.5 py-1 text-xs font-medium text-muted transition-colors hover:text-foreground"
                       >
-                        Withdraw
-                      </button>
+                        Supreme Court
+                      </Link>
                     )}
-                  </div>
-                  {/* Vote tally */}
-                  <div className="flex gap-4 text-sm">
-                    <span className="text-success font-medium">
-                      {data.vpNomination.votesFor} For
+                    <Link
+                      href={`/country/${countryId.toLowerCase()}/executive/cabinet`}
+                      className="rounded-md border border-card-border px-2.5 py-1 text-xs font-medium text-muted transition-colors hover:text-foreground"
+                    >
+                      Cabinet room
+                    </Link>
+                  </>
+                }
+              />
+
+              {/* VP confirmation vote: the 25th Amendment needs both chambers. */}
+              {data.vpNomination && data.isSenator && (
+                <div className="flex flex-col gap-3 rounded-xl border border-info/30 bg-card px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="text-sm">
+                    <span className="font-medium text-foreground">
+                      {data.vpNomination.nomineeCharacterName}
                     </span>
-                    <span className="text-error font-medium">
-                      {data.vpNomination.votesAgainst} Against
+                    <span className="ml-2 text-xs text-muted">
+                      for Vice President · {data.vpNomination.votesFor} for,{" "}
+                      {data.vpNomination.votesAgainst} against, {data.vpNomination.votesAbstain}{" "}
+                      abstain
                     </span>
-                    <span className="text-muted">{data.vpNomination.votesAbstain} Abstain</span>
                   </div>
-                  {/* Senator vote controls */}
-                  {data.isSenator && (
-                    <div className="pt-2 border-t border-card-border">
-                      {data.vpNomination.myVote ? (
-                        <p className="text-sm text-muted">
-                          Your vote:{" "}
-                          <span className="font-medium capitalize text-foreground">
-                            {data.vpNomination.myVote}
-                          </span>
-                        </p>
-                      ) : (
-                        <div className="flex flex-wrap gap-2">
-                          <span className="text-xs text-muted self-center mr-1">Your vote:</span>
-                          {(["for", "against", "abstain"] as const).map((v) => (
-                            <button
-                              key={v}
-                              onClick={() => handleVpVote(data.vpNomination!.id, v)}
-                              disabled={vpVotingId !== null}
-                              className={`rounded-lg px-3 py-1.5 text-xs font-medium border transition-colors disabled:opacity-50 ${
-                                v === "for"
-                                  ? "bg-success/15 text-success border-success/40 hover:bg-success/25"
-                                  : v === "against"
-                                    ? "bg-error/15 text-error border-error/40 hover:bg-error/25"
-                                    : "bg-card-elevated text-muted border-card-border hover:text-foreground"
-                              }`}
-                            >
-                              {vpVotingId ? "…" : v.charAt(0).toUpperCase() + v.slice(1)}
-                            </button>
-                          ))}
-                        </div>
-                      )}
+                  {data.vpNomination.myVote ? (
+                    <p className="text-xs text-muted">
+                      Your vote:{" "}
+                      <span className="font-medium capitalize text-foreground">
+                        {data.vpNomination.myVote}
+                      </span>
+                    </p>
+                  ) : (
+                    <div className="flex flex-wrap gap-1.5">
+                      {(["for", "against", "abstain"] as const).map((v) => (
+                        <button
+                          key={v}
+                          onClick={() => handleVpVote(data.vpNomination!.id, v)}
+                          disabled={vpVotingId !== null}
+                          className={`rounded-md border px-3 py-1 text-xs font-medium transition-colors disabled:opacity-50 ${
+                            v === "for"
+                              ? "border-success/40 bg-success/15 text-success hover:bg-success/25"
+                              : v === "against"
+                                ? "border-error/40 bg-error/15 text-error hover:bg-error/25"
+                                : "border-card-border bg-card-elevated text-muted hover:text-foreground"
+                          }`}
+                        >
+                          {vpVotingId ? "..." : v.charAt(0).toUpperCase() + v.slice(1)}
+                        </button>
+                      ))}
                     </div>
                   )}
                 </div>
-              </section>
-            )}
-
-            {/* Bills Awaiting Signature */}
-            {data.isPresident && bills.length > 0 && (
-              <section className="mb-8">
-                <h2 className="text-sm font-semibold text-muted mb-1">
-                  Bills awaiting your signature
-                </h2>
-                <p className="mb-4 text-xs text-muted">
-                  Sign or veto before each deadline. A bill you leave unanswered becomes law without
-                  your signature when its deadline passes.
-                </p>
-                <div className="rounded-2xl border border-card-border bg-card p-6 shadow-sm">
-                  <div className="space-y-4 max-h-[400px] overflow-y-auto pr-2">
-                    {bills.map((b) => (
-                      <div
-                        key={b.id}
-                        className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-xl border border-card-border bg-card-elevated p-4"
-                      >
-                        <div className="min-w-0 flex-1">
-                          <Link
-                            href={
-                              countryId === COUNTRY_CONFIGS.US.id
-                                ? `/congress/bills/${b.id}`
-                                : `${legislaturePath}/bills/${b.id}`
-                            }
-                            className="font-medium text-foreground hover:text-primary transition-colors"
-                          >
-                            {b.title}
-                          </Link>
-                          <p className="text-sm text-muted mt-0.5 line-clamp-2">{b.summary}</p>
-                          {(b.presidentActionDeadlineOnTurn != null ||
-                            b.presidentActionDeadline) && (
-                            <p className="mt-1 text-xs font-medium text-warning">
-                              {deskDeadlineLabel(
-                                b.presidentActionDeadlineOnTurn != null
-                                  ? clock.formatRemainingTurns(b.presidentActionDeadlineOnTurn)
-                                  : clock.formatRemaining(b.presidentActionDeadline)
-                              )}
-                            </p>
-                          )}
-                        </div>
-                        <div className="flex gap-2 shrink-0">
-                          <button
-                            onClick={() => handleBillAction(b.id, "sign")}
-                            disabled={billActionId !== null}
-                            className="rounded-lg bg-success/20 text-success border border-success/50 px-4 py-2 text-sm font-medium hover:bg-success/30 disabled:opacity-50 transition-colors min-h-[44px] touch-manipulation"
-                          >
-                            Sign
-                          </button>
-                          <button
-                            onClick={() => handleBillAction(b.id, "veto")}
-                            disabled={billActionId !== null}
-                            className="rounded-lg bg-error/20 text-error border border-error/50 px-4 py-2 text-sm font-medium hover:bg-error/30 disabled:opacity-50 transition-colors min-h-[44px] touch-manipulation"
-                          >
-                            Veto
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                  <Link
-                    href={
-                      countryId === COUNTRY_CONFIGS.US.id ? "/congress?tab=bills" : legislaturePath
-                    }
-                    className="mt-4 inline-block text-sm text-primary hover:underline font-medium"
-                  >
-                    View all bills →
-                  </Link>
-                </div>
-              </section>
-            )}
-
-            {/* Cabinet link */}
-            {/* Cabinet narrative lives on the cabinet page (USCabinetClient). */}
-            <section className="space-y-4">
-              {activeNominationsCount > 0 && (
-                <Link
-                  href={
-                    countryId === COUNTRY_CONFIGS.US.id
-                      ? "/congress?chamber=senate&tab=bills"
-                      : legislaturePath
-                  }
-                  className="block rounded-2xl border-2 border-primary/50 bg-primary/10 p-5 shadow-md hover:bg-primary/15 hover:border-primary/70 transition-all"
-                >
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                    <div>
-                      <h3 className="font-semibold text-foreground">
-                        {activeNominationsCount} nomination{activeNominationsCount !== 1 ? "s" : ""}{" "}
-                        awaiting Senate vote
-                      </h3>
-                      <p className="text-sm text-muted mt-0.5">
-                        {upperChamberShort} members: vote to confirm or reject. 24-hour voting
-                        window.
-                      </p>
-                    </div>
-                    <span className="inline-flex items-center gap-1 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-primary/90 transition-colors min-h-[44px] touch-manipulation shrink-0">
-                      Vote in {upperChamberShort}
-                      <svg
-                        className="h-4 w-4"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M9 5l7 7-7 7"
-                        />
-                      </svg>
-                    </span>
-                  </div>
-                </Link>
               )}
-            </section>
+
+              {/* The desk: bills awaiting signature, as a table. */}
+              {data.isPresident && bills.length > 0 && (
+                <section className="space-y-3">
+                  <div>
+                    <h2 className="text-sm font-semibold text-foreground">
+                      Bills awaiting your signature
+                    </h2>
+                    <p className="mt-0.5 text-xs text-muted">
+                      Sign or veto before each deadline. A bill you leave unanswered becomes law
+                      without your signature when its deadline passes.
+                    </p>
+                  </div>
+                  <div className="overflow-x-auto rounded-xl border border-warning/30 bg-card">
+                    <table className="w-full min-w-[560px] border-collapse text-sm">
+                      <thead>
+                        <tr className="border-b border-card-border bg-card-muted text-left text-[11px] text-muted">
+                          <th scope="col" className="px-4 py-2 font-medium">
+                            Bill
+                          </th>
+                          <th scope="col" className="px-3 py-2 font-medium">
+                            Deadline
+                          </th>
+                          <th scope="col" className="px-4 py-2 text-right font-medium">
+                            <span className="sr-only">Decision</span>
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {bills.map((b) => (
+                          <tr key={b.id} className="border-t border-card-border/50 align-middle">
+                            <td className="max-w-[420px] px-4 py-2.5">
+                              <Link
+                                href={
+                                  countryId === COUNTRY_CONFIGS.US.id
+                                    ? `/congress/bills/${b.id}`
+                                    : `${legislaturePath}/bills/${b.id}`
+                                }
+                                className="font-medium text-foreground transition-colors hover:text-primary"
+                              >
+                                {b.title}
+                              </Link>
+                              <p className="mt-0.5 line-clamp-1 text-xs text-muted">{b.summary}</p>
+                            </td>
+                            <td className="whitespace-nowrap px-3 py-2.5 text-xs font-medium text-warning">
+                              {b.presidentActionDeadlineOnTurn != null || b.presidentActionDeadline
+                                ? deskDeadlineLabel(
+                                    b.presidentActionDeadlineOnTurn != null
+                                      ? clock.formatRemainingTurns(b.presidentActionDeadlineOnTurn)
+                                      : clock.formatRemaining(b.presidentActionDeadline)
+                                  )
+                                : "-"}
+                            </td>
+                            <td className="px-4 py-2.5">
+                              <div className="flex justify-end gap-1.5">
+                                <button
+                                  onClick={() => handleBillAction(b.id, "sign")}
+                                  disabled={billActionId !== null}
+                                  className="min-h-[36px] touch-manipulation rounded-md border border-success/50 bg-success/20 px-3.5 py-1 text-xs font-medium text-success transition-colors hover:bg-success/30 disabled:opacity-50"
+                                >
+                                  Sign
+                                </button>
+                                <button
+                                  onClick={() => handleBillAction(b.id, "veto")}
+                                  disabled={billActionId !== null}
+                                  className="min-h-[36px] touch-manipulation rounded-md border border-error/50 bg-error/20 px-3.5 py-1 text-xs font-medium text-error transition-colors hover:bg-error/30 disabled:opacity-50"
+                                >
+                                  Veto
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </section>
+              )}
+            </ExecutiveActivitySection>
           </>
         )}
       </main>

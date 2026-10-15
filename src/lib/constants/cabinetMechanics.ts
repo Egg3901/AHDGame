@@ -85,6 +85,13 @@ export interface CabinetPositionDef {
    * Takes precedence over `namesByYear`. See rosterEra.resolveSeatName.
    */
   renameOnDepartmentSplit?: { whenSeatEnabled: string; name: string };
+  /**
+   * Seated by the executive alone: a nomination for this seat opens no Senate
+   * vote and the nominee takes office at the next turn (US Chief of Staff).
+   */
+  appointedWithoutConfirmation?: boolean;
+  /** Not part of the presidential line of succession, so no "Nth in line" label. */
+  outsideSuccession?: boolean;
 }
 
 export const MECHANICS_BY_COUNTRY: Record<string, Record<string, CabinetPositionMechanics>> = {
@@ -175,6 +182,20 @@ export function getCabinetPositions(
   countryId: CountryId | string
 ): ReadonlyArray<CabinetPositionDef> {
   return POSITIONS_BY_COUNTRY[countryId] ?? [];
+}
+
+/**
+ * True when the executive fills this seat alone, with no confirmation vote
+ * (see CabinetPositionDef.appointedWithoutConfirmation).
+ */
+export function isDirectAppointmentSeat(
+  countryId: CountryId | string,
+  positionId: string
+): boolean {
+  return (
+    getCabinetPositions(countryId).find((p) => p.id === positionId)
+      ?.appointedWithoutConfirmation === true
+  );
 }
 
 /** All country ids that have a cabinet roster registered. */

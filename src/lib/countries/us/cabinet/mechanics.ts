@@ -1,8 +1,9 @@
 /**
- * US cabinet offices and what each one does. US_CABINET_MECHANICS lists all 16
+ * US cabinet offices and what each one does. US_CABINET_MECHANICS lists all 17
  * positions (Secretary of State, Treasury, Defense, Attorney General, Interior,
  * Agriculture, Commerce, Labor, Health, HUD, Transportation, Energy, Education,
- * Veterans, Homeland Security, Director of Intelligence) with the national and
+ * Veterans, Homeland Security, Director of Intelligence, White House Chief of
+ * Staff) with the national and
  * regional metrics each office moves, its allocation panels and its emergencies.
  */
 /**
@@ -1910,5 +1911,71 @@ export const US_CABINET_MECHANICS: Record<string, CabinetPositionMechanics> = {
       },
     ],
     regionalMetrics: [],
+  },
+  // ── 17. White House Chief of Staff ───────────────────────────────────────
+  // Runs the White House rather than a department: its lever is how the
+  // administration deals with the press and the public.
+  chief_of_staff: {
+    positionId: "chief_of_staff",
+    department: "Executive Office of the President",
+    nationalMetrics: [
+      {
+        category: "governance",
+        metricId: "publicTrust",
+        label: "Public Trust",
+        format: "index",
+        higherIsBetter: true,
+      },
+      {
+        category: "governance",
+        metricId: "governmentTransparency",
+        label: "Government Transparency",
+        format: "index",
+        higherIsBetter: true,
+      },
+      {
+        category: "mediaInformation",
+        metricId: "mediaPolarization",
+        label: "Media Polarization",
+        format: "index",
+        higherIsBetter: false,
+      },
+    ],
+    regionalMetrics: [],
+    tierSetting: {
+      name: "White House Operation",
+      description:
+        "Set how the White House deals with the press and the public. Message discipline calms media polarization but makes government less transparent; an open door raises transparency and trust but gives the press more to fight over.",
+      defaultTier: "balanced",
+      options: [
+        {
+          id: "message_discipline",
+          label: "Message discipline",
+          description:
+            "One voice, tightly controlled. Lowers media polarization but reduces government transparency.",
+          effects: {
+            "mediaInformation.mediaPolarization": -0.02,
+            "governance.governmentTransparency": -0.02,
+          },
+        },
+        {
+          id: "balanced",
+          label: "Balanced",
+          description: "A conventional press operation. No additional metric effects.",
+          effects: {},
+        },
+        {
+          id: "open_door",
+          label: "Open door",
+          description:
+            "Frequent briefings and open access. Raises transparency and public trust but increases media polarization.",
+          effects: {
+            "governance.governmentTransparency": 0.02,
+            "governance.publicTrust": 0.01,
+            "mediaInformation.mediaPolarization": 0.01,
+          },
+        },
+      ],
+    },
   },
 };

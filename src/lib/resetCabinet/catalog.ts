@@ -120,7 +120,29 @@ const intelligenceActions: ResetCabinetAction[] = (["US", "UK"] as const).flatMa
     }))
 );
 
-const completePortfolioActions = [...portfolioActions, ...intelligenceActions];
+// The White House Chief of Staff runs the same coordinating work as Japan's
+// Chief Cabinet Secretary: publishing what the administration decided, and
+// pulling departments together around a disaster response.
+const chiefOfStaffActions: ResetCabinetAction[] = authored
+  .filter((action) => action.seatId === "chief_cabinet_secretary")
+  .map((action) => ({
+    ...action,
+    id: `US:chief_of_staff:${action.slot}`,
+    country: "US" as const,
+    seatId: "chief_of_staff",
+    title: action.slot === 1 ? "Publish the Decision Record" : "Coordinate Disaster Response",
+    brief:
+      action.slot === 1
+        ? "Release the administration's decisions and who is accountable for follow-up."
+        : "Reconcile each department's documented disaster response assignments and open gaps.",
+    description: action.description.replace("Cabinet decisions", "administration decisions"),
+  }));
+
+const completePortfolioActions = [
+  ...portfolioActions,
+  ...intelligenceActions,
+  ...chiefOfStaffActions,
+];
 
 // Every office has two administrative choices even when its legislative account is
 // unfunded. Existing paid actions retain their effects and costs.
