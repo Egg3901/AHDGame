@@ -184,6 +184,11 @@ describe("dismissCaretakerCeo (I/O)", () => {
   it("restores the displaced human CEO and clears caretakerCeo", async () => {
     const db = createMockDb();
     const underlyingCharacterId = new ObjectId();
+    db.collection("characters").findOne.mockResolvedValue({
+      _id: underlyingCharacterId,
+      homeState: "DC",
+      countryId: "US",
+    } as never);
     const underlyingUserId = new ObjectId();
     const c = corp({
       ceoId: new ObjectId(), // currently the NPP
@@ -216,6 +221,11 @@ describe("dismissCaretakerCeo (I/O)", () => {
   it("restores a CEO who resigned into an automatic caretaker without a cooldown", async () => {
     const db = createMockDb();
     const underlyingCharacterId = new ObjectId();
+    db.collection("characters").findOne.mockResolvedValue({
+      _id: underlyingCharacterId,
+      homeState: "DC",
+      countryId: "US",
+    } as never);
     const underlyingUserId = new ObjectId();
     const c = corp({
       ceoId: new ObjectId(),
@@ -273,6 +283,42 @@ describe("dismissCaretakerCeo (I/O)", () => {
     expect(call.$set).not.toHaveProperty("caretakerCooldownUntilTurn");
   });
 
+  it("leaves the seat vacant when the stashed human moved away while the caretaker served", async () => {
+    const db = createMockDb();
+    db.collection("characters").findOne.mockResolvedValue({
+      homeState: "JP_TK",
+      countryId: "JP",
+    } as never);
+    const c = corp({
+      ceoId: new ObjectId(),
+      ceoType: "npp",
+      caretakerCeo: {
+        underlyingCharacterId: new ObjectId(),
+        underlyingUserId: new ObjectId(),
+        appointedTurn: 10,
+        appointmentSource: "owner",
+      },
+    });
+
+    const result = await dismissCaretakerCeo(db as unknown as Db, { corp: c, turn: 20, now });
+
+    expect(result).toEqual({ ok: true });
+    const call = db.collectionMocks["corporations"]!.updateOne.mock.calls[0]![1] as {
+      $set: Record<string, unknown>;
+      $unset: Record<string, unknown>;
+    };
+    expect(call.$set).toMatchObject({
+      ceoType: "character",
+      ceoVacant: true,
+      ceoVacantSinceTurn: 20,
+    });
+    expect(call.$set).not.toHaveProperty("ceoId");
+    expect(call.$unset).toHaveProperty("ceoId", "");
+    expect(call.$unset).toHaveProperty("caretakerCeo", "");
+    const writes = db.collectionMocks["corporations"]!.updateOne.mock.calls;
+    expect(writes.some(([, update]) => "$push" in (update as object))).toBe(false);
+  });
+
   it("is a no-op error when there is no caretaker", async () => {
     const db = createMockDb();
     const result = await dismissCaretakerCeo(db as unknown as Db, { corp: corp(), turn: 1, now });
@@ -287,6 +333,11 @@ describe("dismissCaretakerCeo (I/O)", () => {
     const siblingId = new ObjectId();
     const underlyingUserId = new ObjectId();
     const underlyingCharacterId = new ObjectId();
+    db.collection("characters").findOne.mockResolvedValue({
+      _id: underlyingCharacterId,
+      homeState: "DC",
+      countryId: "US",
+    } as never);
     const c = corp({
       ceoType: "npp",
       subsidiaryFormalizedAtTurn: 10,

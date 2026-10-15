@@ -446,8 +446,8 @@ export default function MarketOverviewPanel({
       {votesLoaded && tallies.length > 0 && (
         <DenseSection title="CEO election" meta="weighted by voting power">
           <p className="py-1 text-xs text-muted">
-            The leading candidate is offered the seat. Candidates must live in the HQ region, except
-            the sitting CEO. You can change or withdraw your vote at any time.
+            The leading candidate is offered the seat. To become CEO, a candidate must live in the
+            HQ region. You can change or withdraw your vote at any time.
           </p>
           <table className="w-full border-collapse">
             <thead>
