@@ -117,6 +117,7 @@ export async function initializeGameState(): Promise<GameState> {
     worldEpochId: new ObjectId().toHexString(),
     resetWorldId: randomUUID(),
     currentTurn: 1,
+    hardwareInputReliefStartTurn: 1,
     currentYear: STARTING_YEAR,
     // Always pair `startingYear` with the matching `preset`. Writing only
     // `startingYear` previously left `preset` undefined, which made

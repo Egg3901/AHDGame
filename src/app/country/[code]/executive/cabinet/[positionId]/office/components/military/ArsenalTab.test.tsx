@@ -8,6 +8,11 @@ import type {
   MilitaryUnitView,
 } from "../../useCabinetOffice";
 
+vi.mock("next-intl", () => ({
+  useTranslations: () => (key: string) =>
+    key === "openBoard" ? "Open country contract board" : "Publish and award government tenders.",
+}));
+
 afterEach(cleanup);
 
 const unit = (over: Partial<MilitaryUnitView> = {}) =>
@@ -57,6 +62,7 @@ const supplier = (over: Partial<DefenceSupplierView> = {}): DefenceSupplierView 
 function setup(over: Partial<React.ComponentProps<typeof ArsenalTab>> = {}) {
   return render(
     <ArsenalTab
+      countryId="US"
       arsenal={{
         stock: { ground: 40, naval: 0, air: 0, rocket: 0, space: 0, marine: 0 },
         grade: { ground: 2, naval: 0, air: 0, rocket: 0, space: 0, marine: 0 },
@@ -136,119 +142,13 @@ describe("ArsenalTab", () => {
   });
 });
 
-describe("ArsenalTab — awarding a contract", () => {
-  // The whole C2 loop is inert without this form: a minister could see an empty arsenal and
-  // an empty contract list with no way to connect the two.
-  it("awards to the selected plant with the ordered lots", async () => {
-    const onAwardContract = vi.fn(async () => true);
-    setup({ onAwardContract });
-
-    fireEvent.change(screen.getByLabelText("Supplier"), { target: { value: "s1" } });
-    fireEvent.change(screen.getByLabelText("Lots ordered"), { target: { value: "5" } });
-    fireEvent.click(screen.getByText("Offer contract"));
-
-    // The third argument is the minister's optional price and grade (suggestions #291/#292);
-    // an untouched form sends neither, so the route quotes a fair price at the plant's ceiling.
-    expect(onAwardContract).toHaveBeenCalledWith("s1", 5, {});
-  });
-
-  // Quoting off a different price than the route bills would make the confirmation a lie.
-  it("quotes lots x the going rate before the minister commits", () => {
-    setup();
-    fireEvent.change(screen.getByLabelText("Supplier"), { target: { value: "s1" } });
-    fireEvent.change(screen.getByLabelText("Lots ordered"), { target: { value: "5" } });
-    expect(screen.getByText("Total if fully delivered")).toBeTruthy();
-    // 5 lots x $1,000.
-    expect(screen.getByText(/5,000/)).toBeTruthy();
-  });
-
-  it("shows how many turns the plant needs to fill the order", () => {
-    setup();
-    fireEvent.change(screen.getByLabelText("Supplier"), { target: { value: "s1" } });
-    fireEvent.change(screen.getByLabelText("Lots ordered"), { target: { value: "5" } });
-    expect(screen.getByText(/about 1 turn to fill/)).toBeTruthy();
-  });
-
-  it("refuses to submit with no plant chosen or a non-positive order", () => {
-    const onAwardContract = vi.fn(async () => true);
-    setup({ onAwardContract });
-    const button = screen.getByText("Offer contract") as HTMLButtonElement;
-
-    expect(button.disabled).toBe(true);
-    fireEvent.change(screen.getByLabelText("Supplier"), { target: { value: "s1" } });
-    fireEvent.change(screen.getByLabelText("Lots ordered"), { target: { value: "0" } });
-    expect(button.disabled).toBe(true);
-
-    fireEvent.click(screen.getByText("Offer contract"));
-    expect(onAwardContract).not.toHaveBeenCalled();
-  });
-
-  // A zero GDP is exactly what would price a contract at nothing, so the form closes rather
-  // than awarding free materiel.
-  it("disables the form when a lot cannot be priced", () => {
-    setup({ lotPricePerLot: null });
-    expect(screen.getByText(/no usable GDP figure/)).toBeTruthy();
-    expect(screen.queryByLabelText("Supplier")).toBeNull();
-  });
-
-  it("explains an empty supplier list rather than showing a dead picker", () => {
-    setup({ suppliers: [] });
-    expect(screen.getByText(/No eligible supplier/)).toBeTruthy();
-    expect(screen.queryByLabelText("Supplier")).toBeNull();
-  });
-
-  it("hides the form from someone who does not hold the seat", () => {
-    setup({ canAct: false });
-    expect(screen.getByText(/Only the defence minister may award/)).toBeTruthy();
-  });
-
-  // A plant serving two domains splits its output, and a plant already under contract splits
-  // it again — both change what the order is actually worth.
-  it("warns when the chosen plant is already committed", () => {
-    setup({ suppliers: [supplier({ alreadyContracted: true })] });
-    fireEvent.change(screen.getByLabelText("Supplier"), { target: { value: "s1" } });
-    expect(screen.getByText(/already has an order/)).toBeTruthy();
-  });
-
-  it("lets a minister pick air on a two-domain plant (ticket 1134)", async () => {
-    const onAwardContract = vi.fn(async () => true);
-    setup({
-      onAwardContract,
-      suppliers: [supplier({ strategyId: "standard", components: ["ground", "air"] })],
-    });
-    fireEvent.change(screen.getByLabelText("Supplier"), { target: { value: "s1" } });
-    fireEvent.change(screen.getByLabelText("Domain"), { target: { value: "air" } });
-    fireEvent.change(screen.getByLabelText("Lots ordered"), { target: { value: "5" } });
-    fireEvent.click(screen.getByText("Offer contract"));
-    expect(onAwardContract).toHaveBeenCalledWith("s1", 5, { component: "air" });
-  });
-
-  it("warns when the chosen plant is producing nothing", () => {
-    setup({ suppliers: [supplier({ projectedLotsPerTurn: 0 })] });
-    fireEvent.change(screen.getByLabelText("Supplier"), { target: { value: "s1" } });
-    fireEvent.change(screen.getByLabelText("Lots ordered"), { target: { value: "5" } });
-    expect(screen.getByText(/producing nothing right now/)).toBeTruthy();
-  });
-});
-
-describe("ArsenalTab — contracting allowance", () => {
-  it("refuses an order past the supplier's current allowance", () => {
-    const onAwardContract = vi.fn(async () => true);
-    setup({ onAwardContract });
-    fireEvent.change(screen.getByLabelText("Supplier"), { target: { value: "s1" } });
-    fireEvent.change(screen.getByLabelText("Lots ordered"), { target: { value: "7" } });
-
-    expect(screen.getByText(/at most 6 more lots/)).toBeTruthy();
-    expect((screen.getByText("Offer contract") as HTMLButtonElement).disabled).toBe(true);
-    fireEvent.click(screen.getByText("Offer contract"));
-    expect(onAwardContract).not.toHaveBeenCalled();
-  });
-
-  it("accepts an order exactly at the allowance", () => {
-    setup();
-    fireEvent.change(screen.getByLabelText("Supplier"), { target: { value: "s1" } });
-    fireEvent.change(screen.getByLabelText("Lots ordered"), { target: { value: "6" } });
-    expect(screen.queryByText(/at most 6 more lots/)).toBeNull();
-    expect((screen.getByText("Offer contract") as HTMLButtonElement).disabled).toBe(false);
+describe("ArsenalTab bidding replacement", () => {
+  it("links to this country's defence tenders instead of selecting a supplier", () => {
+    setup({ countryId: "JP" });
+    expect(
+      screen.getByRole("link", { name: "Open country contract board" }).getAttribute("href")
+    ).toBe("/country/jp/government-contracts?type=defence");
+    expect(screen.queryByText("Award a contract")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Offer contract" })).toBeNull();
   });
 });

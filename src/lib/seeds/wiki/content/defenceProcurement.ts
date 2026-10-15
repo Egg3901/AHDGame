@@ -4,13 +4,19 @@ Recruiting units and paying for equipment are two different systems. This page i
 
 ## Who awards contracts
 
-The defence seat holder writes procurement contracts against the national defence appropriation. A contract names a corporation with a defence-strategy plant as the supplier and commits the country to buying a run of "lots" of equipment from it. An **acting** secretary can award and cancel contracts under the same rules as a confirmed holder.
+The defence seat holder publishes equipment tenders against the national defence appropriation. An **acting** secretary uses the same authority as a confirmed holder. The Cabinet Office's **Government Contracts** tab opens the country board; the Arsenal tab retains stock, deliveries and signed orders.
+
+A tender fixes the component, number of lots, required grade and maximum price per lot. Eligible domestic corporations nominate a certified plant and bid a price within the permitted band. Bid values stay sealed until closing; CEOs can revise or withdraw their own bid before then. The government selects a qualifying bid after closing and publishes its reason. The winning bid activates the order without another acceptance step.
+
+Publishing reserves the maximum obligation. Award transfers the actual winning value into the contract and releases the difference. The supplier concentration cap still applies. Defence bidding and award deadlines must fit inside the current quarterly contracting window.
+
+The country board has **Active Bidding**, **Bidding Closed**, **Awarded** and **Canceled** tabs, type filters and ten results per page. An interrupted award remains in Bidding Closed so the government can resume it.
 
 A country under a **demilitarisation** settlement (see [Peace, Indemnities & Truces](/wiki/peace-and-truces)) may award no new contracts, and no company may accept a new order from it, until the bar lapses. Live contracts keep delivering.
 
 ## Planned economies
 
-The Soviet Union and East Germany place no orders with private suppliers: there is no market to place them into, so the contract pipeline on this page never runs for them. Their arsenals are fed by **state arms industry** instead, a fixed number of lots every turn produced to plan rather than to order, delivered straight to the store and aimed at whichever branch is furthest from a full load. It keeps an army equipped and banks a modest war reserve in peacetime; it does not keep up with a war fought at full pace. See [Units, Recruitment & Procurement](/wiki/military-units).
+The Soviet Union and East Germany receive **state arms industry** output independently of tenders: a fixed number of lots each turn, delivered straight to the arsenal and aimed at the branch furthest from a full load. Eligible state-owned and true NPP defence suppliers also submit an initial suggested-price bid when a tender opens. They use the same country, currency and component eligibility checks as player suppliers; they do not receive a direct-award shortcut. Player corporations with NPP caretaker CEOs still make their own bidding decisions. See [Units, Recruitment & Procurement](/wiki/military-units).
 
 ## Contracting windows
 
@@ -41,7 +47,7 @@ A self-dealt award is not blocked. It is disclosed publicly, on the order book, 
 
 A contract can be cancelled by the minister who holds the defence seat, and how much that costs depends entirely on which of three things it is.
 
-**Withdrawing an offer.** An award starts as an offer and does nothing until the supplying CEO accepts it. Until they do, the minister can withdraw it for nothing: no fee, no disclosure, and the lots go straight back into the window's tranche. Nobody was promised anything.
+**Canceling an unawarded tender.** The minister publishes a reason and the reserved appropriation and quarterly capacity are released. An unawarded tender also expires at its award deadline. Once a winning bid has become an order, ending it follows the cause or convenience rules below. Historical withdrawn offers remain in the records; new awards do not wait for a second CEO acceptance.
 
 **Terminating for cause.** If a plant misses three delivery turns in a row for a reason of its own making, the contract can be torn up for free and the tranche is handed back. The three supplier-side reasons are: the plant produced nothing, the supplier is no longer eligible to be paid from the appropriation, or input prices overtook the struck price and the supplier cannot fund the loss. A buyer running out of appropriation is NOT one of them: underfunding your own defence budget does not earn you a free cancellation.
 

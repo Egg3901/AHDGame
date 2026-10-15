@@ -129,6 +129,7 @@ export function buildGroupSupplyContext(
       );
       const demand = computeSupplyAgreementBuyerDemand({
         preset: lookups.preset,
+        hardwareInputReliefStartTurn: lookups.hardwareInputReliefStartTurn,
         currentTurn: turn,
         unitScale: lookups.eraUnitScale,
         plantsEnabled: true,

@@ -140,48 +140,6 @@ export function MilitaryFlagship({
     }
   }
 
-  async function awardContract(
-    sectorId: string,
-    lotsOrdered: number,
-    // Suggestion #291/#292. Both optional: omitting them reproduces the old behaviour exactly,
-    // a fair computed price at the supplier's own grade ceiling.
-    options?: { pricePerLot?: number; gradeCeiling?: number; component?: string }
-  ) {
-    setBusy(true);
-    setContractError(null);
-    try {
-      const res = await fetch(
-        `/api/country/${countryCode}/executive/cabinet/${positionId}/defence-contracts`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            sectorId,
-            lotsOrdered,
-            ...(options?.pricePerLot != null ? { pricePerLot: options.pricePerLot } : {}),
-            ...(options?.gradeCeiling != null ? { gradeCeiling: options.gradeCeiling } : {}),
-            ...(options?.component != null ? { component: options.component } : {}),
-          }),
-        }
-      );
-      if (!res.ok) {
-        // The route refuses for reasons the form cannot pre-empt — a re-tooled plant, a lost
-        // seat, a country whose GDP went unusable between render and submit. Surface its own
-        // wording rather than a generic failure.
-        const payload = (await res.json().catch(() => null)) as { error?: string } | null;
-        setContractError(apiErrorText(payload, "That contract could not be awarded."));
-        return false;
-      }
-      onUpdate();
-      return true;
-    } catch {
-      setContractError("That request could not be sent.");
-      return false;
-    } finally {
-      setBusy(false);
-    }
-  }
-
   async function cancelContract(contractId: string) {
     setBusy(true);
     setContractError(null);
@@ -258,6 +216,7 @@ export function MilitaryFlagship({
 
       {tab === "arsenal" && (
         <ArsenalTab
+          countryId={countryId}
           arsenal={arsenal}
           contracts={contracts}
           suppliers={suppliers}
@@ -266,7 +225,6 @@ export function MilitaryFlagship({
           currencySymbol={currencySymbol}
           canAct={canAct}
           busy={busy}
-          onAwardContract={awardContract}
           onCancelContract={cancelContract}
         />
       )}

@@ -147,7 +147,7 @@ function ContractsTab({ countryId }: { countryId: string }) {
               onClick={() => setShowIssueModal(true)}
               className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary-dark transition-colors"
             >
-              Issue contract
+              Publish tender
             </button>
           )}
           {isAdmin && (

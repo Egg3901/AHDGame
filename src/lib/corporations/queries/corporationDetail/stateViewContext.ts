@@ -76,6 +76,7 @@ export async function loadStateViewContext(
                 preset: 1,
                 currentYear: 1,
                 currentTurn: 1,
+                hardwareInputReliefStartTurn: 1,
                 startingYear: 1,
                 eraSystemEnabled: 1,
               },

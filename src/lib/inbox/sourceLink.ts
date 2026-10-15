@@ -23,6 +23,14 @@ export function resolveSourceLink(
   metadata: Record<string, unknown> | undefined
 ): InboxSource | null {
   const m = metadata ?? {};
+  if (type === "government_contract_awarded" && asString(m.countryId))
+    return {
+      label: "View government contract",
+      href:
+        "/country/" +
+        encodeURIComponent(String(m.countryId).toLowerCase()) +
+        "/government-contracts?tab=awarded",
+    };
 
   // ── Election ──────────────────────────────────────────────────────────────
   const electionId = asString(m.electionId);

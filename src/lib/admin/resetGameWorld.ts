@@ -679,6 +679,7 @@ export async function resetGameWorld(
     worldEpochStartedAt: now,
     resetWorldId: randomUUID(),
     currentTurn: resetDate.currentTurn,
+    hardwareInputReliefStartTurn: resetDate.currentTurn,
     currentYear: resetDate.currentYear,
     resetStartDate: { year: resetDate.year, week: resetDate.week },
     startingYear,

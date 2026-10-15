@@ -4,6 +4,8 @@ import type { ExtractableResource } from "@/lib/constants/commodities";
 
 export interface ExtractionContract {
   _id: ObjectId;
+  /** Public tender whose winning bid created this contract; absent on existing contracts. */
+  tenderId?: string;
   stateId: string;
   countryId: CountryId;
   corporationId: ObjectId;
@@ -29,6 +31,8 @@ export interface ExtractionContract {
   signingFeeAnchor?: number;
   /** Frozen idempotency identity for a funded national signing-fee receipt. */
   signingFeeAttemptKey?: string;
+  /** The tender signing-fee journal has applied both the payment and its receipts. */
+  signingFeeSettled?: boolean;
   /** Per-turn royalty as a fraction of contracted capacity market value (0–0.02). */
   royaltyRatePerTurn?: number;
   /** Contract term in turns; absent = perpetual (legacy / admin). */

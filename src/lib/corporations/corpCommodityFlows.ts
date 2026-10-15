@@ -177,6 +177,7 @@ export type FlowSector = Pick<
 export interface CorpCommodityFlowContext {
   /** Originating preset selects input recipes without following the game clock. */
   preset?: string;
+  hardwareInputReliefStartTurn?: number;
   /** `marketSystemMode >= "plants"` — measured production replaces the nameplate. */
   plantsEnabled?: boolean;
   /** State-owned corp: carries `NATCORP_COMMODITY_MULTIPLIER`. */
@@ -240,7 +241,8 @@ export function computeSectorCommodityUnits(
     currentTurn,
     sector.industryModel,
     sector.mediaDiscriminator,
-    context.preset
+    context.preset,
+    context.hardwareInputReliefStartTurn
   );
   // The world ledger treats an unmodified `standard` strategy as the legacy
   // SECTOR_SUPPLY table. Several canonical rates have evolved there without

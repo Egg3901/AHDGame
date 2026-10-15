@@ -1,3 +1,4 @@
+import { expireGovernmentTenders } from "@/lib/governmentContracts/reservations";
 import { getEraContext } from "@/lib/era/context";
 import { processStatePartyElections } from "@/lib/statePartyElections";
 import { processNationalPartyElections } from "@/lib/nationalPartyElections";
@@ -622,6 +623,10 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
             "Skipped because extraction-contract issuance is disabled."
           );
         }
+
+        await runtime.runPhase("governmentContractExpiry", () =>
+          expireGovernmentTenders(context.db, newTurn)
+        );
 
         const lineOfCreditResult = await runtime.runPhase("lineOfCreditTurn", async () => {
           // Currency income comes only from this turn's corporationTurn result.

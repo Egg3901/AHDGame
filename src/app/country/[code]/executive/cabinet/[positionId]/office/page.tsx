@@ -66,6 +66,7 @@ import { COUNTRY_CURRENCY_MAP, CURRENCY_SYMBOLS } from "@/lib/constants/currenci
 import { useCountryDisplayName } from "@/contexts/RegisteredCountriesContext";
 import { DepartmentProgramPanel } from "./components/DepartmentProgramPanel";
 import { DepartmentFinancePanel } from "./components/DepartmentFinancePanel";
+import { CabinetContractsPanel } from "@/components/governmentContracts/CabinetContractsPanel";
 import { ResetCabinetActionPanel } from "./components/ResetCabinetActionPanel";
 
 export default function CabinetOfficePage() {
@@ -355,6 +356,9 @@ export default function CabinetOfficePage() {
             />
 
             <div className="min-w-0 flex-1 space-y-6">
+              {activeTab === "contracts" && (
+                <CabinetContractsPanel countryId={countryId} positionId={positionId} />
+              )}
               {activeTab === "overview" && (
                 <>
                   {data.departmentProgram && (

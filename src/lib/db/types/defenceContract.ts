@@ -24,6 +24,8 @@ export type DefenceContractStatus = "pending" | "active" | "complete" | "cancell
  */
 export interface DefenceContract {
   _id: ObjectId;
+  /** Public tender whose winning bid created this contract; absent on existing contracts. */
+  tenderId?: string;
   /** The buying country. Equals the supplying corporation's `countryId` — see above. */
   countryId: CountryId;
   corporationId: ObjectId;
@@ -85,6 +87,8 @@ export interface DefenceContract {
    * Absent on legacy contracts, where the default allocation reproduces the old even split.
    */
   assignedFactories?: number;
+  /** Plant-issued sequence fences delayed CEO allocation writes. */
+  factoryAllocationSequence?: number;
   /**
    * Why this contract shipped less than it could have on its last delivery turn, or absent
    * when it shipped everything it built.

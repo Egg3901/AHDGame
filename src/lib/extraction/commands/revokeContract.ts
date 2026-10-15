@@ -21,6 +21,12 @@ export async function revokeContract(
   turn: number,
   now: Date
 ): Promise<RevokeContractResult> {
+  if (contract.tenderId && contract.status === "offered")
+    return {
+      ok: false,
+      status: 409,
+      error: "The winning bid is still settling. Resume the tender award.",
+    };
   if (contract.revokedTurn != null) {
     return { ok: false, status: 409, error: "This contract is already terminated." };
   }

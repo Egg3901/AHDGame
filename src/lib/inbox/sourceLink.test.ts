@@ -2,6 +2,11 @@ import { describe, it, expect } from "vitest";
 import { resolveSourceLink } from "./sourceLink";
 
 describe("resolveSourceLink", () => {
+  it("links government awards to the buying country board", () => {
+    expect(
+      resolveSourceLink("government_contract_awarded", { countryId: "JP", tenderId: "t" })
+    ).toMatchObject({ href: "/country/jp/government-contracts?tab=awarded" });
+  });
   // ── From the brief ──────────────────────────────────────────────────────
   it("links a bill notification to the bill page", () => {
     const s = resolveSourceLink("bill_vote_open", { billId: "abc123" });

@@ -1,4 +1,5 @@
 "use client";
+import { ContractBoardLink } from "@/components/governmentContracts/ContractBoardLink";
 
 import { apiErrorText } from "@/lib/errors/catalog";
 import { Fragment, useState } from "react";
@@ -48,11 +49,13 @@ const STATUS_LABEL: Record<string, string> = {
  */
 export default function DefenceContractsTab({
   corpId,
+  countryId,
   defence,
   isCeo,
   onUpdate,
 }: {
   corpId: string;
+  countryId?: string;
   defence?: CorporationDefenceView;
   isCeo: boolean;
   onUpdate?: () => void;
@@ -129,6 +132,7 @@ export default function DefenceContractsTab({
 
   return (
     <div className="space-y-6">
+      <ContractBoardLink countryId={countryId} type="defence" />
       <DenseSection title="Defence procurement">
         <dl
           aria-label="Procurement summary"

@@ -1,0 +1,9 @@
+# Hardware input relief qualification
+
+Approved change: reduce hardware recipe input requirements by 15%, linearly over twelve turns from a world-local activation boundary. Apply relief separately to the hardware source and target legs before retool interpolation. Output, software and standard recipes remain unchanged. New worlds initialize the boundary at their starting turn; existing worlds remain unchanged until explicitly activated after release. Reset writes a new starting boundary.
+
+Run `npx tsx scripts/sim/hardwareInputRelief.ts`. The deterministic study covers three presets (1953, 1991, 2027), three production methods, four input/output price combinations, zero/partial/full utilization and two plant scales. Across 216 scenarios and 2,160 assertions, materials bills follow the phase exactly at turns0/1/6/12/24 and output revenue stays constant. At completion, hardware requirements are0.85 of baseline; other methods stay1. The full production-sector regression also verifies the actual billed materials, payroll and production, while the physical-rail test compares ledger demand, contract demand, displayed quantities and billed units.
+
+At neutral prices a55% hardware recipe input share becomes46.75%, improving the materials component by8.25 percentage points of sales at identical output and other conditions. A shortage can still make the plant loss-making. The phase is1.25 percentage points of the original input requirement per turn, not a repeated compounding discount.
+
+Limits: this is frozen-price sensitivity, not an endogenous world trajectory. Less material demand can change world prices and other producers' returns; no exact future sales, margin or aggregate price forecast is claimed. Existing market clearing and price adjustment rules remain in place. Refund accounting for the separate historical payroll regression is not part of this balance calculation.

@@ -171,6 +171,14 @@ export function buildWorldNavItems({
       show: true,
     },
     {
+      id: "governmentContracts",
+      label: "Government Contracts",
+      labelKey: "menus.world.governmentContracts",
+      href: "/country/" + country + "/government-contracts",
+      section: "main",
+      show: true,
+    },
+    {
       id: "forex",
       label: "Currency Exchange",
       labelKey: "menus.world.forex",
@@ -266,7 +274,16 @@ const WORLD_NAV_GROUPS: WorldNavGroupDef[] = [
     // Stock Market 2.82% > Sectors 0.40% > Currency Exchange 0.35% >
     // Trade 0.10%; Banking, IMF and Unions are below the measurement floor.
     // Banking replaces the nation-details central-bank link as the world entry.
-    itemIds: ["stockMarket", "sectors", "forex", "trade", "banking", "imf", "unions"],
+    itemIds: [
+      "stockMarket",
+      "governmentContracts",
+      "sectors",
+      "forex",
+      "trade",
+      "banking",
+      "imf",
+      "unions",
+    ],
   },
   {
     id: "diplomacy",

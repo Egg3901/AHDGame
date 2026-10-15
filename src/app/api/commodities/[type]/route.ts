@@ -339,8 +339,16 @@ export async function getCommodityDetailData(
             .collection<{ _id: string; commandEconomyEnabled?: boolean }>("gameConfig")
             .findOne({ _id: "default" }, { projection: { commandEconomyEnabled: 1 } }),
           db
-            .collection<{ _id: string; currentYear?: number; preset?: string }>("gameState")
-            .findOne({ _id: "current" }, { projection: { currentYear: 1 } }),
+            .collection<{
+              _id: string;
+              currentYear?: number;
+              preset?: string;
+              hardwareInputReliefStartTurn?: number;
+            }>("gameState")
+            .findOne(
+              { _id: "current" },
+              { projection: { currentYear: 1, preset: 1, hardwareInputReliefStartTurn: 1 } }
+            ),
           (await getStateResourceCapacityCollection(db))
             .find({}, { projection: { stateId: 1, resources: 1 } })
             .toArray(),
@@ -498,6 +506,7 @@ export async function getCommodityDetailData(
           eraUnitScale,
           currentYear: gameStateDoc?.currentYear ?? null,
           preset: gameStateDoc?.preset,
+          hardwareInputReliefStartTurn: gameStateDoc?.hardwareInputReliefStartTurn,
           commandEconomyEnabled: gameConfigDoc?.commandEconomyEnabled === true,
           stateResourcesByState,
         },

@@ -1,5 +1,6 @@
 import type { Db, ObjectId } from "mongodb";
 import type { Character, Corporation } from "@/lib/db/types";
+import { characterCeoResidencyFailure } from "@/lib/corporations/ceoEligibilityRules";
 import { resolveControllingCorporateParent } from "@/lib/corporations/reservedCorporateHoldings";
 import { appointCaretakerCeo } from "@/lib/corporations/caretakerCeo";
 import { openCeoTenure, closeCeoTenure } from "@/lib/corporations/ceoHistory";
@@ -60,9 +61,16 @@ export async function appointSubsidiaryCeo(
   if (!characterId) return fail("A character is required to appoint a human CEO.");
   const character = await db
     .collection<Character>("characters")
-    .findOne({ _id: characterId }, { projection: { userId: 1 } });
+    .findOne({ _id: characterId }, { projection: { userId: 1, homeState: 1, countryId: 1 } });
   if (!character || !character.userId) {
     return fail("The selected character cannot serve as CEO (no owning player).");
+  }
+  const residencyFailure = characterCeoResidencyFailure(character, sub);
+  if (residencyFailure === "headquarters-state") {
+    return fail("The appointed CEO must reside in the subsidiary's headquarters state.", 403);
+  }
+  if (residencyFailure === "country") {
+    return fail("The appointed CEO must reside in the subsidiary's home country.", 403);
   }
 
   // One-person rule keys on sitting humans, not NPP-caretaker stash.
