@@ -23,6 +23,11 @@ vi.mock("@/lib/indexFunds/fundRedemptionLiquidity", () => ({
     salesExecuted: 0,
   }),
 }));
+vi.mock("@/lib/bonds/sellFundBondUnits", () => ({
+  sellFundBondHoldingsForCash: vi
+    .fn()
+    .mockResolvedValue({ proceedsAnchor: 0, unitsSold: 0, bondsTouched: 0 }),
+}));
 // Mirrors the real contract: a fund_reserve position is the fund's own units
 // and is never paid out.
 vi.mock("./holderPayout", () => ({
@@ -34,6 +39,7 @@ vi.mock("./holderPayout", () => ({
 
 import { creditCorpLiquidCapital } from "@/lib/financialTxLog/atomicCashGuard";
 import { sellFundHoldingsForRedemptionCash } from "@/lib/indexFunds/fundRedemptionLiquidity";
+import { sellFundBondHoldingsForCash } from "@/lib/bonds/sellFundBondUnits";
 import { payFundHolderCash } from "./holderPayout";
 import { advanceWindDowns, beginWindUp, completeWindUp } from "./windUp";
 
@@ -71,6 +77,7 @@ function makeDb(opts: {
   sponsorExists?: boolean;
   claimed?: boolean;
   fund?: IndexFund;
+  bondsRemaining?: () => number;
 }) {
   const fundUpdate = vi.fn().mockResolvedValue({ modifiedCount: opts.claimed === false ? 0 : 1 });
   const positionsUpdateMany = vi.fn().mockResolvedValue({ modifiedCount: 1 });
@@ -88,6 +95,16 @@ function makeDb(opts: {
         return {
           find: () => ({ toArray: () => Promise.resolve(opts.positions ?? []) }),
           updateMany: positionsUpdateMany,
+        };
+      if (name === "bonds")
+        return {
+          countDocuments: vi.fn(async () => opts.bondsRemaining?.() ?? 0),
+          aggregate: vi.fn(() => ({
+            toArray: async () =>
+              (opts.bondsRemaining?.() ?? 0) > 0
+                ? (opts.windingDown ?? []).map((f) => ({ _id: f._id }))
+                : [],
+          })),
         };
       if (name === "indexFundTransactions") return { insertOne: txInsert };
       if (name === "corporations")
@@ -202,6 +219,45 @@ describe("advanceWindDowns", () => {
     expect(r.fundsCompleted).toBe(0);
     expect(vi.mocked(sellFundHoldingsForRedemptionCash)).toHaveBeenCalled();
     expect(vi.mocked(payFundHolderCash)).not.toHaveBeenCalled();
+  });
+
+  it("sells bonds before completing and pays out the fresh cash balance", async () => {
+    const fund = makeFund({ status: "winding_down", cashAnchor: 10_000 });
+    const current = { ...fund };
+    let bondsRemaining = 1;
+    const { db, fundUpdate } = makeDb({
+      windingDown: [fund],
+      fund: current,
+      bondsRemaining: () => bondsRemaining,
+    });
+    vi.mocked(sellFundBondHoldingsForCash).mockImplementationOnce(async () => {
+      bondsRemaining = 0;
+      current.cashAnchor += 5_000;
+      return { proceedsAnchor: 5_000, unitsSold: 10, bondsTouched: 1 };
+    });
+    const r = await advanceWindDowns(db, 200);
+    expect(sellFundBondHoldingsForCash).toHaveBeenCalledWith(
+      db,
+      fund,
+      Number.POSITIVE_INFINITY,
+      expect.any(Date),
+      { turn: 200 }
+    );
+    expect(r.fundsCompleted).toBe(1);
+    expect(r.errors).toEqual([]);
+    expect(fundUpdate.mock.calls[0][1].$set.status).toBe("delisted");
+    expect(creditCorpLiquidCapital).toHaveBeenCalledWith(db, SPONSOR, 15_000);
+  });
+
+  it("waits without an error when bond units remain after a sale", async () => {
+    const fund = makeFund({ status: "winding_down" });
+    const { db, fundUpdate } = makeDb({ windingDown: [fund], bondsRemaining: () => 1 });
+    const r = await advanceWindDowns(db, 200);
+    expect(sellFundBondHoldingsForCash).toHaveBeenCalled();
+    expect(r.fundsCompleted).toBe(0);
+    expect(r.errors).toEqual([]);
+    expect(fundUpdate).not.toHaveBeenCalled();
+    expect(payFundHolderCash).not.toHaveBeenCalled();
   });
 
   it("finishes a fund whose portfolio has become cash", async () => {
