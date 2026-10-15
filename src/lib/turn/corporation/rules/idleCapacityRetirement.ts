@@ -46,6 +46,14 @@
  *    choice to hold capacity, already billed at the cold upkeep rate.
  *  - Any plant before the streak passes the grace period, so a single bad
  *    clearing turn or a short demand shock retires nothing.
+ *
+ * NPP engine 6 adds one case for NPP-run corps only: a plant that sells out
+ * but whose throttle stays under IDLE_RETIRE_STRUCTURAL_THROTTLE for
+ * IDLE_RETIRE_STRUCTURAL_GRACE_TURNS is oversized, not recovering. It retires
+ * toward its run with IDLE_RETIRE_STRUCTURAL_HEADROOM of room to grow back.
+ * On live turn 202, loss-making NPP sectors ran at 38-46% utilization under
+ * the throttle while selling 92-100% of output, paying payroll and upkeep on
+ * the idle rest. Player plants are unchanged.
  */
 
 /** Consecutive glutted turns a plant may run before any capacity retires. */
@@ -64,6 +72,20 @@ export const IDLE_RETIRE_HEADROOM = 0.25;
  */
 export const IDLE_RETIRE_GLUT_FILL = 0.95;
 
+/**
+ * NPP engine 6: an NPP-run plant whose demand throttle stays below this share
+ * of capacity is structurally oversized even when it sells everything it makes.
+ * A recovering market lets the throttle climb by the probe margin each turn, so
+ * a throttle that stays this low for the structural grace is not recovering.
+ */
+export const IDLE_RETIRE_STRUCTURAL_THROTTLE = 0.6;
+
+/** Consecutive deeply-throttled turns an NPP-run plant may run before retiring. */
+export const IDLE_RETIRE_STRUCTURAL_GRACE_TURNS = 24;
+
+/** Headroom kept above the run for a structural retirement (room to grow back). */
+export const IDLE_RETIRE_STRUCTURAL_HEADROOM = 0.5;
+
 export interface IdleCapacityRetirementInput {
   plantsEnabled: boolean;
   mothballed: boolean;
@@ -80,6 +102,11 @@ export interface IdleCapacityRetirementInput {
   priorStreak: number | null | undefined;
   /** Plants transition ramp, 0 on the flip turn rising to 1. */
   rampLambda: number;
+  /**
+   * NPP engine 6, NPP-run corp: a sold-out plant held deeply under capacity by
+   * the throttle for the structural grace also retires toward its run.
+   */
+  nppStructural?: boolean;
 }
 
 export interface IdleCapacityRetirementResult {
@@ -104,16 +131,27 @@ export function idleCapacityRetirement(
     typeof fill === "number" &&
     Number.isFinite(fill) &&
     fill < IDLE_RETIRE_GLUT_FILL;
-  if (!glutted) return { streak: 0, retireFraction: 0 };
+  const structural =
+    !glutted &&
+    input.nppStructural === true &&
+    input.plantsEnabled &&
+    !input.mothballed &&
+    input.activeFraction >= 1 &&
+    Number.isFinite(throttle) &&
+    throttle > 0 &&
+    throttle < IDLE_RETIRE_STRUCTURAL_THROTTLE;
+  if (!glutted && !structural) return { streak: 0, retireFraction: 0 };
 
   const prior =
     typeof input.priorStreak === "number" && Number.isFinite(input.priorStreak)
       ? Math.max(0, Math.floor(input.priorStreak))
       : 0;
   const streak = prior + 1;
-  if (streak <= IDLE_RETIRE_GRACE_TURNS) return { streak, retireFraction: 0 };
+  const grace = glutted ? IDLE_RETIRE_GRACE_TURNS : IDLE_RETIRE_STRUCTURAL_GRACE_TURNS;
+  if (streak <= grace) return { streak, retireFraction: 0 };
 
-  const excessShare = Math.max(0, 1 - throttle * (1 + IDLE_RETIRE_HEADROOM));
+  const headroom = glutted ? IDLE_RETIRE_HEADROOM : IDLE_RETIRE_STRUCTURAL_HEADROOM;
+  const excessShare = Math.max(0, 1 - throttle * (1 + headroom));
   const ramp = Number.isFinite(input.rampLambda) ? Math.max(0, Math.min(1, input.rampLambda)) : 0;
   return { streak, retireFraction: IDLE_RETIRE_RATE * excessShare * ramp };
 }

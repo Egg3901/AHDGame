@@ -21,6 +21,8 @@ import { USE_GROWTH_INCREMENT, businessAcumenGrowthMultiplier } from "@/lib/stat
 import { shedVacantCeoSectorsToUnowned } from "./vacantCeoSectorShed";
 import { shedInactiveCeoSectorsToUnowned } from "./inactiveCeoSectorShed";
 import { installCaretakersForVacantCorps } from "./autoCaretakerVacantCorps";
+import { nppAutonomyAtLeast } from "@/lib/nppAutonomy/featureFlag";
+import { NPP_ENGINE_LEVEL } from "@/lib/nppAutonomy/engineVersion";
 import { recordNppCeoTrackRecords } from "./nppCeoTrackRecord";
 import { processSectors } from "./sectorCalculations";
 import { getLabourSystemMode, labourAtLeast } from "@/lib/labour/featureFlag";
@@ -657,6 +659,17 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
     );
   }
   mark("autoCaretaker");
+
+  // NPP engine 6: NPP-run plants right-size structural overcapacity
+  // (rules/idleCapacityRetirement). Resolved once per country for the turn.
+  const engineSixCountries = new Set<string>();
+  for (const countryId of new Set(
+    lookups.corporations.filter((c) => c.ceoType === "npp").map((c) => c.countryId)
+  )) {
+    if (await nppAutonomyAtLeast(db, countryId, NPP_ENGINE_LEVEL))
+      engineSixCountries.add(countryId);
+  }
+  lookups.engineSixCountries = engineSixCountries;
 
   // NPP engine 6 bookkeeping: once a game day, fold each NPP CEO's margin
   // against sector peers into its CEO track record. Reads last turn's sector

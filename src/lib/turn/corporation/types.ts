@@ -26,6 +26,8 @@ export interface CorporationLookups {
   preset?: string;
   corporations: Corporation[];
   sectorsByCorp: Map<string, CorporateSector[]>;
+  /** Countries whose NPP-run corps follow NPP engine 6 (autonomy v6). */
+  engineSixCountries?: ReadonlySet<string>;
   productLinesV2Enabled?: boolean;
   productSectorQualityById?: Map<string, number>;
   /** Active v2 manufacturing projects, empty and unread while productLinesV2 is off. */

@@ -106,6 +106,19 @@ number.
   (shipped in 6.14.1). Running worlds never change level on their own. The
   live multiplayer world moved to v6 with game 1.16.
 
+## 6.19.0 (game 1.16.0, 2026-10-15)
+
+Stage 3 (corporations).
+
+- **NPP-run plants shrink to the market they serve (v6).** A plant that sells
+  everything it makes but is held far below its size by weak demand kept
+  paying payroll and upkeep on the idle rest, because sold-out plants were
+  treated as recovering. When an NPP-run plant's output stays under 60% of its
+  size for 24 turns, it now retires part of the idle capacity each turn,
+  keeping room to grow back by half. On live turn 202, loss-making NPP sectors
+  ran at 38-46% of capacity while selling 92-100% of what they made. Player
+  plants are unchanged.
+
 ## 6.18.0 (game 1.16.0, 2026-10-15)
 
 Stage 3 (corporations).
