@@ -73,6 +73,7 @@ import { nppBuyBond } from "@/lib/nppAutonomy/v3/finance/nppBonds";
 import { nppBuyShares, nppSellShares } from "@/lib/nppAutonomy/v3/finance/nppShares";
 import { nppFoundCorporation } from "@/lib/nppAutonomy/v3/finance/nppFoundCorporation";
 import { loadPrivateEnterpriseBlockedCountries } from "@/lib/economy/queries/privateEnterpriseGate";
+import { foundNppNationalShortageCorporations } from "@/lib/turn/npp/nationalShortageFounding";
 import {
   nppBuildPartyOrg,
   preloadNppBuildOrgSweepCache,
@@ -725,6 +726,10 @@ async function runNppActions(db: Db, currentTurn: number): Promise<NppActionProc
     step.mark("partyOrgBuilding");
     await foundNppCorporationsSurplus(db, currentTurn, econScopeCountries, preset);
     step.mark("corporationFounding");
+    if (!econScopeCountries) {
+      await foundNppNationalShortageCorporations(db, currentTurn, NPP_FOUNDING_FEE_ANCHOR, preset);
+      step.mark("nationalShortageFounding");
+    }
   }
 
   return result;
