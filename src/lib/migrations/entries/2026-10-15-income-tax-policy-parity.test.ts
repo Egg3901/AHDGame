@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { ObjectId, type Db } from "mongodb";
 import { createInMemoryDb } from "@/lib/test-utils/inMemoryDb";
 import { migration } from "./2026-10-15-income-tax-policy-parity";
@@ -36,13 +36,94 @@ function setup() {
   memory.seed("statePolicies", policies);
   memory.seed("federalBudget", budgets);
   memory.seed("legislationTypes", [
-    { _id: "br_income_tax_rate", policyOptions: [{ id: "br_18", rate: 18 }] },
-    { _id: "ng_personal_income_tax", policyOptions: [{ id: "ng_19", rate: 19 }] },
+    {
+      _id: "br_income_tax_rate",
+      policyOptions: [
+        { id: "br_0", rate: 0 },
+        { id: "br_8", rate: 8 },
+        { id: "br_13", rate: 13 },
+        { id: "br_18", rate: 18 },
+      ],
+    },
+    {
+      _id: "ng_personal_income_tax",
+      policyOptions: [
+        { id: "ng_7", rate: 7 },
+        { id: "ng_11", rate: 11 },
+        { id: "ng_15", rate: 15 },
+        { id: "ng_19", rate: 19 },
+      ],
+    },
   ]);
-  return { db: memory as unknown as Db, policies, budgets };
+  return { db: memory as unknown as Db, memory, policies, budgets };
 }
 
 describe("income-tax seed repair migration", () => {
+  it("does not overwrite a bill enacted after its initial read", async () => {
+    const { db, memory, policies } = setup();
+    const collection = memory.collection("statePolicies");
+    const bulkWrite = collection.bulkWrite.bind(collection);
+    vi.spyOn(collection, "bulkWrite").mockImplementationOnce(async (ops) => {
+      await collection.updateOne(
+        { _id: policies[0]._id },
+        { $set: { enactedByBillId: new ObjectId(), policyOptionId: "rate:30" } }
+      );
+      return bulkWrite(ops);
+    });
+    expect((await migration.execute(db, { dryRun: false })).documentsUpdated).toBe(1);
+    expect(
+      (await db.collection("statePolicies").findOne({ _id: policies[0]._id }))?.policyOptionId
+    ).toBe("rate:30");
+  });
+  it.each([NaN, Infinity, -1, 101])("leaves invalid budget rates untouched: %s", async (rate) => {
+    const { db, policies } = setup();
+    await db
+      .collection<{ _id: string }>("federalBudget")
+      .updateOne({ _id: "BR" }, { $set: { "taxRates.incomeTax": rate } });
+    expect((await migration.execute(db, { dryRun: false })).documentsUpdated).toBe(1);
+    expect(
+      (await db.collection("statePolicies").findOne({ _id: policies[0]._id }))?.policyOptionId
+    ).toBe("br_18");
+  });
+  it("does not repair a misfiled jurisdiction", async () => {
+    const { db, policies } = setup();
+    await db
+      .collection("statePolicies")
+      .updateOne({ _id: policies[0]._id }, { $set: { stateId: "ng_national" } });
+    expect((await migration.execute(db, { dryRun: false })).documentsUpdated).toBe(1);
+  });
+  it.each([undefined, null, 99, 1])(
+    "preserves the original id's effects when its stored index is %s",
+    async (index) => {
+      const { db, policies } = setup();
+      await db
+        .collection("statePolicies")
+        .updateOne(
+          { _id: policies[0]._id },
+          index === undefined
+            ? { $unset: { policyOptionIndex: "" } }
+            : { $set: { policyOptionIndex: index } }
+        );
+      await migration.execute(db, { dryRun: false });
+      expect(await db.collection("statePolicies").findOne({ _id: policies[0]._id })).toMatchObject({
+        policyOptionId: "rate:22",
+        policyOptionIndex: 3,
+      });
+    }
+  );
+  it.each([undefined, "unknown", "rate:", "rate:0x16"])(
+    "leaves ambiguous legacy effect sources untouched: %s",
+    async (id) => {
+      const { db, policies } = setup();
+      await db
+        .collection("statePolicies")
+        .updateOne(
+          { _id: policies[0]._id },
+          id === undefined ? { $unset: { policyOptionId: "" } } : { $set: { policyOptionId: id } }
+        );
+      expect((await migration.execute(db, { dryRun: false })).documentsUpdated).toBe(1);
+    }
+  );
   it("repairs both policy rates without changing fiscal or ideological values, and replays safely", async () => {
     const { db, policies, budgets } = setup();
     expect((await migration.execute(db, { dryRun: false })).documentsUpdated).toBe(2);

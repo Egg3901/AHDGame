@@ -3,6 +3,8 @@ import type { FederalBudget, LegislationType, StatePolicy } from "@/lib/db/types
 import {
   INCOME_TAX_POLICY_JURISDICTIONS,
   incomeTaxPolicyOptionId,
+  incomeTaxEffectOptionIndex,
+  readTaxPolicyRate,
 } from "@/lib/budget/rules/incomeTaxPolicy";
 import type { Migration } from "../types";
 
@@ -51,6 +53,11 @@ export const migration: Migration = {
       );
       const type = types.find((entry) => entry._id === jurisdiction.legislationTypeId);
       if (!budget || !type) continue;
+      if (
+        readTaxPolicyRate(policy.policyOptionId) === undefined &&
+        !type.policyOptions?.some((option) => option.id === policy.policyOptionId)
+      )
+        continue;
       const policyOptionId = incomeTaxPolicyOptionId({
         currentOptionId: policy.policyOptionId,
         options: type.policyOptions ?? [],
@@ -58,6 +65,12 @@ export const migration: Migration = {
         pendingRate: budget.taxRatePhaseIn?.incomeTax,
       });
       if (!policyOptionId || policyOptionId === policy.policyOptionId) continue;
+      const policyOptionIndex = incomeTaxEffectOptionIndex({
+        ...policy,
+        options: type.policyOptions ?? [],
+      });
+      // An ambiguous/corrupt effect source cannot safely be rewritten as an exact rate.
+      if (policyOptionIndex === undefined) continue;
       ops.push({
         updateOne: {
           filter: {
@@ -66,8 +79,10 @@ export const migration: Migration = {
             stateId: policy.stateId,
             legislationTypeId: policy.legislationTypeId,
             policyOptionId: policy.policyOptionId,
+            policyOptionIndex:
+              "policyOptionIndex" in policy ? policy.policyOptionIndex : { $exists: false },
           },
-          update: { $set: { policyOptionId } },
+          update: { $set: { policyOptionId, policyOptionIndex } },
         },
       });
     }

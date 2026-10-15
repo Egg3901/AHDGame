@@ -30,6 +30,41 @@ const legacyIncomeTax = {
 } as unknown as LegislationType;
 
 describe("national tax policy records", () => {
+  it("shows the same retained effects as the turn engine for calibrated legacy taxes", () => {
+    const type = {
+      ...legacyIncomeTax,
+      _id: "ng_personal_income_tax",
+      policyOptions: [
+        {
+          id: "retained",
+          name: "19%",
+          rate: 19,
+          economic: 1,
+          social: 0,
+          metricEffects: [
+            { category: "economic", metricId: "smallBusinessFormation", ratePerTurn: 0.2 },
+          ],
+        },
+        { id: "center", name: "24%", rate: 24, economic: 0, social: 0, metricEffects: [] },
+      ],
+    } as LegislationType;
+    const row = buildPolicyResponse(
+      {
+        scope: "national",
+        legislationTypeId: type._id,
+        policyOptionId: "rate:24",
+        policyOptionIndex: 0,
+        economic: 0,
+        social: 0,
+        updatedAt: new Date(0),
+      },
+      type
+    );
+    expect(row.policyOptionName).toBe("Rate: 24%");
+    expect(row.metricEffects).toEqual([
+      { category: "economic", metricId: "smallBusinessFormation", ratePerTurn: 0.2 },
+    ]);
+  });
   it("shows an exact calibrated rate on a legacy tax record without a budget", () => {
     const row = buildPolicyResponse(
       {

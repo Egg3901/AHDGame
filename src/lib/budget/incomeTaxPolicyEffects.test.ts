@@ -3,6 +3,19 @@ import { computeTickRates, calculateMetricTarget, type ActivePolicy } from "@/li
 import { legislationTypes } from "@/lib/seeds/reference/legislationTypes";
 
 describe("income-tax record repair preserves non-fiscal outcomes", () => {
+  it("handles legacy policy records with no option id without crashing the turn", () => {
+    const type = legislationTypes.find((entry) => entry._id === "ng_personal_income_tax")!;
+    const policy = {
+      legislationTypeId: type._id,
+      policyOptionIndex: 3,
+      effectDirection: 1,
+      scopeMultiplier: 1,
+    } as ActivePolicy;
+    expect(() => computeTickRates([policy], new Map([[type._id, type]]))).not.toThrow();
+    expect(() =>
+      calculateMetricTarget(null, "economic", "gdpGrowth", [policy], new Map([[type._id, type]]))
+    ).not.toThrow();
+  });
   it.each([
     { typeId: "br_income_tax_rate", countryId: "BR", rate: 22 },
     { typeId: "ng_personal_income_tax", countryId: "NG", rate: 24 },

@@ -25,10 +25,7 @@ import { balRegions } from "@/lib/seeds/bal/balRegions";
 import { easternBlocPolicyConfig } from "@/lib/seeds/shared/easternBlocLegislation";
 import { COUNTRY_POLICY_CONFIGS_2019 } from "./basePolicies2019";
 import { getStateLean } from "@/lib/utils/demographics";
-import {
-  INCOME_TAX_POLICY_JURISDICTIONS,
-  incomeTaxPolicyOptionId,
-} from "@/lib/budget/rules/incomeTaxPolicy";
+import { alignIncomeTaxPolicyRecords } from "@/lib/budget/rules/incomeTaxPolicy";
 
 export type BasePolicyRecord = {
   scope: "national" | "state";
@@ -413,21 +410,5 @@ export async function getBasePolicies(preset: string): Promise<BasePolicyRecord[
   const records = await getUnalignedBasePolicies(preset);
   const { getInitialNationalBudgetsForPreset } = await import("./budgets");
   const budgets = getInitialNationalBudgetsForPreset(preset);
-  return records.map((record) => {
-    const jurisdiction = INCOME_TAX_POLICY_JURISDICTIONS.find(
-      (entry) =>
-        record.scope === "national" &&
-        record.stateId === entry.stateId &&
-        record.legislationTypeId === entry.legislationTypeId
-    );
-    if (!jurisdiction) return record;
-    const budget = budgets.find((entry) => entry.countryId === jurisdiction.countryId);
-    const type = legislationTypes.find((entry) => entry._id === jurisdiction.legislationTypeId);
-    const policyOptionId = incomeTaxPolicyOptionId({
-      currentOptionId: record.policyOptionId,
-      options: type?.policyOptions ?? [],
-      effectiveRate: budget?.taxRates.incomeTax,
-    });
-    return policyOptionId ? { ...record, policyOptionId } : record;
-  });
+  return alignIncomeTaxPolicyRecords(records, budgets, legislationTypes);
 }
