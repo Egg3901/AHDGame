@@ -179,7 +179,7 @@ describe("technology physical operating costs", () => {
           env.currentYear = 1991;
           env.lookups.marginLevelTrimPp = 8;
         },
-        { ...makeCorp(), type: "technology", sectorType: "technology" }
+        { ...makeCorp(), type: "technology" }
       );
       const pnl = r.update.plantsPnl as NonNullable<CorporateSector["plantsPnl"]>;
       expect(r.update.labourStaffingFactor).toBe(1);
