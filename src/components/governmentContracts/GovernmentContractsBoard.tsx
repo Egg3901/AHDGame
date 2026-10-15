@@ -292,6 +292,7 @@ function TenderDetails({
     [version, setVersion] = useState(0);
   const [selected, setSelected] = useState(""),
     [reason, setReason] = useState("");
+  const [acknowledgeConflict, setAcknowledgeConflict] = useState(false);
   const api = `/api/country/${countryId}/government-contracts/${tenderId}`;
   useEffect(() => {
     const c = new AbortController();
@@ -299,6 +300,7 @@ function TenderDetails({
       .then((data) => {
         if (!c.signal.aborted) {
           setDetail(data);
+          setAcknowledgeConflict(false);
           setError("");
         }
       })
@@ -336,6 +338,7 @@ function TenderDetails({
     );
   const row = detail.tender,
     terms = row.terms;
+  const warning = row.awardWarnings?.[row.winningCorporationId || selected];
   return (
     <div className="mt-4 space-y-4 border-t border-card-border pt-4">
       {terms.type === "defence" ? (
@@ -380,7 +383,10 @@ function TenderDetails({
                     value={b.corporationId}
                     checked={(row.winningCorporationId || selected) === b.corporationId}
                     disabled={row.status === "awarding"}
-                    onChange={() => setSelected(b.corporationId)}
+                    onChange={() => {
+                      setSelected(b.corporationId);
+                      setAcknowledgeConflict(false);
+                    }}
                   />
                   {t("selectBid")}
                 </label>
@@ -423,19 +429,39 @@ function TenderDetails({
               maxLength={1000}
             />
           </label>
+          {warning && row.status !== "awarding" && (
+            <div role="alert" className="space-y-2 rounded-lg border border-warning p-3 text-sm">
+              <p>
+                {t(warning.basis === "owner" ? "ownerWarning" : "stakeWarning", {
+                  stake: warning.stakeShare * 100,
+                  penalty: warning.favorabilityPenalty,
+                })}
+              </p>
+              <label className="flex items-start gap-2">
+                <input
+                  type="checkbox"
+                  checked={acknowledgeConflict}
+                  onChange={(e) => setAcknowledgeConflict(e.target.checked)}
+                />
+                {t("acknowledgeConflict")}
+              </label>
+            </div>
+          )}
           <div className="flex flex-wrap gap-3">
             {row.tab === "closed" && (
               <button
                 disabled={
                   busy ||
                   !(row.winningCorporationId || selected) ||
-                  (row.status !== "awarding" && reason.trim().length < 10)
+                  (row.status !== "awarding" &&
+                    (reason.trim().length < 10 || (!!warning && !acknowledgeConflict)))
                 }
                 className={buttonClass}
                 onClick={() =>
                   void action("award", {
                     corporationId: row.winningCorporationId || selected,
                     reason: row.awardReason || reason,
+                    acknowledgeConflict,
                   })
                 }
               >
@@ -468,6 +494,9 @@ function TenderDetails({
       {error && (
         <p role="alert" className="text-sm text-error">
           {error}
+          <button type="button" className="ml-3 text-primary" onClick={reload}>
+            {t("retry")}
+          </button>
         </p>
       )}
     </div>

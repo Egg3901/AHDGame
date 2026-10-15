@@ -26,7 +26,8 @@ export async function POST(
         parsed.data.reason,
         auth.user,
         turn,
-        new Date()
+        new Date(),
+        parsed.data.acknowledgeConflict
       ),
     });
   } catch (e) {

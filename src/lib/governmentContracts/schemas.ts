@@ -54,6 +54,7 @@ export const awardSchema = z
   .object({
     corporationId: z.string().regex(/^[a-f0-9]{24}$/),
     reason: z.string().trim().min(10).max(1000),
+    acknowledgeConflict: z.boolean().optional(),
   })
   .strict();
 export const cancelSchema = z.object({ reason: z.string().trim().min(10).max(1000) }).strict();

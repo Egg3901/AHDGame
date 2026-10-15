@@ -16,10 +16,7 @@ import { getGameState } from "@/lib/gameState";
 import { maxTechTierForPreset } from "@/lib/admin/seed/seedMilitaryUnits";
 import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
 import { resolveDefenseLineFrom } from "@/lib/turn/defenseEnvelope";
-import {
-  resolveSelfDealing,
-  selfDealingFavorabilityPenalty,
-} from "@/lib/military/defenceSelfDealing";
+import { tenderAwardInterest, discloseExtractionAward } from "./selfDealing";
 import { defenceContractLotCaps } from "@/lib/military/defenceContractLimits";
 import { defenceContractWindow } from "@/lib/military/defenceContractLimits";
 import { isProcurementBlocked } from "@/lib/military/procurementGate";
@@ -231,7 +228,8 @@ export async function awardTender(
   reason: string,
   user: AuthUserWithCharacter,
   turn: number,
-  now: Date
+  now: Date,
+  acknowledgeConflict = false
 ) {
   const leaseKey = new ObjectId().toHexString();
   const lock = await tenders(db).findOneAndUpdate(
@@ -248,7 +246,7 @@ export async function awardTender(
   if (!lock)
     throw new ContractError("An award is already being processed. Refresh before retrying.");
   try {
-    return await awardLocked(db, lock, corporationId, reason, user, turn, now);
+    return await awardLocked(db, lock, corporationId, reason, user, turn, now, acknowledgeConflict);
   } finally {
     await tenders(db).updateOne(
       { _id: t._id, awardLeaseKey: leaseKey },
@@ -263,7 +261,8 @@ async function awardLocked(
   reason: string,
   user: AuthUserWithCharacter,
   turn: number,
-  now: Date
+  now: Date,
+  acknowledgeConflict: boolean
 ) {
   if (!(await managementAuthority(db, t.countryId, t.terms, user, t.issuerLevel)))
     throw new ContractError("You cannot award this tender.", 403);
@@ -287,28 +286,18 @@ async function awardLocked(
     )
       throw new ContractError("Extraction contract issuance is disabled.");
     const validation = await validateBid(db, t, bid, turn);
-    const interest =
-      t.terms.type === "defence"
-        ? resolveSelfDealing({
-            corp: validation.corp,
-            ministerUserId: new ObjectId(user.userId),
-            ministerCharacterId: user.character?._id,
-          })
-        : null;
-    const awardSelfDealing =
-      interest?.basis && t.terms.type === "defence"
-        ? {
-            basis: interest.basis,
-            stakeShare: interest.stakeShare,
-            ministerCharacterId: user.character?._id,
-            ministerName: user.character?.name,
-            favorabilityPenalty: selfDealingFavorabilityPenalty({
-              contractValue: t.terms.lots * bid.amount,
-              tranche: defenceContractLotCaps(resolveDefenseLineFrom(validation.budget), 1)
-                .procurementNotional,
-            }),
-          }
-        : null;
+    const awardSelfDealing = tenderAwardInterest(
+      t,
+      validation.corp,
+      user,
+      bid.amount,
+      defenceContractLotCaps(resolveDefenseLineFrom(validation.budget), 1).procurementNotional
+    );
+    if (awardSelfDealing && !acknowledgeConflict)
+      throw new ContractError(
+        `You own or hold a significant stake in this corporation. This award will be publicly disclosed and cost ${awardSelfDealing.favorabilityPenalty} favorability. Acknowledge the conflict before awarding.`,
+        409
+      );
     const awardAttemptId = new ObjectId().toHexString();
     const claim = await tenders(db).updateOne(
       {
@@ -427,6 +416,7 @@ async function awardLocked(
       }
     }
   }
+  await discloseExtractionAward(db, t);
   await tenders(db).updateOne(
     { _id: t._id, status: "awarding", winningCorporationId: corporationId },
     { $set: { status: "awarded", updatedAt: now } }

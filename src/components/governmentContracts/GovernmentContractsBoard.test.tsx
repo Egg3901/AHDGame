@@ -77,6 +77,88 @@ describe("country government contracts board", () => {
     );
     expect(screen.queryByRole("button", { name: "Publish tender" })).toBeNull();
   });
+
+  it.each(["defence", "extraction"] as const)(
+    "warns and requires a fresh acknowledgement for a conflicted %s award",
+    async (type) => {
+      const conflicted = "b".repeat(24),
+        independent = "c".repeat(24);
+      const closed = {
+        ...row,
+        tab: "closed",
+        status: "open",
+        canManage: true,
+        bidHistory: [],
+        terms:
+          type === "defence"
+            ? row.terms
+            : {
+                type: "extraction",
+                stateId: "JP-01",
+                resource: "oil",
+                share: 0.3,
+                termTurns: 48,
+                royaltyRatePerTurn: 0.01,
+                minimumSigningFeeAnchor: 0,
+              },
+        bids: [
+          { corporationId: conflicted, corporationName: "Related supplier", amount: 90 },
+          { corporationId: independent, corporationName: "Independent supplier", amount: 95 },
+        ],
+        awardWarnings: {
+          [conflicted]: { basis: "owner", stakeShare: 0, favorabilityPenalty: 4.1 },
+        },
+      };
+      const fetcher = vi.fn(async (url: string, init?: RequestInit) => {
+        if (init?.method === "POST")
+          return new Response(JSON.stringify({ contractId: "contract" }));
+        return new Response(
+          JSON.stringify(
+            url.endsWith("/access")
+              ? {}
+              : url.endsWith(row._id)
+                ? { tender: closed, currentTurn: 8 }
+                : {
+                    tenders: [closed],
+                    total: 1,
+                    page: 1,
+                    pageSize: 10,
+                    totalPages: 1,
+                    currentTurn: 8,
+                  }
+          )
+        );
+      });
+      vi.stubGlobal("fetch", fetcher);
+      show("closed", type, 1);
+      fireEvent.click(await screen.findByRole("button", { name: "View terms and bids" }));
+      const radios = await screen.findAllByRole("radio");
+      fireEvent.click(radios[0]);
+      fireEvent.change(screen.getByRole("textbox"), {
+        target: { value: "Reason for this award." },
+      });
+      expect(screen.getByRole("alert").textContent).toContain("4.1 favorability");
+      const award = screen.getByRole("button", { name: "Award selected bid" }) as HTMLButtonElement;
+      expect(award.disabled).toBe(true);
+      fireEvent.click(screen.getByRole("checkbox"));
+      expect(award.disabled).toBe(false);
+      fireEvent.click(radios[1]);
+      expect(screen.queryByRole("checkbox")).toBeNull();
+      fireEvent.click(radios[0]);
+      expect(award.disabled).toBe(true);
+      fireEvent.click(screen.getByRole("checkbox"));
+      fireEvent.click(award);
+      await waitFor(() =>
+        expect(fetcher.mock.calls.some(([, init]) => init?.method === "POST")).toBe(true)
+      );
+      const post = fetcher.mock.calls.find(([, init]) => init?.method === "POST")!;
+      expect(JSON.parse(post[1]!.body as string)).toMatchObject({
+        corporationId: conflicted,
+        acknowledgeConflict: true,
+      });
+    }
+  );
+
   it("resets the page on a type filter change", async () => {
     show();
     await screen.findByText("Naval equipment tender");

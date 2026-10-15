@@ -2,6 +2,13 @@
 import { ObjectId, type Db, type Filter } from "mongodb";
 import type { AuthUserWithCharacter } from "@/lib/auth";
 import { managementAuthority } from "./authority";
+import type { Corporation } from "@/lib/db/types";
+import { ensureFederalBudget } from "@/lib/turn/ensureFederalBudget";
+import { getGameState } from "@/lib/gameState";
+import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
+import { resolveDefenseLineFrom } from "@/lib/turn/defenseEnvelope";
+import { defenceContractLotCaps } from "@/lib/military/defenceContractLimits";
+import { tenderAwardInterest } from "./selfDealing";
 import {
   CONTRACTS_PAGE_SIZE,
   tenderTab,
@@ -57,6 +64,44 @@ export async function tenderView(
       .toArray();
     for (const corporation of owned) ownedCorporationIds.add(corporation._id.toHexString());
   }
+  const canManage =
+    !!user && !!(await managementAuthority(db, t.countryId, t.terms, user, t.issuerLevel));
+  const awardWarnings: NonNullable<TenderView["awardWarnings"]> = {};
+  if (canManage && user && t.status === "open" && tenderTab(t, turn) === "closed") {
+    const ids = Object.values(t.bids ?? {})
+      .filter((b) => !b.withdrawn)
+      .map((b) => new ObjectId(b.corporationId));
+    const corporations = ids.length
+      ? await db
+          .collection<Corporation>("corporations")
+          .find(
+            { _id: { $in: ids } },
+            { projection: { userId: 1, shareholders: 1, totalShares: 1 } }
+          )
+          .toArray()
+      : [];
+    let tranche = 0;
+    if (t.terms.type === "defence" && corporations.length) {
+      const game = await getGameState(db);
+      const budget = await ensureFederalBudget(
+        db,
+        t.countryId,
+        game?.preset ?? DEFAULT_SEED_PRESET
+      );
+      tranche = defenceContractLotCaps(resolveDefenseLineFrom(budget), 1).procurementNotional;
+    }
+    for (const corp of corporations) {
+      const id = corp._id.toHexString();
+      const interest = tenderAwardInterest(t, corp, user, t.bids[id].amount, tranche);
+      if (interest)
+        awardWarnings[id] = {
+          basis: interest.basis,
+          stakeShare: interest.stakeShare,
+          favorabilityPenalty: interest.favorabilityPenalty,
+        };
+    }
+  }
+  const publicInterest = t.preparedDefence?.selfDealing ?? t.awardSelfDealing;
   const {
     bids,
     bidHistory,
@@ -86,16 +131,16 @@ export async function tenderView(
       user?.userId,
       ownedCorporationIds
     ).map(({ userId: _userId, ...bid }) => bid),
-    ...(t.status === "awarded" && t.preparedDefence?.selfDealing
+    ...(t.status === "awarded" && publicInterest
       ? {
           selfDealing: {
-            ministerName: t.preparedDefence.selfDealing.ministerName,
-            favorabilityPenalty: t.preparedDefence.selfDealing.favorabilityPenalty,
+            ministerName: publicInterest.ministerName,
+            favorabilityPenalty: publicInterest.favorabilityPenalty,
           },
         }
       : {}),
-    canManage:
-      !!user && !!(await managementAuthority(db, t.countryId, t.terms, user, t.issuerLevel)),
+    canManage,
+    ...(canManage ? { awardWarnings } : {}),
   };
 }
 export async function listGovernmentTenders(

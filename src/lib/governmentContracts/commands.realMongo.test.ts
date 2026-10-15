@@ -160,6 +160,174 @@ describe.skipIf(!REAL_MONGO_ENABLED)(
         (await f.db.collection("federalBudget").findOne({ countryId: "US" }))?.treasuryBalance
       ).toBe(1200);
     });
+
+    it.each(["owner", "shareholding"] as const)(
+      "requires acknowledgement and discloses extraction %s interests exactly once",
+      async (basis) => {
+        let row = await extraction();
+        const characterId = new ObjectId();
+        const official = {
+          ...government,
+          userId: basis === "owner" ? owner.toHexString() : government.userId,
+          hasCharacter: true,
+          character: { _id: characterId, name: "Synthetic official" },
+        } as AuthUserWithCharacter;
+        await f.db.collection("characters").insertOne({ _id: characterId, favorability: 50 });
+        if (basis === "shareholding")
+          await f.db
+            .collection("corporations")
+            .updateOne({ _id: corpId }, { $set: { shareholders: [{ characterId, shares: 5 }] } });
+        // A zero-fee concession is still a valuable resource allocation.
+        await tenders(f.db).updateOne(
+          { _id: row._id },
+          {
+            $set: {
+              "terms.minimumSigningFeeAnchor": 0,
+              [`bids.${corpId.toHexString()}.amount`]: 0,
+            },
+          }
+        );
+        row = (await tenders(f.db).findOne({ _id: row._id }))!;
+        expect(
+          (await tenderView(f.db, row, 3, official)).awardWarnings?.[corpId.toHexString()]
+        ).toMatchObject({ basis, favorabilityPenalty: 4.1 });
+        expect((await tenderView(f.db, row, 1, official)).awardWarnings).toEqual({});
+        expect((await tenderView(f.db, row, 3, ceo)).awardWarnings).toBeUndefined();
+        await expect(
+          awardTender(
+            f.db,
+            row,
+            corpId.toHexString(),
+            "Synthetic concession award.",
+            official,
+            3,
+            now
+          )
+        ).rejects.toThrow("Acknowledge the conflict");
+        expect(await f.db.collection("extractionContracts").countDocuments()).toBe(0);
+        expect(
+          (await f.db.collection("characters").findOne({ _id: characterId }))?.favorability
+        ).toBe(50);
+        await awardTender(
+          f.db,
+          row,
+          corpId.toHexString(),
+          "Synthetic concession award.",
+          official,
+          3,
+          now,
+          true
+        );
+        // Recreate an interruption after disclosure but before the tender's completion marker.
+        await tenders(f.db).updateOne({ _id: row._id }, { $set: { status: "awarding" } });
+        await f.db
+          .collection("corporations")
+          .updateOne({ _id: corpId }, { $set: { userId: new ObjectId(), shareholders: [] } });
+        await awardTender(
+          f.db,
+          row,
+          corpId.toHexString(),
+          "Synthetic concession award.",
+          government,
+          3,
+          now
+        );
+        expect(
+          (await f.db.collection("characters").findOne({ _id: characterId }))?.favorability
+        ).toBe(45.9);
+        expect(await f.db.collection("newsPosts").countDocuments()).toBe(1);
+        const post = await f.db.collection("newsPosts").findOne({});
+        expect(post?.content).toContain(
+          basis === "owner" ? "owns Synthetic supplier" : "holds 5.0%"
+        );
+        expect(post?.content).toContain("30.0% of oil");
+        const awarded = (await tenders(f.db).findOne({ _id: row._id }))!;
+        expect((await tenderView(f.db, awarded, 3)).selfDealing).toEqual({
+          ministerName: "Synthetic official",
+          favorabilityPenalty: 4.1,
+        });
+      }
+    );
+    it("does not penalize an extraction interest below five percent", async () => {
+      const row = await extraction();
+      const characterId = new ObjectId();
+      const official = {
+        ...government,
+        hasCharacter: true,
+        character: { _id: characterId, name: "Synthetic official" },
+      } as AuthUserWithCharacter;
+      await f.db.collection("characters").insertOne({ _id: characterId, favorability: 50 });
+      await f.db
+        .collection("corporations")
+        .updateOne({ _id: corpId }, { $set: { shareholders: [{ characterId, shares: 4.99 }] } });
+      expect((await tenderView(f.db, row, 3, official)).awardWarnings).toEqual({});
+      // The server rechecks ownership if it changes after the official reads the preview.
+      await f.db
+        .collection("corporations")
+        .updateOne({ _id: corpId }, { $set: { shareholders: [{ characterId, shares: 5 }] } });
+      await expect(
+        awardTender(
+          f.db,
+          row,
+          corpId.toHexString(),
+          "Synthetic concession award.",
+          official,
+          3,
+          now
+        )
+      ).rejects.toThrow("Acknowledge the conflict");
+      await f.db
+        .collection("corporations")
+        .updateOne({ _id: corpId }, { $set: { shareholders: [{ characterId, shares: 4.99 }] } });
+      await awardTender(
+        f.db,
+        row,
+        corpId.toHexString(),
+        "Synthetic concession award.",
+        official,
+        3,
+        now
+      );
+      expect(await f.db.collection("newsPosts").countDocuments()).toBe(0);
+      expect(
+        (await f.db.collection("characters").findOne({ _id: characterId }))?.favorability
+      ).toBe(50);
+    });
+
+    it("does not disclose or penalize an unfunded conflicted extraction award", async () => {
+      const row = await extraction();
+      const characterId = new ObjectId();
+      const official = {
+        ...government,
+        userId: owner.toHexString(),
+        hasCharacter: true,
+        character: { _id: characterId, name: "Synthetic official" },
+      } as AuthUserWithCharacter;
+      await f.db.collection("characters").insertOne({ _id: characterId, favorability: 50 });
+      await f.db
+        .collection("corporations")
+        .updateOne({ _id: corpId }, { $set: { liquidCapital: 0 } });
+      await expect(
+        awardTender(
+          f.db,
+          row,
+          corpId.toHexString(),
+          "Synthetic concession award.",
+          official,
+          3,
+          now,
+          true
+        )
+      ).rejects.toThrow("cannot fund");
+      const fresh = (await tenders(f.db).findOne({ _id: row._id }))!;
+      expect(fresh.status).toBe("open");
+      expect(fresh.awardSelfDealing).toBeUndefined();
+      expect(await f.db.collection("newsPosts").countDocuments()).toBe(0);
+      expect(
+        (await f.db.collection("characters").findOne({ _id: characterId }))?.favorability
+      ).toBe(50);
+    });
+
     it("records revisions and withdrawals atomically, even after the corporation changes industry", async () => {
       let row = await extraction();
       await submitBid(
@@ -566,14 +734,27 @@ describe.skipIf(!REAL_MONGO_ENABLED)(
         now
       );
       row = (await tenders(f.db).findOne({ _id: id }))!;
+      const official = { ...government, userId: owner.toHexString() } as AuthUserWithCharacter;
+      await expect(
+        awardTender(
+          f.db,
+          row,
+          corpId.toHexString(),
+          "Lowest qualifying equipment price.",
+          official,
+          3,
+          now
+        )
+      ).rejects.toThrow("Acknowledge the conflict");
       await awardTender(
         f.db,
         row,
         corpId.toHexString(),
         "Lowest qualifying equipment price.",
-        government,
+        official,
         3,
-        now
+        now,
+        true
       );
       const contract = await f.db.collection("defenceContracts").findOne({ tenderId: id });
       expect(contract).toMatchObject({

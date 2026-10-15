@@ -90,4 +90,8 @@ export interface TenderView extends Omit<
   bidHistory: Omit<ContractBid, "userId">[];
   canManage: boolean;
   selfDealing?: { ministerName?: string; favorabilityPenalty: number };
+  awardWarnings?: Record<
+    string,
+    { basis: "owner" | "shareholding"; stakeShare: number; favorabilityPenalty: number }
+  >;
 }
