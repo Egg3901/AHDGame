@@ -295,7 +295,7 @@ export function ResourcesTab({ stateId, countryId, isAdmin = false }: Props) {
                 onClick={() => setShowIssueModal(true)}
                 className="rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-white hover:bg-primary-dark transition-colors"
               >
-                Issue contract
+                Publish tender
               </button>
             )}
             {isAdmin && (

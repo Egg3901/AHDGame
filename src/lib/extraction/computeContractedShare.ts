@@ -28,14 +28,43 @@ export function contractedShareFilter(
 export async function computeContractedShare(
   db: Db,
   stateId: string,
-  resource: ExtractableResource
+  resource: ExtractableResource,
+  countryId?: string
 ): Promise<number> {
+  // Read reservations first: an award cannot disappear between the reservation and contract reads.
+  const reserved = await db
+    .collection<import("@/lib/governmentContracts/types").GovernmentTender>("governmentTenders")
+    .find(
+      {
+        "terms.type": "extraction",
+        "terms.stateId": stateId,
+        "terms.resource": resource,
+        status: { $in: ["publishing", "open", "awarding"] },
+        ...(countryId
+          ? { countryId: countryId as import("@/lib/constants/countries").CountryId }
+          : {}),
+      },
+      { projection: { _id: 1, terms: 1 } }
+    )
+    .toArray();
   const contracts = await (
     await getExtractionContractsCollection(db)
   )
-    .find(contractedShareFilter(stateId, resource))
+    .find({
+      ...contractedShareFilter(stateId, resource),
+      ...(countryId
+        ? { countryId: countryId as import("@/lib/constants/countries").CountryId }
+        : {}),
+    })
     .toArray();
-  return contracts.reduce((sum, c) => sum + (c.share ?? 0), 0);
+  const linked = new Set(contracts.map((c) => c.tenderId).filter(Boolean));
+  return (
+    contracts.reduce((sum, c) => sum + (c.share ?? 0), 0) +
+    reserved.reduce(
+      (sum, t) => sum + (!linked.has(t._id) && t.terms.type === "extraction" ? t.terms.share : 0),
+      0
+    )
+  );
 }
 
 /**

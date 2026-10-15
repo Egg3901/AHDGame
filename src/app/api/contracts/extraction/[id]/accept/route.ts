@@ -36,6 +36,11 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
     const contractsCol = await getExtractionContractsCollection(db);
     const contract = await contractsCol.findOne({ _id: new ObjectId(id) });
     if (!contract) throw notFound("Contract not found");
+    if (contract.tenderId)
+      return errorResponse(
+        410,
+        "Winning bids are settled automatically by their government tender."
+      );
 
     const resolved = await resolveCorporation(db, contract.corporationId.toString());
     if (!resolved.ok) return resolved.response;

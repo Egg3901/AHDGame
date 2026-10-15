@@ -1,3 +1,4 @@
+import { migration as governmentContractBidding } from "./entries/2026-10-14-government-contract-bidding";
 import { migration as contestAccountHistory } from "./entries/2026-10-14-contest-account-history";
 import { migration as liveWorldNppAutonomyV6 } from "./entries/2026-10-15-live-world-npp-autonomy-v6";
 import { migration as corporateFundPositions } from "./entries/2026-10-09-corporate-fund-positions";
@@ -41,6 +42,7 @@ import type { Migration } from "./types";
 export const REQUIRED_STARTUP_MIGRATIONS: readonly Migration[] = [
   // Ownership and achievement definitions must exist before the next reset or settlement.
   contestAccountHistory,
+  governmentContractBidding,
   equityMarketPools,
   repairOrphanIndexFundState,
   providerIdentityIndexes,

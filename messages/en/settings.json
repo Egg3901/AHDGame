@@ -682,7 +682,8 @@
         "defence_contract_cancelled": "Defence contract cancelled",
         "ask_refund": "Ask refund",
         "ask_correction": "Ask correction",
-        "ask_watch": "Ask watch"
+        "ask_watch": "Ask watch",
+        "government_contract_awarded": "Government contract awards"
       },
       "mail": "Direct-message alerts",
       "mailHint": "Show unread message badges. Messages are still delivered and available in your inbox when muted."

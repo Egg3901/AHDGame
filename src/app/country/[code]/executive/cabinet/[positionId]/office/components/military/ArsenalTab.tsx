@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+import { useTranslations } from "next-intl";
 import { useMemo, useState } from "react";
 import type {
   ArsenalView,
@@ -10,7 +12,6 @@ import type {
 import { getUnitArchetype } from "@/lib/constants/military";
 import type { UnitDomain } from "@/lib/db/types/militaryUnit";
 import { lotsRequired, lotsToFillUnit } from "@/lib/military/arsenal";
-import { lotPriceBand } from "@/lib/military/defenceLotEconomics";
 import { DEFENCE_TERMINATION_CAUSE_TURNS } from "@/lib/military/defenceTermination";
 import { AggTile, MilIcon, domainIcon, fmtMoneyAbs } from "./militaryUi";
 import { ActingLockNote, useActingLock } from "../ActingLock";
@@ -37,17 +38,16 @@ const GRADE_LABEL = ["None", "Legacy", "Modernised", "Cutting-edge"];
  * and it is what turns a starved navy from an abstraction into a number.
  */
 export function ArsenalTab({
+  countryId,
   arsenal,
   contracts,
-  suppliers,
-  lotPricePerLot,
   units,
   currencySymbol,
   canAct: canActProp,
   busy,
-  onAwardContract,
   onCancelContract,
 }: {
+  countryId: string;
   arsenal?: ArsenalView;
   contracts?: DefenceContractView[];
   suppliers?: DefenceSupplierView[];
@@ -56,7 +56,7 @@ export function ArsenalTab({
   currencySymbol: string;
   canAct: boolean;
   busy: boolean;
-  onAwardContract: (
+  onAwardContract?: (
     sectorId: string,
     lotsOrdered: number,
     options?: { pricePerLot?: number; gradeCeiling?: number; component?: string }
@@ -67,17 +67,8 @@ export function ArsenalTab({
   const actingLockReason = useActingLock("procurement");
   const canAct = canActProp && !actingLockReason;
 
+  const translateContracts = useTranslations("corporations.governmentContracts");
   const [confirming, setConfirming] = useState<string | null>(null);
-  const [awardSectorId, setAwardSectorId] = useState("");
-  const [awardLots, setAwardLots] = useState("");
-  // Suggestion #291/#292. Both start empty, which means "quote me the fair price at whatever
-  // grade this supplier can build" - exactly what every contract got before ministers could
-  // specify, so the default path is unchanged.
-  const [awardPrice, setAwardPrice] = useState("");
-  const [awardGrade, setAwardGrade] = useState<string>("");
-  // Ticket #1134. Empty means the plant's first certified domain.
-  const [awardComponent, setAwardComponent] = useState("");
-
   // What the CURRENT roster is short of, per domain — the demand side of the store.
   const shortfallByDomain = useMemo(() => {
     const out: Partial<Record<UnitDomain, number>> = {};
@@ -99,54 +90,6 @@ export function ArsenalTab({
     hasUnits: units.some((u) => u.domain === d.id),
   }));
 
-  const available = suppliers ?? [];
-  const selected = available.find((v) => v.sectorId === awardSectorId);
-  const lotsWanted = Number(awardLots);
-  const lotsPositive =
-    Number.isFinite(lotsWanted) && lotsWanted > 0 && Number.isInteger(lotsWanted);
-  const supplierAllowance = selected?.availableLots ?? 0;
-  const lotsTooMany = lotsPositive && lotsWanted > supplierAllowance;
-  const lotsValid = lotsPositive && !lotsTooMany;
-  // Priced off the same anchored GDP the award route uses, so the figure the minister
-  // approves is the figure they are billed. A null GDP disables rather than quoting free kit.
-  const priced = lotPricePerLot != null && lotPricePerLot > 0;
-
-  // The band the minister may negotiate inside, computed from the SAME pure functions the
-  // award route validates against - so a price the form accepts is a price the server accepts.
-  // The floor is what the plant spends building a lot plus a margin; the ceiling is the GDP
-  // anchor. Outside those two the appropriation is either a private cash tap or a confiscation.
-  const grade = awardGrade === "" ? Math.round(selected?.gradeCeiling ?? 0) : Number(awardGrade);
-  const band =
-    priced && selected
-      ? lotPriceBand({
-          anchorPrice: lotPricePerLot,
-          productionCost: selected.unitProductionCost,
-          grade,
-        })
-      : null;
-  const priceWanted = awardPrice === "" ? (band?.suggested ?? 0) : Number(awardPrice);
-  const priceOutOfBand =
-    band != null &&
-    awardPrice !== "" &&
-    (!Number.isFinite(priceWanted) || priceWanted < band.floor || priceWanted > band.ceiling);
-  const effectivePrice = band ? (priceOutOfBand ? band.suggested : priceWanted) : 0;
-
-  const estimatedCost = priced && lotsValid ? lotsWanted * effectivePrice : 0;
-  const canSubmit =
-    canAct &&
-    !busy &&
-    priced &&
-    !!selected &&
-    supplierAllowance > 0 &&
-    lotsValid &&
-    band != null &&
-    !priceOutOfBand;
-  // Whole turns to fill the order at the plant’s current output — the one number that turns
-  // "500 lots" from a figure into a decision.
-  const turnsToFill =
-    selected && selected.projectedLotsPerTurn > 0 && lotsValid
-      ? Math.ceil(lotsWanted / selected.projectedLotsPerTurn)
-      : null;
   const totalStock = rows.reduce((s, r) => s + r.stock, 0);
   const totalNeeded = rows.reduce((s, r) => s + r.needed, 0);
   const active = contracts ?? [];
@@ -212,270 +155,22 @@ export function ArsenalTab({
         </div>
       </div>
 
-      <div className="rounded-xl border border-card-border bg-card">
-        <div className="border-b border-card-border px-4 py-2.5">
-          <h3 className="text-sm font-semibold text-foreground">Award a contract</h3>
-          <p className="mt-0.5 text-[11px] text-muted">
-            Only domestic defence plants paid in your own currency can hold an order. What each
-            builds comes from the production line its CEO has chosen. A private supplier must accept
-            the offer before it starts; a state-owned plant begins delivering immediately.
-          </p>
-        </div>
-        {!canAct ? (
-          <div className="px-4 py-6 text-center text-[13px] text-muted">
-            Only the defence minister may award procurement contracts.
-          </div>
-        ) : available.length === 0 ? (
-          <div className="px-4 py-6 text-center text-[13px] text-muted">
-            No eligible supplier. A domestic corporation needs a defence plant running a line that
-            builds materiel — a cyber line makes electronics, not equipment.
-          </div>
-        ) : !priced ? (
-          <div className="px-4 py-6 text-center text-[13px] text-muted">
-            This country has no usable GDP figure, so a lot cannot be priced. Procurement is
-            unavailable until that is resolved.
-          </div>
-        ) : (
-          <div className="space-y-3 px-4 py-3">
-            <div>
-              <label
-                htmlFor="award-supplier"
-                className="mb-1.5 block text-body-sm font-medium text-muted"
-              >
-                Supplier
-              </label>
-              <select
-                id="award-supplier"
-                value={awardSectorId}
-                onChange={(e) => {
-                  setAwardSectorId(e.target.value);
-                  setAwardComponent("");
-                }}
-                disabled={busy}
-                className="w-full rounded-lg border border-card-border bg-background px-3 py-2 text-sm focus:border-primary/60 focus:outline-none disabled:opacity-50"
-              >
-                <option value="">Select a plant…</option>
-                {available.map((v) => (
-                  <option key={v.sectorId} value={v.sectorId}>
-                    {v.corporationName} · {v.plantLabel} · {v.component}
-                    {v.alreadyContracted ? " (already contracted)" : ""}
-                  </option>
-                ))}
-              </select>
-              {selected && (
-                <p className="mt-1.5 text-[11px] text-muted">
-                  Builds <span className="text-foreground">{selected.components.join(", ")}</span> ·
-                  about{" "}
-                  <span className="tabular text-foreground">
-                    {selected.projectedLotsPerTurn.toLocaleString("en-US")}
-                  </span>{" "}
-                  lots per turn · delivers at{" "}
-                  {GRADE_LABEL[Math.max(0, Math.min(3, Math.round(selected.gradeCeiling)))]} grade
-                  {` · ${selected.freeFactories} of ${selected.totalFactories} production lines free`}
-                  {selected.alreadyContracted &&
-                    " · this plant already has an order, and a second one takes only the lines still free"}
-                  {` · ${supplierAllowance.toLocaleString("en-US")} lots available through turn ${selected.allowanceWindowEndTurn ?? "?"}`}
-                </p>
-              )}
-            </div>
-
-            {selected && selected.components.length > 1 && (
-              <div>
-                <label
-                  htmlFor="award-component"
-                  className="mb-1.5 block text-body-sm font-medium text-muted"
-                >
-                  Domain
-                </label>
-                <select
-                  id="award-component"
-                  value={awardComponent || selected.components[0]}
-                  onChange={(e) => setAwardComponent(e.target.value)}
-                  disabled={busy}
-                  className="w-full rounded-lg border border-card-border bg-background px-3 py-2 text-sm focus:border-primary/60 focus:outline-none disabled:opacity-50"
-                >
-                  {selected.components.map((c) => (
-                    <option key={c} value={c}>
-                      {DOMAINS.find((d) => d.id === c)?.label ?? c}
-                    </option>
-                  ))}
-                </select>
-                <p className="mt-1.5 text-[11px] text-muted">
-                  This plant can fill any of these. One order is for one domain; award a second
-                  contract if you need the other.
-                </p>
-              </div>
-            )}
-
-            <div>
-              <label
-                htmlFor="award-lots"
-                className="mb-1.5 block text-body-sm font-medium text-muted"
-              >
-                Lots ordered
-              </label>
-              <input
-                id="award-lots"
-                type="number"
-                inputMode="numeric"
-                min={1}
-                max={Math.max(1, supplierAllowance)}
-                step={1}
-                value={awardLots}
-                onChange={(e) => setAwardLots(e.target.value)}
-                disabled={busy}
-                className="tabular w-full rounded-lg border border-card-border bg-background px-3 py-2 text-sm focus:border-primary/60 focus:outline-none disabled:opacity-50"
-              />
-              {lotsTooMany && (
-                <p className="mt-1.5 text-[11px] text-[var(--error)]">
-                  This supplier may receive at most {supplierAllowance.toLocaleString("en-US")} more
-                  lots in the current contracting window.
-                </p>
-              )}
-              <p className="mt-1.5 text-[11px] text-muted">
-                {fmtMoneyAbs(currencySymbol, effectivePrice)} per lot, paid out of the appropriation
-                as each lot is delivered - never up front. The full order is committed against the
-                appropriation the moment you sign it.
-                {totalNeeded > totalStock && (
-                  <>
-                    {" "}
-                    Your roster is short{" "}
-                    <span className="text-foreground">
-                      {(totalNeeded - totalStock).toLocaleString("en-US")}
-                    </span>{" "}
-                    lots.
-                  </>
-                )}
-              </p>
-            </div>
-
-            {selected && band && (
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label
-                    htmlFor="award-grade"
-                    className="mb-1.5 block text-body-sm font-medium text-muted"
-                  >
-                    Grade
-                  </label>
-                  <select
-                    id="award-grade"
-                    value={awardGrade}
-                    onChange={(e) => {
-                      setAwardGrade(e.target.value);
-                      // The band moves with the grade, so a price typed against the old band
-                      // would silently become invalid. Clearing it re-quotes rather than
-                      // submitting a number the server will refuse.
-                      setAwardPrice("");
-                    }}
-                    disabled={busy}
-                    className="w-full rounded-lg border border-card-border bg-background px-3 py-2 text-sm focus:border-primary/60 focus:outline-none disabled:opacity-50"
-                  >
-                    {[0, 1, 2, 3]
-                      .filter((g) => g <= Math.round(selected.gradeCeiling))
-                      .map((g) => (
-                        <option key={g} value={String(g)}>
-                          {GRADE_LABEL[g]}
-                        </option>
-                      ))}
-                  </select>
-                  <p className="mt-1.5 text-[11px] text-muted">
-                    Cheaper grades buy more lots per unit of budget; better grades field stronger
-                    formations. This plant can build up to{" "}
-                    {GRADE_LABEL[Math.max(0, Math.min(3, Math.round(selected.gradeCeiling)))]}.
-                  </p>
-                </div>
-                <div>
-                  <label
-                    htmlFor="award-price"
-                    className="mb-1.5 block text-body-sm font-medium text-muted"
-                  >
-                    Price per lot
-                  </label>
-                  <input
-                    id="award-price"
-                    type="number"
-                    inputMode="numeric"
-                    min={band.floor}
-                    max={band.ceiling}
-                    step={1}
-                    placeholder={String(band.suggested)}
-                    value={awardPrice}
-                    onChange={(e) => setAwardPrice(e.target.value)}
-                    disabled={busy}
-                    className="tabular w-full rounded-lg border border-card-border bg-background px-3 py-2 text-sm focus:border-primary/60 focus:outline-none disabled:opacity-50"
-                  />
-                  <p
-                    className={`mt-1.5 text-[11px] ${priceOutOfBand ? "text-[var(--error)]" : "text-muted"}`}
-                  >
-                    {fmtMoneyAbs(currencySymbol, band.floor)} to{" "}
-                    {fmtMoneyAbs(currencySymbol, band.ceiling)}. Below the floor the plant builds at
-                    a loss and will not deliver; above the ceiling you are paying over the odds with
-                    public money. Leave it blank for a fair price.
-                  </p>
-                </div>
-              </div>
-            )}
-
-            {lotsValid && selected && (
-              <div className="rounded-lg border border-card-border bg-card-muted px-3 py-2 text-[12px]">
-                <div className="flex items-center justify-between">
-                  <span className="text-muted">Total if fully delivered</span>
-                  <span className="tabular font-semibold text-foreground">
-                    {fmtMoneyAbs(currencySymbol, estimatedCost)}
-                  </span>
-                </div>
-                {turnsToFill != null && (
-                  <div className="mt-1 flex items-center justify-between">
-                    <span className="text-muted">At current output</span>
-                    <span className="tabular text-foreground">
-                      about {turnsToFill.toLocaleString("en-US")}{" "}
-                      {turnsToFill === 1 ? "turn" : "turns"} to fill
-                    </span>
-                  </div>
-                )}
-                {selected.projectedLotsPerTurn === 0 && (
-                  <p className="mt-1 text-[11px] text-[var(--error)]">
-                    This plant is producing nothing right now, so the order would sit unfilled until
-                    its output recovers.
-                  </p>
-                )}
-              </div>
-            )}
-
-            <button
-              disabled={!canSubmit}
-              onClick={async () => {
-                if (!canSubmit) return;
-                const ok = await onAwardContract(awardSectorId, lotsWanted, {
-                  ...(awardPrice !== "" ? { pricePerLot: Math.round(priceWanted) } : {}),
-                  ...(awardGrade !== "" ? { gradeCeiling: grade } : {}),
-                  ...(awardComponent !== "" ? { component: awardComponent } : {}),
-                });
-                // Only clear on success — a refused award should leave the figures in place
-                // to correct rather than making the minister retype the whole order.
-                if (ok) {
-                  setAwardSectorId("");
-                  setAwardLots("");
-                  setAwardPrice("");
-                  setAwardGrade("");
-                  setAwardComponent("");
-                }
-              }}
-              className="w-full rounded-lg border border-[color-mix(in_srgb,var(--gov)_40%,transparent)] bg-[color-mix(in_srgb,var(--gov)_15%,transparent)] px-3 py-2 text-[13px] font-semibold text-gov-soft disabled:opacity-50"
-            >
-              Offer contract
-            </button>
-          </div>
-        )}
+      <div className="rounded-xl border border-card-border bg-card p-4">
+        <p className="text-sm text-muted">{translateContracts("defenceOffice")}</p>
+        <Link
+          className="mt-3 inline-block text-sm font-semibold text-primary"
+          href={"/country/" + countryId.toLowerCase() + "/government-contracts?type=defence"}
+        >
+          {translateContracts("openBoard")}
+        </Link>
       </div>
       <div className="rounded-xl border border-card-border bg-card">
         <div className="border-b border-card-border px-4 py-2.5">
           <h3 className="text-sm font-semibold text-foreground">Procurement contracts</h3>
           <p className="mt-0.5 text-[11px] text-muted">
             Standing orders with your own defence industry. Each pays per lot delivered, out of the
-            defence appropriation. A private supplier must accept before anything is built; a
-            state-owned plant starts at once.
+            defence appropriation. Winning bids activate after award. Existing orders keep their
+            signed terms.
           </p>
         </div>
         {active.length === 0 ? (

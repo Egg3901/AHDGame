@@ -987,6 +987,12 @@ export interface SectorBuildOrder {
 
 export interface CorporateSector {
   _id: ObjectId;
+  /** Recoverable defence award or factory-allocation operation holding this plant. */
+  contractMutationOwner?: string;
+  /** Request fence: an earlier request cannot release a resumed operation. */
+  contractMutationKey?: string;
+  contractMutationRevision?: number;
+  contractMutationSequence?: number;
   corporationId: ObjectId;
   /** Country where this sector operates */
   countryId: CountryId;
