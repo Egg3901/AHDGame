@@ -25,6 +25,7 @@ import { balRegions } from "@/lib/seeds/bal/balRegions";
 import { easternBlocPolicyConfig } from "@/lib/seeds/shared/easternBlocLegislation";
 import { COUNTRY_POLICY_CONFIGS_2019 } from "./basePolicies2019";
 import { getStateLean } from "@/lib/utils/demographics";
+import { alignIncomeTaxPolicyRecords } from "@/lib/budget/rules/incomeTaxPolicy";
 
 export type BasePolicyRecord = {
   scope: "national" | "state";
@@ -337,8 +338,7 @@ function buildBasePolicies(
 /**
  * The 2019 policy set, un-vacuumed and preset-blind.
  *
- * Consumed by `scripts/seed/seed-policies.ts` (through the `scripts/seeds`
- * re-export), a manual upsert with no preset argument. It builds from
+ * Retained for compatibility with preset-blind importers. It builds from
  * `COUNTRY_POLICY_CONFIGS_2019`, so it covers sixteen countries rather than the
  * legacy union's twenty-seven: running it no longer writes Warsaw-Pact or Soviet
  * policy rows into a world that has none.
@@ -361,7 +361,7 @@ export default basePolicies;
  * JP, Kohl-era DE, Haughey-era IE, post-Tiananmen CN) rather than the
  * Jan 2020 snapshot baked into `basePolicies`.
  */
-export async function getBasePolicies(preset: string): Promise<BasePolicyRecord[]> {
+async function getUnalignedBasePolicies(preset: string): Promise<BasePolicyRecord[]> {
   if (preset === "1953-default") {
     const { COUNTRY_POLICY_CONFIGS_1953 } = await import("./basePolicies1953");
     return buildBasePolicies(COUNTRY_POLICY_CONFIGS_1953, 1953);
@@ -403,4 +403,12 @@ export async function getBasePolicies(preset: string): Promise<BasePolicyRecord[
   // Vacuum at 2019 so a modern world doesn't seed a domain that opens after it
   // (e.g. cn_common_prosperity 2021).
   return buildBasePolicies(COUNTRY_POLICY_CONFIGS_2019, 2019);
+}
+
+/** Preserve authored budget rates when a legacy option ladder cannot represent them. */
+export async function getBasePolicies(preset: string): Promise<BasePolicyRecord[]> {
+  const records = await getUnalignedBasePolicies(preset);
+  const { getInitialNationalBudgetsForPreset } = await import("./budgets");
+  const budgets = getInitialNationalBudgetsForPreset(preset);
+  return alignIncomeTaxPolicyRecords(records, budgets, legislationTypes);
 }

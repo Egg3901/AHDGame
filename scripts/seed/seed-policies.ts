@@ -8,8 +8,13 @@
  */
 
 import { connectDb, closeDb } from "../utils/db";
-import { basePolicies } from "../seeds/basePolicies";
-import type { StatePolicyRecord } from "../../src/lib/db/types";
+import { getBasePolicies } from "../seeds/basePolicies";
+import { getGameStatePresetOrDefault } from "../../src/lib/db/collections/gameState";
+import type { StatePolicyRecord, FederalBudget, LegislationType } from "../../src/lib/db/types";
+import {
+  alignIncomeTaxPolicyRecords,
+  INCOME_TAX_POLICY_JURISDICTIONS,
+} from "../../src/lib/budget/rules/incomeTaxPolicy";
 
 const RESET = process.argv.includes("--reset");
 
@@ -28,6 +33,25 @@ async function main() {
   const db = await connectDb();
 
   try {
+    const authoredPolicies = await getBasePolicies(await getGameStatePresetOrDefault(db));
+    // Standalone policy seeding does not reset budgets: retain current rates and pending targets.
+    const [budgets, taxTypes] = await Promise.all([
+      db
+        .collection<FederalBudget>("federalBudget")
+        .find(
+          { countryId: { $in: ["BR", "NG"] } },
+          { projection: { countryId: 1, "taxRates.incomeTax": 1, "taxRatePhaseIn.incomeTax": 1 } }
+        )
+        .toArray(),
+      db
+        .collection<LegislationType>("legislationTypes")
+        .find(
+          { _id: { $in: INCOME_TAX_POLICY_JURISDICTIONS.map((entry) => entry.legislationTypeId) } },
+          { projection: { "policyOptions.id": 1, "policyOptions.rate": 1 } }
+        )
+        .toArray(),
+    ]);
+    const basePolicies = alignIncomeTaxPolicyRecords(authoredPolicies, budgets, taxTypes);
     if (RESET) {
       await db
         .collection("statePolicies")
