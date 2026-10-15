@@ -1,9 +1,9 @@
 import { configureGroupSupply, groupForecastWriteOps } from "./groupSupplyTurn";
+import { resolvePhaseLookups } from "./phaseLookups";
 /**
  * Corporation turns settle operating results and distribute shareholder income.
  * processCorporationTurn shares monetary quotes across automatic dividend conversions.
  */
-import { resolveNoBuyerPhaseOutStartTurn } from "@/lib/extraction/noBuyerPhaseOutStart";
 import { CORPORATION_TURN_GAME_CONFIG_PROJECTION } from "./gameConfigProjection";
 import { applyCorporationCashWrites } from "@/lib/turn/npp/foundingCashLedger";
 import { loadConversionQuoteContext } from "@/lib/currency/euro/quotes";
@@ -28,12 +28,6 @@ import { getLabourSystemMode, labourAtLeast } from "@/lib/labour/featureFlag";
 import { getMarketSystemMode, marketAtLeast } from "@/lib/market/featureFlag";
 import { buildMarketContext } from "@/lib/market/marketContext";
 import { normalizeCommodityFixStage } from "@/lib/market/commodityFixStages";
-import { placementRevenuePhaseStartTurnFrom } from "@/lib/market/placementRevenuePhase";
-import {
-  announceCountryRecessions,
-  countryRecessionsFrom,
-  recessionCapacityFactors,
-} from "@/lib/market/countryRecession";
 import { isFairnessDoctrineInEffect } from "@/lib/mediaRegulation/rules";
 import { runClearingPrePass } from "./clearingPrePass";
 import { computeQualityUpdates } from "./brandQualityTurn";
@@ -271,18 +265,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
           )
       : Promise.resolve(null),
   ]);
-  lookups.extractionNoBuyerPhaseOutStartTurn = await resolveNoBuyerPhaseOutStartTurn(
-    db,
-    marketGovernorConfig,
-    turn ?? gameState?.currentTurn ?? 0
-  );
-  lookups.placementRevenuePhaseStartTurn = placementRevenuePhaseStartTurnFrom(marketGovernorConfig);
-  {
-    const recessions = countryRecessionsFrom(marketGovernorConfig);
-    const recessionTurn = turn ?? gameState?.currentTurn ?? 0;
-    lookups.recessionCapacityFactorByCountry = recessionCapacityFactors(recessions, recessionTurn);
-    if (recessions.length > 0) await announceCountryRecessions(db, recessions, recessionTurn);
-  }
+  await resolvePhaseLookups(db, marketGovernorConfig, turn ?? gameState?.currentTurn ?? 0, lookups);
   if (
     mediaProductSlatesEnabled &&
     lookups.mediaProductProjectsByCorpId &&
