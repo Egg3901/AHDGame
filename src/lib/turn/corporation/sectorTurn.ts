@@ -660,6 +660,7 @@ export function processSector(
     newStrikeStartedAtTurn,
     newStrikeCooldownUntilTurn,
   } = resolveSectorLabourEconomics({
+    explicitPlantCostsEnabled,
     labour: explicitPlantCostsEnabled ? { ...labour, wagesEnabled: true } : labour,
     sector,
     sectorCountryId,
