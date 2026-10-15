@@ -23,6 +23,7 @@ import {
 import { creditCorpLiquidCapital } from "@/lib/financialTxLog/atomicCashGuard";
 import { emitTx } from "@/lib/financialTxLog/emit";
 import { sellFundHoldingsForRedemptionCash } from "@/lib/indexFunds/fundRedemptionLiquidity";
+import { sellFundBondHoldingsForCash } from "@/lib/bonds/sellFundBondUnits";
 import { payCorporateWindUpHolders } from "./corporateHolderPayout";
 import { payFundHolderCash } from "./holderPayout";
 import { withSessionDb, afterCommit } from "@/lib/db/sessionDb";
@@ -99,6 +100,9 @@ export async function advanceWindDowns(db: Db, currentTurn: number): Promise<Win
     .find({ status: "winding_down" })
     .toArray();
 
+  // Funds whose stocks are gone sell their bonds this pass; they complete
+  // only once no bond units remain (checked in one batched read below).
+  const bondPhase: IndexFund[] = [];
   for (const fund of funds) {
     result.fundsProcessed += 1;
     try {
@@ -119,6 +123,43 @@ export async function advanceWindDowns(db: Db, currentTurn: number): Promise<Win
         continue;
       }
 
+      await sellFundBondHoldingsForCash(db, fund, Number.POSITIVE_INFINITY, new Date(), {
+        turn: currentTurn,
+      });
+      bondPhase.push(fund);
+    } catch (err) {
+      result.errors.push(`${fund.tickerSymbol}: ${(err as Error).message}`);
+    }
+  }
+
+  if (bondPhase.length === 0) return result;
+
+  let stillHoldingBonds: Set<string>;
+  try {
+    const rows = await db
+      .collection("bonds")
+      .aggregate<{ _id: unknown }>([
+        { $match: { "holders.fundId": { $in: bondPhase.map((f) => f._id) } } },
+        { $unwind: "$holders" },
+        {
+          $match: {
+            "holders.fundId": { $in: bondPhase.map((f) => f._id) },
+            "holders.units": { $gt: 0 },
+          },
+        },
+        { $group: { _id: "$holders.fundId" } },
+      ])
+      .toArray();
+    stillHoldingBonds = new Set(rows.map((r) => String(r._id)));
+  } catch (err) {
+    for (const fund of bondPhase)
+      result.errors.push(`${fund.tickerSymbol}: ${(err as Error).message}`);
+    return result;
+  }
+
+  for (const fund of bondPhase) {
+    if (stillHoldingBonds.has(String(fund._id))) continue;
+    try {
       const paid = await completeWindUp(db, fund, currentTurn);
       result.holdersPaid += paid;
       result.fundsCompleted += 1;
