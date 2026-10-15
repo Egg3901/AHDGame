@@ -140,6 +140,32 @@ describe("resolveSectorLabourEconomics", () => {
     };
   }
 
+  it("restores hardware payroll only for explicit plants, retaining wage floors and pay reporting", () => {
+    const input = economicsInput(1.3);
+    input.sector.sectorType = "technology";
+    input.sector.strategyId = "hardware";
+    const legacy = resolveSectorLabourEconomics({ ...input, currentYear: 1991 });
+    const explicit = resolveSectorLabourEconomics({
+      ...input,
+      currentYear: 1991,
+      explicitPlantCostsEnabled: true,
+    });
+    expect(explicit.sectorLaborCost).toBeCloseTo(legacy.sectorLaborCost * 0.75, 10);
+    expect(explicit.wagePerWorker).toBeCloseTo(legacy.wagePerWorker! * 0.75, 10);
+    expect(explicit.sectorLaborCost).toBeGreaterThan(1000 * 0.33);
+    for (const strategyId of ["standard", "software"]) {
+      const sector = { ...input.sector, strategyId };
+      expect(
+        resolveSectorLabourEconomics({
+          ...input,
+          sector,
+          currentYear: 1991,
+          explicitPlantCostsEnabled: true,
+        }).sectorLaborCost
+      ).toBe(resolveSectorLabourEconomics({ ...input, sector, currentYear: 1991 }).sectorLaborCost);
+    }
+  });
+
   it("prices an agreement wage floor above the employer's own wage level", () => {
     const unfloored = resolveSectorLabourEconomics(economicsInput());
     const floored = resolveSectorLabourEconomics(economicsInput(1.3));
