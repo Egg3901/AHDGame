@@ -21,7 +21,7 @@ export function MarketCorporationAction() {
   const corporationId = foundedId ?? navData?.myCorporationId;
 
   useEffect(() => {
-    if (!open) return;
+    if (corporationId) return;
     let cancelled = false;
     fetchJson<{ foundingCooldownTurnsRemaining?: number }>("/api/character/me", {
       cache: "no-store",
@@ -34,7 +34,7 @@ export function MarketCorporationAction() {
     return () => {
       cancelled = true;
     };
-  }, [open]);
+  }, [corporationId, turn?.currentTurn]);
 
   const className =
     "inline-flex items-center rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-white hover:bg-primary/90 transition-colors";
@@ -49,14 +49,21 @@ export function MarketCorporationAction() {
 
   return (
     <>
-      <button
-        type="button"
-        data-coach="nav-corporations"
-        className={className}
-        onClick={() => setOpen(true)}
-      >
-        Found corporation
-      </button>
+      <div className="flex flex-col items-start">
+        <button
+          type="button"
+          data-coach="nav-corporations"
+          className={className}
+          onClick={() => setOpen(true)}
+        >
+          Found corporation
+        </button>
+        {cooldown > 0 && (
+          <p className="mt-1 text-xs text-muted" role="status">
+            Available to found in {cooldown} turns
+          </p>
+        )}
+      </div>
       <FoundCorporationModal
         open={open}
         onClose={() => setOpen(false)}

@@ -351,6 +351,17 @@ export interface GameConfig {
    */
   placementRevenuePhaseStartTurn?: number;
   /**
+   * Operator-scheduled country recessions: capacity contraction spread over a
+   * window of turns. See src/lib/market/countryRecession.ts. Cleared on reset.
+   */
+  countryRecessions?: import("@/lib/market/countryRecession").CountryRecession[];
+  /**
+   * Turn a live world starts moving macro demand onto anchor state GDP over
+   * STATE_GDP_ANCHOR_PHASE_TURNS (operator-set; worlds seeded with
+   * GameState.stateGdpAnchoredDemand are already fully on). See sectorLedger.ts.
+   */
+  stateGdpAnchorPhaseStartTurn?: number;
+  /**
    * Turn the input-demand-follows-real-output phase-in starts, set by an
    * operator (never stamped automatically). See src/lib/market/inputDemandRealPhase.ts.
    */

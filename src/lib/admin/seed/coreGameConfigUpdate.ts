@@ -49,6 +49,10 @@ export const STALE_PER_WORLD_GAME_CONFIG_UNSET: Readonly<Record<string, "">> = O
   extractionNoBuyerPhaseOutStartTurn: "",
   // Revenue-follows-placement phase-in start (operator-set turn on the old world).
   placementRevenuePhaseStartTurn: "",
+  // Operator-scheduled country recessions belong to the old world.
+  countryRecessions: "",
+  // State GDP anchor phase-in start (operator-set turn on the old world).
+  stateGdpAnchorPhaseStartTurn: "",
   // Input-demand-follows-real-output phase-in start (operator-set turn on the old world).
   inputDemandRealPhaseStartTurn: "",
   marketGuardReferenceFundamentalMcap: "",

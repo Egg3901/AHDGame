@@ -171,7 +171,8 @@ export async function GET() {
     const homeCurrency = COUNTRY_CURRENCY_MAP[user.character.countryId as CountryId];
     const forexRates = forexEnabled ? await loadFxRatesRecord(db) : undefined;
 
-    // Bug #0728: turns remaining before this user may found another corporation.
+    // Bug #0728: turns remaining before this user may refound after their last
+    // corporation ended.
     // userDoc is fetched above for every request; 0 means "may found now".
     const gameState = await getGameState();
     const foundingCooldownRemaining = foundingCooldownTurnsRemaining(

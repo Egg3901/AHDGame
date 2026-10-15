@@ -309,6 +309,8 @@ export interface CorporationLookups {
   extractionNoBuyerPhaseOutStartTurn?: number;
   /** Turn the revenue-follows-placement phase-in started (gameConfig stamp). */
   placementRevenuePhaseStartTurn?: number;
+  /** countryId → this turn's recession capacity factor (absent = 1). See countryRecession.ts. */
+  recessionCapacityFactorByCountry?: Map<string, number>;
   /**
    * sectorId → revenue-weighted extraction capacity utilization (0..1) and the
    * most-binding resource, derived from computeExtractionCapacityMultipliers.

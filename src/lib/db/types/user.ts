@@ -74,7 +74,7 @@ export interface User {
   activeImperialCharacterId?: ObjectId;
   activeCharacterType?: "character" | "imperial";
   activeCharacterCount?: number;
-  /** Turn of this user's most recent corporation founding; gates the founding cooldown (Bug #0728). */
+  /** Turn this user's most recent corporation ended; gates refounding cooldown (legacy field name, Bug #0728). */
   lastCorporationFoundedTurn?: number;
   createdAt: Date;
   updatedAt: Date;

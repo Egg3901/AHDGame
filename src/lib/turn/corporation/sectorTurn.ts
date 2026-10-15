@@ -406,6 +406,7 @@ export function processSector(
     worldGovernorAnchorTurn: market.worldGovernorAnchorTurn,
     governorGlide: market.governorGlide,
     embargoLegacyMothball,
+    recessionCapacityFactor: lookups.recessionCapacityFactorByCountry?.get(sector.countryId ?? ""),
   });
   // (moved to computePlantsCapacity: plant ledger + owned-capacity advance)
   // (moved to computePlantsCapacity: P5 paid basis of capacity)

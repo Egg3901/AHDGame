@@ -72,7 +72,11 @@ export interface CorporationDissolutionResult {
 export async function executeCorporationBondDefaultDissolution(
   db: Db,
   corporation: Corporation,
-  options: { requireDefaultedBonds: boolean; exitReason?: CorporationExitReason }
+  options: {
+    requireDefaultedBonds: boolean;
+    exitReason?: CorporationExitReason;
+    cooldownExempt?: boolean;
+  }
 ): Promise<CorporationDissolutionResult> {
   if (corporation.countryOwnerId) {
     throw badRequest("National corporations cannot be dissolved here");
@@ -744,6 +748,7 @@ export async function executeCorporationBondDefaultDissolution(
       options.exitReason ?? (options.requireDefaultedBonds ? "bond_default" : "forced_liquidation"),
     successorIds: disposal.recipientIds,
     now,
+    cooldownExempt: options.cooldownExempt,
   });
 
   const totalPayoutToPeople = [...charAll].reduce(
