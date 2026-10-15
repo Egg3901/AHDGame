@@ -4,7 +4,7 @@
  * Opt-in editor for the `central_bank_independence` bill provision, on economy
  * bills only (see `CENTRAL_BANK_INDEPENDENCE_BILL_CATEGORIES`).
  *
- * `grant` hands rate-setting to the bank and seats its policy committee;
+ * `grant` hands rate-setting to the bank (and seats the committee for the US Fed);
  * `revoke` returns it to the head of government and the finance seat. The
  * provision stands on its own, so a bill may carry nothing else — the parent
  * modal counts it toward `MAX_PROVISIONS` and toward the national-influence
@@ -61,7 +61,7 @@ export function CentralBankProvisionEditor({
         {!include
           ? "No central-bank provision will be included in this bill."
           : action === "grant"
-            ? "On enactment the bank sets its own rate through its policy committee."
+            ? "On enactment the bank sets its own rate, independent of the government."
             : "On enactment the head of government and the finance minister set the rate."}
       </p>
     </div>
