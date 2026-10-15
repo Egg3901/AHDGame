@@ -29,6 +29,11 @@ import { getMarketSystemMode, marketAtLeast } from "@/lib/market/featureFlag";
 import { buildMarketContext } from "@/lib/market/marketContext";
 import { normalizeCommodityFixStage } from "@/lib/market/commodityFixStages";
 import { placementRevenuePhaseStartTurnFrom } from "@/lib/market/placementRevenuePhase";
+import {
+  announceCountryRecessions,
+  countryRecessionsFrom,
+  recessionCapacityFactors,
+} from "@/lib/market/countryRecession";
 import { isFairnessDoctrineInEffect } from "@/lib/mediaRegulation/rules";
 import { runClearingPrePass } from "./clearingPrePass";
 import { computeQualityUpdates } from "./brandQualityTurn";
@@ -272,6 +277,12 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
     turn ?? gameState?.currentTurn ?? 0
   );
   lookups.placementRevenuePhaseStartTurn = placementRevenuePhaseStartTurnFrom(marketGovernorConfig);
+  {
+    const recessions = countryRecessionsFrom(marketGovernorConfig);
+    const recessionTurn = turn ?? gameState?.currentTurn ?? 0;
+    lookups.recessionCapacityFactorByCountry = recessionCapacityFactors(recessions, recessionTurn);
+    if (recessions.length > 0) await announceCountryRecessions(db, recessions, recessionTurn);
+  }
   if (
     mediaProductSlatesEnabled &&
     lookups.mediaProductProjectsByCorpId &&

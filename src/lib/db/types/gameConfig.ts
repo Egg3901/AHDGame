@@ -351,6 +351,11 @@ export interface GameConfig {
    */
   placementRevenuePhaseStartTurn?: number;
   /**
+   * Operator-scheduled country recessions: capacity contraction spread over a
+   * window of turns. See src/lib/market/countryRecession.ts. Cleared on reset.
+   */
+  countryRecessions?: import("@/lib/market/countryRecession").CountryRecession[];
+  /**
    * Turn the input-demand-follows-real-output phase-in starts, set by an
    * operator (never stamped automatically). See src/lib/market/inputDemandRealPhase.ts.
    */
