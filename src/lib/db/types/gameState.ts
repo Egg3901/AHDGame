@@ -163,6 +163,15 @@ export interface GameState {
   /** Reset choice (#2679). Missing means default; overwritten on every reset. */
   startingPartiesMode?: "default" | "none";
   /**
+   * On for fresh worlds (`DEFAULT_GAME_STATE_FLAGS`) since the state GDP unit fix.
+   * The commodity ledger then reads each state's GDP in anchor terms (stored
+   * local-currency GDP times the preset's denomination rate) instead of the raw
+   * stored figure, so GDP-driven macro demand tracks real economic size across
+   * countries. Missing (every world seeded before the fix) keeps the raw
+   * reading, so a live world's demand does not shift under its players.
+   */
+  stateGdpAnchoredDemand?: boolean;
+  /**
    * Pre-iteration "founding" election phase (see foundingElections). When
    * `active`, every political nation is running a one-off full-seating election
    * to establish its starting composition, the turn counter advances normally,

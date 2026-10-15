@@ -91,6 +91,9 @@ export const DEFAULT_GAME_STATE_FLAGS = {
   corpDealsEnabled: true,
   intOrgAlignmentEnabled: true,
   nppCorpStrategyEnabled: true,
+  // Macro demand reads state GDP in anchor terms. Fresh worlds only: existing
+  // worlds lack the field and keep the raw stored reading.
+  stateGdpAnchoredDemand: true,
 } as const satisfies Partial<GameState>;
 
 export type DefaultGameStateFlagKey = keyof typeof DEFAULT_GAME_STATE_FLAGS;
