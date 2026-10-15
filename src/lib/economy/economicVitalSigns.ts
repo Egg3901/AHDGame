@@ -1656,6 +1656,7 @@ export async function snapshotEconomicVitalSigns(
     demandFunds,
     demandRatings,
     demandLiquidity,
+    inputReliefWorld,
   ] = await Promise.all([
     db.collection<CommodityFlow>("commodityFlows").find({ turn }).toArray(),
     db
@@ -1808,6 +1809,11 @@ export async function snapshotEconomicVitalSigns(
     db
       .collection<GameConfig>("gameConfig")
       .findOne({ _id: "default" }, { projection: { indexFundBondLiquidityEnabled: 1 } }),
+    db
+      .collection<{ _id: string; preset?: string; hardwareInputReliefStartTurn?: number }>(
+        "gameState"
+      )
+      .findOne({ _id: "current" }, { projection: { preset: 1, hardwareInputReliefStartTurn: 1 } }),
   ]);
   const fxByCurrency = new Map(exchangeRates.map((row) => [row.currencyCode, row.rate]));
   if (!fxByCurrency.has("USD")) fxByCurrency.set("USD", 1);
@@ -1832,7 +1838,11 @@ export async function snapshotEconomicVitalSigns(
         capacityUnits: sector.operatingCapacityUnits ?? sector.capitalStock,
       },
       turn,
-      { plantsEnabled: true }
+      {
+        plantsEnabled: true,
+        preset: inputReliefWorld?.preset,
+        hardwareInputReliefStartTurn: inputReliefWorld?.hardwareInputReliefStartTurn,
+      }
     );
     const commodities = new Set([...supply.keys(), ...demand.keys()]);
     for (const commodity of commodities) {

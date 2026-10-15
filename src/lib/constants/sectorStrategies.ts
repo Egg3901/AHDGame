@@ -20,6 +20,7 @@ import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
  */
 
 import * as Sentry from "@sentry/nextjs";
+import { hardwareInputMultiplier } from "@/lib/corporations/rules/hardwareInputRelief";
 import {
   isCorporationType,
   operatingSectorTypeFor,
@@ -251,10 +252,25 @@ export function getEffectiveStrategyRates(
   transitionStartTurn: number | undefined | null,
   currentTurn: number,
   mediaDiscriminator?: string | null,
-  preset?: string
+  preset?: string,
+  hardwareInputReliefStartTurn?: number | null
 ): EffectiveStrategyRates {
   const operatingType = getOperatingSectorType(sectorType, undefined, mediaDiscriminator);
-  const target = getStrategy(operatingType, strategyId, preset);
+  const relieve = (strategy: SectorStrategy): SectorStrategy => {
+    const multiplier = hardwareInputMultiplier(
+      operatingType,
+      strategy.id,
+      currentTurn,
+      hardwareInputReliefStartTurn
+    );
+    if (multiplier === 1) return strategy;
+    const demand = { ...strategy.demand };
+    for (const commodity of Object.keys(demand) as CommodityType[]) {
+      demand[commodity] = (demand[commodity] ?? 0) * multiplier;
+    }
+    return { ...strategy, demand };
+  };
+  const target = relieve(getStrategy(operatingType, strategyId, preset));
 
   // No transition in progress → return target directly
   if (!transitionFromStrategyId || transitionStartTurn == null) {
@@ -277,7 +293,7 @@ export function getEffectiveStrategyRates(
     };
   }
 
-  const source = getStrategy(operatingType, transitionFromStrategyId, preset);
+  const source = relieve(getStrategy(operatingType, transitionFromStrategyId, preset));
 
   // Interpolate each commodity rate
   const supply = blendRates(source.supply, target.supply, progress);
@@ -295,7 +311,8 @@ export function getEffectiveStrategyRatesForOperatingModel(
   currentTurn: number,
   industryModel?: string | null,
   mediaDiscriminator?: string | null,
-  preset?: string
+  preset?: string,
+  hardwareInputReliefStartTurn?: number | null
 ): EffectiveStrategyRates {
   return getEffectiveStrategyRates(
     getOperatingSectorType(sectorType, industryModel, mediaDiscriminator),
@@ -304,7 +321,8 @@ export function getEffectiveStrategyRatesForOperatingModel(
     transitionStartTurn,
     currentTurn,
     mediaDiscriminator,
-    preset
+    preset,
+    hardwareInputReliefStartTurn
   );
 }
 

@@ -732,7 +732,8 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
       currentTurn,
       sector.industryModel,
       sector.mediaDiscriminator,
-      sectorDetailPreset
+      sectorDetailPreset,
+      gameState?.hardwareInputReliefStartTurn
     );
 
     // Extraction-only: resource capacity and per-resource multipliers ,
@@ -1038,7 +1039,8 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
           currentTurn,
           candidate.industryModel,
           candidate.mediaDiscriminator,
-          sectorDetailPreset
+          sectorDetailPreset,
+          gameState?.hardwareInputReliefStartTurn
         ).supply;
         const multiplier = producerOutputMultiplier(candidate, supply);
         const capacityUnits = candidate.operatingCapacityUnits ?? candidate.capitalStock ?? NaN;

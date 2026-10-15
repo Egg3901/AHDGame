@@ -304,7 +304,8 @@ export function buildSectorDetails(ctx: SectorRowContext) {
       currentTurn,
       sector.industryModel,
       sector.mediaDiscriminator,
-      gameState?.preset
+      gameState?.preset,
+      gameState?.hardwareInputReliefStartTurn
     );
     const effectiveSupply = applyExtractionResourceCapacityToSupply(
       st,

@@ -9,6 +9,7 @@
 import type { Db, ObjectId } from "mongodb";
 import type { CommodityType } from "@/lib/constants/commodities";
 import type { Corporation } from "@/lib/db/types/corporation";
+import type { CorporationExit } from "@/lib/db/types/corporationExit";
 import { notifySupplyAgreementEvent } from "@/lib/corporations/supplyExchange/notifications";
 import { clampAgreementPremium, type SupplyAgreement } from "@/lib/db/types/supplyAgreement";
 import {
@@ -164,7 +165,52 @@ export async function loadSettleableSupplyAgreements(args: {
 
   let legacyStateLocalAgreementLive = false;
   const agreements: SettleableSupplyAgreement[] = [];
+  // A missing row alone is not proof of an exit. Require the durable exit
+  // record too, and retain a restored corporation even if its old exit remains.
+  const counterparties = new Map<string, ObjectId>();
+  for (const agreement of docs) {
+    for (const id of [agreement.supplierCorpId, agreement.buyerCorpId]) {
+      counterparties.set(id.toString(), id);
+    }
+  }
+  const exits =
+    counterparties.size > 0
+      ? await db
+          .collection<CorporationExit>("corporationExits")
+          .find({ _id: { $in: [...counterparties.values()] } }, { projection: { _id: 1 } })
+          .toArray()
+      : [];
+  const restored =
+    exits.length > 0
+      ? await db
+          .collection<Corporation>("corporations")
+          .find({ _id: { $in: exits.map((exit) => exit._id) } }, { projection: { _id: 1 } })
+          .toArray()
+      : [];
+  const restoredIds = new Set(restored.map((corp) => corp._id.toString()));
+  const departed = exits.filter((exit) => !restoredIds.has(exit._id.toString()));
+  const departedIds = new Set(departed.map((exit) => exit._id.toString()));
+  const obsolete = docs.filter(
+    (agreement) =>
+      departedIds.has(agreement.supplierCorpId.toString()) ||
+      departedIds.has(agreement.buyerCorpId.toString())
+  );
+  if (obsolete.length > 0) {
+    await db.collection<SupplyAgreement>("supplyAgreements").updateMany(
+      {
+        _id: { $in: obsolete.map((agreement) => agreement._id) },
+        status: { $in: ["active", "cancelling"] },
+        $or: [
+          { supplierCorpId: { $in: departed.map((exit) => exit._id) } },
+          { buyerCorpId: { $in: departed.map((exit) => exit._id) } },
+        ],
+      },
+      { $set: { status: "cancelled", updatedAt: now }, $unset: { cancelEffectiveTurn: "" } }
+    );
+  }
   for (const a of docs) {
+    if (departedIds.has(a.supplierCorpId.toString()) || departedIds.has(a.buyerCorpId.toString()))
+      continue;
     if (isStateScopedCommodity(a.commodity) && !a.stateId) {
       legacyStateLocalAgreementLive = true;
     }

@@ -1,5 +1,6 @@
 "use client";
 
+import { ContractBoardLink } from "@/components/governmentContracts/ContractBoardLink";
 import { useCallback, useEffect, useState } from "react";
 import { COMMODITY_LABELS } from "@/lib/constants/commodities";
 import { useCurrency } from "@/contexts/CurrencyContext";
@@ -16,6 +17,7 @@ import { apiErrorText } from "@/lib/errors/catalog";
 
 interface CorporationContractsTabProps {
   corpId: string;
+  countryId?: string;
   isCeo: boolean;
 }
 
@@ -24,7 +26,11 @@ interface CorporationContractsTabProps {
  * CEO can accept/decline offers and see royalty/term detail on active
  * contracts. Rendered only for extraction corps when contractIssuanceEnabled.
  */
-export default function CorporationContractsTab({ corpId, isCeo }: CorporationContractsTabProps) {
+export default function CorporationContractsTab({
+  corpId,
+  isCeo,
+  countryId,
+}: CorporationContractsTabProps) {
   const { formatAmount } = useCurrency();
   const { showToast } = useToast();
   const gameTurn = useGameTurnStatus();
@@ -97,6 +103,7 @@ export default function CorporationContractsTab({ corpId, isCeo }: CorporationCo
 
   return (
     <div className="space-y-6">
+      <ContractBoardLink countryId={countryId} type="extraction" />
       {offers.length > 0 && (
         <DenseSection title="Pending offers" meta={`${offers.length}`}>
           <TableScroll>

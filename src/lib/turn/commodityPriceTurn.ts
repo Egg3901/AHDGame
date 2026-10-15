@@ -440,7 +440,12 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
       // `currentYear` rides along for the planned-economy output remap below —
       // widening this projection rather than adding a read, so the positional
       // fetch order the turn tests mock stays exactly as it is.
-      projection: { preset: 1, currentYear: 1, stateGdpAnchoredDemand: 1 },
+      projection: {
+        preset: 1,
+        currentYear: 1,
+        stateGdpAnchoredDemand: 1,
+        hardwareInputReliefStartTurn: 1,
+      },
     }
   );
   const activePreset = presetState?.preset ?? "";
@@ -668,7 +673,8 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
       activePreset,
       sectorUnits,
       retailGdpParams,
-      inputDemandRealPhase
+      inputDemandRealPhase,
+      presetState?.hardwareInputReliefStartTurn
     );
 
   // Plants-tier produced/sold units for the inventory advance (see module).

@@ -18,6 +18,7 @@ import {
 import type { SupplyAgreementDemandSector } from "@/lib/turn/corporation/settleSupplyAgreementsAllocation";
 export function computeSupplyAgreementBuyerDemand(args: {
   preset?: string;
+  hardwareInputReliefStartTurn?: number;
   sectors: readonly SupplyAgreementDemandSector[];
   currentTurn: number;
   unitScale: number;
@@ -36,7 +37,8 @@ export function computeSupplyAgreementBuyerDemand(args: {
       args.currentTurn,
       sector.industryModel,
       sector.mediaDiscriminator,
-      args.preset
+      args.preset,
+      args.hardwareInputReliefStartTurn
     );
     const utilization =
       args.plantsEnabled &&

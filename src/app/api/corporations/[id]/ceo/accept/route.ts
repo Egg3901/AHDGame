@@ -11,6 +11,7 @@ import { isStateOwned } from "@/lib/nationalization/nationalCorporation";
 import { openCeoTenure } from "@/lib/corporations/ceoHistory";
 import { getCurrentTurn } from "@/lib/turn/currentTurn";
 import { holdsAnyBondsInCorp } from "@/lib/bonds/ceoBondConflict";
+import { characterCeoResidencyFailure } from "@/lib/corporations/ceoEligibilityRules";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -50,33 +51,32 @@ export async function POST(_request: Request, { params }: RouteParams) {
     // Residency rule depends on ownership. A National Corporation is a
     // country-wide state instrument, so its CEO need only reside in the same
     // COUNTRY (any state). A private corp keeps the stricter HQ-state rule.
-    if (isStateOwned(corporation)) {
-      if (corporation.countryId && myChar.countryId !== corporation.countryId) {
+    const residencyFailure = characterCeoResidencyFailure(myChar, corporation, {
+      countryWide: isStateOwned(corporation),
+    });
+    if (residencyFailure === "country") {
+      if (isStateOwned(corporation)) {
         return errorResponse(
           400,
           "You must reside in this country to accept the National Corporation CEO position."
         );
       }
-    } else {
+      return errorResponse(
+        400,
+        "You must be in the same country as this corporation to accept the CEO position."
+      );
+    }
+    if (residencyFailure === "headquarters-state") {
       // Enforce CEO must reside in HQ state
-      if (myChar.homeState !== corporation.headquartersState) {
-        // Look up HQ state name for a friendly error message
-        const hqState = await db
-          .collection<State>("states")
-          .findOne({ _id: corporation.headquartersState });
-        const hqName = hqState?.name ?? corporation.headquartersState;
-        return errorResponse(
-          400,
-          `You must reside in ${hqName} to accept the CEO position. Relocate to the headquarters state first.`
-        );
-      }
-
-      if (corporation.countryId && myChar.countryId !== corporation.countryId) {
-        return errorResponse(
-          400,
-          "You must be in the same country as this corporation to accept the CEO position."
-        );
-      }
+      // Look up HQ state name for a friendly error message
+      const hqState = await db
+        .collection<State>("states")
+        .findOne({ _id: corporation.headquartersState });
+      const hqName = hqState?.name ?? corporation.headquartersState;
+      return errorResponse(
+        400,
+        `You must reside in ${hqName} to accept the CEO position. Relocate to the headquarters state first.`
+      );
     }
 
     // Enforce one CEO per character: check if this character is already CEO of another active corporation

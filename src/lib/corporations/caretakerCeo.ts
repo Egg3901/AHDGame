@@ -27,7 +27,7 @@
 
 import type { Db } from "mongodb";
 import { ObjectId } from "mongodb";
-import type { Corporation, NPP } from "@/lib/db/types";
+import type { Character, Corporation, NPP } from "@/lib/db/types";
 import { TURNS_PER_DAY } from "@/lib/constants/turnTime";
 import { openCeoTenure, closeCeoTenure } from "./ceoHistory";
 import { chooseNppCorpCeo, type NppCorpCeoAffiliation } from "@/lib/admin/nppCorpCeoSelection";
@@ -38,6 +38,8 @@ import {
   type GatherNppCeoAffiliationsOptions,
 } from "./nppCeoAffiliations";
 import { subsidiaryReclaimBlocked } from "@/lib/corporations/subsidiaries/parentContext";
+import { characterCeoResidencyFailure } from "@/lib/corporations/ceoEligibilityRules";
+import { isStateOwned } from "@/lib/nationalization/nationalCorporation";
 
 /** Reason a caretaker appointment was rejected (pure, before any I/O). */
 export type CaretakerAppointmentError =
@@ -219,7 +221,19 @@ export async function dismissCaretakerCeo(
   if (!corp.caretakerCeo) return { ok: false, error: "not-caretaker" };
 
   const { underlyingCharacterId, underlyingUserId, appointmentSource } = corp.caretakerCeo;
-  if (underlyingCharacterId) {
+  const underlyingCharacter = underlyingCharacterId
+    ? await db
+        .collection<Character>("characters")
+        .findOne({ _id: underlyingCharacterId }, { projection: { homeState: 1, countryId: 1 } })
+    : null;
+  const eligibleUnderlyingCharacter =
+    underlyingCharacter &&
+    characterCeoResidencyFailure(underlyingCharacter, corp, {
+      countryWide: isStateOwned(corp),
+    }) === null
+      ? underlyingCharacter
+      : null;
+  if (eligibleUnderlyingCharacter) {
     const blocked = await subsidiaryReclaimBlocked(db, corp, underlyingUserId);
     if (blocked) return { ok: false, error: "one-person-rule" };
   }
@@ -232,9 +246,9 @@ export async function dismissCaretakerCeo(
       ? { caretakerCooldownUntilTurn: turn + CARETAKER_REAPPOINT_COOLDOWN_TURNS }
       : {};
 
-  if (!underlyingCharacterId) {
-    // Auto-installed caretaker with no human to restore: return the corp to a
-    // plain vacant seat (owner retained) rather than seating a ghost character.
+  if (!eligibleUnderlyingCharacter) {
+    // No human remains eligible at this headquarters, so release the NPP but
+    // leave a plain vacant seat rather than restoring an out-of-location CEO.
     await db.collection<Corporation>("corporations").updateOne(
       { _id: corp._id },
       {
@@ -242,6 +256,7 @@ export async function dismissCaretakerCeo(
           ceoType: "character",
           userId: underlyingUserId,
           ceoVacant: true,
+          ceoVacantSinceTurn: turn,
           ...reappointmentCooldown,
           updatedAt: now,
         },
@@ -252,7 +267,7 @@ export async function dismissCaretakerCeo(
         },
       }
     );
-    // Close the caretaker NPP's tenure; there is no human tenure to reopen.
+    // Close the caretaker NPP's tenure; there is no eligible human tenure to reopen.
     if (corp.ceoId) await closeCeoTenure(db, corp._id, { holderId: corp.ceoId, turn });
     return { ok: true };
   }
@@ -261,7 +276,7 @@ export async function dismissCaretakerCeo(
     { _id: corp._id },
     {
       $set: {
-        ceoId: underlyingCharacterId,
+        ceoId: eligibleUnderlyingCharacter._id,
         ceoType: "character",
         userId: underlyingUserId,
         ceoVacant: false,
@@ -278,12 +293,12 @@ export async function dismissCaretakerCeo(
   // Close the caretaker NPP's tenure, reopen the restored human's.
   if (corp.ceoId) await closeCeoTenure(db, corp._id, { holderId: corp.ceoId, turn });
   await openCeoTenure(db, corp._id, {
-    holderId: underlyingCharacterId,
+    holderId: eligibleUnderlyingCharacter._id,
     ceoType: "character",
     turn,
   });
 
-  return { ok: true, restoredCharacterId: underlyingCharacterId.toString() };
+  return { ok: true, restoredCharacterId: eligibleUnderlyingCharacter._id.toString() };
 }
 
 /**

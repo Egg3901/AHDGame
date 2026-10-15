@@ -274,7 +274,8 @@ export function processSector(
     turn ?? 0,
     sector.industryModel,
     sector.mediaDiscriminator,
-    lookups.preset
+    lookups.preset,
+    lookups.hardwareInputReliefStartTurn
   );
   // No-buyer phase-out: a mine whose recipe has no leg its state can extract
   // put nothing on the clearing book, yet the deposit ramps kept crediting it

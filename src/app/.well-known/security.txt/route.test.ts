@@ -10,7 +10,9 @@ describe("GET /.well-known/security.txt", () => {
 
     const body = await res.text();
     expect(body).toContain("Contact: mailto:admin@ahousedividedgame.com");
-    expect(body).toContain("Contact: https://github.com/Egg3901/AHDGame/security/advisories/new");
+    expect(body).toContain(
+      "Contact: https://github.com/lakesidegamedev/AHDGame/security/advisories/new"
+    );
 
     const expiresLine = body.split("\n").find((line) => line.startsWith("Expires: "));
     expect(expiresLine).toBeDefined();

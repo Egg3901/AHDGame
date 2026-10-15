@@ -156,6 +156,41 @@ const INPUT_COMMODITY = (Object.keys(DEMAND) as CommodityType[]).find(
 const profitOf = (r: ReturnType<typeof run>) => r.result.hourlyRevenue - r.result.costs;
 
 describe("technology physical operating costs", () => {
+  it("phases the billed hardware materials down without discounting payroll or output", () => {
+    const rates = getEffectiveStrategyRates("technology", "hardware", undefined, undefined, 0);
+    const units = impliedOutputUnits(DAILY_REVENUE, rates.supply, COMMODITY_BASE_PRICES, 1);
+    const at = (startTurn?: number) =>
+      run(
+        "plants",
+        makeSector({
+          sectorType: "technology",
+          strategyId: "hardware",
+          profitMargin: 35,
+          currentGrowthRate: 0,
+          targetGrowthRate: 0,
+          capitalStock: units * CAPITAL_SEED_HEADROOM,
+          plantsStartTurn: 800,
+          wageLevel: 1,
+        }),
+        1000,
+        (env) => {
+          env.market.explicitPlantCostsEnabled = true;
+          env.currentYear = 1991;
+          env.lookups.hardwareInputReliefStartTurn = startTurn;
+        },
+        { ...makeCorp(), type: "technology" }
+      );
+    const old = at();
+    const half = at(994);
+    const full = at(988);
+    const pnl = (r: ReturnType<typeof at>) =>
+      r.update.plantsPnl as NonNullable<CorporateSector["plantsPnl"]>;
+    expect(pnl(half).inputs).toBeCloseTo(pnl(old).inputs * 0.925, 6);
+    expect(pnl(full).inputs).toBeCloseTo(pnl(old).inputs * 0.85, 6);
+    expect(pnl(full).labour).toBe(pnl(old).labour);
+    expect(full.update.producedUnits).toBe(old.update.producedUnits);
+    expect(pnl(full).revenue).toBe(pnl(old).revenue);
+  });
   it.each(["hardware", "software", "standard"])(
     "can cover %s operating costs at base prices with full staffing and sales",
     (strategyId) => {
