@@ -256,10 +256,15 @@ export function buildPolicyResponse(
   const social = record.social ?? 0;
   const matchedOption = findMatchedOption(legislationType.policyOptions, economic, social);
   const encodedSliderRate =
-    legislationType.taxSlider && record.policyOptionId?.startsWith("rate:")
+    (legislationType.taxSlider || legislationType.taxRateChange) &&
+    record.policyOptionId?.startsWith("rate:")
       ? Number(record.policyOptionId.slice("rate:".length))
       : null;
-  const sliderTaxType = legislationType.taxSlider?.taxType as keyof FederalTaxRates | undefined;
+  const taxController = legislationType.taxSlider ?? legislationType.taxRateChange;
+  const sliderTaxType =
+    taxController?.scope === "federal"
+      ? (taxController.taxType as keyof FederalTaxRates)
+      : undefined;
   const currentSliderRate = sliderTaxType
     ? getBudgetTaxRate(budget ?? null, sliderTaxType)
     : undefined;

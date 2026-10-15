@@ -30,6 +30,38 @@ const legacyIncomeTax = {
 } as unknown as LegislationType;
 
 describe("national tax policy records", () => {
+  it("shows an exact calibrated rate on a legacy tax record without a budget", () => {
+    const row = buildPolicyResponse(
+      {
+        scope: "national",
+        legislationTypeId: legacyIncomeTax._id,
+        policyOptionId: "rate:22",
+        economic: 0,
+        social: 0,
+        updatedAt: new Date(0),
+      },
+      legacyIncomeTax
+    );
+    expect(row.policyOptionName).toBe("Rate: 22%");
+  });
+
+  it("shows effective and pending rates for legacy taxes instead of an ideology-matched option", () => {
+    const row = buildPolicyResponse(
+      {
+        scope: "national",
+        legislationTypeId: legacyIncomeTax._id,
+        policyOptionId: "high",
+        economic: 0,
+        social: 0,
+        updatedAt: new Date(0),
+      },
+      legacyIncomeTax,
+      null,
+      { taxRates: { incomeTax: 22 }, taxRatePhaseIn: { incomeTax: 30 } } as FederalBudget
+    );
+    expect(row.policyOptionName).toBe("Rate: 22% (target 30%, phasing in)");
+  });
+
   it("shows the enacted rate encoded by a modern tax-slider policy", () => {
     const row = buildPolicyResponse(
       {

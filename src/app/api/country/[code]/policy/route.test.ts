@@ -178,12 +178,12 @@ describe("GET /api/country/[code]/policy", () => {
         expect.objectContaining({
           legislationTypeId: "uk_domestic_corporation_tax",
           name: "Domestic Corporation Tax Rate Act",
-          policyOptionName: "25%",
+          policyOptionName: "Rate: 25%",
         }),
         expect.objectContaining({
           legislationTypeId: "uk_foreign_corporation_tax",
           name: "Foreign Corporation Tax Rate Act",
-          policyOptionName: "19%",
+          policyOptionName: "Rate: 19%",
         }),
       ])
     );
@@ -289,11 +289,11 @@ describe("GET /api/country/[code]/policy", () => {
       expect.arrayContaining([
         expect.objectContaining({
           legislationTypeId: "uk_domestic_corporation_tax",
-          policyOptionName: "19%",
+          policyOptionName: "Rate: 19%",
         }),
         expect.objectContaining({
           legislationTypeId: "uk_foreign_corporation_tax",
-          policyOptionName: "19%",
+          policyOptionName: "Rate: 19%",
         }),
       ])
     );

@@ -8,7 +8,8 @@
  */
 
 import { connectDb, closeDb } from "../utils/db";
-import { basePolicies } from "../seeds/basePolicies";
+import { getBasePolicies } from "../seeds/basePolicies";
+import { getGameStatePresetOrDefault } from "../../src/lib/db/collections/gameState";
 import type { StatePolicyRecord } from "../../src/lib/db/types";
 
 const RESET = process.argv.includes("--reset");
@@ -28,6 +29,7 @@ async function main() {
   const db = await connectDb();
 
   try {
+    const basePolicies = await getBasePolicies(await getGameStatePresetOrDefault(db));
     if (RESET) {
       await db
         .collection("statePolicies")

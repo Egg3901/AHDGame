@@ -70,6 +70,7 @@ describe("onBillEnacted", () => {
       legislationTypeId: string;
       effectDirection: number;
       stateId?: string;
+      countryId?: string;
       provisions?: Array<{
         legislationTypeId: string;
         policyOptionId?: string;
@@ -1298,6 +1299,57 @@ describe("onBillEnacted", () => {
         foreignCorporateTax: 24, // 23 toward 52, one point per turn
       });
     });
+
+    it.each([
+      {
+        countryId: "BR",
+        stateId: "br_national",
+        typeId: "br_income_tax_rate",
+        current: 22,
+        target: 24,
+      },
+      {
+        countryId: "NG",
+        stateId: "ng_national",
+        typeId: "ng_personal_income_tax",
+        current: 24,
+        target: 19,
+      },
+    ])(
+      "keeps $countryId income-tax policy targets and budget phase-ins in sync",
+      async ({ countryId, stateId, typeId, current, target }) => {
+        const optionId = `${typeId}_chosen`;
+        const bill = createBill({
+          countryId,
+          stateId,
+          provisions: [{ legislationTypeId: typeId, policyOptionId: optionId, effectDirection: 1 }],
+        });
+        setupCollection("legislationTypes", [
+          {
+            _id: typeId,
+            policyDomain: "tax",
+            countryScope: countryId.toLowerCase(),
+            taxRateChange: { scope: "federal", taxType: "incomeTax" },
+            policyOptions: [{ id: optionId, rate: target, effectDirection: 1 }],
+          },
+        ]);
+        db.collection("federalBudget");
+        db.collectionMocks.federalBudget.findOne = vi.fn().mockResolvedValue({
+          _id: countryId,
+          taxRates: { incomeTax: current },
+          spending: { total: 100 },
+        });
+        await onBillEnacted(db as unknown as Db, bill as any, 10);
+        const policyWrite = db.collectionMocks.statePolicies.updateOne.mock.calls.find(
+          (call) => call[1].$set?.policyOptionId === optionId
+        );
+        expect(policyWrite).toBeDefined();
+        const budgetWrite = db.collectionMocks.federalBudget.updateOne.mock.calls[0];
+        expect(budgetWrite[0]).toEqual({ _id: countryId });
+        expect(budgetWrite[1].$set.taxRates.incomeTax).toBe(current + Math.sign(target - current));
+        expect(budgetWrite[1].$set["taxRatePhaseIn.incomeTax"]).toBe(target);
+      }
+    );
 
     it("enacting de_income_tax_rate writes to the DE national budget", async () => {
       const { calculateFederalRevenue } = await import("@/lib/budget/revenue");
