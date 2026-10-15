@@ -24,6 +24,7 @@ import type { MediaProductProject } from "@/lib/products/mediaProduct";
 export interface CorporationLookups {
   /** Originating reset preset selects the qualified input baskets. */
   preset?: string;
+  hardwareInputReliefStartTurn?: number;
   corporations: Corporation[];
   sectorsByCorp: Map<string, CorporateSector[]>;
   /** Countries whose NPP-run corps follow NPP engine 6 (autonomy v6). */

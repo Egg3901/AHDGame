@@ -41,6 +41,7 @@ export function buildInternalSupplyContext(args: {
     demand:
       computeSupplyAgreementBuyerDemand({
         preset: args.lookups.preset,
+        hardwareInputReliefStartTurn: args.lookups.hardwareInputReliefStartTurn,
         sectors: [s],
         currentTurn: args.turn,
         unitScale: args.lookups.eraUnitScale,

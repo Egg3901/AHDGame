@@ -2167,7 +2167,8 @@ export function computeRawSupplyDemand(
   /** Retail GDP amplifier override (commodity treadmill fix stage 2). */
   retailGdpParams?: { scale: number; max: number },
   /** Progress (0..1) of the input-demand-follows-real-output phase-in. */
-  inputDemandRealPhase = 0
+  inputDemandRealPhase = 0,
+  hardwareInputReliefStartTurn?: number
 ): {
   global: Map<CommodityType, { supply: number; demand: number }>;
   byState: Map<string, Map<CommodityType, { supply: number; demand: number }>>;
@@ -2297,7 +2298,8 @@ export function computeRawSupplyDemand(
             currentTurn ?? 0,
             sector.industryModel,
             sector.mediaDiscriminator,
-            preset
+            preset,
+            hardwareInputReliefStartTurn
           )
         : null;
 
@@ -2482,7 +2484,8 @@ export function computeRawSupplyDemand(
             currentTurn ?? 0,
             sector.industryModel,
             sector.mediaDiscriminator,
-            preset
+            preset,
+            hardwareInputReliefStartTurn
           )
         : null);
     const demandEntries = demandRates

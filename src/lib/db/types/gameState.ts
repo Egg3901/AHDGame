@@ -79,6 +79,8 @@ export interface IterationStampFields {
 }
 
 export interface GameState {
+  /** World-local activation boundary for the twelve-turn hardware input reduction. */
+  hardwareInputReliefStartTurn?: number;
   /** Unique world identity for replay receipts; replaced on each reset. */
   worldEpochId?: string;
   /** Stable start timestamp for filtering retained event archives by world. */

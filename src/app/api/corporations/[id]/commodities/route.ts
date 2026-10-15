@@ -142,7 +142,10 @@ export async function GET(request: Request, { params }: RouteParams) {
     ] = await Promise.all([
       db
         .collection<GameState>("gameState")
-        .findOne({ _id: "current" }, { projection: { currentTurn: 1, currentYear: 1 } }),
+        .findOne(
+          { _id: "current" },
+          { projection: { currentTurn: 1, currentYear: 1, hardwareInputReliefStartTurn: 1 } }
+        ),
       db
         .collection<State>("states")
         .find({ _id: { $in: stateIds } })
@@ -357,6 +360,7 @@ export async function GET(request: Request, { params }: RouteParams) {
         isNatcorp: !!corporation.countryOwnerId,
         eraUnitScale: getEraUnitScale(worldPreset),
         preset: worldPreset,
+        hardwareInputReliefStartTurn: gameState?.hardwareInputReliefStartTurn,
         stateResourcesByState,
         currentYear: gameState?.currentYear,
         commandEconomyEnabled: gameConfig?.commandEconomyEnabled === true,

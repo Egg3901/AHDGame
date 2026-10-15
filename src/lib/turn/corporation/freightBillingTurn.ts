@@ -48,6 +48,7 @@ export function buildFreightBillingBySector(args: {
   lookups: Pick<
     CorporationLookups,
     | "preset"
+    | "hardwareInputReliefStartTurn"
     | "sectorsByCorp"
     | "corpById"
     | "eraUnitScale"
@@ -118,6 +119,7 @@ export function buildFreightBillingBySector(args: {
           currentTurn,
           {
             preset: lookups.preset,
+            hardwareInputReliefStartTurn: lookups.hardwareInputReliefStartTurn,
             plantsEnabled,
             isNatcorp,
             eraUnitScale: lookups.eraUnitScale,
