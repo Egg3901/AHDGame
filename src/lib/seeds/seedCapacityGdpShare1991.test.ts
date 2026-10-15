@@ -18,7 +18,11 @@ import { computeUnownedSeedRevenue } from "@/lib/admin/seed/seedUnownedSectors";
 import { getInitialNationalBudgetsForPreset } from "@/lib/seeds/reference/budgets";
 import { gdpToAnchor } from "@/lib/currency/gdpAnchorRate";
 import { NATIONAL_SCOPE_IDS } from "@/lib/constants/nationalScope";
-import { buildStateLookups } from "@/lib/turn/commodity/sectorLedger";
+import {
+  buildStateLookups,
+  STATE_GDP_ANCHOR_PHASE_TURNS,
+  stateGdpAnchorBlend,
+} from "@/lib/turn/commodity/sectorLedger";
 import type { State } from "@/lib/db/types";
 
 const PRESET = "1991-default";
@@ -105,5 +109,31 @@ describe("1991 seed: capacity and demand track GDP share", () => {
     const jp = regionsFor("JP");
     const { stateGdpMap } = buildStateLookups(jp, []);
     for (const region of jp) expect(stateGdpMap.get(region._id)).toBe(region.gdp);
+  });
+});
+
+describe("live phase-in onto anchor state GDP", () => {
+  it("blend is 1 on anchored worlds, ramps from the operator start otherwise, else 0", () => {
+    expect(stateGdpAnchorBlend(true, undefined, 10)).toBe(1);
+    expect(stateGdpAnchorBlend(false, undefined, 10)).toBe(0);
+    expect(stateGdpAnchorBlend(false, 220, 219)).toBe(0);
+    expect(stateGdpAnchorBlend(false, 220, 220 + STATE_GDP_ANCHOR_PHASE_TURNS / 2)).toBeCloseTo(
+      0.5
+    );
+    expect(stateGdpAnchorBlend(false, 220, 500)).toBe(1);
+  });
+
+  it("moves each region geometrically from raw to anchor GDP", () => {
+    const jp = regionsFor("JP");
+    const raw = buildStateLookups(jp, []).stateGdpMap;
+    const full = buildStateLookups(jp, [], PRESET, 1).stateGdpMap;
+    const half = buildStateLookups(jp, [], PRESET, 0.5).stateGdpMap;
+    const none = buildStateLookups(jp, [], PRESET, 0).stateGdpMap;
+    for (const region of jp) {
+      const r = raw.get(region._id)!;
+      const f = full.get(region._id)!;
+      expect(none.get(region._id)).toBe(r);
+      expect(half.get(region._id)!).toBeCloseTo(Math.sqrt(r * f), 0);
+    }
   });
 });

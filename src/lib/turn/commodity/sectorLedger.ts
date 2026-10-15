@@ -4,6 +4,24 @@ import type { State } from "@/lib/db/types/state";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import type { CountryId } from "@/lib/constants/countries";
 import { gdpToAnchor } from "@/lib/currency/gdpAnchorRate";
+
+/** Turns a live world takes to move macro demand onto anchor state GDP. */
+export const STATE_GDP_ANCHOR_PHASE_TURNS = 24;
+
+/**
+ * How far a world is onto anchor state GDP: 1 when it was seeded with the fix
+ * (`GameState.stateGdpAnchoredDemand`), else the operator-started phase-in
+ * (`GameConfig.stateGdpAnchorPhaseStartTurn`), else 0.
+ */
+export function stateGdpAnchorBlend(
+  anchoredWorld: boolean,
+  phaseStartTurn: number | null | undefined,
+  turn: number
+): number {
+  if (anchoredWorld) return 1;
+  if (typeof phaseStartTurn !== "number" || !Number.isFinite(phaseStartTurn)) return 0;
+  return Math.max(0, Math.min(1, (turn - phaseStartTurn) / STATE_GDP_ANCHOR_PHASE_TURNS));
+}
 import { readCorpEconomicAnchor } from "@/lib/currency/corpEconomyFields";
 import {
   fxRateForSectorHostFromMap,
@@ -54,7 +72,13 @@ export interface StateLookups {
 export function buildStateLookups(
   allStates: Pick<State, "_id" | "countryId" | "gdp">[],
   allStateMetrics: StateMetrics[],
-  gdpAnchorPreset?: string | null
+  gdpAnchorPreset?: string | null,
+  /**
+   * Share (0..1) of the way from the raw stored GDP to anchor GDP. 1 (default)
+   * is the full fix; a live world phases in with `stateGdpAnchorBlend`.
+   * Geometric, so every country moves by the same percentage each turn.
+   */
+  anchorBlend = 1
 ): StateLookups {
   const stateGdpMap = new Map<string, number>();
   const stateToCountry = new Map<string, string>();
@@ -63,9 +87,14 @@ export function buildStateLookups(
     if (NATIONAL_SCOPE_IDS.has(state._id)) continue;
     stateToCountry.set(state._id, state.countryId);
     if (state.gdp && state.gdp > 0) {
+      const blend = Math.max(0, Math.min(1, anchorBlend));
       const gdp =
-        gdpAnchorPreset != null
-          ? gdpToAnchor(state.gdp, state.countryId as CountryId, gdpAnchorPreset)
+        gdpAnchorPreset != null && blend > 0
+          ? state.gdp *
+            Math.pow(
+              gdpToAnchor(state.gdp, state.countryId as CountryId, gdpAnchorPreset) / state.gdp,
+              blend
+            )
           : state.gdp;
       if (gdp > 0) stateGdpMap.set(state._id, gdp);
     }

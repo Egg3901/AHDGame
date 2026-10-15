@@ -50,7 +50,7 @@ import {
   type GdpGrowthData,
 } from "@/lib/constants/commodities";
 import { NATIONAL_SCOPE_IDS } from "@/lib/constants/nationalScope";
-import { buildStateLookups } from "@/lib/turn/commodity/sectorLedger";
+import { buildStateLookups, stateGdpAnchorBlend } from "@/lib/turn/commodity/sectorLedger";
 
 export type CommodityGlobalDeltaPreview = {
   commodity: CommodityType;
@@ -257,6 +257,10 @@ export async function previewQuickDissolve(
     .findOne({ _id: "current" });
   const currentTurn = gameState?.currentTurn ?? 0;
 
+  const gdpPhaseConfig = await db
+    .collection<{ _id: string; stateGdpAnchorPhaseStartTurn?: number }>("gameConfig")
+    .findOne({ _id: "default" }, { projection: { stateGdpAnchorPhaseStartTurn: 1 } });
+
   const [allSectors, allCorps, allStates, stateMetrics, centralBanks] = await Promise.all([
     db
       .collection<CorporateSector>("corporateSectors")
@@ -317,10 +321,16 @@ export async function previewQuickDissolve(
   }
 
   // Same GDP reading as the turn's commodity ledger, so the preview matches.
+  const gdpAnchorBlend = stateGdpAnchorBlend(
+    gameState?.stateGdpAnchoredDemand === true,
+    gdpPhaseConfig?.stateGdpAnchorPhaseStartTurn,
+    currentTurn
+  );
   const { stateGdpMap } = buildStateLookups(
     allStates,
     [],
-    gameState?.stateGdpAnchoredDemand === true ? (gameState.preset ?? null) : null
+    gdpAnchorBlend > 0 ? (gameState?.preset ?? null) : null,
+    gdpAnchorBlend
   );
 
   const gdpByState = new Map<string, number>();
