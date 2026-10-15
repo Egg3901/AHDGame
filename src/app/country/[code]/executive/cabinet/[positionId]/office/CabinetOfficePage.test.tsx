@@ -11,6 +11,7 @@ const office: {
   estateSummary?: EstateSummaryView;
   cabinetVersion?: "v1" | "v2";
   resetCabinetActions?: CabinetOfficeData["resetCabinetActions"];
+  departmentFinances?: CabinetOfficeData["departmentFinances"];
 } = vi.hoisted(() => ({
   positionId: "secretary_of_treasury",
   canView: true,
@@ -64,6 +65,9 @@ vi.mock("./components/RegionalBreakdownTable", () => ({
 vi.mock("./components/TradeEmbargoPanel", () => ({ TradeEmbargoPanel: () => <div>TRADE</div> }));
 vi.mock("./components/ForeignSecPanels", () => ({ ForeignSecPanels: () => <div>FOREIGN</div> }));
 vi.mock("./components/CabinetBannerUploader", () => ({ CabinetBannerUploader: () => <div /> }));
+vi.mock("./components/DepartmentFinancePanel", () => ({
+  DepartmentFinancePanel: () => <div>DEPARTMENT FINANCE PANEL</div>,
+}));
 
 vi.mock("./useCabinetOffice", () => ({
   useCabinetOffice: () => ({
@@ -74,6 +78,7 @@ vi.mock("./useCabinetOffice", () => ({
       canView: office.canView,
       cabinetVersion: office.cabinetVersion,
       resetCabinetActions: office.resetCabinetActions,
+      departmentFinances: office.departmentFinances,
       canAct: false,
       member: {
         characterId: "c1",
@@ -106,6 +111,7 @@ beforeEach(() => {
   office.estateSummary = undefined;
   office.cabinetVersion = undefined;
   office.resetCabinetActions = undefined;
+  office.departmentFinances = undefined;
 });
 afterEach(cleanup);
 
@@ -157,6 +163,26 @@ describe("CabinetOfficePage tabs", () => {
     expect(screen.queryByText("ORDERS")).toBeNull();
     expect(screen.queryByText("FX")).toBeNull();
     expect(screen.queryByText("BOND")).toBeNull();
+  });
+
+  it("moves department account and allocation panels to the Allocations tab", () => {
+    office.departmentFinances = [
+      {
+        enabled: true,
+        departmentId: "justice",
+        departmentName: "Department of Justice",
+        kind: "spending_department",
+        explanation: "Department funding details.",
+        programs: [],
+      },
+    ];
+    render(<CabinetOfficePage />);
+
+    expect(screen.getByRole("button", { name: "Allocations" })).toBeTruthy();
+    expect(screen.queryByText("DEPARTMENT FINANCE PANEL")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Allocations" }));
+    expect(screen.getByText("DEPARTMENT FINANCE PANEL")).toBeTruthy();
+    expect(screen.getByText(/Not every department has program allocations/)).toBeTruthy();
   });
 });
 
