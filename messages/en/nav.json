@@ -60,7 +60,8 @@
           "browse": "Browse",
           "corporate": "Corporate"
         },
-        "banking": "Banking"
+        "banking": "Banking",
+        "governmentContracts": "Government Contracts"
       },
       "staff": {
         "localWorld": "Local World",
@@ -100,7 +101,8 @@
         "scotus": "Supreme Court",
         "charterSingle": "Charter: {name}",
         "chartersMultiple": "Party Charters ({count})",
-        "banking": "Banking"
+        "banking": "Banking",
+        "governmentContracts": "Government Contracts"
       },
       "legislature": {
         "congress": "Congress",

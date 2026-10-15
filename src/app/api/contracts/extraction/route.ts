@@ -66,11 +66,12 @@ export async function GET(request: Request) {
     if (resource) query.resource = resource;
     if (countryId) query.countryId = countryId;
 
-    const contracts = await db
+    const loadedContracts = await db
       .collection<ExtractionContract>("extractionContracts")
       .find(query)
       .toArray();
 
+    const contracts = loadedContracts.filter((c) => !(c.tenderId && c.status === "offered"));
     const corpIds = [...new Set(contracts.map((c) => c.corporationId as ObjectId))];
     const corporations =
       corpIds.length > 0

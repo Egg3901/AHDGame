@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { isUrlSafeToFetch } from "@/lib/security/ssrfGuard";
 
 const IMAGE_PROXY_USER_AGENT =
-  "a-house-divided/1.0 (game; https://github.com/Egg3901/a-house-divided)";
+  "a-house-divided/1.0 (game; https://github.com/lakesidegamedev/a-house-divided)";
 const VALID_IMAGE_CACHE_TTL_MS = 60 * 60 * 1000;
 const INVALID_IMAGE_CACHE_TTL_MS = 5 * 60 * 1000;
 const MAX_IMAGE_VALIDATION_CACHE_ENTRIES = 500;

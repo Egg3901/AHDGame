@@ -8,7 +8,7 @@ A House Divided is a live competitive game with a persistent economy. A bug that
 
 Report privately via one of:
 
-- **GitHub**: [Report a vulnerability](https://github.com/Egg3901/AHDGame/security/advisories/new) (private security advisory)
+- **GitHub**: [Report a vulnerability](https://github.com/lakesidegamedev/AHDGame/security/advisories/new) (private security advisory)
 - **Email**: admin@ahousedividedgame.com
 - **Discord**: DM a member of the staff team
 

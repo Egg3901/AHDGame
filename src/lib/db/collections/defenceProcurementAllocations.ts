@@ -15,6 +15,11 @@ interface DefenceProcurementAllocation {
   endTurn: number;
   countryAmount: number;
   supplierAmounts: Record<string, number>;
+  governmentTenderReservations?: Record<
+    string,
+    { state: "held" | "converted" | "released"; amount: number; corporationId?: string }
+  >;
+  governmentDirectOfferWithdrawals?: Record<string, boolean>;
   updatedAt: Date;
 }
 

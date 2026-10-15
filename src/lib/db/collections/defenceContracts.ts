@@ -1,3 +1,9 @@
+import { lockContractPlant, releaseContractPlant } from "@/lib/governmentContracts/plantSlots";
+import { componentsForStrategy } from "@/lib/military/arsenalComponents";
+import {
+  defaultFactoryAllocation,
+  DEFENCE_FACTORY_SLOTS_PER_PLANT,
+} from "@/lib/military/defenceLotEconomics";
 import { ObjectId, type Db } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
 import type { UnitDomain } from "@/lib/db/types/militaryUnit";
@@ -405,11 +411,49 @@ export async function setContractFactories(
   contractId: ObjectId,
   assignedFactories: number
 ): Promise<boolean> {
-  const res = await contracts(db).updateOne(
-    { _id: contractId, status: { $in: ["pending", "active"] } },
-    { $set: { assignedFactories, updatedAt: new Date() } }
-  );
-  return res.modifiedCount > 0;
+  if (
+    !Number.isInteger(assignedFactories) ||
+    assignedFactories < 0 ||
+    assignedFactories > DEFENCE_FACTORY_SLOTS_PER_PLANT
+  )
+    return false;
+  const contract = await contracts(db).findOne({
+    _id: contractId,
+    status: { $in: ["pending", "active"] },
+  });
+  if (!contract) return false;
+  const owner = "allocation:" + contractId.toHexString();
+  const operationKey = new ObjectId().toHexString();
+  const plant = await lockContractPlant(db, contract.sectorId, owner, operationKey);
+  if (!plant) return false;
+  try {
+    const defaultSlots = defaultFactoryAllocation(
+      componentsForStrategy(plant.strategyId).length,
+      DEFENCE_FACTORY_SLOTS_PER_PLANT
+    );
+    const used = await assignedFactoriesForSector(db, contract.sectorId, defaultSlots, contractId);
+    if (used + assignedFactories > DEFENCE_FACTORY_SLOTS_PER_PLANT) return false;
+    const res = await contracts(db).updateOne(
+      {
+        _id: contractId,
+        status: { $in: ["pending", "active"] },
+        $or: [
+          { factoryAllocationSequence: { $exists: false } },
+          { factoryAllocationSequence: { $lt: plant.contractMutationSequence } },
+        ],
+      },
+      {
+        $set: {
+          assignedFactories,
+          factoryAllocationSequence: plant.contractMutationSequence,
+          updatedAt: new Date(),
+        },
+      }
+    );
+    return res.matchedCount > 0;
+  } finally {
+    await releaseContractPlant(db, contract.sectorId, owner, operationKey);
+  }
 }
 
 /**

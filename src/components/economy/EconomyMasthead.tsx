@@ -132,6 +132,12 @@ export function EconomyMasthead({
               >
                 National budget &rarr;
               </Link>
+              <Link
+                href={`/country/${countryId.toLowerCase()}/government-contracts`}
+                className="inline-flex items-center whitespace-nowrap rounded-full border border-white/25 bg-white/10 px-2.5 py-0.5 text-xs font-semibold text-white hover:bg-white/20"
+              >
+                Government Contracts &rarr;
+              </Link>
             </div>
           </div>
         </div>

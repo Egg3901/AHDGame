@@ -1,3 +1,4 @@
+import { ensureGovernmentContractIndexes } from "@/lib/governmentContracts/persistence";
 import { ensureProviderIdentityIndexes } from "@/lib/auth/providerIdentityIndexes";
 import type { Db } from "mongodb";
 import { assertUniqueCorporationSequentialIds } from "./assertUniqueCorporationIds";
@@ -297,5 +298,6 @@ export async function seedCoreIndexes(db: Db, log: (msg: string) => void) {
   await ensureIndex(db, "bannedIps", { ip: 1 }, { unique: true, name: "bannedIps_ip" }, log);
   await ensureIndex(db, "bannedIps", { bannedAt: -1 }, { name: "bannedIps_bannedAt" }, log);
 
+  await ensureGovernmentContractIndexes(db);
   log("Core indexes ensured");
 }
