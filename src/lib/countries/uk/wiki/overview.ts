@@ -46,9 +46,9 @@ The 1953 preset uses its own 625-seat Commons map. Your character's home region 
 
 ## How UK elections work
 
-UK Commons elections use **regional multi-seat allocation**. In modern game years, each region's seats are allocated by the Hare largest-remainder path. Before 1999, the same exact-seat allocator applies a square-law majoritarian bonus to the leading electoral pair, which produces a stronger FPTP-style squeeze on smaller parties.
+UK Commons elections use **regional multi-seat allocation**. Each region's seats are allocated by the Hare largest-remainder method, in every era.
 
-A party needs at least **20% of pooled regional votes** to qualify in the modern proportional path. The pre-1999 majoritarian path lowers that gate to 10% before applying its winner's bonus.
+A party needs at least **10% of pooled regional votes** to qualify for seats.
 
 **Primaries advance the top 3 candidates** (not 1 as in the US). Three candidates from each party advance to the general election per nation.
 
