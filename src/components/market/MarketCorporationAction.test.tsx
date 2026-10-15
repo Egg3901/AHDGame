@@ -33,10 +33,21 @@ beforeEach(() => {
   blocked = false;
 });
 describe("Market corporation action", () => {
-  it("opens founding and refreshes the player cooldown", async () => {
+  it("shows the remaining cooldown under the button and passes it to founding", async () => {
     render(<MarketCorporationAction />);
+    await waitFor(() =>
+      expect(screen.getByRole("status").textContent).toBe("Available to found in 7 turns")
+    );
     fireEvent.click(screen.getByRole("button", { name: "Found corporation" }));
     await waitFor(() => expect(screen.getByRole("dialog").textContent).toBe("Cooldown 7"));
+  });
+  it("does not show a countdown when founding is available", async () => {
+    const { fetchJson } = await import("@/lib/observability/fetchJson");
+    vi.mocked(fetchJson).mockResolvedValueOnce({ foundingCooldownTurnsRemaining: 0 } as never);
+
+    render(<MarketCorporationAction />);
+
+    await waitFor(() => expect(screen.queryByRole("status")).toBeNull());
   });
   it("links an existing owner to their corporation", () => {
     corpId = 42;

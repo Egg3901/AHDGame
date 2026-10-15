@@ -1,5 +1,10 @@
 import type { Db, ObjectId } from "mongodb";
-import type { CorporationExit, CorporationExitReason, CorporationHistory } from "@/lib/db/types";
+import type {
+  CorporationExit,
+  CorporationExitReason,
+  CorporationHistory,
+  User,
+} from "@/lib/db/types";
 import { getCurrentTurn } from "@/lib/turn/currentTurn";
 import { buildCorporationExit, type CorporationExitSnapshot } from "./rules";
 
@@ -24,6 +29,8 @@ export async function recordCorporationExit(
     now?: Date;
     turn?: number;
     strict?: boolean;
+    /** Admin cleanup is not a player-attributable corporate end. */
+    cooldownExempt?: boolean;
   }
 ): Promise<void> {
   try {
@@ -47,6 +54,20 @@ export async function recordCorporationExit(
     await db
       .collection<CorporationExit>("corporationExits")
       .updateOne({ _id }, { $setOnInsert: fields }, { upsert: true });
+
+    const userId = corporation.userId?.toString();
+    if (
+      userId &&
+      userId !== "000000000000000000000000" &&
+      !corporation.countryOwnerId &&
+      corporation.ownershipState !== "stateOwned" &&
+      !params.cooldownExempt
+    ) {
+      // `$max` makes retries safe and never moves the anchor backwards.
+      await db
+        .collection<User>("users")
+        .updateOne({ _id: corporation.userId }, { $max: { lastCorporationFoundedTurn: turn } });
+    }
   } catch (error) {
     if (params.strict) throw error;
     console.error(`[corporation-exit] failed to record exit of ${corporation._id}`, error);

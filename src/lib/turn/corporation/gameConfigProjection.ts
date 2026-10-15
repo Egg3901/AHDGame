@@ -11,6 +11,7 @@ export const CORPORATION_TURN_GAME_CONFIG_PROJECTION = {
   marketGovernorGlideFloor: 1,
   extractionNoBuyerPhaseOutStartTurn: 1,
   placementRevenuePhaseStartTurn: 1,
+  countryRecessions: 1,
   productLinesV2Enabled: 1,
   marketGovernorCap: 1,
   marketGovernorRampTurns: 1,

@@ -57,7 +57,7 @@ import type {
   ElectoralLawProvision,
 } from "@/lib/db/types/legislation";
 import { applyEconomicSystemReformProvision } from "@/lib/economy/economicSystemReform";
-import type { CentralBank } from "@/lib/db/types/centralBank";
+import { FOMC_COMMITTEE_COUNTRY_IDS, type CentralBank } from "@/lib/db/types/centralBank";
 import { getBankId } from "@/lib/centralBank/helpers";
 import { seedFomcBoards } from "@/lib/centralBank/seedFomcBoard";
 import { scrutinyAfterRevocation } from "@/lib/centralBank/independence";
@@ -386,7 +386,7 @@ export async function applyCentralBankIndependenceProvision(
   const bankName = getCountryConfig(countryId)?.centralBank.name ?? "central bank";
   const newsContent =
     provision.action === "grant"
-      ? `The ${bankName} has been granted operational independence: rate-setting passes from the government to the bank and its new policy committee.`
+      ? `The ${bankName} has been granted operational independence: rate-setting passes from the government to the bank${FOMC_COMMITTEE_COUNTRY_IDS.has(countryId) ? " and its policy committee" : "'s governor"}.`
       : `The ${bankName}'s operational independence has been revoked by law: rate-setting returns to the government, and markets have marked down what the bank's word is worth.`;
   await createSystemNewsPost(newsContent, "legislation").catch(() => {});
 }

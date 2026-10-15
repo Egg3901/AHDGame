@@ -207,8 +207,8 @@ export const CEO_SALARY_MAX_REVENUE_MULTIPLE = 1.25;
  */
 export const CORP_OVERHEAD_MAX_REVENUE_MULTIPLE = 1.5;
 
-/** A user may found at most one corporation per this many turns (Bug #0728). */
-export const CORPORATION_FOUNDING_COOLDOWN_TURNS = 168;
+/** Turns a user must wait after their corporation ends before founding another (Bug #0728). */
+export const CORPORATION_FOUNDING_COOLDOWN_TURNS = 96;
 
 /** Default starting liquid capital for a new corporation */
 export const CORPORATION_STARTING_CAPITAL = 1_000_000;
