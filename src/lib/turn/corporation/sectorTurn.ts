@@ -570,6 +570,8 @@ export function processSector(
     demandFill,
     priorStreak: sector.demandIdleTurns,
     rampLambda: plantsRampLambda,
+    nppStructural:
+      corp.ceoType === "npp" && lookups.engineSixCountries?.has(corp.countryId) === true,
   });
   const retainedCapacityShare = 1 - idleRetirement.retireFraction;
   const persistedOwnedCapacity = plantsOwnedCapacity * retainedCapacityShare;

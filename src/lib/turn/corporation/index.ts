@@ -21,6 +21,7 @@ import { USE_GROWTH_INCREMENT, businessAcumenGrowthMultiplier } from "@/lib/stat
 import { shedVacantCeoSectorsToUnowned } from "./vacantCeoSectorShed";
 import { shedInactiveCeoSectorsToUnowned } from "./inactiveCeoSectorShed";
 import { installCaretakersForVacantCorps } from "./autoCaretakerVacantCorps";
+import { loadEngineSixCountries } from "./engineSixCountries";
 import { recordNppCeoTrackRecords } from "./nppCeoTrackRecord";
 import { processSectors } from "./sectorCalculations";
 import { getLabourSystemMode, labourAtLeast } from "@/lib/labour/featureFlag";
@@ -657,6 +658,9 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
     );
   }
   mark("autoCaretaker");
+
+  // NPP engine 6: NPP-run plants right-size structural overcapacity.
+  lookups.engineSixCountries = await loadEngineSixCountries(db, lookups.corporations);
 
   // NPP engine 6 bookkeeping: once a game day, fold each NPP CEO's margin
   // against sector peers into its CEO track record. Reads last turn's sector

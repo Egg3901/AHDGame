@@ -6,6 +6,7 @@ import { isMergerAuthoritySeat } from "@/lib/corporations/mergerReview/constants
 export type CabinetTabId =
   | "overview"
   | "actions"
+  | "allocations"
   | "treasury"
   | "foreign"
   | "flagship"
@@ -17,7 +18,7 @@ export type CabinetTabId =
 export interface CabinetTab {
   id: CabinetTabId;
   label: string;
-  labelKey?: "actionsTab";
+  labelKey?: "actionsTab" | "allocationsTab";
 }
 
 /**
@@ -74,11 +75,15 @@ export function resolveCabinetTabs(args: {
   competitionQueueApplies?: boolean;
   cabinetVersion?: "v1" | "v2";
   flagshipAvailable?: boolean;
+  allocationsAvailable?: boolean;
 }): CabinetTab[] {
   const { countryId, positionId, conflictsEnabled = false, competitionQueueApplies = false } = args;
   const tabs: CabinetTab[] = [{ id: "overview", label: "Overview" }];
   if (args.cabinetVersion === "v2") {
     tabs.push({ id: "actions", label: "Actions", labelKey: "actionsTab" });
+  }
+  if (args.allocationsAvailable) {
+    tabs.push({ id: "allocations", label: "Allocations", labelKey: "allocationsTab" });
   }
 
   if (isFinanceMinister(countryId, positionId)) {
