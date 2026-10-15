@@ -59,6 +59,7 @@ import {
 } from "@/lib/governmentFinance/deliveryMultipliers";
 import { clampRatio } from "@/lib/governmentFinance/rules/implementation";
 import { RESET_V2_COUNTRIES } from "@/lib/resetVersions/rules";
+import { incomeTaxEffectOptionId } from "@/lib/budget/rules/incomeTaxPolicy";
 
 /**
  * Map of legislation type IDs to their documents
@@ -247,7 +248,13 @@ export function calculateMetricTarget(
     // even on the same side. Falls back to the 3-valued effectDirection sign only when
     // the option can't be resolved. Center option → 0 → no-op (unchanged for neutral laws).
     const options = legType.policyOptions ?? [];
-    const byId = options.findIndex((o) => o.id === policy.policyOptionId);
+    const effectOptionId = incomeTaxEffectOptionId({
+      legislationTypeId: policy.legislationTypeId,
+      policyOptionId: policy.policyOptionId,
+      policyOptionIndex: policy.policyOptionIndex,
+      options,
+    });
+    const byId = options.findIndex((o) => o.id === effectOptionId);
     const optIdx =
       byId !== -1 ? byId : options.findIndex((o) => o.effectDirection === policy.effectDirection);
     const intensity =
@@ -325,9 +332,15 @@ export function computeTickRates(
     const legType = legTypeMap.get(policy.legislationTypeId);
     if (!legType?.policyOptions?.length) continue;
 
-    // Find the active policy option by policyOptionId (exact match), fall back to effectDirection
+    // Exact fiscal rates retain their original option's non-fiscal effects.
+    const effectOptionId = incomeTaxEffectOptionId({
+      legislationTypeId: policy.legislationTypeId,
+      policyOptionId: policy.policyOptionId,
+      policyOptionIndex: policy.policyOptionIndex,
+      options: legType.policyOptions,
+    });
     const policyOption =
-      legType.policyOptions.find((opt) => opt.id === policy.policyOptionId) ??
+      legType.policyOptions.find((opt) => opt.id === effectOptionId) ??
       legType.policyOptions.find((opt) => opt.effectDirection === policy.effectDirection);
     if (!policyOption?.metricEffects?.length) continue;
 

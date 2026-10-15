@@ -47,6 +47,10 @@ describe("executeSimpleInfluence — pause gate", () => {
     db.collection("characters");
     db.collection("npps");
     db.collection("actionLogs");
+    db.collection("states").findOne.mockResolvedValue({
+      gdp: 100_000,
+      population: 10_000_000,
+    });
   });
 
   it("rejects attack (lower) with 409 when the game is paused and does not write", async () => {
@@ -97,6 +101,10 @@ describe("executeSimpleInfluence — cap guards", () => {
     db.collection("characters");
     db.collection("npps");
     db.collection("actionLogs");
+    db.collection("states").findOne.mockResolvedValue({
+      gdp: 100_000,
+      population: 10_000_000,
+    });
   });
 
   it("rejects raise when target favorability is already 100 and does not write", async () => {
@@ -241,6 +249,44 @@ describe("getSimpleInfluenceInfo — targetMediaSustainedAtCap detection", () =>
     db.collection("npps");
     db.collection("campaigns");
     db.collection("elections");
+    db.collection("states").findOne.mockResolvedValue({
+      gdp: 100_000,
+      population: 10_000_000,
+    });
+  });
+
+  it("prices boosts from the target's stats and home-region economy", async () => {
+    db.collectionMocks["characters"]!.findOne.mockResolvedValue({
+      _id: targetId,
+      userId: new ObjectId(),
+      countryId: "US",
+      name: "High-stat Target",
+      homeState: "CA",
+      politicalInfluence: 85,
+      favorability: 90,
+      stats: { charisma: 9, intellect: 8 },
+      infamy: 0,
+    });
+
+    const actor = makeActor({
+      politicalInfluence: 10,
+      favorability: 10,
+      stats: { charisma: 1, intellect: 1 } as Character["stats"],
+    });
+    const { info, error } = await getSimpleInfluenceInfo(
+      db as unknown as Db,
+      actor,
+      targetId.toString(),
+      "character",
+      false
+    );
+
+    expect(error).toBeUndefined();
+    expect(info).toBeDefined();
+    expect(db.collectionMocks["states"]!.findOne).toHaveBeenCalledWith(
+      { _id: "CA", countryId: "US" },
+      { projection: { gdp: 1, population: 1 } }
+    );
   });
 
   it("flags media-sustained when target is at fav 100 in active presidential race with mediaLevel 5", async () => {
