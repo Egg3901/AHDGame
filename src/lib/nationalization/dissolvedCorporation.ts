@@ -35,6 +35,7 @@ export async function deleteDissolvedCorporation(
         liquidCurrencyCode: 1,
         sharePrice: 1,
         totalShares: 1,
+        userId: 1,
       },
     }
   );
