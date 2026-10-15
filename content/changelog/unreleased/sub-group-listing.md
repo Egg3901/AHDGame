@@ -13,3 +13,5 @@ areas: [fullstack]
 - Groups use their chosen name and icon, falling back to their parent corporation's identity.
 - Nested groups list separately; higher groups include all descendants once and exclude internally held equity from their external equity value.
 - Signed-in players can view group overviews. Private financial history, directions and supply management stay with player CEOs.
+
+- Hardened group browsing for legacy currencies, cyclic ownership and unavailable valuations, and limited overview reads to the selected group.

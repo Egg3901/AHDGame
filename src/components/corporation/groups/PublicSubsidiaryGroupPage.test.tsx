@@ -12,6 +12,7 @@ vi.mock("./SubsidiaryGroupPage", () => ({
   SubsidiaryGroupPage: () => <div>Owner management page</div>,
 }));
 let canViewManagement = false;
+let amounts: number | null = 100;
 vi.mock("@/components/market/useMarketJson", () => ({
   useMarketJson: () => ({
     loading: false,
@@ -24,9 +25,9 @@ vi.mock("@/components/market/useMarketJson", () => ({
         name: "Harbor Group",
         parentName: "Harbor",
         members: [],
-        equityValueAnchor: 100,
-        cashAnchor: 20,
-        revenueAnchor: 30,
+        equityValueAnchor: amounts,
+        cashAnchor: amounts,
+        revenueAnchor: amounts,
         sectorCount: 2,
         regionCount: 1,
         countries: ["US"],
@@ -44,6 +45,7 @@ function mount() {
 beforeEach(() => {
   cleanup();
   canViewManagement = false;
+  amounts = 100;
 });
 describe("public group overview", () => {
   it("keeps visitors on overview even with a private hash", () => {
@@ -53,6 +55,12 @@ describe("public group overview", () => {
     expect(screen.getByText("Overview")).toBeTruthy();
     expect(screen.queryByText("Owner management page")).toBeNull();
     expect(screen.queryByRole("button", { name: /financial|direction|supply/i })).toBeNull();
+  });
+  it("renders private or unavailable financial totals without formatting null as zero", () => {
+    amounts = null;
+    mount();
+    expect(screen.getAllByText("Unavailable")).toHaveLength(3);
+    expect(screen.queryByText("A0")).toBeNull();
   });
   it("preserves the owner's management page", () => {
     canViewManagement = true;

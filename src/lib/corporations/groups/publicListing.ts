@@ -5,23 +5,30 @@
 import type { Db } from "mongodb";
 import type { Corporation, CorporateSector, GameState } from "@/lib/db/types";
 import { getControllingCorporateParent } from "../corporateOwnership";
+import { shouldRedactCorporation } from "../redaction";
 import {
   corporationWithReservedHoldings,
   loadReservedCorporatePositionsByTarget,
 } from "../reservedCorporateHoldings";
 import {
   corpCapitalToAnchor,
+  corpLiquidCapitalToAnchor,
   loadValuationFxRates,
   fxRateForCorpFromMap,
   fxRateForSectorHostFromMap,
   resolveSectorHostCurrencyCode,
 } from "@/lib/currency/corporationCapital";
-import { publicSubsidiaryGroups, type PublicGroupMember } from "./rules/publicListing";
-export async function loadPublicSubsidiaryGroups(db: Db) {
+import {
+  publicSubsidiaryGroups,
+  publicGroupStructure,
+  type PublicGroupMember,
+} from "./rules/publicListing";
+export async function loadPublicSubsidiaryGroups(db: Db, corporationId?: string) {
   const world = await db
     .collection<GameState>("gameState")
     .findOne({ _id: "current" }, { projection: { subsidiaryCorporationsEnabled: 1 } });
-  if (!world?.subsidiaryCorporationsEnabled) return [];
+  // Feature discovery follows the toggle; existing group bookmarks remain readable.
+  if (!world?.subsidiaryCorporationsEnabled && !corporationId) return [];
   const [corps, reserved, fx] = await Promise.all([
     db
       .collection<Corporation>("corporations")
@@ -30,6 +37,7 @@ export async function loadPublicSubsidiaryGroups(db: Db) {
         {
           projection: {
             name: 1,
+            isPrivate: 1,
             sequentialId: 1,
             logoUrl: 1,
             countryId: 1,
@@ -65,20 +73,23 @@ export async function loadPublicSubsidiaryGroups(db: Db) {
       getControllingCorporateParent(corp)?.corporationId.toString(),
     ])
   );
-  const groupedIds = new Set<string>();
-  for (const corp of corps) {
-    const id = corp._id.toString(),
-      parent = parentById.get(id);
-    if (
-      corp.subsidiaryFormalizedAtTurn == null ||
-      !parent ||
-      parent === id ||
-      !effectiveById.has(parent)
-    )
-      continue;
-    groupedIds.add(id);
-    groupedIds.add(parent);
-  }
+  const structure = publicGroupStructure(
+    corps.map((corp) => ({
+      id: corp._id.toString(),
+      parentId: parentById.get(corp._id.toString()),
+      formalized: corp.subsidiaryFormalizedAtTurn != null,
+    }))
+  );
+  const selectedRoot =
+    corporationId &&
+    (structure.membersByRootId.has(corporationId)
+      ? corporationId
+      : structure.topRootByCorpId.get(corporationId));
+  const groupedIds = new Set(
+    corporationId
+      ? (selectedRoot && structure.membersByRootId.get(selectedRoot)) || []
+      : [...structure.membersByRootId.values()].flat()
+  );
   const groupedCorps = corps.filter((corp) => groupedIds.has(corp._id.toString()));
   if (!groupedCorps.length) return [];
   const sectors = await db
@@ -100,6 +111,7 @@ export async function loadPublicSubsidiaryGroups(db: Db) {
     const id = corp._id.toString();
     const effective = effectiveById.get(id)!;
     const rate = fxRateForCorpFromMap(corp, fx);
+    const privateFinancials = shouldRedactCorporation(corp, undefined, false);
     const owned = byCorp.get(id) ?? [];
     return {
       id,
@@ -112,31 +124,48 @@ export async function loadPublicSubsidiaryGroups(db: Db) {
       isNpp: corp.ceoType === "npp",
       groupName: corp.groupManagement?.name,
       groupLogoUrl: corp.groupManagement?.logoUrl,
-      cashAnchor: corpCapitalToAnchor(corp.liquidCapital ?? 0, corp.liquidCurrencyCode, rate),
+      cashAnchor: privateFinancials
+        ? null
+        : corpLiquidCapitalToAnchor(corp.liquidCapital ?? 0, corp, rate),
       marketCapAnchor:
-        Number.isFinite(corp.sharePrice) && corp.sharePrice >= 0 && corp.totalShares > 0
-          ? corpCapitalToAnchor(corp.sharePrice * corp.totalShares, corp.liquidCurrencyCode, rate)
+        !privateFinancials &&
+        Number.isFinite(corp.sharePrice) &&
+        corp.sharePrice >= 0 &&
+        corp.totalShares > 0
+          ? corpLiquidCapitalToAnchor(corp.sharePrice * corp.totalShares, corp, rate)
           : null,
       totalShares: corp.totalShares,
       corporateHoldings: (effective.shareholders ?? []).flatMap((h) =>
         h.corporationId ? [{ holderId: h.corporationId.toString(), shares: h.shares }] : []
       ),
-      revenueAnchor: owned.reduce(
-        (sum, s) =>
-          sum +
-          corpCapitalToAnchor(
-            s.revenue ?? 0,
-            resolveSectorHostCurrencyCode(s, corp),
-            fxRateForSectorHostFromMap(s, corp, fx)
+      revenueAnchor: privateFinancials
+        ? null
+        : owned.reduce(
+            (sum, s) =>
+              sum +
+              corpCapitalToAnchor(
+                s.revenue ?? 0,
+                resolveSectorHostCurrencyCode(s, corp),
+                fxRateForSectorHostFromMap(s, corp, fx)
+              ),
+            0
           ),
-        0
-      ),
       sectors: owned.map((s) => ({
         industry: s.sectorType,
-        countryId: s.countryId,
+        countryId: s.countryId ?? corp.countryId,
         stateId: s.stateId,
       })),
     };
   });
-  return publicSubsidiaryGroups(rows);
+  return publicSubsidiaryGroups(rows).map((group) => ({
+    ...group,
+    parentGroupId: structure.parentById.get(group.id),
+    managementAvailable:
+      !structure.parentById.has(group.id) &&
+      !structure.orphanedRoots.has(structure.topRootByCorpId.get(group.id)!),
+    members: group.members.map((member) => ({
+      ...member,
+      parentId: structure.parentById.get(member.id),
+    })),
+  }));
 }

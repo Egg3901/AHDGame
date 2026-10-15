@@ -21,32 +21,33 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
       suspended: 1,
     });
     if (!resolved.ok) return resolved.response;
-    const groups = await loadPublicSubsidiaryGroups(db);
     const corporationId = resolved.corporation._id.toString();
+    const groups = await loadPublicSubsidiaryGroups(db, corporationId);
     const group =
       groups.find((g) => g.id === corporationId) ??
       groups.find((g) => !g.parentGroupId && g.members.some((m) => m.id === corporationId));
     if (!group) return errorResponse(404, "Subsidiary group not found.");
     // Preserve member CEOs' existing access to their own participation and finances.
     // A nested listing stays public: management still belongs to the existing top-level group.
-    const members = group.parentGroupId
-      ? []
-      : await db
-          .collection<Corporation>("corporations")
-          .find(
-            { _id: { $in: group.members.map((m) => new ObjectId(m.id)) } },
-            {
-              projection: {
-                userId: 1,
-                ceoId: 1,
-                ceoType: 1,
-                ceoVacant: 1,
-                countryOwnerId: 1,
-                suspended: 1,
-              },
-            }
-          )
-          .toArray();
+    const members =
+      group.parentGroupId || !group.managementAvailable
+        ? []
+        : await db
+            .collection<Corporation>("corporations")
+            .find(
+              { _id: { $in: group.members.map((m) => new ObjectId(m.id)) } },
+              {
+                projection: {
+                  userId: 1,
+                  ceoId: 1,
+                  ceoType: 1,
+                  ceoVacant: 1,
+                  countryOwnerId: 1,
+                  suspended: 1,
+                },
+              }
+            )
+            .toArray();
     const canViewManagement = members.some(
       (c) => !requireCeo(c, auth.user.userId) && c.ceoType !== "npp" && !c.countryOwnerId
     );

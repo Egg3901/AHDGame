@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import { useMemo } from "react";
 import { useTranslations } from "next-intl";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import type { PublicSubsidiaryGroup } from "@/lib/corporations/groups/rules/publicListing";
@@ -14,8 +15,16 @@ export function PublicSubsidiaryGroupPage({ corpId }: { corpId: string }) {
     group: PublicSubsidiaryGroup;
     canViewManagement: boolean;
   }>(`/api/corporations/${corpId}/group/overview`);
-  if (data?.canViewManagement) return <SubsidiaryGroupPage corpId={data.group.pathId} />;
   const group = data?.group;
+  const childCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const member of group?.members ?? []) {
+      if (member.formalized && member.parentId)
+        counts.set(member.parentId, (counts.get(member.parentId) ?? 0) + 1);
+    }
+    return counts;
+  }, [group]);
+  if (data?.canViewManagement) return <SubsidiaryGroupPage corpId={data.group.pathId} />;
   return (
     <main className="mx-auto max-w-7xl space-y-6 p-4 sm:p-6">
       <PanelState loading={loading} error={error}>
@@ -27,12 +36,15 @@ export function PublicSubsidiaryGroupPage({ corpId }: { corpId: string }) {
             >
               {t("back")}
             </Link>
-            <header className="flex items-center gap-5 rounded-xl border border-card-border bg-card p-6">
+            <header className="flex flex-wrap items-center gap-5 rounded-xl border border-card-border bg-card p-6">
               <CorporationLogo logoUrl={group.logoUrl} name={group.name} size="h-16 w-16" />
-              <div>
+              <div className="min-w-0 flex-1">
                 <p className="text-xs text-muted">{t("title")}</p>
-                <h1 className="text-3xl font-bold">{group.name}</h1>
-                <Link className="text-sm text-muted" href={`/corporation/${group.pathId}`}>
+                <h1 className="break-words text-3xl font-bold">{group.name}</h1>
+                <Link
+                  className="block break-words text-sm text-muted"
+                  href={`/corporation/${group.pathId}`}
+                >
                   {group.parentName}
                 </Link>
               </div>
@@ -46,9 +58,12 @@ export function PublicSubsidiaryGroupPage({ corpId }: { corpId: string }) {
             <dl className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
               {(["equityValueAnchor", "cashAnchor", "revenueAnchor", "sectorCount"] as const).map(
                 (key) => (
-                  <div key={key} className="rounded-xl border border-card-border bg-card p-5">
+                  <div
+                    key={key}
+                    className="min-w-0 rounded-xl border border-card-border bg-card p-5"
+                  >
                     <dt className="text-xs text-muted">{t(key)}</dt>
-                    <dd className="mt-2 font-mono text-2xl">
+                    <dd className="mt-2 break-words font-mono text-2xl">
                       {key === "sectorCount"
                         ? group[key]
                         : group[key] === null
@@ -84,22 +99,22 @@ export function PublicSubsidiaryGroupPage({ corpId }: { corpId: string }) {
                       className="flex items-center gap-3 font-semibold"
                     >
                       <CorporationLogo name={m.name} logoUrl={m.logoUrl} />
-                      {m.name}
+                      <span className="min-w-0 break-words">{m.name}</span>
                     </Link>
                     <p className="text-sm text-muted">
                       {t("memberSummary", {
-                        revenue: formatAmount(m.revenueAnchor),
-                        count: group.members.filter((member) => member.parentId === m.id).length,
+                        revenue:
+                          m.revenueAnchor === null
+                            ? t("unavailable")
+                            : formatAmount(m.revenueAnchor),
+                        count: childCounts.get(m.id) ?? 0,
                       })}
                     </p>
-                    {m.id !== group.id &&
-                      group.members.some(
-                        (child) => child.formalized && child.parentId === m.id
-                      ) && (
-                        <Link className="text-xs text-info" href={`/corporation/${m.pathId}/group`}>
-                          {t("viewGroup")}
-                        </Link>
-                      )}
+                    {m.id !== group.id && (childCounts.get(m.id) ?? 0) > 0 && (
+                      <Link className="text-xs text-info" href={`/corporation/${m.pathId}/group`}>
+                        {t("viewGroup")}
+                      </Link>
+                    )}
                   </article>
                 ))}
               </div>

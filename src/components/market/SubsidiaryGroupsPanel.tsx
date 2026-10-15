@@ -40,10 +40,18 @@ export function SubsidiaryGroupsPanel({ country = "global" }: { country?: string
         )
         .sort((a, b) => {
           if (sort !== "name" && (a[sort] === null || b[sort] === null))
-            return a[sort] === b[sort] ? a.name.localeCompare(b.name) : a[sort] === null ? 1 : -1;
+            return a[sort] === b[sort]
+              ? a.name.localeCompare(b.name) || a.id.localeCompare(b.id)
+              : a[sort] === null
+                ? 1
+                : -1;
           const comparison =
             sort === "name" ? a.name.localeCompare(b.name) : Number(a[sort]) - Number(b[sort]);
-          return (ascending ? comparison : -comparison) || a.name.localeCompare(b.name);
+          return (
+            (ascending ? comparison : -comparison) ||
+            a.name.localeCompare(b.name) ||
+            a.id.localeCompare(b.id)
+          );
         }),
     [all, country, industry, search, sort, ascending, showNpp]
   );
@@ -72,7 +80,7 @@ export function SubsidiaryGroupsPanel({ country = "global" }: { country?: string
           <input
             aria-label={t("search")}
             placeholder={t("search")}
-            className={`${inputClass} min-w-60 flex-1`}
+            className={`${inputClass} w-full min-w-0 sm:min-w-60 sm:flex-1`}
             value={search}
             onChange={(e) => {
               setSearch(e.target.value);
@@ -165,10 +173,10 @@ export function SubsidiaryGroupsPanel({ country = "global" }: { country?: string
                       : formatAmount(g.equityValueAnchor)}
                   </td>
                   <td className="whitespace-nowrap px-4 py-3 font-mono">
-                    {formatAmount(g.cashAnchor)}
+                    {g.cashAnchor === null ? t("unavailable") : formatAmount(g.cashAnchor)}
                   </td>
                   <td className="whitespace-nowrap px-4 py-3 font-mono">
-                    {formatAmount(g.revenueAnchor)}
+                    {g.revenueAnchor === null ? t("unavailable") : formatAmount(g.revenueAnchor)}
                   </td>
                   <td className="px-4 py-3 tabular-nums">{g.sectorCount}</td>
                 </tr>

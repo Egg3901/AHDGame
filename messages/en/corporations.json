@@ -802,7 +802,7 @@
       "cashAnchor": "Cash",
       "revenueAnchor": "Revenue / turn",
       "sectorCount": "Sectors",
-      "basis": "Each group includes its parent and all formalized descendants, including nested groups. External equity value uses current share prices and excludes stakes held by another member. Groups overlap; their totals must not be added together.",
+      "basis": "Each group includes its parent and all formalized descendants, including nested groups. External equity value uses current share prices and excludes stakes held by another member. Groups overlap; their totals must not be added together. Totals are unavailable when any member has private or unavailable accounts.",
       "publicNote": "This overview is visible to signed-in players. Financial history, directions and supply management remain private.",
       "search": "Search groups or member corporations",
       "industry": "Industry",
