@@ -23,6 +23,7 @@ import type {
 import { getMetricDefinition } from "@/lib/constants/metricDefinitions";
 import type { MetricCategoryId } from "@/lib/db/types";
 import { taxSliderRateLabel } from "@/lib/politicalLegislation/taxSlider";
+import { readTaxPolicyRate, incomeTaxEffectOptionId } from "@/lib/budget/rules/incomeTaxPolicy";
 import { JP_ECONOMY } from "@/lib/countries/jp/economy";
 import { US_ECONOMY } from "@/lib/countries/us/economy";
 import { UK_ECONOMY } from "@/lib/countries/uk/economy";
@@ -254,12 +255,27 @@ export function buildPolicyResponse(
 ): PolicyRecordResponse {
   const economic = record.economic ?? 0;
   const social = record.social ?? 0;
-  const matchedOption = findMatchedOption(legislationType.policyOptions, economic, social);
+  const effectOptionId = incomeTaxEffectOptionId({
+    legislationTypeId: legislationType._id,
+    policyOptionId: record.policyOptionId,
+    policyOptionIndex: record.policyOptionIndex,
+    options: legislationType.policyOptions ?? [],
+  });
+  const retainedOption =
+    effectOptionId !== record.policyOptionId
+      ? legislationType.policyOptions?.find((option) => option.id === effectOptionId)
+      : undefined;
+  const matchedOption =
+    retainedOption ?? findMatchedOption(legislationType.policyOptions, economic, social);
   const encodedSliderRate =
-    legislationType.taxSlider && record.policyOptionId?.startsWith("rate:")
-      ? Number(record.policyOptionId.slice("rate:".length))
-      : null;
-  const sliderTaxType = legislationType.taxSlider?.taxType as keyof FederalTaxRates | undefined;
+    legislationType.taxSlider || legislationType.taxRateChange
+      ? readTaxPolicyRate(record.policyOptionId)
+      : undefined;
+  const taxController = legislationType.taxSlider ?? legislationType.taxRateChange;
+  const sliderTaxType =
+    taxController?.scope === "federal"
+      ? (taxController.taxType as keyof FederalTaxRates)
+      : undefined;
   const currentSliderRate = sliderTaxType
     ? getBudgetTaxRate(budget ?? null, sliderTaxType)
     : undefined;
@@ -271,7 +287,7 @@ export function buildPolicyResponse(
         pendingSliderRate !== currentSliderRate
         ? `${taxSliderRateLabel(currentSliderRate)} (target ${pendingSliderRate}%, phasing in)`
         : taxSliderRateLabel(currentSliderRate)
-      : encodedSliderRate !== null && Number.isFinite(encodedSliderRate)
+      : encodedSliderRate !== undefined
         ? taxSliderRateLabel(encodedSliderRate)
         : (matchedOption?.name ?? null);
   const metricEffects: PolicyMetricEffect[] = (matchedOption?.metricEffects ?? [])

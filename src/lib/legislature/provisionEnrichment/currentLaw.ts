@@ -10,6 +10,7 @@ import { regionalDefaultLevel } from "@/lib/politicalLegislation/regionalDefault
 import { resolveOptionLabel, splitLegacySnapshot } from "./optionLabel";
 import { resolveProvisionPolicyOption, type ResolvableProvision } from "./resolvePolicyOption";
 import type { FiscalScope, ProvisionLabel } from "./types";
+import { readTaxPolicyRate } from "@/lib/budget/rules/incomeTaxPolicy";
 
 /** The frozen labels a provision carries once it has been through the snapshot pass. */
 export interface SnapshotFields {
@@ -108,6 +109,11 @@ export function resolveCurrentLaw(
   if (snapshotIndex !== undefined) {
     return { index: snapshotIndex, label: labelFromIndex(lt, snapshotIndex) };
   }
+  const isTax = Boolean(lt?.taxSlider || lt?.taxRateChange);
+  const snapshotRate = isTax
+    ? readTaxPolicyRate(provision.currentPolicyOptionIdSnapshot)
+    : undefined;
+  if (snapshotRate !== undefined) return { label: { name: `Rate: ${snapshotRate}%` } };
 
   // 3. Legacy combined snapshot, split the way the national page always rendered
   //    it. There is no id to place it on the ladder, so the index falls through
@@ -121,6 +127,12 @@ export function resolveCurrentLaw(
   }
 
   // 4/5. Live row (statePolicies, else enactedLaws), supplied by the caller.
+  const liveRate = isTax ? readTaxPolicyRate(live?.policyOptionId) : undefined;
+  if (liveRate !== undefined)
+    return {
+      label: { name: `Rate: ${liveRate}%` },
+      ...(fromLive !== undefined ? { index: fromLive } : {}),
+    };
   if (fromLive !== undefined) {
     return { index: fromLive, label: labelFromIndex(lt, fromLive) };
   }

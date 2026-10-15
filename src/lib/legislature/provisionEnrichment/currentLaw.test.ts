@@ -15,6 +15,43 @@ const lt = {
 } as unknown as LegislationType;
 
 describe("resolveCurrentLaw — precedence", () => {
+  const incomeTax = {
+    ...lt,
+    _id: "br_income_tax_rate",
+    taxRateChange: { scope: "federal", taxType: "incomeTax" },
+  } as LegislationType;
+  it("shows an exact live tax rate rather than its retained effect bracket", () => {
+    expect(
+      resolveCurrentLaw(
+        incomeTax,
+        { effectDirection: 0 },
+        { policyOptionId: "rate:22", policyOptionIndex: 1 }
+      )
+    ).toEqual({ label: { name: "Rate: 22%" }, index: 1 });
+  });
+  it("keeps an exact rate snapshot ahead of a later live tax change", () => {
+    expect(
+      resolveCurrentLaw(
+        incomeTax,
+        { effectDirection: 0, currentPolicyOptionIdSnapshot: "rate:22" },
+        { policyOptionId: "rate:30", policyOptionIndex: 2 }
+      )
+    ).toEqual({ label: { name: "Rate: 22%" } });
+  });
+  it("preserves structured historical labels ahead of encoded ids", () => {
+    expect(
+      resolveCurrentLaw(
+        incomeTax,
+        {
+          effectDirection: 0,
+          currentPolicyOptionIdSnapshot: "rate:22",
+          currentPolicyOptionNameSnapshot: "Historical tax",
+          currentPolicyOptionExplanationSnapshot: "Frozen text.",
+        },
+        undefined
+      ).label
+    ).toEqual({ name: "Historical tax", explanation: "Frozen text." });
+  });
   it("prefers the id snapshot over the live row", () => {
     const out = resolveCurrentLaw(
       lt,

@@ -1,36 +1,21 @@
 /**
- * Simple Influence System
- * Handles +1/-1 influence actions on characters and NPPs
- * Used by legacy influence routes (characters/[id]/influence and npps/[id]/boost)
+ * Player influence boosts. Barnstorm raises political influence and support or attack shifts favorability.
+ * Costs use the actor's equivalent self-action quotes with a premium; see executeSimpleInfluence.
  */
 
 import { ObjectId, Db } from "mongodb";
-import type { Campaign, Character, Election, NPP } from "@/lib/db/types";
+import type { Campaign, Character, Election, GameConfig, NPP, State } from "@/lib/db/types";
 import { getGameState } from "@/lib/gameState";
-import { calculateActionCost, getActionCostMultiplier } from "@/lib/states/adjacency";
+import { getActionCostMultiplier } from "@/lib/states/adjacency";
 import { createNotification } from "@/lib/notifications";
 import { getHomeCurrency, loadCharacterFxRate } from "@/lib/currency/characterFunds";
 import { localCampaignBalance } from "@/lib/currency/campaignBalance";
 import { isSameCountry } from "@/lib/api/sameCountry";
 import { getMediaFavPerTurn } from "@/lib/campaigns/opsEffects";
-
-/**
- * Base action-point cost for a support/attack influence action.
- *
- * Raised 2 → 6. At 2 AP the ±1 reputation move was close to free: the US
- * playerbase held 9,470 banked action points, i.e. ~4,700 reputation swings
- * available in a single turn against a stat that only spans 100 points. Since
- * favorability multiplies a candidate's entire vote (~0.45 vote-share points
- * per favorability point, measured), that made click volume the most
- * cost-effective campaign tool in the game by a wide margin.
- *
- * At 6 AP the same 80-attack strike costs 480 action points rather than 160, so
- * it competes properly with campaigning, fundraising and political operations
- * for a player's turn instead of being loose change. Deliberately a cost change
- * rather than a lockout: a party that genuinely wants to spend its turns
- * attacking still can.
- */
-export const BASE_INFLUENCE_COST = 6;
+import { quoteAdvertiseAction, quoteCampaignAction } from "@/lib/actions/rules";
+import { resolveCampaignPriceLevel } from "@/lib/campaigns/rules/priceLevel";
+import { NEUTRAL_STAT } from "@/lib/stats/statsConstants";
+import { EXTERNAL_ATTACK_PREMIUM, priceExternalBoost, quoteSelfActionsForGain } from "./rules";
 
 /**
  * Maximum NET favorability any one target can be moved by player support/attack
@@ -54,9 +39,8 @@ export const BASE_INFLUENCE_COST = 6;
  * points per point — favorability is ~11x stronger, and was the only one of the
  * two with no aggregate limit at all.
  *
- * This is a BACKSTOP, not the primary limiter. The real throttles are the
- * raised {@link BASE_INFLUENCE_COST} (2 → 6 AP, so a strike competes with
- * campaigning for a player's turn) and the softened
+ * This is a BACKSTOP, not the primary limiter. The primary limiter is the
+ * action-equivalent cost of each boost, alongside the softened
  * `APPROVAL_SCALAR_EXPONENT` (favorability is deliberately less decisive).
  * 12/turn is set well above normal coordinated play — the observed median
  * target-turn is far below it — and exists only to stop the extreme case of a
@@ -126,6 +110,114 @@ export interface SimpleInfluenceInfo {
    * explain *why* the cap won't drop.
    */
   targetMediaSustainedAtCap: boolean;
+  supportFundsCostAnchor: number;
+  supportActionCost: number;
+  attackFundsCostAnchor: number;
+  attackActionCost: number;
+  barnstormFundsCostAnchor: number;
+  barnstormActionCost: number;
+}
+
+interface SimpleInfluencePrices {
+  supportFundsCostAnchor: number;
+  supportActionCost: number;
+  attackFundsCostAnchor: number;
+  attackActionCost: number;
+  barnstormFundsCostAnchor: number;
+  barnstormActionCost: number;
+}
+
+async function getSimpleInfluencePrices(
+  db: Db,
+  actor: Character,
+  target: Character | NPP,
+  preset?: string,
+  barnstormTargetGain?: number
+): Promise<{ prices?: SimpleInfluencePrices; error?: string }> {
+  const targetCountryId = target.countryId ?? actor.countryId;
+  const state = await db
+    .collection<State>("states")
+    .findOne(
+      { _id: target.homeState, countryId: targetCountryId },
+      { projection: { gdp: 1, population: 1 } }
+    );
+  if (!state || !Number.isFinite(state.gdp) || !Number.isFinite(state.population)) {
+    return {
+      error:
+        "The target's home-region economic data is unavailable, so boost costs cannot be calculated.",
+    };
+  }
+
+  const gameConfig = await db
+    .collection<GameConfig>("gameConfig")
+    .findOne({ _id: "default" }, { projection: { campaignEraPriceLevelEnabled: 1 } });
+  const priceLevel = resolveCampaignPriceLevel(gameConfig?.campaignEraPriceLevelEnabled, preset);
+  const quoteTarget = {
+    gdpMillions: state.gdp,
+    population: state.population,
+    countryId: targetCountryId,
+    preset,
+  };
+  // Quote against the target's own stats and home economy so a low-stat booster
+  // cannot discount the action. NPPs and pre-stat characters use neutral stats.
+  const targetStats = "stats" in target ? target.stats : undefined;
+  const charisma = targetStats?.charisma ?? NEUTRAL_STAT;
+  const intellect = targetStats?.intellect ?? NEUTRAL_STAT;
+  const campaignTargetGain = barnstormTargetGain ?? (actor.homeState === target.homeState ? 2 : 1);
+  // Campaign is ineligible at exactly 100. Price the equivalent just below
+  // that cap so an experienced actor can still fund an external boost.
+  const campaignStartingInfluence = Math.min(target.politicalInfluence ?? 0, 99.999);
+  const campaignQuote = quoteSelfActionsForGain(
+    campaignStartingInfluence,
+    campaignTargetGain,
+    (politicalInfluence) => {
+      const quoteInfluence = Math.min(politicalInfluence, 99.999);
+      const quote = quoteCampaignAction(
+        { politicalInfluence: quoteInfluence, charisma, intellect },
+        quoteTarget,
+        priceLevel
+      );
+      return quote.ok
+        ? {
+            apCost: quote.apCost,
+            fundCostAnchor: quote.fundCostAnchor,
+            statGain: quote.influenceGain,
+          }
+        : { error: quote.error };
+    }
+  );
+  if (!campaignQuote.ok) return { error: campaignQuote.error };
+
+  const advertiseQuote = quoteSelfActionsForGain(target.favorability ?? 50, 1, (favorability) => {
+    const quote = quoteAdvertiseAction({ favorability, charisma }, quoteTarget, priceLevel);
+    return quote.ok
+      ? {
+          apCost: quote.apCost,
+          fundCostAnchor: quote.fundCostAnchor,
+          statGain: quote.favorabilityGain,
+        }
+      : { error: quote.error };
+  });
+  if (!advertiseQuote.ok) return { error: advertiseQuote.error };
+
+  const advertiseDistance = getActionCostMultiplier(actor.homeState, target.homeState);
+  const supportPrice = priceExternalBoost(advertiseQuote.actions, advertiseDistance);
+  const attackPrice = priceExternalBoost(
+    advertiseQuote.actions,
+    advertiseDistance,
+    EXTERNAL_ATTACK_PREMIUM
+  );
+  const barnstormPrice = priceExternalBoost(campaignQuote.actions);
+  return {
+    prices: {
+      supportFundsCostAnchor: supportPrice.fundsCostAnchor,
+      supportActionCost: supportPrice.actionCost,
+      attackFundsCostAnchor: attackPrice.fundsCostAnchor,
+      attackActionCost: attackPrice.actionCost,
+      barnstormFundsCostAnchor: barnstormPrice.fundsCostAnchor,
+      barnstormActionCost: barnstormPrice.actionCost,
+    },
+  };
 }
 
 /**
@@ -194,6 +286,7 @@ export async function getSimpleInfluenceInfo(
   targetType: TargetType,
   forexEnabled = false
 ): Promise<{ info?: SimpleInfluenceInfo; error?: { message: string; status: number } }> {
+  const gameState = await getGameState();
   const homeFxRate = forexEnabled
     ? (await loadCharacterFxRate(db, getHomeCurrency(myCharacter))).rate
     : 1;
@@ -230,12 +323,26 @@ export async function getSimpleInfluenceInfo(
     };
   }
 
-  // Calculate action cost based on state proximity
-  const actionCost = calculateActionCost(
-    BASE_INFLUENCE_COST,
-    myCharacter.homeState,
-    target.homeState
+  const barnstormTargetGain = Math.min(
+    myCharacter.homeState === target.homeState ? 2 : 1,
+    Math.max(0, 100 - (target.politicalInfluence ?? 0))
   );
+  const pricing = await getSimpleInfluencePrices(
+    db,
+    myCharacter,
+    target,
+    gameState?.preset,
+    barnstormTargetGain
+  );
+  if (!pricing.prices) {
+    return {
+      error: {
+        message: pricing.error ?? "Boost costs could not be calculated.",
+        status: 503,
+      },
+    };
+  }
+
   const multiplier = getActionCostMultiplier(myCharacter.homeState, target.homeState);
 
   // Calculate attack failure chance based on infamy
@@ -246,7 +353,7 @@ export async function getSimpleInfluenceInfo(
   return {
     info: {
       canInfluence: true,
-      actionCost,
+      actionCost: pricing.prices.supportActionCost,
       multiplier,
       myActions: myCharacter.actions,
       // Return anchor units to keep the existing API contract (UI shows
@@ -262,6 +369,12 @@ export async function getSimpleInfluenceInfo(
       myInfamy,
       attackFailureChance: myInfamy,
       targetMediaSustainedAtCap,
+      supportFundsCostAnchor: pricing.prices.supportFundsCostAnchor,
+      supportActionCost: pricing.prices.supportActionCost,
+      attackFundsCostAnchor: pricing.prices.attackFundsCostAnchor,
+      attackActionCost: pricing.prices.attackActionCost,
+      barnstormFundsCostAnchor: pricing.prices.barnstormFundsCostAnchor,
+      barnstormActionCost: pricing.prices.barnstormActionCost,
     },
   };
 }
@@ -321,52 +434,91 @@ export async function executeSimpleInfluence(
     };
   }
 
+  const targetCurrentFavorabilityForGuard = target.favorability ?? 50;
+  if (action === "raise" && targetCurrentFavorabilityForGuard >= 100) {
+    return {
+      error: {
+        message: `${target.name}'s favorability is already maxed (100%). Wait for it to decay before supporting again.`,
+        status: 400,
+      },
+    };
+  }
+  if (action === "lower" && targetCurrentFavorabilityForGuard <= 0) {
+    return {
+      error: {
+        message: `${target.name}'s favorability is already at the floor (0%). They can't be attacked further.`,
+        status: 400,
+      },
+    };
+  }
+  if (action === "barnstorm" && (target.politicalInfluence ?? 0) >= 100) {
+    return {
+      error: {
+        message: `${target.name}'s political influence is already maxed (100%). Find someone else to barnstorm for.`,
+        status: 400,
+      },
+    };
+  }
+
+  const barnstormInfluenceGain = Math.min(
+    myCharacter.homeState === target.homeState ? 2 : 1,
+    Math.max(0, 100 - (target.politicalInfluence ?? 0))
+  );
+  const pricing = await getSimpleInfluencePrices(
+    db,
+    myCharacter,
+    target,
+    gameState?.preset,
+    barnstormInfluenceGain
+  );
+  if (!pricing.prices) {
+    return {
+      error: {
+        message: pricing.error ?? "Boost costs could not be calculated.",
+        status: 503,
+      },
+    };
+  }
+  const actionCost =
+    action === "barnstorm"
+      ? pricing.prices.barnstormActionCost
+      : action === "lower"
+        ? pricing.prices.attackActionCost
+        : pricing.prices.supportActionCost;
+  const fundsCostAnchor =
+    action === "barnstorm"
+      ? pricing.prices.barnstormFundsCostAnchor
+      : action === "lower"
+        ? pricing.prices.attackFundsCostAnchor
+        : pricing.prices.supportFundsCostAnchor;
+  const campaignFundsField = forexEnabled ? "currencyBalances.campaign" : "funds";
+  const myBalanceLocal = forexEnabled
+    ? (myCharacter.currencyBalances?.campaign ?? 0)
+    : (myCharacter.funds ?? 0);
+  const fundsCostLocal = forexEnabled ? fundsCostAnchor * homeFxRate : fundsCostAnchor;
+  if (myBalanceLocal < fundsCostLocal) {
+    return {
+      error: {
+        message: `Not enough funds. Required: ${fundsCostLocal.toLocaleString()} ${forexEnabled ? homeCurrency : "USD"}`,
+        status: 400,
+      },
+    };
+  }
+
   // Barnstorm action logic
   if (action === "barnstorm") {
-    const BARNSTORM_ACTION_COST = 5;
-    const BARNSTORM_FUND_COST = 100000;
-
-    // Reject no-op when the target is already at the influence ceiling. Without
-    // this guard we'd debit 5 actions + $100k while writing 100 → 100, leaving
-    // the actor confused about why nothing moved.
-    if ((target.politicalInfluence ?? 0) >= 100) {
-      return {
-        error: {
-          message: `${target.name}'s political influence is already maxed (100%). Find someone else to barnstorm for.`,
-          status: 400,
-        },
-      };
-    }
-
     // Check costs
-    if (myCharacter.actions < BARNSTORM_ACTION_COST) {
+    if (myCharacter.actions < actionCost) {
       return {
-        error: { message: `Not enough actions. Required: ${BARNSTORM_ACTION_COST}`, status: 400 },
+        error: { message: `Not enough actions. Required: ${actionCost}`, status: 400 },
       };
     }
-    // Compare local-to-local: BARNSTORM_FUND_COST is anchor; convert at boundary.
-    // #888: when forex is on, do NOT fall back to the legacy anchor `funds`
-    // field — it is USD-scaled and reads as a tiny local balance (e.g. in NGN),
-    // producing a false "Not enough funds" if currencyBalances.campaign is
-    // momentarily undefined ("cannot barnstorm"). Fall back to 0 instead.
-    const myBalanceLocal = forexEnabled
-      ? (myCharacter.currencyBalances?.campaign ?? 0)
-      : (myCharacter.funds ?? 0);
-    const barnstormCostLocal = forexEnabled
-      ? BARNSTORM_FUND_COST * homeFxRate
-      : BARNSTORM_FUND_COST;
-    if (myBalanceLocal < barnstormCostLocal) {
-      return {
-        error: {
-          message: `Not enough funds. Required: ${barnstormCostLocal.toLocaleString()} ${forexEnabled ? homeCurrency : "USD"}`,
-          status: 400,
-        },
-      };
-    }
-
     // Determine influence gain
     const isHomeState = myCharacter.homeState === target.homeState;
-    const influenceGain = isHomeState ? 2 : 1;
+    const influenceGain = Math.min(
+      isHomeState ? 2 : 1,
+      Math.max(0, 100 - (target.politicalInfluence ?? 0))
+    );
 
     const targetCurrentInfluence = target.politicalInfluence || 0;
     const newTargetInfluence = Math.min(100, Math.max(0, targetCurrentInfluence + influenceGain));
@@ -378,20 +530,16 @@ export async function executeSimpleInfluence(
     // before touching the target, so a failed deduction doesn't hand out a
     // free influence boost.
     //
-    // BARNSTORM_FUND_COST is ANCHOR-denominated. Convert to LOCAL once for
-    // both the filter and the $inc.
-    const campaignFundsField = forexEnabled ? "currencyBalances.campaign" : "funds";
-    const fundCostLocal = forexEnabled ? BARNSTORM_FUND_COST * homeFxRate : BARNSTORM_FUND_COST;
     const debitFilter = {
       _id: myCharacter._id,
-      actions: { $gte: BARNSTORM_ACTION_COST },
-      [campaignFundsField]: { $gte: fundCostLocal },
+      actions: { $gte: actionCost },
+      [campaignFundsField]: { $gte: fundsCostLocal },
     };
 
     const debitResult = await db.collection<Character>("characters").updateOne(debitFilter, {
       $inc: {
-        actions: -BARNSTORM_ACTION_COST,
-        [campaignFundsField]: -fundCostLocal,
+        actions: -actionCost,
+        [campaignFundsField]: -fundsCostLocal,
       },
       $set: { updatedAt: new Date() },
     });
@@ -423,8 +571,8 @@ export async function executeSimpleInfluence(
       actionType: "barnstorm",
       [targetIdField]: target._id,
       [targetNameField]: target.name,
-      actionCost: BARNSTORM_ACTION_COST,
-      fundsCost: BARNSTORM_FUND_COST,
+      actionCost,
+      fundsCost: fundsCostAnchor,
       result: {
         success: true,
         targetInfluenceChange: influenceGain,
@@ -457,7 +605,7 @@ export async function executeSimpleInfluence(
         success: true,
         attackFailed: false,
         action,
-        actionCost: BARNSTORM_ACTION_COST,
+        actionCost,
         targetName: target.name,
         newTargetInfluence: newTargetInfluence,
         newTargetFavorability: target.favorability ?? 50,
@@ -471,24 +619,6 @@ export async function executeSimpleInfluence(
   // Reject no-op support/attack when the target is already at the favorability
   // ceiling/floor. Without these guards the action is debited but the clamped
   // write is a no-op (100 → 100 / 0 → 0), which players interpret as a glitch.
-  const targetCurrentFavorabilityForGuard = target.favorability ?? 50;
-  if (action === "raise" && targetCurrentFavorabilityForGuard >= 100) {
-    return {
-      error: {
-        message: `${target.name}'s favorability is already maxed (100%). Wait for it to decay before supporting again.`,
-        status: 400,
-      },
-    };
-  }
-  if (action === "lower" && targetCurrentFavorabilityForGuard <= 0) {
-    return {
-      error: {
-        message: `${target.name}'s favorability is already at the floor (0%). They can't be attacked further.`,
-        status: 400,
-      },
-    };
-  }
-
   // Aggregate per-target throttle. The ±1 move is per-actor, so per-actor costs
   // (action points, infamy) never bound how far a COORDINATED group can push a
   // single target in one turn. Measured worth: ~0.45 vote-share points per
@@ -512,13 +642,6 @@ export async function executeSimpleInfluence(
       },
     };
   }
-
-  // Calculate action cost based on state proximity
-  const actionCost = calculateActionCost(
-    BASE_INFLUENCE_COST,
-    myCharacter.homeState,
-    target.homeState
-  );
 
   // Check if player has enough actions
   if (myCharacter.actions < actionCost) {
@@ -556,6 +679,35 @@ export async function executeSimpleInfluence(
   const infamyGain = action === "lower" ? 2 : 0;
   const newMyInfamy = Math.min(100, myCurrentInfamy + infamyGain);
 
+  // Debit the quoted action and campaign-fund costs atomically before applying
+  // the effect. Failed attacks still consume both, matching their AP behavior.
+  const debitResult = await db.collection<Character>("characters").updateOne(
+    {
+      _id: myCharacter._id,
+      actions: { $gte: actionCost },
+      [campaignFundsField]: { $gte: fundsCostLocal },
+    },
+    {
+      $inc: {
+        actions: -actionCost,
+        [campaignFundsField]: -fundsCostLocal,
+      },
+      $set:
+        action === "lower"
+          ? { infamy: newMyInfamy, updatedAt: new Date() }
+          : { updatedAt: new Date() },
+    }
+  );
+  if (debitResult.matchedCount === 0) {
+    return {
+      error: {
+        message:
+          "Your available actions or campaign funds changed before the boost completed. Please try again.",
+        status: 409,
+      },
+    };
+  }
+
   // Only update target's favorability if attack didn't fail
   if (!attackFailed) {
     await db
@@ -565,17 +717,6 @@ export async function executeSimpleInfluence(
         { $set: { favorability: newTargetFavorability, updatedAt: new Date() } }
       );
   }
-
-  // Update my actions and infamy
-  const myUpdates: Record<string, unknown> = {
-    actions: myCharacter.actions - actionCost,
-    updatedAt: new Date(),
-  };
-  if (action === "lower") {
-    myUpdates.infamy = newMyInfamy;
-  }
-
-  await db.collection("characters").updateOne({ _id: myCharacter._id }, { $set: myUpdates });
 
   // Log the action
   const targetIdField = targetType === "character" ? "targetCharacterId" : "targetNPPId";
@@ -588,6 +729,7 @@ export async function executeSimpleInfluence(
     [targetIdField]: target._id,
     [targetNameField]: target.name,
     actionCost,
+    fundsCost: fundsCostAnchor,
     result: {
       success: !attackFailed,
       attackFailed,
