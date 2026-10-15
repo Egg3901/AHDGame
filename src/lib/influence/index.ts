@@ -8,7 +8,6 @@ export {
 export {
   getSimpleInfluenceInfo,
   executeSimpleInfluence,
-  BASE_INFLUENCE_COST,
   type TargetType,
   type SimpleInfluenceInfo,
   type SimpleInfluenceResult,

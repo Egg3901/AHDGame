@@ -13,7 +13,6 @@ type Tab = "actions" | "funds" | "mail";
 
 interface InfluenceInfo {
   canInfluence: boolean;
-  actionCost: number;
   multiplier: number;
   myActions: number;
   myFunds: number;
@@ -24,6 +23,12 @@ interface InfluenceInfo {
   myInfamy: number;
   attackFailureChance: number;
   targetMediaSustainedAtCap: boolean;
+  supportFundsCostAnchor: number;
+  supportActionCost: number;
+  attackFundsCostAnchor: number;
+  attackActionCost: number;
+  barnstormFundsCostAnchor: number;
+  barnstormActionCost: number;
 }
 
 interface InteractCardProps {
@@ -106,19 +111,7 @@ function ActionsTab({
       if (res.ok) {
         setInfluence(data.newTargetInfluence);
         setFavorability(data.newTargetFavorability);
-        const newInfamy = data.myCharacter.infamy || 0;
-        setInfo((prev) =>
-          prev
-            ? {
-                ...prev,
-                myActions: data.myCharacter.actions,
-                // LOCAL home-currency balance (canonical source of truth).
-                myFunds: data.myCharacter.currencyBalances?.campaign ?? data.myCharacter.funds ?? 0,
-                myInfamy: newInfamy,
-                attackFailureChance: newInfamy,
-              }
-            : null
-        );
+        await fetchInfo();
         setFlash(data.attackFailed ? "failed" : action);
         setTimeout(() => setFlash(null), 1500);
       } else {
@@ -141,11 +134,22 @@ function ActionsTab({
 
   if (!info) return <p className="text-body-sm text-muted">{t("loadError")}</p>;
 
-  const canAction = info.myActions >= info.actionCost;
+  const canSupport =
+    info.myActions >= info.supportActionCost && info.myFunds >= info.supportFundsCostAnchor;
+  const canAttack =
+    info.myActions >= info.attackActionCost && info.myFunds >= info.attackFundsCostAnchor;
   const favorabilityMaxed = favorability >= 100;
   const favorabilityFloored = favorability <= 0;
   const influenceMaxed = influence >= 100;
-  const canBarnstorm = info.myActions >= 5 && info.myFunds >= 100_000 && !influenceMaxed;
+  const canBarnstorm =
+    info.myActions >= info.barnstormActionCost &&
+    info.myFunds >= info.barnstormFundsCostAnchor &&
+    !influenceMaxed;
+  const minAvailableActionCost = Math.min(
+    favorabilityMaxed ? Number.POSITIVE_INFINITY : info.supportActionCost,
+    favorabilityFloored ? Number.POSITIVE_INFINITY : info.attackActionCost,
+    influenceMaxed ? Number.POSITIVE_INFINITY : info.barnstormActionCost
+  );
   const sameState = info.myHomeState === info.targetHomeState;
 
   const locationLabel =
@@ -171,7 +175,7 @@ function ActionsTab({
         <div className="flex justify-between text-muted">
           <span>{t("location")}</span>
           <span className="text-foreground">
-            {locationLabel} · {t("actionCost", { count: info.actionCost })}
+            {locationLabel} · {t("actionCost", { count: info.supportActionCost })}
           </span>
         </div>
         <div className="flex justify-between text-muted">
@@ -186,7 +190,7 @@ function ActionsTab({
       <div className="grid grid-cols-2 gap-2">
         <button
           onClick={() => execute("raise")}
-          disabled={!canAction || favorabilityMaxed || executing || flash !== null}
+          disabled={!canSupport || favorabilityMaxed || executing || flash !== null}
           title={
             favorabilityMaxed && info.targetMediaSustainedAtCap
               ? t("supportTitleMediaCap")
@@ -204,13 +208,17 @@ function ActionsTab({
               ? info.targetMediaSustainedAtCap
                 ? t("pinnedByMedia")
                 : t("maxed")
-              : t("plusFav")}
+              : t("boostCost", {
+                  effect: t("plusFav"),
+                  actions: info.supportActionCost,
+                  amount: formatAmount(info.supportFundsCostAnchor),
+                })}
           </span>
         </button>
 
         <button
           onClick={() => execute("lower")}
-          disabled={!canAction || favorabilityFloored || executing || flash !== null}
+          disabled={!canAttack || favorabilityFloored || executing || flash !== null}
           className={`${btnBase} ${
             flash === "failed"
               ? "border-warning"
@@ -232,9 +240,14 @@ function ActionsTab({
               >
                 {favorabilityFloored
                   ? t("atFloor")
-                  : info.attackFailureChance > 0
-                    ? t("attackEffectWithFail", { pct: Math.round(info.attackFailureChance) })
-                    : t("attackEffect")}
+                  : t("boostCost", {
+                      effect:
+                        info.attackFailureChance > 0
+                          ? t("attackEffectWithFail", { pct: Math.round(info.attackFailureChance) })
+                          : t("attackEffect"),
+                      actions: info.attackActionCost,
+                      amount: formatAmount(info.attackFundsCostAnchor),
+                    })}
               </span>
             </>
           )}
@@ -255,12 +268,15 @@ function ActionsTab({
             ? t("influenceMaxed")
             : t("barnstormEffect", {
                 gain: sameState ? "+2%" : "+1%",
-                amount: formatAmount(100_000),
+                actions: info.barnstormActionCost,
+                amount: formatAmount(info.barnstormFundsCostAnchor),
               })}
         </span>
       </button>
 
-      {!canAction && <p className="text-center text-body-xs text-error">{t("notEnoughActions")}</p>}
+      {info.myActions < minAvailableActionCost && (
+        <p className="text-center text-body-xs text-error">{t("notEnoughActions")}</p>
+      )}
       <InlineError error={actionError} className="text-center text-body-xs text-error" />
     </div>
   );
