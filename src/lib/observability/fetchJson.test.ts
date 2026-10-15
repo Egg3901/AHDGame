@@ -86,9 +86,9 @@ describe("fetchJson", () => {
   it("throws gateway statuses without capturing them", async () => {
     for (const status of [502, 503, 504]) {
       mockFetch(() => new Response("<html>bad gateway</html>", { status }));
-      const err = await fetchJson("/api/x", { feature: "t" }).catch((e: unknown) => e as HttpError);
+      const err = await fetchJson("/api/x", { feature: "t" }).catch((e: unknown) => e);
       expect(err).toBeInstanceOf(HttpError);
-      expect(err.status).toBe(status);
+      expect((err as HttpError).status).toBe(status);
     }
     expect(captureException).not.toHaveBeenCalled();
   });
