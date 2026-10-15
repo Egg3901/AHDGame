@@ -6,6 +6,7 @@ import { useState, useEffect, Suspense, useMemo, useCallback, useRef } from "rea
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import * as Sentry from "@sentry/nextjs";
 import { fetchJson, HttpError } from "@/lib/observability/fetchJson";
+import { isTransientRequestFailure } from "@/lib/errors/transient";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import { Skeleton } from "@/components/ui";
 import BackButton from "@/components/BackButton";
@@ -95,10 +96,13 @@ type PortfolioSeed = any;
  * Report a portfolio load failure, except 4xx. A signed-out or expired session
  * answers /api/character/me and /api/character/portfolio with 401 — that is the
  * auth flow working, not a fault, and it was the top client error in GlitchTip.
- * fetchJson already reports network and 5xx faults with its own context.
+ * Transient failures (dropped connection, timeout, 502/503/504 during a deploy)
+ * are shown as a load error but not reported. fetchJson already reports real
+ * 5xx faults with its own context.
  */
 function reportPortfolioLoadError(err: unknown): void {
   if (err instanceof HttpError && err.status >= 400 && err.status < 500) return;
+  if (isTransientRequestFailure(err)) return;
   Sentry.captureException(err, { tags: { feature: "portfolio" } });
 }
 

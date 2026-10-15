@@ -1,9 +1,9 @@
 import { configureGroupSupply, groupForecastWriteOps } from "./groupSupplyTurn";
+import { resolvePhaseLookups } from "./phaseLookups";
 /**
  * Corporation turns settle operating results and distribute shareholder income.
  * processCorporationTurn shares monetary quotes across automatic dividend conversions.
  */
-import { resolveNoBuyerPhaseOutStartTurn } from "@/lib/extraction/noBuyerPhaseOutStart";
 import { CORPORATION_TURN_GAME_CONFIG_PROJECTION } from "./gameConfigProjection";
 import { applyCorporationCashWrites } from "@/lib/turn/npp/foundingCashLedger";
 import { loadConversionQuoteContext } from "@/lib/currency/euro/quotes";
@@ -21,6 +21,7 @@ import { USE_GROWTH_INCREMENT, businessAcumenGrowthMultiplier } from "@/lib/stat
 import { shedVacantCeoSectorsToUnowned } from "./vacantCeoSectorShed";
 import { shedInactiveCeoSectorsToUnowned } from "./inactiveCeoSectorShed";
 import { installCaretakersForVacantCorps } from "./autoCaretakerVacantCorps";
+import { loadEngineSixCountries } from "./engineSixCountries";
 import { recordNppCeoTrackRecords } from "./nppCeoTrackRecord";
 import { processSectors } from "./sectorCalculations";
 import { getLabourSystemMode, labourAtLeast } from "@/lib/labour/featureFlag";
@@ -264,11 +265,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
           )
       : Promise.resolve(null),
   ]);
-  lookups.extractionNoBuyerPhaseOutStartTurn = await resolveNoBuyerPhaseOutStartTurn(
-    db,
-    marketGovernorConfig,
-    turn ?? gameState?.currentTurn ?? 0
-  );
+  await resolvePhaseLookups(db, marketGovernorConfig, turn ?? gameState?.currentTurn ?? 0, lookups);
   if (
     mediaProductSlatesEnabled &&
     lookups.mediaProductProjectsByCorpId &&
@@ -442,6 +439,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
   });
   market.explicitPlantCostsEnabled = marketGovernorConfig?.explicitPlantCostsEnabled === true;
   market.commodityFixStage = normalizeCommodityFixStage(marketGovernorConfig?.commodityFixStage);
+  market.shortageBuildSpeedupEnabled = marketGovernorConfig?.shortageBuildSpeedupEnabled === true;
   market.mediaRegulationEnabled = mediaRegulationEnabled;
   market.mediaEditorialEnabled = mediaEditorialEnabled;
   if (mediaRegulationEnabled) {
@@ -654,6 +652,9 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
     );
   }
   mark("autoCaretaker");
+
+  // NPP engine 6: NPP-run plants right-size structural overcapacity.
+  lookups.engineSixCountries = await loadEngineSixCountries(db, lookups.corporations);
 
   // NPP engine 6 bookkeeping: once a game day, fold each NPP CEO's margin
   // against sector peers into its CEO track record. Reads last turn's sector

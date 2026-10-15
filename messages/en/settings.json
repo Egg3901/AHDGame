@@ -282,6 +282,14 @@
       "classicUi": "Classic",
       "classicUiHint": "The richer typography, color, depth, and navigation style used before the October 3 redesign. Current game features remain available.",
       "interfaceSaveError": "Could not save the interface preference. Your previous choice was restored.",
+      "corpOverviewTitle": "Corporation overview",
+      "corpOverviewHint": "How a company's Overview tab opens. You can also switch it from the tab itself.",
+      "corpOverview": {
+        "simple": "Simple",
+        "simpleHint": "What needs your attention, the core figures and your biggest sectors.",
+        "pro": "Pro",
+        "proHint": "Every figure, the ownership breakdown and the full sector table."
+      },
       "statusBar": "Status Bar",
       "statusBarHint": "Choose what's shown in the bottom status bar.",
       "layouts": {

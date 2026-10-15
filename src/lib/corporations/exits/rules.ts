@@ -19,7 +19,7 @@ export type CorporationExitSnapshot = Pick<
   | "liquidCurrencyCode"
   | "sharePrice"
   | "totalShares"
->;
+> & { userId?: Corporation["userId"] };
 
 export function exitOwnerKind(corp: CorporationExitSnapshot): CorporationExitOwnerKind {
   // Same test as `isStateOwned`, kept local so the rules module has no imports
@@ -36,6 +36,7 @@ export function buildCorporationExit(input: {
   /** Revenue on the corporation's last history row, if any. */
   lastRevenue?: number | null;
   successorId?: CorporationExit["successorId"];
+  successorIds?: CorporationExit["successorIds"];
   now: Date;
 }): CorporationExit {
   const { corporation: corp } = input;
@@ -57,5 +58,6 @@ export function buildCorporationExit(input: {
   if (corp.sequentialId != null) exit.sequentialId = corp.sequentialId;
   if (corp.liquidCurrencyCode) exit.currencyCode = corp.liquidCurrencyCode;
   if (input.successorId) exit.successorId = input.successorId;
+  if (input.successorIds && input.successorIds.length > 0) exit.successorIds = input.successorIds;
   return exit;
 }

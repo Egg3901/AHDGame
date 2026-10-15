@@ -358,10 +358,11 @@ export async function POST(request: Request) {
     // HQ defaults to character's home state
     const headquartersState = character.homeState;
 
-    // Check player doesn't already own an active corporation
+    // Keep the one-active-corporation limit account-wide, even when a player
+    // switches characters. The cooldown begins only once that corporation ends.
     const existing = await db
       .collection<Corporation>("corporations")
-      .findOne({ ceoId: character._id, ceoVacant: { $ne: true } });
+      .findOne({ userId: new ObjectId(auth.user.userId), ceoVacant: { $ne: true } });
     if (existing) {
       return errorResponse(
         400,
@@ -369,9 +370,8 @@ export async function POST(request: Request) {
       );
     }
 
-    // Bug #0728: per-user founding cooldown. Blocks the found → drain → abandon →
-    // found rotation that dodged the per-corp bond cooldown. currentTurnAtFounding
-    // is reused below as foundedAtTurn so we read game state only once.
+    // Bug #0728: per-user refounding cooldown, anchored when the previous
+    // corporation ends. currentTurnAtFounding is reused below for founding records.
     const foundingGameState = await getGameState();
     const currentTurnAtFounding = foundingGameState?.currentTurn ?? 0;
     const founderUser = await db
@@ -1031,16 +1031,6 @@ export async function POST(request: Request) {
           href: `/corporation/${sequentialId}`,
         });
       }
-
-      // Bug #0728: arm the per-user founding cooldown. Stamped last, after every
-      // rollback-tracked write, so a failed founding (which the catch fully
-      // reverses) never leaves a user cooled down with no corporation.
-      await db
-        .collection<User>("users")
-        .updateOne(
-          { _id: new ObjectId(auth.user.userId) },
-          { $set: { lastCorporationFoundedTurn: foundedAtTurn } }
-        );
 
       if (foundingSettlementPending) {
         return NextResponse.json(

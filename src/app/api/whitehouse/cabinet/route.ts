@@ -14,7 +14,7 @@ import type {
 } from "@/lib/db/types";
 import type { Character } from "@/lib/db/types/character";
 import { bulkFetchCharacterNames } from "@/lib/db/characterLookup";
-import { getCabinetPositions } from "@/lib/constants/cabinetMechanics";
+import { getCabinetPositionGroup, getCabinetPositions } from "@/lib/constants/cabinetMechanics";
 import { resolveCabinetRoster } from "@/lib/cabinet/rosterEra";
 import { getManuallyEnabledSeats } from "@/lib/cabinet/liveGameYear";
 import { getLiveGameYear } from "@/lib/cabinet/liveGameYear";
@@ -113,6 +113,12 @@ export async function GET(request: Request) {
         id: pos.id,
         name: pos.name,
         order: pos.order,
+        // Policy bucket for the grouped roster table on the executive page.
+        group: getCabinetPositionGroup(countryId, pos.id),
+        // Seats the President fills alone (US Chief of Staff): no Senate vote,
+        // no place in the line of succession.
+        appointedWithoutConfirmation: pos.appointedWithoutConfirmation === true,
+        outsideSuccession: pos.outsideSuccession === true,
         member: member
           ? {
               // NPP caretaker seats (V2.1) have a null characterId — surface the

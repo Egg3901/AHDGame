@@ -21,16 +21,17 @@ import {
 import { emitBuildCapexTx } from "@/lib/corporations/capexTxLog";
 import { OPERATING_SECTOR_TYPE_LABELS } from "@/lib/constants/corporations";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
-import { restoreSectorsToUnowned } from "@/lib/corporations/restoreSectorsToUnowned";
+import { disposeLeavingSectors } from "@/lib/corporations/nppPickup";
 import { applyBrandFacilityLoss } from "@/lib/corporations/brandFacilityLoss";
 import { requireCorporationActionsEnabled } from "@/lib/api/requireCorporationActions";
 import { unprotectedConstructionPropertyFilter } from "@/lib/corporations/securedConstructionProperty";
+import { abandonBankImpact } from "@/lib/banking/capacityAllocation";
 
 interface RouteParams {
   params: Promise<{ id: string; sectorId: string }>;
 }
 
-export async function abandonSector(_request: Request, { params }: RouteParams) {
+export async function abandonSector(request: Request, { params }: RouteParams) {
   try {
     const auth = await requireBasicAuth();
     if (!auth.ok) return auth.response;
@@ -53,6 +54,35 @@ export async function abandonSector(_request: Request, { params }: RouteParams) 
 
     if (!ObjectId.isValid(sectorId)) {
       return errorResponse(400, "Invalid sector ID");
+    }
+
+    // A financial sector feeds a deposit-taking bank's branch network. Abandoning
+    // one lowers the deposit ceiling (to zero with the last one), so the CEO sees
+    // the impact and confirms it first (ticket 1553).
+    const preview = await db
+      .collection<CorporateSector>("corporateSectors")
+      .findOne(
+        { _id: new ObjectId(sectorId), corporationId: corporation._id },
+        { projection: { sectorType: 1 } }
+      );
+    if (preview) {
+      const impact = await abandonBankImpact(db, corporation, preview);
+      const body = (await request.json().catch(() => null)) as {
+        acknowledgeBankImpact?: unknown;
+      } | null;
+      if (
+        impact &&
+        impact.ceilingAfter < impact.ceilingBefore &&
+        body?.acknowledgeBankImpact !== true
+      ) {
+        return errorResponse(
+          409,
+          impact.lastFinancialSector
+            ? "This is your last financial sector. Your bank's deposit capacity comes only from financial sectors, so abandoning it cuts the deposit ceiling to zero: the bank takes no new deposits and existing deposits drain away each turn until you own a financial sector again."
+            : "Your bank's deposit capacity comes from your financial sectors. Abandoning this one lowers the deposit ceiling, and deposits above the new ceiling drain away each turn.",
+          { code: "BANK_CAPACITY_IMPACT", extra: { bankImpact: impact } }
+        );
+      }
     }
 
     // Reserve the sector without deleting it. The property marker makes this
@@ -143,11 +173,16 @@ export async function abandonSector(_request: Request, { params }: RouteParams) 
       }
     }
 
-    const restoreResult = await restoreSectorsToUnowned(db, [sector], now);
+    // An NPP operator takes over most of the built capacity so the market keeps
+    // its supply; the rest, and any undelivered orders, return to the pool.
+    const disposal = await disposeLeavingSectors(db, corporation, [sector], now);
 
     return NextResponse.json({
       success: true,
-      message: `Abandoned ${sectorLabel} sector in ${stateName}. $${Math.round(restoreResult.totalRevenueRestored).toLocaleString()}/day returned to the unowned pool.`,
+      message:
+        disposal.recipientIds.length > 0
+          ? `Abandoned ${sectorLabel} sector in ${stateName}. An NPP operator took over most of its plants; the rest of the market reopens to builders.`
+          : `Abandoned ${sectorLabel} sector in ${stateName}. Its market reopens to builders.`,
     });
   } catch (error) {
     return handleRouteError(error);

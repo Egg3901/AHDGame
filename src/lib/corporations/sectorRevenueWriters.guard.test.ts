@@ -247,6 +247,14 @@ const ALLOWED_WRITERS: Record<string, WriterEntry> = {
     status: "plants-gated",
     reason: "Privatization; plants-aware.",
   },
+  "src/lib/corporations/nppPickup.ts": {
+    writeSites: 1,
+    status: "plants-gated",
+    reason:
+      "NPP pickup of leaving plants. Only runs under plants (`plantsEnabled`); the new " +
+      "receiver row's revenue is the donor's host-currency nameplate scaled with the " +
+      "carved capacity and is restated from capitalStock on the next tick.",
+  },
 
   // ─── Reviewed by the ownership/transfer sweep ────────────────────────────
   "src/lib/corporations/commands/sectorOperations/buyListedSector.ts": {
@@ -395,6 +403,7 @@ const MUST_BE_PLANTS_AWARE = [
   // beside them.
   "src/lib/remediation/defects/AHD-1271-merged-state-extraction.ts",
   "src/lib/nationalization/privatizeAsset.ts",
+  "src/lib/corporations/nppPickup.ts",
 ];
 
 function collectSourceFiles(dir: string, acc: string[] = []): string[] {

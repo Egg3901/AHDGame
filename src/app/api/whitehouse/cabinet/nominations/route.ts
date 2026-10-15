@@ -143,9 +143,18 @@ export async function POST(request: Request) {
 
     // Anchor votingEndsAt to the game clock so it agrees with votingEndsOnTurn
     // and with the readers (lifecycle + vote routes) that compare against game time.
+    //
+    // A seat the executive fills alone (appointedWithoutConfirmation) opens no
+    // vote: the window closes on the current turn, so the lifecycle seats the
+    // nominee at the next turn through the same install path as a confirmation.
+    const directAppointment = positionDef.appointedWithoutConfirmation === true;
     const gameTimeForVote = await getGameTime();
-    const votingEndsAt = new Date(gameTimeForVote.effectiveNow.getTime() + VOTING_DURATION_MS);
-    const votingEndsOnTurn = gameTimeForVote.currentTurn + VOTING_DURATION_HOURS;
+    const votingEndsAt = directAppointment
+      ? gameTimeForVote.effectiveNow
+      : new Date(gameTimeForVote.effectiveNow.getTime() + VOTING_DURATION_MS);
+    const votingEndsOnTurn = directAppointment
+      ? gameTimeForVote.currentTurn
+      : gameTimeForVote.currentTurn + VOTING_DURATION_HOURS;
 
     const nomination: Omit<CabinetNomination, "_id"> = {
       countryId: myCharacter.countryId,
@@ -180,6 +189,28 @@ export async function POST(request: Request) {
         return errorResponse(409, "An active nomination for this cabinet position already exists");
       }
       throw error;
+    }
+
+    if (directAppointment) {
+      if (nomineeUserId) {
+        await createNotifications([
+          {
+            userId: nomineeUserId,
+            type: "system",
+            title: "Cabinet Appointment",
+            message: `You have been appointed ${positionDef.name}. You take office at the next turn.`,
+            metadata: {
+              nominationId: result.insertedId.toString(),
+              type: "cabinet_nomination_proposed",
+            },
+          },
+        ]);
+      }
+      return NextResponse.json({
+        success: true,
+        nominationId: result.insertedId.toString(),
+        message: `Appointed ${nomineeName} as ${positionDef.name}. No Senate vote is needed; they take office at the next turn.`,
+      });
     }
 
     // Notify senators (player characters only)

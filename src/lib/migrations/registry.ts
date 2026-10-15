@@ -1,5 +1,6 @@
 import { migration as governmentContractBidding } from "./entries/2026-10-14-government-contract-bidding";
 import { migration as contestAccountHistory } from "./entries/2026-10-14-contest-account-history";
+import { migration as liveWorldNppAutonomyV6 } from "./entries/2026-10-15-live-world-npp-autonomy-v6";
 import { migration as orgHeadAgendaIndex } from "./entries/2026-10-13-org-head-agenda-index";
 import { migration as bankFundSubscriptions } from "./entries/2026-10-12-bank-fund-subscriptions";
 import { migration as completeCabinetV2Accounts } from "./entries/2026-10-10-complete-cabinet-v2-accounts";
@@ -376,6 +377,7 @@ export const MIGRATIONS: Migration[] = [
   bankFundSubscriptions,
   orgHeadAgendaIndex,
   contestAccountHistory,
+  liveWorldNppAutonomyV6,
   governmentContractBidding,
 ];
 

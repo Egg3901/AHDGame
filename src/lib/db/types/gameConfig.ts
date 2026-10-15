@@ -346,6 +346,27 @@ export interface GameConfig {
    */
   extractionNoBuyerPhaseOutStartTurn?: number;
   /**
+   * Turn the revenue-follows-placement phase-in starts, set by an operator
+   * (never stamped automatically). See src/lib/market/placementRevenuePhase.ts.
+   */
+  placementRevenuePhaseStartTurn?: number;
+  /**
+   * Operator-scheduled country recessions: capacity contraction spread over a
+   * window of turns. See src/lib/market/countryRecession.ts. Cleared on reset.
+   */
+  countryRecessions?: import("@/lib/market/countryRecession").CountryRecession[];
+  /**
+   * Turn a live world starts moving macro demand onto anchor state GDP over
+   * STATE_GDP_ANCHOR_PHASE_TURNS (operator-set; worlds seeded with
+   * GameState.stateGdpAnchoredDemand are already fully on). See sectorLedger.ts.
+   */
+  stateGdpAnchorPhaseStartTurn?: number;
+  /**
+   * Turn the input-demand-follows-real-output phase-in starts, set by an
+   * operator (never stamped automatically). See src/lib/market/inputDemandRealPhase.ts.
+   */
+  inputDemandRealPhaseStartTurn?: number;
+  /**
    * Geographic freight rollout. Shadow records routes for calibration; active
    * also feeds delivered state inputs into next turn's plant throughput.
    */
@@ -422,6 +443,12 @@ export interface GameConfig {
    * Unset or 0 keeps every pre-fix constant.
    */
   commodityFixStage?: number;
+  /**
+   * When true, outstanding build orders in sectors whose output is in deep
+   * shortage have their remaining build time halved, once per order. See
+   * turn/corporation/sectorTurn/shortageBuildSpeedup.ts.
+   */
+  shortageBuildSpeedupEnabled?: boolean;
   /**
    * Money wiring (interstate-logistics plan step 5, phase A): when true, a
    * sector's input bill adds the landed-price premium for out-of-state

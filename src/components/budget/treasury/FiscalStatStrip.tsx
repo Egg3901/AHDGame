@@ -48,6 +48,8 @@ export interface FiscalStatStripProps {
   gdpGrowth: number;
   /** Debt-to-GDP ratio (0–n, not %). */
   debtToGdp: number;
+  /** Outstanding sovereign bond principal, in local currency units. */
+  debtPrincipal: number;
   rating: CreditRating;
   /** Signed national treasury balance (local currency); negative = national debt. */
   treasuryReserve: number;
@@ -82,6 +84,7 @@ export function FiscalStatStrip({
   ratioGdp,
   gdpGrowth,
   debtToGdp,
+  debtPrincipal,
   rating,
   treasuryReserve,
   treasuryCashLedgerEnabled = false,
@@ -135,6 +138,7 @@ export function FiscalStatStrip({
       />
       <StatTile
         label="Debt-to-GDP"
+        labelTitle="Outstanding sovereign bond principal divided by smoothed national GDP. Treasury cash and the signed fiscal position are not part of the numerator."
         value={`${(debtToGdp * 100).toFixed(1)}%`}
         tone={debtTone(debtToGdp)}
         delta={
@@ -147,6 +151,11 @@ export function FiscalStatStrip({
             />
           ) : undefined
         }
+      />
+      <StatTile
+        label="Outstanding bond principal"
+        value={money(debtPrincipal)}
+        sub={usdNote(debtPrincipal, "sovereign bonds outstanding")}
       />
       <StatTile label="Credit rating" value={rating} tone="gold" />
       <StatTile

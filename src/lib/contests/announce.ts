@@ -27,11 +27,18 @@ export function formatContestScore(kind: ContestKind, score: number): string {
   switch (kind) {
     case "corp_growth_small":
     case "corp_growth_large":
+    case "corp_comeback":
       return `${fmt(1)}%`;
     case "influence_gain":
+    case "rookie_influence":
+    case "backbench_influence":
       return `${fmt(0)} NI`;
     case "approval_gain":
+    case "governor_approval":
+    case "favorability_gain":
       return `${fmt(1)} pts`;
+    case "kingmaker":
+      return score === 1 ? "1 race called" : `${score} races called`;
     case "referrals_weekly":
       return score === 1 ? "1 referral" : `${score} referrals`;
     case "legislator_bills":

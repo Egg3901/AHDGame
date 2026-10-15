@@ -271,7 +271,10 @@ describe("player suggestion branded card", () => {
     const embed = JSON.parse(fetchMock.mock.calls[0]![1].body).embeds[0];
     expect(embed.image).toEqual({ url: "https://cdn.example/charts/event-suggestion-371.png" });
     expect(embed.description).toContain(input.description);
-    expect(embed.fields.map((f: { name: string }) => f.name)).toEqual(["Expected impact"]);
+    expect(embed.fields.map((f: { name: string }) => f.name)).toEqual([
+      "Expected impact",
+      "Join the discussion",
+    ]);
     mockCardUrl.value = undefined;
   });
 

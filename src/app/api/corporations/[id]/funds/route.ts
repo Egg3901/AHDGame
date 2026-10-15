@@ -1,6 +1,7 @@
 import { withNoStore } from "@/lib/api/withNoStore";
 import { getAuthUser } from "@/lib/auth";
 import { fundCreationEligibility } from "@/lib/indexFunds/sponsorship/eligibility";
+import { fundBankCharter } from "@/lib/indexFunds/sponsorship/rules/eligibility";
 import type { Corporation } from "@/lib/db/types";
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
@@ -28,7 +29,7 @@ export const GET = withNoStore(async function GET(_request: Request, { params }:
     const canCreate =
       !!auth && !requireCeo(sponsor, auth.userId) && !(await fundCreationEligibility(db, sponsor));
     const stockChoices =
-      canCreate && sponsor.bankCharter
+      canCreate && fundBankCharter(sponsor.bankCharter)
         ? await db
             .collection<Corporation>("corporations")
             .find(

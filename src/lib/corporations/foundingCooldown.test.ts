@@ -9,8 +9,8 @@ describe("foundingCooldownTurnsRemaining (Bug #0728)", () => {
   });
 
   it("returns remaining turns while within the cooldown window", () => {
-    // founded at 100, currentTurn 150 → 100 + 168 - 150 = 118 remaining
-    expect(foundingCooldownTurnsRemaining(100, 150)).toBe(118);
+    // ended at 100, currentTurn 150 → 100 + 96 - 150 = 46 remaining
+    expect(foundingCooldownTurnsRemaining(100, 150)).toBe(46);
   });
 
   it("returns 0 once the cooldown window has fully elapsed", () => {

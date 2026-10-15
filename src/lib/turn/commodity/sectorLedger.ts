@@ -2,6 +2,26 @@ import { freshMilitaryDiversion } from "@/lib/military/arsenal";
 import type { CorporateSector, Corporation, StateMetrics } from "@/lib/db/types";
 import type { State } from "@/lib/db/types/state";
 import type { CurrencyCode } from "@/lib/constants/currencies";
+import type { CountryId } from "@/lib/constants/countries";
+import { gdpToAnchor } from "@/lib/currency/gdpAnchorRate";
+
+/** Turns a live world takes to move macro demand onto anchor state GDP. */
+export const STATE_GDP_ANCHOR_PHASE_TURNS = 24;
+
+/**
+ * How far a world is onto anchor state GDP: 1 when it was seeded with the fix
+ * (`GameState.stateGdpAnchoredDemand`), else the operator-started phase-in
+ * (`GameConfig.stateGdpAnchorPhaseStartTurn`), else 0.
+ */
+export function stateGdpAnchorBlend(
+  anchoredWorld: boolean,
+  phaseStartTurn: number | null | undefined,
+  turn: number
+): number {
+  if (anchoredWorld) return 1;
+  if (typeof phaseStartTurn !== "number" || !Number.isFinite(phaseStartTurn)) return 0;
+  return Math.max(0, Math.min(1, (turn - phaseStartTurn) / STATE_GDP_ANCHOR_PHASE_TURNS));
+}
 import { readCorpEconomicAnchor } from "@/lib/currency/corpEconomyFields";
 import {
   fxRateForSectorHostFromMap,
@@ -27,6 +47,7 @@ import { realizedOutputFraction } from "@/lib/extraction/realizedOutputFraction"
 import type { ExtractionSectorInput } from "@/lib/turn/extraction/extractionCapacity";
 import { NATIONAL_SCOPE_IDS } from "@/lib/constants/nationalScope";
 import type { PlantsUnits, SectorLedgerRow } from "./ledgerTypes";
+import { sectorPriceLeg } from "@/lib/market/inputDemandRealPhase";
 
 export interface StateLookups {
   stateGdpMap: Map<string, number>;
@@ -38,10 +59,26 @@ export interface StateLookups {
  * State GDP map + stateId->countryId lookup + road-condition map.
  * The country lookup feeds both national aggregation and the sector
  * countryId stamp for sectorDemandModifier lookups.
+ *
+ * `State.gdp` is stored in each era seed's own denomination (Japan's 1991
+ * regions are yen millions: Kansai ~2.2e8 against California ~1.0e6). Every
+ * macro demand leg multiplies this map by a fraction of GDP, so reading the raw
+ * figure handed Japan roughly 134x its share of GDP-driven demand. With
+ * `gdpAnchorPreset` the map holds anchor GDP instead, converted with the same
+ * denomination rate the seed uses for sector pools (`gdpToAnchor`). Omitted, the
+ * raw figure is kept for worlds seeded before the fix (see
+ * `GameState.stateGdpAnchoredDemand`).
  */
 export function buildStateLookups(
   allStates: Pick<State, "_id" | "countryId" | "gdp">[],
-  allStateMetrics: StateMetrics[]
+  allStateMetrics: StateMetrics[],
+  gdpAnchorPreset?: string | null,
+  /**
+   * Share (0..1) of the way from the raw stored GDP to anchor GDP. 1 (default)
+   * is the full fix; a live world phases in with `stateGdpAnchorBlend`.
+   * Geometric, so every country moves by the same percentage each turn.
+   */
+  anchorBlend = 1
 ): StateLookups {
   const stateGdpMap = new Map<string, number>();
   const stateToCountry = new Map<string, string>();
@@ -50,7 +87,16 @@ export function buildStateLookups(
     if (NATIONAL_SCOPE_IDS.has(state._id)) continue;
     stateToCountry.set(state._id, state.countryId);
     if (state.gdp && state.gdp > 0) {
-      stateGdpMap.set(state._id, state.gdp);
+      const blend = Math.max(0, Math.min(1, anchorBlend));
+      const gdp =
+        gdpAnchorPreset != null && blend > 0
+          ? state.gdp *
+            Math.pow(
+              gdpToAnchor(state.gdp, state.countryId as CountryId, gdpAnchorPreset) / state.gdp,
+              blend
+            )
+          : state.gdp;
+      if (gdp > 0) stateGdpMap.set(state._id, gdp);
     }
   }
   for (const metrics of allStateMetrics) {
@@ -111,6 +157,8 @@ export function buildSectorRows(inputs: SectorRowInputs): SectorLedgerRow[] {
       industryModel: s.industryModel,
       mediaDiscriminator: s.mediaDiscriminator,
       revenue: readCorpEconomicAnchor(s.revenue, hostCurrencyCode, hostFxRate),
+      // Last turn's realized price leg, which deflates revenue-driven input demand.
+      priceLeg: sectorPriceLeg(s.clearingFactor, s.soldFraction),
       stateId: s.stateId,
       sectorId: s._id.toString(),
       corporationId: s.corporationId,

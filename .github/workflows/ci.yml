@@ -15,18 +15,58 @@ jobs:
   changes:
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+      checks: read
+      pull-requests: read
     outputs:
       full_suite: ${{ steps.scope.outputs.full_suite }}
+      tree: ${{ steps.checkout.outputs.tree }}
+      reuse: ${{ steps.reuse.outputs.reuse }}
+      qualification_run: ${{ steps.reuse.outputs.qualification_run }}
     steps:
       - uses: actions/checkout@v4
         with:
           # Pull-request checkouts are merge commits. The first parent is the
           # base revision, so depth two is enough to classify the whole change.
           fetch-depth: 2
+      - name: Record the tested checkout tree
+        id: checkout
+        run: |
+          checked_tree=$(git -c safe.directory="$GITHUB_WORKSPACE" rev-parse 'HEAD^{tree}')
+          test "${#checked_tree}" -eq 40
+          case "$checked_tree" in *[!a-f0-9]*) exit 1 ;; esac
+          printf 'tree=%s\n' "$checked_tree" >> "$GITHUB_OUTPUT"
+      - name: Find reusable staging qualification
+        id: reuse
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if ! node scripts/ci/staging-qualification.mjs; then
+            echo "reuse=false" >> "$GITHUB_OUTPUT"
+            echo "promotion=true" >> "$GITHUB_OUTPUT"
+          fi
       - name: Classify the change
         id: scope
         shell: bash
+        env:
+          REUSE_QUALIFICATION: ${{ steps.reuse.outputs.reuse }}
+          CAN_REUSE: ${{ (github.event_name == 'pull_request' && github.head_ref == 'staging' && github.base_ref == 'main' && github.event.pull_request.head.repo.id == github.event.repository.id && github.event.pull_request.base.repo.id == github.event.repository.id) || (github.event_name == 'push' && github.ref == 'refs/heads/main') }}
+          PROMOTION: ${{ steps.reuse.outputs.promotion }}
         run: |
+          if [[ "$REUSE_QUALIFICATION" == "true" && "$CAN_REUSE" == "true" ]]; then
+            echo "full_suite=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [[ "$REUSE_QUALIFICATION" == "true" && "$CAN_REUSE" != "true" ]]; then
+            echo "full_suite=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [[ "$PROMOTION" == "true" ]]; then
+            echo "full_suite=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           if [[ "$GITHUB_EVENT_NAME" != "pull_request" ]]; then
             echo "full_suite=true" >> "$GITHUB_OUTPUT"
             exit 0
@@ -58,7 +98,7 @@ jobs:
 
   content-checks:
     needs: changes
-    if: needs.changes.outputs.full_suite != 'true'
+    if: needs.changes.outputs.full_suite != 'true' && needs.changes.outputs.reuse != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -134,6 +174,8 @@ jobs:
           else
             npm run lint
           fi
+      - name: Build recovery and promotion qualification tests
+        run: node --test scripts/ci/staging-qualification.test.mjs scripts/build-with-cache-recovery.test.mjs
       - name: Architecture audit
         run: npm run architecture:audit
 
@@ -196,7 +238,7 @@ jobs:
           # Keep enough heap headroom for the hosted runner to finish reliably.
           NODE_OPTIONS: --max-old-space-size=12288
 
-  # Split out of `verify` and sharded: the suite is ~3,500 files and its cost is
+  # Split out of `verify` and sharded: the suite has thousands of files and its cost is
   # dominated by per-file module loading. Architecture contracts are excluded
   # here because the lint job runs the same files as a dedicated hard gate.
   test:
@@ -207,7 +249,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4]
+        shard: [1, 2, 3, 4, 5, 6]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -215,10 +257,29 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci --no-audit --no-fund
-      # job-total rather than a hard-coded 4, so adding or removing a shard in
+      # Use job-total rather than a fixed divisor, so adding or removing a shard in
       # the matrix above cannot silently desync the divisor and drop test files.
       - name: Unit tests (shard ${{ matrix.shard }}/${{ strategy.job-total }})
-        run: npm run test:ci -- --shard=${{ matrix.shard }}/${{ strategy.job-total }}
+        # This full-world fixture alone took 320 s in a 583 s shard. Give it
+        # an independent required job so it cannot strand the other shards.
+        run: npm run test:ci -- --shard=${{ matrix.shard }}/${{ strategy.job-total }} --exclude=src/lib/admin/seed/presetBootstrap.integration.test.ts
+        env:
+          NODE_OPTIONS: --max-old-space-size=6144
+
+  bootstrap-integration:
+    needs: changes
+    if: needs.changes.outputs.full_suite == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - name: Qualify every shipping bootstrap preset
+        run: npx vitest run src/lib/admin/seed/presetBootstrap.integration.test.ts --maxWorkers=1
         env:
           NODE_OPTIONS: --max-old-space-size=6144
 
@@ -234,6 +295,21 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci --no-audit --no-fund
+      # Persist compiler work only. The full build still runs on every job;
+      # runtime fetch caches and generated application outputs stay ephemeral.
+      - name: Restore Turbopack compiler cache
+        id: compiler-cache
+        uses: actions/cache@v4
+        continue-on-error: true
+        timeout-minutes: 2
+        with:
+          path: .next/cache/turbopack
+          key: ${{ runner.os }}-${{ runner.arch }}-node22-turbopack-v1-${{ hashFiles('package-lock.json', 'package.json', 'next.config.ts', 'tsconfig*.json', 'postcss.config.*') }}-${{ hashFiles('src/**', 'content/**', 'messages/**', 'public/**', 'sentry.*.config.ts') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ runner.arch }}-node22-turbopack-v1-${{ hashFiles('package-lock.json', 'package.json', 'next.config.ts', 'tsconfig*.json', 'postcss.config.*') }}-
+      - name: Discard an incomplete compiler cache restore
+        if: steps.compiler-cache.outcome == 'failure'
+        run: rm -rf .next/cache/turbopack
       # The compile reaches the 16 GB runner's limit (15.7 GB on the last good
       # build, then the agent killed mid-compile on every run from 2026-10-09).
       # Swap absorbs the peak instead of losing the runner.
@@ -263,6 +339,8 @@ jobs:
           # 2026-10-08 (killed at 568 of 758 pages). Static generation takes
           # about 8 s when healthy, so one worker costs little.
           NEXT_BUILD_CPUS: "1"
+      - name: Report compiler cache size
+        run: du -sh .next/cache/turbopack || true
 
   federation-transactions:
     needs: changes
@@ -309,12 +387,41 @@ jobs:
           docker logs federation-mongo || true
           docker rm --force federation-mongo || true
 
+  # The operator recognizes this job only after independently checking native
+  # workflow/run/job provenance and the trusted workflow and helper blobs.
+  reuse-staging-qualification:
+    needs: changes
+    if: needs.changes.outputs.reuse == 'true' && ((github.event_name == 'pull_request' && github.head_ref == 'staging' && github.base_ref == 'main' && github.event.pull_request.head.repo.id == github.event.repository.id && github.event.pull_request.base.repo.id == github.event.repository.id) || (github.event_name == 'push' && github.ref == 'refs/heads/main'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Reuse the proven identical staging tree
+        env:
+          TREE: ${{ needs.changes.outputs.tree }}
+          QUALIFICATION_RUN: ${{ needs.changes.outputs.qualification_run }}
+        run: |
+          [[ "$TREE" =~ ^[a-f0-9]{40}$ ]]
+          [[ "$QUALIFICATION_RUN" =~ ^[0-9]+$ ]]
+          printf 'Qualified tree %s in prior run %s\n' "$TREE" "$QUALIFICATION_RUN"
+
   # Branch protection requires the stable `verify` context. Keep that single
   # public gate, but do not report it successful until every correctness gate
   # above has completed successfully.
   verify:
     if: always()
-    needs: [changes, content-checks, lint, format, typecheck, test, build, federation-transactions]
+    needs:
+      [
+        changes,
+        content-checks,
+        lint,
+        format,
+        typecheck,
+        test,
+        bootstrap-integration,
+        build,
+        federation-transactions,
+        reuse-staging-qualification,
+      ]
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:
@@ -322,11 +429,15 @@ jobs:
         env:
           CHANGES_RESULT: ${{ needs.changes.result }}
           FULL_SUITE: ${{ needs.changes.outputs.full_suite }}
+          REUSE_QUALIFICATION: ${{ needs.changes.outputs.reuse }}
+          CAN_REUSE: ${{ (github.event_name == 'pull_request' && github.head_ref == 'staging' && github.base_ref == 'main' && github.event.pull_request.head.repo.id == github.event.repository.id && github.event.pull_request.base.repo.id == github.event.repository.id) || (github.event_name == 'push' && github.ref == 'refs/heads/main') }}
+          REUSE_RESULT: ${{ needs['reuse-staging-qualification'].result }}
           CONTENT_RESULT: ${{ needs.content-checks.result }}
           LINT_RESULT: ${{ needs.lint.result }}
           FORMAT_RESULT: ${{ needs.format.result }}
           TYPECHECK_RESULT: ${{ needs.typecheck.result }}
           TEST_RESULT: ${{ needs.test.result }}
+          BOOTSTRAP_RESULT: ${{ needs['bootstrap-integration'].result }}
           BUILD_RESULT: ${{ needs.build.result }}
           FEDERATION_RESULT: ${{ needs['federation-transactions'].result }}
         run: |
@@ -341,6 +452,13 @@ jobs:
             exit 1
           fi
 
+          if [[ "$REUSE_QUALIFICATION" == "true" ]]; then
+            if [[ "$CAN_REUSE" != "true" || "$FULL_SUITE" != "false" || "$REUSE_RESULT" != "success" ]]; then
+              exit 1
+            fi
+            exit 0
+          fi
+
           if [[ "$FULL_SUITE" == "false" ]]; then
             test "$CONTENT_RESULT" = "success"
             exit $?
@@ -349,13 +467,22 @@ jobs:
           printf 'lint=%s format=%s typecheck=%s test=%s build=%s\n' \
             "$LINT_RESULT" "$FORMAT_RESULT" "$TYPECHECK_RESULT" \
             "$TEST_RESULT" "$BUILD_RESULT"
+          printf 'bootstrap-integration=%s\n' "$BOOTSTRAP_RESULT"
           printf 'federation-transactions=%s\n' "$FEDERATION_RESULT"
 
           if [[ "$LINT_RESULT" != "success" || \
                 "$FORMAT_RESULT" != "success" || \
                 "$TYPECHECK_RESULT" != "success" || \
                 "$TEST_RESULT" != "success" || \
+                "$BOOTSTRAP_RESULT" != "success" || \
                 "$BUILD_RESULT" != "success" || \
                 "$FEDERATION_RESULT" != "success" ]]; then
             exit 1
           fi
+      # No checkout or application code runs here. This native successful step
+      # binds full qualification to the exact checked tree without another runner.
+      - name: qualified-${{ github.head_ref || github.ref_name }}-${{ github.base_ref || github.ref_name }}-tree-${{ needs.changes.outputs.tree }}
+        if: needs.changes.outputs.full_suite == 'true'
+        env:
+          TREE: ${{ needs.changes.outputs.tree }}
+        run: '[[ "$TREE" =~ ^[a-f0-9]{40}$ ]]'

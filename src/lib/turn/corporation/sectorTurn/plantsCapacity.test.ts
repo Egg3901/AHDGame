@@ -261,3 +261,33 @@ describe("computePlantsCapacity: world governor anchor", () => {
     expect(r.plantsRampLambda).toBe(0);
   });
 });
+
+describe("computePlantsCapacity: country recession factor", () => {
+  const running = (factor?: number) =>
+    computePlantsCapacity(
+      input({
+        isFlipTurn: false,
+        recessionCapacityFactor: factor,
+        sector: {
+          ...input().sector,
+          capitalStock: 10_000,
+          capacityBookAnchor: 1_000_000,
+          plantsStartTurn: CURRENT_TURN - 500,
+        } as PlantsCapacityInput["sector"],
+      })
+    );
+
+  it("takes capacity and its paid basis down by the same factor", () => {
+    const base = running();
+    const cut = running(0.99);
+    expect(cut.plantsOwnedCapacity).toBeCloseTo(base.plantsOwnedCapacity * 0.99, 6);
+    expect(cut.capacityBookAnchor).toBeCloseTo(base.capacityBookAnchor * 0.99, 4);
+  });
+
+  it("ignores factors outside (0, 1]", () => {
+    const base = running();
+    expect(running(1.5).plantsOwnedCapacity).toBeCloseTo(base.plantsOwnedCapacity, 6);
+    expect(running(0).plantsOwnedCapacity).toBeCloseTo(base.plantsOwnedCapacity, 6);
+    expect(running(Number.NaN).plantsOwnedCapacity).toBeCloseTo(base.plantsOwnedCapacity, 6);
+  });
+});

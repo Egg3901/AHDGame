@@ -50,6 +50,7 @@ import {
   type GdpGrowthData,
 } from "@/lib/constants/commodities";
 import { NATIONAL_SCOPE_IDS } from "@/lib/constants/nationalScope";
+import { buildStateLookups, stateGdpAnchorBlend } from "@/lib/turn/commodity/sectorLedger";
 
 export type CommodityGlobalDeltaPreview = {
   commodity: CommodityType;
@@ -146,8 +147,8 @@ export async function previewQuickDissolve(
   // contribute to the cash payout preview. Held bonds (redeemed at face),
   // liquidCapital, and the operating-sector salvage below form the returned cash.
 
-  // Operating sectors are abandoned to the unowned market on dissolution, so a
-  // salvage fraction of their capitalized NPV is realized as cash — mirrors the
+  // Operating sectors leave the corporation on dissolution (to NPP successors,
+  // or the unowned market), so a salvage fraction of their capitalized NPV is realized as cash — mirrors the
   // dissolve route and the bond-default settlement. Same helper as the route so
   // the quote matches what executes.
   const sectorSalvageAnchor = await computeDissolutionSectorSalvageAnchor(
@@ -247,9 +248,18 @@ export async function previewQuickDissolve(
   const ceoIsSoleShareholder = totalRealHolders <= 1 && !!ceoRow;
 
   const gameState = await db
-    .collection<{ _id: string; currentTurn: number }>("gameState")
+    .collection<{
+      _id: string;
+      currentTurn: number;
+      preset?: string;
+      stateGdpAnchoredDemand?: boolean;
+    }>("gameState")
     .findOne({ _id: "current" });
   const currentTurn = gameState?.currentTurn ?? 0;
+
+  const gdpPhaseConfig = await db
+    .collection<{ _id: string; stateGdpAnchorPhaseStartTurn?: number }>("gameConfig")
+    .findOne({ _id: "default" }, { projection: { stateGdpAnchorPhaseStartTurn: 1 } });
 
   const [allSectors, allCorps, allStates, stateMetrics, centralBanks] = await Promise.all([
     db
@@ -310,11 +320,18 @@ export async function previewQuickDissolve(
     });
   }
 
-  const stateGdpMap = new Map<string, number>();
-  for (const state of allStates) {
-    if (NATIONAL_SCOPE_IDS.has(state._id)) continue;
-    if (state.gdp && state.gdp > 0) stateGdpMap.set(state._id, state.gdp);
-  }
+  // Same GDP reading as the turn's commodity ledger, so the preview matches.
+  const gdpAnchorBlend = stateGdpAnchorBlend(
+    gameState?.stateGdpAnchoredDemand === true,
+    gdpPhaseConfig?.stateGdpAnchorPhaseStartTurn,
+    currentTurn
+  );
+  const { stateGdpMap } = buildStateLookups(
+    allStates,
+    [],
+    gdpAnchorBlend > 0 ? (gameState?.preset ?? null) : null,
+    gdpAnchorBlend
+  );
 
   const gdpByState = new Map<string, number>();
   let gdpWeightedSum = 0;

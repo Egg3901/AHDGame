@@ -12,6 +12,7 @@ import {
   getCommodityDisplayCurrency,
 } from "@/lib/commodity-map/commodityPriceDisplay";
 import type { MapMode } from "./CommodityMapModeToggle";
+import { formatUnits } from "../lib/helpers";
 
 interface CommodityCountryStatCardProps {
   countryId: CountryId;
@@ -26,13 +27,6 @@ interface CommodityCountryStatCardProps {
   onClose: () => void;
   onViewCountryPage: () => void;
   onViewCountryMap: () => void;
-}
-
-function formatUnits(value: number, unit: string): string {
-  if (value >= 1000000) return `${(value / 1000000).toFixed(1)}M ${unit}`;
-  if (value >= 1000) return `${(value / 1000).toFixed(1)}K ${unit}`;
-  if (value >= 10) return `${Math.round(value)} ${unit}`;
-  return `${value.toFixed(1)} ${unit}`;
 }
 
 export default function CommodityCountryStatCard({

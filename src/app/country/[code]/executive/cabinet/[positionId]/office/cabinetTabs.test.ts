@@ -83,6 +83,23 @@ describe("resolveCabinetTabs", () => {
     expect(tabs.some((t) => t.id === "treasury")).toBe(true);
   });
 
+  it("adds the Allocations tab only when department finance data is available", () => {
+    const args = {
+      countryId: "US",
+      positionId: "attorney_general",
+      mechanics: { ...base, positionId: "attorney_general" },
+    };
+    expect(resolveCabinetTabs(args).some((tab) => tab.id === "allocations")).toBe(false);
+    const allocationsTab = resolveCabinetTabs({ ...args, allocationsAvailable: true }).find(
+      (tab) => tab.id === "allocations"
+    );
+    expect(allocationsTab).toMatchObject({
+      id: "allocations",
+      label: "Allocations",
+      labelKey: "allocationsTab",
+    });
+  });
+
   it("does not add a Treasury tab for a non-finance seat", () => {
     const tabs = resolveCabinetTabs({
       countryId: "US",

@@ -39,7 +39,7 @@ import { emitTxBulk, loadTxThresholds } from "@/lib/financialTxLog/emit";
 import { stampSubjectDeleted } from "@/lib/financialTxLog/stampDeleted";
 import type { FinancialTxLogEntry } from "@/lib/db/types/financialTxLog";
 import type { CurrencyCode } from "@/lib/constants/currencies";
-import { restoreSectorsToUnowned } from "@/lib/corporations/restoreSectorsToUnowned";
+import { disposeLeavingSectors } from "@/lib/corporations/nppPickup";
 import { reserveSectorsForRestore } from "@/lib/corporations/securedConstructionProperty";
 import { withCorporationSettlementLock } from "@/lib/corporations/settlementLock";
 import { getCurrentTurn } from "@/lib/turn/currentTurn";
@@ -228,13 +228,13 @@ export async function POST(_request: Request, { params }: RouteParams) {
         // extract (the money-laundering exploit).
         await distributeCrossEquityInKind(db, corporation, now);
 
-        // Operating sectors are abandoned to the unowned market on dissolution
-        // (no going-concern buyer), so a salvage fraction of their capitalized
-        // NPV is realized as cash into the payout pool — mirroring the
-        // bond-default dissolution settlement. Without this the shareholders got
-        // nothing for the enterprise, only cash + redeemed bonds (the "why
-        // doesn't dissolve count sector NPV" report). Computed before sectors are
-        // restored to the unowned market below.
+        // Operating sectors leave the corporation on dissolution (NPP successors
+        // take them over, or they return to the unowned market), so a salvage
+        // fraction of their capitalized NPV is realized as cash into the payout
+        // pool, mirroring the bond-default dissolution settlement. Without this
+        // the shareholders got nothing for the enterprise, only cash + redeemed
+        // bonds (the "why doesn't dissolve count sector NPV" report). Computed
+        // before the sectors are disposed of below.
         const sectorSalvageAnchor = await computeDissolutionSectorSalvageAnchor(
           db,
           corporation,
@@ -553,7 +553,9 @@ export async function POST(_request: Request, { params }: RouteParams) {
           }
         }
 
-        await restoreSectorsToUnowned(db, sectors, now);
+        // NPP operators take over most of each plant's capacity so its output
+        // continues; the rest returns to the unowned pool.
+        const disposal = await disposeLeavingSectors(db, refreshedCorporation, sectors, now);
         await releaseCorporationHeldSharesToFloat(db, refreshedCorporation._id, now);
 
         await stampSubjectDeleted(db, refreshedCorporation._id, {
@@ -566,6 +568,7 @@ export async function POST(_request: Request, { params }: RouteParams) {
           .deleteOne({ _id: refreshedCorporation._id });
         await recordCorporationExit(db, refreshedCorporation, {
           reason: "voluntary_closure",
+          successorIds: disposal.recipientIds,
           now,
         });
 

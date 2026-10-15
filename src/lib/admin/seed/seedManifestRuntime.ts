@@ -150,6 +150,24 @@ export const RUNTIME: CollectionEntry[] = [
       "One equity market pool per currency: finite cash backing every corporation's publicFloat, with lifetime flow counters. Seeded from a share of M2; wiped with the world.",
   },
   {
+    name: "productAdvertisingClearing",
+    category: "runtime",
+    notes:
+      "One product advertising clearing pool per family and buyer currency: funded order cash owed to advertising sellers until the turn's clearing pays them. Wiped with the world.",
+  },
+  {
+    name: "productAdvertisingPayables",
+    category: "runtime",
+    notes:
+      "Owed per-order advertising seller payables, inserted with each funded order and removed once a clearing pays them. Wiped with the world.",
+  },
+  {
+    name: "productAdvertisingClearances",
+    category: "runtime",
+    notes:
+      "Append-only receipts naming the clearing that paid each advertising payable. Wiped with the world.",
+  },
+  {
     name: "moneySupplySnapshots",
     category: "runtime",
     notes: "Per-turn M1/M2, credit, sovereign-debt, and central-bank holdings by issuing currency.",

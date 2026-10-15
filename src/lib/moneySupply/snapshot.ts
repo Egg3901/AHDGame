@@ -329,6 +329,24 @@ export async function snapshotMoneySupply(db: Db, turn: number): Promise<number>
   }
   for (const pool of equityPools)
     addComponent(byCurrency, pool._id as CurrencyCode, "equityPoolCash", pool.cashLocal ?? 0);
+  // Funded advertising orders owed to sellers sit in the clearing pool between
+  // the buyer debit and the seller credit. It is corporate cash in transit,
+  // normally zero at turn end, counted so an in-flight clearing is not missing money.
+  const advertisingClearingPools = await db
+    .collection<{ currencyCode?: string; cashLocal?: number }>(
+      // PRODUCT_ADVERTISING_CLEARING_COLLECTION, kept literal to avoid importing the settlement shell.
+      "productAdvertisingClearing"
+    )
+    .find({}, { projection: { currencyCode: 1, cashLocal: 1 } })
+    .toArray();
+  for (const pool of advertisingClearingPools)
+    if (pool.currencyCode)
+      addComponent(
+        byCurrency,
+        pool.currencyCode as CurrencyCode,
+        "corporateLiquid",
+        pool.cashLocal ?? 0
+      );
   for (const bond of bonds) {
     const currency = (bond.currencyCode ?? currencyFor(bond.countryId!)) as CurrencyCode;
     addComponent(byCurrency, currency, "sovereignBondsOutstanding", bond.totalIssued);

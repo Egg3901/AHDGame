@@ -208,6 +208,7 @@ export async function GET() {
             patreonAdPreference: 1,
             adsDisabled: 1,
             statusBarLayout: 1,
+            corpOverviewMode: 1,
             enableExperimentalUI: 1,
             patreonTier: 1,
             patreonExpiresAt: 1,
@@ -377,6 +378,7 @@ export async function GET() {
                   {
                     ceoId: character._id,
                     ceoVacant: { $ne: true },
+                    imfInstitution: { $ne: true },
                   },
                   { projection: { sequentialId: 1, type: 1, countryId: 1 } }
                 )
@@ -702,6 +704,7 @@ export async function GET() {
           patreonAdPreference:
             user.patreonAdPreference ?? (user.adsDisabled ? "ad-free" : "all-ads"),
           statusBarLayout: user.statusBarLayout ?? null,
+          corpOverviewMode: user.corpOverviewMode ?? null,
           // New interface is the default; only an explicit opt-out (false) is classic.
           enableExperimentalUI: user.enableExperimentalUI !== false,
           patreonTier: user.patreonTier ?? null,

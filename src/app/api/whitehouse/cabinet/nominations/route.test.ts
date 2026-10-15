@@ -195,6 +195,36 @@ describe("POST /api/whitehouse/cabinet/nominations", () => {
     expect(batch.every((n) => n.metadata?.type === "cabinet_nomination")).toBe(true);
   });
 
+  it("seats a Chief of Staff without a Senate vote", async () => {
+    const nppId = new ObjectId();
+    db.collectionMocks["cabinetNominations"]!.insertOne.mockResolvedValue({
+      acknowledged: true,
+      insertedId: new ObjectId(),
+    } as never);
+    db.collectionMocks["electedOfficials"]!.find.mockReturnValue(
+      createAsyncIterableCursor([{ characterId: new ObjectId() }])
+    );
+
+    const res = await postAsPresident(
+      { positionId: "chief_of_staff", nomineeNppId: nppId.toString() },
+      { kind: "npp" }
+    );
+
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toMatchObject({
+      message: expect.stringMatching(/no senate vote/i),
+    });
+    const stored = db.collectionMocks["cabinetNominations"]!.insertOne.mock.calls[0][0] as Record<
+      string,
+      unknown
+    >;
+    // The window closes on the current turn, so the next lifecycle pass seats them.
+    expect(stored.votingEndsOnTurn).toBe(100);
+    const { createNotifications } = await import("@/lib/notifications");
+    expect(createNotifications).not.toHaveBeenCalled();
+    expect(db.collectionMocks["electedOfficials"]!.find).not.toHaveBeenCalled();
+  });
+
   it("rejects a body with both nominee ids", async () => {
     const res = await postAsPresident(
       { nomineeCharacterId: new ObjectId().toString(), nomineeNppId: new ObjectId().toString() },

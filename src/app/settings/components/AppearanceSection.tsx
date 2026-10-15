@@ -7,6 +7,12 @@ import { useTheme, type Theme } from "@/contexts/ThemeContext";
 import type { InterfaceMode } from "@/contexts/InterfaceContext";
 import { type StatusBarLayout } from "@/components/StatusBar";
 import { LanguageSection } from "./LanguageSection";
+import {
+  useCorpOverviewMode,
+  type CorpOverviewMode,
+} from "@/components/corporation/useCorpOverviewMode";
+
+const CORP_OVERVIEW_MODES: readonly CorpOverviewMode[] = ["simple", "pro"];
 
 interface ThemeOption {
   value: Theme;
@@ -210,6 +216,7 @@ export function AppearanceSection({
 }: Props) {
   const t = useTranslations("settings");
   const { theme, setTheme } = useTheme();
+  const { mode: corpOverviewMode, setMode: setCorpOverviewMode } = useCorpOverviewMode();
   const [page, setPage] = useState(0);
   const [statusBarLayout, setStatusBarLayout] = useState<StatusBarLayout>("standard");
   const trackRef = useRef<HTMLDivElement>(null);
@@ -476,6 +483,57 @@ export function AppearanceSection({
                 </span>
                 <span className="mt-1 block text-xs leading-relaxed text-muted">
                   {t(`appearance.${mode}UiHint`)}
+                </span>
+              </label>
+            );
+          })}
+        </fieldset>
+      </div>
+
+      {/* ── Corporation overview ───────────────────────────────────────── */}
+      <div className="border-t border-card-border pt-6">
+        <h3 className="mb-1 text-sm font-medium">{t("appearance.corpOverviewTitle")}</h3>
+        <p className="mb-3 text-xs text-muted">{t("appearance.corpOverviewHint")}</p>
+        <fieldset
+          className="grid gap-3 sm:grid-cols-2"
+          aria-label={t("appearance.corpOverviewTitle")}
+        >
+          {CORP_OVERVIEW_MODES.map((mode) => {
+            const selected = corpOverviewMode === mode;
+            return (
+              <label
+                key={mode}
+                data-corp-overview-option
+                data-selected={selected ? "true" : undefined}
+                className={`relative cursor-pointer rounded-xl border px-4 py-3 text-left transition-all ${
+                  selected
+                    ? "border-primary bg-primary/10 shadow-sm"
+                    : "border-card-border bg-card hover:border-primary/50 hover:bg-card-elevated"
+                } focus-within:outline-none focus-within:ring-2 focus-within:ring-primary focus-within:ring-offset-2 focus-within:ring-offset-background`}
+              >
+                <input
+                  type="radio"
+                  name="corp-overview-mode"
+                  value={mode}
+                  checked={selected}
+                  onChange={() => setCorpOverviewMode(mode)}
+                  className="sr-only"
+                />
+                <span className="flex items-center justify-between gap-3 text-sm font-semibold text-foreground">
+                  {t(`appearance.corpOverview.${mode}`)}
+                  <span
+                    aria-hidden
+                    className={`flex h-4 w-4 items-center justify-center rounded-full border text-[10px] ${
+                      selected
+                        ? "border-primary bg-primary text-white"
+                        : "border-card-border text-transparent"
+                    }`}
+                  >
+                    ✓
+                  </span>
+                </span>
+                <span className="mt-1 block text-xs leading-relaxed text-muted">
+                  {t(`appearance.corpOverview.${mode}Hint`)}
                 </span>
               </label>
             );

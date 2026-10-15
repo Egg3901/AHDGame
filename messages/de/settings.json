@@ -252,6 +252,14 @@
       "classicUi": "Klassisch",
       "classicUiHint": "Die reichere Typografie, Farbe, Tiefe und Navigation von vor der Neugestaltung am 3. Oktober. Aktuelle Spielfunktionen bleiben verfügbar.",
       "interfaceSaveError": "Die Oberflächeneinstellung konnte nicht gespeichert werden. Die vorherige Auswahl wurde wiederhergestellt.",
+      "corpOverviewTitle": "Konzernübersicht",
+      "corpOverviewHint": "Wie der Übersicht-Tab eines Unternehmens öffnet. Du kannst auch direkt im Tab umschalten.",
+      "corpOverview": {
+        "simple": "Einfach",
+        "simpleHint": "Was deine Aufmerksamkeit braucht, die wichtigsten Kennzahlen und deine größten Sektoren.",
+        "pro": "Profi",
+        "proHint": "Alle Kennzahlen, die Eigentümerstruktur und die vollständige Sektortabelle."
+      },
       "statusBar": "Statusleiste",
       "statusBarHint": "Wähle, was in der unteren Statusleiste angezeigt wird.",
       "layouts": {

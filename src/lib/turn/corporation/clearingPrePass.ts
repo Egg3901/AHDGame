@@ -1,4 +1,5 @@
-import { outputPlacementRatios } from "@/lib/market/rules/outputPlacement";
+import { outputPlacementRatios, revenuePlacementRatios } from "@/lib/market/rules/outputPlacement";
+import { placementRevenuePhaseProgress } from "@/lib/market/placementRevenuePhase";
 import { buildGroupSupplyContext } from "./groupSupplyContext";
 import { buildInternalSupplyContext, finishInternalSupplyContext } from "./internalSupply";
 import {
@@ -664,6 +665,13 @@ export function runClearingPrePass(input: ClearingPrePassInput): ClearingPrePass
             clearingInput.supplyRates,
             lookups.statePlacementRatioByState?.get(sector.stateId)
           );
+          clearingInput.revenuePlacementByCommodity = outputPlacementRatios(
+            clearingInput.supplyRates,
+            revenuePlacementRatios(
+              lookups.statePlacementRatioByState?.get(sector.stateId),
+              lookups.stateDeliveryLimitedRatioByState?.get(sector.stateId)
+            )
+          );
         }
         if (freightSettlementActive) {
           const deliveryLimit = deliveryLimitedForSector(sector.stateId, rates.supply ?? {});
@@ -858,6 +866,10 @@ export function runClearingPrePass(input: ClearingPrePassInput): ClearingPrePass
       // on modern worlds → the single worldwide book, unchanged.
       groupBySector: clearingGroupBySector,
       balancesByGroup: lookups.countryClearingBooks ?? undefined,
+      placementRevenuePhase: placementRevenuePhaseProgress(
+        lookups.placementRevenuePhaseStartTurn,
+        turn
+      ),
       priceRatioByCommodity: lookups.priceRatioByCommodity,
       // Partitioned worlds: each seller's price-realization leg reads its home
       // country's lagged reachable price. Sparse map; falls back to the

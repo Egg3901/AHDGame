@@ -11,11 +11,12 @@ describe("US cabinet year gating", () => {
     // Education no longer auto-enables by year (legislation-gated), so 1991/2019
     // are one seat lighter than before until a Department of Education Act passes.
     // The Director of Central Intelligence exists from 1946, so it is active in
-    // every preset year and lifts all four counts by one.
-    expect(resolveCabinetRoster(us, 1953)).toHaveLength(10);
-    expect(resolveCabinetRoster(us, 1979)).toHaveLength(13);
-    expect(resolveCabinetRoster(us, 1991)).toHaveLength(14);
-    expect(resolveCabinetRoster(us, 2019)).toHaveLength(15);
+    // every preset year and lifts all four counts by one. The White House Chief
+    // of Staff also exists from 1946 and lifts them by one more.
+    expect(resolveCabinetRoster(us, 1953)).toHaveLength(11);
+    expect(resolveCabinetRoster(us, 1979)).toHaveLength(14);
+    expect(resolveCabinetRoster(us, 1991)).toHaveLength(15);
+    expect(resolveCabinetRoster(us, 2019)).toHaveLength(16);
   });
 
   it("existence gates carry the researched years", () => {
@@ -28,6 +29,7 @@ describe("US cabinet year gating", () => {
     expect(byId.secretary_of_veterans.yearEnabled).toBe(1989);
     expect(byId.secretary_of_homeland.yearEnabled).toBe(2002);
     expect(byId.secretary_of_health.yearEnabled).toBe(1953);
+    expect(byId.chief_of_staff.yearEnabled).toBe(1946);
   });
 
   it("HEW stays HEW by year alone; splits to HHS only via legislation", () => {
@@ -43,7 +45,7 @@ describe("US cabinet year gating", () => {
     expect(isSeatActive(education, 1954, split)).toBe(true);
     expect(isSeatActive(education, 1954)).toBe(false);
     expect(resolveSeatName(health, 1954, split)).toBe("Secretary of Health and Human Services");
-    expect(resolveCabinetRoster(us, 1954, split)).toHaveLength(11);
+    expect(resolveCabinetRoster(us, 1954, split)).toHaveLength(12);
   });
 
   it("active-set orders are unique at every preset year", () => {

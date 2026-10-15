@@ -158,4 +158,29 @@ describe("PresidentialCabinetClient acting appointments", () => {
     expect(await screen.findByRole("button", { name: /^nominate$/i })).toBeTruthy();
     expect(screen.queryByRole("button", { name: /appoint acting/i })).toBeNull();
   });
+
+  it("offers a Chief of Staff seat as a direct appointment, outside the line of succession", async () => {
+    mockFetch({
+      positions: [
+        {
+          id: "chief_of_staff",
+          name: "White House Chief of Staff",
+          order: 17,
+          group: "Centre",
+          appointedWithoutConfirmation: true,
+          outsideSuccession: true,
+          member: null,
+          nomination: null,
+          actingChargeSpent: false,
+        },
+      ],
+    });
+    render(<PresidentialCabinetClient countryId="US" />);
+
+    expect(await screen.findByRole("button", { name: /^appoint$/i })).toBeTruthy();
+    expect(screen.getByText(/serves at the president's pleasure/i)).toBeTruthy();
+    expect(screen.queryByText(/in line/i)).toBeNull();
+    // No caretaker flow: the seat is filled directly anyway.
+    expect(screen.queryByRole("button", { name: /appoint acting/i })).toBeNull();
+  });
 });

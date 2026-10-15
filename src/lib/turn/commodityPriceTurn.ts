@@ -72,6 +72,10 @@ import {
   retailGdpParamsForStage,
   stockCoverCapTurnsForStage,
 } from "@/lib/market/commodityFixStages";
+import {
+  inputDemandRealPhaseProgress,
+  inputDemandRealPhaseStartTurnFrom,
+} from "@/lib/market/inputDemandRealPhase";
 import { GOVERNMENT_DEMAND_SUPPLY_CAP } from "@/lib/turn/commodity/rules/healthcareDemandCap";
 import { STOCK_COVER_CAP_TURNS } from "@/lib/market/inventory";
 import { computeExtractionCapacityMultipliers } from "@/lib/turn/extraction/extractionCapacity";
@@ -103,6 +107,7 @@ import { persistCommodityNominalIndex } from "@/lib/turn/commodityNominalIndexPe
 export { realizedOutputFraction } from "@/lib/extraction/realizedOutputFraction";
 import {
   buildStateLookups,
+  stateGdpAnchorBlend,
   buildSectorRows,
   buildGdpGrowthData,
   buildPrimeRateByState,
@@ -167,6 +172,26 @@ export interface CommodityPriceTurnResult {
  *
  * Only OWNED sectors count for supply/demand. Unowned does not participate.
  */
+/** Turns of debt issuance that feed latent financial-services demand (one game year). */
+export const DEBT_ISSUANCE_WINDOW_TURNS = 48;
+
+/**
+ * Bonds counted as recent debt issuance for the turn being processed.
+ *
+ * The window is the completed year before this turn, [turn - 48, turn), and a
+ * bond still counts if it was matured or redeemed during this turn. Both rules
+ * matter because bond issuance and maturity run in parallel with commodity
+ * pricing: the old `issuedAtTurn > turn - 48 && matured: false` filter dropped
+ * the cohort issued a year ago before this turn's replacement issue was
+ * visible, so financial-services demand dipped every quarter.
+ */
+export function recentDebtIssuanceFilter(turn: number) {
+  return {
+    issuedAtTurn: { $gte: Math.max(0, turn - DEBT_ISSUANCE_WINDOW_TURNS), $lt: turn },
+    $or: [{ matured: false }, { redeemedAtTurn: { $gte: turn } }],
+  };
+}
+
 export async function processCommodityPriceTurn(turn: number): Promise<CommodityPriceTurnResult> {
   const db = await getDb();
   const now = new Date();
@@ -175,7 +200,6 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
   // leave countries whose only bonds were seeded at game start with zero demand once
   // those bonds age out — the 1-year window keeps demand stable across countries with
   // infrequent sovereign issuance (JP, CA, DE).
-  const debtIssuanceWindowStart = Math.max(0, turn - 48);
   const [countries, ledgerConfig] = await Promise.all([
     getRegisteredCountryIds(db),
     db.collection<GameConfig>("gameConfig").findOne(
@@ -189,6 +213,7 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
           retailDemandTransitionTurns: 1,
           commodityNominalPriceIndex: 1,
           commodityNominalPriceIndexTurn: 1,
+          stateGdpAnchorPhaseStartTurn: 1,
         },
       }
     ),
@@ -225,6 +250,10 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
             industryModel: 1,
             mediaDiscriminator: 1,
             revenue: 1,
+            // Realized price leg (clearing factor / sold fraction) for the
+            // input-demand deflator (src/lib/market/inputDemandRealPhase.ts).
+            clearingFactor: 1,
+            soldFraction: 1,
             countryId: 1,
             stateId: 1,
             corporationId: 1,
@@ -305,18 +334,15 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
       .toArray(),
     db
       .collection<Bond>("bonds")
-      .find(
-        { issuedAtTurn: { $gt: debtIssuanceWindowStart }, matured: false },
-        {
-          projection: {
-            issuerType: 1,
-            countryId: 1,
-            corporationId: 1,
-            totalIssued: 1,
-            currencyCode: 1,
-          },
-        }
-      )
+      .find(recentDebtIssuanceFilter(turn), {
+        projection: {
+          issuerType: 1,
+          countryId: 1,
+          corporationId: 1,
+          totalIssued: 1,
+          currencyCode: 1,
+        },
+      })
       .toArray(),
     db
       .collection<FederalBudget>("federalBudget")
@@ -414,7 +440,7 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
       // `currentYear` rides along for the planned-economy output remap below —
       // widening this projection rather than adding a read, so the positional
       // fetch order the turn tests mock stays exactly as it is.
-      projection: { preset: 1, currentYear: 1 },
+      projection: { preset: 1, currentYear: 1, stateGdpAnchoredDemand: 1 },
     }
   );
   const activePreset = presetState?.preset ?? "";
@@ -465,9 +491,18 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
   }
 
   // ── Supply-ledger inputs ──────────────────────────────────────────────
+  // Worlds reset after the state GDP unit fix read anchor GDP; older worlds keep
+  // the raw stored figure so their demand does not shift mid-game.
+  const gdpAnchorBlend = stateGdpAnchorBlend(
+    presetState?.stateGdpAnchoredDemand === true,
+    ledgerConfig?.stateGdpAnchorPhaseStartTurn,
+    turn
+  );
   const { stateGdpMap, stateToCountry, roadConditionByState } = buildStateLookups(
     allStates,
-    allStateMetrics
+    allStateMetrics,
+    gdpAnchorBlend > 0 ? activePreset : null,
+    gdpAnchorBlend
   );
 
   // Plants tier: the world ledger reads real production instead of the revenue
@@ -517,8 +552,12 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
   const fixStageCfg = await db
     .collection<GameConfig>("gameConfig")
     .findOne({ _id: "default" } as Record<string, unknown>, {
-      projection: { commodityFixStage: 1 },
+      projection: { commodityFixStage: 1, inputDemandRealPhaseStartTurn: 1 },
     });
+  const inputDemandRealPhase = inputDemandRealPhaseProgress(
+    inputDemandRealPhaseStartTurnFrom(fixStageCfg),
+    turn
+  );
   const commodityFixStage = normalizeCommodityFixStage(fixStageCfg?.commodityFixStage);
   const retailGdpParams = retailGdpParamsForStage(commodityFixStage, {
     scale: RETAIL_GDP_DEMAND_SCALE,
@@ -628,7 +667,8 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
       demandCalibration,
       activePreset,
       sectorUnits,
-      retailGdpParams
+      retailGdpParams,
+      inputDemandRealPhase
     );
 
   // Plants-tier produced/sold units for the inventory advance (see module).

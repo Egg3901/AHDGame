@@ -572,6 +572,14 @@ export function runSourcingPass(inputs: SourcingInputs): SourcingResult {
   const ownRouteDelivered: SourcingOwnRoute[] = [];
   const ownBudgets = ownRouteBudgets(ownRoutes ?? []);
   const stateById = new Map(sortedStates.map((state) => [state.stateId, state] as const));
+  // Exporting states per country, so a foreign dispatch can be drawn from the
+  // states whose spare backs the national pool (see drawExportFromStates).
+  const statesByCountry = new Map<string, string[]>();
+  for (const { stateId, countryId } of sortedStates) {
+    const list = statesByCountry.get(countryId) ?? [];
+    list.push(stateId);
+    statesByCountry.set(countryId, list);
+  }
   const summaries: SourcingCommoditySummary[] = [];
   const landedPremiumByDestState = new Map<string, Map<CommodityType, LandedPremiumAccumulator>>();
   const importAggregatesByCountry = new Map<string, ImportAggregate>();
@@ -793,6 +801,26 @@ export function runSourcingPass(inputs: SourcingInputs): SourcingResult {
     };
 
     const initialForeignSpareByCountry = new Map(spareByCountry);
+    // A foreign dispatch consumes the exporter's NATIONAL pool, but the units
+    // physically leave its states. Without also drawing them from those
+    // states' spare, every exported unit stayed "unplaced": placement (and so
+    // each seller's clearing offer) was capped at domestic demand, and a
+    // surplus country's mines delivered almost nothing while foreign buyers
+    // went short (prod t192: Brazil's main oil state placed 23 of 23,942
+    // units). Drawn pro rata to each state's remaining spare, capped at what
+    // the states hold.
+    const drawExportFromStates = (countryId: string, units: number) => {
+      if (!(units > 0)) return;
+      const exporters = statesByCountry.get(countryId) ?? [];
+      let total = 0;
+      for (const stateId of exporters) total += spareByState.get(stateId) ?? 0;
+      if (!(total > 0)) return;
+      const keep = Math.max(0, 1 - units / total);
+      for (const stateId of exporters) {
+        const spare = spareByState.get(stateId) ?? 0;
+        if (spare > 0) spareByState.set(stateId, spare * keep);
+      }
+    };
     const foreignAllocatedByBuyer = new Map<string, number>();
     const fairForeignBudgetFor = (
       buyer: { stateId: string; countryId: CountryId },
@@ -1101,6 +1129,7 @@ export function runSourcingPass(inputs: SourcingInputs): SourcingResult {
           summary.interStateUnits += take;
         } else {
           spareByCountry.set(cand.originId as CountryId, spare - dispatch);
+          drawExportFromStates(cand.originId, dispatch);
           summary.importUnits += take;
           summary.tariffPaid += tariffPaid;
           const key = foreignBudgetKey(cand.originId as CountryId, buyer.stateId);

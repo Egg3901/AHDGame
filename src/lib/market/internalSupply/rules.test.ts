@@ -5,6 +5,8 @@ import {
   internalSupplyDiscounts,
   settleConsumedInternalDiscounts,
   resolveSupplyPolicies,
+  ownRouteGroupRoot,
+  recordedGroupRouteMembers,
   type SupplyOwner,
 } from "./rules";
 
@@ -252,3 +254,208 @@ describe("own-company cross-state routes under active freight", () => {
     expect(unitsTo(trades, "ca-plant")).toBe(0);
   });
 });
+
+describe("group cross-state receipts under active freight", () => {
+  const groupPolicies = resolveSupplyPolicies([
+    ...owners.map((owner) =>
+      owner.id === "parent"
+        ? { ...owner, policy: { ...policy, ownFirstAcrossStates: true } }
+        : owner
+    ),
+    { id: "sister", totalShares: 100, holders: [{ corporationId: "parent", shares: 100 }] },
+  ]);
+  const states = new Map([
+    ["mine", "MN"],
+    ["own", "CA"],
+    ["child", "CA"],
+    ["nested", "CA"],
+    ["sister", "CA"],
+    ["other-dest", "NV"],
+  ]);
+  const routeCap = (identity: string, destination = "CA", units = 40) =>
+    new Map([[identity + "|MN|" + destination, units]]);
+
+  it("keeps first-turn group cross-state reservations empty until a group haul is recorded", () => {
+    const args = {
+      sellers: [{ sectorId: "mine", corporationId: "parent", units: 40 }],
+      buyers: [{ sectorId: "child", corporationId: "nested", demand: 40, availability: 0.5 }],
+      policies: groupPolicies,
+      supply: 40,
+      demand: 40,
+      reservationRoom: 40,
+      deliveryStateBySector: states,
+    };
+    expect(allocateInternalSupply(args).trades).toEqual([]);
+    expect(
+      allocateInternalSupply({ ...args, ownRouteCaps: routeCap("group:parent") }).trades.map(
+        (trade) => [trade.buyerSectorId, trade.units]
+      )
+    ).toEqual([["child", 40]]);
+  });
+
+  it("gives own plants the first share of a recorded group haul", () => {
+    const { trades } = allocateInternalSupply({
+      sellers: [{ sectorId: "mine", corporationId: "parent", units: 40 }],
+      buyers: [
+        { sectorId: "own", corporationId: "parent", demand: 30, availability: 0.5 },
+        { sectorId: "child", corporationId: "nested", demand: 30, availability: 0.5 },
+      ],
+      policies: groupPolicies,
+      supply: 40,
+      demand: 60,
+      reservationRoom: 40,
+      deliveryStateBySector: states,
+      ownRouteCaps: routeCap("group:parent"),
+    });
+    expect(trades.map((trade) => [trade.buyerSectorId, trade.units])).toEqual([
+      ["own", 30],
+      ["child", 10],
+    ]);
+  });
+
+  it("does not spend a legacy own-only receipt on a subsidiary", () => {
+    const { trades } = allocateInternalSupply({
+      sellers: [{ sectorId: "mine", corporationId: "parent", units: 25 }],
+      buyers: [{ sectorId: "child", corporationId: "nested", demand: 40, availability: 1 }],
+      policies: groupPolicies,
+      supply: 25,
+      demand: 40,
+      reservationRoom: 25,
+      deliveryStateBySector: states,
+      ownRouteCaps: routeCap("parent", "CA", 25),
+    });
+    expect(trades).toEqual([]);
+  });
+
+  it("rejects group reservations for minority, unrelated, sold and cyclic ownership", () => {
+    const policies = resolveSupplyPolicies([
+      {
+        id: "parent",
+        totalShares: 100,
+        holders: [{ shares: 100 }],
+        policy: { priority: "group", discount: 0.1, ownFirstAcrossStates: true },
+      },
+      { id: "child", totalShares: 100, holders: [{ corporationId: "parent", shares: 100 }] },
+      {
+        id: "minority",
+        totalShares: 100,
+        holders: [{ corporationId: "parent", shares: 99 }, { shares: 1 }],
+      },
+      { id: "unrelated", totalShares: 100, holders: [{ shares: 100 }] },
+      { id: "sold", totalShares: 100, holders: [{ corporationId: "outside", shares: 100 }] },
+      {
+        id: "cycle-a",
+        totalShares: 100,
+        holders: [{ corporationId: "cycle-b", shares: 100 }],
+        policy: { priority: "group", discount: 0.1, ownFirstAcrossStates: true },
+      },
+      {
+        id: "cycle-b",
+        totalShares: 100,
+        holders: [{ corporationId: "cycle-a", shares: 100 }],
+        policy: { priority: "group", discount: 0.1, ownFirstAcrossStates: true },
+      },
+    ]);
+    const buyers = ["child", "minority", "unrelated", "sold", "cycle-a"].map((corporationId) => ({
+      sectorId: corporationId,
+      corporationId,
+      demand: 10,
+      availability: 1,
+    }));
+    const { trades } = allocateInternalSupply({
+      sellers: [{ sectorId: "mine", corporationId: "parent", units: 100 }],
+      buyers,
+      policies,
+      supply: 100,
+      demand: 50,
+      reservationRoom: 100,
+      deliveryStateBySector: new Map([
+        ["mine", "MN"],
+        ...buyers.map((buyer) => [buyer.sectorId, "CA"] as const),
+      ]),
+      ownRouteCaps: routeCap("group:parent", "CA", 100),
+    });
+
+    expect(trades.map((trade) => [trade.buyerCorpId, trade.units])).toEqual([["child", 10]]);
+  });
+
+  it("shares a route cap across suppliers and destination plants without double-spending", () => {
+    const { trades } = allocateInternalSupply({
+      sellers: [
+        { sectorId: "mine", corporationId: "parent", units: 30 },
+        { sectorId: "nested-mine", corporationId: "nested", units: 30 },
+      ],
+      buyers: [
+        { sectorId: "child", corporationId: "child", demand: 30, availability: 1 },
+        { sectorId: "sister", corporationId: "sister", demand: 30, availability: 1 },
+      ],
+      policies: groupPolicies,
+      supply: 60,
+      demand: 60,
+      reservationRoom: 60,
+      deliveryStateBySector: new Map([...states, ["nested-mine", "MN"]]),
+      ownRouteCaps: routeCap("group:parent", "CA", 25),
+    });
+    expect(trades.reduce((sum, trade) => sum + trade.units, 0)).toBeCloseTo(25);
+    expect(trades.reduce((sum, trade) => sum + trade.units, 0)).toBeLessThanOrEqual(25);
+    expect(trades.map((trade) => trade.buyerSectorId)).toContain("child");
+    expect(trades.map((trade) => trade.buyerSectorId)).toContain("sister");
+  });
+
+  it("shares route caps across group suppliers and multiple destination states", () => {
+    const { trades } = allocateInternalSupply({
+      sellers: [
+        { sectorId: "mine", corporationId: "parent", units: 30 },
+        { sectorId: "nested-mine", corporationId: "nested", units: 30 },
+      ],
+      buyers: [
+        { sectorId: "child", corporationId: "child", demand: 30, availability: 1 },
+        { sectorId: "sister", corporationId: "sister", demand: 30, availability: 1 },
+        { sectorId: "nested", corporationId: "nested", demand: 30, availability: 1 },
+      ],
+      policies: groupPolicies,
+      supply: 60,
+      demand: 90,
+      reservationRoom: 60,
+      deliveryStateBySector: new Map([...states, ["nested-mine", "MN"], ["nested", "NV"]]),
+      ownRouteCaps: new Map([
+        ["group:parent|MN|CA", 25],
+        ["group:parent|MN|NV", 12],
+      ]),
+    });
+    const byDestination = new Map<string, number>();
+    for (const trade of trades) {
+      const state = trade.buyerSectorId === "nested" ? "NV" : "CA";
+      byDestination.set(state, (byDestination.get(state) ?? 0) + trade.units);
+    }
+
+    expect(byDestination.get("CA")).toBeCloseTo(25);
+    expect(byDestination.get("NV")).toBeCloseTo(12);
+    expect(trades.reduce((sum, trade) => sum + trade.units, 0)).toBeCloseTo(37);
+  });
+
+  it("decodes group haul identity for destination member billing", () => {
+    expect(ownRouteGroupRoot("group:parent")).toBe("parent");
+    expect(ownRouteGroupRoot("child")).toBeUndefined();
+  });
+});
+
+it.each(["market", "own", "group"] as const)(
+  "keeps recorded freight membership after switching to %s with shipping off",
+  (priority) => {
+    const changed = owners.map((owner) => ({
+      ...owner,
+      policy: { priority, discount: 0, ownFirstAcrossStates: false },
+    }));
+    expect([...recordedGroupRouteMembers(changed, ["group:parent"]).get("parent")!].sort()).toEqual(
+      ["child", "nested", "parent"]
+    );
+    const sold = changed.map((owner) =>
+      owner.id === "child" ? { ...owner, holders: [{ shares: 100 }] } : owner
+    );
+    expect([...recordedGroupRouteMembers(sold, ["group:parent"]).get("parent")!]).toEqual([
+      "parent",
+    ]);
+    expect(recordedGroupRouteMembers(changed, []).size).toBe(0);
+  }
+);

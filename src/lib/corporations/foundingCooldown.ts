@@ -1,10 +1,11 @@
 import { CORPORATION_FOUNDING_COOLDOWN_TURNS } from "@/lib/constants/corporations";
 
 /**
- * Turns remaining before a user may found another corporation (Bug #0728).
+ * Turns remaining before a user may found another corporation after their
+ * previous corporation ended (Bug #0728).
  * Returns 0 when the user may found now — including their first-ever founding
- * (no `lastCorporationFoundedTurn`). Per-user cooldown that prevents the
- * found → drain → abandon → found rotation which dodged the per-corp bond cooldown.
+ * (no `lastCorporationFoundedTurn`). The legacy-named field stores the turn
+ * their corporation ended, preventing immediate refounding after dissolution.
  */
 export function foundingCooldownTurnsRemaining(
   lastCorporationFoundedTurn: number | null | undefined,

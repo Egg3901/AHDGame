@@ -486,7 +486,7 @@ export async function GET(request: Request) {
         : Promise.resolve(null),
       includeCorp
         ? db.collection<Corporation>("corporations").findOne(
-            { ceoId: character._id, ceoVacant: { $ne: true } },
+            { ceoId: character._id, ceoVacant: { $ne: true }, imfInstitution: { $ne: true } },
             {
               projection: {
                 _id: 1,

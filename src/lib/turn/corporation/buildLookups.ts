@@ -46,7 +46,10 @@ import { buildFtaCoverageLookup, loadActiveFtaPairs } from "@/lib/tariffs/ftaOve
 import { reconcileSignedTariffBills } from "@/lib/tariffs/reconcileTariffs";
 import { reconcileSignedEmbargoBills } from "@/lib/trade/reconcileEmbargoes";
 import { buildTradeAffinity } from "@/lib/trade/tradeAffinity";
-import { buildCountryClearingBooks } from "@/lib/market/tradePartition";
+import {
+  buildCountryClearingBooks,
+  overlayReachableClearingBooks,
+} from "@/lib/market/tradePartition";
 import { sectorCountryForClearing } from "./sectorCountry";
 import { getRegisteredCountryIds } from "@/lib/country/registeredCountries";
 import {
@@ -128,7 +131,7 @@ import {
   scarcityReliefCappedUtilization,
 } from "@/lib/extraction/capacityHaircut";
 import type { SourcingNetworkDoc } from "@/lib/logistics/sourcingLedger";
-import { ownRouteKey } from "@/lib/market/internalSupply/rules";
+import { ownRouteKey, recordedGroupRouteMembers } from "@/lib/market/internalSupply/rules";
 import { SETTLEMENT_HISTORY_EXCLUDED } from "@/lib/banking/settlementHistory";
 import { latentDemandTopUp } from "@/lib/market/latentShortageSignal";
 
@@ -1101,6 +1104,9 @@ export async function buildCorporationLookups(
       capUnitsFor,
       importCostMultiplierFor,
     });
+    // The stored national balances are post-trade; the price turn's persisted
+    // reachable books are the pre-trade clearing the books are meant to be.
+    overlayReachableClearingBooks(countryClearingBooks, tradeSnapshotDoc?.books);
   }
   const marketShareBySectorId = buildMarketShareBySectorId({
     sectors: allSectors,
@@ -1410,6 +1416,7 @@ export async function buildCorporationLookups(
   const freightSupplyByOriginState = new Map<string, number>();
   const ownRouteDeliveredByKey = new Map<string, number>();
   const ownRouteFreightByCorp = new Map<string, Map<string, Map<CommodityType, number>>>();
+  let ownRouteGroupMembersByRoot = new Map<string, Set<string>>();
   if (
     options?.moneyWiringEnabled ||
     options?.canonicalFreightBillingEnabled ||
@@ -1422,6 +1429,20 @@ export async function buildCorporationLookups(
       .limit(1)
       .toArray();
     const doc = networkDoc[0];
+    if (options?.canonicalFreightBillingEnabled) {
+      ownRouteGroupMembersByRoot = recordedGroupRouteMembers(
+        corporations.map((corp) => ({
+          id: corp._id.toString(),
+          totalShares: corp.totalShares,
+          holders: (corp.shareholders ?? []).map((holder) => ({
+            corporationId: holder.corporationId?.toString(),
+            shares: holder.shares,
+          })),
+          policy: corp.internalSupplyPolicy,
+        })),
+        (doc?.ownRouteDelivered ?? []).map((route) => route.corporationId)
+      );
+    }
     if (options?.freightSettlementActive) {
       for (const r of doc?.ownRouteDelivered ?? []) {
         if (!(typeof r.units === "number" && r.units > 0)) continue;
@@ -1549,6 +1570,7 @@ export async function buildCorporationLookups(
     freightSupplyByOriginState,
     ownRouteDeliveredByKey,
     ownRouteFreightByCorp,
+    ownRouteGroupMembersByRoot,
     freightHaulRevenueByOriginState,
     nationalCommodityBalancesByCountry,
     countryClearingBooks,

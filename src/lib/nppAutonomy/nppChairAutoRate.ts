@@ -23,7 +23,12 @@ import {
   snapToPrimeRateGrid,
 } from "@/lib/db/types/centralBank";
 import { chairAlignmentPolicy, type ChairAlignment } from "@/lib/centralBank/chairAlignment";
-import { computeNppChairRateTarget } from "@/lib/nppAutonomy/rules/chairRateTarget";
+import {
+  computeNppChairActivityTarget,
+  computeNppChairRateTarget,
+} from "@/lib/nppAutonomy/rules/chairRateTarget";
+import { nationalOutputGap } from "@/lib/metricEngine/outputTrend";
+import type { State } from "@/lib/db/types/state";
 export { computeNppChairRateTarget } from "@/lib/nppAutonomy/rules/chairRateTarget";
 import { isBankGovernmentControlled } from "@/lib/centralBank/governance";
 import type { ExchangeRate, InterventionPolicy } from "@/lib/db/types/exchangeRate";
@@ -185,13 +190,47 @@ export async function processNppChairAutoRate(
     commonIndicators?.neutralRate ??
     getEraMonetaryBaseline(countryId, currentYear)?.neutralPrimeRate ??
     COUNTRY_CONFIGS[countryId].centralBank.defaultPrimeRate;
-  const taylorTarget = computeNppChairRateTarget({
-    neutralRate,
-    inflationRate,
-    targetInflation,
-    gdpGrowth,
-    alignment: bank.chairAlignment,
-  });
+  // A national chair answers measured slack (output gap, unemployment above
+  // NAIRU); a shared common policy keeps the growth rule until its members'
+  // activity inputs are aggregated.
+  let activityNote = `growth ${gdpGrowth.toFixed(1)}%`;
+  let taylorTarget: number;
+  if (commonIndicators) {
+    taylorTarget = computeNppChairRateTarget({
+      neutralRate,
+      inflationRate,
+      targetInflation,
+      gdpGrowth,
+      alignment: bank.chairAlignment,
+    });
+  } else {
+    const regions = await db
+      .collection<State>("states")
+      .find(
+        { countryId },
+        { projection: { gdp: 1, outputGap: 1, outputTrendGrowth: 1, realOutputStartTurn: 1 } }
+      )
+      .toArray();
+    // Phased in with the measured-output blend, as the inflation model reads it.
+    const measuredGap = nationalOutputGap(regions, currentTurn);
+    const outputGap = measuredGap ? measuredGap.gap * measuredGap.weight : null;
+    const unemploymentRate = finiteOr(
+      nationalMetrics?.economic?.unemploymentRate?.value,
+      Number.NaN
+    );
+    taylorTarget = computeNppChairActivityTarget({
+      neutralRate,
+      inflationRate,
+      targetInflation,
+      activity: { outputGap, unemploymentRate },
+      alignment: bank.chairAlignment,
+    });
+    activityNote = `${outputGap != null ? `output gap ${outputGap.toFixed(1)}%, ` : ""}${
+      Number.isFinite(unemploymentRate)
+        ? `unemployment ${unemploymentRate.toFixed(1)}%`
+        : "unemployment n/a"
+    }`;
+  }
   // Engine 6.6 (v6): a floating national currency's move over the lookback
   // shifts the target (v6/rules/fxRateResponse.ts). A shared common policy,
   // a peg or an admin hard peg has no national exchange rate to answer.
@@ -253,7 +292,7 @@ export async function processNppChairAutoRate(
     fxShift !== 0 && fxMove != null
       ? `, currency ${fxMove > 0 ? "down" : "up"} ${Math.abs(fxMove * 100).toFixed(0)}% over ${FX_LOOKBACK_TURNS} turns (${fxShift > 0 ? "+" : ""}${fxShift.toFixed(2)} pts)`
       : "";
-  const taylor = `Taylor rule: inflation ${inflationRate.toFixed(1)}%, growth ${gdpGrowth.toFixed(1)}%, neutral ${neutralRate.toFixed(2)}%${fxNote}`;
+  const taylor = `Taylor rule: inflation ${inflationRate.toFixed(1)}%, ${activityNote}, neutral ${neutralRate.toFixed(2)}%${fxNote}`;
   const record: RateChangeRecord = governmentControlled
     ? {
         previousRate: bank.primeRate,

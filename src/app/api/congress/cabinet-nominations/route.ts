@@ -9,6 +9,7 @@ import { getAuthUser } from "@/lib/auth";
 import { handleRouteError } from "@/lib/api/errors";
 import type { CabinetNomination, ElectedOfficial, Character } from "@/lib/db/types";
 import { getCabinetPositionById } from "@/lib/constants";
+import { isDirectAppointmentSeat } from "@/lib/constants/cabinetMechanics";
 import { computeCabinetNominationTallies } from "@/lib/congress/governmentVoteBreakdown";
 import { loadNominationPeople } from "@/lib/congress/nominationPeople";
 
@@ -20,11 +21,14 @@ export const GET = withNoStore(async function GET() {
     const db = await getDb();
     const authUser = await getAuthUser();
 
-    const activeNominations = await db
-      .collection<CabinetNomination>("cabinetNominations")
-      .find({ status: "active", countryId: "US" })
-      .sort({ proposedAt: -1 })
-      .toArray();
+    // A seat filled without a Senate vote (Chief of Staff) is never on the ballot.
+    const activeNominations = (
+      await db
+        .collection<CabinetNomination>("cabinetNominations")
+        .find({ status: "active", countryId: "US" })
+        .sort({ proposedAt: -1 })
+        .toArray()
+    ).filter((n) => !isDirectAppointmentSeat("US", n.positionId));
 
     const myCharacter = authUser
       ? await db

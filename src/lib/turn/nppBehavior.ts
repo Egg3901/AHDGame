@@ -64,6 +64,7 @@ async function runNppTurn(
     now,
     year: options.currentYear,
     rng: Math.random,
+    ...(options.currentTurn != null ? { turn: options.currentTurn } : {}),
   });
   mark("processNppMortality");
 

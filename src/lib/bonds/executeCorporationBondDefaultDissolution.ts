@@ -45,7 +45,7 @@ import { badRequest } from "@/lib/api/errors";
 import { releaseCorporationHeldSharesToFloat } from "@/lib/corporations/releaseHeldSharesToFloat";
 import { distributeCrossEquityInKind } from "@/lib/corporations/distributeCrossEquityInKind";
 import { payFundShareholderRows } from "@/lib/corporations/payFundShareholders";
-import { restoreSectorsToUnowned } from "@/lib/corporations/restoreSectorsToUnowned";
+import { disposeLeavingSectors } from "@/lib/corporations/nppPickup";
 import { emitTxBulk, loadTxThresholds } from "@/lib/financialTxLog/emit";
 import { stampSubjectDeleted } from "@/lib/financialTxLog/stampDeleted";
 import type { FinancialTxLogEntry } from "@/lib/db/types/financialTxLog";
@@ -72,7 +72,11 @@ export interface CorporationDissolutionResult {
 export async function executeCorporationBondDefaultDissolution(
   db: Db,
   corporation: Corporation,
-  options: { requireDefaultedBonds: boolean; exitReason?: CorporationExitReason }
+  options: {
+    requireDefaultedBonds: boolean;
+    exitReason?: CorporationExitReason;
+    cooldownExempt?: boolean;
+  }
 ): Promise<CorporationDissolutionResult> {
   if (corporation.countryOwnerId) {
     throw badRequest("National corporations cannot be dissolved here");
@@ -724,7 +728,9 @@ export async function executeCorporationBondDefaultDissolution(
     await db.collection("bondHistory").deleteMany({ bondId: { $in: bondIds } });
   }
 
-  await restoreSectorsToUnowned(db, sectors, now);
+  // NPP successors take the sectors over so their plants keep producing; only
+  // what they cannot take returns to the unowned pool.
+  const disposal = await disposeLeavingSectors(db, refreshedCorporation, sectors, now);
   await db.collection<Bond>("bonds").deleteMany({ corporationId: refreshedCorporation._id });
   await releaseCorporationHeldSharesToFloat(db, refreshedCorporation._id, now);
 
@@ -740,7 +746,9 @@ export async function executeCorporationBondDefaultDissolution(
   await recordCorporationExit(db, refreshedCorporation, {
     reason:
       options.exitReason ?? (options.requireDefaultedBonds ? "bond_default" : "forced_liquidation"),
+    successorIds: disposal.recipientIds,
     now,
+    cooldownExempt: options.cooldownExempt,
   });
 
   const totalPayoutToPeople = [...charAll].reduce(

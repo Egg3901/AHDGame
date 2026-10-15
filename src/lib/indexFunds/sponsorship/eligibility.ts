@@ -2,7 +2,7 @@
 import { isIndexFundsEnabled } from "../featureFlag";
 import type { Db } from "mongodb";
 import type { Corporation, FederalBudget, GameConfig, GameState } from "@/lib/db/types";
-import { fundSponsorEligibility } from "./rules/eligibility";
+import { fundBankCharter, fundSponsorEligibility } from "./rules/eligibility";
 import { FUND_CHARTER_FEE_ANCHOR, FUND_MIN_SEED_CAPITAL_ANCHOR } from "./constants";
 import { resolveCountryCurrencyCode } from "@/lib/currency/govBudgetFields";
 import {
@@ -41,9 +41,10 @@ export async function fundCreationEligibility(
   if (reason) return reason;
   if (state?.corporationActionsPaused) return "Corporation actions are currently paused.";
   if (!(await isIndexFundsEnabled(config))) return "Investment funds are not enabled.";
-  if (!sponsor.bankCharter && !config?.playerFundSponsorshipEnabled)
+  const bank = fundBankCharter(sponsor.bankCharter);
+  if (!bank && !config?.playerFundSponsorshipEnabled)
     return "Player-sponsored index funds are not available yet.";
-  if (!options?.replay && sponsor.bankCharter && liveFunds >= 3)
+  if (!options?.replay && bank && liveFunds >= 3)
     return "A bank can manage at most three live funds.";
   const rate = await getCorpFxRate(db, sponsor);
   const minimum =

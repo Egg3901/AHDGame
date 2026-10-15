@@ -35,6 +35,19 @@ export const NPP_CHAIR_GROWTH_COEF = 0.5;
 export const NPP_CHAIR_STEP_FRACTION = 0.5;
 /** Target real GDP growth for the autonomous chair (matches TARGET_GROWTH in centralBankChairTurn.ts). */
 export const NPP_CHAIR_TARGET_GROWTH = 2.0;
+/** Activity rule for autonomous chairs: weight on the measured output gap (pts of rate per pt of gap). */
+export const NPP_CHAIR_OUTPUT_GAP_COEF = 0.5;
+/** Output gap read by the activity rule is clamped to +/- this many points. */
+export const NPP_CHAIR_OUTPUT_GAP_CLAMP = 4;
+/** Unemployment NAIRU read by the activity rule (same value as NAIRU in budget/inflation.ts). */
+export const NPP_CHAIR_NAIRU = 5.0;
+/** Activity rule: rate points per point of unemployment above NAIRU (subtracted). */
+export const NPP_CHAIR_UNEMPLOYMENT_COEF = 0.5;
+/** Unemployment gap read by the activity rule is clamped to [-2, 4] points around NAIRU. */
+export const NPP_CHAIR_UNEMPLOYMENT_GAP_MIN = -2;
+export const NPP_CHAIR_UNEMPLOYMENT_GAP_MAX = 4;
+/** Lowest rate an autonomous chair targets under the activity rule. */
+export const NPP_CHAIR_RATE_FLOOR = 0.25;
 
 /**
  * Inflation overshoot (pp above target) at which an autonomous chair or the

@@ -24,6 +24,13 @@ vi.mock("@/lib/audit/recordAudit", () => ({ recordAudit: vi.fn(), recordAuditBul
 vi.mock("@/lib/financialTxLog/emit", () => ({ emitTx: vi.fn().mockResolvedValue(undefined) }));
 vi.mock("@/lib/notifications", () => ({ createNotification: vi.fn() }));
 vi.mock("@/lib/news", () => ({ createSystemNewsPost: vi.fn().mockResolvedValue(undefined) }));
+// A line of credit record whose resume throws, as an unbalanced plan did on
+// live turns 194 to 199. The recovery pass must isolate it.
+vi.mock("@/lib/lineOfCredit/settlement", () => ({
+  resumeLocSettlement: vi
+    .fn()
+    .mockRejectedValue(new Error("Unbalanced original LOC cash flows in USD")),
+}));
 
 const BANK = new ObjectId();
 const OWNER = new ObjectId();
@@ -294,5 +301,70 @@ describe("recovery worker", () => {
     const gated = (await buildBankingHealth(db as unknown as Db)).gate;
     expect(gated.ok).toBe(false);
     expect(gated.reasons.join(" ")).toMatch(/unfinished/);
+  });
+
+  it("reports a record whose resume throws and still finishes the records after it", async () => {
+    const before = totalMoney(db);
+    await db.collection("bankMoneyMoves").insertOne({
+      _id: `line_of_credit:broken:${TURN}`,
+      kind: "line_of_credit",
+      turn: TURN,
+      status: "partial",
+      createdAt: new Date(0),
+      locSettlement: { request: {} },
+      legs: [],
+    });
+    // A real transfer that crashed after its debit landed, recorded after the
+    // broken one, so the pass reaches it only if the throw is isolated.
+    const faulty = withInjectedCrash(db, {
+      collection: "corporations",
+      op: "updateOne",
+      onCall: 1,
+      afterWrite: true,
+    }).db;
+    await expect(
+      settleTransition(faulty, {
+        key: `test-move:after:${TURN}`,
+        kind: "test_move",
+        turn: TURN,
+        currency: "USD",
+        legs: [
+          {
+            kind: "debit" as const,
+            amount: 1_000,
+            collection: "corporations",
+            filter: { _id: oid(BANK.toString()) },
+            path: "bankCharter.cashReserves",
+            note: "vault out",
+          },
+          {
+            kind: "credit" as const,
+            amount: 1_000,
+            collection: "centralBanks",
+            filter: { _id: "US" },
+            path: "externalBroadMoney",
+            note: "pool in",
+          },
+        ],
+        projections: [],
+        event: { kind: "bank.resolved" as const, command: "test" },
+      })
+    ).rejects.toBeInstanceOf(InjectedCrash);
+    expect(bank(db).bankCharter.cashReserves).toBe(10_000);
+    expect(cb(db).externalBroadMoney).toBe(49_000);
+
+    const recovered = await recoverBankingSettlements(db as unknown as Db, TURN + 1);
+    expect(recovered.stillPartial).toEqual([
+      {
+        key: `line_of_credit:broken:${TURN}`,
+        kind: "line_of_credit",
+        turn: TURN,
+        error: "Unbalanced original LOC cash flows in USD",
+      },
+    ]);
+    expect(recovered.resumedSettlements).toEqual([`test-move:after:${TURN}`]);
+    expect(bank(db).bankCharter.cashReserves).toBe(10_000);
+    expect(cb(db).externalBroadMoney).toBe(50_000);
+    expect(totalMoney(db)).toBe(before);
   });
 });

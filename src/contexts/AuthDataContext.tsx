@@ -195,6 +195,11 @@ export function useAuthMe(): AuthDataContextValue {
   return ctx;
 }
 
+/** Non-throwing `useAuthMe`, for components that also render outside the provider. */
+export function useOptionalAuthMe(): AuthDataContextValue | null {
+  return useContext(AuthDataContext);
+}
+
 /**
  * Non-throwing accessor for the nav-bootstrap refetch.
  *

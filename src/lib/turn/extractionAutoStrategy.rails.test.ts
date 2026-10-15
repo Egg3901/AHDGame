@@ -4,6 +4,7 @@ import { ObjectId } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 import { spawnNppCorporation } from "@/lib/admin/spawnNppCorporation";
 import {
+  extractionHeadroomValue,
   extractionShortageWeight,
   isExtractionShortage,
   processExtractionAutoStrategy,
@@ -152,6 +153,74 @@ describe("processExtractionAutoStrategy rails", () => {
 
     expect(res.placed).toBe(0);
     expect(spawnNppCorporation).not.toHaveBeenCalled();
+  });
+
+  describe("ranking idle deposits across resources by value, not raw units", () => {
+    // Live 1991 world, turn 192: rare earth 2.58x base (21,000 per unit) and
+    // iron 2.61x base (120 per unit). XN-shaped state: 58,929 units of rare
+    // earth worth 1.24B at base beside 2,268,000 units of iron worth 272M.
+    // Ranked on raw units, iron won every slot and rare earth never moved.
+    const livePrices = [
+      {
+        commodity: "rare_earth",
+        globalSupply: 7_133,
+        globalDemand: 9_515,
+        globalPrice: 54_112,
+        basePrice: 21_000,
+        stateSupply: { AZ: 17 },
+      },
+      {
+        commodity: "iron",
+        globalSupply: 1_383_481,
+        globalDemand: 1_505_038,
+        globalPrice: 313,
+        basePrice: 120,
+        stateSupply: { AZ: 0 },
+      },
+    ];
+    const xnShapedState = {
+      stateId: "AZ",
+      countryId: "US",
+      resources: { rare_earth: 58_929, iron: 2_268_000 },
+    };
+
+    it("retools a standard miner onto the rare earth deposit worth more", async () => {
+      const corpId = new ObjectId();
+      db.collectionMocks.commodityPrices.find.mockReturnValue(cursor(livePrices));
+      db.collectionMocks.stateResourceCapacity.find.mockReturnValue(cursor([xnShapedState]));
+      db.collectionMocks.corporations.find.mockReturnValue(cursor([npcCorp(corpId)]));
+      db.collectionMocks.corporateSectors.find.mockReturnValue(
+        cursor([
+          { _id: new ObjectId(), corporationId: corpId, stateId: "AZ", strategyId: "standard" },
+        ])
+      );
+
+      const res = await processExtractionAutoStrategy(db as unknown as Db, 10, ENABLED);
+
+      expect(res.byResource).toEqual({ rare_earth: 1 });
+    });
+
+    it("places the rare earth mine first in a state holding both deposits", async () => {
+      db.collectionMocks.commodityPrices.find.mockReturnValue(cursor(livePrices));
+      db.collectionMocks.stateResourceCapacity.find.mockReturnValue(cursor([xnShapedState]));
+      db.collectionMocks.corporateSectors.find.mockReturnValue(cursor([]));
+
+      const res = await processExtractionAutoStrategy(db as unknown as Db, 10, ENABLED);
+
+      expect(res.placedByResource).toEqual({ rare_earth: 1 });
+      expect(spawnNppCorporation).toHaveBeenCalledWith(
+        db,
+        expect.objectContaining({ headquartersState: "AZ", initialStrategyId: "rare_earth_mining" })
+      );
+    });
+
+    it("values headroom at base price and falls back to raw units without one", () => {
+      expect(extractionHeadroomValue(58_929, 21_000)).toBe(58_929 * 21_000);
+      expect(extractionHeadroomValue(2_268_000, 120)).toBe(2_268_000 * 120);
+      expect(extractionHeadroomValue(500, undefined)).toBe(500);
+      expect(extractionHeadroomValue(500, 0)).toBe(500);
+      expect(extractionHeadroomValue(-5, 120)).toBe(0);
+    });
   });
 
   describe("dead deposits (plants mode, every alternative forecasts a loss)", () => {

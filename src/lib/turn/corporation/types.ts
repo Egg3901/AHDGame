@@ -26,6 +26,8 @@ export interface CorporationLookups {
   preset?: string;
   corporations: Corporation[];
   sectorsByCorp: Map<string, CorporateSector[]>;
+  /** Countries whose NPP-run corps follow NPP engine 6 (autonomy v6). */
+  engineSixCountries?: ReadonlySet<string>;
   productLinesV2Enabled?: boolean;
   productSectorQualityById?: Map<string, number>;
   /** Active v2 manufacturing projects, empty and unread while productLinesV2 is off. */
@@ -240,6 +242,7 @@ export interface CorporationLookups {
   freightSupplyByOriginState?: Map<string, number>;
   ownRouteDeliveredByKey?: Map<string, number>;
   ownRouteFreightByCorp?: Map<string, Map<string, Map<CommodityType, number>>>;
+  ownRouteGroupMembersByRoot?: Map<string, Set<string>>;
   /**
    * The transfer's other half: per origin state, LAST turn's haul revenue its
    * freight network earned. Same gate and source as
@@ -304,6 +307,10 @@ export interface CorporationLookups {
    * is what every read-only caller of the lookups gets.
    */
   extractionNoBuyerPhaseOutStartTurn?: number;
+  /** Turn the revenue-follows-placement phase-in started (gameConfig stamp). */
+  placementRevenuePhaseStartTurn?: number;
+  /** countryId → this turn's recession capacity factor (absent = 1). See countryRecession.ts. */
+  recessionCapacityFactorByCountry?: Map<string, number>;
   /**
    * sectorId → revenue-weighted extraction capacity utilization (0..1) and the
    * most-binding resource, derived from computeExtractionCapacityMultipliers.
@@ -473,6 +480,8 @@ export interface SectorUpdateOp {
       $inc?: Record<string, number>;
       $push?: Record<string, unknown>;
     };
+    /** Positional filters, used by the shortage build speed-up. */
+    arrayFilters?: Record<string, unknown>[];
   };
 }
 

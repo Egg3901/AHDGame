@@ -1,5 +1,5 @@
 import { chooseNppCorporationName } from "@/lib/corporations/names/rules";
-import type { Db } from "mongodb";
+import type { Db, Document, WithId } from "mongodb";
 import { ObjectId } from "mongodb";
 import type { Corporation, CorporateSector, GameState, NPP } from "@/lib/db/types";
 import { chooseNppCorpCeo, type NppCorpCeoAffiliation } from "./nppCorpCeoSelection";
@@ -32,7 +32,11 @@ import {
   DEFAULT_SECTOR_STARTING_WORKERS,
   type OperatingSectorType,
 } from "@/lib/constants/corporations";
-import { COUNTRY_CURRENCY_MAP, getSeedCurrencyCode } from "@/lib/constants/currencies";
+import {
+  COUNTRY_CURRENCY_MAP,
+  getSeedCurrencyCode,
+  type CurrencyCode,
+} from "@/lib/constants/currencies";
 import {
   anchorToCorpCapital,
   getCurrencyFxRate,
@@ -226,6 +230,415 @@ function pickBrandColor(inputColor?: string): string {
   return inputColor ?? randomBrandColor();
 }
 
+export interface CreateNppCorporationShellInput {
+  name: string;
+  type: CorporationType;
+  industryModel: ManufacturingIndustryModel | null;
+  mediaDiscriminator: MediaDiscriminator | null;
+  countryId: CountryId;
+  headquartersState: string;
+  currencyCode: CurrencyCode;
+  preset: Awaited<ReturnType<typeof loadWorldPreset>>;
+  /** Liquid capital in `currencyCode`; defaults to the era-scaled NPP founding book. */
+  startingCapital?: number;
+  brandColor?: string;
+  tickerSymbol?: string;
+  nppPartyId?: string;
+  foundedAtTurn?: number;
+  /** Tech nodes carried over in addition to the era's auto-granted set. */
+  inheritedTechNodeIds?: readonly string[];
+  /**
+   * Value (in `currencyCode`) the corporation holds beyond its cash, priced into
+   * the opening share price. A shell that is handed live plants must not list at
+   * a cash-only price, or its public float sells for a fraction of what it owns.
+   */
+  additionalBookValueLocal?: number;
+  /** Extra fields written on the corporation document at insert. */
+  extraFields?: Partial<Corporation>;
+  now: Date;
+}
+
+export interface CreateNppCorporationShellResult {
+  corpDoc: Corporation;
+  corpId: ObjectId;
+  npp: NPP;
+  startingCapital: number;
+  sequentialId: number;
+  tickerSymbol: string;
+}
+
+/**
+ * Insert an NPP-run corporation with no sectors: CEO selection, founding book,
+ * tech grants, share structure, and the witnessed starting grant. Shared by the
+ * admin/seed spawn (which then grants a founding sector out of the unowned pool)
+ * and dissolution succession (which re-parents the dissolved corporation's live
+ * sectors instead).
+ */
+export async function createNppCorporationShell(
+  db: Db,
+  input: CreateNppCorporationShellInput
+): Promise<CreateNppCorporationShellResult> {
+  const {
+    name,
+    type,
+    industryModel,
+    mediaDiscriminator,
+    countryId,
+    headquartersState,
+    currencyCode,
+    preset,
+    startingCapital: customCapital,
+    brandColor,
+    tickerSymbol: customTicker,
+    nppPartyId,
+    now,
+  } = input;
+
+  // Choose the CEO: prefer an existing NPP without a corp (balanced across
+  // active parties + independents); only create a new NPP when none is free.
+  // NPP engine 6: at v6 a free NPP with a good record in this lane wins.
+  const sectorLane = await nppCeoSelectionLane(
+    db,
+    countryId,
+    getOperatingSectorType(type, industryModel, mediaDiscriminator)
+  );
+  const affiliations = await gatherNppCorpCeoAffiliations(db, countryId, {
+    withTrackRecords: sectorLane != null,
+  });
+  const choice = chooseNppCorpCeo({
+    forcedParty: nppPartyId,
+    affiliations,
+    ...(sectorLane ? { sectorLane } : {}),
+  });
+
+  let npp: NPP | null = null;
+  if (choice.kind === "existing") {
+    npp = await db.collection<NPP>("npps").findOne({ _id: new ObjectId(choice.nppId) });
+  }
+  // Fall back to creating a fresh NPP when told to (choice.kind === "new") or if
+  // the chosen existing NPP vanished between gather and fetch (defensive). Either
+  // way `choice.party` holds the affiliation the balancer settled on.
+  if (!npp) {
+    npp = await createNPP({
+      state: headquartersState,
+      party: choice.party,
+      countryId,
+      targetOffice: null,
+    });
+  }
+
+  // Determine starting capital. Two normalizations, both on the default only
+  // (an explicit `customCapital` is taken literally):
+  //
+  //  1. FX: ~₳2M expressed in the country's own currency, so weak-currency
+  //     countries (JP, NG, BR) are not seeded with tiny local books. A flat 2M
+  //     LOCAL left e.g. JP corps at ~19k ₳ vs UK/US at ~2M — an ~800x
+  //     cross-nation gap that also kept those corps below the nominal cash
+  //     floors gating expansion. See balance audit (2026-07-21). Converted at
+  //     the world's market rate, the same rate the cash is valued at: the GDP
+  //     normalization factor differs from it wherever authored GDP is not at
+  //     the era's market rate (1991 NG, PL, BG; 1953 JP, IT), see #2985.
+  //  2. ERA: ₳2,000,000 is a MODERN absolute (refs #3778 §3). 1953 nominal GDP
+  //     is ~70x smaller, so the unscaled default handed a fresh NPP corp more
+  //     cash than several 1953 regional sector markets put together. Deflating
+  //     by the era's nominal scale keeps the founding book the same share of
+  //     the economy it is in a 2019 world. No-op for every modern preset.
+  const techGameState = await db.collection<GameState>("gameState").findOne(
+    { _id: "current" },
+    {
+      projection: {
+        sectorTechTreesEnabled: 1,
+        currentYear: 1,
+        currentTurn: 1,
+        startingYear: 1,
+      },
+    }
+  );
+  const techGrantIds =
+    techGameState?.sectorTechTreesEnabled === true
+      ? autoGrantedNodeIds(
+          getOperatingSectorType(type, industryModel, mediaDiscriminator),
+          resolveGameYear(techGameState) ?? getStartingYearForPreset(preset)
+        )
+      : [];
+  const startingCapital =
+    customCapital ??
+    Math.round(
+      anchorToCorpCapital(
+        NPP_DEFAULT_STARTING_CAPITAL_ANCHOR * getEraNominalScale(preset),
+        currencyCode,
+        await getCurrencyFxRate(db, currencyCode)
+      )
+    );
+  const techGrantIdsWithInherited = [
+    ...new Set([...techGrantIds, ...(input.inheritedTechNodeIds ?? [])]),
+  ];
+
+  // Get next sequential ID for corporation
+  const sequentialId = await getNextSequentialId(db, "corporation");
+
+  // Generate ticker if not provided
+  const tickerSymbol = customTicker ?? (await generateTickerSymbol(db, name));
+
+  // Share allocation: NPP CEO gets 51%, public float gets 49%. The share base
+  // deflates with the era for the same reason `startingCapital` above does —
+  // on a fixed 10M base a 1953 corp prices below MIN_SHARE_PRICE and floors.
+  const totalIssuedShares = getEraFounderShares(CEO_INITIAL_SHARES, preset);
+  const nppShares = Math.floor(totalIssuedShares * 0.51);
+  const publicFloatShares = totalIssuedShares - nppShares;
+
+  // Calculate initial share price based on starting capital
+  const initialSharePrice = Math.max(
+    DEFAULT_SHARE_PRICE,
+    Math.round(
+      ((startingCapital + Math.max(0, input.additionalBookValueLocal ?? 0)) / totalIssuedShares) *
+        100
+    ) / 100
+  );
+
+  // Create the corporation document
+  const corpId = new ObjectId();
+  const corpDoc: Omit<Corporation, "_id"> & { _id: ObjectId } = {
+    _id: corpId,
+    name,
+    tickerSymbol,
+    type,
+    ...(industryModel ? { industryModel } : {}),
+    ...(mediaDiscriminator ? { mediaDiscriminator } : {}),
+    ceoId: npp._id,
+    ceoType: "npp",
+    ceoVacant: false,
+    userId: new ObjectId("000000000000000000000000"), // system placeholder
+    countryId,
+    headquartersState,
+    liquidCapital: startingCapital,
+    liquidCurrencyCode: currencyCode,
+    marketingBudget: Math.round(startingCapital * 0.02), // 2% marketing
+    marketingStrength: 10,
+    logisticsBudget: Math.round(startingCapital * 0.01), // 1% logistics
+    logisticsStrength: 0,
+    rdBudget: Math.round(startingCapital * 0.01), // 1% R&D
+    rdScore: 0,
+    ...(techGrantIdsWithInherited.length > 0
+      ? { unlockedTechNodeIds: techGrantIdsWithInherited }
+      : {}),
+    ceoSalary: 0,
+    brandColor: pickBrandColor(brandColor),
+    sequentialId,
+    totalShares: totalIssuedShares,
+    sharePrice: initialSharePrice,
+    shareholders: [{ nppId: npp._id, shares: nppShares }],
+    publicFloat: publicFloatShares,
+    dividendRate: 5, // 5% dividend — attractive to investors
+    suspended: false,
+    hiddenFromExchange: false,
+    isPrivate: false,
+    foundedAtTurn: input.foundedAtTurn ?? 0,
+    createdAt: now,
+    updatedAt: now,
+    ...input.extraFields,
+  };
+
+  await insertCorporationWithTickerRetry(db, corpDoc as Corporation);
+  await witnessCorporationStartingGrant(db, {
+    corporationId: corpId,
+    amountLocal: startingCapital,
+    currencyCode,
+    turn: input.foundedAtTurn,
+    now,
+  });
+
+  return {
+    corpDoc: corpDoc as Corporation,
+    corpId,
+    npp,
+    startingCapital,
+    sequentialId,
+    tickerSymbol,
+  };
+}
+
+export interface GrantNppSectorFromUnownedPoolInput {
+  corpDoc: Pick<Corporation, "_id" | "countryId" | "liquidCurrencyCode">;
+  stateId: string;
+  /** Country the state belongs to (the sector's host). */
+  countryId: CountryId;
+  type: CorporationType;
+  industryModel: ManufacturingIndustryModel | null;
+  mediaDiscriminator: MediaDiscriminator | null;
+  /** Market captured, in ₳ on the standard strategy basis. */
+  startingRevenue: number;
+  profitMargin: number;
+  initialStrategyId?: string;
+  foundedAtTurn?: number;
+  plantsEnabled: boolean;
+  eraUnitScale: number;
+  /** The pool row already loaded by the caller, if any. */
+  pool?: WithId<Document> | null;
+  now: Date;
+}
+
+/**
+ * Insert one NPP sector granted directly from the unowned pool (capacity
+ * instant, no build window) and draw the pool down by what it took.
+ */
+export async function grantNppSectorFromUnownedPool(
+  db: Db,
+  input: GrantNppSectorFromUnownedPoolInput
+): Promise<{ sectorId: ObjectId; capacityUnits: number }> {
+  const {
+    corpDoc,
+    stateId,
+    countryId,
+    type,
+    industryModel,
+    mediaDiscriminator,
+    startingRevenue,
+    profitMargin,
+    plantsEnabled,
+    eraUnitScale,
+    now,
+  } = input;
+
+  // ─── Plants: the founding sector is GRANTED capacity, not a revenue line ──
+  //
+  // This is the SEED/ADMIN path, not a player action, and it is deliberately
+  // NOT the founding-build flow `expandSector` and the NPP turn behaviour use.
+  // A world is seeded at t0: there is no turn on which a build queue could
+  // drain, and a spawned corp whose plants are all still under construction
+  // would start a world producing nothing. So the capacity is granted directly
+  // into `capitalStock` — instant, in UNITS — and drawn out of the unowned pool
+  // it captures, exactly as the founding build draws its own starter capacity.
+  // The grant is sized from the same `startingRevenue` the legacy path used, so
+  // a seeded world's opening capacity is unchanged; only its BASIS changes from
+  // ₳/day to units/day.
+  const startingCapacityUnitsStandard = plantsEnabled
+    ? computeUnownedHeadroomUnits(
+        type,
+        startingRevenue,
+        eraUnitScale,
+        industryModel,
+        mediaDiscriminator
+      )
+    : 0;
+  const startingCapacityUnits = plantsEnabled
+    ? startingCapacityUnitsStandard *
+      capacityRescaleRatio(
+        type,
+        "standard",
+        input.initialStrategyId,
+        industryModel,
+        mediaDiscriminator
+      )
+    : 0;
+
+  // ─── Currency: `corporateSectors.revenue` is stored in the sector's HOST-state
+  // currency, NOT in ₳ (see src/lib/currency/corpEconomyFields.ts; readers call
+  // `readCorpEconomicAnchor`, writers `writeCorpEconomicLocal`). This path wrote
+  // the ₳ figure straight in, so every sector in a non-anchor-currency country
+  // (JP fx ≈ 360, BR, NG, DE, CN, IE…) was read back at 1/fx of its true weight
+  // by every ₳-denominated aggregate — tax rollups, GDP weighting, market-share
+  // denominators, corp valuation. Capital mode hid it because the turn's
+  // read→grow→write round-trips and cancels; plants exposes it because the
+  // nameplate is rebuilt from currency-free capacity.
+  //
+  // The seeded sector is always domestic (HQ state ⇒ host country == corp
+  // country), so host == `currencyCode`, but resolve it through the shared
+  // helpers anyway so this stays correct if a spawn is ever cross-border.
+  const sectorHostFxRate = await getSectorHostFxRate(db, { countryId }, corpDoc);
+  const startingRevenueLocal = Math.round(
+    writeCorpEconomicLocal(
+      startingRevenue,
+      resolveSectorHostCurrencyCode({ countryId }, corpDoc),
+      sectorHostFxRate
+    )
+  );
+
+  // Create the initial sector
+  const sectorId = new ObjectId();
+  const sectorDoc: Omit<CorporateSector, "_id"> & { _id: ObjectId } = {
+    _id: sectorId,
+    corporationId: corpDoc._id,
+    countryId,
+    stateId,
+    sectorType: type,
+    ...(industryModel ? { industryModel } : {}),
+    ...(mediaDiscriminator ? { mediaDiscriminator } : {}),
+    // Plants births grow via build orders, never via the growth slider.
+    targetGrowthRate: plantsEnabled ? 0 : 3, // Moderate growth
+    currentGrowthRate: 0,
+    currentGrowthCost: 0,
+    // HOST-currency, converted from the ₳ `startingRevenue` above.
+    revenue: startingRevenueLocal,
+    profitMargin,
+    workers: DEFAULT_SECTOR_STARTING_WORKERS,
+    ...(input.initialStrategyId ? { strategyId: input.initialStrategyId } : {}),
+    createdAt: now,
+    updatedAt: now,
+    ...(plantsEnabled
+      ? {
+          capitalStock: startingCapacityUnits,
+          ...seedPlantLedger(type, startingCapacityUnits, industryModel, mediaDiscriminator),
+          // Born under plants — never needs the flip-turn migration.
+          plantsStartTurn: input.foundedAtTurn ?? 0,
+        }
+      : {}),
+  };
+
+  await db.collection<CorporateSector>("corporateSectors").insertOne(sectorDoc as CorporateSector);
+
+  // Reduce the unowned sector pool to reflect market capture.
+  const unownedSector =
+    input.pool ??
+    (await db.collection("unownedSectors").findOne({
+      stateId,
+      sectorType: type,
+      industryModel,
+      ...(type === "media" ? { mediaDiscriminator } : {}),
+    }));
+  if (unownedSector) {
+    const captureAmount = startingRevenue;
+    const newRevenue = Math.max(0, unownedSector.revenue - captureAmount);
+    // `headroomUnits` was NOT being decremented here: the spawn captured ₳
+    // revenue out of the pool while leaving its unit view at the pre-capture
+    // figure. Under plants that view is what market share and the founding
+    // build are sized against, so every spawned corp permanently inflated the
+    // headroom of the market it had just taken a bite out of. Decrement in
+    // lockstep. Non-plants worlds get the same fix: `headroomUnits` is a derived
+    // view of `revenue` and must never disagree with it.
+    // The pool is denominated on the sector type's standard strategy. A focused
+    // founding holds a D9-rescaled stock but consumes the same standard-basis
+    // market entry that its unchanged starting revenue represents.
+    const unitsCaptured = plantsEnabled
+      ? startingCapacityUnitsStandard
+      : computeUnownedHeadroomUnits(
+          type,
+          captureAmount,
+          eraUnitScale,
+          industryModel,
+          mediaDiscriminator
+        );
+    const priorUnits =
+      typeof unownedSector.headroomUnits === "number" &&
+      Number.isFinite(unownedSector.headroomUnits)
+        ? unownedSector.headroomUnits
+        : unownedHeadroomUnitsPerAnchor(type, eraUnitScale, industryModel, mediaDiscriminator) *
+          (unownedSector.revenue ?? 0);
+    await db.collection("unownedSectors").updateOne(
+      { _id: unownedSector._id },
+      {
+        $set: {
+          revenue: newRevenue,
+          headroomUnits: Math.max(0, priorUnits - unitsCaptured),
+          updatedAt: now,
+        },
+      }
+    );
+  }
+
+  return { sectorId, capacityUnits: startingCapacityUnits };
+}
+
 /**
  * Spawn an NPP-run corporation.
  *
@@ -319,83 +732,7 @@ export async function spawnNppCorporation(
     throw new Error(`No currency configured for country "${countryId}"`);
   }
 
-  // Choose the CEO: prefer an existing NPP without a corp (balanced across
-  // active parties + independents); only create a new NPP when none is free.
-  // NPP engine 6: at v6 a free NPP with a good record in this lane wins.
-  const sectorLane = await nppCeoSelectionLane(
-    db,
-    countryId,
-    getOperatingSectorType(type, industryModel, mediaDiscriminator)
-  );
-  const affiliations = await gatherNppCorpCeoAffiliations(db, countryId, {
-    withTrackRecords: sectorLane != null,
-  });
-  const choice = chooseNppCorpCeo({
-    forcedParty: nppPartyId,
-    affiliations,
-    ...(sectorLane ? { sectorLane } : {}),
-  });
-
-  let npp: NPP | null = null;
-  if (choice.kind === "existing") {
-    npp = await db.collection<NPP>("npps").findOne({ _id: new ObjectId(choice.nppId) });
-  }
-  // Fall back to creating a fresh NPP when told to (choice.kind === "new") or if
-  // the chosen existing NPP vanished between gather and fetch (defensive). Either
-  // way `choice.party` holds the affiliation the balancer settled on.
-  if (!npp) {
-    npp = await createNPP({
-      state: headquartersState,
-      party: choice.party,
-      countryId,
-      targetOffice: null,
-    });
-  }
-
-  // Determine starting capital. Two normalizations, both on the default only
-  // (an explicit `customCapital` is taken literally):
-  //
-  //  1. FX: ~₳2M expressed in the country's own currency, so weak-currency
-  //     countries (JP, NG, BR) are not seeded with tiny local books. A flat 2M
-  //     LOCAL left e.g. JP corps at ~19k ₳ vs UK/US at ~2M — an ~800x
-  //     cross-nation gap that also kept those corps below the nominal cash
-  //     floors gating expansion. See balance audit (2026-07-21). Converted at
-  //     the world's market rate, the same rate the cash is valued at: the GDP
-  //     normalization factor differs from it wherever authored GDP is not at
-  //     the era's market rate (1991 NG, PL, BG; 1953 JP, IT), see #2985.
-  //  2. ERA: ₳2,000,000 is a MODERN absolute (refs #3778 §3). 1953 nominal GDP
-  //     is ~70x smaller, so the unscaled default handed a fresh NPP corp more
-  //     cash than several 1953 regional sector markets put together. Deflating
-  //     by the era's nominal scale keeps the founding book the same share of
-  //     the economy it is in a 2019 world. No-op for every modern preset.
   const preset = spawnPreset;
-  const techGameState = await db.collection<GameState>("gameState").findOne(
-    { _id: "current" },
-    {
-      projection: {
-        sectorTechTreesEnabled: 1,
-        currentYear: 1,
-        currentTurn: 1,
-        startingYear: 1,
-      },
-    }
-  );
-  const techGrantIds =
-    techGameState?.sectorTechTreesEnabled === true
-      ? autoGrantedNodeIds(
-          getOperatingSectorType(type, industryModel, mediaDiscriminator),
-          resolveGameYear(techGameState) ?? getStartingYearForPreset(preset)
-        )
-      : [];
-  const startingCapital =
-    customCapital ??
-    Math.round(
-      anchorToCorpCapital(
-        NPP_DEFAULT_STARTING_CAPITAL_ANCHOR * getEraNominalScale(preset),
-        currencyCode,
-        await getCurrencyFxRate(db, currencyCode)
-      )
-    );
 
   // Determine starting revenue: use custom, or derive from unowned market.
   //
@@ -439,203 +776,40 @@ export async function spawnNppCorporation(
   }
   const profitMargin = customMargin ?? DEFAULT_PROFIT_MARGIN;
 
-  // Get next sequential ID for corporation
-  const sequentialId = await getNextSequentialId(db, "corporation");
+  const { corpDoc, corpId, npp, startingCapital, sequentialId, tickerSymbol } =
+    await createNppCorporationShell(db, {
+      name,
+      type,
+      industryModel,
+      mediaDiscriminator,
+      countryId,
+      headquartersState,
+      currencyCode,
+      preset,
+      startingCapital: customCapital,
+      brandColor,
+      tickerSymbol: customTicker,
+      nppPartyId,
+      foundedAtTurn: input.foundedAtTurn,
+      now,
+    });
 
-  // Generate ticker if not provided
-  const tickerSymbol = customTicker ?? (await generateTickerSymbol(db, name));
-
-  // Share allocation: NPP CEO gets 51%, public float gets 49%. The share base
-  // deflates with the era for the same reason `startingCapital` above does —
-  // on a fixed 10M base a 1953 corp prices below MIN_SHARE_PRICE and floors.
-  const totalIssuedShares = getEraFounderShares(CEO_INITIAL_SHARES, preset);
-  const nppShares = Math.floor(totalIssuedShares * 0.51);
-  const publicFloatShares = totalIssuedShares - nppShares;
-
-  // Calculate initial share price based on starting capital
-  const initialSharePrice = Math.max(
-    DEFAULT_SHARE_PRICE,
-    Math.round((startingCapital / totalIssuedShares) * 100) / 100
-  );
-
-  // Create the corporation document
-  const corpId = new ObjectId();
-  const corpDoc: Omit<Corporation, "_id"> & { _id: ObjectId } = {
-    _id: corpId,
-    name,
-    tickerSymbol,
-    type,
-    ...(industryModel ? { industryModel } : {}),
-    ...(mediaDiscriminator ? { mediaDiscriminator } : {}),
-    ceoId: npp._id,
-    ceoType: "npp",
-    ceoVacant: false,
-    userId: new ObjectId("000000000000000000000000"), // system placeholder
+  const { sectorId } = await grantNppSectorFromUnownedPool(db, {
+    corpDoc,
+    stateId: headquartersState,
     countryId,
-    headquartersState,
-    liquidCapital: startingCapital,
-    liquidCurrencyCode: currencyCode,
-    marketingBudget: Math.round(startingCapital * 0.02), // 2% marketing
-    marketingStrength: 10,
-    logisticsBudget: Math.round(startingCapital * 0.01), // 1% logistics
-    logisticsStrength: 0,
-    rdBudget: Math.round(startingCapital * 0.01), // 1% R&D
-    rdScore: 0,
-    ...(techGrantIds.length > 0 ? { unlockedTechNodeIds: techGrantIds } : {}),
-    ceoSalary: 0,
-    brandColor: pickBrandColor(brandColor),
-    sequentialId,
-    totalShares: totalIssuedShares,
-    sharePrice: initialSharePrice,
-    shareholders: [{ nppId: npp._id, shares: nppShares }],
-    publicFloat: publicFloatShares,
-    dividendRate: 5, // 5% dividend — attractive to investors
-    suspended: false,
-    hiddenFromExchange: false,
-    isPrivate: false,
-    foundedAtTurn: input.foundedAtTurn ?? 0,
-    createdAt: now,
-    updatedAt: now,
-  };
-
-  await insertCorporationWithTickerRetry(db, corpDoc as Corporation);
-  await witnessCorporationStartingGrant(db, {
-    corporationId: corpId,
-    amountLocal: startingCapital,
-    currencyCode,
-    turn: input.foundedAtTurn,
+    type,
+    industryModel,
+    mediaDiscriminator,
+    startingRevenue,
+    profitMargin,
+    initialStrategyId: input.initialStrategyId,
+    foundedAtTurn: input.foundedAtTurn,
+    plantsEnabled,
+    eraUnitScale,
+    pool: boundedPool,
     now,
   });
-
-  // ─── Plants: the founding sector is GRANTED capacity, not a revenue line ──
-  //
-  // This is the SEED/ADMIN path, not a player action, and it is deliberately
-  // NOT the founding-build flow `expandSector` and the NPP turn behaviour use.
-  // A world is seeded at t0: there is no turn on which a build queue could
-  // drain, and a spawned corp whose plants are all still under construction
-  // would start a world producing nothing. So the capacity is granted directly
-  // into `capitalStock` — instant, in UNITS — and drawn out of the unowned pool
-  // it captures, exactly as the founding build draws its own starter capacity.
-  // The grant is sized from the same `startingRevenue` the legacy path used, so
-  // a seeded world's opening capacity is unchanged; only its BASIS changes from
-  // ₳/day to units/day.
-  const startingCapacityUnitsStandard = plantsEnabled
-    ? computeUnownedHeadroomUnits(
-        type,
-        startingRevenue,
-        eraUnitScale,
-        industryModel,
-        mediaDiscriminator
-      )
-    : 0;
-  const startingCapacityUnits = plantsEnabled
-    ? startingCapacityUnitsStandard *
-      capacityRescaleRatio(
-        type,
-        "standard",
-        input.initialStrategyId,
-        industryModel,
-        mediaDiscriminator
-      )
-    : 0;
-
-  // ─── Currency: `corporateSectors.revenue` is stored in the sector's HOST-state
-  // currency, NOT in ₳ (see src/lib/currency/corpEconomyFields.ts; readers call
-  // `readCorpEconomicAnchor`, writers `writeCorpEconomicLocal`). This path wrote
-  // the ₳ figure straight in, so every sector in a non-anchor-currency country
-  // (JP fx ≈ 360, BR, NG, DE, CN, IE…) was read back at 1/fx of its true weight
-  // by every ₳-denominated aggregate — tax rollups, GDP weighting, market-share
-  // denominators, corp valuation. Capital mode hid it because the turn's
-  // read→grow→write round-trips and cancels; plants exposes it because the
-  // nameplate is rebuilt from currency-free capacity.
-  //
-  // The seeded sector is always domestic (HQ state ⇒ host country == corp
-  // country), so host == `currencyCode`, but resolve it through the shared
-  // helpers anyway so this stays correct if a spawn is ever cross-border.
-  const sectorHostFxRate = await getSectorHostFxRate(db, { countryId }, corpDoc);
-  const startingRevenueLocal = Math.round(
-    writeCorpEconomicLocal(
-      startingRevenue,
-      resolveSectorHostCurrencyCode({ countryId }, corpDoc),
-      sectorHostFxRate
-    )
-  );
-
-  // Create the initial sector
-  const sectorId = new ObjectId();
-  const sectorDoc: Omit<CorporateSector, "_id"> & { _id: ObjectId } = {
-    _id: sectorId,
-    corporationId: corpId,
-    countryId,
-    stateId: headquartersState,
-    sectorType: type,
-    ...(industryModel ? { industryModel } : {}),
-    ...(mediaDiscriminator ? { mediaDiscriminator } : {}),
-    // Plants births grow via build orders, never via the growth slider.
-    targetGrowthRate: plantsEnabled ? 0 : 3, // Moderate growth
-    currentGrowthRate: 0,
-    currentGrowthCost: 0,
-    // HOST-currency, converted from the ₳ `startingRevenue` above.
-    revenue: startingRevenueLocal,
-    profitMargin,
-    workers: DEFAULT_SECTOR_STARTING_WORKERS,
-    ...(input.initialStrategyId ? { strategyId: input.initialStrategyId } : {}),
-    createdAt: now,
-    updatedAt: now,
-    ...(plantsEnabled
-      ? {
-          capitalStock: startingCapacityUnits,
-          ...seedPlantLedger(type, startingCapacityUnits, industryModel, mediaDiscriminator),
-          // Born under plants — never needs the flip-turn migration.
-          plantsStartTurn: input.foundedAtTurn ?? 0,
-        }
-      : {}),
-  };
-
-  await db.collection<CorporateSector>("corporateSectors").insertOne(sectorDoc as CorporateSector);
-
-  // Reduce the unowned sector pool to reflect market capture.
-  const unownedSector =
-    boundedPool ?? (await db.collection("unownedSectors").findOne(marketFilter));
-  if (unownedSector) {
-    const captureAmount = startingRevenue;
-    const newRevenue = Math.max(0, unownedSector.revenue - captureAmount);
-    // `headroomUnits` was NOT being decremented here: the spawn captured ₳
-    // revenue out of the pool while leaving its unit view at the pre-capture
-    // figure. Under plants that view is what market share and the founding
-    // build are sized against, so every spawned corp permanently inflated the
-    // headroom of the market it had just taken a bite out of. Decrement in
-    // lockstep. Non-plants worlds get the same fix: `headroomUnits` is a derived
-    // view of `revenue` and must never disagree with it.
-    // The pool is denominated on the sector type's standard strategy. A focused
-    // founding holds a D9-rescaled stock but consumes the same standard-basis
-    // market entry that its unchanged starting revenue represents.
-    const unitsCaptured = plantsEnabled
-      ? startingCapacityUnitsStandard
-      : computeUnownedHeadroomUnits(
-          type,
-          captureAmount,
-          eraUnitScale,
-          industryModel,
-          mediaDiscriminator
-        );
-    const priorUnits =
-      typeof unownedSector.headroomUnits === "number" &&
-      Number.isFinite(unownedSector.headroomUnits)
-        ? unownedSector.headroomUnits
-        : unownedHeadroomUnitsPerAnchor(type, eraUnitScale, industryModel, mediaDiscriminator) *
-          (unownedSector.revenue ?? 0);
-    await db.collection("unownedSectors").updateOne(
-      { _id: unownedSector._id },
-      {
-        $set: {
-          revenue: newRevenue,
-          headroomUnits: Math.max(0, priorUnits - unitsCaptured),
-          updatedAt: now,
-        },
-      }
-    );
-  }
 
   return {
     corporationId: corpId.toString(),

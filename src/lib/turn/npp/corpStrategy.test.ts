@@ -313,3 +313,48 @@ describe("the loop", () => {
     expect(switches).toBeLessThan(10);
   });
 });
+
+describe("advanceStrategy: engine 6 judges loss-making corps", () => {
+  // Adopted expand while losing; now losing less. Engine 5 keeps it as "working".
+  const prior = { id: "expand" as const, adoptedTurn: 100, baselineScore: -8 };
+
+  it("engine 5 keeps a losing expand that beats its baseline, after the long tenure", () => {
+    const early = advanceStrategy({
+      prior,
+      turn: 110,
+      situation: sit({ score: -3 }),
+      eligible: true,
+    });
+    expect(early.changed).toBe(false);
+    const late = advanceStrategy({
+      prior,
+      turn: 160,
+      situation: sit({ score: -3 }),
+      eligible: true,
+    });
+    expect(late.changed).toBe(false);
+  });
+
+  it("engine 6 re-evaluates a losing corp after the short tenure and moves to retrench", () => {
+    const decision = advanceStrategy({
+      prior,
+      turn: 110,
+      situation: sit({ score: -3 }),
+      eligible: true,
+      engineSix: true,
+    });
+    expect(decision.changed).toBe(true);
+    expect(decision.state.id).toBe("retrench");
+  });
+
+  it("engine 6 still keeps a strategy that has turned profitable", () => {
+    const decision = advanceStrategy({
+      prior,
+      turn: 160,
+      situation: sit({ score: 12 }),
+      eligible: true,
+      engineSix: true,
+    });
+    expect(decision.changed).toBe(false);
+  });
+});

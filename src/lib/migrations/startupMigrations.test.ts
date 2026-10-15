@@ -57,6 +57,7 @@ describe("runRequiredStartupMigrations", () => {
       "2026-10-10-supply-agreement-status-index",
       "2026-10-09-corporate-fund-positions",
       "2026-10-09-subhour-wiki-cadence",
+      "2026-10-15-live-world-npp-autonomy-v6",
     ]);
     expect(REQUIRED_STARTUP_MIGRATIONS.every((migration) => migration.idempotent)).toBe(true);
     expect(runMigrationsMock).toHaveBeenNthCalledWith(1, db, {

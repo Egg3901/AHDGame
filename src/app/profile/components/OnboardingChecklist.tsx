@@ -16,6 +16,8 @@ export interface OnboardingChecklistCardStep {
   body: string;
   link: string;
   done: boolean;
+  /** Shown but not required for the reward (e.g. a vote that needs a seat). */
+  optional?: boolean;
 }
 
 export interface OnboardingChecklistProps {
@@ -127,48 +129,55 @@ export function OnboardingChecklist({
         <div className="h-full bg-foreground/60" style={{ width: `${progressPct}%` }} />
       </div>
 
-      {/* Steps */}
+      {/* Steps: required first, then optional ones marked "later" */}
       <ul className="mt-1 divide-y divide-card-border/60">
-        {steps.map((step, index) => (
-          <li key={step.id} className="flex items-start gap-3 px-4 py-2.5">
-            {step.done ? (
-              <span
-                aria-hidden
-                className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-card-border text-foreground text-body-xs font-bold"
-              >
-                ✓
-              </span>
-            ) : (
-              <span
-                aria-hidden
-                className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-card-border text-muted text-body-xs font-semibold"
-              >
-                {index + 1}
-              </span>
-            )}
-            <div className="min-w-0 flex-1">
+        {[...steps.filter((s) => !s.optional), ...steps.filter((s) => s.optional)].map(
+          (step, index) => (
+            <li key={step.id} className="flex items-start gap-3 px-4 py-2.5">
               {step.done ? (
-                <p className="text-body-sm text-muted">
-                  {step.title}
-                  <span className="sr-only"> {t("doneSr")}</span>
-                </p>
+                <span
+                  aria-hidden
+                  className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-card-border text-foreground text-body-xs font-bold"
+                >
+                  ✓
+                </span>
               ) : (
-                <>
-                  <Link
-                    href={step.link}
-                    className="text-body-sm font-medium text-foreground underline-offset-4 hover:underline"
-                  >
-                    {step.title}
-                    <span aria-hidden className="ml-1 text-muted">
-                      →
-                    </span>
-                  </Link>
-                  <p className="mt-0.5 text-body-xs text-muted leading-relaxed">{step.body}</p>
-                </>
+                <span
+                  aria-hidden
+                  className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-card-border text-muted text-body-xs font-semibold"
+                >
+                  {step.optional ? "·" : index + 1}
+                </span>
               )}
-            </div>
-          </li>
-        ))}
+              <div className="min-w-0 flex-1">
+                {step.done ? (
+                  <p className="text-body-sm text-muted">
+                    {step.title}
+                    <span className="sr-only"> {t("doneSr")}</span>
+                  </p>
+                ) : (
+                  <>
+                    <Link
+                      href={step.link}
+                      className="text-body-sm font-medium text-foreground underline-offset-4 hover:underline"
+                    >
+                      {step.title}
+                      <span aria-hidden className="ml-1 text-muted">
+                        →
+                      </span>
+                    </Link>
+                    {step.optional && (
+                      <span className="ml-2 rounded-sm border border-card-border px-1.5 py-px text-body-xs text-muted">
+                        {t("later")}
+                      </span>
+                    )}
+                    <p className="mt-0.5 text-body-xs text-muted leading-relaxed">{step.body}</p>
+                  </>
+                )}
+              </div>
+            </li>
+          )
+        )}
       </ul>
 
       {/* Reward footer */}

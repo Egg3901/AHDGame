@@ -14,6 +14,7 @@ import {
   type InternalSupplyClearing,
 } from "./internalSupply/clearing";
 import { normalizedOfferShare } from "./rules/demandAllocation";
+import { placementRevenueLeg } from "./placementRevenuePhase";
 import { capDeliveredMediaUnits, type MediaOwnershipMarket } from "@/lib/mediaRegulation/rules";
 import { COMMODITY_BASE_PRICES, type CommodityType } from "@/lib/constants/commodities";
 import { commodityMixWeight as mixWeight } from "@/lib/constants/commodities";
@@ -279,6 +280,11 @@ export interface SectorClearingInput {
   outputUnitsByCommodity?: Partial<Record<CommodityType, number>>;
   /** Fraction of each physical offer reachable by current media product titles. */
   offerAvailabilityByCommodity?: Partial<Record<CommodityType, number>>;
+  /**
+   * Placement share used for REVENUE by the revenue-follows-placement phase:
+   * placed plus freight-limited. Absent falls back to `offerPlacementByCommodity`.
+   */
+  revenuePlacementByCommodity?: Partial<Record<CommodityType, number>>;
   /** Host-state placement cap for each output, independent of other commodities. */
   offerPlacementByCommodity?: Partial<Record<CommodityType, number>>;
   /** Conserved nominal output value by commodity, used to weight sector realization. */
@@ -611,6 +617,12 @@ export function computeClearingFactors(args: {
    * state-local seller with missing location data fails closed into a zero-
    * demand book rather than claiming aggregate demand already used elsewhere.
    */
+  /**
+   * Revenue-follows-placement phase-in progress, 0..1 (see
+   * market/placementRevenuePhase). 0 or absent keeps the sold fraction
+   * measured against the placement-shrunk offer, as before.
+   */
+  placementRevenuePhase?: number;
   stateMarkets?: {
     /** sectorId → host stateId. */
     stateBySector: ReadonlyMap<string, string>;
@@ -1286,7 +1298,13 @@ export function computeClearingFactors(args: {
         ? Math.max(0, Math.min(1, s.offerAvailabilityByCommodity?.[commodity] ?? 1))
         : 1;
       const availability = editorialAvailability * productAvailability;
-      const sold = offeredSold * availability;
+      // Placement shrank the offer; without this leg the sold fraction is a
+      // share of that shrunken offer, so output nobody bought was still paid.
+      const placementLeg = placementRevenueLeg(
+        s.revenuePlacementByCommodity?.[commodity] ?? s.offerPlacementByCommodity?.[commodity],
+        args.placementRevenuePhase ?? 0
+      );
+      const sold = offeredSold * availability * placementLeg;
       // State-scoped legs realize their own state's price. Clearing volume
       // locally while realizing price nationally would leave a seller who
       // relieved a local shortage paid at the glutted national level.

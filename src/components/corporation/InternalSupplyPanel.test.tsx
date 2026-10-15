@@ -145,7 +145,7 @@ it("saves the cross-state opt-in and shows freight separately from discounts", a
     screen.getByText("coal: IL to CA, 20 units; freight ₳5 per unit (anchor currency).")
   ).toBeTruthy();
   const toggle = screen.getByLabelText(
-    "Ship own surplus to out-of-state plants before local market buyers"
+    "Ship eligible surplus to out-of-state plants before local market buyers"
   );
   expect(toggle).toHaveProperty("checked", false);
   fireEvent.click(toggle);

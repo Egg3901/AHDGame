@@ -9,6 +9,7 @@ import { getSuggestionsCollection } from "@/lib/db/collections/suggestions";
 import { getSuggestionReactionsCollection } from "@/lib/db/collections/suggestionReactions";
 import { getCharacterByUserId } from "@/lib/db/characterLookup";
 import { markSuggestionThreadRead } from "@/lib/suggestions/readState";
+import { suggestionDiscordMessageUrl } from "@/lib/suggestions/discordLink";
 import {
   discordSubmitHandleForChip,
   discordSubmitPrimaryLabel,
@@ -42,6 +43,7 @@ export const GET = withNoStore(async function GET(
     let reporterPartyAbbrev: string | null = null;
     let reporterStateCode: string | null = null;
     let reporterCountryId: string | null = null;
+    let reporterCharacterId: string | null = null;
 
     if (s.userId) {
       const [u, character] = await Promise.all([
@@ -53,6 +55,7 @@ export const GET = withNoStore(async function GET(
       reporterUsername = u?.username ?? null;
       reporterDiscordUsername = u?.discordUsername ?? null;
       reporterCharacterName = character?.name ?? null;
+      reporterCharacterId = character?._id.toString() ?? null;
       reporterAvatarUrl = character?.avatarUrl ?? null;
       reporterStateCode = character?.homeState?.toUpperCase() ?? null;
       reporterCountryId = character?.countryId ?? null;
@@ -101,8 +104,12 @@ export const GET = withNoStore(async function GET(
       }
     }
 
+    const discordUrl = await suggestionDiscordMessageUrl(s.discordMessageId);
+
     return NextResponse.json(
       serializeDetail(s, {
+        reporterCharacterId,
+        discordUrl,
         reporterUsername,
         reporterDiscordUsername,
         reporterCharacterName,
@@ -123,6 +130,8 @@ export const GET = withNoStore(async function GET(
 function serializeDetail(
   s: Suggestion,
   reporter: {
+    reporterCharacterId: string | null;
+    discordUrl: string | null;
     reporterUsername: string | null;
     reporterDiscordUsername: string | null;
     reporterCharacterName: string | null;
@@ -153,6 +162,8 @@ function serializeDetail(
       dislike: Math.max(0, s.reactions?.dislike ?? 0),
     },
     userReaction: reporter.userReaction,
+    reporterCharacterId: reporter.reporterCharacterId,
+    discordUrl: reporter.discordUrl,
     reporterUsername: reporter.reporterUsername,
     reporterDiscordUsername: reporter.reporterDiscordUsername,
     reporterCharacterName: reporter.reporterCharacterName,

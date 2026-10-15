@@ -1,10 +1,15 @@
 import { describe, expect, it, vi } from "vitest";
-import { ObjectId } from "mongodb";
+import { ObjectId, type Db } from "mongodb";
 import type { Character, CentralBank, NPP, PoliticalParty } from "@/lib/db/types";
 import {
   alignInflationBreakdownToDisplayRate,
   buildCentralBankChairData,
+  loadCountryCentralBankDetail,
 } from "./countryCentralBankDetail";
+
+const world = vi.hoisted(() => ({ currentTurn: 120, currentYear: 2027, preset: "2027" }));
+
+vi.mock("@/lib/gameState", () => ({ getGameState: async () => world }));
 
 describe("alignInflationBreakdownToDisplayRate", () => {
   it("keeps the tooltip total aligned with the displayed inflation rate", () => {
@@ -262,5 +267,94 @@ describe("buildCentralBankChairData", () => {
     // An npp chair must NEVER resolve to a character — a stale chairNppId
     // renders the empty-chair state, not a player name under the AI badge (M1).
     expect(result.chairData).toBeNull();
+  });
+});
+
+describe("loadCountryCentralBankDetail money supply", () => {
+  const snapshot = {
+    _id: "USD:120",
+    turn: 120,
+    currencyCode: "USD",
+    m1: 1_000,
+    m2: 1_500,
+    annualizedM2GrowthPct: null,
+  };
+
+  function createDetailDb(moneySupplyEnabled: boolean | undefined, hasSnapshot = true): Db {
+    const documents: Record<string, Record<string, unknown>> = {
+      gameConfig: {
+        _id: "default",
+        lineOfCreditEnabled: true,
+        ...(moneySupplyEnabled === undefined ? {} : { moneySupplyEnabled }),
+      },
+      ...(hasSnapshot ? { moneySupplySnapshots: snapshot } : {}),
+    };
+    return {
+      collection: (name: string) => ({
+        findOne: async (
+          filter: Record<string, unknown>,
+          options?: { projection?: Record<string, number> }
+        ) => {
+          const doc = documents[name];
+          if (!doc || !Object.entries(filter).every(([key, value]) => doc[key] === value)) {
+            return null;
+          }
+          // Honour inclusion projections so omitted feature flags cannot leak into the result.
+          return options?.projection
+            ? Object.fromEntries(
+                Object.entries(doc).filter(
+                  ([key]) => key === "_id" || options.projection?.[key] === 1
+                )
+              )
+            : doc;
+        },
+        findOneAndUpdate: async (
+          _filter: unknown,
+          update: { $setOnInsert: Record<string, unknown> }
+        ) => update.$setOnInsert,
+        find: () => ({ toArray: async () => [] }),
+        aggregate: () => ({ toArray: async () => [] }),
+      }),
+    } as unknown as Db;
+  }
+
+  it("returns the stored money supply for a public viewer when enabled", async () => {
+    const result = await loadCountryCentralBankDetail({
+      db: createDetailDb(true),
+      countryId: "US",
+      viewer: null,
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error);
+    expect(result.body.moneySupply).toMatchObject(snapshot);
+    expect(result.body.lineOfCreditEnabled).toBe(true);
+    expect(result.body.isChair).toBe(false);
+    expect(result.body.isAdmin).toBe(false);
+  });
+
+  it.each([false, undefined])("keeps money supply hidden when enabled is %s", async (enabled) => {
+    const result = await loadCountryCentralBankDetail({
+      db: createDetailDb(enabled),
+      countryId: "US",
+      viewer: null,
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error);
+    expect(result.body.moneySupply).toBeNull();
+  });
+
+  it.each([0, 120])("handles a missing snapshot at world turn %s", async (currentTurn) => {
+    world.currentTurn = currentTurn;
+    const result = await loadCountryCentralBankDetail({
+      db: createDetailDb(true, false),
+      countryId: "US",
+      viewer: null,
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error);
+    expect(result.body.moneySupply).toBeNull();
   });
 });
