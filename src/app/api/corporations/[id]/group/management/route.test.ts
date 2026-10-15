@@ -41,6 +41,21 @@ beforeEach(() => {
   vi.mocked(updateGroupManagement).mockResolvedValue({ ok: true });
 });
 describe("group management API", () => {
+  it("rejects unrelated viewers while allowing member CEOs and parent managers", async () => {
+    vi.mocked(groupManagementView).mockResolvedValue({
+      canManage: false,
+      members: [{ canEdit: false, history: null }],
+    } as never);
+    expect((await GET(new Request("https://game.test"), context)).status).toBe(403);
+    vi.mocked(groupManagementView).mockResolvedValue({
+      canManage: false,
+      members: [{ canEdit: false, history: [] }],
+    } as never);
+    expect((await GET(new Request("https://game.test"), context)).status).toBe(200);
+    vi.mocked(groupManagementView).mockResolvedValue({ canManage: true, members: [] } as never);
+    expect((await GET(new Request("https://game.test"), context)).status).toBe(200);
+  });
+
   it("passes a validated primary-only mandate through the authenticated route", async () => {
     const command = {
       action: "direction",

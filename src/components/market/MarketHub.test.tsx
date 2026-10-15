@@ -12,6 +12,10 @@ vi.mock("@/contexts/RegisteredCountriesContext", () => ({
   useCountryDisplayName: () => (id: string) => id,
 }));
 
+vi.mock("next-intl", () => ({
+  useTranslations: () => (key: string) => (key === "tab" ? "Sub. Groups" : key),
+}));
+
 let search = "";
 const replace = vi.fn();
 vi.mock("next/navigation", () => ({
