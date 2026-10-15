@@ -62,6 +62,7 @@ export function toDisplayError(err: unknown, fallbackMessage?: string): DisplayE
     if (
       e.name === "TypeError" ||
       e.name === "AbortError" ||
+      e.name === "TimeoutError" ||
       /failed to fetch|networkerror|load failed/i.test(e.message ?? "")
     ) {
       return { message: ERROR_CATALOG.NETWORK_ERROR.message, code: "NETWORK_ERROR" };

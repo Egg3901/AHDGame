@@ -26,10 +26,12 @@ export function strategyEvaluationDue(args: {
   prior: NppStrategyState | undefined;
   turn: number;
   eligible: boolean;
+  /** Engine 6 loss-making corp: judged on the short tenure (see advanceStrategy). */
+  losing?: boolean;
 }): boolean {
   const { prior, turn, eligible } = args;
   if (!prior || !NPP_CORP_STRATEGIES.includes(prior.id)) return true;
-  return eligible && tenureSatisfied(prior, turn);
+  return eligible && tenureSatisfied(prior, turn, args.losing === true);
 }
 
 /** Memoize a derivation so a lazily-read situation field is computed at most once. */

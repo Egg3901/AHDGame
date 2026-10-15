@@ -247,8 +247,14 @@ export function situationalStrategy(s: StrategySituation): NppCorpStrategy {
 }
 
 /** Whether enough turns have passed for this strategy to be fairly judged. */
-export function tenureSatisfied(state: NppStrategyState, turn: number): boolean {
-  const required = CAPACITY_BEARING.has(state.id) ? CAPACITY_STRATEGY_TENURE : STRATEGY_MIN_TENURE;
+export function tenureSatisfied(
+  state: NppStrategyState,
+  turn: number,
+  /** Engine 6: a loss-making corp is judged on the short tenure whatever it runs. */
+  losing = false
+): boolean {
+  const required =
+    CAPACITY_BEARING.has(state.id) && !losing ? CAPACITY_STRATEGY_TENURE : STRATEGY_MIN_TENURE;
   return turn - state.adoptedTurn >= required;
 }
 
@@ -272,8 +278,15 @@ export function advanceStrategy(args: {
   situation: StrategySituation;
   /** True on this corp's stagger slot. Switching is refused otherwise. */
   eligible: boolean;
+  /**
+   * NPP engine 6: a strategy that still loses money is never "working" just
+   * because it beats the score it was adopted at, and a losing corp is judged
+   * on the short tenure. Absent reads as engine 5.
+   */
+  engineSix?: boolean;
 }): StrategyDecision {
   const { prior, turn, situation, eligible } = args;
+  const losing = args.engineSix === true && situation.score < 0;
   const allowed = situation.isCaretaker ? CARETAKER_STRATEGIES : new Set(NPP_CORP_STRATEGIES);
 
   // First sight of this corp: adopt, record the baseline, change nothing else.
@@ -296,7 +309,7 @@ export function advanceStrategy(args: {
   if (best === undefined || situation.score > best) scores[prior.id] = situation.score;
   const held: NppStrategyState = { ...prior, lastScore: situation.score, scores };
 
-  if (!eligible || !tenureSatisfied(prior, turn)) return { state: held, changed: false };
+  if (!eligible || !tenureSatisfied(prior, turn, losing)) return { state: held, changed: false };
 
   // It is working: still clear of the bar it was adopted against. Defer the
   // next evaluation, but DO NOT raise the bar.
@@ -312,7 +325,7 @@ export function advanceStrategy(args: {
   // The loop's job is to escape strategies that are NOT working, not to
   // micro-optimize ones that are. A strategy that keeps clearing its adoption
   // baseline keeps its place; one that decays back to it gets re-evaluated.
-  if (situation.score >= prior.baselineScore + STRATEGY_IMPROVEMENT_EPSILON) {
+  if (!losing && situation.score >= prior.baselineScore + STRATEGY_IMPROVEMENT_EPSILON) {
     return { state: { ...held, adoptedTurn: turn }, changed: false };
   }
 

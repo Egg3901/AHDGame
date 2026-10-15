@@ -8,6 +8,7 @@ import {
   SCARCITY_MOMENTUM_MIN_HISTORY,
   scarcityImbalance,
   updateScarcityMultiplier,
+  SCARCITY_MOMENTUM_EASE_DECAY,
   updateScarcityMultiplierMomentum,
 } from "./scarcityDrift";
 
@@ -140,11 +141,32 @@ describe("updateScarcityMultiplierMomentum (commodity treadmill fix stage 1)", (
     expect(worse.multiplier).toBeCloseTo(base.multiplier * (1 + SCARCITY_DRIFT_STEP), 10);
   });
 
-  it("an easing shortage steps down toward 1", () => {
+  it("an easing shortage unwinds toward 1 at the ease rate", () => {
     const flat: Array<[number, number]> = Array.from({ length: 8 }, () => [100, 200]);
     const base = run(1.8, flat);
     const easing = updateScarcityMultiplierMomentum(base.multiplier, 100, 140, base.history);
-    expect(easing.multiplier).toBeCloseTo(base.multiplier / (1 + SCARCITY_DRIFT_STEP), 10);
+    expect(easing.multiplier).toBeCloseTo(
+      1 + (base.multiplier - 1) * SCARCITY_MOMENTUM_EASE_DECAY,
+      10
+    );
+  });
+
+  it("an easing shortage never unwinds slower than a flat one", () => {
+    const flat: Array<[number, number]> = Array.from({ length: 8 }, () => [100, 200]);
+    const base = run(1.71, flat);
+    const easing = updateScarcityMultiplierMomentum(base.multiplier, 100, 180, base.history);
+    const steady = updateScarcityMultiplierMomentum(base.multiplier, 100, 200, base.history);
+    expect(easing.multiplier).toBeLessThan(steady.multiplier);
+  });
+
+  it("a multiplier just above 1 still moves by at least one ratchet step when easing", () => {
+    const flat: Array<[number, number]> = Array.from({ length: 8 }, () => [100, 200]);
+    const base = run(1.8, flat);
+    const near = updateScarcityMultiplierMomentum(1.05, 100, 140, base.history);
+    expect(near.multiplier).toBeCloseTo(
+      Math.min(1 + 0.05 * SCARCITY_MOMENTUM_EASE_DECAY, 1.05 / (1 + SCARCITY_DRIFT_STEP)),
+      10
+    );
   });
 
   it("a deepening glut steps down toward the glut target, an easing glut steps up", () => {
@@ -153,7 +175,10 @@ describe("updateScarcityMultiplierMomentum (commodity treadmill fix stage 1)", (
     const deeper = updateScarcityMultiplierMomentum(base.multiplier, 200, 100, base.history);
     expect(deeper.multiplier).toBeCloseTo(base.multiplier / (1 + SCARCITY_DRIFT_STEP), 10);
     const easing = updateScarcityMultiplierMomentum(base.multiplier, 105, 100, base.history);
-    expect(easing.multiplier).toBeCloseTo(base.multiplier * (1 + SCARCITY_DRIFT_STEP), 10);
+    expect(easing.multiplier).toBeCloseTo(
+      1 + (base.multiplier - 1) * SCARCITY_MOMENTUM_EASE_DECAY,
+      10
+    );
   });
 
   it("never leaves the hard bounds and drops garbage history", () => {

@@ -31,6 +31,8 @@ export interface NppCorpDecisionContext {
   labourWagesEnabled?: boolean;
   currentYear?: number;
   techTreesEnabled?: boolean;
+  /** The corp's country runs NPP engine 6 (autonomy v6); absent reads as engine 5. */
+  engineSix?: boolean;
   /** Net per-turn debt service in anchor currency; positive is a drag. */
   debtServiceAnchor?: number;
   /** Persisted strategy memory; absent adopts the legacy expand behavior. */

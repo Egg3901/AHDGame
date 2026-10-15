@@ -17,6 +17,7 @@
  * and a record it cannot finish is reported, not forced.
  */
 
+import * as Sentry from "@sentry/nextjs";
 import type { Db, ObjectId } from "mongodb";
 import type { Corporation } from "@/lib/db/types";
 import { MONEY_MOVE_COLLECTION } from "@/lib/banking/moneyMove";
@@ -140,7 +141,25 @@ export async function recoverBankingSettlements(
     .toArray();
   for (const record of partial) {
     if (estateKeys.has(record._id)) continue;
-    const result = await resumeSettlement(db, record._id);
+    // One record that cannot be resumed (a malformed plan, a guard that
+    // throws) is reported and left partial. It must not stop every later
+    // record, or the rest of the banking turn, from running.
+    let result: Awaited<ReturnType<typeof resumeSettlement>>;
+    try {
+      result = await resumeSettlement(db, record._id);
+    } catch (error) {
+      Sentry.captureException(error, {
+        tags: { phase: "bankingRecovery", settlementKind: record.kind },
+        extra: { key: record._id, recordTurn: record.turn, turn },
+      });
+      summary.stillPartial.push({
+        key: record._id,
+        kind: record.kind,
+        turn: record.turn,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      continue;
+    }
     if (result.status === "applied" || result.status === "replayed") {
       summary.resumedSettlements.push(record._id);
     } else {

@@ -26,6 +26,8 @@ export interface SectorLedgerRow {
   industryModel?: string | null;
   mediaDiscriminator?: string | null;
   revenue: number;
+  /** Last turn's realized price leg (clearing factor / sold fraction); null when unknown. */
+  priceLeg?: number | null;
   stateId: string;
   sectorId: string;
   corporationId: CorporateSector["corporationId"];

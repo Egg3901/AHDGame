@@ -135,6 +135,14 @@ export const SCARCITY_MOMENTUM_HISTORY_TURNS = 12;
 export const SCARCITY_MOMENTUM_MIN_HISTORY = 4;
 /** Imbalance change (share points) inside which the market reads as flat. */
 export const SCARCITY_MOMENTUM_DEAD_BAND = 0.02;
+/**
+ * Geometric decay toward 1 per turn while an imbalance is EASING (~17 turns to
+ * halve). Recovery must unwind scarcity memory at least as fast as a flat
+ * market does: the original fixed step (0.4%/turn) left an easing shortage
+ * holding its premium longer than an unchanged one (prod t199: construction
+ * services easing for 19 turns still carried a 1.71 multiplier).
+ */
+export const SCARCITY_MOMENTUM_EASE_DECAY = 0.96;
 
 /** Signed imbalance: unmet share of demand minus surplus share of supply. */
 export function scarcityImbalance(supplyUnits: number, demandUnits: number): number {
@@ -184,8 +192,8 @@ export function updateScarcityMultiplierMomentum(
   }
   const delta = current - median(past);
   if (delta > SCARCITY_MOMENTUM_DEAD_BAND) {
-    // Worsening. Shortage worsening: step up toward the severity target.
-    // Glut worsening (imbalance falling further below 0): step down.
+    // Imbalance rising. Shortage worsening: step up toward the severity
+    // target. Glut easing (imbalance rising toward 0): unwind toward 1.
     if (current > 0) {
       const unmetShare = demand > 0 ? Math.max(0, demand - supply) / demand : 0;
       const target =
@@ -194,11 +202,11 @@ export function updateScarcityMultiplierMomentum(
           severityFraction(unmetShare, SCARCITY_DRIFT_UNMET_THRESHOLD, SCARCITY_DRIFT_SEVERE_UNMET);
       return { multiplier: stepToward(prev, Math.max(prev, target)), history: nextHistory };
     }
-    return { multiplier: stepToward(prev, 1), history: nextHistory };
+    return { multiplier: easeToward1(prev), history: nextHistory };
   }
   if (delta < -SCARCITY_MOMENTUM_DEAD_BAND) {
-    // Easing. Shortage easing: step down toward 1. Glut deepening
-    // (imbalance falling): step down toward the glut target.
+    // Imbalance falling. Shortage easing: unwind toward 1. Glut deepening:
+    // step down toward the glut target.
     if (current < 0) {
       const surplusShare = supply > 0 ? Math.max(0, supply - demand) / supply : 0;
       const target =
@@ -211,7 +219,7 @@ export function updateScarcityMultiplierMomentum(
           );
       return { multiplier: stepToward(prev, Math.min(prev, target)), history: nextHistory };
     }
-    return { multiplier: stepToward(prev, 1), history: nextHistory };
+    return { multiplier: easeToward1(prev), history: nextHistory };
   }
   return { multiplier: decayToward1(prev), history: nextHistory };
 }
@@ -232,6 +240,14 @@ function stepToward(prev: number, target: number): number {
     return clampMultiplier(Math.max(clampedTarget, prev / (1 + SCARCITY_DRIFT_STEP)));
   }
   return clampMultiplier(prev);
+}
+
+/** Easing-market unwind: the faster of the ease decay and one ratchet step. */
+function easeToward1(prev: number): number {
+  const decayed = 1 + (prev - 1) * SCARCITY_MOMENTUM_EASE_DECAY;
+  const stepped = stepToward(prev, 1);
+  const next = prev >= 1 ? Math.min(decayed, stepped) : Math.max(decayed, stepped);
+  return Math.abs(next - 1) < 0.0005 ? 1 : clampMultiplier(next);
 }
 
 function decayToward1(prev: number): number {

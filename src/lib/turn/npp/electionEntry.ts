@@ -58,6 +58,7 @@ import {
   reconcileSlateMoves,
   slateSuppressesIncumbentDefense,
   slateSuppressesAutoPick,
+  slateProtectsCandidacy,
 } from "./slateOverride";
 import { isActiveElectionCandidateDuplicateKey } from "@/lib/elections/duplicateKey";
 import { isNppAutonomyActive, nppAutonomyAtLeast } from "@/lib/nppAutonomy/featureFlag";
@@ -694,6 +695,11 @@ export async function processElectionEntry(ctx: NPPContext): Promise<number> {
     for (const candidateId of trailingCandidatesToWithdraw(entrants)) {
       const candidate = active.find((c) => c._id.toString() === candidateId);
       if (!candidate?.nppId) continue;
+      // A party chair's slate outranks consolidation: never withdraw an NPP the
+      // chair slated here, or any NPP in a race the chair is managing.
+      const nppId = candidate.nppId.toString();
+      const partyId = ctx.nppMap.get(nppId)?.party ?? candidate.party;
+      if (slateProtectsCandidacy(nppId, partyId, primary._id.toString(), slateMaps)) continue;
       if (!(await withdrawCandidacyFromRace(ctx, primary, candidate))) continue;
       consolidated++;
       const until = primary.primaryEndTime ?? primary.endTime;

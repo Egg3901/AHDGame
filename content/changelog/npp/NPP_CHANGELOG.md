@@ -103,8 +103,42 @@ number.
 ### Stage 6: default for new worlds
 
 - Autonomy v6 becomes the default for new singleplayer and simulation worlds
-  (shipped in 6.14.1). Running worlds never change level on their own, and the
-  live multiplayer world keeps its own setting.
+  (shipped in 6.14.1). Running worlds never change level on their own. The
+  live multiplayer world moved to v6 with game 1.16.
+
+## 6.18.0 (game 1.16.0, 2026-10-15)
+
+Stage 3 (corporations).
+
+- **R&D is never cut to zero (v6).** NPP-run companies with thin margins or
+  short cash kept no R&D budget, so their technology score decayed every turn,
+  their product quality fell with it, and lower sales pushed margins lower
+  still. They now keep a small maintenance R&D budget, which is enough to hold
+  technology near par. On live turn 199, NPP companies losing money averaged
+  quality 43 against 70 for those above a 20% margin. Player companies at the
+  same thin margins kept quality above 70.
+- **Losing companies change course sooner (v6).** A company's strategy used
+  to count as working whenever it did better than when it was adopted, so a
+  company that started expanding while losing money kept expanding as long as
+  it lost a little less, and was only re-judged every 48 turns. A strategy that
+  still loses money no longer counts as working, and a loss-making company is
+  re-judged after 8 turns. On live turn 199, 101 of the 120 loss-making NPP
+  companies were still on the expand strategy.
+- **Fix: a caretaker seat left empty is filled again.** A player company
+  handed to a caretaker that was later marked as having no CEO stayed that
+  way: the vacancy step skipped it because it was already caretaken. It now
+  gets a caretaker again the next turn, and the owner's arrangement stays.
+
+## 6.17.1 (game 1.16.0, 2026-10-15)
+
+- **Fix: a successor takes every seat a dead NPP held (v5).** When an NPP
+  dies, the NPP that replaces it now also takes its cabinet posts, its place
+  as national leader, and any player company it was running as caretaker. The
+  owner's caretaker arrangement stays in force. Before, those seats kept
+  pointing at the dead NPP.
+- **Fix: consolidation respects a party chair's slate (v6).** A trailing NPP
+  is no longer withdrawn from a primary its party chair slated it to, or from
+  any race the chair is managing for the party.
 
 ## 6.17.0 (game 1.16.0, 2026-10-14)
 

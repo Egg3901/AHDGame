@@ -7,6 +7,7 @@ import { useGameEvents } from "@/hooks/useGameEvents";
 import { InlineError } from "@/components/ui/InlineError";
 import { apiErrorText, defaultMessageFor, newRequestRef } from "@/lib/errors/catalog";
 import { readApiError, toDisplayError } from "@/lib/errors/client";
+import { isTransientRequestFailure, isTransportFailure } from "@/lib/errors/transient";
 import { captureClientExceptionWithId } from "@/lib/observability/sentryClientLazy";
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useParams, useRouter, useSearchParams, usePathname } from "next/navigation";
@@ -107,11 +108,7 @@ async function readCorporationResponse(res: Response, url: string) {
     return await res.json();
   } catch (cause) {
     if (cause instanceof Error && cause.name === "AbortError") throw cause;
-    if (
-      cause instanceof TypeError &&
-      /failed to fetch|load failed|networkerror|network connection was lost/i.test(cause.message)
-    )
-      throw cause;
+    if (isTransportFailure(cause)) throw cause;
     const parseError = cause instanceof Error ? cause : new Error("Unknown JSON parse failure");
     const error = new Error(defaultMessageFor("CLIENT_ERROR")) as CorporationResponseError;
     error.name = "CorporationResponseError";
@@ -278,6 +275,21 @@ export default function CorporationDetailPage() {
       setCeoIsInactive(data.ceoIsInactive === true);
     } catch (err) {
       const display = toDisplayError(err, "Failed to load corporation data");
+      if (isTransientRequestFailure(err)) {
+        // A dropped connection or timeout is not an application fault: show the
+        // retryable network message without reporting it or inventing a ref.
+        const message = apiErrorText(
+          { error: display.message, code: display.code },
+          display.message
+        );
+        if (!hasLoaded.current) {
+          setError(message);
+          setErrorRef(null);
+        } else {
+          showToast(message, "error");
+        }
+        return;
+      }
       const ref =
         (await captureClientExceptionWithId(err, {
           tags: { feature: "corporation-detail", error_code: display.code },

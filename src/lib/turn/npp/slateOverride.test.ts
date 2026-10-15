@@ -4,6 +4,7 @@ import type { NPP, Election } from "@/lib/db/types";
 import {
   slateSuppressesIncumbentDefense,
   slateSuppressesAutoPick,
+  slateProtectsCandidacy,
   type SlateOverrideMaps,
 } from "./slateOverride";
 
@@ -105,5 +106,35 @@ describe("slateSuppressesAutoPick (#906)", () => {
       slatedElectionIdsByNpp: new Map(),
     };
     expect(slateSuppressesAutoPick(npp, maps)).toBe(false);
+  });
+});
+
+describe("slateProtectsCandidacy (engine 6.4 consolidation)", () => {
+  const nppId = new ObjectId().toString();
+  const electionId = ELECTION_ID.toString();
+  const empty: SlateOverrideMaps = {
+    chairManagedByPartyElection: new Set(),
+    slatedElectionIdsByNpp: new Map(),
+  };
+
+  it("protects an NPP the chair slated to this race", () => {
+    const maps: SlateOverrideMaps = {
+      ...empty,
+      slatedElectionIdsByNpp: new Map([[nppId, new Set([electionId])]]),
+    };
+    expect(slateProtectsCandidacy(nppId, PARTY, electionId, maps)).toBe(true);
+  });
+
+  it("protects every NPP of the party in a chair-managed race", () => {
+    expect(slateProtectsCandidacy(nppId, PARTY, electionId, chairManagedNoSlate())).toBe(true);
+  });
+
+  it("leaves unslated NPPs in unmanaged races to consolidation", () => {
+    const maps: SlateOverrideMaps = {
+      ...empty,
+      slatedElectionIdsByNpp: new Map([[nppId, new Set([new ObjectId().toString()])]]),
+    };
+    expect(slateProtectsCandidacy(nppId, PARTY, electionId, maps)).toBe(false);
+    expect(slateProtectsCandidacy(nppId, "99", electionId, chairManagedNoSlate())).toBe(false);
   });
 });

@@ -351,6 +351,11 @@ export interface GameConfig {
    */
   placementRevenuePhaseStartTurn?: number;
   /**
+   * Turn the input-demand-follows-real-output phase-in starts, set by an
+   * operator (never stamped automatically). See src/lib/market/inputDemandRealPhase.ts.
+   */
+  inputDemandRealPhaseStartTurn?: number;
+  /**
    * Geographic freight rollout. Shadow records routes for calibration; active
    * also feeds delivered state inputs into next turn's plant throughput.
    */
