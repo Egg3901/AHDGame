@@ -150,6 +150,8 @@ export interface PhysicalCostsInput {
   /** Share of capacity not mothballed; the fixed overhead half bills active capacity. */
   activeFraction?: number;
   producedUnits: number;
+  /** Energy input-utilization ceiling, shared with the world commodity ledger. */
+  inputProductivityMultiplier?: number;
   retoolCapacityRatio: number;
   newPolicyLevel: number;
   /** >= 1; commodity treadmill fix stage 4 shortage headroom scales inputs too. */
@@ -324,6 +326,7 @@ export function decomposePhysicalCosts(input: PhysicalCostsInput): PhysicalCosts
         priceRatios:
           reachableInputPriceRatiosByCountry?.get(sectorCountryId) ?? priceRatioByCommodity,
         utilization: plantsCapacity > 0 ? producedUnits / plantsCapacity : 1,
+        productivityMultiplier: input.inputProductivityMultiplier,
         inputMultiplier: getInputMultiplier(newPolicyLevel) * (input.policyHeadroomFactor ?? 1),
         turnsPerDay: TURNS_PER_DAY,
         mothballed,
