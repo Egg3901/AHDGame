@@ -176,7 +176,7 @@ export function StageField({
         >
           <div
             data-field-part="avatar"
-            style={{ position: "relative", gridRow: "1 / span 3", marginTop: 1 }}
+            style={{ position: "relative", gridRow: "1 / span 4", marginTop: 1 }}
           >
             <Avatar url={r.avatarUrl} name={r.name} size="h-9 w-9" tintColor={r.color} />
           </div>
@@ -191,36 +191,51 @@ export function StageField({
             }}
           >
             <div
+              data-field-part="name-column"
+              className="min-w-0 flex-1"
               style={{
                 minWidth: 0,
                 flex: "1 1 0%",
+                fontSize: 14,
+                fontWeight: 600,
+                lineHeight: 1.2,
+              }}
+            >
+              {r.href ? (
+                <Link
+                  href={r.href}
+                  className="hover:underline"
+                  style={{ ...linkStyle, display: "block" }}
+                >
+                  <CandidateName name={r.name} />
+                </Link>
+              ) : (
+                <span style={{ display: "block" }}>
+                  <CandidateName name={r.name} />
+                </span>
+              )}
+            </div>
+            <div data-field-part="figure" style={{ flex: "0 0 auto", textAlign: "right" }}>
+              <div style={{ fontFamily: FONT.mono, fontSize: 14, fontWeight: 600, color: r.color }}>
+                {r.figure}
+              </div>
+            </div>
+          </div>
+          {r.partyName || r.isWinner || r.isYou ? (
+            <div
+              data-field-part="metadata"
+              style={{
+                gridColumn: 2,
+                minWidth: 0,
                 display: "flex",
-                alignItems: "flex-start",
+                alignItems: "center",
+                flexWrap: "wrap",
                 gap: 6,
                 fontSize: 14,
                 fontWeight: 600,
                 lineHeight: 1.2,
               }}
             >
-              <div
-                data-field-part="name-column"
-                className="min-w-0 flex-1"
-                style={{ minWidth: 0, flex: "1 1 0%" }}
-              >
-                {r.href ? (
-                  <Link
-                    href={r.href}
-                    className="hover:underline"
-                    style={{ ...linkStyle, display: "block" }}
-                  >
-                    <CandidateName name={r.name} />
-                  </Link>
-                ) : (
-                  <span style={{ display: "block" }}>
-                    <CandidateName name={r.name} />
-                  </span>
-                )}
-              </div>
               {r.partyName ? <PartyMark row={r} countryId={countryId} /> : null}
               {r.isWinner ? <span style={{ color: BLEND.gold, flex: "0 0 auto" }}>★</span> : null}
               {r.isYou ? (
@@ -236,12 +251,7 @@ export function StageField({
                 </span>
               ) : null}
             </div>
-            <div data-field-part="figure" style={{ flex: "0 0 auto", textAlign: "right" }}>
-              <div style={{ fontFamily: FONT.mono, fontSize: 14, fontWeight: 600, color: r.color }}>
-                {r.figure}
-              </div>
-            </div>
-          </div>
+          ) : null}
           <div
             data-field-part="subline"
             style={{

@@ -5,6 +5,9 @@ import type { ElectionResultsResponse } from "@/lib/elections/liveResults/types"
 import type { ElectionDetail } from "../components/ElectionDetailTypes";
 import { ResultsBlendView, ResolutionBanners } from "./ResultsBlendView";
 
+// Map geometry is unrelated to ticket rows and fetches a CDN asset on mount.
+vi.mock("./presMap/PresidentialMap", () => ({ PresidentialMap: () => null }));
+
 function unit(id: string, name: string, weight: number, leaderId: string, marginPct: number) {
   return {
     id,
@@ -79,6 +82,39 @@ function data(): ElectionResultsResponse {
  * count rather than assert "at least one", so a duplicated block shows up.
  */
 describe("ResultsBlendView", () => {
+  it("keeps the winner and viewer badges with party details below the result name", () => {
+    const election = {
+      isEnded: false,
+      allCandidates: [
+        {
+          id: "c1",
+          characterId: "ch-c1",
+          characterName: "First Ticket",
+          party: "1",
+          partyName: "Democratic Party",
+          isYou: true,
+          campaignId: "camp-c1",
+        },
+      ],
+    } as unknown as ElectionDetail;
+    const { container } = render(
+      <ResultsBlendView data={data()} route="concluded" election={election} />
+    );
+    const field = container.querySelector('[data-field-row="c1"]');
+    const identity = field?.querySelector('[data-field-part="identity"]');
+    const metadata = field?.querySelector('[data-field-part="metadata"]');
+    expect(identity?.textContent).toBe("First Ticket73 EV");
+    expect(metadata?.textContent).toContain("Democratic Party");
+    expect(metadata?.textContent).toContain("★");
+    expect(metadata?.textContent).toContain("YOU");
+    expect(screen.getByRole("link", { name: "First Ticket" }).getAttribute("href")).toBe(
+      "/character/ch-c1"
+    );
+    expect(screen.getByRole("link", { name: "Campaign" }).getAttribute("href")).toBe(
+      "/campaign/camp-c1"
+    );
+  });
+
   it("gives every ticket's result on the stage", () => {
     render(<ResultsBlendView data={data()} route="concluded" />);
     // The compact vote total appears only on a ticket row; the candidate's name

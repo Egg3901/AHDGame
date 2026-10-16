@@ -1,6 +1,6 @@
 /** @vitest-environment happy-dom */
 import { describe, expect, it } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { StageField, type StageFieldRow } from "./StageField";
 
 const row: StageFieldRow = {
@@ -56,7 +56,47 @@ describe("StageField", () => {
     expect(screen.getByRole("link", { name: "Campaign" }).parentElement).toBe(subline);
     expect(
       Array.from(fieldRow.children).map((child) => child.getAttribute("data-field-part"))
-    ).toEqual(["avatar", "identity", "subline", "action"]);
+    ).toEqual(["avatar", "identity", "metadata", "subline", "action"]);
+  });
+
+  it("keeps party details and badges below the name without losing links or actions", () => {
+    let endorsements = 0;
+    const { container } = render(
+      <StageField
+        rows={[
+          {
+            ...row,
+            isYou: true,
+            isWinner: true,
+            action: (
+              <button type="button" onClick={() => endorsements++}>
+                Endorse
+              </button>
+            ),
+          },
+        ]}
+        countryId="US"
+      />
+    );
+
+    const identity = container.querySelector('[data-field-part="identity"]');
+    const metadata = container.querySelector<HTMLElement>('[data-field-part="metadata"]');
+    expect(identity?.textContent).toBe("Alex Exampleton63.6%");
+    expect(metadata).not.toBeNull();
+    if (!metadata) throw new Error("Expected party details below the name");
+    expect(metadata.style.gridColumn).toBe("2");
+    expect(metadata.style.flexWrap).toBe("wrap");
+    expect(within(metadata).getByRole("link", { name: row.partyName }).getAttribute("href")).toBe(
+      row.partyHref
+    );
+    expect(within(metadata).getByText("YOU")).toBeTruthy();
+    expect(within(metadata).getByText("★")).toBeTruthy();
+    expect(screen.getByRole("link", { name: row.name }).getAttribute("href")).toBe(row.href);
+    expect(screen.getByRole("link", { name: "Campaign" }).getAttribute("href")).toBe(
+      row.campaignHref
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Endorse" }));
+    expect(endorsements).toBe(1);
   });
 
   it("ellipsizes an oversized single word instead of splitting it", () => {
