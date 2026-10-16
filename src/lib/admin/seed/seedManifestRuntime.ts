@@ -438,6 +438,12 @@ export const RUNTIME: CollectionEntry[] = [
     notes:
       "Funded non-corporate producer-market counterparties, scoped to one world. Cash is separate from bank reserves and deposits. Wiped on reset.",
   },
+  {
+    name: "producerEconomyTurns",
+    category: "runtime",
+    notes:
+      "Immutable complete producer requests and settled results, scoped to the current world. Wiped with their cash journals on reset.",
+  },
   { name: "financialCrisisFiscalActions", category: "runtime" },
   { name: "financialCrisisCreditHistory", category: "runtime" },
   { name: "bankMoneyMoves", category: "runtime" },

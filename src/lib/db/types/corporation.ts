@@ -998,6 +998,15 @@ export interface SectorBuildOrder {
 }
 
 export interface CorporateSector {
+  /** Authoritative quantities and operating accounts from the funded producer market. */
+  producerSettlement?: import("./producerEconomy").ProducerSectorSettlement;
+  /** Per-product asking policies. Fixed unit prices are anchor money, never revenue multipliers. */
+  producerQuotes?: Partial<
+    Record<
+      import("../../constants/commodities").CommodityType,
+      import("@/lib/market/producerMarket/rules").ProducerQuotePolicy
+    >
+  >;
   _id: ObjectId;
   /** Recoverable defence award or factory-allocation operation holding this plant. */
   contractMutationOwner?: string;

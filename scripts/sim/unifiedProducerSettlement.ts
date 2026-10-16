@@ -1,87 +1,16 @@
 /** Deterministic rules qualification. Never connects to a database. */
 import assert from "node:assert/strict";
 import { writeFileSync } from "node:fs";
-import { OPERATING_SECTOR_TYPES } from "../../src/lib/constants/corporations";
 import { COMMODITY_BASE_PRICES, type CommodityType } from "../../src/lib/constants/commodities";
-import {
-  getEffectiveStrategyRatesForOperatingModel,
-  SECTOR_STRATEGIES,
-} from "../../src/lib/constants/sectorStrategies";
-import { isStorable } from "../../src/lib/market/inventory";
-import {
-  advanceProducerEconomy,
-  type ProductionPlan,
-} from "../../src/lib/market/producerMarket/production";
+import { advanceProducerEconomy } from "../../src/lib/market/producerMarket/production";
 import { HOUSEHOLD_CONSUMER_BASKET } from "../../src/lib/market/producerMarket/householdRules";
-import { isStateScopedCommodity } from "../../src/lib/market/rules/commodityMarketScope";
-
-const book = (commodity: string) =>
-  isStateScopedCommodity(commodity as CommodityType) ? "state:fixture" : "world";
-
-function recipeFixture(preset: string): ProductionPlan[] {
-  return OPERATING_SECTOR_TYPES.flatMap((lane) =>
-    SECTOR_STRATEGIES[lane]
-      .filter(
-        (strategy) =>
-          strategy.minDecade == null || Number(strategy.minDecade) <= Number(preset.slice(0, 4))
-      )
-      .map((strategy) => {
-        const recipe = getEffectiveStrategyRatesForOperatingModel(
-          lane,
-          strategy.id,
-          undefined,
-          undefined,
-          0,
-          undefined,
-          undefined,
-          preset
-        );
-        const yieldPerNominal = Object.entries(recipe.supply).reduce(
-          (sum, [commodity, rate]) =>
-            sum + rate! / COMMODITY_BASE_PRICES[commodity as CommodityType],
-          0
-        );
-        assert(yieldPerNominal > 0, `Missing output recipe: ${lane}`);
-        const nominalValue = 10000;
-        return {
-          id: `${lane}:${strategy.id}`,
-          accountId: `${lane}:${strategy.id}`,
-          capacityUnits: nominalValue * yieldPerNominal,
-          activeFraction: 1,
-          outputMultiplier: 1,
-          inputs: Object.entries(recipe.demand).map(([commodity, rate]) => ({
-            commodity,
-            book: book(commodity),
-            unitsPerOutput:
-              rate! / COMMODITY_BASE_PRICES[commodity as CommodityType] / yieldPerNominal,
-            maximumUnitPrice: COMMODITY_BASE_PRICES[commodity as CommodityType] * 1.25,
-          })),
-          outputs: Object.entries(recipe.supply).map(([commodity, rate]) => ({
-            commodity,
-            book: book(commodity),
-            unitsPerOutput:
-              rate! / COMMODITY_BASE_PRICES[commodity as CommodityType] / yieldPerNominal,
-            policy: { kind: "automatic" as const, targetMarkup: 0.1 },
-            referenceUnitPrice: COMMODITY_BASE_PRICES[commodity as CommodityType],
-            storable: isStorable(commodity as CommodityType),
-          })),
-          // Explicit synthetic payroll and maintenance, never fitted to an old margin.
-          labourCost: nominalValue * 0.15,
-          otherOperatingCost: nominalValue * 0.03,
-          labourRecipientAccountId: "households",
-          operatingRecipientAccountId: "operating-payee",
-          inputStock: [],
-          outputStock: [],
-        };
-      })
-  );
-}
+import { makeProducerRecipeFixture, producerFixtureBook } from "./fixtures/producerEconomy";
 
 function simulate(
   preset: string,
   scenario: "recipe-closure" | "input-shortage" | "low-utilization" | "zero-consumption"
 ) {
-  let plans = recipeFixture(preset);
+  let plans = makeProducerRecipeFixture(preset);
   if (scenario === "input-shortage") plans = plans.filter((plan) => !plan.id.startsWith("energy:"));
   if (scenario === "low-utilization")
     plans = plans.map((plan) => ({ ...plan, activeFraction: 0.1 }));
@@ -105,7 +34,7 @@ function simulate(
             spendFraction: scenario === "zero-consumption" ? 0 : 0.9,
             products: Object.entries(HOUSEHOLD_CONSUMER_BASKET).map(([commodity, weight]) => ({
               commodity,
-              book: book(commodity),
+              book: producerFixtureBook(commodity),
               maximumUnitPrice: COMMODITY_BASE_PRICES[commodity as CommodityType] * 1.25,
               weight: weight!,
             })),
@@ -163,6 +92,11 @@ function simulate(
       tradeCount: result.trades.length,
     });
   }
+  if (scenario === "recipe-closure")
+    assert(
+      observations.at(-1)!.produced >= observations[0].produced * 0.999999,
+      `${preset} supplier network collapsed`
+    );
   return {
     preset,
     scenario,
@@ -185,7 +119,6 @@ const report = {
   liveRolloutQualified: false,
   qualificationGaps: [
     "Complete turn-engine, API and UI replacement remains unimplemented.",
-    "The synthetic 1991 recipe portfolio loses almost all output over 48 turns despite conserved cash.",
     "Synthetic payroll and site costs do not establish balance for current-world producers.",
     "Contracts, route constraints, quality, inventory decay, fiscal flows and full-world performance remain unqualified.",
   ],

@@ -34,6 +34,98 @@ const accounts = [
 ];
 
 describe("receipt-backed production", () => {
+  it("reports paid unit prices separately from internal site deliveries", () => {
+    const energy = {
+      commodity: "energy",
+      book: "world",
+      unitsPerOutput: 1,
+      referenceUnitPrice: 3,
+      policy: { kind: "manual" as const, unitPrice: 3 },
+      storable: false,
+    };
+    const steel = {
+      ...energy,
+      commodity: "steel",
+      referenceUnitPrice: 2,
+      policy: { kind: "manual" as const, unitPrice: 2 },
+      storable: true,
+    };
+    const result = advanceProducerEconomy({
+      turn: 1,
+      accounts,
+      producers: [
+        plant({ id: "power", capacityUnits: 10, inputs: [], outputs: [energy] }),
+        plant({
+          id: "steel",
+          capacityUnits: 10,
+          inputs: [
+            { commodity: "energy", book: "world", unitsPerOutput: 0.5, maximumUnitPrice: 3 },
+          ],
+          outputs: [steel],
+        }),
+      ],
+      externalOrders: [
+        {
+          id: "energy-customer",
+          accountId: "households",
+          commodity: "energy",
+          book: "world",
+          units: 5,
+          maximumUnitPrice: 3,
+        },
+        {
+          id: "steel-customer",
+          accountId: "households",
+          commodity: "steel",
+          book: "world",
+          units: 10,
+          maximumUnitPrice: 2,
+        },
+      ],
+    });
+    expect(result.producers.find((p) => p.id === "power")!.products[0]).toMatchObject({
+      soldUnits: 5,
+      deliveredUnits: 10,
+      internalDeliveredUnits: 5,
+      revenue: 15,
+      realizedUnitPrice: 3,
+    });
+    expect(result.producers.find((p) => p.id === "steel")!.purchases).toBe(0);
+  });
+  it("can run a partial batch entirely from this site's purchased inputs", () => {
+    const result = advanceProducerEconomy({
+      turn: 1,
+      accounts,
+      producers: [plant({ inputStock: [{ commodity: "energy", units: 100, value: 40 }] })],
+    });
+    expect(result.producers[0]).toMatchObject({
+      producedUnits: 50,
+      plannedUnits: 50,
+      purchases: 0,
+      inputsConsumed: 40,
+      cashFlow: -30,
+    });
+  });
+
+  it("cannot plan another site's production from privately retained inputs", () => {
+    const result = advanceProducerEconomy({
+      turn: 1,
+      accounts,
+      producers: [
+        plant({
+          id: "owner",
+          activeFraction: 0,
+          inputStock: [{ commodity: "energy", units: 100, value: 40 }],
+        }),
+        plant({ id: "other" }),
+      ],
+    });
+    expect(result.producers.find((p) => p.id === "other")!.plannedUnits).toBe(0);
+    expect(result.producers.find((p) => p.id === "owner")!.inputStock[0]).toMatchObject({
+      units: 100,
+      value: 40,
+    });
+  });
   it("cannot produce or sell output without delivered inputs", () => {
     const result = advanceProducerEconomy({ turn: 1, accounts, producers: [plant()] });
     expect(result.producers[0]).toMatchObject({

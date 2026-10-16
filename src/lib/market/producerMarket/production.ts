@@ -58,8 +58,11 @@ export interface ProducerOperatingResult {
   id: string;
   capacityUnits: number;
   activeUnits: number;
+  /** Physical proposal before funded order matching constrains actual production. */
+  plannedUnits: number;
   producedUnits: number;
   offeredUnits: number;
+  soldUnits: number;
   deliveredUnits: number;
   revenue: number;
   purchases: number;
@@ -80,6 +83,8 @@ export interface ProducerOperatingResult {
     book: string;
     producedUnits: number;
     offeredUnits: number;
+    soldUnits: number;
+    internalDeliveredUnits: number;
     deliveredUnits: number;
     revenue: number;
     askingUnitPrice: number;
@@ -213,48 +218,82 @@ export function advanceProducerEconomy(input: {
   // Find a physically feasible mix before buyers reserve inputs. Otherwise an
   // early final producer can take the energy needed by the steel supplier that
   // makes its own inputs, and a greedy shrink pass strands the entire cycle.
+  // Each segment ends when one owned input is exhausted. Its marginal input
+  // requirement is constant. This retains partial batches without ever treating
+  // private purchased stock as a shared commodity endowment.
+  const segments = plans.flatMap((p) => {
+    const maximum = plannedById.get(p.id)!;
+    const owned = new Map(
+      p.inputs.map((r) => [
+        r.commodity,
+        p.inputStock
+          .filter((s) => s.commodity === r.commodity)
+          .reduce((sum, s) => sum + s.units, 0),
+      ])
+    );
+    const boundaries = new Set([0, 1]);
+    for (const r of p.inputs) {
+      const required = maximum * r.unitsPerOutput;
+      const fraction = required > 0 ? (owned.get(r.commodity) ?? 0) / required : 0;
+      if (fraction > 0 && fraction < 1) boundaries.add(fraction);
+    }
+    const points = [...boundaries].sort((a, b) => a - b);
+    return points.slice(1).map((to, j) => ({
+      id: JSON.stringify([p.id, j]),
+      plan: p,
+      owned,
+      from: points[j] * maximum,
+      to: to * maximum,
+      units: (to - points[j]) * maximum,
+    }));
+  });
   const resources = new Map<string, { available: number; coefficients: number[] }>();
   const resource = (commodity: string, book: string) => {
     const key = JSON.stringify([commodity, book]);
     let row = resources.get(key);
     if (!row) {
-      row = { available: 0, coefficients: Array(plans.length).fill(0) };
+      row = { available: 0, coefficients: Array(segments.length).fill(0) };
       resources.set(key, row);
     }
     return row;
   };
-  for (const [j, p] of plans.entries()) {
-    const maximum = plannedById.get(p.id)!;
-    for (const recipe of p.inputs) {
-      const row = resource(recipe.commodity, recipe.book);
-      row.coefficients[j] += maximum * recipe.unitsPerOutput;
-      row.available += p.inputStock
-        .filter((s) => s.commodity === recipe.commodity)
-        .reduce((sum, s) => sum + s.units, 0);
+  for (const [j, segment] of segments.entries()) {
+    for (const recipe of segment.plan.inputs) {
+      const owned = segment.owned.get(recipe.commodity) ?? 0;
+      resource(recipe.commodity, recipe.book).coefficients[j] +=
+        Math.max(0, segment.to * recipe.unitsPerOutput - owned) -
+        Math.max(0, segment.from * recipe.unitsPerOutput - owned);
     }
-    for (const output of p.outputs) {
-      const row = resource(output.commodity, output.book);
-      row.coefficients[j] -= maximum * output.unitsPerOutput;
-      row.available += p.outputStock
+    for (const output of segment.plan.outputs)
+      resource(output.commodity, output.book).coefficients[j] -=
+        segment.units * output.unitsPerOutput;
+  }
+  for (const p of plans)
+    for (const output of p.outputs)
+      resource(output.commodity, output.book).available += p.outputStock
         .filter((s) => s.commodity === output.commodity && s.book === output.book)
         .reduce((sum, s) => sum + s.units, 0);
-    }
-  }
   for (const offer of input.externalOffers ?? [])
     resource(offer.commodity, offer.book).available += Math.min(
       offer.units,
       offer.deliverableUnits ?? offer.units
     );
   const feasible = feasibleProduction({
-    activities: plans.map((p) => ({
-      id: p.id,
+    activities: segments.map((s) => ({
+      id: s.id,
       value:
-        plannedById.get(p.id)! *
-        p.outputs.reduce((sum, o) => sum + o.unitsPerOutput * o.referenceUnitPrice, 0),
+        s.units *
+        s.plan.outputs.reduce((sum, o) => sum + o.unitsPerOutput * o.referenceUnitPrice, 0),
     })),
     constraints: [...resources.values()],
   });
-  for (const [j, p] of plans.entries()) plannedById.set(p.id, plannedById.get(p.id)! * feasible[j]);
+  for (const p of plans) plannedById.set(p.id, 0);
+  for (const [j, segment] of segments.entries())
+    plannedById.set(
+      segment.plan.id,
+      plannedById.get(segment.plan.id)! + segment.units * feasible[j]
+    );
+  const proposedById = new Map(plannedById);
   const inputOrders = () =>
     plans.flatMap((p) =>
       p.inputs.map((recipe) => {
@@ -455,24 +494,26 @@ export function advanceProducerEconomy(input: {
     for (const recipe of p.inputs) {
       const stock = stocks.get(recipe.commodity)!;
       const used = produced * recipe.unitsPerOutput;
-      const cost =
-        used >= stock.units
-          ? stock.value
-          : stock.units > 0
-            ? (stock.value * used) / stock.units
-            : 0;
-      stock.units = Math.max(0, stock.units - used);
-      stock.value = Math.max(0, stock.value - cost);
+      const exhausted = used >= stock.units * (1 - 1e-12);
+      const cost = exhausted
+        ? stock.value
+        : stock.units > 0
+          ? (stock.value * used) / stock.units
+          : 0;
+      stock.units = exhausted ? 0 : Math.max(0, stock.units - used);
+      stock.value = exhausted ? 0 : Math.max(0, stock.value - cost);
       consumed += cost;
     }
     let revenue = 0,
       offeredUnits = 0,
+      soldUnits = 0,
       deliveredUnits = 0;
     const products: ProducerOperatingResult["products"] = [];
     const outputStock = p.outputs.map((output) => {
       const sold = offersById.get(JSON.stringify([p.id, "output", output.commodity]))!;
       revenue += sold.revenue;
       offeredUnits += sold.offeredUnits;
+      soldUnits += sold.soldUnits;
       deliveredUnits += sold.deliveredUnits;
       const opening = p.outputStock
         .filter((s) => s.commodity === output.commodity && s.book === output.book)
@@ -485,17 +526,22 @@ export function advanceProducerEconomy(input: {
         book: output.book,
         producedUnits: produced * output.unitsPerOutput,
         offeredUnits: sold.offeredUnits,
+        soldUnits: sold.soldUnits,
+        internalDeliveredUnits: sold.internalDeliveredUnits,
         deliveredUnits: sold.deliveredUnits,
         revenue: sold.revenue,
         askingUnitPrice: postedOffers.get(JSON.stringify([p.id, "output", output.commodity]))!
           .unitPrice,
-        realizedUnitPrice: sold.deliveredUnits > 0 ? sold.revenue / sold.deliveredUnits : null,
+        realizedUnitPrice: sold.soldUnits > 0 ? sold.revenue / sold.soldUnits : null,
         unsoldUnits: Math.max(0, available - sold.deliveredUnits),
       });
       return {
         commodity: output.commodity,
         book: output.book,
-        units: output.storable ? Math.max(0, available - sold.deliveredUnits) : 0,
+        units:
+          output.storable && sold.deliveredUnits < available * (1 - 1e-12)
+            ? Math.max(0, available - sold.deliveredUnits)
+            : 0,
       };
     });
     const paid = payments.get(p.id)!;
@@ -503,8 +549,10 @@ export function advanceProducerEconomy(input: {
       id: p.id,
       capacityUnits: p.capacityUnits,
       activeUnits: p.capacityUnits * p.activeFraction,
+      plannedUnits: proposedById.get(p.id)!,
       producedUnits: produced,
       offeredUnits,
+      soldUnits,
       deliveredUnits,
       revenue,
       purchases,

@@ -41,6 +41,13 @@ export async function seedBankingIndexes(db: Db, log: (msg: string) => void) {
   );
   for (const index of INCOME_TAX_INDEXES)
     await ensureIndex(db, index.collection, index.keys, { name: index.name }, log);
+  await ensureIndex(
+    db,
+    "producerEconomyTurns",
+    { worldEpoch: 1, turn: -1 },
+    { name: "producerEconomyTurns_world_turn", unique: true, background: true },
+    log
+  );
 
   await ensureIndex(
     db,

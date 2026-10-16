@@ -54,7 +54,14 @@ export interface ProducerTrade {
 export interface ProducerMarketResult {
   accounts: MarketAccount[];
   trades: ProducerTrade[];
-  offers: Array<{ id: string; offeredUnits: number; deliveredUnits: number; revenue: number }>;
+  offers: Array<{
+    id: string;
+    offeredUnits: number;
+    soldUnits: number;
+    internalDeliveredUnits: number;
+    deliveredUnits: number;
+    revenue: number;
+  }>;
   orders: Array<{ id: string; requestedUnits: number; deliveredUnits: number; cost: number }>;
   prices: Array<{
     commodity: string;
@@ -134,7 +141,14 @@ export function settleProducerMarket(input: {
   const offerResults = new Map(
     input.offers.map((o) => [
       o.id,
-      { id: o.id, offeredUnits: offered.get(o.id)!, deliveredUnits: 0, revenue: 0 },
+      {
+        id: o.id,
+        offeredUnits: offered.get(o.id)!,
+        soldUnits: 0,
+        internalDeliveredUnits: 0,
+        deliveredUnits: 0,
+        revenue: 0,
+      },
     ])
   );
   const trades: ProducerTrade[] = [];
@@ -209,6 +223,8 @@ export function settleProducerMarket(input: {
           buyer.deliveredUnits += units;
           buyer.cost += amount;
           const seller = offerResults.get(offer.id)!;
+          if (internal) seller.internalDeliveredUnits += units;
+          else seller.soldUnits += units;
           seller.deliveredUnits += units;
           seller.revenue += amount;
         }
