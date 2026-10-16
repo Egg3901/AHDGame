@@ -1,11 +1,12 @@
 import { ObjectId } from "mongodb";
+import type { AnyBulkWriteOperation } from "mongodb";
 import type { Migration } from "../types";
 import { SCOTUS_ACHIEVEMENTS, SCOTUS_CONFIRMED_SLUG } from "@/lib/scotus/achievementDefinitions";
 import {
   buildScotusConfirmationCareerEvent,
   hasScotusConfirmationEvent,
 } from "@/lib/scotus/careerEvents";
-import type { CareerEvent } from "@/lib/db/types/character";
+import type { Character } from "@/lib/db/types/character";
 
 /**
  * Adds the Supreme Court achievement definitions and backfills what past
@@ -45,9 +46,7 @@ export const migration: Migration = {
       : [];
     const byId = new Map(characters.map((c) => [c._id.toString(), c]));
 
-    const historyWrites: Array<{
-      updateOne: { filter: { _id: ObjectId }; update: { $push: { careerHistory: CareerEvent } } };
-    }> = [];
+    const historyWrites: AnyBulkWriteOperation<Character>[] = [];
     const awardUserIds = new Map<string, { userId: ObjectId; characterId: ObjectId }>();
     for (const nom of confirmed) {
       const character = byId.get((nom.nomineeCharacterId as ObjectId).toString());
@@ -88,7 +87,8 @@ export const migration: Migration = {
           },
         }))
       );
-      if (historyWrites.length) await db.collection("characters").bulkWrite(historyWrites);
+      if (historyWrites.length)
+        await db.collection<Character>("characters").bulkWrite(historyWrites);
       const definition = await db
         .collection("achievements")
         .findOne({ slug: SCOTUS_CONFIRMED_SLUG }, { projection: { _id: 1 } });
