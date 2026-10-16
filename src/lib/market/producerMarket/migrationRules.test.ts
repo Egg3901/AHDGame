@@ -13,6 +13,13 @@ const opening = (): ExistingWorldProducerOpening => ({
     {
       id: "plant",
       accountId: "a",
+      capacity: {
+        ownedDailyUnits: 240,
+        paidBookAnchor: 300,
+        buildQueue: [
+          { unitsOrdered: 60, costPaidAnchor: 90, startTurn: 8, onlineTurn: 12, smooth: true },
+        ],
+      },
       inventoryDailyUnits: { steel: 240 },
       inventoryValueAnchor: 480,
       pricingMode: "market",
@@ -58,6 +65,15 @@ describe("existing-world producer opening", () => {
       { currency: "USD", before: 100, after: 100 },
     ]);
     expect(plan.firstSettlementTurn).toBe(11);
+    expect(plan.sectors[0].capacity).toEqual({
+      ...opening().sectors[0].capacity,
+      completedTurn: 10,
+    });
+    expect(plan.reconciliation).toMatchObject({
+      ownedDailyUnits: 240,
+      paidCapacityBookAnchor: 300,
+      constructionInProgressAnchor: 45,
+    });
     expect(plan.protectedImages).toEqual(opening().protectedImages);
   });
 

@@ -30,6 +30,27 @@ const openingSchema = z
         .object({
           id: identity,
           accountId: identity,
+          capacity: z
+            .object({
+              ownedDailyUnits: amount,
+              paidBookAnchor: amount,
+              buildQueue: z.array(
+                z
+                  .object({
+                    unitsOrdered: amount,
+                    costPaidAnchor: amount,
+                    startTurn: z.number().finite().nonnegative(),
+                    onlineTurn: z.number().int().nonnegative(),
+                    strategyId: z.string().nullable().optional(),
+                    accelerated: z.boolean().optional(),
+                    smooth: z.boolean().optional(),
+                    constructionLoanId: identity.optional(),
+                    constructionClaimId: identity.optional(),
+                  })
+                  .strict()
+              ),
+            })
+            .strict(),
           inventoryDailyUnits: z.record(z.string(), amount),
           inventoryValueAnchor: amount,
           outputs: z.array(

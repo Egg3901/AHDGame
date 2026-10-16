@@ -1,5 +1,8 @@
 import type { ProducerPayable } from "@/lib/market/producerMarket/payablesRules";
-import type { ProducerOperatingResult } from "@/lib/market/producerMarket/production";
+import type {
+  ProducerOperatingResult,
+  PurchasedStock,
+} from "@/lib/market/producerMarket/production";
 
 /** Cash-backed counterparties to producer sales and operating payments. */
 export interface ProducerEconomyAccount {
@@ -28,4 +31,12 @@ export interface ProducerPayablesState {
   worldEpoch: string;
   turn: number;
   claims: ProducerPayable[];
+}
+
+/** Current physical goods; the operating receipt preserves their historical movement. */
+export interface ProducerInventoryState {
+  worldEpoch: string;
+  turn: number;
+  inputStock: PurchasedStock[];
+  outputStock: Array<{ commodity: string; book: string; units: number }>;
 }

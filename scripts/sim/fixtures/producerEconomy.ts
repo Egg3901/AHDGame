@@ -8,6 +8,7 @@ import {
 } from "../../../src/lib/constants/sectorStrategies";
 import { isStorable } from "../../../src/lib/market/inventory";
 import { type ProductionPlan } from "../../../src/lib/market/producerMarket/production";
+import { producerRecipe } from "../../../src/lib/market/producerMarket/recipeRules";
 import { isStateScopedCommodity } from "../../../src/lib/market/rules/commodityMarketScope";
 
 export const producerFixtureBook = (commodity: string) =>
@@ -31,11 +32,8 @@ export function makeProducerRecipeFixture(preset: string): ProductionPlan[] {
           undefined,
           preset
         );
-        const yieldPerNominal = Object.entries(recipe.supply).reduce(
-          (sum, [commodity, rate]) =>
-            sum + rate! / COMMODITY_BASE_PRICES[commodity as CommodityType],
-          0
-        );
+        const physical = producerRecipe({ ...recipe, eraUnitScale: 1 });
+        const yieldPerNominal = physical.unitsPerNominalAnchor;
         assert(yieldPerNominal > 0, `Missing output recipe: ${lane}`);
         const nominalValue = 10000;
         return {
@@ -44,18 +42,16 @@ export function makeProducerRecipeFixture(preset: string): ProductionPlan[] {
           capacityUnits: nominalValue * yieldPerNominal,
           activeFraction: 1,
           outputMultiplier: 1,
-          inputs: Object.entries(recipe.demand).map(([commodity, rate]) => ({
+          inputs: physical.inputs.map(({ commodity, unitsPerOutput }) => ({
             commodity,
             book: producerFixtureBook(commodity),
-            unitsPerOutput:
-              rate! / COMMODITY_BASE_PRICES[commodity as CommodityType] / yieldPerNominal,
+            unitsPerOutput,
             maximumUnitPrice: COMMODITY_BASE_PRICES[commodity as CommodityType] * 1.25,
           })),
-          outputs: Object.entries(recipe.supply).map(([commodity, rate]) => ({
+          outputs: physical.outputs.map(({ commodity, unitsPerOutput }) => ({
             commodity,
             book: producerFixtureBook(commodity),
-            unitsPerOutput:
-              rate! / COMMODITY_BASE_PRICES[commodity as CommodityType] / yieldPerNominal,
+            unitsPerOutput,
             policy: { kind: "automatic" as const, targetMarkup: 0.1 },
             referenceUnitPrice: COMMODITY_BASE_PRICES[commodity as CommodityType],
             storable: isStorable(commodity as CommodityType),

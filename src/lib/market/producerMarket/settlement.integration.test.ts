@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import type { Corporation } from "@/lib/db/types/corporation";
+import type { Corporation, CorporateSector } from "@/lib/db/types/corporation";
 import { ObjectId, type Db } from "mongodb";
 import { createInMemoryDb } from "@/lib/test-utils/inMemoryDb";
 import { withInjectedCrash } from "@/lib/test-utils/faultyDb";
@@ -10,10 +10,14 @@ import { reconcileLedger } from "@/lib/ledger/reconcile";
 import type { LedgerEntry } from "@/lib/ledger/types";
 import { snapshotMoneySupply } from "@/lib/moneySupply/snapshot";
 import { settleProducerTurn } from "./settlement";
+import { CAPITAL_DEPRECIATION_PER_TURN } from "@/lib/market/capital";
+import { TURNS_PER_DAY } from "@/lib/constants/turnTime";
+import { prepareProducerSector } from "@/lib/turn/corporation/producerSectorPlan";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 const corporationId = "aaaaaaaaaaaaaaaaaaaaaaaa";
 const sectorId = "bbbbbbbbbbbbbbbbbbbbbbbb";
+const openingDailyUnits = (10 * TURNS_PER_DAY) / (1 - CAPITAL_DEPRECIATION_PER_TURN);
 
 function fixture() {
   const memory = createInMemoryDb();
@@ -34,7 +38,13 @@ function fixture() {
     {
       _id: new ObjectId(sectorId),
       corporationId: new ObjectId(corporationId),
+      sectorType: "manufacturing",
       pricingPosture: 0.2,
+      capitalStock: openingDailyUnits,
+      capacityBookAnchor: 100,
+      buildQueue: [],
+      producerCapacity: { worldEpoch: "example", turn: 0 },
+      producerInventory: { worldEpoch: "example", turn: 0, inputStock: [], outputStock: [] },
     },
   ]);
   memory.seed("producerEconomyAccounts", [
@@ -68,7 +78,6 @@ function fixture() {
         {
           id: "plant",
           accountId: "corp",
-          capacityUnits: 10,
           activeFraction: 1,
           outputMultiplier: 1,
           inputs: [],
@@ -124,12 +133,137 @@ function fixture() {
         openingCashLocal: 0,
       },
     ],
-    targets: [{ producerId: "plant", sectorId, corporationId }],
+    targets: [
+      {
+        producerId: "plant",
+        sectorId,
+        corporationId,
+        capacity: {
+          completedTurn: 0,
+          ownedDailyUnits: openingDailyUnits,
+          paidBookAnchor: 100,
+          buildQueue: [],
+        },
+        operatingRecipeRatio: 1,
+        recessionCapacityFactor: 1,
+        plantType: { sectorType: "manufacturing" },
+      },
+    ],
   };
   return { memory, input, db: memory as unknown as Db };
 }
 
 describe("frozen producer turn settlement", () => {
+  it("settles a real finance-sector plan with the common quote and a physical branch allocation", async () => {
+    const { memory, input, db } = fixture();
+    await db.collection<CorporateSector>("corporateSectors").updateOne(
+      { _id: new ObjectId(sectorId) },
+      {
+        $set: {
+          sectorType: "financial",
+          producerQuotes: { financial_services: { kind: "manual", unitPrice: 3 } },
+        },
+      }
+    );
+    const sector = (await db
+      .collection<CorporateSector>("corporateSectors")
+      .findOne({ _id: new ObjectId(sectorId) }))!;
+    const prepared = prepareProducerSector({
+      worldEpoch: "example",
+      turn: 1,
+      sector,
+      recipe: { supply: { financial_services: 1 }, demand: {}, eraUnitScale: 1 },
+      markets: new Map([
+        ["financial_services", { book: "world", referenceUnitPrice: 5, maximumInputUnitPrice: 6 }],
+      ]),
+      outputMultiplier: 0.4,
+      operatingRecipeRatio: 1,
+      recessionCapacityFactor: 1,
+      labourCost: 10,
+      otherOperatingCost: 5,
+      labourRecipientAccountId: "households",
+      operatingRecipientAccountId: "operating",
+    });
+    input.production.producers = [prepared.plan];
+    input.targets = [prepared.target];
+    input.production.accounts = input.production.accounts.map((account) =>
+      account.id === "corp" ? { ...account, id: corporationId } : account
+    );
+    input.bindings = input.bindings.map((binding) =>
+      binding.accountId === "corp" ? { ...binding, accountId: corporationId } : binding
+    );
+    input.production.households = [
+      {
+        accountId: "households",
+        spendFraction: 1,
+        products: [
+          { commodity: "financial_services", book: "world", maximumUnitPrice: 3, weight: 1 },
+        ],
+      },
+    ];
+    const result = await settleProducerTurn(db, input);
+    expect(result.producers[0]).toMatchObject({
+      capacityUnits: 10,
+      producedUnits: 4,
+      offeredUnits: 4,
+      soldUnits: 4,
+      revenue: 12,
+      profit: -3,
+    });
+    expect(memory.collection("corporations").docs[0]).toMatchObject({
+      liquidCapital: 994,
+      bankCharter: { cashReserves: 9000, totalLoans: 6000, totalDeposits: 8000 },
+    });
+    expect(memory.collection("corporateSectors").docs[0].producerInventory).toMatchObject({
+      worldEpoch: "example",
+      turn: 1,
+    });
+  });
+
+  it("rejects unreconciled physical stock before freezing or moving cash", async () => {
+    const { memory, input, db } = fixture();
+    memory.collection("corporateSectors").docs[0].capitalStock = openingDailyUnits + 1;
+    await expect(settleProducerTurn(db, input)).rejects.toThrow("physical opening");
+    expect(memory.collection("producerEconomyTurns").docs).toHaveLength(0);
+    expect(memory.collection("corporations").docs[0].liquidCapital).toBe(1000);
+  });
+
+  it.each([false, true])(
+    "recovers physical delivery and depreciation exactly once, afterWrite=%s",
+    async (afterWrite) => {
+      const { memory, input, db } = fixture();
+      const queue = [
+        { unitsOrdered: 24, costPaidAnchor: 12, startTurn: 0, onlineTurn: 1, smooth: true },
+      ];
+      input.targets = input.targets.map((target) => ({
+        ...target,
+        capacity: { ...target.capacity, buildQueue: queue },
+      }));
+      memory.collection("corporateSectors").docs[0].buildQueue = queue;
+      const faulty = withInjectedCrash(memory, {
+        collection: "corporateSectors",
+        op: "bulkWrite",
+        onCall: 1,
+        afterWrite,
+      });
+      await expect(settleProducerTurn(faulty.db, input)).rejects.toThrow("crash");
+      const frozenCash = memory.collection("corporations").docs[0].liquidCapital;
+      input.targets = [];
+      const result = await settleProducerTurn(db, input);
+      const expectedDaily = (openingDailyUnits + 24) * (1 - CAPITAL_DEPRECIATION_PER_TURN);
+      expect(result.producers[0].capacityUnits).toBe(expectedDaily / TURNS_PER_DAY);
+      expect(memory.collection("corporateSectors").docs[0]).toMatchObject({
+        capitalStock: expectedDaily,
+        capacityBookAnchor: 112 * (1 - CAPITAL_DEPRECIATION_PER_TURN),
+        buildQueue: [],
+        producerCapacity: { worldEpoch: "example", turn: 1 },
+        constructionInProgressAnchor: 0,
+      });
+      expect(memory.collection("corporations").docs[0].liquidCapital).toBe(frozenCash);
+      expect(memory.collection("ledgerEntries").docs).toHaveLength(1);
+    }
+  );
+
   it("publishes the same delivered receipt that paid cash and preserves bank and user-command fields", async () => {
     const { memory, input, db } = fixture();
     const result = await settleProducerTurn(db, input);
@@ -311,6 +445,20 @@ describe("frozen producer turn settlement", () => {
     await expect(settleProducerTurn(db, input)).rejects.toThrow("omitted");
     expect(memory.collection("corporations").docs[0].liquidCapital).toBe(30);
     input.production.payables = stored.claims;
+    input.production.producers = input.production.producers.map((plan) => ({
+      ...plan,
+      inputStock: first.producers[0].inputStock,
+      outputStock: first.producers[0].outputStock,
+    }));
+    input.targets = input.targets.map((target) => ({
+      ...target,
+      capacity: {
+        completedTurn: 1,
+        ownedDailyUnits: openingDailyUnits * (1 - CAPITAL_DEPRECIATION_PER_TURN),
+        paidBookAnchor: 100 * (1 - CAPITAL_DEPRECIATION_PER_TURN),
+        buildQueue: [],
+      },
+    }));
     const second = await settleProducerTurn(db, input);
     expect(second.producers[0]).toMatchObject({
       profit: -15,

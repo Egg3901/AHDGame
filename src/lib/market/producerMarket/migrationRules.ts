@@ -1,6 +1,8 @@
 /** Pure opening-state conversion. This plan never applies a migration or invents funding. */
 import { TURNS_PER_DAY } from "@/lib/constants/turnTime";
 import type { ProducerQuotePolicy } from "./rules";
+import { validateProducerCapacityState, type ProducerCapacityState } from "./capacityRules";
+import { queueUndeliveredCost } from "@/lib/corporations/buildDelivery";
 
 export interface ExistingWorldProducerOpening {
   worldEpoch: string;
@@ -16,6 +18,8 @@ export interface ExistingWorldProducerOpening {
   sectors: readonly {
     id: string;
     accountId: string;
+    /** Reconciled physical stock and paid basis; a revenue estimate cannot substitute. */
+    capacity: Omit<ProducerCapacityState, "completedTurn">;
     inventoryDailyUnits: Readonly<Record<string, number>>;
     /** Existing telemetry, retained as a memo, never converted into cash or acquisition cost. */
     inventoryValueAnchor: number;
@@ -49,6 +53,7 @@ export interface ProducerOpeningPlan {
   sectors: Array<{
     id: string;
     accountId: string;
+    capacity: ProducerCapacityState;
     inputStock: [];
     outputStock: Array<{ commodity: string; book: string; units: number }>;
     quotes: Array<{ commodity: string; book: string; policy: ProducerQuotePolicy }>;
@@ -67,6 +72,9 @@ export interface ProducerOpeningPlan {
     }>;
     cashCreated: 0;
     inputStockCreated: 0;
+    ownedDailyUnits: number;
+    paidCapacityBookAnchor: number;
+    constructionInProgressAnchor: number;
   };
 }
 
@@ -132,6 +140,9 @@ export function planProducerOpening(source: ExistingWorldProducerOpening): Produ
     .sort((a, b) => compare(a.id, b.id))
     .map((sector) => {
       if (!accountIds.has(sector.accountId)) throw new Error("Unbound sector");
+      if (!sector.capacity) throw new Error("Physical opening capacity requires reconciliation");
+      const capacity = { ...sector.capacity, completedTurn: source.completedTurn };
+      validateProducerCapacityState(capacity);
       uniqueIds(
         sector.outputs.map((output) => ({ id: output.commodity })),
         "output commodity"
@@ -158,6 +169,7 @@ export function planProducerOpening(source: ExistingWorldProducerOpening): Produ
       return {
         id: sector.id,
         accountId: sector.accountId,
+        capacity,
         inputStock: [],
         outputStock,
         quotes: [...sector.outputs]
@@ -210,6 +222,22 @@ export function planProducerOpening(source: ExistingWorldProducerOpening): Produ
         .map(([commodity, quantity]) => ({ commodity, ...quantity })),
       cashCreated: 0,
       inputStockCreated: 0,
+      ownedDailyUnits: valid(
+        sectors.reduce((sum, sector) => sum + sector.capacity.ownedDailyUnits, 0),
+        "opening capacity total"
+      ),
+      paidCapacityBookAnchor: valid(
+        sectors.reduce((sum, sector) => sum + sector.capacity.paidBookAnchor, 0),
+        "opening capacity book total"
+      ),
+      constructionInProgressAnchor: valid(
+        sectors.reduce(
+          (sum, sector) =>
+            sum + queueUndeliveredCost([...sector.capacity.buildQueue], source.completedTurn),
+          0
+        ),
+        "opening construction total"
+      ),
     },
   };
 }
