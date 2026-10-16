@@ -5,6 +5,7 @@ import type { CountryId } from "@/lib/constants/countries";
 import { COUNTRY_CURRENCY_MAP, getSeedCurrencyCode } from "@/lib/constants/currencies";
 import type { CorporationType, OperatingSectorType } from "@/lib/constants/corporations";
 import { getOperatingSectorType } from "@/lib/constants/sectorStrategies";
+import { pickupMeasurementBasis, pickupProductionHistory } from "./nppPickup/rules";
 import { capacityRescaleRatio } from "@/lib/constants/capacityEconomy";
 import { createNppCorporationShell } from "@/lib/admin/spawnNppCorporation";
 import { chooseNppCorporationName } from "@/lib/corporations/names/rules";
@@ -166,6 +167,7 @@ export async function creditNppPickup(
 ): Promise<number> {
   const sectors = db.collection<CorporateSector>("corporateSectors");
   const workers = Math.round((sector.workers ?? 0) * share);
+  const capacityShare = builtStock(sector) > 0 ? carved.capitalStock / builtStock(sector) : 0;
 
   if (pickup.merge) {
     const receiver = await sectors.findOne({ _id: pickup.receiverSectorId });
@@ -190,10 +192,23 @@ export async function creditNppPickup(
         : {}),
       buildQueue: [],
     });
+    const history = pickupProductionHistory({
+      receiver,
+      donor: sector,
+      capacityShare,
+      unitRatio: (ratio * pickupMeasurementBasis(receiver)) / pickupMeasurementBasis(sector),
+    });
     const result = await sectors.updateOne(
       { _id: receiver._id, nppPickupReceipts: { $ne: pickup.key } },
       {
-        $set: { ...merged, updatedAt: now },
+        $set: {
+          ...merged,
+          ...history,
+          ...(receiver.productOutputCapacityUnits != null
+            ? { productOutputCapacityUnits: merged.operatingCapacityUnits ?? merged.capitalStock }
+            : {}),
+          updatedAt: now,
+        },
         $inc: { workers },
         $push: { nppPickupReceipts: { $each: [pickup.key], $slice: -RECEIPT_CAP } },
       }
@@ -222,6 +237,11 @@ export async function creditNppPickup(
       workers,
       ...(sector.strategyId ? { strategyId: sector.strategyId } : {}),
       ...carved,
+      ...pickupProductionHistory({
+        donor: sector,
+        capacityShare,
+        unitRatio: 1 / pickupMeasurementBasis(sector),
+      }),
       buildQueue: [],
       nppPickupReceipts: [pickup.key],
       createdAt: now,
