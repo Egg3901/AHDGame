@@ -1,5 +1,6 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { ObjectId } from "mongodb";
+import { stockTaxReceipt, taxableStockAmounts } from "@/lib/budget/rules/capitalGainsTax";
 import { emitCorporationTurnTx } from "./corporationTurnPhases";
 import type { Db } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
@@ -97,6 +98,37 @@ describe("emitCorporationTurnTx — corporate tax is booked once (ticket #1260)"
       thresholds: {} as never,
     });
   }
+
+  it("emits a valid dividend receipt when independently accumulated capital exceeds the total by roundoff", async () => {
+    const holder = new ObjectId();
+    db.collection("characters")
+      .find()
+      .toArray.mockResolvedValue([{ _id: holder, name: "Test Holder" }]);
+    await emitCorporationTurnTx({
+      db: db as unknown as Db,
+      lookups: makeLookups("USD", 1),
+      corpSnapshots: [],
+      ceoSalaryPayments: new Map(),
+      dividendPayments: new Map([[holder.toString(), new Map([["USD", 0.3]])]]),
+      capitalDividendPayments: new Map([[holder.toString(), new Map([["USD", 0.1 + 0.2]])]]),
+      dividendTaxPaidByCountry: new Map(),
+      turn: 1,
+      now: new Date("2026-10-16T00:00:00Z"),
+      thresholds: {} as never,
+    });
+    const entries = emitTxBulk.mock.calls[0][1] as FinancialTxLogEntry[];
+    const row = entries.find((entry) => entry.type === "corp_dividend")!;
+    expect(row.amount).toBe(0.3);
+    expect(stockTaxReceipt(row.meta?.stockTax)).toMatchObject({
+      incomeAmount: 0,
+      capitalAmount: 0.3,
+    });
+    expect(taxableStockAmounts(row.type, row.amount, row.meta?.stockTax)).toEqual({
+      income: 0,
+      capital: 0.3,
+      assessmentTurn: 1,
+    });
+  });
 
   it("nets corp_revenue against corp_tax_paid to the cash the corp actually keeps", async () => {
     await run("USD", 1);
