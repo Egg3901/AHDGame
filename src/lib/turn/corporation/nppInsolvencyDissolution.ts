@@ -167,6 +167,7 @@ export async function processNppInsolventCorpDissolution(
     const fxRate = fxRateForCorpFromMap(corp, fxByCurrency);
     const arrearsAnchor = corporateCashArrearsAnchor({
       operatingByCurrency: corp.operatingCashArrearsByCurrency,
+      producerPayables: corp.producerPayables?.claims,
       federalTaxByCountryAnchor: corp.federalTaxArrearsAnchorByCountry,
       fxByCurrency,
     });
@@ -214,6 +215,7 @@ export async function processNppInsolventCorpDissolution(
         ) -
         corporateCashArrearsAnchor({
           operatingByCurrency: corp.operatingCashArrearsByCurrency,
+          producerPayables: corp.producerPayables?.claims,
           federalTaxByCountryAnchor: corp.federalTaxArrearsAnchorByCountry,
           fxByCurrency,
         });

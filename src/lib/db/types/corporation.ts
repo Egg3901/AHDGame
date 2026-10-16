@@ -219,6 +219,7 @@ export interface CorporationAutopilot {
 }
 
 export interface Corporation {
+  producerPayables?: import("./producerEconomy").ProducerPayablesState;
   /** Frozen migration fallback for unrecorded legacy personal cost basis. */
   stockHoldingRolloutAnchorPrice?: number;
   stockHoldingRolloutTurn?: number;

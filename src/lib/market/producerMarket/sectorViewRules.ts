@@ -4,6 +4,7 @@ import type { ProducerQuotePolicy } from "./rules";
 
 export interface ProducerSectorView {
   turn: number | null;
+  quotePolicies?: Readonly<Record<string, ProducerQuotePolicy | undefined>>;
   products: Array<{
     commodity: string;
     policy?: ProducerQuotePolicy;
@@ -14,6 +15,7 @@ export interface ProducerSectorView {
     internalDeliveredUnits: number | null;
     askingUnitPrice: number | null;
     realizedUnitPrice: number | null;
+    lostUnits: number | null;
     sellThrough: number | null;
   }>;
   operations?: {
@@ -22,10 +24,13 @@ export interface ProducerSectorView {
     producedUnits: number;
     revenue: number;
     inputsUsed: number;
+    inventoryWriteOff: number;
     inputsPurchased: number;
     labourCost: number;
     otherOperatingCost: number;
     unpaidBills: number;
+    newUnpaidBills: number;
+    oldBillsPaid: number;
     breakEvenRevenue: number;
     profit: number;
     cashFlow: number;
@@ -42,6 +47,7 @@ export function producerSectorView(input: {
   const products = new Map(receipt?.products.map((p) => [p.commodity, p]));
   return {
     turn: receipt?.turn ?? null,
+    ...(input.canManage ? { quotePolicies: { ...input.policies } } : {}),
     products: [...new Set([...input.commodities, ...products.keys()])].sort().map((commodity) => {
       const product = products.get(commodity);
       const policy: ProducerQuotePolicy = input.policies[commodity] ?? {
@@ -62,6 +68,7 @@ export function producerSectorView(input: {
         internalDeliveredUnits: product?.internalDeliveredUnits ?? null,
         askingUnitPrice: product?.askingUnitPrice ?? null,
         realizedUnitPrice: product?.realizedUnitPrice ?? null,
+        lostUnits: product?.lostUnits ?? null,
         sellThrough:
           product && product.offeredUnits > 0 ? product.soldUnits / product.offeredUnits : null,
       };
@@ -74,10 +81,13 @@ export function producerSectorView(input: {
             producedUnits: receipt.producedUnits,
             revenue: receipt.revenue,
             inputsUsed: receipt.inputsConsumed,
+            inventoryWriteOff: receipt.inventoryWriteOff,
             inputsPurchased: receipt.purchases,
             labourCost: receipt.labourPaid + receipt.labourArrears,
             otherOperatingCost: receipt.otherOperatingPaid + receipt.otherOperatingArrears,
-            unpaidBills: receipt.operatingArrears,
+            unpaidBills: receipt.closingArrears,
+            newUnpaidBills: receipt.operatingArrears,
+            oldBillsPaid: receipt.arrearsPaid,
             breakEvenRevenue: receipt.revenue - receipt.profit,
             profit: receipt.profit,
             cashFlow: receipt.cashFlow,

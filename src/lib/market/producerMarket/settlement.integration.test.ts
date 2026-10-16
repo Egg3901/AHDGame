@@ -1,7 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
+import type { Corporation } from "@/lib/db/types/corporation";
 import { ObjectId, type Db } from "mongodb";
 import { createInMemoryDb } from "@/lib/test-utils/inMemoryDb";
 import { withInjectedCrash } from "@/lib/test-utils/faultyDb";
+import { loadArrearsView } from "@/lib/corporations/queries/corporationDetail/arrears";
+import { producerPayableId } from "./payablesRules";
 import { collectBalances } from "@/lib/ledger/balanceSnapshot";
 import { reconcileLedger } from "@/lib/ledger/reconcile";
 import type { LedgerEntry } from "@/lib/ledger/types";
@@ -23,6 +26,7 @@ function fixture() {
       liquidCapital: 1000,
       liquidCurrencyCode: "USD",
       countryId: "US",
+      userId: new ObjectId("cccccccccccccccccccccccc"),
       bankCharter: { cashReserves: 9000, totalLoans: 6000, totalDeposits: 8000 },
     },
   ]);
@@ -154,15 +158,13 @@ describe("frozen producer turn settlement", () => {
     memory.seed("exchangeRates", [{ currencyCode: "USD", rate: 2 }]);
     memory.seed("gameConfig", [{ _id: "default", moneySupplyEnabled: true }]);
     memory.seed("centralBanks", [{ _id: "US", countryId: "US", externalBroadMoney: 0 }]);
-    memory
-      .collection("producerEconomyAccounts")
-      .docs.push({
-        _id: "stale",
-        worldEpoch: "other",
-        cash: 1000000,
-        currency: "USD",
-        kind: "households",
-      });
+    memory.collection("producerEconomyAccounts").docs.push({
+      _id: "stale",
+      worldEpoch: "other",
+      cash: 1000000,
+      currency: "USD",
+      kind: "households",
+    });
     const opening = await collectBalances(db);
     expect(opening).not.toHaveProperty("economy_wallet:stale:USD");
     await snapshotMoneySupply(db, 0);
@@ -265,6 +267,132 @@ describe("frozen producer turn settlement", () => {
     memory.collection("producerEconomyTurnChunks").docs.splice(0);
     await expect(settleProducerTurn(db, input)).rejects.toThrow("Missing producer receipt chunk");
     expect(memory.collection("corporations").docs[0].liquidCapital).toBe(1000);
+  });
+
+  it("carries stored invoices across turns and rejects an omitted opening debt", async () => {
+    const { memory, input, db } = fixture();
+    memory.collection("corporations").docs[0].liquidCapital = 0;
+    input.production.accounts = input.production.accounts.map((account) =>
+      account.id === "corp" ? { ...account, cash: 0 } : account
+    );
+    input.bindings = input.bindings.map((binding) =>
+      binding.accountId === "corp" ? { ...binding, openingCashLocal: 0 } : binding
+    );
+    const first = await settleProducerTurn(db, input);
+    expect(first.producers[0]).toMatchObject({ profit: -15, closingArrears: 15 });
+    const stored = (await db
+      .collection<Corporation>("corporations")
+      .findOne({ _id: new ObjectId(corporationId) }))!.producerPayables!;
+    expect(
+      stored.claims.reduce((sum: number, claim: { amount: number }) => sum + claim.amount, 0)
+    ).toBe(15);
+    memory.collection("corporations").docs[0].liquidCapital = 30;
+    const household = memory
+      .collection("producerEconomyAccounts")
+      .docs.find((row) => row._id === "households")!;
+    household.cash = Number(household.cash) - 30;
+    memory.collection("gameState").docs[0].processingTargetTurn = 2;
+    input.production = {
+      ...input.production,
+      turn: 2,
+      accounts: input.production.accounts.map((account) =>
+        account.id === "corp"
+          ? { ...account, cash: 15 }
+          : account.id === "households"
+            ? { ...account, cash: 35 }
+            : account
+      ),
+    };
+    input.bindings = input.bindings.map((binding) => ({
+      ...binding,
+      openingCashLocal:
+        binding.accountId === "corp" ? 30 : binding.accountId === "households" ? 70 : 0,
+    }));
+    await expect(settleProducerTurn(db, input)).rejects.toThrow("omitted");
+    expect(memory.collection("corporations").docs[0].liquidCapital).toBe(30);
+    input.production.payables = stored.claims;
+    const second = await settleProducerTurn(db, input);
+    expect(second.producers[0]).toMatchObject({
+      profit: -15,
+      cashFlow: -15,
+      arrearsPaid: 15,
+      closingArrears: 15,
+    });
+    expect(memory.collection("corporations").docs[0].producerPayables).toMatchObject({ turn: 2 });
+  });
+
+  it.each([false, true])(
+    "recovers payable publication without another payment, afterWrite=%s",
+    async (afterWrite) => {
+      const { memory, input, db } = fixture();
+      const claim = {
+        debtorAccountId: "corp",
+        creditorAccountId: "households",
+        producerId: "plant",
+        kind: "labour" as const,
+        amount: 20,
+      };
+      const payables = [{ ...claim, id: producerPayableId(claim) }];
+      memory.collection("corporations").docs[0].producerPayables = {
+        worldEpoch: "example",
+        turn: 0,
+        claims: payables,
+      };
+      input.production.payables = payables;
+      const faulty = withInjectedCrash(memory, {
+        collection: "corporations",
+        op: "bulkWrite",
+        onCall: 1,
+        afterWrite,
+      });
+      await expect(settleProducerTurn(faulty.db, input)).rejects.toThrow("crash");
+      expect(memory.collection("corporations").docs[0].liquidCapital).toBe(990);
+      input.production.payables = [];
+      const result = await settleProducerTurn(db, input);
+      expect(result.producers[0]).toMatchObject({
+        profit: 15,
+        cashFlow: -5,
+        arrearsPaid: 20,
+        closingArrears: 0,
+      });
+      expect(memory.collection("corporations").docs[0].liquidCapital).toBe(990);
+      expect(memory.collection("corporations").docs[0].producerPayables).toMatchObject({
+        turn: 1,
+        claims: [],
+      });
+      expect(memory.collection("ledgerEntries").docs).toHaveLength(1);
+    }
+  );
+
+  it("shows the exact native repayment after the outstanding balance is cleared and FX changes", async () => {
+    const { memory, input, db } = fixture();
+    const claim = {
+      debtorAccountId: "corp",
+      creditorAccountId: "households",
+      producerId: "plant",
+      kind: "labour" as const,
+      amount: 20,
+    };
+    const claims = [{ ...claim, id: producerPayableId(claim) }];
+    memory.collection("corporations").docs[0].producerPayables = {
+      worldEpoch: "example",
+      turn: 0,
+      claims,
+    };
+    input.production.payables = claims;
+    await settleProducerTurn(db, input);
+    const corporation = (await db
+      .collection<Corporation>("corporations")
+      .findOne({ _id: new ObjectId(corporationId) }))!;
+    expect(corporation.producerPayables?.claims).toEqual([]);
+    const view = await loadArrearsView({
+      db,
+      corporation,
+      viewerUserId: corporation.userId!.toString(),
+      turn: 1,
+      rates: new Map([["USD", 3]]),
+    });
+    expect(view).toEqual({ turn: 1, paidLastTurn: 40, remaining: 0 });
   });
 
   it("rejects an unsupported native currency before freezing or moving cash", async () => {

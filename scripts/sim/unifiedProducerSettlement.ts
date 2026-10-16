@@ -22,12 +22,14 @@ function simulate(
   ];
   const openingCash = accounts.reduce((sum, account) => sum + account.cash, 0);
   const observations = [];
+  let payables: Parameters<typeof advanceProducerEconomy>[0]["payables"] = [];
   for (let turn = 1; turn <= 48; turn++) {
     let result: ReturnType<typeof advanceProducerEconomy>;
     try {
       result = advanceProducerEconomy({
         turn,
         accounts,
+        payables,
         producers: plans,
         households: [
           {
@@ -54,6 +56,11 @@ function simulate(
         );
       throw error;
     }
+    const openingDebt: number = (payables ?? []).reduce((sum, claim) => sum + claim.amount, 0);
+    const paidDebt = result.payablePayments.reduce((sum, claim) => sum + claim.amount, 0);
+    const newDebt = result.producers.reduce((sum, producer) => sum + producer.operatingArrears, 0);
+    const closingDebt = result.payables.reduce((sum, claim) => sum + claim.amount, 0);
+    assert(Math.abs(closingDebt - (openingDebt - paidDebt + newDebt)) <= 1e-7);
     const closingCash = result.accounts.reduce((sum, account) => sum + account.cash, 0);
     assert(Math.abs(closingCash - openingCash) <= openingCash * 1e-12);
     for (const trade of producerTrades(result.tradeReceipt))
@@ -73,14 +80,47 @@ function simulate(
             (producer.revenue -
               producer.purchases -
               producer.labourPaid -
-              producer.otherOperatingPaid)
+              producer.otherOperatingPaid -
+              producer.arrearsPaid)
         ) < 1e-7
       );
+      for (const product of producer.products) {
+        const carried =
+          producer.outputStock.find(
+            (stock) => stock.commodity === product.commodity && stock.book === product.book
+          )?.units ?? 0;
+        assert(
+          Math.abs(product.offeredUnits - product.deliveredUnits - carried - product.lostUnits) <=
+            Math.max(1e-7, product.offeredUnits * 1e-12)
+        );
+      }
       const plan = plans.find((p) => p.id === producer.id)!;
+      const openingInputValue = plan.inputStock.reduce((sum, stock) => sum + stock.value, 0);
+      const closingInputValue = producer.inputStock.reduce((sum, stock) => sum + stock.value, 0);
+      assert(
+        Math.abs(
+          closingInputValue -
+            (openingInputValue +
+              producer.purchases -
+              producer.inputsConsumed -
+              producer.inventoryWriteOff)
+        ) <= Math.max(1e-7, openingInputValue * 1e-12)
+      );
+      assert(
+        Math.abs(
+          producer.profit -
+            (producer.revenue -
+              producer.inputsConsumed -
+              producer.inventoryWriteOff -
+              plan.labourCost -
+              plan.otherOperatingCost)
+        ) <= 1e-7
+      );
       plan.inputStock = producer.inputStock;
       plan.outputStock = producer.outputStock;
     }
     accounts = result.accounts;
+    payables = result.payables;
     observations.push({
       turn,
       cashDrift: closingCash - openingCash,
@@ -119,7 +159,7 @@ const scenarios = [
 const report = {
   liveRolloutQualified: false,
   qualificationGaps: [
-    "Complete turn-engine, API and UI replacement remains unimplemented.",
+    "Active turn-engine and forecasts remain incomplete; migrated pricing controls still need end-to-end qualification.",
     "Synthetic payroll and site costs do not establish balance for current-world producers.",
     "Contracts, route constraints, quality, inventory decay, fiscal flows and full-world performance remain unqualified.",
   ],
@@ -131,7 +171,9 @@ const report = {
     "delivered output bounded by input-backed production and retained stock",
     "revenue equals delivered units times trade price",
     "purchases charged once",
-    "unpaid bills remain expenses and arrears",
+    "unpaid claims reconcile across turns; paying old bills is not a new expense",
+    "input acquisition value reconciles across purchases, consumption, carry loss and closing stock",
+    "output reconciles across delivery, carry loss and retained stock",
   ],
   results: ["1991-default", "2019-default"].flatMap((preset) =>
     scenarios.map((scenario) => simulate(preset, scenario))

@@ -12,6 +12,12 @@ import {
   type ProducerTradeReceipt,
   type PurchaseOrder,
 } from "./rules";
+import {
+  accrueProducerPayable,
+  settlePriorProducerPayables,
+  type ProducerPayable,
+} from "./payablesRules";
+import { COMMODITY_SPOILAGE_PER_TURN } from "../inventory";
 import { householdPurchaseOrders } from "./householdRules";
 import { feasibleProduction } from "./productionFeasibilityRules";
 
@@ -76,11 +82,15 @@ export interface ProducerOperatingResult {
   revenue: number;
   purchases: number;
   inputsConsumed: number;
+  /** Acquisition value lost from unused purchased inputs; not another cash charge. */
+  inventoryWriteOff: number;
   labourPaid: number;
   otherOperatingPaid: number;
   labourArrears: number;
   otherOperatingArrears: number;
   operatingArrears: number;
+  arrearsPaid: number;
+  closingArrears: number;
   /** Purchases move cash into input stock; only consumption is an expense. */
   profit: number;
   cashFlow: number;
@@ -99,6 +109,7 @@ export interface ProducerOperatingResult {
     askingUnitPrice: number;
     realizedUnitPrice: number | null;
     unsoldUnits: number;
+    lostUnits: number;
   }>;
 }
 
@@ -160,6 +171,7 @@ function quoteVolumesExcept(
 export function advanceProducerEconomy(input: {
   turn: number;
   accounts: readonly MarketAccount[];
+  payables?: readonly ProducerPayable[];
   producers: readonly ProductionPlan[];
   externalOffers?: readonly ProducerOffer[];
   externalOrders?: readonly PurchaseOrder[];
@@ -168,15 +180,60 @@ export function advanceProducerEconomy(input: {
   /** Explicit route/scope eligibility; missing entries allow only the offer's own book. */
   eligibleOffersByOrder?: Readonly<Record<string, readonly string[]>>;
   maximumPlanningPasses?: number;
+  /** Explicit carry policy for alternate catalogs; ordinary worlds use commodity spoilage. */
+  carryLossByCommodity?: Readonly<Record<string, number>>;
 }): {
   accounts: MarketAccount[];
+  payables: ProducerPayable[];
+  payablePayments: ProducerPayable[];
   producers: ProducerOperatingResult[];
   tradeReceipt: ProducerTradeReceipt;
   prices: ReturnType<typeof settleProducerMarket>["prices"];
 } {
+  const carryRates: Readonly<Record<string, number>> =
+    input.carryLossByCommodity ?? COMMODITY_SPOILAGE_PER_TURN;
+  const carryLoss = (commodity: string) => {
+    const rate = carryRates[commodity] ?? 0;
+    if (!Number.isFinite(rate) || rate < 0 || rate > 1)
+      throw new Error("Invalid inventory carry loss");
+    return rate;
+  };
+  const prior = settlePriorProducerPayables({
+    accounts: input.accounts,
+    payables: input.payables ?? [],
+  });
+  const closingPayables = new Map(prior.payables.map((claim) => [claim.id, claim]));
+  const oldBillsPaidByProducer = new Map<string, number>();
+  const oldBillsRemainingByProducer = new Map<string, number>();
+  for (const payment of prior.payments) {
+    const key = JSON.stringify([payment.debtorAccountId, payment.producerId]);
+    oldBillsPaidByProducer.set(key, (oldBillsPaidByProducer.get(key) ?? 0) + payment.amount);
+  }
+  for (const claim of prior.payables) {
+    const key = JSON.stringify([claim.debtorAccountId, claim.producerId]);
+    oldBillsRemainingByProducer.set(
+      key,
+      (oldBillsRemainingByProducer.get(key) ?? 0) + claim.amount
+    );
+  }
   const producerIds = new Set<string>();
-  const cash = new Map(input.accounts.map((a) => [a.id, finite(a.cash, "opening operating cash")]));
-  if (cash.size !== input.accounts.length) throw new Error("Duplicate operating account");
+  const cash = new Map(prior.accounts.map((a) => [a.id, finite(a.cash, "opening operating cash")]));
+  const pendingDueByAccount = new Map<string, number>();
+  for (const claim of prior.payables)
+    pendingDueByAccount.set(
+      claim.debtorAccountId,
+      (pendingDueByAccount.get(claim.debtorAccountId) ?? 0) + claim.amount
+    );
+  const heldForPayables = new Map<string, number>();
+  const reserveUnpaidCash = () => {
+    for (const [id, due] of pendingDueByAccount) {
+      const held = heldForPayables.get(id) ?? 0;
+      const added = Math.min(cash.get(id)!, Math.max(0, due - held));
+      cash.set(id, cash.get(id)! - added);
+      heldForPayables.set(id, held + added);
+    }
+  };
+  reserveUnpaidCash();
   const payments = new Map<string, { labour: number; operating: number; arrears: number }>();
   const offers: ProducerOffer[] = [...(input.externalOffers ?? [])];
   const plans = [...input.producers].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
@@ -224,7 +281,13 @@ export function advanceProducerEconomy(input: {
     }
     for (const stock of p.outputStock) {
       finite(stock.units, "output stock");
-      if (!outputCommodities.has(stock.commodity)) throw new Error("Unrecognized produced stock");
+      if (
+        !outputCommodities.has(stock.commodity) ||
+        !p.outputs.some(
+          (output) => output.commodity === stock.commodity && output.book === stock.book
+        )
+      )
+        throw new Error("Unrecognized produced stock or market book");
     }
   }
   const funding = new Map(
@@ -244,14 +307,21 @@ export function advanceProducerEconomy(input: {
       p.operatingRecipientAccountId,
       (credits.get(p.operatingRecipientAccountId) ?? 0) + operating
     );
+    pendingDueByAccount.set(
+      p.accountId,
+      (pendingDueByAccount.get(p.accountId) ?? 0) +
+        Math.max(0, p.labourCost - labour) +
+        Math.max(0, p.otherOperatingCost - operating)
+    );
     payments.set(p.id, {
       labour,
       operating,
-      arrears: p.labourCost + p.otherOperatingCost - labour - operating,
+      arrears: Math.max(0, p.labourCost - labour) + Math.max(0, p.otherOperatingCost - operating),
     });
   }
   // Paid wages are actual income, not an invented household demand multiplier.
   for (const [id, amount] of credits) cash.set(id, cash.get(id)! + amount);
+  reserveUnpaidCash();
   const householdIds = new Set<string>();
   const consumerOrders = [...(input.externalOrders ?? [])];
   for (const household of input.households ?? []) {
@@ -583,7 +653,11 @@ export function advanceProducerEconomy(input: {
   const results: ProducerOperatingResult[] = [];
   const offersById = new Map(market.offers.map((o) => [o.id, o]));
   const ordersById = new Map(market.orders.map((o) => [o.id, o]));
-  const closingCash = new Map(market.accounts.map((a) => [a.id, a.cash]));
+  const closingAccounts = market.accounts.map((account) => ({
+    ...account,
+    cash: account.cash + (heldForPayables.get(account.id) ?? 0),
+  }));
+  const closingCash = new Map(closingAccounts.map((a) => [a.id, a.cash]));
   for (const p of plans) {
     const stocks = new Map<string, PurchasedStock>();
     for (const stock of p.inputStock) {
@@ -639,6 +713,13 @@ export function advanceProducerEconomy(input: {
       stock.value = exhausted ? 0 : Math.max(0, stock.value - cost);
       consumed += cost;
     }
+    let inventoryWriteOff = 0;
+    for (const stock of stocks.values()) {
+      const loss = carryLoss(stock.commodity);
+      inventoryWriteOff += stock.value * loss;
+      stock.units *= 1 - loss;
+      stock.value *= 1 - loss;
+    }
     let revenue = 0,
       offeredUnits = 0,
       soldUnits = 0,
@@ -656,6 +737,11 @@ export function advanceProducerEconomy(input: {
       const available = opening + produced * output.unitsPerOutput;
       if (sold.deliveredUnits - available > Math.max(1e-8, available * 1e-12))
         throw new Error("Sold output exceeded input-backed production");
+      const unsold = Math.max(0, available - sold.deliveredUnits);
+      const kept =
+        output.storable && sold.deliveredUnits < available * (1 - 1e-12)
+          ? unsold * (1 - carryLoss(output.commodity))
+          : 0;
       products.push({
         commodity: output.commodity,
         book: output.book,
@@ -668,18 +754,38 @@ export function advanceProducerEconomy(input: {
         askingUnitPrice: postedOffers.get(JSON.stringify([p.id, "output", output.commodity]))!
           .unitPrice,
         realizedUnitPrice: sold.soldUnits > 0 ? sold.revenue / sold.soldUnits : null,
-        unsoldUnits: Math.max(0, available - sold.deliveredUnits),
+        unsoldUnits: unsold,
+        lostUnits: unsold - kept,
       });
       return {
         commodity: output.commodity,
         book: output.book,
-        units:
-          output.storable && sold.deliveredUnits < available * (1 - 1e-12)
-            ? Math.max(0, available - sold.deliveredUnits)
-            : 0,
+        units: kept,
       };
     });
     const paid = payments.get(p.id)!;
+    const payableKey = JSON.stringify([p.accountId, p.id]);
+    const arrearsPaid = oldBillsPaidByProducer.get(payableKey) ?? 0;
+    accrueProducerPayable(closingPayables, {
+      debtorAccountId: p.accountId,
+      creditorAccountId: p.labourRecipientAccountId,
+      producerId: p.id,
+      kind: "labour",
+      amount: Math.max(0, p.labourCost - paid.labour),
+    });
+    accrueProducerPayable(closingPayables, {
+      debtorAccountId: p.accountId,
+      creditorAccountId: p.operatingRecipientAccountId,
+      producerId: p.id,
+      kind: "operating",
+      amount: Math.max(0, p.otherOperatingCost - paid.operating),
+    });
+    const closingArrears = (oldBillsRemainingByProducer.get(payableKey) ?? 0) + paid.arrears;
+
+    finite(
+      consumed + inventoryWriteOff + p.labourCost + p.otherOperatingCost,
+      "production expense"
+    );
     results.push({
       id: p.id,
       capacityUnits: p.capacityUnits,
@@ -692,13 +798,16 @@ export function advanceProducerEconomy(input: {
       revenue,
       purchases,
       inputsConsumed: consumed,
+      inventoryWriteOff,
       labourPaid: paid.labour,
       otherOperatingPaid: paid.operating,
       labourArrears: p.labourCost - paid.labour,
       otherOperatingArrears: p.otherOperatingCost - paid.operating,
       operatingArrears: paid.arrears,
-      profit: revenue - consumed - p.labourCost - p.otherOperatingCost,
-      cashFlow: revenue - purchases - paid.labour - paid.operating,
+      arrearsPaid,
+      closingArrears,
+      profit: revenue - consumed - inventoryWriteOff - p.labourCost - p.otherOperatingCost,
+      cashFlow: revenue - purchases - paid.labour - paid.operating - arrearsPaid,
       inputStock: [...stocks.values()],
       outputStock,
       products,
@@ -712,7 +821,11 @@ export function advanceProducerEconomy(input: {
   )
     throw new Error("Producer market cash did not reconcile");
   return {
-    accounts: market.accounts,
+    accounts: closingAccounts,
+    payables: [...closingPayables.values()].sort((a, b) =>
+      a.id < b.id ? -1 : a.id > b.id ? 1 : 0
+    ),
+    payablePayments: prior.payments,
     producers: results,
     tradeReceipt: market.tradeReceipt,
     prices: market.prices,

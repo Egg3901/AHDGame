@@ -1,3 +1,4 @@
+import { producerPayableId } from "./payablesRules";
 import { producerTrades } from "./rules";
 import { describe, expect, it } from "vitest";
 import { advanceProducerEconomy, type ProductionPlan } from "./production";
@@ -95,6 +96,215 @@ describe("receipt-backed production", () => {
     }
   );
 
+  it("carries unpaid bills forward and never expenses their later payment twice", () => {
+    const first = advanceProducerEconomy({
+      turn: 1,
+      accounts: accounts.map((account) =>
+        account.id === "corp" ? { ...account, cash: 0 } : account
+      ),
+      producers: [plant({ inputs: [] })],
+    });
+    expect(first.producers[0]).toMatchObject({ profit: -30, cashFlow: 0, closingArrears: 30 });
+    expect(first.payables.reduce((sum, claim) => sum + claim.amount, 0)).toBe(30);
+    const transfer = (rows: typeof first.accounts, amount: number) =>
+      rows.map((account) => ({
+        ...account,
+        cash:
+          account.cash +
+          (account.id === "corp" ? amount : account.id === "households" ? -amount : 0),
+      }));
+    const second = advanceProducerEconomy({
+      turn: 2,
+      accounts: transfer(first.accounts, 15),
+      payables: first.payables,
+      producers: [plant({ inputs: [] })],
+    });
+    expect(second.producers[0]).toMatchObject({
+      producedUnits: 0,
+      profit: -30,
+      cashFlow: -15,
+      arrearsPaid: 15,
+      closingArrears: 45,
+    });
+    const third = advanceProducerEconomy({
+      turn: 3,
+      accounts: transfer(second.accounts, 80),
+      payables: second.payables,
+      producers: [plant({ inputs: [] })],
+    });
+    expect(third.producers[0]).toMatchObject({
+      profit: -30,
+      cashFlow: -75,
+      arrearsPaid: 45,
+      closingArrears: 0,
+    });
+    expect(third.payables).toEqual([]);
+    expect(third.accounts.find((account) => account.id === "corp")!.cash).toBe(5);
+  });
+
+  it("reserves received cash for an unpaid creditor before allowing discretionary purchases", () => {
+    const claims = [
+      {
+        debtorAccountId: "corp",
+        creditorAccountId: "households",
+        producerId: "closed-a",
+        kind: "labour" as const,
+        amount: 10,
+      },
+      {
+        debtorAccountId: "households",
+        creditorAccountId: "services",
+        producerId: "closed-b",
+        kind: "operating" as const,
+        amount: 10,
+      },
+    ];
+    const result = advanceProducerEconomy({
+      turn: 1,
+      accounts: [
+        { id: "corp", cash: 10 },
+        { id: "households", cash: 0 },
+        { id: "services", cash: 0 },
+        { id: "supplier", cash: 0 },
+      ],
+      producers: [],
+      payables: claims.map((claim) => ({ ...claim, id: producerPayableId(claim) })),
+      externalOffers: [
+        {
+          id: "goods",
+          accountId: "supplier",
+          commodity: "goods",
+          book: "world",
+          units: 10,
+          unitPrice: 1,
+        },
+      ],
+      externalOrders: [
+        {
+          id: "shopping",
+          accountId: "households",
+          commodity: "goods",
+          book: "world",
+          units: 10,
+          maximumUnitPrice: 1,
+        },
+      ],
+    });
+    expect(result.tradeReceipt.tradeCount).toBe(0);
+    expect(result.accounts.find((account) => account.id === "households")!.cash).toBe(10);
+    expect(result.payables).toHaveLength(1);
+    expect(result.payables[0]).toMatchObject({
+      debtorAccountId: "households",
+      creditorAccountId: "services",
+      amount: 10,
+    });
+  });
+
+  it("retains a creditor's bill after the producing site closes", () => {
+    const claim = {
+      debtorAccountId: "corp",
+      creditorAccountId: "households",
+      producerId: "closed-plant",
+      kind: "labour" as const,
+      amount: 20,
+    };
+    const result = advanceProducerEconomy({
+      turn: 1,
+      accounts,
+      producers: [],
+      payables: [{ ...claim, id: producerPayableId(claim) }],
+    });
+    expect(result.producers).toEqual([]);
+    expect(result.payables).toEqual([]);
+    expect(result.payablePayments[0].amount).toBe(20);
+    expect(result.accounts.find((account) => account.id === "corp")!.cash).toBe(980);
+  });
+
+  it("writes off only the lost acquisition value of unused inputs without another cash charge", () => {
+    const first = advanceProducerEconomy({
+      turn: 1,
+      accounts,
+      carryLossByCommodity: { food: 0.25 },
+      producers: [
+        plant({
+          capacityUnits: 0,
+          inputs: [],
+          inputStock: [{ commodity: "food", units: 100, value: 200 }],
+        }),
+      ],
+    });
+    expect(first.producers[0]).toMatchObject({
+      inventoryWriteOff: 50,
+      inputsConsumed: 0,
+      profit: -80,
+      cashFlow: -30,
+      inputStock: [{ commodity: "food", units: 75, value: 150 }],
+    });
+    const second = advanceProducerEconomy({
+      turn: 2,
+      accounts: first.accounts,
+      carryLossByCommodity: { food: 0.25 },
+      producers: [
+        plant({ capacityUnits: 0, inputs: [], inputStock: first.producers[0].inputStock }),
+      ],
+    });
+    expect(second.producers[0]).toMatchObject({
+      inventoryWriteOff: 37.5,
+      profit: -67.5,
+      cashFlow: -30,
+      inputStock: [{ commodity: "food", units: 56.25, value: 112.5 }],
+    });
+    expect(second.accounts.find((account) => account.id === "corp")!.cash).toBe(940);
+  });
+
+  it("reconciles sold, carried and lost output without expensing old production twice", () => {
+    const result = advanceProducerEconomy({
+      turn: 1,
+      accounts,
+      carryLossByCommodity: { steel: 0.25 },
+      producers: [
+        plant({
+          capacityUnits: 0,
+          labourCost: 0,
+          otherOperatingCost: 0,
+          inputs: [],
+          outputs: [
+            {
+              commodity: "steel",
+              book: "world",
+              unitsPerOutput: 1,
+              policy: { kind: "manual", unitPrice: 3 },
+              referenceUnitPrice: 3,
+              storable: true,
+            },
+          ],
+          outputStock: [{ commodity: "steel", book: "world", units: 100 }],
+        }),
+      ],
+      externalOrders: [
+        {
+          id: "steel-buyer",
+          accountId: "households",
+          commodity: "steel",
+          book: "world",
+          units: 40,
+          maximumUnitPrice: 3,
+        },
+      ],
+    });
+    expect(result.producers[0]).toMatchObject({
+      profit: 120,
+      inventoryWriteOff: 0,
+      outputStock: [{ commodity: "steel", book: "world", units: 45 }],
+    });
+    expect(result.producers[0].products[0]).toMatchObject({
+      offeredUnits: 100,
+      deliveredUnits: 40,
+      unsoldUnits: 60,
+      lostUnits: 15,
+    });
+  });
+
   it("reports paid unit prices separately from internal site deliveries", () => {
     const energy = {
       commodity: "energy",
@@ -183,8 +393,8 @@ describe("receipt-backed production", () => {
     });
     expect(result.producers.find((p) => p.id === "other")!.plannedUnits).toBe(0);
     expect(result.producers.find((p) => p.id === "owner")!.inputStock[0]).toMatchObject({
-      units: 100,
-      value: 40,
+      units: 0,
+      value: 0,
     });
   });
   it("cannot produce or sell output without delivered inputs", () => {
@@ -330,10 +540,11 @@ describe("receipt-backed production", () => {
       operatingArrears: 30,
       labourArrears: 20,
       otherOperatingArrears: 10,
-      profit: -30,
+      inventoryWriteOff: 100,
+      profit: -130,
       cashFlow: 0,
     });
-    expect(result.producers[0].inputStock[0].units).toBe(200);
+    expect(result.producers[0].inputStock[0].units).toBe(0);
   });
 
   it("allocates one corporation fixed-bill funding proportionally across its sites", () => {
@@ -438,7 +649,9 @@ describe("receipt-backed production", () => {
     const result = advanceProducerEconomy({ turn: 1, accounts: funded, producers: [a, b] });
     expect(result.producers.map((p) => p.producedUnits)).toEqual([10, 10]);
     expect([...producerTrades(result.tradeReceipt)].reduce((n, t) => n + t.units, 0)).toBe(10);
-    expect(result.producers.map((p) => p.outputStock[0].units)).toEqual([5, 5]);
+    expect(result.producers.map((p) => p.outputStock[0].units)).toEqual([0, 4.99]);
+    expect(result.producers[0].products[0].lostUnits).toBe(5);
+    expect(result.producers[1].products[0].lostUnits).toBeCloseTo(0.01);
     const empty = funded.map((a) => (["corp", "supplier"].includes(a.id) ? { ...a, cash: 0 } : a));
     const unfunded = advanceProducerEconomy({ turn: 1, accounts: empty, producers: [a, b] });
     expect(unfunded.producers.map((p) => p.producedUnits)).toEqual([0, 0]);

@@ -221,25 +221,7 @@ export interface CorporateCreditComputationInput {
 }
 
 /** Normalize corporation cash arrears to anchor units for credit/equity scoring. */
-export function corporateCashArrearsAnchor(input: {
-  operatingByCurrency?: Readonly<Record<string, number | undefined>>;
-  federalTaxByCountryAnchor?: Readonly<Record<string, number | undefined>>;
-  fxByCurrency: ReadonlyMap<CurrencyCode, number>;
-}): number {
-  const operating = Object.entries(input.operatingByCurrency ?? {}).reduce<number>(
-    (sum, [currency, local]) => {
-      if (!(local && local > 0)) return sum;
-      const rate = input.fxByCurrency.get(currency as CurrencyCode) ?? 1;
-      return sum + local / (rate > 0 ? rate : 1);
-    },
-    0
-  );
-  const tax = Object.values(input.federalTaxByCountryAnchor ?? {}).reduce<number>(
-    (sum, amount) => sum + Math.max(0, amount ?? 0),
-    0
-  );
-  return operating + tax;
-}
+export { corporateCashArrearsAnchor } from "./rules/cashArrears";
 
 /** Reuse already loaded bonds and FX rates; there is no extra maturity lookup. */
 export function corporateBondMaturityLiquidity(input: {

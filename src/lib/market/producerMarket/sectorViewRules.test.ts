@@ -35,6 +35,7 @@ describe("producer receipt views", () => {
       canManage: false,
     });
     expect(view.operations).toBeUndefined();
+    expect(view.quotePolicies).toBeUndefined();
     expect(view.products[0].policy).toBeUndefined();
     expect(view.products[0].askingUnitPrice).toBe(3);
   });

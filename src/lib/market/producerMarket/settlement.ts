@@ -7,6 +7,8 @@ import { ObjectId, type Db } from "mongodb";
 import type { CorporateSector } from "@/lib/db/types/corporation";
 import { settleTransition } from "@/lib/banking/settlementJournal";
 import { encodeReceipt, decodeReceipt, stageReceiptChunks } from "./receiptStorage";
+import { verifyOpeningProducerPayables, publishProducerPayables } from "./payablesSettlement";
+import { producerPayableReceiptKeys } from "./payablesRules";
 import { advanceProducerEconomy } from "./production";
 import { producerCashTransition, type ProducerCashBinding } from "./cashSettlementRules";
 
@@ -79,6 +81,20 @@ function cashWithLedger(payload: FrozenProducerTurn, receiptDigest: string) {
       role: "primary",
     });
   }
+  const bindingsByAccount = new Map(
+    payload.bindings.map((binding) => [binding.accountId, binding])
+  );
+  const payableMeta: Record<string, number | string> = {};
+  for (const payment of payload.result.payablePayments) {
+    const binding = bindingsByAccount.get(payment.debtorAccountId)!;
+    if (binding.kind !== "corporation") continue;
+    const keys = producerPayableReceiptKeys(binding.corporationId);
+    const paid = Number(payableMeta[keys.amount] ?? 0) + payment.amount * binding.localPerAnchor;
+    if (!Number.isFinite(paid)) throw new Error("Producer payable native payment overflow");
+    payableMeta[keys.amount] = paid;
+    payableMeta[keys.currency] = binding.currency;
+  }
+  transition.event.meta = { ...transition.event.meta, ...payableMeta };
   const createdAt = new Date(payload.createdAt);
   if (!Number.isFinite(createdAt.getTime())) throw new Error("Invalid producer receipt time");
   if (ledgerLegs.length) {
@@ -168,6 +184,12 @@ export async function settleProducerTurn(
   let record = await turns.findOne({ _id: key });
   let claimedPayload: FrozenProducerTurn | undefined;
   if (!record) {
+    await verifyOpeningProducerPayables(db, {
+      worldEpoch: input.worldEpoch,
+      turn,
+      bindings: input.bindings,
+      payables: input.production.payables ?? [],
+    });
     const payload: FrozenProducerTurn = {
       version: 1,
       createdAt: new Date().toISOString(),
@@ -241,6 +263,13 @@ export async function settleProducerTurn(
   const settled = await settleTransition(db, cash);
   if (settled.status !== "applied" && settled.status !== "replayed")
     throw new Error(settled.error ?? "Producer cash settlement is incomplete");
+  await publishProducerPayables(db, {
+    worldEpoch: frozen.worldEpoch,
+    turn,
+    bindings: frozen.bindings,
+    openingPayables: frozen.request.payables ?? [],
+    closingPayables: frozen.result.payables,
+  });
   const results = new Map(frozen.result.producers.map((p) => [p.id, p]));
   // Only turn-owned absolute receipt fields are published here. Replaying a
   // completed batch changes no cash, stock quantity or user command field.

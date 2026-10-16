@@ -17,7 +17,15 @@ interface ProducerMarketPanelProps {
 }
 
 export default function ProducerMarketPanel(props: ProducerMarketPanelProps) {
-  return <ProducerMarketEditor key={`${props.corporationId}:${props.sectorId}`} {...props} />;
+  const policyKey = JSON.stringify(
+    Object.entries(props.market.quotePolicies ?? {}).sort(([a], [b]) => a.localeCompare(b))
+  );
+  return (
+    <ProducerMarketEditor
+      key={`${props.corporationId}:${props.sectorId}:${policyKey}`}
+      {...props}
+    />
+  );
 }
 
 function ProducerMarketEditor({
@@ -28,9 +36,15 @@ function ProducerMarketEditor({
 }: ProducerMarketPanelProps) {
   const { formatAmount, formatPrice, toDisplay, toInternal, inputSymbol } = useCurrency();
   const [policies, setPolicies] = useState<Record<string, ProducerQuotePolicy>>(() =>
-    Object.fromEntries(
-      market.products.map((p) => [p.commodity, p.policy ?? { kind: "automatic", targetMarkup: 0 }])
-    )
+    Object.fromEntries([
+      ...Object.entries(market.quotePolicies ?? {}).filter(
+        (entry): entry is [string, ProducerQuotePolicy] => entry[1] !== undefined
+      ),
+      ...market.products.map((p) => [
+        p.commodity,
+        p.policy ?? { kind: "automatic", targetMarkup: 0 },
+      ]),
+    ])
   );
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
@@ -91,6 +105,7 @@ function ProducerMarketEditor({
                 ["Offered", number(product.offeredUnits)],
                 ["Sold", number(product.soldUnits)],
                 ["Delivered", number(product.deliveredUnits)],
+                ["Output lost", number(product.lostUnits)],
                 ["Last asking price", money(product.askingUnitPrice)],
                 ["Price received", money(product.realizedUnitPrice)],
               ].map(([name, value]) => (
@@ -208,12 +223,14 @@ function ProducerMarketEditor({
             {[
               ["Revenue", operations.revenue],
               ["Inputs used", operations.inputsUsed],
+              ["Stock written off", operations.inventoryWriteOff],
               ["Workforce cost", operations.labourCost],
               ["Site costs", operations.otherOperatingCost],
               ["Break-even revenue", operations.breakEvenRevenue],
               ["Operating profit", operations.profit],
               ["Operating cash flow", operations.cashFlow],
               ["Inputs purchased", operations.inputsPurchased],
+              ["Old bills paid", operations.oldBillsPaid],
             ].map(([label, value]) => (
               <div key={label}>
                 <dt className="text-xs text-muted">{label}</dt>
@@ -227,13 +244,14 @@ function ProducerMarketEditor({
           </p>
           {operations.unpaidBills > 0 && (
             <p className="text-xs text-warning">
-              {formatAmount(operations.unpaidBills)} remains unpaid and is already included in
-              costs.
+              {formatAmount(operations.unpaidBills)} remains unpaid, including{" "}
+              {formatAmount(operations.newUnpaidBills)} added this turn. Older bills were expensed
+              in their original turn.
             </p>
           )}
         </div>
       )}
-      {isCeo && (
+      {isCeo && market.products.length > 0 && (
         <button
           type="button"
           disabled={saving}

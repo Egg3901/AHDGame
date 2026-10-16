@@ -56,6 +56,41 @@ describe("producer market controls", () => {
     await waitFor(() => expect(screen.getByRole("status")).toBeTruthy());
   });
 
+  it("keeps choices for future products and refreshes controls after a bulk policy change", async () => {
+    const request = vi.fn().mockResolvedValue({ ok: true });
+    vi.stubGlobal("fetch", request);
+    const market = producerSectorView({
+      receipt: sectorReceipt(),
+      commodities: ["financial_services"],
+      policies: { food: { kind: "manual", unitPrice: 7 } },
+      canManage: true,
+    });
+    const view = render(
+      <ProducerMarketPanel corporationId="corp" sectorId="sector" isCeo market={market} />
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Save pricing" }));
+    await waitFor(() => expect(request).toHaveBeenCalled());
+    expect(JSON.parse(request.mock.calls[0][1].body).quotes.food).toEqual({
+      kind: "manual",
+      unitPrice: 7,
+    });
+    const changed = producerSectorView({
+      receipt: sectorReceipt(),
+      commodities: ["financial_services"],
+      policies: { financial_services: { kind: "costPlus", markup: 0.2 } },
+      canManage: true,
+    });
+    view.rerender(
+      <ProducerMarketPanel corporationId="corp" sectorId="sector" isCeo market={changed} />
+    );
+    expect(screen.getByRole("button", { name: "Cost + markup" }).getAttribute("aria-pressed")).toBe(
+      "true"
+    );
+    expect((screen.getByRole("spinbutton", { name: /markup/ }) as HTMLInputElement).value).toBe(
+      "20"
+    );
+  });
+
   it("publishes prices without exposing owner costs or edit controls to a visitor", () => {
     show(false);
     expect(screen.queryByRole("button")).toBeNull();

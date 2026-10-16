@@ -7,6 +7,7 @@ import type { Db } from "mongodb";
 import type { Corporation } from "@/lib/db/types";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import { resolveCorpLiquidCurrencyCode } from "@/lib/currency/corporationCapital";
+import { producerPayableReceiptKeys } from "@/lib/market/producerMarket/payablesRules";
 import { summarizeArrears, type ArrearsReceipt } from "./rules/arrears";
 
 export async function loadArrearsView(args: {
@@ -24,6 +25,8 @@ export async function loadArrearsView(args: {
   )
     return undefined;
   const id = corporation._id.toString();
+  const producerEpoch = corporation.producerPayables?.worldEpoch;
+  const producerKeys = producerPayableReceiptKeys(id);
   const receipts = await db
     .collection<ArrearsReceipt & { _id: string }>("bankMoneyMoves")
     .find(
@@ -32,11 +35,24 @@ export async function loadArrearsView(args: {
           $in: [
             `corp-operating-arrears-settle:${id}:${turn}`,
             `corp-tax-arrears-settle:${id}:${turn}`,
+            ...(producerEpoch ? [`producer-economy:${producerEpoch}:${turn}`] : []),
           ],
         },
         status: "applied",
       },
-      { projection: { status: 1, currency: 1, "event.amount": 1 } }
+      {
+        projection: {
+          status: 1,
+          currency: 1,
+          "event.amount": 1,
+          ...(producerEpoch
+            ? {
+                [`event.meta.${producerKeys.amount}`]: 1,
+                [`event.meta.${producerKeys.currency}`]: 1,
+              }
+            : {}),
+        },
+      }
     )
     .toArray();
   return summarizeArrears({
@@ -44,6 +60,8 @@ export async function loadArrearsView(args: {
     currency: resolveCorpLiquidCurrencyCode(corporation) ?? "anchor",
     rates,
     operating: corporation.operatingCashArrearsByCurrency,
+    producerCorporationId: id,
+    producerPayables: corporation.producerPayables?.claims,
     taxAnchor: corporation.federalTaxArrearsAnchorByCountry,
     receipts,
   });

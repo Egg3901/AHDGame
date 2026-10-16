@@ -1168,6 +1168,7 @@ export function processSectors(
       ),
       otherLiabilitiesAnchor: corporateCashArrearsAnchor({
         operatingByCurrency: corp.operatingCashArrearsByCurrency,
+        producerPayables: corp.producerPayables?.claims,
         federalTaxByCountryAnchor: corp.federalTaxArrearsAnchorByCountry,
         fxByCurrency: lookups.exchangeRatesByCurrency,
       }),
@@ -1483,6 +1484,7 @@ export function processSectors(
         ),
         otherLiabilitiesAnchor: corporateCashArrearsAnchor({
           operatingByCurrency: corp.operatingCashArrearsByCurrency,
+          producerPayables: corp.producerPayables?.claims,
           federalTaxByCountryAnchor: corp.federalTaxArrearsAnchorByCountry,
           fxByCurrency: lookups.exchangeRatesByCurrency,
         }),
