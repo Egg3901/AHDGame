@@ -150,8 +150,12 @@ describe("agreed acquisition, subsidiary outcome: settlement", () => {
     expect(target?.bankCharter).toBeDefined();
     const acquirer = await w.memory.collection("corporations").findOne({ _id: w.acq });
     // Each corporation keeps exactly its own charter: no dual-charter conflict.
-    expect(acquirer?.bankCharter?.charteredTurn).toBe(100);
-    expect(target?.bankCharter?.charteredTurn).toBe(150);
+    expect((acquirer?.bankCharter as { charteredTurn?: number } | undefined)?.charteredTurn).toBe(
+      100
+    );
+    expect((target?.bankCharter as { charteredTurn?: number } | undefined)?.charteredTurn).toBe(
+      150
+    );
     expect(await w.memory.collection("corporationExits").countDocuments({})).toBe(0);
   });
 
