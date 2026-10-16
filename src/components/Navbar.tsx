@@ -41,6 +41,7 @@ import {
   regionElectionsUrl,
   partyUrl,
   countryUrl,
+  scotusJusticeOfficeUrl,
 } from "@/lib/urls";
 import { ProfileSwitcher, ImperialMark } from "./navbar/ProfileSwitcher";
 import { viewerIsSingleplayerOwner, visibleStaffNavItems } from "@/components/navbar/staffNavItems";
@@ -101,6 +102,7 @@ interface NavbarProps {
     positionName: string;
     countryCode: string;
   };
+  justiceOffice?: { countryCode: string; seatNumber: number };
   governorOffice?: {
     stateId: string;
     stateName: string;
@@ -151,6 +153,7 @@ export const Navbar = React.memo(function Navbar({
   currentParty,
   activeElection,
   cabinetOffice,
+  justiceOffice,
   governorOffice,
   activePresidentElectionId,
   activePresidentElectionSeatId,
@@ -496,6 +499,7 @@ export const Navbar = React.memo(function Navbar({
               <NationDropdown
                 currentParty={currentParty}
                 cabinetOffice={cabinetOffice}
+                justiceOffice={justiceOffice}
                 activePresidentElectionId={activePresidentElectionId}
                 activePresidentElectionSeatId={activePresidentElectionSeatId}
                 isUKContext={isUKContext}
@@ -1100,6 +1104,16 @@ export const Navbar = React.memo(function Navbar({
                         className={`flex items-center rounded-lg px-3 py-2 text-sm transition-colors hover:bg-white/5 ${isNavActive(pathname, `/country/${cabinetOffice.countryCode}/executive/cabinet/${cabinetOffice.positionId}/office`) ? "bg-white/5 font-medium" : "text-muted"}`}
                       >
                         {t("menus.nation.cabinetOffice")} · {cabinetOffice.positionName}
+                      </Link>
+                    )}
+
+                    {justiceOffice && (
+                      <Link
+                        href={scotusJusticeOfficeUrl(justiceOffice.countryCode)}
+                        onClick={closeMobileMenu}
+                        className={`flex items-center rounded-lg px-3 py-2 text-sm transition-colors hover:bg-white/5 ${isNavActive(pathname, scotusJusticeOfficeUrl(justiceOffice.countryCode)) ? "bg-white/5 font-medium" : "text-muted"}`}
+                      >
+                        {t("menus.nation.justiceOffice")}
                       </Link>
                     )}
 

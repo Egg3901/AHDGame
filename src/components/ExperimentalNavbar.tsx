@@ -41,6 +41,7 @@ import {
   regionLegislatureUrl,
   regionElectionsUrl,
   cabinetOfficeUrl,
+  scotusJusticeOfficeUrl,
 } from "@/lib/urls";
 import { UK_NATIONS, UK_REGIONS } from "@/lib/constants/uk";
 import {
@@ -94,6 +95,7 @@ export interface ExperimentalNavbarProps {
   homeState?: { id: string; name: string; countryId: string };
   activeElection?: { id: string; seatId?: string; label: string };
   cabinetOffice?: { positionId: string; positionName: string; countryCode: string };
+  justiceOffice?: { countryCode: string; seatNumber: number };
   governorOffice?: { stateId: string; stateName: string; countryCode: string };
   isImperialMode?: boolean;
   wikiDisabled?: boolean;
@@ -124,6 +126,7 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
   homeState,
   activeElection,
   cabinetOffice,
+  justiceOffice,
   governorOffice,
   isImperialMode = false,
   wikiDisabled = false,
@@ -461,6 +464,11 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
             onNavigate={closeAll}
           >
             {t("menus.nation.cabinetOffice")}
+          </MenuRow>
+        )}
+        {justiceOffice && (
+          <MenuRow href={scotusJusticeOfficeUrl(justiceOffice.countryCode)} onNavigate={closeAll}>
+            {t("menus.nation.justiceOffice")}
           </MenuRow>
         )}
         {currentParty && (
@@ -1166,6 +1174,7 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
               homeState={homeState}
               activeElection={activeElection}
               cabinetOffice={cabinetOffice}
+              justiceOffice={justiceOffice}
               governorOffice={governorOffice}
               stateLegislatureLabel={stateLegislatureLabel}
               pageCountry={pageCountry}
@@ -1255,6 +1264,7 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
                 homeState={homeState}
                 activeElection={activeElection}
                 cabinetOffice={cabinetOffice}
+                justiceOffice={justiceOffice}
                 governorOffice={governorOffice}
                 stateLegislatureLabel={stateLegislatureLabel}
                 pageCountry={pageCountry}
