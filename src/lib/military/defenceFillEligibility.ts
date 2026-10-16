@@ -41,8 +41,7 @@ export const FILL_REASON_TEXT: Record<FillIneligibilityReason, string> = {
     "This plant's production line does not build materiel. Change its strategy to a line that " +
     "supplies an arsenal component first.",
   retooled_off_component:
-    "This plant has been re-tooled off the component it was contracted for, so it can no longer " +
-    "deliver against this order.",
+    "This plant's current production line does not supply the component this order requires.",
   no_output: "This plant is producing nothing, so the order cannot advance until that changes.",
   no_factories_assigned:
     "No production lines are assigned to this order, so it builds nothing. Assign at least one " +

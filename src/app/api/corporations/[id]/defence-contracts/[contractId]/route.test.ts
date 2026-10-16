@@ -246,7 +246,9 @@ describe("POST corporations/[id]/defence-contracts/[contractId]", () => {
     const { POST } = await import(ROUTE);
     const res = await POST(req({ action: "accept" }), params);
     expect(res.status).toBe(409);
-    expect((await res.json()).error).toMatch(/re-tooled/i);
+    expect((await res.json()).error).toBe(
+      "This plant's current production line does not supply the component this order requires."
+    );
     expect(db.collectionMocks.defenceContracts.updateOne).not.toHaveBeenCalled();
   });
 
