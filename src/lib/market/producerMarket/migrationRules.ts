@@ -17,6 +17,8 @@ export interface ExistingWorldProducerOpening {
     cash: number;
     /** Audited outstanding operating bills, excluding separately preserved tax arrears. */
     operatingArrearsAnchor: number;
+    /** Historical modeled loss carry is not evidence of a debt to a supplier. */
+    modeledLossCarryAnchor: number;
     /** Reconciled named creditors; an unresolved balance cannot be discarded. */
     payables: readonly ProducerPayable[];
   }[];
@@ -68,6 +70,8 @@ export interface ProducerOpeningPlan {
   protectedImages: Array<{ key: string; digest: string }>;
   /** The apply host must bind these exact creditors before enabling the new economy. */
   requiredCreditorAccountIds: string[];
+  /** An apply host must resolve these explicitly, never invent creditors or forgive them silently. */
+  unresolvedModeledLossCarry: Array<{ accountId: string; amountAnchor: number }>;
   reconciliation: {
     cashByCurrency: Array<{ currency: string; before: number; after: number }>;
     signedCashAnchor: number;
@@ -127,6 +131,7 @@ export function planProducerOpening(source: ExistingWorldProducerOpening): Produ
     .map((corp) => {
       valid(corp.cash, "cash", true);
       valid(corp.operatingArrearsAnchor, "opening operating arrears");
+      valid(corp.modeledLossCarryAnchor, "historical modeled loss carry");
       if (!Array.isArray(corp.payables))
         throw new Error("Opening creditors require reconciliation");
       uniqueIds(corp.payables, "opening payable");
@@ -259,6 +264,10 @@ export function planProducerOpening(source: ExistingWorldProducerOpening): Produ
     sectors,
     protectedImages: [...source.protectedImages].sort((a, b) => compare(a.key, b.key)),
     requiredCreditorAccountIds: [...creditorIds].sort(compare),
+    unresolvedModeledLossCarry: [...source.corporations]
+      .sort((a, b) => compare(a.id, b.id))
+      .filter((corp) => corp.modeledLossCarryAnchor > 0)
+      .map((corp) => ({ accountId: corp.id, amountAnchor: corp.modeledLossCarryAnchor })),
     reconciliation: {
       operatingArrearsAnchor,
       operatingArrearsCreated: 0,

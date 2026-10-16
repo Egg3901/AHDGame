@@ -13,6 +13,7 @@ const opening = (): ExistingWorldProducerOpening => ({
       localPerAnchor: 2,
       cash: 100,
       operatingArrearsAnchor: 0,
+      modeledLossCarryAnchor: 0,
       payables: [],
     },
     {
@@ -21,6 +22,7 @@ const opening = (): ExistingWorldProducerOpening => ({
       localPerAnchor: 100,
       cash: -200,
       operatingArrearsAnchor: 0,
+      modeledLossCarryAnchor: 0,
       payables: [],
     },
   ],
@@ -92,6 +94,16 @@ describe("existing-world producer opening", () => {
       constructionInProgressAnchor: 45,
     });
     expect(plan.protectedImages).toEqual(opening().protectedImages);
+  });
+
+  it("keeps unallocated historical modeled losses out of supplier claims and flags them for explicit reconciliation", () => {
+    const source = opening();
+    source.corporations[0].modeledLossCarryAnchor = 25;
+    const plan = planProducerOpening(source);
+    expect(plan.unresolvedModeledLossCarry).toEqual([{ accountId: "a", amountAnchor: 25 }]);
+    expect(plan.accounts[0].producerPayables.claims).toEqual([]);
+    expect(plan.requiredCreditorAccountIds).toEqual([]);
+    expect(plan.accounts[0].openingCashLocal).toBe(100);
   });
 
   it("carries all named opening creditors without paying, expensing or forgiving their claims", () => {

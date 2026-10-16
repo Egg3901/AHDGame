@@ -23,6 +23,7 @@ const openingSchema = z
           localPerAnchor: z.number().finite().positive(),
           cash: z.number().finite(),
           operatingArrearsAnchor: amount,
+          modeledLossCarryAnchor: amount,
           payables: z.array(
             z
               .object({
@@ -112,5 +113,6 @@ console.log(
     operatingArrearsAnchor: plan.reconciliation.operatingArrearsAnchor,
     operatingArrearsForgiven: plan.reconciliation.operatingArrearsForgiven,
     requiredCreditors: plan.requiredCreditorAccountIds.length,
+    unresolvedModeledLossCorporations: plan.unresolvedModeledLossCarry.length,
   })
 );
