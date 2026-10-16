@@ -10,6 +10,9 @@ vi.mock("next/navigation", () => ({
   useParams: () => ({ id: "u1" }),
 }));
 
+/** The Sectors tab button: its name carries the shop count, unlike the "Sectors tab" link. */
+const SECTORS_TAB = /^Sectors\s*\d+$/;
+
 const PARAMS = {
   status: "fulfilled",
   value: { id: "u1" },
@@ -110,6 +113,7 @@ describe("union industrial-relations dashboard", () => {
     // that can make the gap column below say anything at all.
     expect(screen.getByRole("button", { name: "Set demand" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Withdraw demand" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: SECTORS_TAB }));
     expect(screen.getByText("0.10× short")).toBeTruthy();
     expect(screen.getByText("Strike ready")).toBeTruthy();
     expect(screen.getByText("Needs organizing")).toBeTruthy();
@@ -167,6 +171,7 @@ describe("union industrial-relations dashboard", () => {
 
     render(<UnionPage params={PARAMS} />);
 
+    fireEvent.click(await screen.findByRole("button", { name: SECTORS_TAB }));
     fireEvent.click(await screen.findByRole("button", { name: "Organize" }));
 
     await waitFor(() => {

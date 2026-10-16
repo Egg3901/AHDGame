@@ -1,7 +1,13 @@
 "use client";
 
 import { Tooltip } from "@/components/ui";
-import type { UnionDetail } from "./unionTypes";
+import type { SectorRow, UnionDetail } from "./unionTypes";
+import {
+  SECTOR_STATUS_FILTER_LABEL,
+  sectorHolding,
+  sectorStatus,
+  type SectorStatus,
+} from "./unionSectorTable";
 
 export function StanceBadge({ stance }: { stance: "endorse" | "oppose" }) {
   return (
@@ -12,6 +18,138 @@ export function StanceBadge({ stance }: { stance: "endorse" | "oppose" }) {
     >
       {stance === "endorse" ? "Endorsed" : "Opposed"}
     </span>
+  );
+}
+
+/**
+ * Result line for one targeted sector drive. A lost raid is a real outcome
+ * the server reports as a success (the spend stands), so it has to be said
+ * plainly rather than shown as "Done.".
+ */
+export function describeOrganizeSectorResult(
+  data: { wasRaid?: unknown; won?: unknown; unionization?: unknown },
+  shopName: string
+): { ok: boolean; text: string } {
+  const pct = typeof data.unionization === "number" ? data.unionization.toFixed(1) : null;
+  if (data.wasRaid === true && data.won === false) {
+    return {
+      ok: false,
+      text: `The raid on ${shopName} failed: the rival union kept the shop. The drive's cost is spent.`,
+    };
+  }
+  if (data.wasRaid === true) {
+    return {
+      ok: true,
+      text: `Raid won: ${shopName} now belongs to this union${pct ? ` at ${pct}% unionized` : ""}.`,
+    };
+  }
+  return {
+    ok: true,
+    text: `Organized ${shopName}${pct ? `: now ${pct}% unionized` : ""}.`,
+  };
+}
+
+/** Body of `POST /api/unions/[id]/organize-sectors`. */
+export interface OrganizeBatchResponse {
+  completed: number;
+  requested: number;
+  stopped: { sectorId: string; status: number; error: string } | null;
+  results: Array<
+    | { sectorId: string; ok: true; wasRaid?: boolean; won?: boolean }
+    | { sectorId: string; ok: false; error: string }
+  >;
+}
+
+/** One line for a batch of drives: what landed, what each raid did, and what stopped it. */
+export function describeOrganizeBatchResult(
+  data: OrganizeBatchResponse,
+  shopName: (sectorId: string) => string
+): { ok: boolean; text: string } {
+  const landed = data.results.filter(
+    (r): r is Extract<OrganizeBatchResponse["results"][number], { ok: true }> => r.ok
+  );
+  const raidsLost = landed.filter((r) => r.wasRaid === true && r.won === false).length;
+  const raidsWon = landed.filter((r) => r.wasRaid === true && r.won !== false).length;
+  const organized = landed.length - raidsLost - raidsWon;
+  const parts = [
+    organized > 0 && `${organized} organized`,
+    raidsWon > 0 && `${raidsWon} ${raidsWon === 1 ? "raid" : "raids"} won`,
+    raidsLost > 0 && `${raidsLost} ${raidsLost === 1 ? "raid" : "raids"} lost, cost spent`,
+  ].filter(Boolean);
+  const head = `Ran ${data.completed} of ${data.requested} drives${
+    parts.length > 0 ? `: ${parts.join(", ")}` : ""
+  }.`;
+  const stop = data.stopped
+    ? ` Stopped at ${shopName(data.stopped.sectorId)}: ${data.stopped.error}`
+    : "";
+  return { ok: data.stopped == null && raidsLost === 0, text: `${head}${stop}` };
+}
+
+/**
+ * Overview summary of the union's shops by strike status. Each line opens the
+ * Sectors tab already filtered to those shops.
+ */
+export function UnionAtAGlance({
+  unionId,
+  sectors,
+  demandedWageLevel,
+  onOpenSectors,
+}: {
+  unionId: string;
+  sectors: SectorRow[];
+  demandedWageLevel: number | null;
+  onOpenSectors: (status: SectorStatus | "") => void;
+}) {
+  if (sectors.length === 0) return null;
+  const byStatus = new Map<SectorStatus, number>();
+  for (const s of sectors) {
+    const status = sectorStatus(s);
+    byStatus.set(status, (byStatus.get(status) ?? 0) + 1);
+  }
+  const held = sectors.filter((s) => sectorHolding(s, unionId) === "ours").length;
+  const rival = sectors.filter((s) => sectorHolding(s, unionId) === "rival").length;
+  const short = sectors.filter((s) => s.wageGap != null && s.wageGap > 0).length;
+  const statusOrder: SectorStatus[] = [
+    "ready",
+    "striking",
+    "agreement",
+    "cooldown",
+    "underorganized",
+  ];
+  return (
+    <section className="space-y-3 rounded-xl border border-card-border bg-card p-5">
+      <div className="flex items-center gap-3">
+        <h2 className="text-sm font-semibold text-muted">Shops at a glance</h2>
+        <div className="h-px flex-1 bg-card-border" />
+      </div>
+      <p className="text-sm text-muted">
+        {sectors.length} {sectors.length === 1 ? "shop" : "shops"} in this industry: this union
+        holds {held}, rival unions hold {rival}, and {sectors.length - held - rival}{" "}
+        {sectors.length - held - rival === 1 ? "has" : "have"} no union yet.
+        {demandedWageLevel != null &&
+          ` ${short} ${short === 1 ? "pays" : "pay"} less than the public wage claim.`}
+      </p>
+      <ul className="flex flex-wrap gap-2">
+        {statusOrder.map((status) => {
+          const count = byStatus.get(status) ?? 0;
+          if (count === 0) return null;
+          return (
+            <li key={status}>
+              <button
+                type="button"
+                onClick={() => onOpenSectors(status)}
+                className="flex items-center gap-2 rounded-lg border border-card-border px-3 py-1.5 text-xs font-medium transition-colors hover:bg-card-elevated"
+              >
+                <span className="font-mono tabular-nums text-foreground">{count}</span>
+                <span className="text-muted">
+                  {SECTOR_STATUS_FILTER_LABEL[status].toLowerCase()}
+                </span>
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
   );
 }
 
