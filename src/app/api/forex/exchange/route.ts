@@ -1,3 +1,4 @@
+import { effectiveInterventionPolicy } from "@/lib/currency/intervention/rules";
 // GET: returns current exchange rates + public order book
 // POST: execute a market order (instant market maker trade)
 // Auth: requireBasicAuth (POST), isForexEnabled gate (GET)
@@ -94,26 +95,28 @@ export async function GET() {
 
     return NextResponse.json(
       {
-        rates: rates.map((r) => ({
-          countryId: r.countryId,
-          currencyCode: r.currencyCode,
-          rate: r.rate,
-          baseRate: r.baseRate,
-          macroTarget: r.macroTarget,
-          buyVolume24: r.buyVolume24,
-          sellVolume24: r.sellVolume24,
-          rateHistory: r.rateHistory,
-          // Public band info only — reserves and per-intervention history stay chair-only.
-          interventionBand: r.interventionPolicy
-            ? {
-                floor: r.interventionPolicy.floor,
-                ceiling: r.interventionPolicy.ceiling,
-                setAtTurn: r.interventionPolicy.setAtTurn,
-                defending:
-                  r.rate < r.interventionPolicy.floor || r.rate > r.interventionPolicy.ceiling,
-              }
-            : null,
-        })),
+        rates: rates.map((r) => {
+          const policy = effectiveInterventionPolicy(r);
+          return {
+            countryId: r.countryId,
+            currencyCode: r.currencyCode,
+            rate: r.rate,
+            baseRate: r.baseRate,
+            macroTarget: r.macroTarget,
+            buyVolume24: r.buyVolume24,
+            sellVolume24: r.sellVolume24,
+            rateHistory: r.rateHistory,
+            // Public band info only — reserves and per-intervention history stay chair-only.
+            interventionBand: policy
+              ? {
+                  floor: policy.floor,
+                  ceiling: policy.ceiling,
+                  setAtTurn: policy.setAtTurn,
+                  defending: r.rate < policy.floor || r.rate > policy.ceiling,
+                }
+              : null,
+          };
+        }),
         reserveLeaders,
         orderBook: openOrders.map((o) => ({
           _id: o._id.toString(),

@@ -27,9 +27,9 @@ const FUNDING_SOURCE_LABELS: Record<string, string> = {
 interface InterventionPolicyView {
   floor: number;
   ceiling: number;
-  setByCharacterName: string;
-  setAtTurn: number;
-  lastAdjustedAtTurn: number;
+  setByCharacterName: string | null;
+  setAtTurn: number | null;
+  lastAdjustedAtTurn: number | null;
   recentInterventions: InterventionRecord[];
 }
 
@@ -45,6 +45,7 @@ export interface ForexSpreadView {
 }
 
 export interface InterventionData {
+  fxRegime?: "float" | "band" | "peg";
   currencyCode: CurrencyCode | null;
   baseRate: number | null;
   currentRate: number | null;
@@ -81,7 +82,8 @@ export function CentralBankInterventionTab({
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  const canEdit = (isChair && !chairControlsLocked) || isAdmin;
+  const isPeg = data.fxRegime === "peg";
+  const canEdit = !isPeg && ((isChair && !chairControlsLocked) || isAdmin);
   const currencySym = data.currencyCode ? (CURRENCY_SYMBOLS[data.currencyCode] ?? "") : "";
   const totalReserves = (data.forexRevenue ?? 0) + (data.reserveBalance ?? 0);
   const inBand =
@@ -89,7 +91,8 @@ export function CentralBankInterventionTab({
       ? data.currentRate >= data.policy.floor && data.currentRate <= data.policy.ceiling
       : null;
 
-  const turnsSinceAdjusted = data.policy ? currentTurn - data.policy.lastAdjustedAtTurn : null;
+  const turnsSinceAdjusted =
+    data.policy?.lastAdjustedAtTurn != null ? currentTurn - data.policy.lastAdjustedAtTurn : null;
   const cooldownRemaining =
     turnsSinceAdjusted !== null && turnsSinceAdjusted < COOLDOWN_TURNS
       ? COOLDOWN_TURNS - turnsSinceAdjusted
@@ -171,7 +174,13 @@ export function CentralBankInterventionTab({
           onChanged={onChanged}
         />
       )}
-      <CentralBankSection title="FX intervention band">
+      <CentralBankSection title={isPeg ? "FX peg defence" : "FX intervention band"}>
+        {isPeg && (
+          <p className="mb-4 text-body text-muted">
+            Peg defence follows the declared target and available reserves. Use Currency regime to
+            change or end the commitment.
+          </p>
+        )}
         {data.currentRate != null && (
           <p className="mb-2 text-body text-muted">
             Current rate:{" "}
@@ -183,9 +192,11 @@ export function CentralBankInterventionTab({
         {data.policy ? (
           <div className="mb-4 space-y-0.5 text-body">
             <p>
-              Active band:{" "}
+              {isPeg ? "Peg target:" : "Active band:"}{" "}
               <span className="font-mono">
-                [{data.policy.floor.toFixed(4)}, {data.policy.ceiling.toFixed(4)}]
+                {isPeg
+                  ? data.policy.floor.toFixed(4)
+                  : `[${data.policy.floor.toFixed(4)}, ${data.policy.ceiling.toFixed(4)}]`}
               </span>
             </p>
             <p className="text-muted">
@@ -199,11 +210,15 @@ export function CentralBankInterventionTab({
               )}
             </p>
             <p className="text-muted">
-              Set by {data.policy.setByCharacterName} on turn {data.policy.setAtTurn}
-              {data.policy.lastAdjustedAtTurn !== data.policy.setAtTurn &&
+              Set by {data.policy.setByCharacterName ?? "Unknown"}
+              {data.policy.setAtTurn != null
+                ? ` on turn ${data.policy.setAtTurn}`
+                : " (turn unknown)"}
+              {data.policy.lastAdjustedAtTurn != null &&
+                data.policy.lastAdjustedAtTurn !== data.policy.setAtTurn &&
                 ` · last adjusted turn ${data.policy.lastAdjustedAtTurn}`}
             </p>
-            {cooldownRemaining > 0 && (
+            {!isPeg && cooldownRemaining > 0 && (
               <p className="text-warning">
                 Cooldown: {cooldownRemaining} turn{cooldownRemaining === 1 ? "" : "s"} remaining
                 before narrow/cancel

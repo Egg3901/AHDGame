@@ -1,3 +1,4 @@
+import { effectiveInterventionPolicy } from "@/lib/currency/intervention/rules";
 import { currentMoneyGrowth } from "@/lib/moneySupply/rules/growthSignal";
 import { ObjectId, type Db } from "mongodb";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
@@ -643,6 +644,8 @@ export async function loadCountryCentralBankDetail(params: {
       ? await db.collection<ExchangeRate>("exchangeRates").findOne({ _id: "DE" })
       : fxDocForBreakdown;
 
+  const interventionPolicy = policyFx ? effectiveInterventionPolicy(policyFx) : null;
+
   const hasBoard = (policyBank.fomcBoard?.length ?? 0) > 0 && !governmentControlled;
   const hasFunctionalBoard = hasBoard && boardCanCarryMotions(policyBank.fomcBoard ?? []);
 
@@ -783,18 +786,19 @@ export async function loadCountryCentralBankDetail(params: {
             }
           : null,
       intervention: {
+        fxRegime: policyFx?.fxRegime ?? (interventionPolicy ? "band" : "float"),
         currencyCode: policyCurrency ?? nationalCurrency,
         baseRate: policyFx?.baseRate ?? null,
         currentRate: policyFx?.rate ?? null,
-        policy: policyFx?.interventionPolicy
+        policy: interventionPolicy
           ? {
-              floor: policyFx.interventionPolicy.floor,
-              ceiling: policyFx.interventionPolicy.ceiling,
-              setByCharacterName: policyFx.interventionPolicy.setByCharacterName,
-              setAtTurn: policyFx.interventionPolicy.setAtTurn,
-              lastAdjustedAtTurn: policyFx.interventionPolicy.lastAdjustedAtTurn,
+              floor: interventionPolicy.floor,
+              ceiling: interventionPolicy.ceiling,
+              setByCharacterName: interventionPolicy.setByCharacterName,
+              setAtTurn: interventionPolicy.setAtTurn,
+              lastAdjustedAtTurn: interventionPolicy.lastAdjustedAtTurn,
               recentInterventions:
-                isPolicyChair || isAdmin ? policyFx.interventionPolicy.recentInterventions : [],
+                isPolicyChair || isAdmin ? interventionPolicy.recentInterventions : [],
             }
           : null,
         forexRevenue: isPolicyChair || isAdmin ? (policyBank.forexRevenue ?? 0) : null,

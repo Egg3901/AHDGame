@@ -1,3 +1,4 @@
+import { effectiveInterventionPolicy } from "@/lib/currency/intervention/rules";
 // GET /api/country/[code]/executive/cabinet/[positionId]/briefing
 // Auth: public (actions restricted on frontend)
 // Errors: 404
@@ -713,6 +714,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
         db.collection<ExchangeRate>("exchangeRates").findOne({ _id: countryId }),
         getTreasuryOperationsCollection(db).findOne({ _id: countryId }),
       ]);
+      const fxPolicy = fx ? effectiveInterventionPolicy(fx) : null;
       const confidence = budget?.investorConfidence ?? null;
       monetary = {
         primeRate: financeBank?.primeRate ?? null,
@@ -723,9 +725,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
         investorConfidence: confidence,
         confidenceBaseline: INVESTOR_CONFIDENCE_BASELINE,
         fxRate: fx?.rate ?? null,
-        fxBand: fx?.interventionPolicy
-          ? { floor: fx.interventionPolicy.floor, ceiling: fx.interventionPolicy.ceiling }
-          : null,
+        fxBand: fxPolicy ? { floor: fxPolicy.floor, ceiling: fxPolicy.ceiling } : null,
         reserveBalance: financeBank?.reserveBalance ?? null,
         forexRevenue: financeBank?.forexRevenue ?? null,
         debtOp: opDoc?.activeOp

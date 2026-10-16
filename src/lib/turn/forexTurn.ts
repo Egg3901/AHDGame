@@ -1,3 +1,4 @@
+import { effectiveInterventionPolicy } from "@/lib/currency/intervention/rules";
 import { linkedEuroRates } from "@/lib/currency/euro/rules";
 import { getPresetMonetaryScope } from "@/lib/monetaryPolicy/presetMonetaryScope";
 /**
@@ -35,6 +36,7 @@ import {
 } from "@/lib/constants/currencies";
 import {
   computeRateUpdate,
+  generateNoise,
   type MacroInputs,
   type RateUpdateResult,
   type VolumeInputs,
@@ -321,6 +323,10 @@ export async function processForexTurn(
     // A pegged follower publishes the anchor's rate and macro target with no
     // independent drift, volume/cycle pressure, or intervention — its
     // per-country bank never draws reserves for a rate it does not set.
+    const effectivePolicy = effectiveInterventionPolicy(existingRate);
+    // A funded recomputation changes pressure, not the starting rate or noise.
+    const noise =
+      effectivePolicy && euroPegRate == null && !hardPegActive ? generateNoise() : undefined;
     const update: RateUpdateResult =
       euroPegRate != null
         ? {
@@ -342,7 +348,7 @@ export async function processForexTurn(
               countryId,
               macro,
               safeVolumes,
-              undefined,
+              noise,
               volatilityMultiplier,
               cyclePressure,
               currentYear,
@@ -364,11 +370,15 @@ export async function processForexTurn(
         ? null
         : await applyIntervention({
             rate: update.rate,
+            initialRate: safeCurrentRate,
+            noise,
+            bwBand,
+            driftMultiplier: bwFloats ? BW_FLOATING_DRIFT_MULTIPLIER : 1,
             macroTarget: update.macroTarget,
             baseRate,
             countryId,
             currencyCode,
-            policy: existingRate.interventionPolicy ?? null,
+            policy: effectivePolicy,
             bank,
             rates: ratesByCurrency,
             macro,
@@ -401,7 +411,7 @@ export async function processForexTurn(
     );
 
     const nextPolicy = computeNextPolicy({
-      existing: existingRate.interventionPolicy ?? null,
+      existing: effectivePolicy,
       newRecord: interventionOutcome?.record ?? null,
       rateAfter: update.rate,
       currentTurn,
@@ -645,6 +655,10 @@ function buildInterventionFundingPlan(params: {
  */
 async function applyIntervention(args: {
   rate: number;
+  initialRate: number;
+  noise: number | undefined;
+  bwBand: number;
+  driftMultiplier: number;
   macroTarget: number;
   baseRate: number;
   countryId: string;
@@ -731,15 +745,17 @@ async function applyIntervention(args: {
   // bank can still lean against a large traded flow.
   const runBlend = (syntheticVolume: number) => {
     return computeRateUpdate(
-      args.rate,
+      args.initialRate,
       args.baseRate,
       args.countryId as Parameters<typeof computeRateUpdate>[2],
       args.macro,
       { ...args.organicVolumes, syntheticNet: syntheticVolume },
-      undefined,
+      args.noise,
       args.volatilityMultiplier ?? 1,
       args.cyclePressure ?? 0,
-      args.currentYear
+      args.currentYear,
+      args.bwBand,
+      args.driftMultiplier
     );
   };
   const blended = runBlend(effectiveSynthetic);
@@ -836,7 +852,7 @@ async function persistInterventionSideEffects(
         toCharacterSequentialId: chair.sequentialId ?? 0,
         toUserId: chair.userId,
         subject: "FX Intervention Failure",
-        body: "The FX band could not be defended this turn — reserves are depleted. Your infamy has risen. The band remains posted; restore reserves or widen the band to recover.",
+        body: "The currency commitment could not be defended this turn because reserves are depleted. Your infamy has risen. The commitment remains posted. Restore reserves or review your Currency regime and intervention policy.",
       });
     }
   }

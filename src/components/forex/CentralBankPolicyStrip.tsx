@@ -22,7 +22,7 @@ export function CentralBankPolicyStrip({ rates, currentTurn }: Props) {
       <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
         {withBands.map((r) => {
           const band = r.interventionBand!;
-          const turnsSince = currentTurn - band.setAtTurn;
+          const turnsSince = band.setAtTurn == null ? null : currentTurn - band.setAtTurn;
           return (
             <div
               key={r.currencyCode}
@@ -39,10 +39,14 @@ export function CentralBankPolicyStrip({ rates, currentTurn }: Props) {
                 )}
               </div>
               <p className="mt-1 font-mono text-xs text-muted">
-                Band: [{band.floor.toFixed(4)}, {band.ceiling.toFixed(4)}]
+                {band.floor === band.ceiling
+                  ? `Peg target: ${band.floor.toFixed(4)}`
+                  : `Band: [${band.floor.toFixed(4)}, ${band.ceiling.toFixed(4)}]`}
               </p>
               <p className="text-xs text-muted">
-                Posted {turnsSince} turn{turnsSince === 1 ? "" : "s"} ago
+                {turnsSince == null
+                  ? "Posting turn unknown"
+                  : `Posted ${turnsSince} turn${turnsSince === 1 ? "" : "s"} ago`}
               </p>
             </div>
           );

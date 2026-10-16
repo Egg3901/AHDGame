@@ -2,7 +2,7 @@
  * @vitest-environment happy-dom
  */
 import { describe, expect, it, vi, afterEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { CountryId } from "@/lib/constants/countries";
 import messages from "../../../../../messages/en/centralBank.json";
 import { FomcCommitteeTab } from "./FomcCommitteeTab";
@@ -256,4 +256,72 @@ it("shows a carried motion's blocked execution and policy reason", async () => {
   expect(
     screen.getByText("The exchange-rate commitment currently prevents an independent rate change.")
   ).toBeTruthy();
+});
+
+it("shows a rejected motion beside its controls and clears it while retrying before refreshing", async () => {
+  const policyError =
+    "The currency is pegged and the capital account is open. Float the currency or impose capital controls.";
+  const payload = {
+    ...committeePayload(0),
+    viewerSeatId: "seat-1",
+    meeting: { ...votingMeeting(false), motion: "hold", proposedDelta: 0 },
+    governance: {
+      ...governanceWith({ allowed: true }),
+      allowedActions: [{ action: "set_motion", allowed: true }],
+    },
+  };
+  const jsonResponse = (body: unknown, status = 200) =>
+    new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
+  let completeRetry!: (response: Response) => void;
+  const retry = new Promise<Response>((resolve) => {
+    completeRetry = resolve;
+  });
+  const fetchMock = vi
+    .fn()
+    .mockResolvedValueOnce(jsonResponse(payload))
+    .mockResolvedValueOnce(jsonResponse({ error: policyError }, 400))
+    .mockReturnValueOnce(retry)
+    .mockResolvedValueOnce(
+      jsonResponse({
+        ...payload,
+        meeting: { ...votingMeeting(false), motion: "hike", proposedDelta: 0.5 },
+      })
+    );
+  vi.stubGlobal("fetch", fetchMock);
+  render(<FomcCommitteeTab countryId="US" />);
+
+  const button = await screen.findByRole("button", { name: "Table motion" });
+  const controls = screen.getByText("Table your motion").parentElement!;
+  fireEvent.change(screen.getByRole("combobox", { name: "Motion" }), { target: { value: "hike" } });
+  fireEvent.change(screen.getByRole("combobox", { name: "Rate change" }), {
+    target: { value: "0.5" },
+  });
+  fireEvent.click(button);
+
+  const alert = await screen.findByRole("alert");
+  expect(alert.textContent).toContain(policyError);
+  expect(screen.queryByText("Your motion is on the table.")).toBeNull();
+  expect(fetchMock).toHaveBeenCalledTimes(2);
+  expect(fetchMock).toHaveBeenNthCalledWith(
+    2,
+    "/api/country/us/fomc/motion",
+    expect.objectContaining({
+      method: "POST",
+      body: JSON.stringify({ motion: "hike", delta: 0.5 }),
+    })
+  );
+  expect(within(controls).getByRole("alert")).toBe(alert);
+
+  fireEvent.click(button);
+  expect(screen.queryByRole("alert")).toBeNull();
+  expect(screen.queryByText("Your motion is on the table.")).toBeNull();
+  expect((button as HTMLButtonElement).disabled).toBe(true);
+  await act(async () => {
+    completeRetry(jsonResponse({ ok: true }));
+  });
+  await screen.findByText("Motion: Raise rate (+0.50pp)");
+  expect(within(controls).getByText("Your motion is on the table.")).toBeTruthy();
+  expect(screen.queryByRole("alert")).toBeNull();
+  expect(fetchMock).toHaveBeenCalledTimes(4);
+  expect(fetchMock).toHaveBeenLastCalledWith("/api/country/us/fomc", { cache: "no-store" });
 });

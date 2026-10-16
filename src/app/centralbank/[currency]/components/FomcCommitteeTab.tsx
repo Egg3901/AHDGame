@@ -127,6 +127,7 @@ export function FomcCommitteeTab({ countryId }: { countryId: CountryId }) {
   const [motionChoice, setMotionChoice] = useState<"hike" | "cut" | "hold">("hold");
   const [motionSize, setMotionSize] = useState<string>("0.25");
   const [motionStatus, setMotionStatus] = useState<string | null>(null);
+  const [motionError, setMotionError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -172,6 +173,7 @@ export function FomcCommitteeTab({ countryId }: { countryId: CountryId }) {
     setVoting(true);
     setError(null);
     setMotionStatus(null);
+    setMotionError(null);
     try {
       const size = Math.abs(Number(motionSize));
       const body =
@@ -190,7 +192,7 @@ export function FomcCommitteeTab({ countryId }: { countryId: CountryId }) {
       setMotionStatus("Your motion is on the table.");
       await load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not table the motion");
+      setMotionError(e instanceof Error ? e.message : "Could not table the motion");
     } finally {
       setVoting(false);
     }
@@ -400,6 +402,7 @@ export function FomcCommitteeTab({ countryId }: { countryId: CountryId }) {
                     Table motion
                   </button>
                 </div>
+                <InlineError error={motionError} className="mt-2 text-body-sm text-danger" />
                 {motionStatus && <p className="mt-2 text-body-sm text-muted">{motionStatus}</p>}
               </div>
             )}

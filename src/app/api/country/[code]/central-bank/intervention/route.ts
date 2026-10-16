@@ -146,6 +146,15 @@ async function authorizeChair(countryId: CountryId): Promise<GuardSuccess | Guar
     };
   }
 
+  if (rate.fxRegime === "peg") {
+    return {
+      ok: false,
+      response: errorResponse(
+        409,
+        "Peg defence is controlled by Currency regime. Change the regime there before setting, changing or cancelling a band."
+      ),
+    };
+  }
   return { ok: true, db, bank, rate, fxCountryId, character: myChar, isAdmin };
 }
 
@@ -225,7 +234,7 @@ export async function PATCH(request: Request, context: RouteContext) {
     const isWiden = isSuperset(parsed.data, existing) && !isSameBand(parsed.data, existing);
 
     if (!isWiden && !guard.isAdmin) {
-      const turnsSince = currentTurn - existing.lastAdjustedAtTurn;
+      const turnsSince = currentTurn - (existing.lastAdjustedAtTurn ?? 0);
       if (turnsSince < INTERVENTION_POLICY_COOLDOWN_TURNS) {
         throw badRequest(
           `Narrowing the band is limited to once every ${INTERVENTION_POLICY_COOLDOWN_TURNS} turns (${INTERVENTION_POLICY_COOLDOWN_TURNS - turnsSince} more to wait).`
@@ -270,7 +279,7 @@ export async function DELETE(_request: Request, context: RouteContext) {
     if (!guard.isAdmin) {
       const gameState = await getGameState();
       const currentTurn = gameState?.currentTurn ?? 0;
-      const turnsSince = currentTurn - existing.lastAdjustedAtTurn;
+      const turnsSince = currentTurn - (existing.lastAdjustedAtTurn ?? 0);
       if (turnsSince < INTERVENTION_POLICY_COOLDOWN_TURNS) {
         throw badRequest(
           `Cancelling the band is limited to once every ${INTERVENTION_POLICY_COOLDOWN_TURNS} turns (${INTERVENTION_POLICY_COOLDOWN_TURNS - turnsSince} more to wait).`

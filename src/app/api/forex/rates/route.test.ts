@@ -54,3 +54,30 @@ it("retains independent quotes and spreads before union settlement", async () =>
   expect(body.rates.GBP).toBe(0.6);
   expect(body.spreadStrengths.GBP).toBe(0.5);
 });
+
+it("publishes the declared target before the hourly turn without reserve history", async () => {
+  const db = createMockDb();
+  mocks.getDb.mockResolvedValue(db);
+  db.collection("exchangeRates")
+    .find()
+    .toArray.mockResolvedValue([
+      {
+        currencyCode: "USD",
+        rate: 1,
+        fxRegime: "peg",
+        pegTarget: 0.5,
+        interventionPolicy: {
+          floor: 0.5,
+          ceiling: 0.51,
+          recentInterventions: [{ reservesSpent: 99 }],
+        },
+      },
+    ]);
+  const body = await (await GET()).json();
+  expect(body.interventionBands.USD).toEqual({
+    floor: 0.5,
+    ceiling: 0.5,
+    setAtTurn: null,
+    defending: true,
+  });
+});
