@@ -115,7 +115,7 @@ export const WIKI_LAST_UPDATED: Record<string, string> = {
   "military-commands": "2026-10-13",
   "military-units": "2026-10-16",
   "multi-country-play": "2026-08-30",
-  "national-budget": "2026-10-08",
+  "national-budget": "2026-10-16",
   "national-corporations": "2026-08-11",
   "national-doctrine": "2026-10-13",
   "national-metrics": "2026-10-13",
