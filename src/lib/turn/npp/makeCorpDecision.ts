@@ -566,27 +566,31 @@ export function makeNppCorpDecision(
   }
 
   // ── 2c. Glut mothballing (plants only) ────────────────────────────────────
-  sectorUpdates.push(
-    ...buildNppGlutMothballUpdates({
-      corporation: corp,
-      turn: ctx.turn,
-      now,
-      plantsEnabled: plants?.enabled === true,
-      sectorProfits,
-      divestedSectorIds,
-      priceRatioOf,
-    })
+  const mothballUpdates = buildNppGlutMothballUpdates({
+    corporation: corp,
+    turn: ctx.turn,
+    now,
+    plantsEnabled: plants?.enabled === true,
+    sectorProfits,
+    divestedSectorIds,
+    priceRatioOf,
+  });
+  sectorUpdates.push(...mothballUpdates);
+  const newlyMothballedIds = new Set(
+    mothballUpdates
+      .filter(({ update }) => update.$set?.mothballed === true)
+      .map(({ filter }) => filter._id.toString())
   );
 
   // Input-squeeze strategy shifts use the 2c cohort independently: a mothball and a strategy
-  // shift never target the same sector (a shift candidate is running and
-  // selling; a mothball candidate is unfilled), and only one shift per corp
+  // shift never target a sector scheduled to become cold in this decision.
+  // Another running sector may still shift, and only one shift per corp
   // per turn keeps the cohort gradual. SOEs are exempt for 2c's reason.
   // Autopilot leaves retooling to the owner.
   if (!corp.countryOwnerId && !autopilot && glutStaggerEligible(corp._id.toString(), ctx.turn)) {
     const retool = chooseNppStrategyRetool({
       corp,
-      sectors,
+      sectors: sectors.filter((sector) => !newlyMothballedIds.has(sector._id.toString())),
       divestedSectorIds,
       turn: ctx.turn,
       now,
