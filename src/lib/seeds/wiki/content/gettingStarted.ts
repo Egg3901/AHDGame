@@ -14,7 +14,7 @@ dashboard
 
 ## First ten minutes (do these in order)
 
-1. **Dashboard.** Note Actions remaining, Campaign Funds, Favorability, and Political Influence. Those four numbers are your week-one loop.
+1. **Dashboard.** Note Actions remaining, Campaign Funds, Favorability, and Political Influence. Those four numbers are your week-one loop. New characters start with 10 Political Influence, and for their first three days a panel at the top of your profile lists three goals: campaign at home three times, join a party, and enter a local race that is still open.
 2. **Choose whether to join a party.** Open **Parties** in the nav and compare platforms. Independents can run through the independent primary, but joining a party gives access to its primary, organization, action pool, and leadership path.
 3. **Spend Campaign.** On the Dashboard (or Actions), run **Campaign** until you have spent several of the 25 starting actions. Each click adds Political Influence in your home state.
 4. **Find a race.** Open **Elections**. Filter to your country and home state or region. Look for State Senate or House (or the local equivalent) still in primary.
@@ -53,7 +53,7 @@ campaign
 
 ## Contests and community games
 
-In multiplayer, open **Contests** next to Help. Weekly rounds compare small and large corporation growth, National Influence gained, government approval gained and successful referrals. Growth excludes injected capital, and an approval entry requires the same player head of government throughout the round. Check the leaderboard for your current standing and configured prize; a flat round has no winner. Rounds open on the first visit, and scores refresh through the contest system.
+In multiplayer, open **Contests** next to Help. Weekly rounds compare small and large corporation growth, National Influence gained, government approval gained and successful referrals, plus rounds for Legislator of the Week, Personal Wealth Growth and Party Growth. Growth excludes injected capital, and an approval entry requires the same player head of government throughout the round. Check the Contests page for your standing; podium prizes split 50, 30 and 20 percent, except government approval, which is winner takes all. Rounds open on the first visit, and scores refresh through the contest system.
 
 Iteration referrals count new players who create a character during the current iteration. Weekly and iteration ranking exclude banned referees, self-referrals and strong linked accounts. The top three iteration referrers can earn Supporter for the next iteration; paying subscriptions are separate.
 

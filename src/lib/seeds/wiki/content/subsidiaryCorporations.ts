@@ -18,13 +18,17 @@ Once formalized, the relationship isn't permanent by default: if your voting con
 
 You can release a subsidiary yourself too, but not immediately: there's a **24-turn minimum age** between formalizing and releasing, so you can't flip the relationship on and off in the same session.
 
+## Buying a corporation as a subsidiary
+
+Instead of formalizing a corporation you already control, you can buy one and keep it running as a subsidiary. When you make an acquisition offer from the Deals tab, choose **Keep as subsidiary** instead of Merge. The offer pays the target's shareholders the agreed price and makes your corporation the target's only shareholder, while its sectors, cash, bonds, bank charter and management stay as they are. The same offer is refused when it would chain subsidiaries, create circular ownership, or put one player in charge of both parent and subsidiary. An AI-run target accepts automatically at or above its asking price; a player-run one accepts from their own Deals tab. An AI-run subsidiary no longer divests or retools its sectors on its own, so a company you bought is not dismantled behind your back.
+
 ## What being a parent lets you do
 
 **Capital injection.** Send cash straight into the subsidiary's treasury from your own, converted through currency exchange if needed. Capped at **25% of your liquid capital per injection**, with a **24-turn cooldown** per subsidiary. This is the main tool for propping up a struggling subsidiary or funding its growth without going through the stock market.
 
 **Dividend floor.** Set a minimum dividend rate the subsidiary must pay out, which its own CEO cannot undercut (though they can still pay more if they choose). If you stop controlling it, the floor stops applying automatically, it isn't a lever you keep after losing control.
 
-**CEO appointment.** Reseat the subsidiary's CEO, either with an NPP caretaker (the previous human stays attached so they can reclaim later, but a computer runs it day to day) or with a different human character. The one-person rule applies to sitting human CEOs, not to a caretaker stash. Reclaim is blocked if that human already runs another of your subsidiaries.
+**CEO appointment.** Reseat the subsidiary's CEO, either with an NPP caretaker (the previous human stays attached so they can reclaim later, but a computer runs it day to day) or with a different human character. When the subsidiary's CEO seat is vacant, the parent can appoint an eligible NPP to fill it. The one-person rule applies to sitting human CEOs, not to a caretaker stash. Reclaim is blocked if that human already runs another of your subsidiaries.
 
 **Spinning off a piece of your own business.** Rather than formalizing an existing corporation, you can carve one of your own sector types out into a brand-new, wholly-owned subsidiary. All the sectors of that type move to the new corp with their plant capacity intact; nothing is lost in the move. Costs a base fee plus a per-sector fee, paid to your country's treasury, and is on a **168-turn (roughly 7 real-day) cooldown** per parent. The new corp starts private, 100% owned by you, and is immediately a formalized subsidiary from the moment it's created.
 

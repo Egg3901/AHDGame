@@ -4,7 +4,7 @@ The US Senate must confirm presidential nominations for Cabinet positions before
 
 ## What requires Senate confirmation
 
-- All 15 Cabinet positions (see [Cabinet](/wiki/cabinet))
+- All Cabinet positions (see [Cabinet](/wiki/cabinet)), except the White House Chief of Staff, whom the President appoints alone with no Senate vote
 - Supreme Court justices (see [Supreme Court](/wiki/scotus))
 - Federal Reserve chair and governors, voted on from the FOMC committee page (see [FOMC / Rate-Setting Board](/wiki/fomc))
 
@@ -91,7 +91,7 @@ Pending nominations appear on the executive dashboard visible to the President. 
 
 ## Related pages
 
-- [Cabinet](/wiki/cabinet): The 15 Cabinet positions and what each does
+- [Cabinet](/wiki/cabinet): The Cabinet positions and what each does
 - [Congress Leadership](/wiki/congress-leadership): Senate Majority Leader's role in scheduling confirmation votes
 - [Voting & Whips](/wiki/voting-and-whips): Whipping NPP senators on confirmation votes
 - [Government Formation](/wiki/government-formation): Parliamentary equivalent (no Senate confirmation)

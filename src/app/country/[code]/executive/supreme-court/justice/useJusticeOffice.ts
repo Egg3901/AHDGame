@@ -15,6 +15,13 @@ export interface JusticeOfficeSeat {
   deathChance: DivergentDeathChance | null;
 }
 
+export interface JusticeOfficeUpcomingCase {
+  caseKey: string;
+  title: string;
+  axis: string;
+  decisionYear: number;
+}
+
 export interface JusticeOfficeData {
   countryId: string;
   isJustice: boolean;
@@ -26,6 +33,8 @@ export interface JusticeOfficeData {
   actions: JusticeActionDef[];
   /** Holder-only: state for buying +1 action with main AP. */
   topUp: OfficePoolTopUpStatus | null;
+  /** Pending Docket cases the Court has yet to rule on. */
+  upcomingCases: JusticeOfficeUpcomingCase[];
 }
 
 /** Mirrors `useVicePresidentOffice` — fetches the viewer's Justice office briefing (#3605). */

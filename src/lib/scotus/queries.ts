@@ -91,3 +91,23 @@ export async function getScotusDocket(
     .sort({ decisionYear: 1 })
     .toArray();
 }
+
+/** Pending Docket cases the Court has yet to rule on, soonest decision year first. */
+export async function getScotusUpcomingCases(
+  db: Db,
+  countryId: CountryId
+): Promise<Array<Pick<DocketCase, "caseKey" | "title" | "axis" | "decisionYear">>> {
+  return db
+    .collection<DocketCase>("docketCases")
+    .find({ countryId, status: "pending" })
+    .project<Pick<DocketCase, "caseKey" | "title" | "axis" | "decisionYear">>({
+      _id: 0,
+      caseKey: 1,
+      title: 1,
+      axis: 1,
+      decisionYear: 1,
+    })
+    .sort({ decisionYear: 1, title: 1 })
+    .limit(25)
+    .toArray();
+}

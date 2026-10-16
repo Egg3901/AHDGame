@@ -35,6 +35,8 @@ Curated historical cases resolve against the sitting Court on the calendar year 
 
 Once per turn you can spend 10 actions to buy 1 justice action, up to the pool's cap.
 
+A confirmed justice's appointment is recorded in their career history. Two achievements recognise the Court: one for being confirmed to the Supreme Court, and one for dying in office as a sitting justice.
+
 ## Tenure
 
 Original historical occupants leave when their authored departure is reached, opening a live appointment. After that first appointment, a sitting justice (player or NPP) can leave mid-term; the President and occupant are notified when a seat opens. The Court does not keep a confirmed player forever.

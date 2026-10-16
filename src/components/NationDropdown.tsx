@@ -10,7 +10,7 @@ import { CountryFlag } from "@/components/CountryFlag";
 import { useActiveCharters } from "@/hooks/useActiveCharters";
 import { useActiveReferendumCampaign } from "@/hooks/useActiveReferendumCampaign";
 import { useActivePresidentElection } from "@/hooks/useActivePresidentElection";
-import { countryUrl, cabinetOfficeUrl, partyUrl } from "@/lib/urls";
+import { countryUrl, cabinetOfficeUrl, partyUrl, scotusJusticeOfficeUrl } from "@/lib/urls";
 import { DROPDOWN_PANEL_CLASS } from "@/components/navbar/dropdownStyles";
 import { buildNationalDetailsSections } from "@/components/navbar/nationDetailsSections";
 import { CollapsibleNavSection } from "@/components/navbar/CollapsibleNavSection";
@@ -20,6 +20,8 @@ interface NationDropdownProps {
   currentParty?: { id: string; name: string; countryId: string } | null;
   /** Viewer's own cabinet seat (any country) — drives the "Cabinet Office" entry. */
   cabinetOffice?: { positionId: string; positionName: string; countryCode: string } | null;
+  /** Viewer's own Supreme Court seat — drives the "Justice Office" entry. */
+  justiceOffice?: { countryCode: string; seatNumber: number } | null;
   activePresidentElectionId?: string;
   activePresidentElectionSeatId?: string;
   isUKContext?: boolean;
@@ -32,6 +34,7 @@ interface NationDropdownProps {
 export function NationDropdown({
   currentParty,
   cabinetOffice,
+  justiceOffice,
   activePresidentElectionId: _activePresidentElectionId,
   activePresidentElectionSeatId: _activePresidentElectionSeatId,
   isUKContext: _isUKContext = false,
@@ -219,6 +222,28 @@ export function NationDropdown({
                       />
                     </svg>
                     <span className="truncate">{t("menus.nation.cabinetOffice")}</span>
+                  </Link>
+                )}
+                {justiceOffice && (
+                  <Link
+                    href={scotusJusticeOfficeUrl(justiceOffice.countryCode)}
+                    onClick={() => setIsOpen(false)}
+                    className="flex items-center gap-2 px-4 py-2.5 text-sm text-foreground transition-colors hover:bg-background/60"
+                  >
+                    <svg
+                      className="h-4 w-4 text-muted"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M12 3v18m-7-4h14M5 7h14M7 7l-3 6a3 3 0 006 0L7 7zm10 0l-3 6a3 3 0 006 0l-3-6z"
+                      />
+                    </svg>
+                    <span className="truncate">{t("menus.nation.justiceOffice")}</span>
                   </Link>
                 )}
                 {currentParty && (

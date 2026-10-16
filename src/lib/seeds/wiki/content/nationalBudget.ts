@@ -8,7 +8,7 @@ The federal budget collects revenue from several streams:
 
 | Source | How it's set |
 | --- | --- |
-| Income tax | Rate set by legislation |
+| Income tax | Three rates set by legislation: Low Income, Medium Income and High Income |
 | Domestic corporate tax | Rate for corporations headquartered in this country |
 | Foreign corporate tax | Rate for corporations headquartered elsewhere |
 | Payroll tax | Rate set by legislation |
@@ -20,6 +20,23 @@ The federal budget collects revenue from several streams:
 **Domestic vs. foreign corporate tax:** A US-headquartered corporation operating a sector in Germany pays Germany's **foreign** corporate tax rate on those profits. A German-headquartered corporation operating in Germany pays Germany's **domestic** rate. Both rates are set independently by legislation in each country.
 
 Tax revenue scales with the tax base: the actual economic activity being taxed. Higher GDP, more corporate profits, and rising wages all expand the tax base, generating more revenue even at the same rates.
+
+## Income tax by income group
+
+Income tax has a separate legislated rate for each income group: **Low Income**, **Medium Income** and **High Income**. Each is its own tax provision, so a bill can raise one group's rate without touching the others. When a country first moved to tiers, every tier started at its previous single income-tax rate.
+
+Budget revenue weights each group by its share of the population and its relative earnings (high earners count for four times as much income as low earners), so a change to the High Income rate moves revenue more than its population share suggests.
+
+## Personal income tax
+
+Characters pay income tax on what they personally earn: corporate salary, dividends (including index fund dividends), bond coupons, savings interest and bank deposit interest. Starting capital, transfers between characters, borrowing, campaign fundraising and repaid principal are not taxed.
+
+- **Which rate applies:** your earnings over the last 12 turns are converted to a yearly figure and compared with your home state's median income. Below 75% of the median you pay the Low Income rate, below twice the median the Medium Income rate, and above that the High Income rate.
+- **National and state tax:** the national rate for your group goes to the national treasury and your home state's rate for the same group goes to the state budget. The total can never exceed the income itself.
+- **When it is charged:** tax is assessed each turn you receive taxable income, from the money that income paid into.
+- **If you cannot pay:** an assessment your balance cannot cover stays on your account as unpaid tax and is collected on a later turn. It counts against your wealth until it is paid.
+
+Your portfolio shows a personal tax statement with gross income, tax, net income and any unpaid assessments.
 
 ## Spending categories
 

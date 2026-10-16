@@ -118,13 +118,13 @@ describe("computeAutoDowngrade — branch trees", () => {
   });
 
   it("keeps a partially-solvent branch investment instead of shedding everything", () => {
-    // Swing Canvassing L2 upkeep is $12k+$30k=$42k over starter $5.5k. With income
-    // that covers the starter + L1 but not L2, only the top tier should shed.
+    // Ground game upkeep is doubled: starter $11k, Swing Canvassing L1 $24k, L2 $60k.
+    // With income that covers the starter + L1 but not L2, only the top tier should shed.
     const c = treeCampaign({ groundGameTree: { starter: true, a: 2, b: 0, c: 0 } });
-    const result = computeAutoDowngrade(c, { funds: 0, income: 20_000 });
+    const result = computeAutoDowngrade(c, { funds: 0, income: 40_000 });
     expect(result.setFields["groundGameTree.a"]).toBe(1);
     expect(result.setFields["groundGameTree"]).toBeUndefined();
-    expect(result.newMaintenance).toBeLessThanOrEqual(20_000);
+    expect(result.newMaintenance).toBeLessThanOrEqual(40_000);
   });
 
   it("never demotes a zero-maintenance branch (Volunteer Corps)", () => {

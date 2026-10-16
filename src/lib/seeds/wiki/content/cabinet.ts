@@ -4,7 +4,7 @@ The US Cabinet is a council of principal officers who lead the major executive d
 
 ## Cabinet positions
 
-Positions are ordered by presidential line of succession (after the Vice President). The live roster is **year-gated**: later departments (HUD, Transportation, Energy, Veterans Affairs, Homeland Security) unlock by year, and Education is carved out of HEW only when the Department of Education Act passes. The table is the full succession list; not every seat exists in every era.
+Positions are ordered as the game lists them: the succession secretaries (after the Vice President), then the cabinet-rank White House seats added from 1946. The live roster is **year-gated**: later departments (HUD, Transportation, Energy, Veterans Affairs, Homeland Security) unlock by year, and Education is carved out of HEW only when the Department of Education Act passes. The table is the full cabinet roster; not every seat exists in every era.
 
 | # | Position | Department focus |
 | --- | --- | --- |
@@ -23,6 +23,8 @@ Positions are ordered by presidential line of succession (after the Vice Preside
 | 13 | Secretary of Education | Federal education funding, student loans |
 | 14 | Secretary of Veterans Affairs | Veterans healthcare, benefits, GI Bill |
 | 15 | Secretary of Homeland Security | Border security, FEMA, cybersecurity |
+| 16 | Director of Central Intelligence | National intelligence service: foreign collection, counter-intelligence (from 1946) |
+| 17 | White House Chief of Staff | White House operations and press strategy (from 1946; appointed by the President alone, no Senate vote, not in the line of succession) |
 
 ## How nominations work
 
@@ -30,7 +32,7 @@ The nomination process has three stages:
 
 ### 1. Presidential nomination
 
-Only the character currently holding the **President** office can nominate candidates for cabinet positions. The President selects a character (player or NPP) and submits the nomination from the executive dashboard.
+Only the character currently holding the **President** office can nominate candidates for cabinet positions. The President selects a character (player or NPP) and submits the nomination from the executive dashboard. The White House Chief of Staff is the one exception: the President appoints them alone, with no Senate vote, and can fire them at any time.
 
 - A nomination creates a pending **cabinet nomination** record for the position.
 - Only one nomination per position can be pending at a time.
@@ -63,7 +65,7 @@ Cabinet members have both structural roles and active executive mechanics:
 - **Ministerial orders**: Each cabinet position can issue department-specific orders that apply metric modifiers nationally or to target regions. Orders cost **1 cabinet action** and last a fixed number of turns.
 - **Tier settings**: Positions with tiered policy levers can set a national policy tier that applies passive metric modifiers every turn without consuming actions.
 - **Regional targets**: Positions can designate a target region for focused policy effects, with optional non-target penalties to create zero-sum trade-offs.
-- **Projects & buildings**: Most seats can build persistent assets: portfolio facilities like schools, hospitals, and embassies (estates), power plants (the energy seat), or multi-turn infrastructure projects (the transport seat). Each asset nudges its region's metrics every turn, and total upkeep is weighed against your ministry's budget envelope. See [Cabinet Projects & Buildings](/wiki/cabinet-projects) for the full guide.
+- **Projects & buildings**: Most seats can build persistent assets: portfolio facilities like schools, hospitals, and embassies (estates), power plants (the energy seat), or multi-turn infrastructure projects (the transport seat). Each asset nudges its region's metrics every turn, and total upkeep is weighed against your ministry's budget envelope. See [Cabinet Projects & Buildings](/wiki/cabinet-projects) for the full guide. Offices with no associated laws, such as the White House Chief of Staff, carry an intentionally zero legislative budget and show no Allocations tab or department budget panel.
 
 **Action economy:**
 - Cabinet members receive **cabinet actions** (or ministerial actions in parliamentary systems), capped at **4**.

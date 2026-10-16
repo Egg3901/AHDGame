@@ -1,8 +1,8 @@
 export const corporateMergersContent = `# Corporate Mergers & Acquisitions
 
-You can offer to buy another player's corporation outright. If the acquirer's CEO and the target's CEO agree on a price, the target's shareholders get cashed out and the whole corporation, cash, sectors and all, becomes part of the acquirer. If the combined firm would end up dominating a national industry, the deal does not close automatically: it goes to a named minister for review first.
+You can offer to buy another corporation outright, whether it is run by a player or by a computer. On the Deals tab you choose whether to merge the target into your own corporation or keep it running as your subsidiary. On a merge, if the acquirer's CEO and the target's CEO agree on a price, the target's shareholders get cashed out and the whole corporation, cash, sectors and all, becomes part of the acquirer. If the combined firm would end up dominating a national industry, the deal does not close automatically: it goes to a named minister for review first.
 
-This is separate from a [hostile takeover](/wiki/corporations#privatization-buyouts), which squeezes out minority shareholders once you already control a corporation. A merger offer is how you buy a corporation you do not yet control.
+This is separate from a [hostile takeover](/wiki/corporations#privatization-buyouts), which squeezes out minority shareholders once you already control a corporation. An acquisition offer is how you buy a corporation you do not yet control.
 
 ## Proposing an offer
 
@@ -15,6 +15,8 @@ From the Deals tab on your corporation page, search for a target by name across 
 
 The offer stays open for **24 turns**. If the target's CEO does nothing, it expires.
 
+Every offer names an outcome: **Merge** or **Keep as subsidiary**. Merge folds the target into your corporation. Keep as subsidiary pays the target's shareholders the agreed price and makes your corporation its only shareholder, leaving the target's sectors, cash, bonds, bank charter and management as they are. An AI-run target accepts automatically at or above its asking price; a player-run target accepts from their own Deals tab. The subsidiary outcome is refused when it would chain subsidiaries, create circular ownership, or put one player in charge of both parent and subsidiary.
+
 Alongside your price, the game shows you a **reference valuation**: an independent fair-value estimate built from the target's share price times its shares outstanding, its liquid cash, and the replacement-cost value of its plants. This is not the price you have to pay, it's a sanity check so both sides can see whether an offer is generous or lowball.
 
 ## Responding to an offer
@@ -23,13 +25,15 @@ If you are the target's CEO, you can accept or reject. If you are the acquirer, 
 
 **What accepting does NOT let you buy (yet):** a target carrying any un-matured corporate bond, or a target that itself holds shares in another corporation, cannot currently be acquired this way. Those cases are deferred; you'll get an error rather than a broken transfer.
 
-## What happens when a deal closes
+## What happens when a merge closes
 
 1. The acquirer pays the agreed price. If you don't have the cash, the deal fails outright before anything moves.
 2. Every one of the target's shareholders is cashed out at the agreed price pool, the same payout mechanism used for nationalization buyouts.
 3. The target's own liquid cash folds into the acquirer's treasury, on top of the price already paid to shareholders. This isn't double-counting: the price went to the people who owned the shares, and the cash sitting in the company is a separate asset that transfers with it.
 4. Every sector the target owned moves to the acquirer with no value loss, currency-converted where needed.
 5. The target corporation is deleted. Any other pending offer that named it, on either side, is automatically withdrawn.
+
+Under **Keep as subsidiary**, the target is not deleted. The acquirer becomes its only shareholder, and its sectors, cash, bonds, bank charter and management stay in place as a formalized subsidiary.
 
 ## Merger review
 

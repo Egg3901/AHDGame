@@ -101,9 +101,10 @@ export default function BondsGuidePage() {
             <SubHeader>How they are issued</SubHeader>
             <p className="text-sm text-muted leading-relaxed">
               New bonds are issued automatically every{" "}
-              <strong className="text-foreground">12 turns (quarterly)</strong> when a country is
-              running a deficit. The issuance amount equals one quarter of the annual deficit. If
-              the budget is in surplus, no new bonds are issued that quarter.
+              <strong className="text-foreground">12 turns (quarterly)</strong>. The issuance has
+              two parts: one quarter of the annual deficit, plus a rollover that refinances bonds
+              maturing in the next quarter. The rollover keeps the bond float from draining away, so
+              even a country running a surplus issues new bonds to replace the ones coming due.
             </p>
             <div className="overflow-x-auto rounded-xl border border-card-border">
               <table className="w-full text-sm">
@@ -119,7 +120,10 @@ export default function BondsGuidePage() {
                     ["Coupon rate", "Equal to the country's central bank prime rate at issuance"],
                     ["Maturity", "48 turns (1 game year)"],
                     ["Default risk", "None. Sovereign bonds are guaranteed"],
-                    ["Issuance schedule", "Quarterly (every 12 turns), only when deficit > 0"],
+                    [
+                      "Issuance schedule",
+                      "Quarterly (every 12 turns): deficit share plus maturing-debt rollover",
+                    ],
                   ].map(([p, v]) => (
                     <tr key={p}>
                       <td className="px-4 py-2.5 text-muted">{p}</td>

@@ -148,13 +148,15 @@ export default function RunningForOfficePage() {
           {/* ── 3. The Primary Phase ── */}
           <section className="space-y-4">
             <SectionHeader id="primary">3. The primary phase</SectionHeader>
-            <Callout label="Campaign upgrades are a presidential race feature.">
+            <Callout label="The campaign page runs most US races.">
               The full campaign system described below (fundraising tiers, media spending, ground
-              game, opposition research, and campaign actions) applies to{" "}
-              <strong className="text-foreground">presidential elections only</strong>. In
-              congressional and state races, the vote formula (alignment, PI, favorability, party
-              org) still determines the outcome, but the upgrade infrastructure does not apply.
-              Player endorsements also only grant campaign actions in presidential races.
+              game, opposition research, campaign actions, and field offices) applies to{" "}
+              <strong className="text-foreground">
+                President, Senate, Governor, House, and State Senate races
+              </strong>
+              . It also runs UK Commons and Japanese Shugiin, Sangiin and governor races; German and
+              Irish races use the lighter election-detail page instead. Player endorsements only
+              grant campaign actions in presidential races; NPP endorsements count in every race.
             </Callout>
             <p className="text-sm text-muted leading-relaxed">
               The primary is your first hurdle: winning enough support within your own party to
@@ -199,10 +201,12 @@ export default function RunningForOfficePage() {
               </li>
             </ul>
             <Callout label="Endorsements matter.">
-              Your per-turn action count is{" "}
-              <code className="font-mono text-xs">1 + floor(√endorsements × 3)</code>. Actively seek
-              endorsements from NPPs and allied players; even a handful meaningfully increases your
-              action rate.
+              Endorsements feed your campaign page&apos;s own action pool, not your character&apos;s
+              per-turn actions: it earns{" "}
+              <code className="font-mono text-xs">baseline + floor(√endorsements × 3)</code>{" "}
+              campaign actions per turn, where the baseline is your base action rate (4). Actively
+              seek endorsements from NPPs and allied players; even a handful meaningfully increases
+              your campaign action rate.
             </Callout>
           </section>
 
@@ -255,12 +259,12 @@ export default function RunningForOfficePage() {
               allocates votes among candidates in proportion to their relative appeal. Your total
               vote share is the sum of what you receive from each group.
             </p>
-            <FormulaBlock>{`Appeal = Position Alignment × Political Influence (Reach) × Favorability × Party Organization
+            <FormulaBlock>{`Per-group weight = Position Alignment × Reach × Approval × Party Organization
 
-Position Alignment = (50 - |economic gap| × 5 - |social gap| × 5)² / 100
-Reach             = min(2.0, log(PI + 1) / log(101))  (~0.85 at PI 50, 1.0 at PI 100)
-Favorability      = favorability% / 100
-Party Org         = 1.0 + (partyOrg / 100) × 0.6   (range 1.0 to 1.6, no penalty for low org)`}</FormulaBlock>
+Position Alignment = 25 × ((50 - |economic gap| × 5 - |social gap| × 5) / 50)^1.5 + 0.5 floor
+Reach              = sqrt(min(100, PI) / 100)   (0 at PI 0, 1.0 at PI 100)
+Approval           = (favorability / 100)^0.8   (0% favorability = 0 votes)
+Party Org          = (party's state Org / total state Org)^0.2   (range 0 to 1)`}</FormulaBlock>
             <p className="text-sm text-muted leading-relaxed">
               All four factors multiply together. A weakness in any one column drags down everything
               else:
