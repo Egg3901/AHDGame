@@ -32,6 +32,13 @@ export const BANK_TREASURY_TRADES_INDEX = {
  */
 export async function seedBankingIndexes(db: Db, log: (msg: string) => void) {
   log("Banking money-move indexes:");
+  await ensureIndex(
+    db,
+    "producerEconomyAccounts",
+    { worldEpoch: 1, kind: 1, currency: 1 },
+    { name: "producerEconomyAccounts_world_kind_currency", background: true },
+    log
+  );
   for (const index of INCOME_TAX_INDEXES)
     await ensureIndex(db, index.collection, index.keys, { name: index.name }, log);
 

@@ -432,6 +432,12 @@ export const RUNTIME: CollectionEntry[] = [
 
   // Private banking (1.1)
   { name: "bankLoans", category: "runtime" },
+  {
+    name: "producerEconomyAccounts",
+    category: "runtime",
+    notes:
+      "Funded non-corporate producer-market counterparties, scoped to one world. Cash is separate from bank reserves and deposits. Wiped on reset.",
+  },
   { name: "financialCrisisFiscalActions", category: "runtime" },
   { name: "financialCrisisCreditHistory", category: "runtime" },
   { name: "bankMoneyMoves", category: "runtime" },

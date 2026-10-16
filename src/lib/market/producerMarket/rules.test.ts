@@ -177,7 +177,14 @@ describe("one funded producer market", () => {
         },
       ],
     });
-    expect(result.trades[0]).toMatchObject({ units: 4, amount: 8 });
+    expect(result.trades[0]).toMatchObject({
+      kind: "internalTransfer",
+      units: 4,
+      unitPrice: 0,
+      amount: 0,
+    });
+    expect(result.offers[0].revenue).toBe(0);
+    expect(result.orders[0].cost).toBe(0);
     expect(result.accounts[0].cash).toBe(0);
     expect(result.prices).toEqual([]);
   });

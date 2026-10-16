@@ -6,7 +6,7 @@ const plant = (changes: Partial<ProductionPlan> = {}): ProductionPlan => ({
   accountId: "corp",
   capacityUnits: 100,
   activeFraction: 1,
-  physicalFraction: 1,
+  outputMultiplier: 1,
   labourCost: 20,
   otherOperatingCost: 10,
   labourRecipientAccountId: "households",
@@ -175,6 +175,10 @@ describe("receipt-backed production", () => {
       labourPaid: 0,
       otherOperatingPaid: 0,
       operatingArrears: 30,
+      labourArrears: 20,
+      otherOperatingArrears: 10,
+      profit: -30,
+      cashFlow: 0,
     });
     expect(result.producers[0].inputStock[0].units).toBe(200);
   });
@@ -286,5 +290,80 @@ describe("receipt-backed production", () => {
     const unfunded = advanceProducerEconomy({ turn: 1, accounts: empty, producers: [a, b] });
     expect(unfunded.producers.map((p) => p.producedUnits)).toEqual([0, 0]);
     expect(unfunded.trades).toEqual([]);
+  });
+
+  it("preserves physical productivity improvements above nameplate and reports the actual unit price", () => {
+    const result = advanceProducerEconomy({
+      turn: 1,
+      accounts,
+      producers: [plant({ inputs: [], outputMultiplier: 1.25 })],
+      externalOrders: [
+        {
+          id: "customer",
+          accountId: "households",
+          commodity: "financial_services",
+          book: "world",
+          units: 200,
+          maximumUnitPrice: 3,
+        },
+      ],
+    });
+    expect(result.producers[0].producedUnits).toBe(125);
+    expect(result.producers[0].products[0]).toMatchObject({
+      producedUnits: 125,
+      deliveredUnits: 125,
+      askingUnitPrice: 3,
+      realizedUnitPrice: 3,
+      revenue: 375,
+    });
+  });
+
+  it("keeps a productive supplier cycle alive when an earlier final buyer competes for its inputs", () => {
+    const output = (commodity: string, unitPrice = 1) => ({
+      commodity,
+      book: "world",
+      unitsPerOutput: 1,
+      policy: { kind: "manual" as const, unitPrice },
+      referenceUnitPrice: unitPrice,
+      storable: true,
+    });
+    const input = (commodity: string, unitsPerOutput: number) => ({
+      commodity,
+      book: "world",
+      unitsPerOutput,
+      maximumUnitPrice: 1,
+    });
+    const common = { capacityUnits: 10, labourCost: 0, otherOperatingCost: 0 };
+    const result = advanceProducerEconomy({
+      turn: 1,
+      accounts: [
+        ...accounts.map((a) => (a.id === "supplier" ? { ...a, cash: 1000 } : a)),
+        { id: "final", cash: 1000 },
+      ],
+      producers: [
+        plant({
+          ...common,
+          id: "a-final",
+          accountId: "final",
+          inputs: [input("energy", 1), input("steel", 1)],
+          outputs: [output("goods", 5)],
+        }),
+        plant({
+          ...common,
+          id: "power",
+          inputs: [input("steel", 0.5)],
+          outputs: [output("energy")],
+        }),
+        plant({
+          ...common,
+          id: "steel",
+          accountId: "supplier",
+          inputs: [input("energy", 0.5)],
+          outputs: [output("steel")],
+        }),
+      ],
+    });
+    expect(result.producers.map((p) => p.producedUnits)).toEqual([5, 10, 10]);
+    expect(result.accounts.reduce((sum, a) => sum + a.cash, 0)).toBe(4000);
   });
 });

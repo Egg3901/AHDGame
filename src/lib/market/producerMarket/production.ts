@@ -12,6 +12,8 @@ import {
   type ProducerTrade,
   type PurchaseOrder,
 } from "./rules";
+import { householdPurchaseOrders } from "./householdRules";
+import { feasibleProduction } from "./productionFeasibilityRules";
 
 export interface PurchasedStock {
   commodity: string;
@@ -26,7 +28,7 @@ export interface ProductionPlan {
   capacityUnits: number;
   activeFraction: number;
   /** Prior staffing, disasters and other physical constraints, excluding demand. */
-  physicalFraction: number;
+  outputMultiplier: number;
   inputs: readonly {
     commodity: string;
     unitsPerOutput: number;
@@ -64,12 +66,26 @@ export interface ProducerOperatingResult {
   inputsConsumed: number;
   labourPaid: number;
   otherOperatingPaid: number;
+  labourArrears: number;
+  otherOperatingArrears: number;
   operatingArrears: number;
   /** Purchases move cash into input stock; only consumption is an expense. */
   profit: number;
   cashFlow: number;
   inputStock: PurchasedStock[];
   outputStock: Array<{ commodity: string; units: number; book: string }>;
+  /** Receipts on the same per-turn physical basis as purchases and inventory. */
+  products: Array<{
+    commodity: string;
+    book: string;
+    producedUnits: number;
+    offeredUnits: number;
+    deliveredUnits: number;
+    revenue: number;
+    askingUnitPrice: number;
+    realizedUnitPrice: number | null;
+    unsoldUnits: number;
+  }>;
 }
 
 function finite(value: number, label: string): number {
@@ -88,6 +104,7 @@ export function advanceProducerEconomy(input: {
   producers: readonly ProductionPlan[];
   externalOffers?: readonly ProducerOffer[];
   externalOrders?: readonly PurchaseOrder[];
+  households?: readonly Omit<Parameters<typeof householdPurchaseOrders>[0], "cash">[];
   /** Explicit route/scope eligibility; missing entries allow only the offer's own book. */
   eligibleOffersByOrder?: Readonly<Record<string, readonly string[]>>;
   maximumPlanningPasses?: number;
@@ -102,7 +119,6 @@ export function advanceProducerEconomy(input: {
   if (cash.size !== input.accounts.length) throw new Error("Duplicate operating account");
   const payments = new Map<string, { labour: number; operating: number; arrears: number }>();
   const offers: ProducerOffer[] = [...(input.externalOffers ?? [])];
-  const orders: PurchaseOrder[] = [...(input.externalOrders ?? [])];
   const plans = [...input.producers].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
   // Reserve fixed bills across a whole corporation pro rata, not by sector id.
   const bills = new Map<string, number>();
@@ -116,11 +132,11 @@ export function advanceProducerEconomy(input: {
       !Number.isFinite(p.activeFraction) ||
       p.activeFraction < 0 ||
       p.activeFraction > 1 ||
-      !Number.isFinite(p.physicalFraction) ||
-      p.physicalFraction < 0 ||
-      p.physicalFraction > 1
+      !Number.isFinite(p.outputMultiplier) ||
+      p.outputMultiplier < 0
     )
       throw new Error("Invalid capacity fraction");
+    finite(p.capacityUnits * p.activeFraction * p.outputMultiplier, "physical output");
     bills.set(
       p.accountId,
       (bills.get(p.accountId) ?? 0) +
@@ -176,13 +192,69 @@ export function advanceProducerEconomy(input: {
   }
   // Paid wages are actual income, not an invented household demand multiplier.
   for (const [id, amount] of credits) cash.set(id, cash.get(id)! + amount);
+  const householdIds = new Set<string>();
+  const consumerOrders = [...(input.externalOrders ?? [])];
+  for (const household of input.households ?? []) {
+    if (householdIds.has(household.accountId) || !cash.has(household.accountId))
+      throw new Error("Duplicate or unknown household wallet");
+    householdIds.add(household.accountId);
+    consumerOrders.push(
+      ...householdPurchaseOrders({ ...household, cash: cash.get(household.accountId)! })
+    );
+  }
+  const orders = [...consumerOrders];
   const originalCash = new Map(input.accounts.map((a) => [a.id, a.cash]));
   const plannedById = new Map(
     plans.map((p) => [
       p.id,
-      p.capacityUnits * p.activeFraction * p.physicalFraction * (funding.get(p.accountId) ?? 1),
+      p.capacityUnits * p.activeFraction * p.outputMultiplier * (funding.get(p.accountId) ?? 1),
     ])
   );
+  // Find a physically feasible mix before buyers reserve inputs. Otherwise an
+  // early final producer can take the energy needed by the steel supplier that
+  // makes its own inputs, and a greedy shrink pass strands the entire cycle.
+  const resources = new Map<string, { available: number; coefficients: number[] }>();
+  const resource = (commodity: string, book: string) => {
+    const key = JSON.stringify([commodity, book]);
+    let row = resources.get(key);
+    if (!row) {
+      row = { available: 0, coefficients: Array(plans.length).fill(0) };
+      resources.set(key, row);
+    }
+    return row;
+  };
+  for (const [j, p] of plans.entries()) {
+    const maximum = plannedById.get(p.id)!;
+    for (const recipe of p.inputs) {
+      const row = resource(recipe.commodity, recipe.book);
+      row.coefficients[j] += maximum * recipe.unitsPerOutput;
+      row.available += p.inputStock
+        .filter((s) => s.commodity === recipe.commodity)
+        .reduce((sum, s) => sum + s.units, 0);
+    }
+    for (const output of p.outputs) {
+      const row = resource(output.commodity, output.book);
+      row.coefficients[j] -= maximum * output.unitsPerOutput;
+      row.available += p.outputStock
+        .filter((s) => s.commodity === output.commodity && s.book === output.book)
+        .reduce((sum, s) => sum + s.units, 0);
+    }
+  }
+  for (const offer of input.externalOffers ?? [])
+    resource(offer.commodity, offer.book).available += Math.min(
+      offer.units,
+      offer.deliverableUnits ?? offer.units
+    );
+  const feasible = feasibleProduction({
+    activities: plans.map((p) => ({
+      id: p.id,
+      value:
+        plannedById.get(p.id)! *
+        p.outputs.reduce((sum, o) => sum + o.unitsPerOutput * o.referenceUnitPrice, 0),
+    })),
+    constraints: [...resources.values()],
+  });
+  for (const [j, p] of plans.entries()) plannedById.set(p.id, plannedById.get(p.id)! * feasible[j]);
   const inputOrders = () =>
     plans.flatMap((p) =>
       p.inputs.map((recipe) => {
@@ -197,6 +269,8 @@ export function advanceProducerEconomy(input: {
           book: recipe.book,
           units: Math.max(0, plannedById.get(p.id)! * recipe.unitsPerOutput - stock),
           maximumUnitPrice: recipe.maximumUnitPrice,
+          // Reserve intermediate deliveries before discretionary final consumption.
+          priority: 1,
           eligibleOfferIds: input.eligibleOffersByOrder?.[id],
         };
       })
@@ -208,7 +282,8 @@ export function advanceProducerEconomy(input: {
   for (const order of orders)
     requestedSpend.set(
       order.accountId,
-      (requestedSpend.get(order.accountId) ?? 0) + order.units * order.maximumUnitPrice
+      (requestedSpend.get(order.accountId) ?? 0) +
+        Math.min(order.units * order.maximumUnitPrice, order.maximumSpend ?? Number.MAX_VALUE)
     );
   for (const p of plans) {
     const fixed = p.labourCost + p.otherOperatingCost;
@@ -240,7 +315,12 @@ export function advanceProducerEconomy(input: {
           )
           .map((o) => ({
             units:
-              o.units *
+              Math.min(
+                o.units,
+                o.maximumUnitPrice > 0
+                  ? (o.maximumSpend ?? Number.MAX_VALUE) / o.maximumUnitPrice
+                  : o.units
+              ) *
               Math.min(
                 1,
                 (cash.get(o.accountId) ?? 0) /
@@ -303,7 +383,7 @@ export function advanceProducerEconomy(input: {
       turn: input.turn,
       accounts: [...cash].map(([id, value]) => ({ id, cash: value })),
       offers: proposedOffers,
-      orders: [...(input.externalOrders ?? []), ...inputOrders()],
+      orders: [...consumerOrders, ...inputOrders()],
     });
   };
   let market: ReturnType<typeof settleProducerMarket> | undefined;
@@ -375,7 +455,12 @@ export function advanceProducerEconomy(input: {
     for (const recipe of p.inputs) {
       const stock = stocks.get(recipe.commodity)!;
       const used = produced * recipe.unitsPerOutput;
-      const cost = stock.units > 0 ? (stock.value * used) / stock.units : 0;
+      const cost =
+        used >= stock.units
+          ? stock.value
+          : stock.units > 0
+            ? (stock.value * used) / stock.units
+            : 0;
       stock.units = Math.max(0, stock.units - used);
       stock.value = Math.max(0, stock.value - cost);
       consumed += cost;
@@ -383,6 +468,7 @@ export function advanceProducerEconomy(input: {
     let revenue = 0,
       offeredUnits = 0,
       deliveredUnits = 0;
+    const products: ProducerOperatingResult["products"] = [];
     const outputStock = p.outputs.map((output) => {
       const sold = offersById.get(JSON.stringify([p.id, "output", output.commodity]))!;
       revenue += sold.revenue;
@@ -394,6 +480,18 @@ export function advanceProducerEconomy(input: {
       const available = opening + produced * output.unitsPerOutput;
       if (sold.deliveredUnits - available > Math.max(1e-8, available * 1e-12))
         throw new Error("Sold output exceeded input-backed production");
+      products.push({
+        commodity: output.commodity,
+        book: output.book,
+        producedUnits: produced * output.unitsPerOutput,
+        offeredUnits: sold.offeredUnits,
+        deliveredUnits: sold.deliveredUnits,
+        revenue: sold.revenue,
+        askingUnitPrice: postedOffers.get(JSON.stringify([p.id, "output", output.commodity]))!
+          .unitPrice,
+        realizedUnitPrice: sold.deliveredUnits > 0 ? sold.revenue / sold.deliveredUnits : null,
+        unsoldUnits: Math.max(0, available - sold.deliveredUnits),
+      });
       return {
         commodity: output.commodity,
         book: output.book,
@@ -413,11 +511,14 @@ export function advanceProducerEconomy(input: {
       inputsConsumed: consumed,
       labourPaid: paid.labour,
       otherOperatingPaid: paid.operating,
+      labourArrears: p.labourCost - paid.labour,
+      otherOperatingArrears: p.otherOperatingCost - paid.operating,
       operatingArrears: paid.arrears,
-      profit: revenue - consumed - paid.labour - paid.operating,
+      profit: revenue - consumed - p.labourCost - p.otherOperatingCost,
       cashFlow: revenue - purchases - paid.labour - paid.operating,
       inputStock: [...stocks.values()],
       outputStock,
+      products,
     });
   }
   const openingTotal = [...originalCash.values()].reduce((n, v) => n + v, 0);

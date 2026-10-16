@@ -27,6 +27,8 @@ export interface PurchaseOrder {
   book: string;
   units: number;
   maximumUnitPrice: number;
+  /** Reserved cash budget for this order, shared with the account's other orders. */
+  maximumSpend?: number;
   /** Named supplier reservations compete for the same stock and budget as public purchases. */
   supplierOfferId?: string;
   /** Optional eligible suppliers implement embargoes, routes and local-service scope. */
@@ -37,6 +39,7 @@ export interface PurchaseOrder {
 
 export interface ProducerTrade {
   id: string;
+  kind: "sale" | "internalTransfer";
   offerId: string;
   orderId: string;
   sellerAccountId: string;
@@ -118,6 +121,7 @@ export function settleProducerMarket(input: {
     if (!cash.has(order.accountId)) throw new Error("Unknown buyer account");
     nonNegative(order.units, "order units");
     nonNegative(order.maximumUnitPrice, "limit price");
+    if (order.maximumSpend != null) nonNegative(order.maximumSpend, "order spending limit");
     if (order.priority != null && !Number.isFinite(order.priority))
       throw new Error("Invalid priority");
   }
@@ -142,37 +146,43 @@ export function settleProducerMarket(input: {
   );
   for (const order of orders) {
     let wanted = order.units;
+    let orderBudget = order.maximumSpend ?? Number.MAX_VALUE;
     const eligible = order.eligibleOfferIds ? new Set(order.eligibleOfferIds) : null;
     const rows = (byBook.get(bookKey(order.commodity, order.book)) ?? []).filter(
       (offer) =>
-        offer.unitPrice <= order.maximumUnitPrice &&
+        (offer.accountId === order.accountId || offer.unitPrice <= order.maximumUnitPrice) &&
         (!order.supplierOfferId || order.supplierOfferId === offer.id) &&
         (!eligible || eligible.has(offer.id))
     );
     const tiers = new Map<number, ProducerOffer[]>();
     for (const offer of rows) {
-      const tier = tiers.get(offer.unitPrice) ?? [];
+      const price = offer.accountId === order.accountId ? 0 : offer.unitPrice;
+      const tier = tiers.get(price) ?? [];
       tier.push(offer);
-      tiers.set(offer.unitPrice, tier);
+      tiers.set(price, tier);
     }
-    for (const tier of tiers.values()) {
+    for (const [, tier] of [...tiers].sort(([a], [b]) => a - b)) {
       // At an identical price, using owned stock needs no outside financing.
       // Outside suppliers at that price split the remaining purchase pro rata.
       for (const internal of [true, false]) {
         const group = tier.filter((o) => (o.accountId === order.accountId) === internal);
         const total = group.reduce((n, o) => n + remaining.get(o.id)!, 0);
         const price = group[0]?.unitPrice ?? 0;
-        const budget = budgets.get(order.accountId)!;
+        const budget = Math.min(budgets.get(order.accountId)!, orderBudget);
         const take = Math.min(wanted, total, internal || price === 0 ? wanted : budget / price);
         if (!(take > 0) || !(total > 0)) continue;
         for (const offer of group) {
           const available = remaining.get(offer.id)!;
           const units = Math.min(available, (take * available) / total);
           if (!(units > 0)) continue;
-          const amount = units * offer.unitPrice;
+          // Moving owned goods between sites is a physical transfer. It cannot
+          // create a sale, an acquisition asset or profit for the corporation.
+          const unitPrice = internal ? 0 : offer.unitPrice;
+          const amount = units * unitPrice;
           if (!Number.isFinite(amount)) throw new Error("Non-finite trade value");
           const trade: ProducerTrade = {
             id: JSON.stringify([input.turn, order.id, offer.id]),
+            kind: internal ? "internalTransfer" : "sale",
             offerId: offer.id,
             orderId: order.id,
             sellerAccountId: offer.accountId,
@@ -180,13 +190,14 @@ export function settleProducerMarket(input: {
             commodity: order.commodity,
             book: order.book,
             units,
-            unitPrice: offer.unitPrice,
+            unitPrice,
             amount,
           };
           trades.push(trade);
           wanted = Math.max(0, wanted - units);
           remaining.set(offer.id, Math.max(0, available - units));
           if (!internal) {
+            orderBudget = Math.max(0, orderBudget - amount);
             budgets.set(order.accountId, Math.max(0, budgets.get(order.accountId)! - amount));
             cash.set(order.accountId, Math.max(0, cash.get(order.accountId)! - amount));
             cash.set(
@@ -286,7 +297,7 @@ export function quoteProducer(input: {
   if (input.policy.kind === "manual")
     return estimate(nonNegative(input.policy.unitPrice, "manual price"));
   const markup = input.policy.kind === "costPlus" ? input.policy.markup : input.policy.targetMarkup;
-  if (!Number.isFinite(markup) || markup < 0) throw new Error("Invalid target markup");
+  if (!Number.isFinite(markup) || markup < -1) throw new Error("Invalid target markup");
   const target = (breakEven ?? reference) * (1 + markup);
   if (input.policy.kind === "costPlus") return estimate(target);
   const candidates = new Set([reference, target]);
