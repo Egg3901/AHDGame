@@ -40,6 +40,32 @@ describe("joint physical production feasibility", () => {
     ]);
   });
 
+  it("uses the stricter input limit even when the ratios differ by less than the pivot epsilon", () => {
+    const activity = [{ id: "plant", value: 1 }];
+    // Resource order must not let a nearly empty first input override an empty
+    // second input. Both are physical limits, independent of objective precision.
+    for (const available of [
+      [5e-11, 0],
+      [0, 5e-11],
+    ]) {
+      expect(
+        feasibleProduction({
+          activities: activity,
+          constraints: available.map((amount) => ({ available: amount, coefficients: [1] })),
+        })
+      ).toEqual([0]);
+    }
+    expect(
+      feasibleProduction({
+        activities: activity,
+        constraints: [
+          { available: 5e-11, coefficients: [1] },
+          { available: 1e-11, coefficients: [1] },
+        ],
+      })
+    ).toEqual([1e-11]);
+  });
+
   it("cannot manufacture a net resource from an unproductive closed cycle", () => {
     expect(
       feasibleProduction({

@@ -81,6 +81,8 @@ export function feasibleProduction(input: {
       }
       return result;
     }
+    // A ratio tie must be exact: choosing a larger step, even within an
+    // absolute epsilon, can overdraw a scarce input after row rescaling.
     let step = upper(entering);
     let leaving = -1;
     for (let i = 0; i < m; i++) {
@@ -91,10 +93,7 @@ export function feasibleProduction(input: {
           : movement < -tolerance
             ? (upper(basic[i]) - values[i]) / -movement
             : Infinity;
-      if (
-        available < step - tolerance ||
-        (Math.abs(available - step) <= tolerance && (leaving < 0 || basic[i] < basic[leaving]))
-      ) {
+      if (available < step || (available === step && (leaving < 0 || basic[i] < basic[leaving]))) {
         step = Math.max(0, available);
         leaving = i;
       }
