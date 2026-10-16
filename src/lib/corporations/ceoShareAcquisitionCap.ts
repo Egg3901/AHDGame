@@ -13,6 +13,7 @@ const COUNTED_KINDS: ShareTradeKind[] = ["market_buy", "limit_fill", "peer_fill"
 
 export interface CeoSelfAcquisitionWindow {
   acquiredShares: number;
+  reservedShares: number;
   capShares: number;
   remainingShares: number;
   /** Smallest turn among counted rows, or null when none. */
@@ -23,7 +24,7 @@ export interface CeoSelfAcquisitionWindow {
 
 /**
  * Shares the CEO has acquired (float + other-character buys) in the trailing
- * window, read from the immutable shareTradeHistory ledger. Pure read.
+ * window, plus shares reserved by open buy orders and pending offers. Pure read.
  */
 export async function ceoSelfAcquisitionWindow(
   db: Db,
@@ -50,14 +51,35 @@ export async function ceoSelfAcquisitionWindow(
     if (oldestInWindowTurn === null || r.turn < oldestInWindowTurn) oldestInWindowTurn = r.turn;
   }
 
+  const openOrders = await db
+    .collection<ShareOrder>("shareOrders")
+    .find({ corporationId: corp._id, characterId: ceoId, type: "buy", status: "open" })
+    .toArray();
+  const openOrderShares = openOrders.reduce((s, o) => s + (o.sharesRemaining ?? 0), 0);
+
+  const openOffers = await db
+    .collection<ShareOffer>("shareOffers")
+    .find({ corporationId: corp._id, buyerCharacterId: ceoId, status: "pending" })
+    .toArray();
+  const openOfferShares = openOffers.reduce((s, o) => s + (o.shares ?? 0), 0);
+
+  const reservedShares = openOrderShares + openOfferShares;
+
   const capShares = Math.floor(CEO_SELF_ACQUISITION_CAP_FRACTION * (corp.totalShares ?? 0));
-  const remainingShares = Math.max(0, capShares - acquiredShares);
+  const remainingShares = Math.max(0, capShares - acquiredShares - reservedShares);
   const freesUpInTurns =
     oldestInWindowTurn === null
       ? 0
       : Math.max(0, oldestInWindowTurn + CEO_SELF_ACQUISITION_WINDOW_TURNS - currentTurn);
 
-  return { acquiredShares, capShares, remainingShares, oldestInWindowTurn, freesUpInTurns };
+  return {
+    acquiredShares,
+    reservedShares,
+    capShares,
+    remainingShares,
+    oldestInWindowTurn,
+    freesUpInTurns,
+  };
 }
 
 export interface CapRejection {
@@ -86,19 +108,7 @@ export async function assertCeoAcquisitionWithinCap(
 
   const window = await ceoSelfAcquisitionWindow(db, corp, buyerId, holderField, currentTurn);
 
-  const openOrders = await db
-    .collection<ShareOrder>("shareOrders")
-    .find({ corporationId: corp._id, characterId: buyerId, type: "buy", status: "open" })
-    .toArray();
-  const openOrderShares = openOrders.reduce((s, o) => s + (o.sharesRemaining ?? 0), 0);
-
-  const openOffers = await db
-    .collection<ShareOffer>("shareOffers")
-    .find({ corporationId: corp._id, buyerCharacterId: buyerId, status: "pending" })
-    .toArray();
-  const openOfferShares = openOffers.reduce((s, o) => s + (o.shares ?? 0), 0);
-
-  const committed = window.acquiredShares + openOrderShares + openOfferShares;
+  const committed = window.acquiredShares + window.reservedShares;
   if (committed + requestedShares <= window.capShares) return null;
 
   const total = corp.totalShares || 1;

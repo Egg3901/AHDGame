@@ -1,11 +1,16 @@
 import type { ObjectId } from "mongodb";
 import type { Corporation, CorporateSector } from "@/lib/db/types";
 import type { CommodityType } from "@/lib/constants/commodities";
-import type { CorporationType } from "@/lib/constants/corporations";
-import { SECTOR_STRATEGIES, STRATEGY_COOLDOWN_TURNS } from "@/lib/constants/sectorStrategies";
+import type { CorporationType, OperatingSectorType } from "@/lib/constants/corporations";
+import {
+  getOperatingSectorType,
+  SECTOR_STRATEGIES,
+  STRATEGY_COOLDOWN_TURNS,
+} from "@/lib/constants/sectorStrategies";
 import { getStrategyAvailability } from "@/lib/constants/techTree/strategyAvailability";
 import { retoolRescaleFields } from "@/lib/corporations/retoolRescale";
 import type { CommodityPriceRatioFn } from "@/lib/turn/npp/marketSignals";
+import { isObsoleteNppParentStrategy } from "./rules/obsoleteStrategyRepair";
 
 /** Effective profit margin at or below which a sector is a shift candidate. */
 export const STRATEGY_SHIFT_MARGIN_TRIGGER = -3;
@@ -68,7 +73,12 @@ interface StrategyRetoolContext {
  * price advantage, then returns the complete transition write for that sector.
  */
 export function chooseNppStrategyRetool(ctx: StrategyRetoolContext): StrategyRetoolDecision | null {
-  let best: { sector: CorporateSector; toStrategyId: string; advantage: number } | null = null;
+  let best: {
+    sector: CorporateSector;
+    toStrategyId: string;
+    advantage: number;
+    corrective?: true;
+  } | null = null;
 
   for (const sector of ctx.sectors) {
     if (sector.mothballed === true) continue;
@@ -82,12 +92,34 @@ export function chooseNppStrategyRetool(ctx: StrategyRetoolContext): StrategyRet
     }
     if (sector.transitionFromStrategyId) continue;
 
-    const strategies = SECTOR_STRATEGIES[sector.sectorType as CorporationType];
+    const operatingType = getOperatingSectorType(
+      sector.sectorType,
+      sector.industryModel,
+      sector.mediaDiscriminator
+    );
+    const strategies = SECTOR_STRATEGIES[operatingType as OperatingSectorType];
     if (!strategies || strategies.length < 2) continue;
     const countryId = sector.countryId ?? ctx.corp.countryId;
     const currentId = sector.strategyId ?? "standard";
     const current = strategies.find((strategy) => strategy.id === currentId);
-    if (!current) continue;
+    if (!current) {
+      if (
+        !best?.corrective &&
+        isObsoleteNppParentStrategy(ctx.corp.ceoType, operatingType, currentId)
+      ) {
+        const standard = strategies.find((strategy) => strategy.id === "standard");
+        if (
+          standard &&
+          !getStrategyAvailability(ctx.corp, standard, ctx.currentYear, ctx.techTreesEnabled).locked
+        ) {
+          // Keep the obsolete source id throughout the normal blend. Replacing
+          // its fallback immediately would change paid capacity's unit basis.
+          best = { sector, toStrategyId: standard.id, advantage: 0, corrective: true };
+        }
+      }
+      continue;
+    }
+    if (best?.corrective) continue;
     const currentScore = strategyPriceScore(current, countryId, ctx.priceRatioOf);
     if (currentScore == null) continue;
 

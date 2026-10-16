@@ -189,3 +189,215 @@ describe("batched credit-leg delivery", () => {
     expect(f.total()).toBe(1000);
   });
 });
+
+/** Synthetic coupon fan-out; no world flags or settlement stamps are seeded. */
+function mixedFixture(npps = 226, funds = 27, characters = 0) {
+  const memory = createInMemoryDb();
+  const groups = [
+    ["npps", npps, 10, 1],
+    ["indexFunds", funds, 5, 0.5],
+    ["characters", characters, 10, 1],
+  ] as const;
+  const credits: MoneyMove["legs"] = [];
+  for (const [collection, count, amount, rate] of groups) {
+    memory.seed(
+      collection,
+      Array.from({ length: count }, (_, i) => ({
+        _id: `payee-${i}`,
+        balance: 0,
+        state: "open",
+      }))
+    );
+    for (let i = 0; i < count; i++)
+      credits.push({
+        kind: "credit",
+        collection,
+        filter: { _id: `payee-${i}` },
+        path: "balance",
+        amount,
+        valuation: {
+          currencyCode: collection === "indexFunds" ? "GBP" : "USD",
+          localPerAnchor: rate,
+        },
+        note: "coupon",
+      });
+  }
+  const amount = (npps + funds + characters) * 10;
+  memory.seed("federalBudget", [{ _id: "US", balance: amount }]);
+  const move: MoneyMove = {
+    key: "mixed-coupon",
+    kind: "sovereign_coupon_funded_batch_payout",
+    legs: [
+      {
+        kind: "debit",
+        collection: "federalBudget",
+        filter: { _id: "US" },
+        path: "balance",
+        amount,
+        valuation: { currencyCode: "USD", localPerAnchor: 1 },
+        note: "funded cash",
+      },
+      ...credits,
+    ],
+  };
+  const db = memory as unknown as Db;
+  const checkPaid = (revision = 1) => {
+    expect(memory.collection("federalBudget").docs[0].balance).toBe(0);
+    let total = 0;
+    for (const [collection, count, amount, rate] of groups) {
+      expect(memory.collection(collection).docs).toHaveLength(count);
+      for (const row of memory.collection(collection).docs) {
+        expect(row.balance).toBe(amount);
+        expect(row.pendingMoneyMoveReceipt).toBeUndefined();
+        expect(row.moneyMoveRevision).toBe(revision);
+        total += (row.balance as number) / rate;
+      }
+    }
+    expect(total).toBe(move.legs[0].amount);
+    const saved = memory.collection("bankMoneyMoves").docs[0] as unknown as {
+      legs: MoneyMove["legs"];
+    };
+    expect(saved.legs.map(({ amount, valuation }) => ({ amount, valuation }))).toEqual(
+      move.legs.map(({ amount, valuation }) => ({ amount, valuation }))
+    );
+  };
+  return { memory, db, move, checkPaid };
+}
+
+describe("mixed coupon collections", () => {
+  it.each([
+    [226, 27, 0],
+    [264, 27, 3],
+  ])(
+    "batches %i NPP, %i fund and %i character credits with bounded collection calls",
+    async (npps, funds, characters) => {
+      const f = mixedFixture(npps, funds, characters);
+      const tracked = countingDb(f.memory, "indexFunds");
+      const nppTracked = countingDb(
+        tracked.db as unknown as ReturnType<typeof createInMemoryDb>,
+        "npps"
+      );
+      expect((await applyMoneyMove(nppTracked.db, f.move)).status).toBe("applied");
+      expect(Object.values(tracked.counts).reduce((a, b) => a + b, 0)).toBe(4);
+      expect(Object.values(nppTracked.counts).reduce((a, b) => a + b, 0)).toBe(4);
+      expect(f.move.legs).toHaveLength(npps + funds + characters + 1);
+      f.checkPaid();
+      expect((await applyMoneyMove(f.db, f.move)).status).toBe("replayed");
+      expect((await resumeMoneyMove(f.db, f.move.key)).status).toBe("applied");
+      f.checkPaid();
+    }
+  );
+
+  it.each(["missing", "guard", "repeated-guard"])(
+    "stops before later collections after an earlier %s target fails",
+    async (failure) => {
+      const f = mixedFixture(4, 6);
+      if (failure === "missing") f.memory.collection("npps").docs.splice(1, 1);
+      else if (failure === "guard") f.move.legs[2].filter!.state = "closed";
+      else {
+        f.move.legs.splice(5, 0, {
+          ...f.move.legs[1],
+          filter: { _id: "payee-0", state: "closed" },
+        });
+        f.move.legs[0].amount += 10;
+        f.memory.collection("federalBudget").docs[0].balance = f.move.legs[0].amount;
+      }
+      expect((await applyMoneyMove(f.db, f.move)).status).toBe("partial");
+      expect(f.memory.collection("indexFunds").docs.every((row) => row.balance === 0)).toBe(true);
+    }
+  );
+
+  it("preserves existing target generations and stamps across collections", async () => {
+    const f = mixedFixture(6, 5);
+    for (const collection of ["npps", "indexFunds"]) {
+      for (const row of f.memory.collection(collection).docs) {
+        row.moneyMoveRevision = 17;
+        row.settledKeys = ["older-delivery"];
+      }
+    }
+    expect((await applyMoneyMove(f.db, f.move)).status).toBe("applied");
+    f.checkPaid(18);
+    for (const collection of ["npps", "indexFunds"]) {
+      for (const row of f.memory.collection(collection).docs)
+        expect(row.settledKeys).toContain("older-delivery");
+    }
+  });
+
+  it("does not pay a later collection after a guard fails in the second batch", async () => {
+    const f = mixedFixture(4, 4, 6);
+    f.move.legs[5].filter!.state = "closed";
+    expect((await applyMoneyMove(f.db, f.move)).status).toBe("partial");
+    expect(f.memory.collection("npps").docs.every((row) => row.balance === 10)).toBe(true);
+    expect(f.memory.collection("characters").docs.every((row) => row.balance === 0)).toBe(true);
+  });
+
+  it("keeps a failed small first collection ahead of a larger later batch", async () => {
+    const f = mixedFixture(1, 6);
+    f.memory.collection("npps").docs.splice(0, 1);
+    expect((await applyMoneyMove(f.db, f.move)).status).toBe("partial");
+    expect(f.memory.collection("indexFunds").docs.every((row) => row.balance === 0)).toBe(true);
+  });
+
+  it("keeps interleaved collection runs and repeated targets in caller order", async () => {
+    const f = mixedFixture(5, 4);
+    const lastNpp = f.move.legs.splice(5, 1)[0];
+    f.move.legs.push(lastNpp, { ...f.move.legs[1], note: "second NPP coupon" });
+    f.move.legs[0].amount += 10;
+    f.memory.collection("federalBudget").docs[0].balance = f.move.legs[0].amount;
+    expect((await applyMoneyMove(f.db, f.move)).status).toBe("applied");
+    expect(f.memory.collection("npps").docs.map((row) => row.balance)).toEqual([
+      20, 10, 10, 10, 10,
+    ]);
+    expect(f.memory.collection("indexFunds").docs.every((row) => row.balance === 5)).toBe(true);
+    await resumeMoneyMove(f.db, f.move.key);
+    expect(f.memory.collection("npps").docs[0].balance).toBe(20);
+  });
+
+  it("resumes after only part of the second collection bulk delivery lands", async () => {
+    const f = mixedFixture(6, 5);
+    const targets = f.memory.collection("indexFunds");
+    const bulkWrite = targets.bulkWrite.bind(targets);
+    vi.spyOn(targets, "bulkWrite").mockImplementationOnce(async (writes) => {
+      await bulkWrite(writes.slice(0, 2));
+      throw new InjectedCrash("partial fund bulk delivery");
+    });
+    await expect(applyMoneyMove(f.db, f.move)).rejects.toBeInstanceOf(InjectedCrash);
+    expect(targets.docs.map((row) => row.balance)).toEqual([5, 5, 0, 0, 0]);
+    expect((await resumeMoneyMove(f.db, f.move.key)).status).toBe("applied");
+    f.checkPaid();
+    await resumeMoneyMove(f.db, f.move.key);
+    f.checkPaid();
+  });
+
+  for (const collection of ["npps", "indexFunds"]) {
+    for (const [stage, op, onCall, afterWrite] of [
+      ["delivery", "bulkWrite", 1, true],
+      ["acknowledgement", "updateOne", 1, true],
+      ["release", "bulkWrite", 2, true],
+    ] as const) {
+      it(`resumes exactly once after ${collection} ${stage}`, async () => {
+        const f = mixedFixture(6, 5);
+        const faulty = withInjectedCrash(
+          f.memory,
+          stage === "acknowledgement"
+            ? {
+                collection: "bankMoneyMoves",
+                op,
+                onCall,
+                afterWrite,
+                matches: (args) =>
+                  Object.keys((args[1] as { $set?: object }).$set ?? {}).length ===
+                  (collection === "npps" ? 6 : 5),
+              }
+            : { collection, op, onCall, afterWrite }
+        );
+        await expect(applyMoneyMove(faulty.db, f.move)).rejects.toBeInstanceOf(InjectedCrash);
+        faulty.disarm();
+        expect((await resumeMoneyMove(f.db, f.move.key)).status).toBe("applied");
+        f.checkPaid();
+        await resumeMoneyMove(f.db, f.move.key);
+        f.checkPaid();
+      });
+    }
+  }
+});

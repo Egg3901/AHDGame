@@ -323,15 +323,24 @@ export default function SharePurchaseModal({
     return Math.floor(maxExplicitSpendableInHome / unitCostInHome);
   }
 
+  const ceoShareWindow =
+    isCeo && !corporation.isPrivate && !corporation.ceoVacant ? corporation.ceoShareWindow : null;
+  const maxMarketShares = Math.min(
+    buyAsInvestmentBank ? Number.MAX_SAFE_INTEGER : floatAvailable,
+    !buyAsCorp && !buyAsInvestmentBank && ceoShareWindow
+      ? ceoShareWindow.remainingShares
+      : Number.MAX_SAFE_INTEGER
+  );
+
   const maxBuyableShares = Math.max(
     0,
     Math.min(
-      buyAsInvestmentBank ? Number.MAX_SAFE_INTEGER : floatAvailable,
+      maxMarketShares,
       refineMaxAffordableInteger({
         initialGuess: buyAsInvestmentBank
           ? Math.floor(myCorpLiquidInternal / midPriceAnchor)
           : maxAffordableShares(buyAsCorp, askPriceAnchor, marketAskPriceLocal),
-        upperBound: buyAsInvestmentBank ? Number.MAX_SAFE_INTEGER : floatAvailable,
+        upperBound: maxMarketShares,
         canAfford: (candidateShares) => {
           if (candidateShares <= 0) return true;
           const candidateCost =
@@ -935,6 +944,7 @@ export default function SharePurchaseModal({
                 myCorpLiquidCurrency={myCorpLiquidCurrency}
                 floatAvailable={floatAvailable}
                 maxBuyableShares={maxBuyableShares}
+                maxMarketShares={maxMarketShares}
                 buyCost={buyCost}
                 activeBudget={activeBudget}
                 personalBudgetLabel={personalBudgetLabel}
@@ -1039,15 +1049,15 @@ export default function SharePurchaseModal({
               />
             )}
 
-            {corporation.ceoShareWindow && (
+            {ceoShareWindow && (
               <p className="rounded-lg border border-warning/25 bg-warning/5 px-3 py-2 text-[11px] leading-snug text-warning">
-                CEO purchase limit: used{" "}
-                {corporation.ceoShareWindow.acquiredShares.toLocaleString("en-US")}/
-                {corporation.ceoShareWindow.capShares.toLocaleString("en-US")} shares this{" "}
-                {corporation.ceoShareWindow.windowTurns}-turn window (
-                {corporation.ceoShareWindow.remainingShares.toLocaleString("en-US")} remaining
-                {corporation.ceoShareWindow.freesUpInTurns > 0
-                  ? `, full capacity in ${corporation.ceoShareWindow.freesUpInTurns} turns`
+                CEO purchase limit: used {ceoShareWindow.acquiredShares.toLocaleString("en-US")}/
+                {ceoShareWindow.capShares.toLocaleString("en-US")} shares this{" "}
+                {ceoShareWindow.windowTurns}-turn window (
+                {ceoShareWindow.reservedShares.toLocaleString("en-US")} reserved,{" "}
+                {ceoShareWindow.remainingShares.toLocaleString("en-US")} remaining
+                {ceoShareWindow.freesUpInTurns > 0
+                  ? `, full capacity in ${ceoShareWindow.freesUpInTurns} turns`
                   : ""}
                 ).
               </p>

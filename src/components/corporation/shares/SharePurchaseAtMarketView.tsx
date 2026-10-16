@@ -52,6 +52,7 @@ interface SharePurchaseAtMarketViewProps {
   myCorpLiquidCurrency: CurrencyCode;
   floatAvailable: number;
   maxBuyableShares: number;
+  maxMarketShares: number;
   buyCost: number;
   activeBudget: number;
   personalBudgetLabel: string;
@@ -104,6 +105,7 @@ export function SharePurchaseAtMarketView({
   myCorpLiquidCurrency,
   floatAvailable,
   maxBuyableShares,
+  maxMarketShares,
   buyCost,
   activeBudget,
   personalBudgetLabel,
@@ -394,7 +396,7 @@ export function SharePurchaseAtMarketView({
                 const raw = e.target.value;
                 setQuantityDraft(raw);
                 setQuantity(
-                  parseQtyDigits(raw, ratesNeededButMissing ? floatAvailable : maxBuyableShares)
+                  parseQtyDigits(raw, ratesNeededButMissing ? maxMarketShares : maxBuyableShares)
                 );
               }}
               onBlur={() => setQuantityDraft(null)}
