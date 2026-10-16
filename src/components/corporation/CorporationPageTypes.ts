@@ -153,6 +153,7 @@ export interface CorporationDetail {
   ceoShareWindow?: {
     capShares: number;
     acquiredShares: number;
+    reservedShares: number;
     remainingShares: number;
     freesUpInTurns: number;
     capPercent: number;
