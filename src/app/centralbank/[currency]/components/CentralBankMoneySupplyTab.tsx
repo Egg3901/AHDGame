@@ -1,5 +1,6 @@
 "use client";
 
+import { BOND_UNIT_FACE_VALUE } from "@/lib/db/types/bond";
 import { InlineError } from "@/components/ui/InlineError";
 import { useTranslations } from "next-intl";
 import { currentMoneyGrowth } from "@/lib/moneySupply/rules/growthSignal";
@@ -52,12 +53,38 @@ export function CentralBankMoneySupplyTab({
   const fmt = (amount: number) => formatNativeCurrency(amount, data.currencyCode);
   const isBondOperation = type === "qe" || type === "qt";
 
+  const selectedBond = data.eligibleBonds.find((bond) => bond._id === bondId);
+  const availableUnits = selectedBond
+    ? type === "qt"
+      ? (selectedBond.centralBankHoldings ?? 0)
+      : selectedBond.publicFloat
+    : 0;
+  const numeric = Number(value);
+  const unitPrice = selectedBond
+    ? BOND_UNIT_FACE_VALUE * Math.max(0.01, selectedBond.marketPrice)
+    : NaN;
+  const estimatedConsideration = selectedBond
+    ? Math.round(numeric * BOND_UNIT_FACE_VALUE * Math.max(0.01, selectedBond.marketPrice) * 100) /
+      100
+    : NaN;
+  const validBondQuantity =
+    !!selectedBond &&
+    Number.isFinite(selectedBond.marketPrice) &&
+    Number.isFinite(availableUnits) &&
+    Number.isSafeInteger(numeric) &&
+    numeric > 0 &&
+    numeric <= availableUnits &&
+    Number.isFinite(estimatedConsideration);
+
   async function submit(event: FormEvent) {
     event.preventDefault();
+    if (isBondOperation && !validBondQuantity) {
+      setError(t("money.invalidBondQuantity"));
+      return;
+    }
     setBusy(true);
     setError(null);
     setMessage(null);
-    const numeric = Number(value);
     try {
       const signature = JSON.stringify({
         countryId,
@@ -75,7 +102,7 @@ export function CentralBankMoneySupplyTab({
         body: JSON.stringify({
           type,
           operationId: pendingOperation.current?.operationId,
-          ...(isBondOperation ? { bondId, units: Math.floor(numeric) } : { amount: numeric }),
+          ...(isBondOperation ? { bondId, units: numeric } : { amount: numeric }),
           reason: reason || undefined,
         }),
       });
@@ -178,11 +205,12 @@ export function CentralBankMoneySupplyTab({
             <Row label="Lending reserves" value={fmt(data.bankReserves)} />
             <Row label="Net explicit money creation" value={fmt(data.netMoneyCreatedLifetime)} />
           </div>
-          <p className="mt-4 text-body-sm text-muted">
-            Selling bonds is how the government pays for itself. Buying government bonds back off
-            the market creates new money. Selling them again destroys it. A direct advance to the
-            Treasury creates spendable money straight away. Lending more to banks only becomes money
-            in circulation once someone actually borrows it.
+          <p className="mt-4 text-body-sm text-muted">{t("money.transmission")}</p>
+          <p className="mt-2 text-body-sm text-muted">
+            {data.lastOperationTurn == null
+              ? t("money.noPreviousOperation")
+              : t("money.lastOperation", { turn: data.lastOperationTurn })}{" "}
+            {t("money.cooldown", { turns: 6 })}
           </p>
         </CentralBankSection>
       </div>
@@ -226,53 +254,105 @@ export function CentralBankMoneySupplyTab({
 
       {canOperate && (
         <form onSubmit={submit}>
-          <CentralBankSection title="Monetary operation">
+          <CentralBankSection title={t("money.operationTitle")}>
             <div className="grid gap-3 md:grid-cols-4">
               <select
+                aria-label={t("money.operationType")}
                 value={type}
                 onChange={(event) => setType(event.target.value as typeof type)}
                 className="rounded-md border border-card-border bg-background px-3 py-2 text-body"
               >
-                <option value="qe">Buy government bonds (QE)</option>
-                <option value="qt">Sell government bonds (QT)</option>
-                <option value="treasury_advance">Lend directly to the Treasury</option>
-                <option value="liquidity_injection">Lend more to banks</option>
+                <option value="qe">{t("money.qe")}</option>
+                <option value="qt">{t("money.qt")}</option>
+                <option value="treasury_advance">{t("money.treasuryAdvance")}</option>
+                <option value="liquidity_injection">{t("money.liquidityInjection")}</option>
               </select>
               {isBondOperation && (
                 <select
-                  value={bondId}
+                  aria-label={t("money.bondSeries")}
+                  value={selectedBond ? bondId : ""}
                   onChange={(event) => setBondId(event.target.value)}
                   className="rounded-md border border-card-border bg-background px-3 py-2 text-body"
                 >
+                  {!selectedBond && (
+                    <option value="" disabled>
+                      {t(data.eligibleBonds.length ? "money.chooseBond" : "money.noBonds")}
+                    </option>
+                  )}
                   {data.eligibleBonds.map((bond) => (
                     <option key={bond._id} value={bond._id}>
-                      {bond.issuerName ?? "Sovereign"} · {bond.couponRate.toFixed(2)}% · turn{" "}
-                      {bond.maturityTurn}
+                      {t("money.seriesOption", {
+                        issuer: bond.issuerName ?? t("money.sovereign"),
+                        coupon: bond.couponRate.toFixed(2),
+                        maturity: bond.maturityTurn,
+                        id: bond._id,
+                      })}
                     </option>
                   ))}
                 </select>
               )}
               <input
+                aria-label={
+                  isBondOperation
+                    ? t("money.bondUnits")
+                    : t("money.amount", { currency: data.currencyCode })
+                }
                 type="number"
                 min="1"
+                max={isBondOperation ? availableUnits : undefined}
                 step="1"
                 required
                 value={value}
                 onChange={(event) => setValue(event.target.value)}
-                placeholder={isBondOperation ? "Bond units" : `Amount (${data.currencyCode})`}
+                placeholder={
+                  isBondOperation
+                    ? t("money.bondUnits")
+                    : t("money.amount", { currency: data.currencyCode })
+                }
                 className="rounded-md border border-card-border bg-background px-3 py-2 text-body"
               />
               <input
+                aria-label={t("money.rationale")}
                 value={reason}
                 onChange={(event) => setReason(event.target.value)}
-                placeholder="Policy rationale"
+                placeholder={t("money.rationale")}
                 maxLength={240}
                 className="rounded-md border border-card-border bg-background px-3 py-2 text-body"
               />
             </div>
+            {isBondOperation && selectedBond && (
+              <div
+                role="group"
+                aria-label={t("money.bondQuote", { currency: data.currencyCode })}
+                className="mt-4 max-w-3xl"
+              >
+                <p className="text-body-sm text-muted">
+                  {t(type === "qe" ? "money.availableToBuy" : "money.availableToSell", {
+                    units: availableUnits.toLocaleString(),
+                  })}
+                </p>
+                <Row label={t("money.facePerUnit")} value={fmt(BOND_UNIT_FACE_VALUE)} />
+                <Row
+                  label={t("money.marketPerUnit")}
+                  value={Number.isFinite(unitPrice) ? fmt(unitPrice) : t("money.unavailable")}
+                />
+                {validBondQuantity && (
+                  <>
+                    <Row label={t("money.orderFace")} value={fmt(numeric * BOND_UNIT_FACE_VALUE)} />
+                    <Row label={t("money.estimatedTotal")} value={fmt(estimatedConsideration)} />
+                  </>
+                )}
+                <p className="mt-2 text-body-sm text-muted">
+                  {t("money.indicative", { currency: data.currencyCode })}
+                </p>
+              </div>
+            )}
+            {isBondOperation && selectedBond && value !== "" && !validBondQuantity && (
+              <p className="mt-2 text-body-sm text-error">{t("money.invalidBondQuantity")}</p>
+            )}
             <div className="mt-4 flex flex-wrap items-center gap-3">
-              <Button type="submit" disabled={busy || (isBondOperation && !bondId)}>
-                {busy ? "Executing…" : "Execute operation"}
+              <Button type="submit" disabled={busy || (isBondOperation && !validBondQuantity)}>
+                {t(busy ? "money.executing" : "money.execute")}
               </Button>
               {message && <p className="text-body-sm text-success">{message}</p>}
               <InlineError error={error} className="text-body-sm text-error" />
