@@ -65,7 +65,11 @@ export async function verifyOpeningProducerPayables(
         : byWallet.get(binding.economyAccountId);
     if (!row) throw new Error("Missing producer payable account");
     const state = row.producerPayables;
-    if (!state) continue;
+    if (!state) {
+      if (binding.kind === "corporation")
+        throw new Error("Producer corporation requires a reconciled opening payable generation");
+      continue;
+    }
     if (
       state.worldEpoch !== input.worldEpoch ||
       !Number.isSafeInteger(state.turn) ||
@@ -121,7 +125,12 @@ export async function publishProducerPayables(
                   binding.kind === "corporation"
                     ? new ObjectId(binding.corporationId)
                     : binding.economyAccountId,
-                ...(binding.kind === "economyAccount" ? { worldEpoch: input.worldEpoch } : {}),
+                ...(binding.kind === "economyAccount"
+                  ? { worldEpoch: input.worldEpoch, currency: binding.currency }
+                  : {
+                      "producerPayables.worldEpoch": input.worldEpoch,
+                      liquidCurrencyCode: binding.currency,
+                    }),
                 $or: [
                   { producerPayables: { $exists: false } },
                   {

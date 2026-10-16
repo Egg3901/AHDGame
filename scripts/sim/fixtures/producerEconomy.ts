@@ -1,5 +1,6 @@
 /** Deterministic rules qualification. Never connects to a database. */
 import assert from "node:assert/strict";
+import { unitYieldForSupply } from "../../../src/lib/constants/capacityEconomy";
 import { OPERATING_SECTOR_TYPES } from "../../../src/lib/constants/corporations";
 import { COMMODITY_BASE_PRICES, type CommodityType } from "../../../src/lib/constants/commodities";
 import {
@@ -33,7 +34,8 @@ export function makeProducerRecipeFixture(preset: string): ProductionPlan[] {
           preset
         );
         const physical = producerRecipe({ ...recipe, eraUnitScale: 1 });
-        const yieldPerNominal = physical.unitsPerNominalAnchor;
+        // Fixed physical holdings keep before/after rule reports comparable.
+        const yieldPerNominal = unitYieldForSupply(recipe.supply, 1);
         assert(yieldPerNominal > 0, `Missing output recipe: ${lane}`);
         const nominalValue = 10000;
         return {

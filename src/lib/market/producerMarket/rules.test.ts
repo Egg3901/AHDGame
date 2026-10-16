@@ -2,6 +2,100 @@ import { describe, expect, it } from "vitest";
 import { producerTrades, quoteProducer, settleProducerMarket } from "./rules";
 
 describe("one funded producer market", () => {
+  it("credits an actual small sale without subtracting rounded huge stock values to infer revenue", () => {
+    const result = settleProducerMarket({
+      turn: 1,
+      accounts: [
+        { id: "buyer", cash: 5 },
+        { id: "seller", cash: 0 },
+      ],
+      offers: [
+        {
+          id: "stock",
+          accountId: "seller",
+          commodity: "goods",
+          book: "world",
+          units: 1e20,
+          unitPrice: 5,
+        },
+      ],
+      orders: [
+        {
+          id: "purchase",
+          accountId: "buyer",
+          commodity: "goods",
+          book: "world",
+          units: 1,
+          maximumUnitPrice: 5,
+        },
+      ],
+    });
+    expect(result.accounts).toEqual([
+      { id: "buyer", cash: 0 },
+      { id: "seller", cash: 5 },
+    ]);
+    expect(result.offers[0]).toMatchObject({ soldUnits: 1, revenue: 5 });
+    expect([...producerTrades(result.tradeReceipt)][0]).toMatchObject({ units: 1, amount: 5 });
+  });
+
+  it("matches individual supplier matching across pooled sales, own stock and intervening contracts", () => {
+    let seed = 1587;
+    const next = () => {
+      seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+      return seed;
+    };
+    for (let example = 0; example < 100; example++) {
+      const accounts = Array.from({ length: 5 }, (_, i) => ({
+        id: `account:${i}`,
+        cash: next() % 100,
+      }));
+      const offers = Array.from({ length: 15 }, (_, i) => ({
+        id: `offer:${i}`,
+        accountId: accounts[next() % 5].id,
+        commodity: "goods",
+        book: "world",
+        units: next() % 20,
+        unitPrice: next() % 5,
+      }));
+      const orders = Array.from({ length: 12 }, (_, i) => ({
+        id: `order:${i}`,
+        accountId: accounts[next() % 5].id,
+        commodity: "goods",
+        book: "world",
+        units: next() % 25,
+        maximumUnitPrice: Math.max(i % 3 === 0 ? 1 : 0, next() % 6),
+        ...(i % 3 === 0
+          ? { supplierOfferId: offers[next() % offers.length].id, contractUnitPrice: 1 }
+          : {}),
+      }));
+      const pooled = settleProducerMarket({ turn: 1, accounts, offers, orders });
+      const individual = settleProducerMarket({
+        turn: 1,
+        accounts,
+        offers,
+        orders: orders.map((order) => ({
+          ...order,
+          eligibleOfferIds: offers.map((offer) => offer.id),
+        })),
+      });
+      for (let i = 0; i < accounts.length; i++)
+        expect(pooled.accounts[i].cash).toBeCloseTo(individual.accounts[i].cash, 8);
+      for (let i = 0; i < offers.length; i++) {
+        expect(pooled.offers[i].deliveredUnits).toBeCloseTo(individual.offers[i].deliveredUnits, 8);
+        expect(pooled.offers[i].revenue).toBeCloseTo(individual.offers[i].revenue, 8);
+      }
+      for (let i = 0; i < orders.length; i++) {
+        expect(pooled.orders[i].deliveredUnits).toBeCloseTo(individual.orders[i].deliveredUnits, 8);
+        expect(pooled.orders[i].cost).toBeCloseTo(individual.orders[i].cost, 8);
+      }
+      const trades = [...producerTrades(pooled.tradeReceipt)];
+      expect(trades.reduce((sum, trade) => sum + trade.amount, 0)).toBeCloseTo(
+        pooled.orders.reduce((sum, order) => sum + order.cost, 0),
+        8
+      );
+    }
+  });
+
   it("uses the same delivered trade for seller revenue, buyer cost and the observed price", () => {
     const result = settleProducerMarket({
       turn: 7,

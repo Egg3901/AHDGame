@@ -1,3 +1,4 @@
+import { COLD_CAPACITY_UPKEEP_FRACTION } from "@/lib/corporations/investment/rules";
 import { STRATEGY_TRANSITION_TURNS } from "@/lib/constants/sectorStrategyTypes";
 import { eraLaborMultiplier, getSectorLaborShare } from "@/lib/labour/laborCost";
 
@@ -74,4 +75,28 @@ export function computePlantOverhead(args: {
     (1 - PLANT_OVERHEAD_FIXED_SHARE) * producedUnits +
     PLANT_OVERHEAD_FIXED_SHARE * Math.max(producedUnits, capacity * active);
   return (nominalDailyRevenue / capacity / turnsPerDay) * billedUnits * PLANT_OVERHEAD_OUTPUT_SHARE;
+}
+
+/** Funded-market site invoices depend on owned capacity, never the asking price or sales. */
+export function standingProducerSiteBill(input: {
+  nominalHourlyCapacityValue: number;
+  activeFraction: number;
+  financialPenaltyPercent: number;
+}): number {
+  const { nominalHourlyCapacityValue, activeFraction, financialPenaltyPercent } = input;
+  if (
+    ![nominalHourlyCapacityValue, activeFraction, financialPenaltyPercent].every(Number.isFinite) ||
+    nominalHourlyCapacityValue < 0 ||
+    activeFraction < 0 ||
+    activeFraction > 1 ||
+    financialPenaltyPercent < 0
+  )
+    throw new Error("Invalid producer site cost basis");
+  const bill =
+    nominalHourlyCapacityValue *
+    (PLANT_OVERHEAD_OUTPUT_SHARE *
+      (activeFraction + COLD_CAPACITY_UPKEEP_FRACTION * (1 - activeFraction)) +
+      (activeFraction * financialPenaltyPercent) / 100);
+  if (!Number.isFinite(bill)) throw new Error("Producer site cost overflow");
+  return bill;
 }

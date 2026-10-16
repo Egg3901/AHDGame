@@ -1,3 +1,4 @@
+import { ProducerSupplyPool } from "./supplyPoolRules";
 /**
  * Every producer sells delivered units at its posted price. Manual, cost-plus
  * and automatic quotes share the same funded order book and trade receipts.
@@ -72,12 +73,19 @@ export interface ProducerTradeReceipt {
 /** Expand supplier-level trades for audits or route and contract accounting without retaining a matrix. */
 export function* producerTrades(receipt: ProducerTradeReceipt): Generator<ProducerTrade> {
   const orders = new Map(receipt.orders.map((order) => [order.id, order]));
-  const remaining = new Map(
-    receipt.offers.map((offer) => [
-      offer.id,
-      Math.min(offer.units, offer.deliverableUnits ?? offer.units),
-    ])
-  );
+  const poolByOffer = new Map<string, ProducerSupplyPool>();
+  const pools = new Map<string, ProducerSupplyPool>();
+  for (const offer of receipt.offers) {
+    const key = JSON.stringify([offer.commodity, offer.book, offer.unitPrice]);
+    const pool = pools.get(key) ?? new ProducerSupplyPool();
+    pool.add(offer.id, Math.min(offer.units, offer.deliverableUnits ?? offer.units));
+    pools.set(key, pool);
+    poolByOffer.set(offer.id, pool);
+  }
+  const remaining = {
+    get: (id: string) => poolByOffer.get(id)!.remaining(id),
+    set: (id: string, units: number) => poolByOffer.get(id)!.setRemaining(id, units),
+  };
   const books = new Map<string, ProducerOffer[]>();
   for (const offer of receipt.offers) {
     const key = bookKey(offer.commodity, offer.book);
@@ -100,14 +108,21 @@ export function* producerTrades(receipt: ProducerTradeReceipt): Generator<Produc
         (!order.supplierOfferId || offer.id === order.supplierOfferId) &&
         (!eligible || eligible.has(offer.id))
     );
-    const total = group.reduce((sum, offer) => sum + remaining.get(offer.id)!, 0);
+    const pooled =
+      !internal &&
+      !order.eligibleOfferIds &&
+      !order.supplierOfferId &&
+      order.contractUnitPrice == null
+        ? poolByOffer.get(group[0]?.id)
+        : undefined;
+    const total = pooled?.total ?? group.reduce((sum, offer) => sum + remaining.get(offer.id)!, 0);
     if (!(total > 0) || fill.units > total + Math.max(1e-8, total * 1e-12))
       throw new Error("Invalid producer trade fill");
     for (const offer of group) {
       const available = remaining.get(offer.id)!;
-      const units = Math.min(available, (fill.units * available) / total);
+      const units = Math.min(available, (fill.units / total) * available);
       if (!(units > 0)) continue;
-      remaining.set(offer.id, Math.max(0, available - units));
+      if (!pooled) remaining.set(offer.id, Math.max(0, available - units));
       tradeCount++;
       yield {
         id: JSON.stringify([receipt.turn, order.id, offer.id]),
@@ -123,6 +138,7 @@ export function* producerTrades(receipt: ProducerTradeReceipt): Generator<Produc
         amount: units * fill.unitPrice,
       };
     }
+    if (pooled) pooled.take(fill.units);
   }
   if (tradeCount !== receipt.tradeCount) throw new Error("Producer trade count mismatch");
 }
@@ -178,7 +194,13 @@ export function settleProducerMarket(input: {
   const cash = new Map(input.accounts.map((a) => [a.id, nonNegative(a.cash, "operating cash")]));
   // Opening budgets prevent a circular chain of unfunded sales from financing itself.
   const budgets = new Map(cash);
-  const remaining = new Map<string, number>();
+  const poolByOffer = new Map<string, ProducerSupplyPool>();
+  const poolsByBook = new Map<string, Map<number, ProducerSupplyPool>>();
+  const ownByBook = new Map<string, Map<string, ProducerOffer[]>>();
+  const remaining = {
+    get: (id: string) => poolByOffer.get(id)!.remaining(id),
+    set: (id: string, units: number) => poolByOffer.get(id)!.setRemaining(id, units),
+  };
   const offered = new Map<string, number>();
   const byBook = new Map<string, ProducerOffer[]>();
   for (const offer of input.offers) {
@@ -192,14 +214,30 @@ export function settleProducerMarket(input: {
         : nonNegative(offer.deliverableUnits, "delivery ceiling")
     );
     offered.set(offer.id, available);
-    remaining.set(offer.id, available);
     const key = bookKey(offer.commodity, offer.book);
+    const levels = poolsByBook.get(key) ?? new Map<number, ProducerSupplyPool>();
+    const pool = levels.get(offer.unitPrice) ?? new ProducerSupplyPool();
+    pool.add(offer.id, available);
+    levels.set(offer.unitPrice, pool);
+    poolsByBook.set(key, levels);
+    poolByOffer.set(offer.id, pool);
+    const owners = ownByBook.get(key) ?? new Map<string, ProducerOffer[]>();
+    const owned = owners.get(offer.accountId) ?? [];
+    owned.push(offer);
+    owners.set(offer.accountId, owned);
+    ownByBook.set(key, owners);
     const rows = byBook.get(key) ?? [];
     rows.push(offer);
     byBook.set(key, rows);
   }
   for (const rows of byBook.values())
     rows.sort((a, b) => a.unitPrice - b.unitPrice || compareId(a.id, b.id));
+  for (const owners of ownByBook.values())
+    for (const rows of owners.values())
+      rows.sort((a, b) => a.unitPrice - b.unitPrice || compareId(a.id, b.id));
+  const sortedPoolsByBook = new Map(
+    [...poolsByBook].map(([key, pools]) => [key, [...pools].sort(([a], [b]) => a - b)])
+  );
   const quantityGroups = new Map<
     string,
     { accountId: string; commodity: string; book: string; maximumUnits: number; remaining: number }
@@ -272,7 +310,61 @@ export function settleProducerMarket(input: {
     let wanted = Math.min(order.units, quantityGroup?.remaining ?? order.units);
     let orderBudget = order.maximumSpend ?? Number.MAX_VALUE;
     const eligible = order.eligibleOfferIds ? new Set(order.eligibleOfferIds) : null;
-    const rows = (byBook.get(bookKey(order.commodity, order.book)) ?? []).filter(
+    const key = bookKey(order.commodity, order.book);
+    if (!eligible && !order.supplierOfferId && order.contractUnitPrice == null) {
+      const own = ownByBook.get(key)?.get(order.accountId) ?? [];
+      const ownTotal = own.reduce((sum, offer) => sum + remaining.get(offer.id), 0);
+      const ownTake = Math.min(wanted, ownTotal);
+      if (ownTake > 0) {
+        fills.push({ orderId: order.id, kind: "internalTransfer", unitPrice: 0, units: ownTake });
+        const fraction = ownTake / ownTotal;
+        for (const offer of own) {
+          const available = remaining.get(offer.id);
+          const units = Math.min(available, fraction * available);
+          if (!(units > 0)) continue;
+          remaining.set(offer.id, Math.max(0, available - units));
+          const seller = offerResults.get(offer.id)!;
+          seller.internalDeliveredUnits += units;
+          seller.deliveredUnits += units;
+          tradeCount++;
+        }
+        orderResults.get(order.id)!.deliveredUnits += ownTake;
+        wanted = Math.max(0, wanted - ownTake);
+        if (quantityGroup) quantityGroup.remaining = Math.max(0, quantityGroup.remaining - ownTake);
+      }
+      for (const [price, pool] of sortedPoolsByBook.get(key) ?? []) {
+        if (!(wanted > 0) || price > order.maximumUnitPrice) break;
+        const budget = Math.min(budgets.get(order.accountId)!, orderBudget);
+        const take = Math.min(wanted, pool.total, price > 0 ? budget / price : wanted);
+        if (!(take > 0)) continue;
+        const amount = take * price;
+        if (!Number.isFinite(amount)) throw new Error("Non-finite trade value");
+        tradeCount += pool.activeCount;
+        pool.take(take);
+        fills.push({ orderId: order.id, kind: "sale", unitPrice: price, units: take });
+        wanted = Math.max(0, wanted - take);
+        if (quantityGroup) quantityGroup.remaining = Math.max(0, quantityGroup.remaining - take);
+        orderBudget = Math.max(0, orderBudget - amount);
+        budgets.set(order.accountId, Math.max(0, budgets.get(order.accountId)! - amount));
+        cash.set(order.accountId, Math.max(0, cash.get(order.accountId)! - amount));
+        const buyer = orderResults.get(order.id)!;
+        buyer.deliveredUnits += take;
+        buyer.cost += amount;
+        const observed = prices.get(key) ?? {
+          commodity: order.commodity,
+          book: order.book,
+          units: 0,
+          value: 0,
+          unitPrice: 0,
+        };
+        observed.units += take;
+        observed.value += amount;
+        observed.unitPrice = observed.value / observed.units;
+        prices.set(key, observed);
+      }
+      continue;
+    }
+    const rows = (byBook.get(key) ?? []).filter(
       (offer) =>
         (offer.accountId === order.accountId ||
           (order.contractUnitPrice ?? offer.unitPrice) <= order.maximumUnitPrice) &&
@@ -305,7 +397,7 @@ export function settleProducerMarket(input: {
         });
         for (const offer of group) {
           const available = remaining.get(offer.id)!;
-          const units = Math.min(available, (take * available) / total);
+          const units = Math.min(available, (take / total) * available);
           if (!(units > 0)) continue;
           // Moving owned goods between sites is a physical transfer. It cannot
           // create a sale, an acquisition asset or profit for the corporation.
@@ -351,6 +443,19 @@ export function settleProducerMarket(input: {
       }
       if (!(wanted > 0)) break;
     }
+  }
+  for (const offer of input.offers) {
+    if (!poolByOffer.get(offer.id)!.hasPooledSales) continue;
+    const seller = offerResults.get(offer.id)!;
+    const units = poolByOffer.get(offer.id)!.pooledSold(offer.id);
+    const amount = units * offer.unitPrice;
+    seller.soldUnits += units;
+    seller.deliveredUnits += units;
+    seller.revenue += amount;
+    cash.set(
+      offer.accountId,
+      nonNegative(cash.get(offer.accountId)! + amount, "closing seller cash")
+    );
   }
   return {
     accounts: [...cash]

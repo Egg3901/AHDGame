@@ -14,11 +14,13 @@ function world() {
     {
       _id: corpId,
       liquidCapital: 2000,
+      liquidCurrencyCode: "USD",
+      producerPayables: { worldEpoch: "example", turn: 0, claims: [] },
       bankCharter: { cashReserves: 5000, totalDeposits: 4000, totalLoans: 3000 },
     },
   ]);
   memory.seed("producerEconomyAccounts", [
-    { _id: "households:example", worldEpoch: "example", cash: 0 },
+    { _id: "households:example", worldEpoch: "example", currency: "JPY", cash: 0 },
   ]);
   const transition = producerCashTransition({
     worldEpoch: "example",
@@ -85,6 +87,18 @@ describe("producer cash on the durable settlement journal", () => {
       expect(memory.collection("producerEconomyAccounts").docs[0].cash).toBe(10000);
     }
   );
+
+  it.each([
+    { producerPayables: { worldEpoch: "new-world", turn: 0, claims: [] } },
+    { liquidCurrencyCode: "JPY" },
+  ])("rejects a reused corporation identity or changed native currency: %j", async (changed) => {
+    const { memory, transition } = world();
+    Object.assign(memory.collection("corporations").docs[0], changed);
+    const result = await settleTransition(memory as unknown as Db, transition);
+    expect(["partial", "rejected"]).toContain(result.status);
+    expect(memory.collection("corporations").docs[0].liquidCapital).toBe(2000);
+    expect(memory.collection("producerEconomyAccounts").docs[0].cash).toBe(0);
+  });
 
   it("stops on a changed opening balance and cannot draw on a bank reserve to cover it", async () => {
     const { memory, transition } = world();

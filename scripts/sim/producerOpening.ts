@@ -22,6 +22,19 @@ const openingSchema = z
           currency: identity,
           localPerAnchor: z.number().finite().positive(),
           cash: z.number().finite(),
+          operatingArrearsAnchor: amount,
+          payables: z.array(
+            z
+              .object({
+                id: identity,
+                debtorAccountId: identity,
+                creditorAccountId: identity,
+                producerId: identity,
+                kind: z.enum(["labour", "operating"]),
+                amount: z.number().finite().positive(),
+              })
+              .strict()
+          ),
         })
         .strict()
     ),
@@ -96,5 +109,8 @@ console.log(
     protectedBooks: plan.protectedImages.length,
     cashCreated: plan.reconciliation.cashCreated,
     inputStockCreated: plan.reconciliation.inputStockCreated,
+    operatingArrearsAnchor: plan.reconciliation.operatingArrearsAnchor,
+    operatingArrearsForgiven: plan.reconciliation.operatingArrearsForgiven,
+    requiredCreditors: plan.requiredCreditorAccountIds.length,
   })
 );

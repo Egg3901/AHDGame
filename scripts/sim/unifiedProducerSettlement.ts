@@ -6,12 +6,17 @@ import { COMMODITY_BASE_PRICES, type CommodityType } from "../../src/lib/constan
 import { advanceProducerEconomy } from "../../src/lib/market/producerMarket/production";
 import { HOUSEHOLD_CONSUMER_BASKET } from "../../src/lib/market/producerMarket/householdRules";
 import { makeProducerRecipeFixture, producerFixtureBook } from "./fixtures/producerEconomy";
+import { makePreparedProducerRecipeFixture } from "./fixtures/producerHost";
+
+const useHostCosts = process.argv.includes("--host-costs");
 
 function simulate(
   preset: string,
   scenario: "recipe-closure" | "input-shortage" | "low-utilization" | "zero-consumption"
 ) {
-  let plans = makeProducerRecipeFixture(preset);
+  let plans = useHostCosts
+    ? makePreparedProducerRecipeFixture(preset)
+    : makeProducerRecipeFixture(preset);
   if (scenario === "input-shortage") plans = plans.filter((plan) => !plan.id.startsWith("energy:"));
   if (scenario === "low-utilization")
     plans = plans.map((plan) => ({ ...plan, activeFraction: 0.1 }));
@@ -20,6 +25,33 @@ function simulate(
     { id: "households", cash: 0 },
     { id: "operating-payee", cash: 0 },
   ];
+  const nominalCosts = plans.map((plan) => {
+    const work = plan.capacityUnits * plan.activeFraction * plan.outputMultiplier;
+    const outputValueAtBase =
+      work *
+      plan.outputs.reduce(
+        (sum, product) =>
+          sum + product.unitsPerOutput * COMMODITY_BASE_PRICES[product.commodity as CommodityType],
+        0
+      );
+    const inputsAtBase =
+      work *
+      plan.inputs.reduce(
+        (sum, product) =>
+          sum + product.unitsPerOutput * COMMODITY_BASE_PRICES[product.commodity as CommodityType],
+        0
+      );
+    return {
+      id: plan.id,
+      outputValueAtBase,
+      inputsAtBase,
+      payroll: plan.labourCost,
+      siteBills: plan.otherOperatingCost,
+      fullUtilizationProfitAtBase:
+        outputValueAtBase - inputsAtBase - plan.labourCost - plan.otherOperatingCost,
+    };
+  });
+  let finalProducers: ReturnType<typeof advanceProducerEconomy>["producers"] = [];
   const openingCash = accounts.reduce((sum, account) => sum + account.cash, 0);
   const observations = [];
   let payables: Parameters<typeof advanceProducerEconomy>[0]["payables"] = [];
@@ -119,6 +151,7 @@ function simulate(
       plan.inputStock = producer.inputStock;
       plan.outputStock = producer.outputStock;
     }
+    finalProducers = result.producers;
     accounts = result.accounts;
     payables = result.payables;
     observations.push({
@@ -147,6 +180,21 @@ function simulate(
     last: observations.at(-1),
     maximumCashDrift: Math.max(...observations.map((row) => Math.abs(row.cashDrift))),
     observations,
+    ...(scenario === "recipe-closure"
+      ? {
+          nominalCosts,
+          finalProducers: finalProducers.map((producer) => ({
+            id: producer.id,
+            plannedUnits: producer.plannedUnits,
+            producedUnits: producer.producedUnits,
+            revenue: producer.revenue,
+            expense: producer.revenue - producer.profit,
+            profit: producer.profit,
+            purchases: producer.purchases,
+            closingArrears: producer.closingArrears,
+          })),
+        }
+      : {}),
   };
 }
 
@@ -158,13 +206,18 @@ const scenarios = [
 ] as const;
 const report = {
   liveRolloutQualified: false,
+  costBasis: useHostCosts
+    ? "implemented physical host, wages and fixed site bills"
+    : "synthetic payroll and site costs",
   qualificationGaps: [
     "Active turn-engine and forecasts remain incomplete; migrated pricing controls still need end-to-end qualification.",
-    "Synthetic payroll and site costs do not establish balance for current-world producers.",
+    "Completing invariant checks does not establish viable margins; nominal costs and final site losses are reported separately.",
+    "Synthetic holdings and cash do not establish balance for current-world producers; rule fixtures do not replace seeded-world qualification.",
     "Contracts, route constraints, quality, inventory decay, fiscal flows and full-world performance remain unqualified.",
   ],
-  scope:
-    "Pure rules with actual era-available recipe portfolios and synthetic cash, payroll and site costs. This does not execute complete game turns or qualify a live rollout.",
+  scope: useHostCosts
+    ? "Pure rules with implemented physical preparation, era wages and fixed site bills. Cash, holdings, unrestricted resources and market scope are synthetic; no full turns or world qualification."
+    : "Pure rules with actual era-available recipe portfolios and synthetic cash, payroll and site costs. This does not execute complete game turns or qualify a live rollout.",
   invariants: [
     "cash conserved",
     "no negative spendable balances",
@@ -184,7 +237,14 @@ if (!output) throw new Error("Usage: tsx scripts/sim/unifiedProducerSettlement.t
 writeFileSync(output, `${JSON.stringify(report, null, 2)}\n`);
 console.log(
   JSON.stringify(
-    report.results.map(({ observations: _observations, ...summary }) => summary),
+    report.results.map(
+      ({
+        observations: _observations,
+        nominalCosts: _nominalCosts,
+        finalProducers: _finalProducers,
+        ...summary
+      }) => summary
+    ),
     null,
     2
   )

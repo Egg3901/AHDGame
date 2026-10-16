@@ -1,3 +1,4 @@
+import { producerPayableId } from "./payablesRules";
 import { describe, expect, it } from "vitest";
 import { planProducerOpening, type ExistingWorldProducerOpening } from "./migrationRules";
 
@@ -6,8 +7,22 @@ const opening = (): ExistingWorldProducerOpening => ({
   completedTurn: 10,
   processing: false,
   corporations: [
-    { id: "a", currency: "USD", localPerAnchor: 2, cash: 100 },
-    { id: "b", currency: "JPY", localPerAnchor: 100, cash: -200 },
+    {
+      id: "a",
+      currency: "USD",
+      localPerAnchor: 2,
+      cash: 100,
+      operatingArrearsAnchor: 0,
+      payables: [],
+    },
+    {
+      id: "b",
+      currency: "JPY",
+      localPerAnchor: 100,
+      cash: -200,
+      operatingArrearsAnchor: 0,
+      payables: [],
+    },
   ],
   sectors: [
     {
@@ -42,6 +57,7 @@ describe("existing-world producer opening", () => {
         openingCashAnchor: 50,
         spendableCashAnchor: 50,
         openingOverdraftAnchor: 0,
+        producerPayables: { worldEpoch: "example-world", turn: 10, claims: [] },
       },
       {
         id: "b",
@@ -51,6 +67,7 @@ describe("existing-world producer opening", () => {
         openingCashAnchor: -2,
         spendableCashAnchor: 0,
         openingOverdraftAnchor: 2,
+        producerPayables: { worldEpoch: "example-world", turn: 10, claims: [] },
       },
     ]);
     expect(plan.reconciliation).toMatchObject({
@@ -75,6 +92,37 @@ describe("existing-world producer opening", () => {
       constructionInProgressAnchor: 45,
     });
     expect(plan.protectedImages).toEqual(opening().protectedImages);
+  });
+
+  it("carries all named opening creditors without paying, expensing or forgiving their claims", () => {
+    const source = opening();
+    const claim = {
+      debtorAccountId: "a",
+      creditorAccountId: "workers",
+      producerId: "closed-site",
+      kind: "labour" as const,
+      amount: 15,
+    };
+    source.corporations = [
+      {
+        ...source.corporations[0],
+        operatingArrearsAnchor: 15,
+        payables: [{ ...claim, id: producerPayableId(claim) }],
+      },
+    ];
+    const plan = planProducerOpening(source);
+    expect(plan.accounts[0].producerPayables.claims).toEqual(source.corporations[0].payables);
+    expect(plan.accounts[0].openingCashLocal).toBe(100);
+    expect(plan.requiredCreditorAccountIds).toEqual(["workers"]);
+    expect(plan.reconciliation).toMatchObject({
+      operatingArrearsAnchor: 15,
+      operatingArrearsCreated: 0,
+      operatingArrearsForgiven: 0,
+    });
+    source.corporations[0].operatingArrearsAnchor = 16;
+    expect(() => planProducerOpening(source)).toThrow("complete creditor reconciliation");
+    source.corporations[0].operatingArrearsAnchor = 0;
+    expect(() => planProducerOpening(source)).toThrow("complete creditor reconciliation");
   });
 
   it("converts only retained inventory, never last turn's production or memo value into fresh wealth", () => {

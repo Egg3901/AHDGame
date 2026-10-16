@@ -272,21 +272,37 @@ async function verifyPhysicalTargets(db: Db, frozen: FrozenProducerTurn): Promis
   }
 }
 
-async function assertTurnFence(db: Db, worldEpoch: string, turn: number): Promise<void> {
+export async function assertProducerTurnFence(
+  db: Db,
+  worldEpoch: string,
+  turn: number
+): Promise<void> {
   const state = await db
     .collection<{
       _id: string;
       worldEpochId?: string;
+      isActive?: boolean;
       isProcessing?: boolean;
+      processingKind?: string | null;
       processingTargetTurn?: number;
     }>("gameState")
     .findOne(
       { _id: "current" },
-      { projection: { worldEpochId: 1, isProcessing: 1, processingTargetTurn: 1 } }
+      {
+        projection: {
+          worldEpochId: 1,
+          isActive: 1,
+          isProcessing: 1,
+          processingKind: 1,
+          processingTargetTurn: 1,
+        },
+      }
     );
   if (
     state?.worldEpochId !== worldEpoch ||
+    state.isActive !== true ||
     state.isProcessing !== true ||
+    state.processingKind !== "turn" ||
     state.processingTargetTurn !== turn
   )
     throw new Error("Producer settlement requires the matching active turn fence");
@@ -308,7 +324,7 @@ export async function settleProducerTurn(
 ): Promise<EconomyResult> {
   const turn = input.production.turn;
   const key = JSON.stringify([input.worldEpoch, turn]);
-  await assertTurnFence(db, input.worldEpoch, turn);
+  await assertProducerTurnFence(db, input.worldEpoch, turn);
   const turns = db.collection<ProducerTurnRecord>("producerEconomyTurns");
   let record = await turns.findOne({ _id: key });
   let claimedPayload: FrozenProducerTurn | undefined;
@@ -392,7 +408,7 @@ export async function settleProducerTurn(
   const openingInventories = inventoryImages(frozen, false);
   const closingInventories = inventoryImages(frozen, true);
   const cash = cashWithLedger(frozen, record.digest);
-  await assertTurnFence(db, frozen.worldEpoch, turn);
+  await assertProducerTurnFence(db, frozen.worldEpoch, turn);
   const settled = await settleTransition(db, cash);
   if (settled.status !== "applied" && settled.status !== "replayed")
     throw new Error(settled.error ?? "Producer cash settlement is incomplete");
@@ -461,4 +477,26 @@ export async function settleProducerTurn(
     { $set: { status: "settled" } }
   );
   return frozen.result;
+}
+
+/** Recover before preparing a new turn from sectors that may already have advanced. */
+export async function resumeProducerTurn(db: Db, input: { worldEpoch: string; turn: number }) {
+  await assertProducerTurnFence(db, input.worldEpoch, input.turn);
+  const record = await db.collection<ProducerTurnRecord>("producerEconomyTurns").findOne({
+    _id: JSON.stringify([input.worldEpoch, input.turn]),
+  });
+  if (!record) return null;
+  const frozen = await readFrozen(db, record);
+  const result = await settleProducerTurn(db, {
+    worldEpoch: input.worldEpoch,
+    production: frozen.request,
+    bindings: frozen.bindings,
+    targets: frozen.targets,
+  });
+  return {
+    result,
+    bindings: frozen.bindings,
+    targets: frozen.targets,
+    openingAccounts: frozen.request.accounts,
+  };
 }

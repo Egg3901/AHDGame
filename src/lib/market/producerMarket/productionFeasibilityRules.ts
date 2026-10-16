@@ -32,6 +32,42 @@ export function feasibleProduction(input: {
     row[n + i] = 1;
     return { row, value: constraint.available / scale };
   });
+  // Identical columns affect the objective and every resource only through
+  // their total activity. Solve their aggregate once, then give each member
+  // the same fraction. This is an exact reduction, without rounded grouping.
+  const groups = new Map<string, number[]>();
+  for (let j = 0; j < n; j++) {
+    const key = JSON.stringify([
+      input.activities[j].value,
+      ...input.constraints.map((constraint) => constraint.coefficients[j]),
+    ]);
+    const members = groups.get(key) ?? [];
+    members.push(j);
+    groups.set(key, members);
+  }
+  if (groups.size < n) {
+    const members = [...groups.values()];
+    const fractions = feasibleProduction({
+      activities: members.map((indices) => ({
+        id: input.activities[indices[0]].id,
+        value: input.activities[indices[0]].value * indices.length,
+      })),
+      constraints: input.constraints.map((constraint) => ({
+        available: constraint.available,
+        coefficients: members.map(
+          (indices) => constraint.coefficients[indices[0]] * indices.length
+        ),
+      })),
+      maximumPivots: input.maximumPivots,
+    });
+    const result = Array<number>(n);
+    members.forEach((indices, i) =>
+      indices.forEach((j) => {
+        result[j] = fractions[i];
+      })
+    );
+    return reconcileProduction(result, input.constraints);
+  }
   const coefficients = rows.map((r) => r.row);
   const values = rows.map((r) => r.value);
   const basic = rows.map((_, i) => n + i);
@@ -62,24 +98,7 @@ export function feasibleProduction(input: {
     if (entering < 0) {
       const result = Array.from(nonbasic.slice(0, n));
       for (let i = 0; i < m; i++) if (basic[i] < n) result[basic[i]] = values[i];
-      for (let j = 0; j < n; j++) {
-        if (!Number.isFinite(result[j]) || result[j] < -1e-7 || result[j] > 1 + 1e-7)
-          throw new Error("Invalid feasible production bound");
-        result[j] = Math.max(0, Math.min(1, result[j]));
-      }
-      for (const constraint of input.constraints) {
-        const used = constraint.coefficients.reduce((sum, value, j) => sum + value * result[j], 0);
-        const scale = Math.max(
-          1,
-          constraint.available,
-          constraint.coefficients.reduce((sum, v) => sum + Math.abs(v), 0)
-        );
-        if (used > constraint.available + scale * tolerance * 10)
-          throw new Error(
-            `Production resource constraint did not reconcile: used=${used}, available=${constraint.available}, tolerance=${scale * tolerance * 10}`
-          );
-      }
-      return result;
+      return reconcileProduction(result, input.constraints);
     }
     // A ratio tie must be exact: choosing a larger step, even within an
     // absolute epsilon, can overdraw a scarce input after row rescaling.
@@ -126,4 +145,28 @@ export function feasibleProduction(input: {
     basic[leaving] = entering;
   }
   throw new Error("Production feasibility did not converge");
+}
+
+function reconcileProduction(
+  result: number[],
+  constraints: readonly { available: number; coefficients: readonly number[] }[]
+): number[] {
+  for (let j = 0; j < result.length; j++) {
+    if (!Number.isFinite(result[j]) || result[j] < -1e-7 || result[j] > 1 + 1e-7)
+      throw new Error("Invalid feasible production bound");
+    result[j] = Math.max(0, Math.min(1, result[j]));
+  }
+  for (const constraint of constraints) {
+    const used = constraint.coefficients.reduce((sum, value, j) => sum + value * result[j], 0);
+    const scale = Math.max(
+      1,
+      constraint.available,
+      constraint.coefficients.reduce((sum, v) => sum + Math.abs(v), 0)
+    );
+    if (used > constraint.available + scale * 1e-9)
+      throw new Error(
+        `Production resource constraint did not reconcile: used=${used}, available=${constraint.available}, tolerance=${scale * 1e-9}`
+      );
+  }
+  return result;
 }

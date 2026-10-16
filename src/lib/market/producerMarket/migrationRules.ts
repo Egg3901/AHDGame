@@ -1,4 +1,5 @@
 /** Pure opening-state conversion. This plan never applies a migration or invents funding. */
+import { producerPayableId, type ProducerPayable } from "./payablesRules";
 import { TURNS_PER_DAY } from "@/lib/constants/turnTime";
 import type { ProducerQuotePolicy } from "./rules";
 import { validateProducerCapacityState, type ProducerCapacityState } from "./capacityRules";
@@ -14,6 +15,10 @@ export interface ExistingWorldProducerOpening {
     localPerAnchor: number;
     /** Signed native balance. Negative cash remains debt, never forgiven by conversion. */
     cash: number;
+    /** Audited outstanding operating bills, excluding separately preserved tax arrears. */
+    operatingArrearsAnchor: number;
+    /** Reconciled named creditors; an unresolved balance cannot be discarded. */
+    payables: readonly ProducerPayable[];
   }[];
   sectors: readonly {
     id: string;
@@ -37,7 +42,7 @@ export interface ExistingWorldProducerOpening {
 }
 
 export interface ProducerOpeningPlan {
-  version: 1;
+  version: 2;
   worldEpoch: string;
   completedTurn: number;
   firstSettlementTurn: number;
@@ -49,6 +54,7 @@ export interface ProducerOpeningPlan {
     openingCashAnchor: number;
     spendableCashAnchor: number;
     openingOverdraftAnchor: number;
+    producerPayables: { worldEpoch: string; turn: number; claims: ProducerPayable[] };
   }>;
   sectors: Array<{
     id: string;
@@ -60,6 +66,8 @@ export interface ProducerOpeningPlan {
     openingInventoryMemoValueAnchor: number;
   }>;
   protectedImages: Array<{ key: string; digest: string }>;
+  /** The apply host must bind these exact creditors before enabling the new economy. */
+  requiredCreditorAccountIds: string[];
   reconciliation: {
     cashByCurrency: Array<{ currency: string; before: number; after: number }>;
     signedCashAnchor: number;
@@ -70,6 +78,9 @@ export interface ProducerOpeningPlan {
       beforeDailyUnits: number;
       afterTurnUnits: number;
     }>;
+    operatingArrearsAnchor: number;
+    operatingArrearsCreated: 0;
+    operatingArrearsForgiven: 0;
     cashCreated: 0;
     inputStockCreated: 0;
     ownedDailyUnits: number;
@@ -107,12 +118,42 @@ export function planProducerOpening(source: ExistingWorldProducerOpening): Produ
     source.protectedImages.map((image) => ({ id: image.key })),
     "protected image"
   );
+  const creditorIds = new Set<string>();
+  let operatingArrearsAnchor = 0;
   const currencyRates = new Map<string, number>();
   const cashByCurrency = new Map<string, number>();
   const accounts = [...source.corporations]
     .sort((a, b) => compare(a.id, b.id))
     .map((corp) => {
       valid(corp.cash, "cash", true);
+      valid(corp.operatingArrearsAnchor, "opening operating arrears");
+      if (!Array.isArray(corp.payables))
+        throw new Error("Opening creditors require reconciliation");
+      uniqueIds(corp.payables, "opening payable");
+      let due = 0;
+      for (const claim of corp.payables) {
+        if (
+          !claim.producerId ||
+          !claim.creditorAccountId ||
+          claim.debtorAccountId !== corp.id ||
+          claim.creditorAccountId === corp.id ||
+          (claim.kind !== "labour" && claim.kind !== "operating") ||
+          claim.id !== producerPayableId(claim) ||
+          !(valid(claim.amount, "opening payable amount") > 0)
+        )
+          throw new Error("Opening creditors require reconciliation");
+        creditorIds.add(claim.creditorAccountId);
+        due = valid(due + claim.amount, "opening payable total");
+      }
+      if (
+        Math.abs(due - corp.operatingArrearsAnchor) >
+        Math.max(1e-7, corp.operatingArrearsAnchor * 1e-12)
+      )
+        throw new Error("Opening operating arrears require complete creditor reconciliation");
+      operatingArrearsAnchor = valid(
+        operatingArrearsAnchor + due,
+        "opening operating arrears total"
+      );
       if (!corp.currency || !(valid(corp.localPerAnchor, "frozen currency rate") > 0))
         throw new Error("Missing currency valuation");
       const priorRate = currencyRates.get(corp.currency);
@@ -132,6 +173,13 @@ export function planProducerOpening(source: ExistingWorldProducerOpening): Produ
         openingCashAnchor: anchor,
         spendableCashAnchor: Math.max(0, anchor),
         openingOverdraftAnchor: Math.max(0, -anchor),
+        producerPayables: {
+          worldEpoch: source.worldEpoch,
+          turn: source.completedTurn,
+          claims: [...corp.payables]
+            .sort((a, b) => compare(a.id, b.id))
+            .map((claim) => ({ ...claim })),
+        },
       };
     });
   const accountIds = new Set(accounts.map((account) => account.id));
@@ -203,14 +251,18 @@ export function planProducerOpening(source: ExistingWorldProducerOpening): Produ
       true
     );
   return {
-    version: 1,
+    version: 2,
     worldEpoch: source.worldEpoch,
     completedTurn: source.completedTurn,
     firstSettlementTurn: source.completedTurn + 1,
     accounts,
     sectors,
     protectedImages: [...source.protectedImages].sort((a, b) => compare(a.key, b.key)),
+    requiredCreditorAccountIds: [...creditorIds].sort(compare),
     reconciliation: {
+      operatingArrearsAnchor,
+      operatingArrearsCreated: 0,
+      operatingArrearsForgiven: 0,
       cashByCurrency: [...cashByCurrency]
         .sort(([a], [b]) => compare(a, b))
         .map(([currency, before]) => ({ currency, before, after: before })),

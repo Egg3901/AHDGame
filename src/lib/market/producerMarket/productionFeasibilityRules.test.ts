@@ -81,6 +81,15 @@ describe("joint physical production feasibility", () => {
     ).toEqual([0, 0]);
   });
 
+  it("shares an exact aggregate solution across identical plants", () => {
+    const result = feasibleProduction({
+      activities: Array.from({ length: 200 }, (_, i) => ({ id: `plant:${i}`, value: 2 })),
+      constraints: [{ available: 50, coefficients: Array(200).fill(1) }],
+    });
+    expect(result).toEqual(Array(200).fill(0.25));
+    expect(result.reduce((sum, fraction) => sum + fraction * 2, 0)).toBe(100);
+  });
+
   it("matches an independent vertex enumeration for bounded two-activity resource markets", () => {
     let seed = 4322;
     const next = () => {
@@ -88,10 +97,14 @@ describe("joint physical production feasibility", () => {
       return seed;
     };
     for (let example = 0; example < 200; example++) {
-      const value = [1 + (next() % 10), 1 + (next() % 10)];
+      const repetitions = example % 2 === 0 ? [1, 1] : [2, 3];
+      const value = [(1 + (next() % 10)) * repetitions[0], (1 + (next() % 10)) * repetitions[1]];
       const constraints = Array.from({ length: 4 }, () => ({
         available: next() % 4,
-        coefficients: [Number(next() % 7) - 3, Number(next() % 7) - 3],
+        coefficients: [
+          (Number(next() % 7) - 3) * repetitions[0],
+          (Number(next() % 7) - 3) * repetitions[1],
+        ],
       }));
       const edges = [
         ...constraints,
@@ -117,13 +130,24 @@ describe("joint physical production feasibility", () => {
             best = Math.max(best, x * value[0] + y * value[1]);
         }
       const result = feasibleProduction({
-        activities: [
-          { id: "a", value: value[0] },
-          { id: "b", value: value[1] },
-        ],
-        constraints,
+        activities: repetitions.flatMap((count, group) =>
+          Array.from({ length: count }, (_, i) => ({
+            id: `${group}:${i}`,
+            value: value[group] / count,
+          }))
+        ),
+        constraints: constraints.map((constraint) => ({
+          available: constraint.available,
+          coefficients: repetitions.flatMap((count, group) =>
+            Array(count).fill(constraint.coefficients[group] / count)
+          ),
+        })),
       });
-      expect(result[0] * value[0] + result[1] * value[1]).toBeCloseTo(best, 6);
+      const objective = result.reduce((sum, fraction, i) => {
+        const group = i < repetitions[0] ? 0 : 1;
+        return sum + (fraction * value[group]) / repetitions[group];
+      }, 0);
+      expect(objective).toBeCloseTo(best, 6);
     }
   });
 });

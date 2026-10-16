@@ -6,10 +6,9 @@ import {
   SECTOR_STRATEGIES,
 } from "@/lib/constants/sectorStrategies";
 import { OPERATING_SECTOR_TYPES } from "@/lib/constants/corporations";
-import { unitYieldForSupply } from "@/lib/constants/capacityEconomy";
 
 describe("physical producer recipes", () => {
-  it("matches actual capacity units for every sector, including finance, in both qualified eras", () => {
+  it("uses one base-value output basis for every sector, including finance, in both eras", () => {
     for (const preset of ["1991-default", "2019-default"]) {
       for (const lane of OPERATING_SECTOR_TYPES) {
         for (const strategy of SECTOR_STRATEGIES[lane]) {
@@ -27,9 +26,21 @@ describe("physical producer recipes", () => {
           );
           for (const eraUnitScale of [1, 3.75]) {
             const recipe = producerRecipe({ ...rates, eraUnitScale });
-            expect(recipe.unitsPerNominalAnchor).toBe(
-              unitYieldForSupply(rates.supply, eraUnitScale)
+            const outputValueBasis = Object.values(rates.supply).reduce<number>(
+              (sum, rate) => sum + (rate ?? 0),
+              0
             );
+            expect(
+              recipe.outputs.reduce(
+                (sum, row) =>
+                  sum +
+                  (row.unitsPerOutput *
+                    recipe.unitsPerNominalAnchor *
+                    COMMODITY_BASE_PRICES[row.commodity]) /
+                    eraUnitScale,
+                0
+              )
+            ).toBeCloseTo(1, 12);
             expect(recipe.outputs.reduce((sum, row) => sum + row.unitsPerOutput, 0)).toBeCloseTo(
               1,
               12
@@ -39,7 +50,8 @@ describe("physical producer recipes", () => {
                 row.commodity
               ]!;
               expect(row.unitsPerOutput * recipe.unitsPerNominalAnchor).toBeCloseTo(
-                (rate / COMMODITY_BASE_PRICES[row.commodity]) * eraUnitScale,
+                ((rate / COMMODITY_BASE_PRICES[row.commodity]) * eraUnitScale) /
+                  (recipe.inputs.includes(row) ? 1 : outputValueBasis),
                 12
               );
             }
@@ -47,6 +59,23 @@ describe("physical producer recipes", () => {
         }
       }
     }
+  });
+
+  it("keeps technology yield separate from the original nominal basket", () => {
+    const base = producerRecipe({
+      supply: { steel: 0.5 },
+      demand: { iron: 0.2 },
+      eraUnitScale: 1,
+    });
+    const improved = producerRecipe({
+      supply: { steel: 1 },
+      demand: { iron: 0.2 },
+      eraUnitScale: 1,
+      outputRateValueBasis: 0.5,
+    });
+    expect(improved.unitsPerNominalAnchor).toBe(base.unitsPerNominalAnchor * 2);
+    expect(improved.outputs).toEqual(base.outputs);
+    expect(improved.inputs[0].unitsPerOutput).toBeCloseTo(base.inputs[0].unitsPerOutput / 2, 12);
   });
 
   it("rejects unpriced, empty and nonfinite physical recipes", () => {

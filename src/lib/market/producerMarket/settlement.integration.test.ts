@@ -22,12 +22,20 @@ const openingDailyUnits = (10 * TURNS_PER_DAY) / (1 - CAPITAL_DEPRECIATION_PER_T
 function fixture() {
   const memory = createInMemoryDb();
   memory.seed("gameState", [
-    { _id: "current", worldEpochId: "example", isProcessing: true, processingTargetTurn: 1 },
+    {
+      _id: "current",
+      worldEpochId: "example",
+      isActive: true,
+      processingKind: "turn",
+      isProcessing: true,
+      processingTargetTurn: 1,
+    },
   ]);
   memory.seed("corporations", [
     {
       _id: new ObjectId(corporationId),
       liquidCapital: 1000,
+      producerPayables: { worldEpoch: "example", turn: 0, claims: [] },
       liquidCurrencyCode: "USD",
       countryId: "US",
       userId: new ObjectId("cccccccccccccccccccccccc"),

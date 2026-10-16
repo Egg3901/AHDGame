@@ -2,11 +2,15 @@
 import assert from "node:assert/strict";
 import { writeFileSync } from "node:fs";
 import { advanceProducerEconomy } from "../../src/lib/market/producerMarket/production";
+import { producerCashTransition } from "../../src/lib/market/producerMarket/cashSettlementRules";
 import { encodeReceipt } from "../../src/lib/market/producerMarket/receiptStorage";
 import { makeProducerRecipeFixture } from "../sim/fixtures/producerEconomy";
 
-const count = 7755;
-const fixtures = makeProducerRecipeFixture("1991");
+const countIndex = process.argv.indexOf("--producers");
+const count = countIndex < 0 ? 7755 : Number(process.argv[countIndex + 1]);
+if (!Number.isSafeInteger(count) || count < 1 || count > 20000)
+  throw new Error("Synthetic producer count must be an integer from 1 to 20000");
+const fixtures = makeProducerRecipeFixture("1991-default");
 const producers = Array.from({ length: count }, (_, i) => ({
   ...fixtures[i % fixtures.length],
   id: `site:${i}`,
@@ -23,6 +27,22 @@ const clearingMilliseconds = performance.now() - start;
 const encodingStart = performance.now();
 const encoded = encodeReceipt({ version: 1, request: { turn: 1, producers, accounts }, result });
 const receiptEncodingMilliseconds = performance.now() - encodingStart;
+const cashTransition = producerCashTransition({
+  worldEpoch: "synthetic-load",
+  turn: 1,
+  opening: accounts,
+  closing: result.accounts,
+  receiptDigest: encoded.digest,
+  bindings: accounts.map((account, i) => ({
+    accountId: account.id,
+    currency: "USD",
+    localPerAnchor: 1,
+    openingCashLocal: account.cash,
+    ...(i < count
+      ? { kind: "corporation" as const, corporationId: (i + 1).toString(16).padStart(24, "0") }
+      : { kind: "economyAccount" as const, economyAccountId: account.id }),
+  })),
+});
 const bytes = (value: string) => Buffer.byteLength(value);
 const receiptDocumentBytes = bytes(encoded.payload);
 const maxChunkDocumentBytes = Math.max(0, ...encoded.chunks.map((chunk) => bytes(chunk.payload)));
@@ -37,6 +57,7 @@ const report = {
   fixture: "1991 synthetic recipe portfolio",
   producerCount: count,
   logicalTradeCount: result.tradeReceipt.tradeCount,
+  cashSettlementLegCount: cashTransition.legs.length,
   clearingFillCount: result.tradeReceipt.fills.length,
   producedUnits: result.producers.reduce((sum, producer) => sum + producer.producedUnits, 0),
   cashDrift: closingCash - openingCash,

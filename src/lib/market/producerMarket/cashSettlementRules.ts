@@ -96,10 +96,16 @@ export function producerCashTransition(input: {
       collection: binding.kind === "corporation" ? "corporations" : "producerEconomyAccounts",
       filter:
         binding.kind === "corporation"
-          ? { _id: oid(binding.corporationId), liquidCapital: binding.openingCashLocal }
+          ? {
+              _id: oid(binding.corporationId),
+              "producerPayables.worldEpoch": input.worldEpoch,
+              liquidCurrencyCode: binding.currency,
+              liquidCapital: binding.openingCashLocal,
+            }
           : {
               _id: binding.economyAccountId,
               worldEpoch: input.worldEpoch,
+              currency: binding.currency,
               cash: binding.openingCashLocal,
             },
       path: binding.kind === "corporation" ? "liquidCapital" : "cash",
