@@ -6,7 +6,7 @@ Recruiting units and paying for equipment are two different systems. This page i
 
 The defence seat holder publishes equipment tenders against the national defence appropriation. An **acting** secretary uses the same authority as a confirmed holder. The Cabinet Office's **Government Contracts** tab opens the country board; the Arsenal tab retains stock, deliveries and signed orders.
 
-A tender fixes the component, number of lots, required grade and maximum price per lot. Eligible domestic corporations nominate a certified plant and bid a price within the permitted band. Bid values stay sealed until closing; CEOs can revise or withdraw their own bid before then. The government selects a qualifying bid after closing and publishes its reason. The winning bid activates the order without another acceptance step.
+A tender fixes the component, number of lots, required grade and maximum price per lot. The maximum price is checked against the lowest current price floor for that component and grade before the tender is published; if it is too low, the tender is refused and the minimum is shown in national budget units. Eligible domestic corporations nominate a certified plant and bid a price within the permitted band. Bid values stay sealed until closing; CEOs can revise or withdraw their own bid before then. The government selects a qualifying bid after closing and publishes its reason. The winning bid activates the order without another acceptance step.
 
 Publishing reserves the maximum obligation. Award transfers the actual winning value into the contract and releases the difference. The supplier concentration cap still applies. Defence bidding and award deadlines must fit inside the current quarterly contracting window.
 

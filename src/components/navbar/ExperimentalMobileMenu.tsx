@@ -24,6 +24,7 @@ import {
   regionLegislatureUrl,
   regionElectionsUrl,
   cabinetOfficeUrl,
+  scotusJusticeOfficeUrl,
 } from "@/lib/urls";
 import {
   HELP_DISCORD_URL,
@@ -79,6 +80,7 @@ export interface ExperimentalMobileMenuProps {
   homeState?: { id: string; name: string; countryId: string };
   activeElection?: { id: string; seatId?: string; label: string };
   cabinetOffice?: { positionId: string; positionName: string; countryCode: string };
+  justiceOffice?: { countryCode: string; seatNumber: number };
   governorOffice?: { stateId: string; stateName: string; countryCode: string };
   stateLegislatureLabel: string;
   pageCountry: string;
@@ -121,6 +123,7 @@ export function ExperimentalMobileMenu({
   homeState,
   activeElection,
   cabinetOffice,
+  justiceOffice,
   governorOffice,
   stateLegislatureLabel,
   pageCountry,
@@ -553,6 +556,15 @@ export function ExperimentalMobileMenu({
                             className="flex items-center rounded-lg px-3 py-2 text-sm text-muted transition-colors hover:bg-white/5"
                           >
                             {t("menus.nation.cabinetOffice")}
+                          </Link>
+                        )}
+                        {justiceOffice && (
+                          <Link
+                            href={scotusJusticeOfficeUrl(justiceOffice.countryCode)}
+                            onClick={onClose}
+                            className="flex items-center rounded-lg px-3 py-2 text-sm text-muted transition-colors hover:bg-white/5"
+                          >
+                            {t("menus.nation.justiceOffice")}
                           </Link>
                         )}
                         {currentParty && (

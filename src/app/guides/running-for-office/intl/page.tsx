@@ -224,19 +224,18 @@ export default function RunningForOfficeIntlPage() {
                 <p className="text-sm font-semibold text-foreground">Eligibility threshold</p>
                 <ul className="space-y-1 text-sm text-muted">
                   <li>
-                    • <strong className="text-foreground">20% minimum</strong> regional vote share
+                    • <strong className="text-foreground">10% minimum</strong> regional vote share
                     to receive any seats
                   </li>
-                  <li>• Below 20%: zero seats regardless of absolute vote count</li>
-                  <li>• Regional Council threshold is lower: 10%</li>
+                  <li>• Below 10%: zero seats regardless of absolute vote count</li>
+                  <li>• Same-party candidates pool their votes against the gate</li>
                 </ul>
               </div>
             </div>
-            <Callout kind="warning" label="The 20% threshold is hard.">
-              A party polling at 18% gets nothing. This creates a significant spoiler dynamic: small
-              parties that cannot clear 20% actively hurt the ideologically nearest larger party by
-              bleeding votes. In a tight multi-party race, coordinate with allied parties or you
-              both lose.
+            <Callout kind="warning" label="The 10% threshold is hard.">
+              A party polling at 8% gets nothing. This creates a spoiler dynamic: small parties that
+              cannot clear 10% actively hurt the ideologically nearest larger party by bleeding
+              votes. In a tight multi-party race, coordinate with allied parties or you both lose.
             </Callout>
             <SubHeader>Regional party dynamics</SubHeader>
             <p className="text-sm text-muted leading-relaxed">
@@ -275,8 +274,8 @@ export default function RunningForOfficeIntlPage() {
                     ],
                     [
                       "Minority government",
-                      "≥130 (20%) but <326",
-                      "Party must manually initiate; requires ≥130 votes to pass (not 326)",
+                      "≥100 (about 15%) but <326",
+                      "The party chair must initiate the nomination; the Commons then votes on it. A minority bid is allowed even when another party holds a majority",
                     ],
                     [
                       "Nomination fails",
@@ -314,7 +313,7 @@ export default function RunningForOfficeIntlPage() {
               {[
                 [
                   "Know the seat math before you run.",
-                  "The Hamilton method means a 21% regional vote share gets you proportional seats; 19% gets you nothing. Run your party's polling before committing campaign spend.",
+                  "The Hamilton method means a 12% regional vote share clears the 10% gate and gets you proportional seats; 8% gets you nothing. Run your party's polling before committing campaign spend.",
                 ],
                 [
                   "Scotland and Wales are not England.",
@@ -403,9 +402,11 @@ export default function RunningForOfficeIntlPage() {
               Both chambers use{" "}
               <strong className="text-foreground">multi-seat proportional representation</strong>{" "}
               (Hamilton method / largest remainder), the same system as UK Commons elections. Each
-              region elects multiple members in proportion to each party&apos;s vote share, with a{" "}
-              <strong className="text-foreground">20% minimum</strong> regional vote share required
-              to receive any seats.
+              region elects multiple members in proportion to each party&apos;s vote share. The
+              Shugiin uses a <strong className="text-foreground">10% minimum</strong> regional vote
+              share to receive any seats; the Sangiin uses{" "}
+              <strong className="text-foreground">20%</strong>. Same-party candidates pool their
+              votes against the gate.
             </p>
             <SubHeader>Staggered Sangiin elections</SubHeader>
             <p className="text-sm text-muted leading-relaxed">
@@ -434,8 +435,8 @@ export default function RunningForOfficeIntlPage() {
               Most regions operate as an LDP vs CDP two-party race. The exception is{" "}
               <strong className="text-foreground">Kansai</strong>, where Nippon Ishin (Ishin)
               replaces CDP as the primary opposition to the LDP. If you are running in Kansai on a
-              CDP ticket, you are fighting as a third party; the 20% threshold means you risk
-              winning zero seats if your vote share falls short.
+              CDP ticket, you are fighting as a third party; the Shugiin 10% threshold means you
+              risk winning zero seats if your vote share falls short.
             </p>
           </section>
 
@@ -543,7 +544,7 @@ export default function RunningForOfficeIntlPage() {
                 ],
                 [
                   "Kansai runs as an Ishin vs LDP race.",
-                  "If you are CDP, you face a tough three-way split in Kansai. The 20% threshold means your vote share could fall below the cutoff; consider whether it is worth contesting the region or whether your resources are better spent elsewhere.",
+                  "If you are CDP, you face a tough three-way split in Kansai. The Shugiin 10% threshold means your vote share could fall below the cutoff; consider whether it is worth contesting the region or whether your resources are better spent elsewhere.",
                 ],
                 [
                   "As PM, treat snap elections as leverage, not panic buttons.",

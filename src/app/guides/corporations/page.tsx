@@ -433,7 +433,9 @@ Escalation drops by 1 each turn. Costs halve if you wait`}</FormulaBlock>
             <p className="text-sm text-muted leading-relaxed">
               In short: prices rise when demand outstrips supply and fall when supply outstrips
               demand, but the curve is logarithmic, so the first bit of shortage moves price a lot
-              and each further bit moves it less. No ratio sends price to infinity.
+              and each further bit moves it less. No ratio sends price to infinity. A shortage that
+              is not getting worse no longer pushes the price up each turn: prices rise when a
+              shortage deepens and fall when it eases.
             </p>
             <FormulaBlock>{`rawRatio = demand / supply
 effectiveRatio = rawRatio through 3x, then softened in the tail
@@ -648,6 +650,23 @@ Scaled growth  = 0.65 × ln(1 + dailyBudget / 100,000)
               capture gains. The marketing budget is deducted from liquid capital each turn like any
               other cost.
             </p>
+
+            <SubHeader>Autopilot & overview view</SubHeader>
+            <p className="text-sm text-muted leading-relaxed">
+              The Overview has an <strong className="text-foreground">Autopilot</strong> switch. You
+              stay CEO and can still act by hand. Each turn it sets your marketing, logistics and
+              R&D budgets and the dividend, grows plants that sell, pauses plants stuck in a glut,
+              and opens new plants when cash allows. It never borrows, picks research, retools,
+              sells or closes plants, or buys rivals; anything in those categories is listed for you
+              instead. A company on autopilot is not penalised for an inactive CEO, but its
+              CEO&apos;s national influence is capped at the standard rate.
+            </p>
+            <p className="text-sm text-muted leading-relaxed">
+              The same tab has a <strong className="text-foreground">Simple / Pro</strong> switch,
+              also in Settings. Simple shows what needs attention, the core figures at a glance and
+              your five biggest sectors; Pro is the full detail view and the default. The choice is
+              saved to your account.
+            </p>
           </section>
 
           {/* ── 9. Shares ── */}
@@ -677,7 +696,7 @@ Scaled growth  = 0.65 × ln(1 + dailyBudget / 100,000)
               <li>
                 <strong className="text-foreground">Public issuance</strong>. Sell up to 50% of
                 outstanding shares into the public float. Dilutes your ownership but raises liquid
-                capital.
+                capital. A very large issue fills over several turns rather than all at once.
               </li>
               <li>
                 <strong className="text-foreground">Self-issuance</strong>. Issue shares to yourself
@@ -692,7 +711,7 @@ Scaled growth  = 0.65 × ln(1 + dailyBudget / 100,000)
 
             <SubHeader>Dividends</SubHeader>
             <p className="text-sm text-muted leading-relaxed">
-              Set your dividend rate (0-100%) in CEO Office → Settings. Dividends are paid pro-rata
+              Set your dividend rate (0-25%) in CEO Office → Settings. Dividends are paid pro-rata
               to all shareholders each turn from post-tax income. 24-hour cooldown on rate changes.
             </p>
             <Callout label="High dividends vs. reinvestment:">

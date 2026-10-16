@@ -37,14 +37,14 @@ Each member votes for whoever scores best against them personally. If two candid
 
 ## Winning, and what happens on a deadlock
 
-Once both ballots are tallied:
+Once both initial ballots are tallied:
 
 1. Whoever has the most votes leads.
-2. If the leader clears the chamber's threshold, a majority of delegations or of senators, they win outright.
-3. If nobody clears the threshold and there's a tie among the leaders, the game breaks the deadlock deterministically rather than looping forever. The tiebreak is seeded off the election, so it's reproducible, not random each time you check.
+2. If the leader clears the chamber's threshold, a majority of the delegations or of senators, they win.
+3. If no presidential candidate reaches a majority of state delegations, the Senate's vice-presidential pick is seated as **acting president** and the House keeps voting, one ballot per turn, until a candidate reaches the majority or the vote window closes (24 turns). Coalitions tend to vote together, individual members can change their vote between ballots, and chamber chairs can whip their members. An acting president is recorded as an appointment, not an elected term, so it does not count toward term limits.
 4. In the rare case where a chamber produces no usable votes at all (nobody could pick, or the chamber ballot itself was empty), the game falls back to the original Electoral College count from before the contingent election even started, breaking ties by original electoral votes.
 
-Either way, a winner is always produced. A contingent election never leaves the Presidency or Vice Presidency vacant.
+The Senate vote can still seat a Vice President. If the House window closes with no majority, the acting president keeps serving rather than the office sitting empty. A deadlock is resolved by continuing the House vote, not by a one-off tiebreak.
 
 ## What you actually see
 

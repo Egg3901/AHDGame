@@ -125,7 +125,7 @@ Your campaign generates its own per-turn action pool:
   - 16 endorsements → 16/turn
   - 25 endorsements → 19/turn
 
-Campaign actions are consumed by **upgrades only** (not regular actions like Campaign or Fundraise).
+Campaign actions are consumed by **upgrades and field offices** (not regular actions like Campaign or Fundraise). Opening a field office charges both funds and campaign actions; ongoing upkeep is charged in funds each turn.
 
 A campaign can bank at most **48 turns of its own per-turn income** (for example, 480 actions at 10 per turn). At the cap the turn adds nothing until you spend below it. Actions already above the cap are kept, not taken away.
 
@@ -140,6 +140,7 @@ Campaign funds flow:
 
 − Ground Game maintenance (if purchased)
 − Media Spending maintenance (if purchased)
+− Field office upkeep (per open office)
 − New upgrade purchases (when made)
 − Ad campaigns (when initiated)
 \`\`\`

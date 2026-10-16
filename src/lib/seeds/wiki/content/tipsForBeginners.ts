@@ -36,7 +36,7 @@ Last 4 turns before the race ends, campaign passives double. That is the window.
 
 ## 8. Do not file with PI under 30
 
-Campaign until PI is 30+. From 0, that is days of clicks, not one session.
+Campaign until PI is 30+. New characters start at 10, so that is still days of clicks, not one session.
 
 ## 9. First office is the lowest one
 

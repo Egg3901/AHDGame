@@ -66,6 +66,8 @@ NPPs (Non-Player Politicians) autonomously enter primaries. Entry is determinist
   3. **One generic NPP per party.** After slate fill, at most one additional generic NPP may enter any party's primary if no player is present. This prevents races from becoming overcrowded with autonomous candidates.
 - NPPs do **not** drop out based on appeal. Once entered, they remain until primary resolution or manual withdrawal.
 
+In worlds on autonomy V6, an NPP-only primary changes shape late: a challenger can be drawn from the party's strongest NPPs, and a candidate who is clearly behind withdraws rather than splitting the vote (no endorsement). Primaries with a player in them are never affected. New singleplayer and simulation worlds start on V6, and the live multiplayer world runs V6.
+
 ### How NPPs shape your primary
 
 - **NPPs are beaten by alignment and favorability.** The 50% penalty means a player sitting at alignment 35 + favorability 25 + influence 15 (= 75) beats a raw-80 NPP scoring an effective 40.

@@ -28,6 +28,8 @@ Taking the higher of the two means a character with an older career history but 
 
 The count is tracked **per country**. If your character has some other route into a foreign executive office, terms served there don't count against your term limit at home, and vice versa.
 
+An acting president seated during a contingent-election deadlock does not count toward term limits. Serving in that role does not use up one of your capped terms, and it is recorded as an appointment rather than an elected term.
+
 ## What happens when you hit the cap
 
 Once your terms served reaches the country's cap, filing for that office again in that country is blocked at candidacy. For the US specifically, being picked as someone else's running mate is blocked too, since the office chain (VP inherits/succeeds to President) would otherwise be an end-run around the 22nd Amendment reading this game uses.

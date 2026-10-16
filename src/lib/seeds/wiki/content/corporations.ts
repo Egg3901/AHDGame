@@ -321,6 +321,16 @@ Each sector has a production policy on a **-25 to +25 scale**. The active level 
 
 Aggressive policy maximizes revenue and commodity throughput but also raises input costs. Conservative policy protects margins by sharply cutting input consumption while accepting reduced output. The asymmetry is intentional: at maximum conservation, input reduction (-15%) outpaces output reduction (-10%) because lean operations waste less.
 
+### Autopilot
+
+Your corporation's Overview has an **Autopilot** switch. You stay CEO and can still act by hand. Each turn, while it is on, autopilot sets the marketing, logistics and R&D budgets and the dividend, grows plants that are selling, pauses plants stuck in a glut, and opens new plants when there is spare cash. Budgets and dividends you set by hand are reset the next turn.
+
+It never borrows, picks research, retools, sells or closes plants, or buys rivals. When one of those is worth doing, it lists it on the Overview, and urgent items also arrive in your inbox. A corporation on autopilot is not penalised for an inactive CEO, but its CEO's national influence is capped at the standard rate rather than the higher top-listed-company rate. Appointing an NPP caretaker switches autopilot off.
+
+### Simple and Pro views
+
+A corporation's Overview tab has a **Simple / Pro** switch in its top right corner, and the same choice sits in Settings under Appearance. It is saved to your account and follows you to every company. **Pro** is the full detailed view and the default. **Simple** shows what needs your attention, the core figures at a glance (revenue, net income, net margin, growth, cash, debt with its leverage rating, share price and how much of your output sold) and your five biggest sectors by revenue.
+
 ## Operating strategies
 
 Each sector type has **4 to 8 operating strategies** that change which commodities it supplies and demands. Strategies are how you specialize: an energy sector can run Conventional (fossil fuels), Renewables Focus (solar/wind using electronics and rare earth), Nuclear Expansion (high output, heavy steel and chemicals), and several more besides. A chemical industries sector can pivot between industrial chemicals, fertilizer production, pharmaceuticals, or plastics.
@@ -385,6 +395,8 @@ Your corporation's sectors respond to state and national conditions:
 ## Shares and dividends
 
 The CEO sets a **dividend rate** (0 to 25% of after-tax income). Dividends are paid each turn to all shareholders proportional to their share count. Players buy and sell shares on country stock exchanges.
+
+Very large sales and new issues are paced. The market buys at most 5% of a company's value each turn from all sellers together, so sales under ₳25,000,000 per company per turn are never limited, and a bigger sell order fills a slice each turn at the market price. A new share issue places at most 10% of the company's shares, or ₳50,000,000 worth, whichever is larger, in one turn, with the remainder over the following turns. Prices are unchanged.
 
 **Share price formula:**
 The share price is computed from three fundamental components:

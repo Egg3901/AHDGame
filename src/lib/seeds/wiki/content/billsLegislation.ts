@@ -72,6 +72,8 @@ Each legislation type has policy options ranked on two axes:
 
 US tax types use a bracketed scale. All other types use a 7-option scale (3 left, 1 center, 3 right). The option you select determines what happens to national metrics when the bill is signed.
 
+Income tax is split into three provisions by income group: Low Income, Medium Income and High Income, each with its own rate.
+
 ## Bill guards
 
 The system enforces several hard constraints on bill proposals:

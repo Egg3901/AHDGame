@@ -58,7 +58,7 @@ Party whips can issue a directive telling members how to vote on a specific bill
 
 **Soft whips** are advisory only. They do not immediately cast votes. Instead, the directive persists so that future autonomous NPP bill votes (including catch-up votes each turn) can see the whip as part of their cross-pressure calculation. Soft whips are weaker in magnitude than hard whips.
 
-**Leadership votes** (leadership and speaker elections, cabinet nominations, PM appointment votes, and confidence/no-confidence motions) are binding under a **hard** whip: same-party NPPs always fall in line and cannot defy the leadership directive. Only bill whips allow defiance. Under a **soft** whip these votes still use the hidden loyalty/stubbornness roll, and a resisting NPP falls back to a same-party / same-state heuristic.
+**Leadership votes** (leadership and speaker elections, cabinet and Supreme Court nominations, PM appointment votes, and confidence/no-confidence motions) are binding under a **hard** whip: same-party NPPs always fall in line and cannot defy the leadership directive. Only bill whips allow defiance. Under a **soft** whip these votes still use the hidden loyalty/stubbornness roll, and a resisting NPP falls back to a same-party / same-state heuristic.
 
 ### Whipping player members
 

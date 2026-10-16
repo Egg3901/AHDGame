@@ -174,6 +174,14 @@ Past ${DOMINANCE_MARKET_SHARE_THRESHOLD}% share of a sector's market in a state,
 
 Under the plants system dominance is a barrier to expansion, not a tax on operating: your existing plants run at an undistorted margin, but each additional unit of empire costs more than the last. Dominant sectors are also easier for rivals to attack. Being big is fine; buying the last quarter of a market is meant to be a luxury.
 
+## Letting autopilot run the routine
+
+The corporation Overview has an **Autopilot** switch. You stay CEO and keep every manual action. Each turn it sets the marketing, logistics and R&D budgets and the dividend, grows plants that are selling, pauses plants stuck in a glut, and opens new plants when there is spare cash. Budgets and dividends you set by hand are reset the next turn while it is on.
+
+It never borrows, picks research, retools, sells or closes plants, or buys rivals. Anything in those categories that it judges worth doing goes on the Overview as an advisory, with urgent ones also sent to your inbox. A corporation on autopilot is not penalised for an inactive CEO, but its CEO's national influence is capped at the standard rate.
+
+The Overview tab also has a **Simple / Pro** switch in its top right corner, and the same choice sits in Settings under Appearance. It is saved to your account. **Pro** is the full detailed view and the default. **Simple** leads with what needs your attention, the core figures at a glance and your five biggest sectors by revenue.
+
 ## Frequently asked questions
 
 **Why is so much of my output unsold?**

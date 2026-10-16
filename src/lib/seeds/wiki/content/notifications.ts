@@ -11,6 +11,10 @@ Items come in two shapes:
 - **Notifications.** System-generated events: your bill passed committee, you were named Commanding General, your corporation's credit rating changed, an opponent attacked your character.
 - **Mail.** Direct messages from other players and NPPs.
 
+## On the app
+
+If you use the mobile or desktop app and have allowed notifications, alerts can also arrive as native push. A push shows the newest alert's own title and content and opens the page it is about. Push respects the same mute and snooze preferences as the inbox.
+
 ## Segments
 
 The inbox splits into views rather than one long undifferentiated feed:

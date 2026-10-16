@@ -130,6 +130,24 @@ export default function JusticeOfficePage() {
           countryCode={countryCode}
           onUpdate={refetch}
         />
+
+        <section className="rounded-2xl border border-card-border bg-card p-6">
+          <h2 className="text-lg font-semibold text-foreground">Upcoming cases</h2>
+          {data.upcomingCases?.length ? (
+            <ul className="mt-3 divide-y divide-card-border">
+              {data.upcomingCases.map((c) => (
+                <li key={c.caseKey} className="flex items-center justify-between gap-3 py-2">
+                  <span className="text-sm text-foreground">{c.title}</span>
+                  <span className="shrink-0 text-xs text-muted">
+                    Ruling expected {c.decisionYear}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="mt-3 text-sm text-muted">No cases are currently scheduled.</p>
+          )}
+        </section>
       </main>
     </div>
   );

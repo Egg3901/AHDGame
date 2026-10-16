@@ -36,6 +36,7 @@ export interface ClientNavBootstrap {
   currentParty: { id: string; name: string; countryId: string } | null;
   activeElection: { id: string; seatId?: string; label: string } | null;
   cabinetOffice: { positionId: string; positionName: string; countryCode: string } | null;
+  justiceOffice?: { countryCode: string; seatNumber: number } | null;
   governorOffice: { stateId: string; stateName: string; countryCode: string } | null;
   activePresidentElectionId: string | null;
   activePresidentElectionSeatId: string | null;

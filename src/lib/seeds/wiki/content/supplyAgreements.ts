@@ -25,7 +25,7 @@ So a supply agreement is a *priority claim*, not a magic supply. It moves the bu
 
 ## Both sides must agree
 
-An agreement can't be imposed. One corporation makes an **offer**, and it only takes effect once the other **accepts**. Either party can **cancel** an existing agreement.
+An agreement can't be imposed. One corporation makes an **offer**, and it only takes effect once the other **accepts**. Either party can **cancel** an existing agreement. Otherwise it stays in force until its term ends. If a counterparty leaves the game, any agreement with them is retired automatically, so you are not left holding a dead contract.
 
 ## The price stays honest
 
