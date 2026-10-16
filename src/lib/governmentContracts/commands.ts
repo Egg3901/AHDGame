@@ -20,6 +20,11 @@ import { tenderAwardInterest, discloseExtractionAward } from "./selfDealing";
 import { defenceContractLotCaps } from "@/lib/military/defenceContractLimits";
 import { defenceContractWindow } from "@/lib/military/defenceContractLimits";
 import { isProcurementBlocked } from "@/lib/military/procurementGate";
+import { militaryPriceAnchor } from "@/lib/military/procurement";
+import { lotPrice } from "@/lib/military/arsenal";
+import { DEFENCE_STRATEGY_COMPONENT } from "@/lib/military/arsenalComponents";
+import { lotProductionCost, lotPriceBand } from "@/lib/military/defenceLotEconomics";
+import { loadDefencePriceRatios } from "@/lib/military/defencePriceRatios";
 import { loadContractIssuanceSettings } from "@/lib/extraction/featureFlag";
 import { computeContractedShare } from "@/lib/extraction/computeContractedShare";
 import { GOVT_CONTRACT_MAX_TOTAL_SHARE } from "@/lib/constants/prospecting";
@@ -70,6 +75,33 @@ export async function publishTender(
       throw new ContractError("This equipment grade is not available in the current world.", 400);
     const budget = await ensureFederalBudget(db, countryId, state?.preset ?? DEFAULT_SEED_PRESET);
     if (!budget) throw new ContractError("No national budget is available.");
+    const anchor = lotPrice(
+      countryId,
+      militaryPriceAnchor(budget.gdp, budget.militaryPriceBaselineGdp)
+    );
+    if (anchor == null || !Number.isFinite(anchor) || !(anchor > 0))
+      throw new ContractError("Defence lot prices are unavailable for this national budget.");
+    const ratios = await loadDefencePriceRatios(db);
+    let minimumPrice = Infinity;
+    for (const [strategy, components] of Object.entries(DEFENCE_STRATEGY_COMPONENT)) {
+      if (!components.includes(input.terms.component)) continue;
+      const cost = lotProductionCost(strategy, anchor, ratios);
+      const band =
+        cost == null
+          ? null
+          : lotPriceBand({ anchorPrice: anchor, productionCost: cost, grade: input.terms.grade });
+      if (band && Number.isFinite(band.floor) && band.floor > 0)
+        minimumPrice = Math.min(minimumPrice, band.floor);
+    }
+    if (!Number.isFinite(minimumPrice))
+      throw new ContractError(
+        "No usable defence lot prices are available for this component and grade."
+      );
+    if (input.terms.maximumPricePerLot < minimumPrice)
+      throw new ContractError(
+        `The maximum price per lot must be at least ${minimumPrice} in national budget units for this component and grade.`,
+        400
+      );
     defenseLine = resolveDefenseLineFrom(budget);
   } else {
     const config = await loadContractIssuanceSettings(db);
