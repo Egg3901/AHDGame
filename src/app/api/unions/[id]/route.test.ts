@@ -113,13 +113,20 @@ describe("GET union paid service entitlement", () => {
 });
 
 describe("GET shop representatives", () => {
-  it("maps names with one projected batched lookup and keeps this union's member count separate", async () => {
+  it("maps names and approval with one projected batched lookup and keeps this union's member count separate", async () => {
     const memory = createInMemoryDb();
     const id = new ObjectId();
     const rivalId = new ObjectId();
     const deletedId = new ObjectId();
     memory.seed("unions", [
-      { _id: id, name: "Our union", countryId: "US", sectorType: "manufacturing", treasury: 0 },
+      {
+        _id: id,
+        name: "Our union",
+        countryId: "US",
+        sectorType: "manufacturing",
+        treasury: 0,
+        approval: 60.25,
+      },
       {
         _id: rivalId,
         name: "Rival union",
@@ -151,11 +158,55 @@ describe("GET shop representatives", () => {
     expect(
       body.sectors.map((s: { representingUnionName: string | null }) => s.representingUnionName)
     ).toEqual(["Our union", "Rival union", "Rival union", null, null]);
+    expect(
+      body.sectors.map(
+        (s: { representingUnionApproval: number | null }) => s.representingUnionApproval
+      )
+    ).toEqual([60.25, 55, 55, null, null]);
+    expect(body.union.approval).toBe(60.25);
+    expect(body.union.raidApprovalEdgeRequired).toBe(5);
     expect(body.sectors[4].representingUnionId).toBe(deletedId.toString());
     expect(body.union.members).toBe(20);
     expect(find).toHaveBeenCalledExactlyOnceWith(
       { _id: { $in: [id, rivalId, deletedId] } },
-      { projection: { name: 1 } }
+      { projection: { name: 1, approval: 1 } }
     );
+  });
+});
+
+describe("GET representative approval normalization", () => {
+  it.each([
+    [undefined, 55],
+    [Number.NaN, 55],
+    [Number.POSITIVE_INFINITY, 55],
+    [-10, 0],
+    [120, 100],
+    [0, 0],
+    [54.999, 54.999],
+  ])("normalizes stored approval %s exactly as the command does", async (approval, expected) => {
+    const memory = createInMemoryDb();
+    const id = new ObjectId();
+    const rivalId = new ObjectId();
+    memory.seed("unions", [
+      { _id: id, name: "Our union", countryId: "US", sectorType: "manufacturing", treasury: 0 },
+      { _id: rivalId, name: "Rival union", approval },
+    ]);
+    memory.seed("corporateSectors", [
+      {
+        _id: new ObjectId(),
+        corporationId: new ObjectId(),
+        countryId: "US",
+        sectorType: "manufacturing",
+        stateId: "TX",
+        representingUnionId: rivalId,
+      },
+    ]);
+    vi.mocked(getDb).mockResolvedValue(memory as unknown as Db);
+    const response = await GET(new Request("http://localhost/api/unions/test"), {
+      params: Promise.resolve({ id: id.toString() }),
+    });
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.sectors[0].representingUnionApproval).toBe(expected);
   });
 });

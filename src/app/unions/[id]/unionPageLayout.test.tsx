@@ -70,7 +70,7 @@ function sector(id: string, name: string, overrides: Record<string, unknown> = {
 const SECTORS = [
   sector("s1", "Keystone Steel"),
   sector("s2", "Ohio Forge", { strikeActive: true }),
-  sector("s3", "Rival Mill", { representingUnionId: "u9" }),
+  sector("s3", "Rival Mill", { representingUnionId: "u9", representingUnionApproval: 55 }),
 ];
 
 let fetchMock: ReturnType<typeof vi.fn>;
@@ -137,6 +137,17 @@ beforeEach(() => {
 const tab = (name: RegExp | string) => screen.getByRole("button", { name });
 
 describe("union page, corp-style tabs", () => {
+  it("compares the loaded union approval with the rival in the sectors tab", async () => {
+    render(<UnionPage params={PARAMS} />);
+    await screen.findByText("Steelworkers United");
+    fireEvent.click(tab(/^Sectors\s*\d+$/));
+    const rival = screen.getByRole("link", { name: "Rival Mill" }).closest("tr")!;
+    expect(within(rival).getByText("Rival approval: 55%")).toBeTruthy();
+    expect(within(rival).getByText("This union: 60%")).toBeTruthy();
+    expect(within(rival).getByText("Current edge: 5 points (needs 5)")).toBeTruthy();
+    expect(within(rival).getByText("Meets current raid edge")).toBeTruthy();
+  });
+
   it("keeps every key figure's tooltip in the masthead", async () => {
     render(<UnionPage params={PARAMS} />);
     await screen.findByText("Steelworkers United");
