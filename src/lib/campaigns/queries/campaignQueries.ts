@@ -5,15 +5,9 @@ import {
 } from "@/lib/campaigns/campaignCurrency";
 import type { AuthUserWithCharacter } from "@/lib/auth";
 import { campaignActionBankCap, campaignActionsPerTurn } from "@/lib/campaigns/actions";
-import { calculateCampaignIncome } from "@/lib/campaigns/income";
+import { buildCampaignBudgetPreview } from "@/lib/campaigns/rules/budgetPreview";
 import { isCampaignEligibleElection } from "@/lib/campaigns/isCampaignEligible";
-import { calculateMaintenanceCosts } from "@/lib/campaigns/maintenance";
-import {
-  getEffectiveUpgradeCost,
-  getMaintenanceCost,
-  getTreeMaintenanceCost,
-  getCampaignFamilyScalar,
-} from "@/lib/campaigns/upgradeCosts";
+import { getEffectiveUpgradeCost, getCampaignFamilyScalar } from "@/lib/campaigns/upgradeCosts";
 import { computeElectionPhase, isCampaignUpgradeGeneralPhase } from "@/lib/elections/phases";
 import { getGameTime } from "@/lib/time/gameTime";
 import {
@@ -55,6 +49,7 @@ import { getCurrentTurn } from "@/lib/turn/currentTurn";
 import type {
   Campaign,
   CampaignActivity,
+  CampaignFieldOffice,
   Character,
   Election,
   ElectionCandidate,
@@ -332,17 +327,6 @@ export async function getCampaignDetail(
     );
     base.electionInfo.phase = phase.inPrimary ? "primary" : phase.inGeneral ? "general" : "unknown";
   }
-  const income = calculateCampaignIncome(campaign, electionType);
-  const maintenance = calculateMaintenanceCosts(campaign, electionType);
-  // Budget-panel split. Strategic Operations v2: read the tree's per-lever
-  // maintenance (starter + branches, less any maintenance-reduction branch);
-  // legacy rows fall back to the old linear-level maintenance.
-  const groundGameMaintenance = campaign.groundGameTree?.starter
-    ? getTreeMaintenanceCost("groundGame", campaign.groundGameTree, electionType)
-    : getMaintenanceCost("groundGame", campaign.groundGameLevel, electionType);
-  const mediaSpendingMaintenance = campaign.mediaSpendingTree?.starter
-    ? getTreeMaintenanceCost("mediaSpending", campaign.mediaSpendingTree, electionType)
-    : getMaintenanceCost("mediaSpending", campaign.mediaSpendingLevel, electionType);
   // playerEndorsements.candidateId is keyed by the electionCandidates row
   // _id (not campaign.candidateId, which is the character/NPP identity id —
   // see ticket #868), so resolve the row once and join on it. A character
@@ -596,13 +580,20 @@ export async function getCampaignDetail(
   // campaigns (no live plan to brief). Delegate/tipping paths and coalition
   // weakness are presidential concepts read off the tally; the cash runway
   // applies to any race.
-  /**
-   * Whether the turn will move this campaign at all. `campaignTurn.ts`
-   * `continue`s past an archived campaign and past a suspended one before it
-   * computes income, charges maintenance or credits actions, so the desk has to
-   * report zero rather than a rate that will never be applied.
-   */
+  // Regular campaign flows stop while archived or suspended. Geographic
+  // office upkeep runs separately and can still charge a suspended campaign.
   const accruesNothing = campaign.status === "archived" || campaignSuspended;
+  const offices = await db
+    .collection<CampaignFieldOffice>("campaignFieldOffices")
+    .find({ campaignId, electionId: campaign.electionId }, { projection: { _id: 1 } })
+    .toArray();
+  const preview = buildCampaignBudgetPreview(
+    campaign,
+    election,
+    campaignSuspended,
+    offices.length,
+    toLocal
+  );
 
   const briefing =
     campaign.status === "archived"
@@ -613,10 +604,7 @@ export async function getCampaignDetail(
           election,
           candidateRow,
           isGeneralPhase,
-          // Zero when suspended, like every other per-turn figure: the runway
-          // built from this is a countdown to insolvency, and a campaign the
-          // turn engine skips is neither earning nor burning.
-          netPerTurn: accruesNothing ? 0 : toLocal(income) - toLocal(maintenance),
+          netPerTurn: preview.netIncome,
         });
 
   return {
@@ -641,22 +629,7 @@ export async function getCampaignDetail(
       timestamp: entry.timestamp.toISOString(),
     })),
     budget: {
-      // income / maintenance are anchor constants; funds is stored local.
-      // Localize the per-turn figures so the budget panel matches the balance.
-      //
-      // A dormant campaign moves on none of these. The turn engine `continue`s
-      // past both archived and suspended campaigns BEFORE it computes income,
-      // charges maintenance or credits actions, so every per-turn figure here
-      // is zero rather than a rate the turn will never apply. Reporting money
-      // at full value beside zero actions would put two contradictory rates in
-      // the same row.
-      income: { total: accruesNothing ? 0 : toLocal(income) },
-      expenses: {
-        groundGameMaintenance: accruesNothing ? 0 : toLocal(groundGameMaintenance),
-        mediaSpendingMaintenance: accruesNothing ? 0 : toLocal(mediaSpendingMaintenance),
-        total: accruesNothing ? 0 : toLocal(maintenance),
-      },
-      netIncome: accruesNothing ? 0 : toLocal(income) - toLocal(maintenance),
+      ...preview,
       actions: {
         endorsementCount,
         perTurn: accruesNothing ? 0 : grossActionsPerTurn - rallyTourActionDrain,

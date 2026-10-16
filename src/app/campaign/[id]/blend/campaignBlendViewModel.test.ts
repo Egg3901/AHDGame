@@ -60,7 +60,14 @@ function campaignFixture(over: Partial<CampaignData> = {}): CampaignData {
     },
     budget: {
       income: { total: 61_000 },
-      expenses: { groundGameMaintenance: 6_200, mediaSpendingMaintenance: 2_400, total: 8_600 },
+      expenses: {
+        fundraisingMaintenance: 0,
+        oppositionResearchMaintenance: 0,
+        fieldOfficeMaintenance: 0,
+        groundGameMaintenance: 6_200,
+        mediaSpendingMaintenance: 2_400,
+        total: 8_600,
+      },
       netIncome: 52_400,
       actions: { endorsementCount: 2, perTurn: 9 },
       cumulative: {
@@ -960,5 +967,24 @@ describe("copy", () => {
       ...vm.ledger.rows.map((r) => r.label),
     ];
     for (const s of strings) expect(s).not.toMatch(/[–—]/);
+  });
+});
+
+it("keeps geographic offices and all strategic upkeep in the money view", () => {
+  const campaign = campaignFixture();
+  Object.assign(campaign.budget!.expenses, {
+    fieldOfficeMaintenance: 12_000,
+    fundraisingMaintenance: 1_500,
+    oppositionResearchMaintenance: 500,
+    total: 22_600,
+  });
+  campaign.budget!.netIncome = 38_400;
+  const money = buildCampaignBlendViewModel(input({ campaign })).money;
+  expect(money).toMatchObject({
+    fieldOfficeUpkeep: 12_000,
+    fundraisingUpkeep: 1_500,
+    oppositionUpkeep: 500,
+    expenseTotal: 22_600,
+    net: 38_400,
   });
 });
