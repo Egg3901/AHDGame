@@ -381,6 +381,8 @@ export function runClearingPrePass(input: ClearingPrePassInput): ClearingPrePass
             sectorId,
             corporationId: corpId,
             sectorType: sector.sectorType,
+            industryModel: sector.industryModel,
+            mediaDiscriminator: sector.mediaDiscriminator,
             revenueAnchor,
             strategyId: sector.strategyId,
             transitionFromStrategyId: sector.transitionFromStrategyId,
