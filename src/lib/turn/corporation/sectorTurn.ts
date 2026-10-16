@@ -71,6 +71,8 @@ import {
 import { isStateScopedCommodity } from "@/lib/market/commodityMarketScope";
 import { withLatentDemand } from "./demandThrottle";
 import { idleCapacityRetirement } from "./rules/idleCapacityRetirement";
+import { plantCrewShare } from "./rules/plantRunShare";
+import { PLANT_CREW_FLOOR_SHARE } from "@/lib/constants/capacityEconomy";
 import { seedPlantLedger } from "@/lib/corporations/plantLedger";
 import {
   inputBasketCostIndex,
@@ -625,8 +627,20 @@ export function processSector(
   // board it also needs was hoisted next to the margin call above.
   const sectorMetrics = lookups.stateMetricsByState?.get(sector.stateId) ?? null;
   // Ahead of the labor-cost split below, so labor is workers x wage-per-worker.
+  //
+  // Explicit plants staff and pay the part of the active plant that is actually
+  // scheduled to run (demand throttle x input throughput), with a crew floor so
+  // a plant is never staffed at zero. A plant at a full run gets exactly 1.
+  const plantCrew = explicitPlantCostsEnabled
+    ? plantCrewShare({
+        demandThrottleFactor,
+        throughputFactor,
+        ramp: plantsRampLambda,
+        floor: PLANT_CREW_FLOOR_SHARE,
+      })
+    : 1;
   const { desiredWorkers, workers: computedWorkers } = resolveSectorHeadcount({
-    revenue: plantsEnabled ? plantsNameplateRevenue * activeFraction : newRevenue,
+    revenue: plantsEnabled ? plantsNameplateRevenue * activeFraction * plantCrew : newRevenue,
     stateId: sector.stateId,
     rawWorkforceSkillByState: lookups.rawWorkforceSkillByState,
     politicalBoard,
@@ -670,12 +684,13 @@ export function processSector(
     currentTurn,
     currentYear,
     hourlyRevenue: explicitPlantCostsEnabled
-      ? (plantsNameplateRevenue * activeFraction) / TURNS_PER_DAY
+      ? (plantsNameplateRevenue * activeFraction * plantCrew) / TURNS_PER_DAY
       : hourlyRevenue,
-    // Staff are paid for active capacity even when its output cannot sell.
-    // This neutral basis also removes the legacy margin cap on payroll.
+    // Staff are paid for the scheduled run of active capacity (crew floor
+    // applies), even when its output cannot sell. This neutral basis also
+    // removes the legacy margin cap on payroll.
     grossMaintenance: explicitPlantCostsEnabled
-      ? (plantsNameplateRevenue * activeFraction) / TURNS_PER_DAY
+      ? (plantsNameplateRevenue * activeFraction * plantCrew) / TURNS_PER_DAY
       : payrollBasis,
     computedWorkers,
     techLaborCostMultiplier: techEffects.laborCostMultiplier,
@@ -767,6 +782,7 @@ export function processSector(
       plantsExtractionHardMin,
       throughputFactor,
       labourOutputFactor,
+      demandThrottleFactor,
     });
 
   // Canonical freight billing (issue #897, gameConfig gate, default off):

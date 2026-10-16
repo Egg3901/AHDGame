@@ -574,6 +574,22 @@ export const MOTHBALL_UPKEEP_FRACTION = COLD_CAPACITY_UPKEEP_FRACTION;
  */
 export const IDLE_UPKEEP_FRACTION = 0.3;
 
+/**
+ * Smallest share of active nameplate a plant is staffed and paid for, however
+ * hard the demand throttle and input throughput cut the run. A plant is never
+ * staffed at zero. Tunable: the worldsim lever for how much a glutted plant
+ * still pays in wages.
+ */
+export const PLANT_CREW_FLOOR_SHARE = 0.25;
+
+/**
+ * Share of today's idle upkeep still charged on capacity the demand throttle
+ * idled (as opposed to capacity the owner idled with the production slider).
+ * Not zero, so overbuilding still costs something. Tunable alongside
+ * {@link PLANT_CREW_FLOOR_SHARE}.
+ */
+export const THROTTLE_IDLE_UPKEEP_SHARE = 0.33;
+
 /** Legacy first-plant discount. The qualified 1991 preset pays the full basis. */
 export const CAPACITY_FOUNDING_DISCOUNT = 0.1;
 

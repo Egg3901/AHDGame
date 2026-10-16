@@ -15,7 +15,10 @@ import {
 } from "@/lib/market/capital";
 import { buildMarketContext } from "@/lib/market/marketContext";
 import { getEffectiveStrategyRates } from "@/lib/constants/sectorStrategies";
-import { revenuePerCapacityUnitForStrategy } from "@/lib/constants/capacityEconomy";
+import {
+  PLANT_CREW_FLOOR_SHARE,
+  revenuePerCapacityUnitForStrategy,
+} from "@/lib/constants/capacityEconomy";
 import { retoolRescaleFields } from "@/lib/corporations/retoolRescale";
 import { TURNS_PER_DAY, GROWTH_RATE_TURNS_PER_YEAR } from "@/lib/constants/corporations";
 import type { CorporationLookups } from "./types";
@@ -899,5 +902,90 @@ describe("plants mode: 1991 energy productivity ramp", () => {
       producedAt("energy", ramp.startTurn, "2019-default"),
       6
     );
+  });
+});
+
+/**
+ * Plants pay wages and idle upkeep for the part that is running. A plant the
+ * demand throttle holds at a fraction of its run staffs a crew for that run
+ * (never below the crew floor) and pays reduced idle upkeep, while a plant at a
+ * full run is billed exactly as before.
+ */
+describe("plants mode — wages and upkeep follow the scheduled run", () => {
+  const stock = IMPLIED_UNITS * CAPITAL_SEED_HEADROOM;
+
+  function runCosts(history: { producedUnits?: number; soldUnits?: number }, npp = false) {
+    const env = makeEnv("plants", 1000);
+    env.market.explicitPlantCostsEnabled = true;
+    const corp = npp ? ({ ...makeCorp(), ceoType: "npp" } as unknown as Corporation) : makeCorp();
+    const result = processSector(
+      env,
+      corp,
+      makeSector({ capitalStock: stock, plantsStartTurn: 100, ...history }),
+      1,
+      undefined,
+      1
+    );
+    const update = sectorUpdateOf(env);
+    return {
+      laborCost: update.laborCost as number,
+      workers: update.workers as number,
+      workersDesired: update.workersDesired as number,
+      throttle: update.demandThrottleFactor as number,
+      upkeep: result.plantsUpkeepCost,
+    };
+  }
+
+  const unthrottledProduced = run(
+    "plants",
+    makeSector({ capitalStock: stock, plantsStartTurn: 100 }),
+    1000
+  ).update.producedUnits as number;
+  // Sold almost nothing last turn: the throttle sits on its floor.
+  const glutted = { producedUnits: unthrottledProduced, soldUnits: 0 };
+
+  it("staffs and pays a throttled plant at the crew floor, not full nameplate", () => {
+    const full = runCosts({});
+    const throttled = runCosts(glutted);
+    expect(throttled.throttle).toBeCloseTo(DEMAND_THROTTLE_FLOOR, 3);
+    expect(throttled.workersDesired).toBeCloseTo(full.workersDesired * PLANT_CREW_FLOOR_SHARE, -1);
+    expect(throttled.laborCost / full.laborCost).toBeCloseTo(PLANT_CREW_FLOOR_SHARE, 2);
+    expect(throttled.workers).toBeLessThan(full.workers);
+  });
+
+  it("follows the run above the floor", () => {
+    const full = runCosts({});
+    const half = runCosts({
+      producedUnits: unthrottledProduced,
+      soldUnits: unthrottledProduced / 3,
+    });
+    const share = half.throttle;
+    expect(share).toBeGreaterThan(PLANT_CREW_FLOOR_SHARE);
+    expect(share).toBeLessThan(1);
+    expect(half.laborCost / full.laborCost).toBeCloseTo(share, 2);
+  });
+
+  it("still charges some idle upkeep on a throttled plant", () => {
+    // The reduced share is pinned in idleUpkeep.test.ts; here only that
+    // overbuilding is not free once the throttle binds.
+    expect(runCosts(glutted).upkeep).toBeGreaterThan(0);
+  });
+
+  it("bills a plant at a full run exactly as before", () => {
+    const first = runCosts({});
+    const again = runCosts({ producedUnits: unthrottledProduced, soldUnits: unthrottledProduced });
+    expect(again.throttle).toBe(1);
+    expect(again.laborCost).toBe(first.laborCost);
+    expect(again.workers).toBe(first.workers);
+    expect(again.workersDesired).toBe(first.workersDesired);
+    expect(again.upkeep).toBe(first.upkeep);
+  });
+
+  it("applies the same rule to NPP-run plants", () => {
+    const player = runCosts(glutted);
+    const npp = runCosts(glutted, true);
+    expect(npp.laborCost).toBe(player.laborCost);
+    expect(npp.workers).toBe(player.workers);
+    expect(npp.upkeep).toBe(player.upkeep);
   });
 });
