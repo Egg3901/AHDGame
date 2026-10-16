@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
+import { requireCorporationActionsEnabled } from "@/lib/api/requireCorporationActions";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
 import { handleRouteError, errorResponse } from "@/lib/api/errors";
@@ -36,6 +37,8 @@ export async function setSectorPricing(request: Request, { params }: RouteParams
 
     const { quotes } = parsed.data;
     const db = await getDb();
+    const guard = await requireCorporationActionsEnabled(db);
+    if (guard) return guard;
 
     const resolved = await resolveCorporation(db, id);
     if (!resolved.ok) return resolved.response;

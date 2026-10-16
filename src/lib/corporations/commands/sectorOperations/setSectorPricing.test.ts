@@ -4,8 +4,12 @@ import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 import { getDb } from "@/lib/mongodb";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { requireCeo, resolveCorporation } from "@/lib/api/corporations/resolveQuery";
+import { requireCorporationActionsEnabled } from "@/lib/api/requireCorporationActions";
 import { setSectorPricing } from "./setSectorPricing";
 
+vi.mock("@/lib/api/requireCorporationActions", () => ({
+  requireCorporationActionsEnabled: vi.fn().mockResolvedValue(null),
+}));
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 vi.mock("@/lib/api/requireAuth", () => ({ requireBasicAuth: vi.fn() }));
 vi.mock("@/lib/api/corporations/resolveQuery", () => ({
@@ -106,6 +110,15 @@ describe("producer pricing command", () => {
       { _id: sectorId, corporationId: corpId },
       { projection: { _id: 1 } }
     );
+    expect(db.collectionMocks.corporateSectors.updateOne).not.toHaveBeenCalled();
+  });
+
+  it("respects an administrative pause before reading or changing a sector", async () => {
+    vi.mocked(requireCorporationActionsEnabled).mockResolvedValueOnce(
+      new Response("Paused", { status: 409 }) as never
+    );
+    expect((await setSectorPricing(request({ quotes: {} }), { params })).status).toBe(409);
+    expect(db.collectionMocks.corporateSectors.findOne).not.toHaveBeenCalled();
     expect(db.collectionMocks.corporateSectors.updateOne).not.toHaveBeenCalled();
   });
 

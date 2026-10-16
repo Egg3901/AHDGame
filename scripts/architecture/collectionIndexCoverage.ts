@@ -1,5 +1,7 @@
 /** New world collections need a bootstrap index plan or a reviewed primary-key policy. */
 export const PRIMARY_KEY_INDEX_POLICIES: Readonly<Record<string, string>> = {
+  producerEconomyTurnChunks:
+    "Immutable receipt chunks are written by SHA-256 _id and read only by the bounded list of hashes in one frozen turn manifest. Reset deletes all chunks; there are no secondary scans or TTL queries.",
   fundWritedownCompensationLedger: "Retired world receipts have no active secondary access path.",
   procurementRestrictions: "One restriction per country, read and updated by its country _id.",
   vietnamEscalation: "One singleton, read and upserted by _id.",

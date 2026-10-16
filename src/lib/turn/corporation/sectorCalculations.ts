@@ -1,3 +1,4 @@
+import { apportionOperatingProfit } from "@/lib/market/producerMarket/corporateOperatingRules";
 import { holdingMaturationWrites } from "./holdingMaturationWrites";
 /**
  * The per-turn corporation ledger: why a corp lost money this turn. processSectors
@@ -10,7 +11,7 @@ import { prepareInternalSupplySectorResults } from "./internalSupplySectorPass";
 import { holdingDividendSplit, positionHoldingTerms } from "@/lib/corporations/rules/holdingTerms";
 import { formalizedSubsidiaryCountByParentId } from "@/lib/corporations/subsidiaries/helpers";
 import type { AnyBulkWriteOperation, ObjectId } from "mongodb";
-import type { Bond, Corporation, MediaProductAdvertisingObligationV1 } from "@/lib/db/types";
+import type { Corporation, MediaProductAdvertisingObligationV1 } from "@/lib/db/types";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import { getLegalStructureForCorp } from "@/lib/corporations/legalStructure";
 import { getControllingCorporateParent } from "@/lib/corporations/corporateOwnership";
@@ -73,7 +74,6 @@ import type {
   FundDividendAccrual,
   SectorCalculationsResult,
 } from "./types";
-import { perTurnCouponPayment, BOND_UNIT_FACE_VALUE } from "@/lib/constants/bonds";
 import { imfFacilityPaymentAnchorPerTurn } from "@/lib/imf/imfFacilityFinancials";
 import { computeSharePrices, type SharePriceInput } from "./sharePriceFormula";
 import { getShareBuybackMode } from "@/lib/corporations/shareBuybackMode";
@@ -401,7 +401,7 @@ export function processSectors(
     // state rate by sector state) and for tax-base blending (Tasks 3 and 4).
     const sectorResults: Array<{
       hourlyRevenue: number;
-      effectiveMargin: number;
+      operatingCosts: number;
       stateId: string;
       countryId: string;
     }> = [];
@@ -467,7 +467,7 @@ export function processSectors(
       // Record per-sector metrics for tax apportionment and base blending (Tasks 3/4).
       sectorResults.push({
         hourlyRevenue: r.hourlyRevenue,
-        effectiveMargin: r.effectiveMargin,
+        operatingCosts: r.costs,
         stateId: r.stateId,
         countryId: r.countryId,
       });
@@ -646,17 +646,20 @@ export function processSectors(
     const totalCorpCosts = costsBeforeCeo + actualCeoSalary;
     const incomePreDividends = corpRevenue - totalCorpCosts;
 
-    // Corporate tax (territorial, per-sector): each sector pays its country's federal rate
-    // and its state's rate on its revenue-weighted apportioned share of corp income.
-    // Corp-level overhead (marketing, logistics, CEO, growth) is allocated across sectors
-    // by revenue share. Losing sectors pay 0; profitable sectors pay even if corp total is
-    // negative (nexus-based). Loss-making corps with all-negative sectors pay 0 in both tiers.
-    // See docs/plans/archive/2026-04/2026-04-18-corp-tax-apportionment-design.md.
-    let sectorMaintenanceTotal = 0;
-    for (const s of sectorResults) {
-      sectorMaintenanceTotal += s.hourlyRevenue * (1 - s.effectiveMargin / 100);
-    }
-    const corpLevelCosts = totalCorpCosts - sectorMaintenanceTotal;
+    // Deduct each site's actual expenses in its own jurisdiction. Allocate
+    // central overhead by revenue, then offset losses across the corporation.
+    const sectorOperatingCosts = sectorResults.reduce(
+      (sum, sector) => sum + sector.operatingCosts,
+      0
+    );
+    const corpLevelCosts = totalCorpCosts - sectorOperatingCosts;
+    const apportioned = apportionOperatingProfit({
+      sectors: sectorResults.map((sector) => ({
+        revenue: sector.hourlyRevenue,
+        operatingCosts: sector.operatingCosts,
+      })),
+      corporateCosts: corpLevelCosts,
+    });
 
     let totalFederalTax = 0;
     let totalStateTax = 0;
@@ -681,35 +684,9 @@ export function processSectors(
           ? (corpLegalStructure.taxMultiplier ?? 1)
           : 1;
 
-    // Consolidated loss offset. Taxing each sector's positive income in
-    // isolation (`max(0, sectorNetIncome)`) meant a diversified corp's losses
-    // offset NOTHING: live t176, Lockheed Chemicals owed 944k/turn of tax on
-    // 122k/turn of consolidated revenue — its chemical plants taxed gross
-    // while its farming losses were invisible to the base, ~80% of all US
-    // corporate tax from one structurally loss-making company. Standard
-    // consolidated filing nets losses against profits within the group, so:
-    // scale every sector's taxable income by consolidated ÷ gross-positive.
-    // Per-sector state/country ATTRIBUTION is preserved proportionally; a
-    // corp with no losing sectors has scale = 1 and is byte-identical.
-    let grossPositiveTaxable = 0;
-    let consolidatedNet = 0;
-    for (const s of sectorResults) {
-      const revenueShare = corpRevenue > 0 ? s.hourlyRevenue / corpRevenue : 0;
-      const sectorNetIncome =
-        s.hourlyRevenue * (s.effectiveMargin / 100) - corpLevelCosts * revenueShare;
-      consolidatedNet += sectorNetIncome;
-      if (sectorNetIncome > 0) grossPositiveTaxable += sectorNetIncome;
-    }
-    const lossOffsetScale =
-      grossPositiveTaxable > 0
-        ? Math.max(0, Math.min(1, consolidatedNet / grossPositiveTaxable))
-        : 0;
-
-    for (const s of sectorResults) {
-      const revenueShare = corpRevenue > 0 ? s.hourlyRevenue / corpRevenue : 0;
-      const sectorOpIncome = s.hourlyRevenue * (s.effectiveMargin / 100);
-      const sectorNetIncome = sectorOpIncome - corpLevelCosts * revenueShare;
-      const sectorTaxable = Math.max(0, sectorNetIncome) * lossOffsetScale;
+    // Attribute consolidated profit from actual costs, including zero-sales sites.
+    for (const [index, s] of sectorResults.entries()) {
+      const sectorTaxable = apportioned[index].taxableProfit;
       if (sectorTaxable <= 0) continue;
       // Domestic = corp HQ'd in the same country as this sector.
       // Foreign = corp HQ'd elsewhere; pays the host country's foreign rate.
@@ -951,7 +928,7 @@ export function processSectors(
     // tax both follow sector operating location.
     // See docs/plans/archive/2026-04/2026-04-18-corp-tax-apportionment-design.md.
     for (const s of sectorResults) {
-      const sectorOpIncome = s.hourlyRevenue * (s.effectiveMargin / 100);
+      const sectorOpIncome = s.hourlyRevenue - s.operatingCosts;
       if (sectorOpIncome <= 0) continue;
       // Track per-currency operating income (this turn, ₳) for the FX spread.
       const sectorCcy = (COUNTRY_CURRENCY_MAP[s.countryId as keyof typeof COUNTRY_CURRENCY_MAP] ??

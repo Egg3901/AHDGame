@@ -9,7 +9,7 @@ import {
   type MarketAccount,
   type ProducerOffer,
   type ProducerQuotePolicy,
-  type ProducerTrade,
+  type ProducerTradeReceipt,
   type PurchaseOrder,
 } from "./rules";
 import { householdPurchaseOrders } from "./householdRules";
@@ -52,6 +52,15 @@ export interface ProductionPlan {
   inputStock: readonly PurchasedStock[];
   /** Previously produced, unsold stock available beside current production. */
   outputStock: readonly { commodity: string; units: number; book: string }[];
+}
+
+export interface ProducerInputReservation {
+  id: string;
+  producerId: string;
+  commodity: string;
+  supplierOfferId: string;
+  units: number;
+  unitPrice: number;
 }
 
 export interface ProducerOperatingResult {
@@ -98,6 +107,51 @@ function finite(value: number, label: string): number {
   return value;
 }
 
+type QuoteVolumes = Map<
+  string,
+  {
+    levels: Map<number, number>;
+    owners: Map<string, Map<number, number>>;
+  }
+>;
+
+function indexQuoteVolumes(
+  rows: readonly {
+    commodity: string;
+    book: string;
+    ownerId: string;
+    unitPrice: number;
+    units: number;
+  }[]
+): QuoteVolumes {
+  const books: QuoteVolumes = new Map();
+  for (const row of rows) {
+    const key = JSON.stringify([row.commodity, row.book]);
+    const book = books.get(key) ?? { levels: new Map(), owners: new Map() };
+    book.levels.set(row.unitPrice, (book.levels.get(row.unitPrice) ?? 0) + row.units);
+    const owned = book.owners.get(row.ownerId) ?? new Map<number, number>();
+    owned.set(row.unitPrice, (owned.get(row.unitPrice) ?? 0) + row.units);
+    book.owners.set(row.ownerId, owned);
+    books.set(key, book);
+  }
+  return books;
+}
+
+function quoteVolumesExcept(
+  books: QuoteVolumes,
+  commodity: string,
+  bookId: string,
+  ownerId: string
+) {
+  const book = books.get(JSON.stringify([commodity, bookId]));
+  if (!book) return [];
+  const owned = book.owners.get(ownerId);
+  return [...book.levels].map(([unitPrice, total]) => ({
+    unitPrice,
+    units: Math.max(0, total - (owned?.get(unitPrice) ?? 0)),
+  }));
+}
+
 /**
  * Joint production and delivery: shrink proposed production until every
  * recipe is backed by funded, delivered inputs. Each trial uses the same
@@ -109,6 +163,7 @@ export function advanceProducerEconomy(input: {
   producers: readonly ProductionPlan[];
   externalOffers?: readonly ProducerOffer[];
   externalOrders?: readonly PurchaseOrder[];
+  inputReservations?: readonly ProducerInputReservation[];
   households?: readonly Omit<Parameters<typeof householdPurchaseOrders>[0], "cash">[];
   /** Explicit route/scope eligibility; missing entries allow only the offer's own book. */
   eligibleOffersByOrder?: Readonly<Record<string, readonly string[]>>;
@@ -116,7 +171,7 @@ export function advanceProducerEconomy(input: {
 }): {
   accounts: MarketAccount[];
   producers: ProducerOperatingResult[];
-  trades: ProducerTrade[];
+  tradeReceipt: ProducerTradeReceipt;
   prices: ReturnType<typeof settleProducerMarket>["prices"];
 } {
   const producerIds = new Set<string>();
@@ -294,36 +349,121 @@ export function advanceProducerEconomy(input: {
       plannedById.get(segment.plan.id)! + segment.units * feasible[j]
     );
   const proposedById = new Map(plannedById);
-  const inputOrders = () =>
+  const reservations = new Map<string, ProducerInputReservation[]>();
+  const plansById = new Map(plans.map((plan) => [plan.id, plan]));
+  const reservationIds = new Set<string>();
+  for (const reservation of input.inputReservations ?? []) {
+    if (!reservation.id || reservationIds.has(reservation.id) || !reservation.supplierOfferId)
+      throw new Error("Invalid input reservation identity");
+    reservationIds.add(reservation.id);
+    finite(reservation.units, "reserved units");
+    finite(reservation.unitPrice, "reserved price");
+    const plan = plansById.get(reservation.producerId);
+    if (!plan?.inputs.some((recipe) => recipe.commodity === reservation.commodity))
+      throw new Error("Input reservation has no matching recipe");
+    const key = JSON.stringify([reservation.producerId, "input", reservation.commodity]);
+    const rows = reservations.get(key) ?? [];
+    rows.push(reservation);
+    reservations.set(key, rows);
+  }
+  const orderIdsForInput = (producerId: string, commodity: string) => {
+    const id = JSON.stringify([producerId, "input", commodity]);
+    return [
+      id,
+      ...(reservations.get(id) ?? []).map((r) => JSON.stringify([id, "reservation", r.id])),
+    ];
+  };
+  const inputOrders = (): PurchaseOrder[] =>
     plans.flatMap((p) =>
-      p.inputs.map((recipe) => {
+      p.inputs.flatMap((recipe) => {
         const stock = p.inputStock
           .filter((s) => s.commodity === recipe.commodity)
           .reduce((n, s) => n + s.units, 0);
         const id = JSON.stringify([p.id, "input", recipe.commodity]);
-        return {
+        const units = Math.max(0, plannedById.get(p.id)! * recipe.unitsPerOutput - stock);
+        const reserved = reservations.get(id) ?? [];
+        const quantityGroup = reserved.length ? { id, maximumUnits: units } : undefined;
+        const publicOrder: PurchaseOrder = {
           id,
           accountId: p.accountId,
           commodity: recipe.commodity,
           book: recipe.book,
-          units: Math.max(0, plannedById.get(p.id)! * recipe.unitsPerOutput - stock),
+          units,
           maximumUnitPrice: recipe.maximumUnitPrice,
-          // Reserve intermediate deliveries before discretionary final consumption.
           priority: 1,
           eligibleOfferIds: input.eligibleOffersByOrder?.[id],
+          ...(quantityGroup ? { quantityGroup } : {}),
         };
+        return [
+          publicOrder,
+          ...reserved.map((reservation): PurchaseOrder => {
+            const reservedId = JSON.stringify([id, "reservation", reservation.id]);
+            return {
+              ...publicOrder,
+              id: reservedId,
+              units: Math.min(units, reservation.units),
+              maximumUnitPrice: reservation.unitPrice,
+              contractUnitPrice: reservation.unitPrice,
+              supplierOfferId: reservation.supplierOfferId,
+              eligibleOfferIds:
+                input.eligibleOffersByOrder?.[reservedId] ?? publicOrder.eligibleOfferIds,
+            };
+          }),
+        ];
       })
     );
   orders.push(...inputOrders());
   const pendingQuotes: Array<{ offer: ProducerOffer; quote: Parameters<typeof quoteProducer>[0] }> =
     [];
   const requestedSpend = new Map<string, number>();
-  for (const order of orders)
+  const groupedSpend = new Map<string, { accountId: string; maximumSpend: number }>();
+  for (const order of orders) {
+    if (order.quantityGroup) {
+      const group = groupedSpend.get(order.quantityGroup.id);
+      groupedSpend.set(order.quantityGroup.id, {
+        accountId: order.accountId,
+        maximumSpend: Math.max(
+          group?.maximumSpend ?? 0,
+          order.quantityGroup.maximumUnits * order.maximumUnitPrice
+        ),
+      });
+      continue;
+    }
     requestedSpend.set(
       order.accountId,
       (requestedSpend.get(order.accountId) ?? 0) +
         Math.min(order.units * order.maximumUnitPrice, order.maximumSpend ?? Number.MAX_VALUE)
     );
+  }
+  for (const group of groupedSpend.values())
+    requestedSpend.set(
+      group.accountId,
+      (requestedSpend.get(group.accountId) ?? 0) + group.maximumSpend
+    );
+  // Aggregate identical limits once. Retaining one demand object per buyer
+  // per seller makes an otherwise modest world use quadratic memory.
+  const demandBooks = indexQuoteVolumes(
+    orders
+      .filter((order) => !order.supplierOfferId)
+      .map((order) => ({
+        commodity: order.commodity,
+        book: order.book,
+        ownerId: order.accountId,
+        unitPrice: order.maximumUnitPrice,
+        units:
+          Math.min(
+            order.units,
+            order.maximumUnitPrice > 0
+              ? (order.maximumSpend ?? Number.MAX_VALUE) / order.maximumUnitPrice
+              : order.units
+          ) *
+          Math.min(
+            1,
+            (cash.get(order.accountId) ?? 0) /
+              Math.max(Number.MIN_VALUE, requestedSpend.get(order.accountId) ?? 0)
+          ),
+      }))
+  );
   for (const p of plans) {
     const fixed = p.labourCost + p.otherOperatingCost;
     const variablePerOutput = p.inputs.reduce(
@@ -345,28 +485,9 @@ export function advanceProducerEconomy(input: {
           output.unitsPerOutput > 0 ? (variablePerOutput * weight) / output.unitsPerOutput : 0,
         fixedCost: fixed * weight,
         offeredUnits: units,
-        demand: orders
-          .filter(
-            (o) =>
-              o.commodity === output.commodity &&
-              o.book === output.book &&
-              o.accountId !== p.accountId
-          )
-          .map((o) => ({
-            units:
-              Math.min(
-                o.units,
-                o.maximumUnitPrice > 0
-                  ? (o.maximumSpend ?? Number.MAX_VALUE) / o.maximumUnitPrice
-                  : o.units
-              ) *
-              Math.min(
-                1,
-                (cash.get(o.accountId) ?? 0) /
-                  Math.max(Number.MIN_VALUE, requestedSpend.get(o.accountId) ?? 0)
-              ),
-            maximumUnitPrice: o.maximumUnitPrice,
-          })),
+        demand: quoteVolumesExcept(demandBooks, output.commodity, output.book, p.accountId).map(
+          (level) => ({ units: level.units, maximumUnitPrice: level.unitPrice })
+        ),
         competitors: [],
       };
       const quote = quoteProducer({
@@ -390,17 +511,18 @@ export function advanceProducerEconomy(input: {
     }
   }
   const openingOffers = [...offers, ...pendingQuotes.map((q) => q.offer)];
+  const supplyBooks = indexQuoteVolumes(
+    openingOffers.map((offer) => ({ ...offer, ownerId: offer.id }))
+  );
   for (const pending of pendingQuotes) {
     const quote = quoteProducer({
       ...pending.quote,
-      competitors: openingOffers
-        .filter(
-          (o) =>
-            o.commodity === pending.offer.commodity &&
-            o.book === pending.offer.book &&
-            o.id !== pending.offer.id
-        )
-        .map((o) => ({ units: o.units, unitPrice: o.unitPrice })),
+      competitors: quoteVolumesExcept(
+        supplyBooks,
+        pending.offer.commodity,
+        pending.offer.book,
+        pending.offer.id
+      ),
     });
     offers.push({ ...pending.offer, unitPrice: quote.unitPrice });
   }
@@ -443,7 +565,11 @@ export function advanceProducerEconomy(input: {
           .reduce((n, s) => n + s.units, 0);
         supported = Math.min(
           supported,
-          (stock + (bought.get(JSON.stringify([p.id, "input", recipe.commodity])) ?? 0)) /
+          (stock +
+            orderIdsForInput(p.id, recipe.commodity).reduce(
+              (sum, id) => sum + (bought.get(id) ?? 0),
+              0
+            )) /
             recipe.unitsPerOutput
         );
       }
@@ -472,7 +598,16 @@ export function advanceProducerEconomy(input: {
     }
     let purchases = 0;
     for (const recipe of p.inputs) {
-      const bought = ordersById.get(JSON.stringify([p.id, "input", recipe.commodity]))!;
+      const bought = orderIdsForInput(p.id, recipe.commodity).reduce(
+        (total, id) => {
+          const order = ordersById.get(id)!;
+          return {
+            deliveredUnits: total.deliveredUnits + order.deliveredUnits,
+            cost: total.cost + order.cost,
+          };
+        },
+        { deliveredUnits: 0, cost: 0 }
+      );
       const stock = stocks.get(recipe.commodity) ?? {
         commodity: recipe.commodity,
         units: 0,
@@ -579,7 +714,7 @@ export function advanceProducerEconomy(input: {
   return {
     accounts: market.accounts,
     producers: results,
-    trades: market.trades,
+    tradeReceipt: market.tradeReceipt,
     prices: market.prices,
   };
 }

@@ -1,9 +1,8 @@
 /** Freeze a complete turn before moving cash, then publish replayable absolute receipts. */
-import { createHash } from "node:crypto";
-import { gzipSync, gunzipSync } from "node:zlib";
 import { ObjectId, type Db } from "mongodb";
 import type { CorporateSector } from "@/lib/db/types/corporation";
 import { settleTransition } from "@/lib/banking/settlementJournal";
+import { encodeReceipt, decodeReceipt, stageReceiptChunks } from "./receiptStorage";
 import { advanceProducerEconomy } from "./production";
 import { producerCashTransition, type ProducerCashBinding } from "./cashSettlementRules";
 
@@ -34,18 +33,10 @@ interface ProducerTurnRecord {
   status: "frozen" | "settled";
 }
 
-const RECEIPT_LIMIT = 12 * 1024 * 1024;
-const DECODE_LIMIT = 256 * 1024 * 1024;
 const PUBLICATION_BATCH_SIZE = 128;
-const digest = (value: Uint8Array | string) => createHash("sha256").update(value).digest("hex");
 
-function readFrozen(record: ProducerTurnRecord): FrozenProducerTurn {
-  const bytes = gunzipSync(Buffer.from(record.payload, "base64"), {
-    maxOutputLength: DECODE_LIMIT,
-  });
-  if (digest(bytes) !== record.digest) throw new Error("Producer receipt checksum mismatch");
-  // This is our immutable, versioned serialization, covered by its content hash.
-  const payload = JSON.parse(bytes.toString("utf8")) as FrozenProducerTurn;
+async function readFrozen(db: Db, record: ProducerTurnRecord): Promise<FrozenProducerTurn> {
+  const payload = (await decodeReceipt(db, record)) as FrozenProducerTurn;
   if (
     payload.version !== 1 ||
     payload.worldEpoch !== record.worldEpoch ||
@@ -119,6 +110,7 @@ export async function settleProducerTurn(
   await assertTurnFence(db, input.worldEpoch, turn);
   const turns = db.collection<ProducerTurnRecord>("producerEconomyTurns");
   let record = await turns.findOne({ _id: key });
+  let claimedPayload: FrozenProducerTurn | undefined;
   if (!record) {
     const payload: FrozenProducerTurn = {
       version: 1,
@@ -129,19 +121,14 @@ export async function settleProducerTurn(
       result: advanceProducerEconomy(input.production),
     };
     validateTargets(payload);
-    const serialized = JSON.stringify(payload);
-    if (Buffer.byteLength(serialized) > DECODE_LIMIT)
-      throw new Error("Producer receipt exceeds decoded size limit");
-    const compressed = gzipSync(serialized);
-    if (Buffer.byteLength(compressed.toString("base64")) > RECEIPT_LIMIT)
-      throw new Error("Producer receipt exceeds document size limit");
+    const encoded = encodeReceipt(payload);
     const candidate: ProducerTurnRecord = {
       _id: key,
       worldEpoch: input.worldEpoch,
       turn,
       status: "frozen",
-      digest: digest(serialized),
-      payload: compressed.toString("base64"),
+      digest: encoded.digest,
+      payload: encoded.payload,
     };
     // Validate native balances and restricted cash targets before claiming any receipt.
     producerCashTransition({
@@ -152,9 +139,11 @@ export async function settleProducerTurn(
       bindings: payload.bindings,
       receiptDigest: candidate.digest,
     });
+    await stageReceiptChunks(db, encoded.chunks);
     try {
       await turns.insertOne(candidate);
       record = candidate;
+      claimedPayload = payload;
     } catch (error) {
       if (!(error && typeof error === "object" && "code" in error && error.code === 11000))
         throw error;
@@ -162,7 +151,7 @@ export async function settleProducerTurn(
       if (!record) throw new Error("Missing claimed producer receipt");
     }
   }
-  const frozen = readFrozen(record);
+  const frozen = claimedPayload ?? (await readFrozen(db, record));
   if (
     frozen.worldEpoch !== input.worldEpoch ||
     frozen.request.turn !== turn ||

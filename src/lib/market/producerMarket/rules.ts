@@ -31,10 +31,14 @@ export interface PurchaseOrder {
   maximumSpend?: number;
   /** Named supplier reservations compete for the same stock and budget as public purchases. */
   supplierOfferId?: string;
+  /** A validated supplier contract fixes the price while sharing the public offer's stock. */
+  contractUnitPrice?: number;
   /** Optional eligible suppliers implement embargoes, routes and local-service scope. */
   eligibleOfferIds?: readonly string[];
   /** Reserved orders precede public orders. Equal priority is deterministic by id. */
   priority?: number;
+  /** Reservations and their public fallback share one physical purchase target. */
+  quantityGroup?: { id: string; maximumUnits: number };
 }
 
 export interface ProducerTrade {
@@ -51,9 +55,81 @@ export interface ProducerTrade {
   amount: number;
 }
 
+/** A compact replay of exact pro-rata fills, with every supplier constraint retained. */
+export interface ProducerTradeReceipt {
+  turn: number;
+  offers: readonly ProducerOffer[];
+  orders: readonly PurchaseOrder[];
+  fills: Array<{
+    orderId: string;
+    kind: "sale" | "internalTransfer";
+    unitPrice: number;
+    units: number;
+  }>;
+  tradeCount: number;
+}
+
+/** Expand supplier-level trades for audits or route and contract accounting without retaining a matrix. */
+export function* producerTrades(receipt: ProducerTradeReceipt): Generator<ProducerTrade> {
+  const orders = new Map(receipt.orders.map((order) => [order.id, order]));
+  const remaining = new Map(
+    receipt.offers.map((offer) => [
+      offer.id,
+      Math.min(offer.units, offer.deliverableUnits ?? offer.units),
+    ])
+  );
+  const books = new Map<string, ProducerOffer[]>();
+  for (const offer of receipt.offers) {
+    const key = bookKey(offer.commodity, offer.book);
+    const rows = books.get(key) ?? [];
+    rows.push(offer);
+    books.set(key, rows);
+  }
+  for (const rows of books.values())
+    rows.sort((a, b) => a.unitPrice - b.unitPrice || compareId(a.id, b.id));
+  let tradeCount = 0;
+  for (const fill of receipt.fills) {
+    const order = orders.get(fill.orderId);
+    if (!order) throw new Error("Missing producer trade order");
+    const eligible = order.eligibleOfferIds ? new Set(order.eligibleOfferIds) : null;
+    const internal = fill.kind === "internalTransfer";
+    const group = (books.get(bookKey(order.commodity, order.book)) ?? []).filter(
+      (offer) =>
+        (offer.accountId === order.accountId) === internal &&
+        (internal || (order.contractUnitPrice ?? offer.unitPrice) === fill.unitPrice) &&
+        (!order.supplierOfferId || offer.id === order.supplierOfferId) &&
+        (!eligible || eligible.has(offer.id))
+    );
+    const total = group.reduce((sum, offer) => sum + remaining.get(offer.id)!, 0);
+    if (!(total > 0) || fill.units > total + Math.max(1e-8, total * 1e-12))
+      throw new Error("Invalid producer trade fill");
+    for (const offer of group) {
+      const available = remaining.get(offer.id)!;
+      const units = Math.min(available, (fill.units * available) / total);
+      if (!(units > 0)) continue;
+      remaining.set(offer.id, Math.max(0, available - units));
+      tradeCount++;
+      yield {
+        id: JSON.stringify([receipt.turn, order.id, offer.id]),
+        kind: fill.kind,
+        offerId: offer.id,
+        orderId: order.id,
+        sellerAccountId: offer.accountId,
+        buyerAccountId: order.accountId,
+        commodity: order.commodity,
+        book: order.book,
+        units,
+        unitPrice: fill.unitPrice,
+        amount: units * fill.unitPrice,
+      };
+    }
+  }
+  if (tradeCount !== receipt.tradeCount) throw new Error("Producer trade count mismatch");
+}
+
 export interface ProducerMarketResult {
   accounts: MarketAccount[];
-  trades: ProducerTrade[];
+  tradeReceipt: ProducerTradeReceipt;
   offers: Array<{
     id: string;
     offeredUnits: number;
@@ -124,10 +200,41 @@ export function settleProducerMarket(input: {
   }
   for (const rows of byBook.values())
     rows.sort((a, b) => a.unitPrice - b.unitPrice || compareId(a.id, b.id));
+  const quantityGroups = new Map<
+    string,
+    { accountId: string; commodity: string; book: string; maximumUnits: number; remaining: number }
+  >();
   for (const order of input.orders) {
     if (!cash.has(order.accountId)) throw new Error("Unknown buyer account");
     nonNegative(order.units, "order units");
     nonNegative(order.maximumUnitPrice, "limit price");
+    if (order.contractUnitPrice != null) {
+      nonNegative(order.contractUnitPrice, "contract price");
+      if (!order.supplierOfferId || order.contractUnitPrice > order.maximumUnitPrice)
+        throw new Error("Contract price requires a named supplier within the buyer limit");
+    }
+    if (order.quantityGroup) {
+      const { id, maximumUnits } = order.quantityGroup;
+      nonNegative(maximumUnits, "group quantity");
+      if (!id) throw new Error("Missing purchase group identity");
+      const prior = quantityGroups.get(id);
+      if (
+        prior &&
+        (prior.accountId !== order.accountId ||
+          prior.commodity !== order.commodity ||
+          prior.book !== order.book ||
+          prior.maximumUnits !== maximumUnits)
+      )
+        throw new Error("Inconsistent purchase group");
+      if (!prior)
+        quantityGroups.set(id, {
+          accountId: order.accountId,
+          commodity: order.commodity,
+          book: order.book,
+          maximumUnits,
+          remaining: maximumUnits,
+        });
+    }
     if (order.maximumSpend != null) nonNegative(order.maximumSpend, "order spending limit");
     if (order.priority != null && !Number.isFinite(order.priority))
       throw new Error("Invalid priority");
@@ -151,7 +258,9 @@ export function settleProducerMarket(input: {
       },
     ])
   );
-  const trades: ProducerTrade[] = [];
+  const fills: ProducerTradeReceipt["fills"] = [];
+  let tradeCount = 0;
+  const prices = new Map<string, ProducerMarketResult["prices"][number]>();
   const orders = [...input.orders].sort(
     (a, b) =>
       (b.priority ?? 0) - (a.priority ?? 0) ||
@@ -159,18 +268,21 @@ export function settleProducerMarket(input: {
       compareId(a.id, b.id)
   );
   for (const order of orders) {
-    let wanted = order.units;
+    const quantityGroup = order.quantityGroup && quantityGroups.get(order.quantityGroup.id);
+    let wanted = Math.min(order.units, quantityGroup?.remaining ?? order.units);
     let orderBudget = order.maximumSpend ?? Number.MAX_VALUE;
     const eligible = order.eligibleOfferIds ? new Set(order.eligibleOfferIds) : null;
     const rows = (byBook.get(bookKey(order.commodity, order.book)) ?? []).filter(
       (offer) =>
-        (offer.accountId === order.accountId || offer.unitPrice <= order.maximumUnitPrice) &&
+        (offer.accountId === order.accountId ||
+          (order.contractUnitPrice ?? offer.unitPrice) <= order.maximumUnitPrice) &&
         (!order.supplierOfferId || order.supplierOfferId === offer.id) &&
         (!eligible || eligible.has(offer.id))
     );
     const tiers = new Map<number, ProducerOffer[]>();
     for (const offer of rows) {
-      const price = offer.accountId === order.accountId ? 0 : offer.unitPrice;
+      const price =
+        offer.accountId === order.accountId ? 0 : (order.contractUnitPrice ?? offer.unitPrice);
       const tier = tiers.get(price) ?? [];
       tier.push(offer);
       tiers.set(price, tier);
@@ -181,34 +293,42 @@ export function settleProducerMarket(input: {
       for (const internal of [true, false]) {
         const group = tier.filter((o) => (o.accountId === order.accountId) === internal);
         const total = group.reduce((n, o) => n + remaining.get(o.id)!, 0);
-        const price = group[0]?.unitPrice ?? 0;
+        const price = order.contractUnitPrice ?? group[0]?.unitPrice ?? 0;
         const budget = Math.min(budgets.get(order.accountId)!, orderBudget);
         const take = Math.min(wanted, total, internal || price === 0 ? wanted : budget / price);
         if (!(take > 0) || !(total > 0)) continue;
+        fills.push({
+          orderId: order.id,
+          kind: internal ? "internalTransfer" : "sale",
+          unitPrice: internal ? 0 : price,
+          units: take,
+        });
         for (const offer of group) {
           const available = remaining.get(offer.id)!;
           const units = Math.min(available, (take * available) / total);
           if (!(units > 0)) continue;
           // Moving owned goods between sites is a physical transfer. It cannot
           // create a sale, an acquisition asset or profit for the corporation.
-          const unitPrice = internal ? 0 : offer.unitPrice;
+          const unitPrice = internal ? 0 : price;
           const amount = units * unitPrice;
           if (!Number.isFinite(amount)) throw new Error("Non-finite trade value");
-          const trade: ProducerTrade = {
-            id: JSON.stringify([input.turn, order.id, offer.id]),
-            kind: internal ? "internalTransfer" : "sale",
-            offerId: offer.id,
-            orderId: order.id,
-            sellerAccountId: offer.accountId,
-            buyerAccountId: order.accountId,
-            commodity: order.commodity,
-            book: order.book,
-            units,
-            unitPrice,
-            amount,
-          };
-          trades.push(trade);
+          tradeCount++;
+          if (!internal) {
+            const key = bookKey(order.commodity, order.book);
+            const observed = prices.get(key) ?? {
+              commodity: order.commodity,
+              book: order.book,
+              units: 0,
+              value: 0,
+              unitPrice: 0,
+            };
+            observed.units += units;
+            observed.value += amount;
+            observed.unitPrice = observed.value / observed.units;
+            prices.set(key, observed);
+          }
           wanted = Math.max(0, wanted - units);
+          if (quantityGroup) quantityGroup.remaining = Math.max(0, quantityGroup.remaining - units);
           remaining.set(offer.id, Math.max(0, available - units));
           if (!internal) {
             orderBudget = Math.max(0, orderBudget - amount);
@@ -232,28 +352,17 @@ export function settleProducerMarket(input: {
       if (!(wanted > 0)) break;
     }
   }
-  const prices = new Map<string, ProducerMarketResult["prices"][number]>();
-  for (const trade of trades) {
-    // Transfers within one cash account are not independent market-price observations.
-    if (trade.buyerAccountId === trade.sellerAccountId) continue;
-    const key = bookKey(trade.commodity, trade.book);
-    const price = prices.get(key) ?? {
-      commodity: trade.commodity,
-      book: trade.book,
-      units: 0,
-      value: 0,
-      unitPrice: 0,
-    };
-    price.units += trade.units;
-    price.value += trade.amount;
-    price.unitPrice = price.value / price.units;
-    prices.set(key, price);
-  }
   return {
     accounts: [...cash]
       .sort(([a], [b]) => compareId(a, b))
       .map(([id, value]) => ({ id, cash: value })),
-    trades,
+    tradeReceipt: {
+      turn: input.turn,
+      offers: input.offers,
+      orders: input.orders,
+      fills,
+      tradeCount,
+    },
     offers: [...offerResults.values()].sort((a, b) => compareId(a.id, b.id)),
     orders: [...orderResults.values()].sort((a, b) => compareId(a.id, b.id)),
     prices: [...prices.values()].sort((a, b) =>
@@ -266,6 +375,38 @@ export type ProducerQuotePolicy =
   | { kind: "manual"; unitPrice: number }
   | { kind: "costPlus"; markup: number }
   | { kind: "automatic"; targetMarkup: number };
+
+/** Price levels let every candidate use cumulative volumes instead of rescanning the book. */
+function priceVolumes(rows: readonly { price: number; units: number }[]) {
+  const levels = new Map<number, number>();
+  for (const row of rows) {
+    const price = nonNegative(row.price, "price level");
+    levels.set(
+      price,
+      nonNegative((levels.get(price) ?? 0) + nonNegative(row.units, "level units"), "level volume")
+    );
+  }
+  const prices = [...levels.keys()].sort((a, b) => a - b);
+  const before = Array<number>(prices.length + 1).fill(0);
+  const after = Array<number>(prices.length + 1).fill(0);
+  for (let i = 0; i < prices.length; i++)
+    before[i + 1] = nonNegative(before[i] + levels.get(prices[i])!, "cumulative volume");
+  for (let i = prices.length - 1; i >= 0; i--)
+    after[i] = nonNegative(after[i + 1] + levels.get(prices[i])!, "cumulative volume");
+  return {
+    prices,
+    at: (price: number) => {
+      let low = 0,
+        high = prices.length;
+      while (low < high) {
+        const mid = (low + high) >>> 1;
+        if (prices[mid] < price) low = mid + 1;
+        else high = mid;
+      }
+      return { cheaper: before[low], tied: levels.get(price) ?? 0, atOrAbove: after[low] };
+    },
+  };
+}
 
 /** Quote policy selects an asking price only; all policies settle identically. */
 export function quoteProducer(input: {
@@ -287,21 +428,17 @@ export function quoteProducer(input: {
   const fixed = nonNegative(input.fixedCost, "fixed cost");
   const units = nonNegative(input.offeredUnits, "offered units");
   const breakEven = units > 0 ? variable + fixed / units : null;
+  const demandVolumes = priceVolumes(
+    input.demand.map((o) => ({ price: o.maximumUnitPrice, units: o.units }))
+  );
+  const supplyVolumes = priceVolumes(
+    input.competitors.map((o) => ({ price: o.unitPrice, units: o.units }))
+  );
   const estimate = (price: number) => {
-    let demand = 0;
-    for (const order of input.demand) {
-      nonNegative(order.maximumUnitPrice, "demand limit");
-      nonNegative(order.units, "demand units");
-      if (order.maximumUnitPrice >= price) demand += order.units;
-    }
-    let cheaper = 0;
-    let tied = units;
-    for (const seller of input.competitors) {
-      nonNegative(seller.unitPrice, "competitor price");
-      nonNegative(seller.units, "competitor units");
-      if (seller.unitPrice < price) cheaper += seller.units;
-      else if (seller.unitPrice === price) tied += seller.units;
-    }
+    const demand = demandVolumes.at(price).atOrAbove;
+    const supply = supplyVolumes.at(price);
+    const cheaper = supply.cheaper;
+    const tied = units + supply.tied;
     const sold = tied > 0 ? Math.min(units, (Math.max(0, demand - cheaper) * units) / tied) : 0;
     return {
       unitPrice: price,

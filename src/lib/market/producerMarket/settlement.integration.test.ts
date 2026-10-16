@@ -170,6 +170,29 @@ describe("frozen producer turn settlement", () => {
     expect(memory.collection("corporations").docs[0].liquidCapital).toBe(1030);
   });
 
+  it("does not move cash when a frozen receipt chunk is missing", async () => {
+    const { memory, input, db } = fixture();
+    input.production.externalOrders = Array.from({ length: 129 }, (_, i) => ({
+      id: `unused:${i}`,
+      accountId: "households",
+      commodity: "unused",
+      book: "world",
+      units: 0,
+      maximumUnitPrice: 0,
+    }));
+    const faulty = withInjectedCrash(memory, {
+      collection: "producerEconomyTurns",
+      op: "insertOne",
+      onCall: 1,
+      afterWrite: true,
+    });
+    await expect(settleProducerTurn(faulty.db, input)).rejects.toThrow("crash");
+    expect(memory.collection("producerEconomyTurnChunks").docs.length).toBeGreaterThan(0);
+    memory.collection("producerEconomyTurnChunks").docs.splice(0);
+    await expect(settleProducerTurn(db, input)).rejects.toThrow("Missing producer receipt chunk");
+    expect(memory.collection("corporations").docs[0].liquidCapital).toBe(1000);
+  });
+
   it("refuses a different turn fence before freezing or moving money", async () => {
     const { memory, input, db } = fixture();
     memory.collection("gameState").docs[0].processingTargetTurn = 2;

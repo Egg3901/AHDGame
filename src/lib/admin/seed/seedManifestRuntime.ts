@@ -444,6 +444,11 @@ export const RUNTIME: CollectionEntry[] = [
     notes:
       "Immutable complete producer requests and settled results, scoped to the current world. Wiped with their cash journals on reset.",
   },
+  {
+    name: "producerEconomyTurnChunks",
+    category: "runtime",
+    notes: "Content-addressed producer receipt chunks; the unique _id hash is the primary index.",
+  },
   { name: "financialCrisisFiscalActions", category: "runtime" },
   { name: "financialCrisisCreditHistory", category: "runtime" },
   { name: "bankMoneyMoves", category: "runtime" },

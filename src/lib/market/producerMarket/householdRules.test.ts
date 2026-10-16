@@ -1,3 +1,4 @@
+import { producerTrades } from "./rules";
 import { describe, expect, it } from "vitest";
 import { householdPurchaseOrders } from "./householdRules";
 import { settleProducerMarket } from "./rules";
@@ -34,7 +35,11 @@ describe("funded household baskets", () => {
     });
     // Cheaper food does not authorize spending the absent healthcare allocation.
     expect(result.accounts.find((account) => account.id === "household")!.cash).toBe(80);
-    expect(result.trades[0]).toMatchObject({ units: 20, unitPrice: 1, amount: 20 });
+    expect([...producerTrades(result.tradeReceipt)][0]).toMatchObject({
+      units: 20,
+      unitPrice: 1,
+      amount: 20,
+    });
   });
 
   it("caps an order independently from the wallet and rejects synthetic or duplicated budgets", () => {
@@ -83,6 +88,6 @@ describe("funded household baskets", () => {
         },
       ],
     });
-    expect(result.trades[0]).toMatchObject({ units: 5, amount: 10 });
+    expect([...producerTrades(result.tradeReceipt)][0]).toMatchObject({ units: 5, amount: 10 });
   });
 });

@@ -1,4 +1,5 @@
 /** Deterministic rules qualification. Never connects to a database. */
+import { producerTrades } from "../../src/lib/market/producerMarket/rules";
 import assert from "node:assert/strict";
 import { writeFileSync } from "node:fs";
 import { COMMODITY_BASE_PRICES, type CommodityType } from "../../src/lib/constants/commodities";
@@ -55,7 +56,7 @@ function simulate(
     }
     const closingCash = result.accounts.reduce((sum, account) => sum + account.cash, 0);
     assert(Math.abs(closingCash - openingCash) <= openingCash * 1e-12);
-    for (const trade of result.trades)
+    for (const trade of producerTrades(result.tradeReceipt))
       assert(
         Math.abs(trade.amount - trade.units * trade.unitPrice) <=
           Math.max(1e-8, trade.amount * 1e-12)
@@ -89,7 +90,7 @@ function simulate(
       operatingLossSites: result.producers.filter((producer) => producer.profit < 0).length,
       zeroOutputSites: result.producers.filter((producer) => producer.producedUnits < 1e-8).length,
       arrears: result.producers.reduce((sum, producer) => sum + producer.operatingArrears, 0),
-      tradeCount: result.trades.length,
+      tradeCount: result.tradeReceipt.tradeCount,
     });
   }
   if (scenario === "recipe-closure")

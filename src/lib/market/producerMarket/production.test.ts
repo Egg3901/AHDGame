@@ -1,3 +1,4 @@
+import { producerTrades } from "./rules";
 import { describe, expect, it } from "vitest";
 import { advanceProducerEconomy, type ProductionPlan } from "./production";
 
@@ -34,6 +35,66 @@ const accounts = [
 ];
 
 describe("receipt-backed production", () => {
+  it.each([0, 6])(
+    "consumes reserved and fallback inputs once, reserved supplier stock=%s",
+    (contractedStock) => {
+      const result = advanceProducerEconomy({
+        turn: 1,
+        accounts: [...accounts, { id: "contract-seller", cash: 0 }],
+        producers: [
+          plant({
+            capacityUnits: 10,
+            labourCost: 0,
+            otherOperatingCost: 0,
+            inputs: [
+              { commodity: "energy", book: "world", unitsPerOutput: 2, maximumUnitPrice: 2 },
+            ],
+          }),
+        ],
+        inputReservations: [
+          {
+            id: "agreement",
+            producerId: "plant",
+            commodity: "energy",
+            supplierOfferId: "contract-power",
+            units: 6,
+            unitPrice: 1,
+          },
+        ],
+        externalOffers: [
+          {
+            id: "contract-power",
+            accountId: "contract-seller",
+            commodity: "energy",
+            book: "world",
+            units: contractedStock,
+            unitPrice: 5,
+          },
+          {
+            id: "public-power",
+            accountId: "supplier",
+            commodity: "energy",
+            book: "world",
+            units: 20,
+            unitPrice: 2,
+          },
+        ],
+      });
+      const expense = contractedStock + (20 - contractedStock) * 2;
+      expect(result.producers[0]).toMatchObject({
+        producedUnits: 10,
+        purchases: expense,
+        inputsConsumed: expense,
+        cashFlow: -expense,
+        profit: -expense,
+      });
+      expect(result.accounts.find((account) => account.id === "corp")!.cash).toBe(1000 - expense);
+      expect(
+        [...producerTrades(result.tradeReceipt)].reduce((sum, trade) => sum + trade.units, 0)
+      ).toBe(20);
+    }
+  );
+
   it("reports paid unit prices separately from internal site deliveries", () => {
     const energy = {
       commodity: "energy",
@@ -164,7 +225,7 @@ describe("receipt-backed production", () => {
       cashFlow: -80,
     });
     expect(result.producers[0].outputStock[0].units).toBe(0);
-    expect(result.trades[0]).toMatchObject({ units: 50, amount: 50 });
+    expect([...producerTrades(result.tradeReceipt)][0]).toMatchObject({ units: 50, amount: 50 });
   });
 
   it("does not charge already purchased inputs again when their reference price changes", () => {
@@ -376,12 +437,12 @@ describe("receipt-backed production", () => {
     const funded = accounts.map((a) => (a.id === "supplier" ? { ...a, cash: 100 } : a));
     const result = advanceProducerEconomy({ turn: 1, accounts: funded, producers: [a, b] });
     expect(result.producers.map((p) => p.producedUnits)).toEqual([10, 10]);
-    expect(result.trades.reduce((n, t) => n + t.units, 0)).toBe(10);
+    expect([...producerTrades(result.tradeReceipt)].reduce((n, t) => n + t.units, 0)).toBe(10);
     expect(result.producers.map((p) => p.outputStock[0].units)).toEqual([5, 5]);
     const empty = funded.map((a) => (["corp", "supplier"].includes(a.id) ? { ...a, cash: 0 } : a));
     const unfunded = advanceProducerEconomy({ turn: 1, accounts: empty, producers: [a, b] });
     expect(unfunded.producers.map((p) => p.producedUnits)).toEqual([0, 0]);
-    expect(unfunded.trades).toEqual([]);
+    expect([...producerTrades(unfunded.tradeReceipt)]).toEqual([]);
   });
 
   it("preserves physical productivity improvements above nameplate and reports the actual unit price", () => {
