@@ -233,8 +233,12 @@ export function BlendMoneySection({
           value={`+${amount(money.incomeTotal, s)}`}
           color={BLEND.positive}
         />
+        <Row label="Fundraising upkeep" value={`-${amount(money.fundraisingUpkeep, s)}`} />
+        <Row label="Opposition research upkeep" value={`-${amount(money.oppositionUpkeep, s)}`} />
+        <Row label="Field office upkeep" value={`-${amount(money.fieldOfficeUpkeep, s)}`} />
         <Row label="Ground game upkeep" value={`-${amount(money.groundUpkeep, s)}`} />
         <Row label="Media upkeep" value={`-${amount(money.mediaUpkeep, s)}`} />
+        <Row label="Total upkeep" value={`-${amount(money.expenseTotal, s)}`} />
         <Row
           label="Net"
           value={`${money.net >= 0 ? "+" : "-"}${amount(money.net, s)}`}

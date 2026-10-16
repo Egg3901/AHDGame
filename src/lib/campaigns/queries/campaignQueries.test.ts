@@ -934,6 +934,7 @@ describe("getCampaignDetail", () => {
 
     expect(detail.accessLevel).not.toBe("owner");
     expect(detail.briefing).toBeUndefined();
+    expect(detail.budget).toBeUndefined();
   });
 });
 
@@ -948,4 +949,86 @@ it("campaign-manager quotes scale generated amounts while retaining treasury fac
   expect(after.nextUpgradeCosts?.fundraising?.funds).toBe(
     Math.round((before.nextUpgradeCosts?.fundraising?.funds ?? 0) * 0.35808)
   );
+});
+
+describe("campaign budget office upkeep", () => {
+  it.each([
+    { status: "active", suspended: false, count: 0, raceStatus: "active", charged: 0 },
+    { status: "active", suspended: false, count: 2, raceStatus: "active", charged: 2 },
+    { status: "active", suspended: true, count: 2, raceStatus: "active", charged: 2 },
+    { status: "archived", suspended: false, count: 2, raceStatus: "active", charged: 0 },
+    { status: "active", suspended: false, count: 2, raceStatus: "completed", charged: 0 },
+  ])(
+    "previews $charged offices for $status suspended=$suspended race=$raceStatus",
+    async ({ status, suspended, count, raceStatus, charged }) => {
+      const { db, campaignId, user } = await setUpOwnedCampaign();
+      const campaign = await db.collection("campaigns").findOne({});
+      Object.assign(campaign, {
+        status,
+        fieldOfficeCount: 99,
+        fundraisingTree: { starter: true, a: 2, b: 1, c: 0 },
+        groundGameTree: { starter: true, a: 1, b: 2, c: 1 },
+      });
+      const election = await db.collection("elections").findOne({});
+      election.status = raceStatus;
+      db.collection("electionCandidates").find.mockReturnValue({
+        toArray: async () => [
+          {
+            _id: new ObjectId(),
+            characterId: campaign.candidateId,
+            status: "active",
+            campaignSuspended: suspended,
+          },
+        ],
+      });
+      db.collection("campaignFieldOffices").find.mockReturnValue({
+        toArray: async () =>
+          Array.from({ length: count }, () => ({ campaignId, electionId: campaign.electionId })),
+      });
+      db.collection("gameConfig").findOne.mockResolvedValue({ campaignEraPriceLevelEnabled: true });
+      db.collection("gameState").findOne.mockResolvedValue({ preset: "1991-default" });
+      const { calculateCampaignIncome } = await import("@/lib/campaigns/income");
+      const { calculateMaintenanceCosts } = await import("@/lib/campaigns/maintenance");
+      const { getTreeMaintenanceCost } = await import("@/lib/campaigns/upgradeCosts");
+      const detail = await getCampaignDetail(db as never, campaignId, user);
+      const regular = status !== "archived" && !suspended;
+      const local = (n: number) => Math.round(n * 0.35808);
+      const income = regular ? local(calculateCampaignIncome(campaign, "president")) : 0;
+      const ops = regular ? local(calculateMaintenanceCosts(campaign, "president")) : 0;
+      const officeCost = charged * local(6_000);
+      expect(detail.budget!.expenses.fieldOfficeMaintenance).toBe(officeCost);
+      expect(detail.budget!.expenses.fundraisingMaintenance).toBe(
+        regular
+          ? local(getTreeMaintenanceCost("fundraising", campaign.fundraisingTree, "president"))
+          : 0
+      );
+      expect(detail.budget!.expenses.total).toBe(ops + officeCost);
+      expect(detail.budget!.netIncome).toBe(income - ops - officeCost);
+      if (status !== "archived")
+        expect(detail.briefing!.cashRunway.netPerTurn).toBe(income - ops - officeCost);
+    }
+  );
+});
+
+it("uses the preset currency for detail income and excludes unsupported geographic offices", async () => {
+  const { db, campaignId, user } = await setUpOwnedCampaign();
+  user.isAdmin = true;
+  const election = await db.collection("elections").findOne({});
+  election.countryId = "FR";
+  db.collection("gameConfig").findOne.mockResolvedValue({ campaignEraPriceLevelEnabled: true });
+  db.collection("gameState").findOne.mockResolvedValue({ preset: "2027-default" });
+  db.collection("exchangeRates").find.mockReturnValue({
+    toArray: async () => [
+      { currencyCode: "EUR", baseRate: 0.82 },
+      { currencyCode: "FRF", baseRate: 6.75 },
+    ],
+  });
+  db.collection("campaignFieldOffices").find.mockReturnValue({
+    toArray: async () => [{ campaignId, electionId: election._id }],
+  });
+  const detail = await getCampaignDetail(db as never, campaignId, user);
+  expect(detail.currencyCode).toBe("EUR");
+  expect(detail.budget!.income.total).toBe(Math.round(60_000 * 1.28579 * 0.82));
+  expect(detail.budget!.expenses.fieldOfficeMaintenance).toBe(0);
+  expect(detail.funds).toBe(125_000);
 });
