@@ -70,6 +70,11 @@ const HERO_IMAGE_URL =
  */
 export default function UnionDashboardPage({ params }: PageProps) {
   const { id } = usePromise(params);
+  // A new route owns fresh data and UI state; late refreshes belong to the old dashboard.
+  return <UnionDashboard key={id} id={id} />;
+}
+
+function UnionDashboard({ id }: { id: string }) {
   const [union, setUnion] = useState<UnionDetail | null>(null);
   const [sectors, setSectors] = useState<SectorRow[]>([]);
   const [workforce, setWorkforce] = useState<WorkforceSummary | null>(null);
@@ -116,10 +121,7 @@ export default function UnionDashboardPage({ params }: PageProps) {
   // Status the Sectors tab opens filtered to, when the Overview links there.
   const [sectorStatusFilter, setSectorStatusFilter] = useState<SectorStatus | "">("");
 
-  async function loadData() {
-    setLoading(true);
-    setLoadError(null);
-    setNotFound(false);
+  async function loadData(initial = false) {
     try {
       const [unionRes, meRes, voteRes] = await Promise.all([
         fetch(`/api/unions/${id}`),
@@ -127,6 +129,8 @@ export default function UnionDashboardPage({ params }: PageProps) {
         fetch(`/api/unions/${id}/leader/vote`),
       ]);
       const unionData = await unionRes.json();
+      setLoadError(null);
+      setNotFound(false);
       if (unionRes.ok) {
         setUnion(unionData.union);
         setWageDemandDraft(
@@ -141,7 +145,7 @@ export default function UnionDashboardPage({ params }: PageProps) {
         setEmployerOptions(unionData.employerOptions ?? []);
         setBargainingCampaigns(unionData.bargainingCampaigns ?? []);
         setPensionScheme(unionData.pensionScheme ?? null);
-      } else if (unionRes.status === 404) {
+      } else if (unionRes.status === 404 && initial) {
         setNotFound(true);
       } else {
         setLoadError(apiErrorText(unionData, "Failed to load union."));
@@ -224,7 +228,7 @@ export default function UnionDashboardPage({ params }: PageProps) {
   }
 
   useEffect(() => {
-    loadData();
+    loadData(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
@@ -332,7 +336,7 @@ export default function UnionDashboardPage({ params }: PageProps) {
       </main>
     );
   }
-  if (loadError) {
+  if (loadError && !union) {
     return (
       <main className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
         <EmptyState title="Couldn't load this union" description={loadError} />
@@ -502,6 +506,16 @@ export default function UnionDashboardPage({ params }: PageProps) {
           />
         </div>
       </header>
+
+      {loadError && (
+        <div
+          role="alert"
+          className="rounded-xl border border-warning/30 bg-warning/10 p-4 text-sm text-warning"
+        >
+          Couldn&apos;t refresh this union. {loadError} Showing previously loaded data. Reload the
+          page to try again.
+        </div>
+      )}
 
       {partialError && (
         <div

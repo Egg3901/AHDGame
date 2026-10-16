@@ -111,3 +111,51 @@ describe("GET union paid service entitlement", () => {
     expect(body.union.paidServices).toEqual(banned ? [] : ["healthFund"]);
   });
 });
+
+describe("GET shop representatives", () => {
+  it("maps names with one projected batched lookup and keeps this union's member count separate", async () => {
+    const memory = createInMemoryDb();
+    const id = new ObjectId();
+    const rivalId = new ObjectId();
+    const deletedId = new ObjectId();
+    memory.seed("unions", [
+      { _id: id, name: "Our union", countryId: "US", sectorType: "manufacturing", treasury: 0 },
+      {
+        _id: rivalId,
+        name: "Rival union",
+        countryId: "US",
+        sectorType: "manufacturing",
+        treasury: 0,
+      },
+    ]);
+    memory.seed(
+      "corporateSectors",
+      [id, rivalId, rivalId, null, deletedId].map((representingUnionId) => ({
+        _id: new ObjectId(),
+        corporationId: new ObjectId(),
+        countryId: "US",
+        sectorType: "manufacturing",
+        stateId: "TX",
+        workers: 100,
+        unionization: 20,
+        representingUnionId,
+      }))
+    );
+    const find = vi.spyOn(memory.collection("unions"), "find");
+    vi.mocked(getDb).mockResolvedValue(memory as unknown as Db);
+    const res = await GET(new Request("http://localhost/api/unions/test"), {
+      params: Promise.resolve({ id: id.toString() }),
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(
+      body.sectors.map((s: { representingUnionName: string | null }) => s.representingUnionName)
+    ).toEqual(["Our union", "Rival union", "Rival union", null, null]);
+    expect(body.sectors[4].representingUnionId).toBe(deletedId.toString());
+    expect(body.union.members).toBe(20);
+    expect(find).toHaveBeenCalledExactlyOnceWith(
+      { _id: { $in: [id, rivalId, deletedId] } },
+      { projection: { name: 1 } }
+    );
+  });
+});

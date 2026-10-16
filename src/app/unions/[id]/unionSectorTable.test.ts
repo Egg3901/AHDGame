@@ -5,6 +5,7 @@ import {
   filterSectors,
   quoteBatch,
   sectorDriveCost,
+  sectorMembers,
   sectorStatus,
   sortSectors,
 } from "./unionSectorTable";
@@ -125,4 +126,20 @@ describe("quoteBatch", () => {
   it("does not block on an action balance that has not loaded", () => {
     expect(quoteBatch(rows, "u1", 1_000_000, null).blocker).toBeNull();
   });
+});
+
+describe("represented shop member counts", () => {
+  it.each<[string | null, number]>([
+    ["u1", 400],
+    ["u2", 400],
+    ["deleted", 400],
+    [null, 0],
+  ])(
+    "attributes members only when the shop has a representative: %s",
+    (representingUnionId, expected) => {
+      expect(sectorMembers(row({ workers: 1000, unionization: 40, representingUnionId }))).toBe(
+        expected
+      );
+    }
+  );
 });
