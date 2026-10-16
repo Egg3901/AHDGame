@@ -1,4 +1,13 @@
 import { ObjectId, type Collection, type Db, type Filter } from "mongodb";
+import type { PendingStockTaxReceipt } from "@/lib/budget/rules/capitalGainsTax";
+import {
+  updatePersonalHolding,
+  type PersonalHoldingChange,
+} from "@/lib/corporations/personalHoldingOps";
+import {
+  purchasedHoldingTerms,
+  type ShareHoldingTerms,
+} from "@/lib/corporations/rules/holdingTerms";
 import {
   applyIdempotentLeg,
   applyKeyedUpdate,
@@ -20,6 +29,7 @@ export type ShareFillCashCollection =
   "characters" | "imperialCharacters" | "corporations" | "indexFunds";
 
 export interface ShareFillCashLeg {
+  stockTaxReceipt?: PendingStockTaxReceipt;
   collection: ShareFillCashCollection;
   idHex: string;
   /** Dotted balance field pinned at claim time (e.g. `currencyBalances.personal.USD`). */
@@ -28,13 +38,15 @@ export interface ShareFillCashLeg {
 }
 
 export interface ShareFillCapLeg {
+  holdingTerms?: ShareHoldingTerms;
+  holdingTurn?: number;
   field: ShareFillCapEntryField;
   idHex: string;
   /** Weighted-average basis for credits; compensation basis for debits. */
   pricePerShare: number;
 }
 
-export type ShareFillMoneyDirection = "sell-fill" | "buy-fill";
+export type ShareFillMoneyDirection = "sell-fill" | "buy-fill" | "listing-fill";
 
 /**
  * Immutable resume plan persisted on the money receipt before the first leg.
@@ -42,6 +54,7 @@ export type ShareFillMoneyDirection = "sell-fill" | "buy-fill";
  * here at claim time; recovery never reprices from post-fill state.
  */
 export interface ShareFillMoneyPlan {
+  buyerRefund?: ShareFillCashLeg;
   version: 1;
   /** Audit attempt key this money flow belongs to (bridge to audit recovery). */
   fillKey: string;
@@ -81,7 +94,9 @@ export function isShareFillMoneyPlan(value: unknown): value is ShareFillMoneyPla
     plan.version === 1 &&
     typeof plan.fillKey === "string" &&
     typeof plan.corpIdHex === "string" &&
-    (plan.direction === "sell-fill" || plan.direction === "buy-fill") &&
+    (plan.direction === "sell-fill" ||
+      plan.direction === "buy-fill" ||
+      plan.direction === "listing-fill") &&
     typeof plan.shares === "number" &&
     typeof plan.buyerCredit === "object" &&
     plan.buyerCredit !== null
@@ -110,9 +125,13 @@ export function personalBalanceField(currency: string, forexEnabled: boolean): s
 export function buildShareFillMoneyFingerprint(plan: ShareFillMoneyPlan): string {
   const cents = (n: number): string => String(Math.round(n * 100) / 100);
   const cash = (leg: ShareFillCashLeg | null): string =>
-    leg ? `${leg.collection}:${leg.idHex}:${leg.field}:${cents(leg.amount)}` : "none";
+    leg
+      ? `${leg.collection}:${leg.idHex}:${leg.field}:${cents(leg.amount)}${leg.stockTaxReceipt ? ":stockTax:" + JSON.stringify(leg.stockTaxReceipt) : ""}`
+      : "none";
   const cap = (leg: ShareFillCapLeg | null): string =>
-    leg ? `${leg.field}:${leg.idHex}:${cents(leg.pricePerShare)}` : "none";
+    leg
+      ? `${leg.field}:${leg.idHex}:${cents(leg.pricePerShare)}${leg.holdingTurn !== undefined ? ":holdingTurn:" + leg.holdingTurn : ""}${leg.holdingTerms ? ":holdingTerms:" + JSON.stringify(leg.holdingTerms) : ""}`
+      : "none";
   return [
     "share-fill-money",
     plan.corpIdHex,
@@ -121,6 +140,7 @@ export function buildShareFillMoneyFingerprint(plan: ShareFillMoneyPlan): string
     `shares:${plan.shares}`,
     `fillerDebit:${cash(plan.fillerDebit)}`,
     `fillerCredit:${cash(plan.fillerCredit)}`,
+    ...(plan.buyerRefund ? [`buyerRefund:${cash(plan.buyerRefund)}`] : []),
     `sellerDebit:${cap(plan.sellerDebit)}`,
     `buyerCredit:${cap(plan.buyerCredit)}`,
     plan.fundInventoryDebit
@@ -201,6 +221,25 @@ export function makeCapDebitStep(
   return {
     name: "seller-debit",
     apply: async () => {
+      if (
+        (leg.field === "characterId" || leg.field === "imperialCharacterId") &&
+        leg.holdingTurn !== undefined &&
+        leg.holdingTerms
+      ) {
+        const change: PersonalHoldingChange = { turn: leg.holdingTurn, remove: leg.holdingTerms };
+        await updatePersonalHolding({
+          db,
+          corporationId: corpId,
+          ownerId: new ObjectId(leg.idHex),
+          ownerKey: leg.field,
+          shares,
+          credit: false,
+          change,
+          key: subkey,
+          extra: { $set: { updatedAt: now } },
+        });
+        return change.outcome ?? "guard-rejected";
+      }
       const outcome = await applyKeyedUpdate(
         subkey,
         {
@@ -258,6 +297,25 @@ export async function applyCapCreditKeyed(
   shares: number,
   now: Date
 ): Promise<MoneyFlowLegOutcome> {
+  if (
+    (leg.field === "characterId" || leg.field === "imperialCharacterId") &&
+    leg.holdingTurn !== undefined
+  ) {
+    const change: PersonalHoldingChange = { turn: leg.holdingTurn, restore: leg.holdingTerms };
+    await updatePersonalHolding({
+      db,
+      corporationId: corpId,
+      ownerId: new ObjectId(leg.idHex),
+      ownerKey: leg.field,
+      shares,
+      credit: true,
+      pricePerShare: leg.pricePerShare,
+      change,
+      key: subkey,
+      extra: { $set: { updatedAt: now } },
+    });
+    return change.outcome ?? "guard-rejected";
+  }
   const corps = db.collection<CapAccount>("corporations");
   const entryId = new ObjectId(leg.idHex);
   const attemptInc = async (): Promise<MoneyFlowLegOutcome> => {
@@ -345,6 +403,27 @@ async function revertCapCreditKeyed(
   shares: number,
   now: Date
 ): Promise<MoneyFlowLegOutcome> {
+  if (
+    (leg.field === "characterId" || leg.field === "imperialCharacterId") &&
+    leg.holdingTurn !== undefined
+  ) {
+    const change: PersonalHoldingChange = {
+      turn: leg.holdingTurn,
+      remove: leg.holdingTerms ?? purchasedHoldingTerms(shares, leg.pricePerShare, leg.holdingTurn),
+    };
+    await updatePersonalHolding({
+      db,
+      corporationId: corpId,
+      ownerId: new ObjectId(leg.idHex),
+      ownerKey: leg.field,
+      shares,
+      credit: false,
+      change,
+      key: subkey,
+      extra: { $set: { updatedAt: now } },
+    });
+    return change.outcome ?? "guard-rejected";
+  }
   const corps = db.collection<CapAccount>("corporations");
   const entryId = new ObjectId(leg.idHex);
   const live = await corps.findOne({ _id: corpId } as Filter<CapAccount>, {
@@ -658,6 +737,47 @@ export function makeCashStep(
   debit: boolean,
   now: Date
 ): MoneyFlowStep {
+  if (leg.stockTaxReceipt) {
+    if (debit || (leg.collection !== "characters" && leg.collection !== "imperialCharacters"))
+      throw new Error("Stock tax receipt must accompany a personal cash credit");
+    const collection = db.collection<{
+      _id: ObjectId;
+      appliedMoneyFlowKeys?: string[];
+      pendingStockTaxReceipts?: PendingStockTaxReceipt[];
+    }>(leg.collection);
+    const receipt = leg.stockTaxReceipt;
+    return {
+      name,
+      apply: (options) =>
+        applyKeyedUpdate(
+          key,
+          {
+            collection,
+            filter: { _id: new ObjectId(leg.idHex) },
+            update: {
+              $inc: { [leg.field]: leg.amount },
+              $push: { pendingStockTaxReceipts: receipt },
+              $set: { updatedAt: now },
+            },
+          },
+          options ?? {}
+        ),
+      revert: (options) =>
+        applyKeyedUpdate(
+          deriveMoneyFlowKey(key, "compensate", name),
+          {
+            collection,
+            filter: { _id: new ObjectId(leg.idHex) },
+            update: {
+              $inc: { [leg.field]: -leg.amount },
+              $pull: { pendingStockTaxReceipts: { id: receipt.id } },
+              $set: { updatedAt: now },
+            },
+          },
+          options ?? {}
+        ),
+    };
+  }
   const collection = db.collection<{ _id: ObjectId; appliedMoneyFlowKeys?: string[] }>(
     leg.collection
   );

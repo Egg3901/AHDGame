@@ -194,7 +194,7 @@ export function FiscalStatStrip({
             label="Funded treasury cash"
             value={money(treasuryCashLocal)}
             tone="up"
-            sub="spendable proceeds received from bond pools"
+            sub="spendable cash from taxes, bonds, and other receipts"
           />
           <StatTile
             label="Bank claims due"

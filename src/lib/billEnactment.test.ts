@@ -379,7 +379,8 @@ describe("onBillEnacted", () => {
       policyOptionIndex: 0,
     });
     const updateCall = db.collectionMocks.federalBudget.updateOne.mock.calls[0];
-    expect(updateCall[0]).toEqual({ _id: "JP" });
+    expect(updateCall[0]).toMatchObject({ _id: "JP" });
+    expect(updateCall[0].taxRates).toBeDefined();
     expect(updateCall[1].$set.taxRates.foreignCorporateTax).toBe(24);
     expect(updateCall[1].$set["taxRatePhaseIn.foreignCorporateTax"]).toBe(27.25);
   });
@@ -884,7 +885,8 @@ describe("onBillEnacted", () => {
       );
 
       const updateCall = db.collectionMocks["stateBudgets"]!.updateOne.mock.calls[0];
-      expect(updateCall[0]).toEqual({ _id: "US_CA", countryId: "US" });
+      expect(updateCall[0]).toMatchObject({ _id: "US_CA", countryId: "US" });
+      expect(updateCall[0].taxRates).toBeDefined();
       expect(updateCall[1].$set).toMatchObject({
         taxRates: expect.objectContaining({ domesticCorporateTax: 10, foreignCorporateTax: 21 }),
         revenue: expect.objectContaining({ total: 500 }),
@@ -1181,7 +1183,8 @@ describe("onBillEnacted", () => {
 
       expect(calculateFederalRevenue).toHaveBeenCalled();
       const updateCall = db.collectionMocks["federalBudget"]!.updateOne.mock.calls[0];
-      expect(updateCall[0]).toEqual({ _id: "UK" });
+      expect(updateCall[0]).toMatchObject({ _id: "UK" });
+      expect(updateCall[0].taxRates).toBeDefined();
       expect(updateCall[1].$set.taxRates).toMatchObject({
         domesticCorporateTax: 19,
         foreignCorporateTax: 20, // 19 toward 45, one point per turn
@@ -1244,7 +1247,8 @@ describe("onBillEnacted", () => {
 
       expect(calculateFederalRevenue).toHaveBeenCalled();
       const updateCall = db.collectionMocks["federalBudget"]!.updateOne.mock.calls[0];
-      expect(updateCall[0]).toEqual({ _id: "UK" });
+      expect(updateCall[0]).toMatchObject({ _id: "UK" });
+      expect(updateCall[0].taxRates).toBeDefined();
       expect(updateCall[1].$set.taxRates).toMatchObject({
         salesTax: 1, // 0 toward 5, one point per turn
         // Unrelated lines are untouched.
@@ -1293,12 +1297,72 @@ describe("onBillEnacted", () => {
 
       expect(calculateFederalRevenue).toHaveBeenCalled();
       const updateCall = db.collectionMocks["federalBudget"]!.updateOne.mock.calls[0];
-      expect(updateCall[0]).toEqual({ _id: "JP" });
+      expect(updateCall[0]).toMatchObject({ _id: "JP" });
+      expect(updateCall[0].taxRates).toBeDefined();
       expect(updateCall[1].$set.taxRates).toMatchObject({
         domesticCorporateTax: 23,
         foreignCorporateTax: 24, // 23 toward 52, one point per turn
       });
     });
+
+    it.each(["capitalGainsTaxLow", "capitalGainsTaxMiddle", "capitalGainsTaxHigh"])(
+      "enacts %s as an independent provision and preserves other tax rates",
+      async (taxType) => {
+        const typeId = "synthetic_" + taxType;
+        const optionId = "rate:17";
+        const rates = {
+          incomeTax: 20,
+          incomeTaxLow: 10,
+          incomeTaxMiddle: 20,
+          incomeTaxHigh: 30,
+          capitalGainsTaxLow: 8,
+          capitalGainsTaxMiddle: 12,
+          capitalGainsTaxHigh: 18,
+        };
+        setupCollection("legislationTypes", [
+          {
+            _id: typeId,
+            policyDomain: "tax",
+            countryScope: "br",
+            taxRateChange: { scope: "federal", taxType },
+            policyOptions: [{ id: optionId, rate: 17, effectDirection: 1 }],
+          },
+        ]);
+        db.collection("federalBudget");
+        db.collectionMocks.federalBudget.findOne.mockResolvedValue({
+          _id: "BR",
+          countryId: "BR",
+          taxRates: rates,
+          spending: { total: 100 },
+        });
+        await onBillEnacted(
+          db as unknown as Db,
+          createBill({
+            countryId: "BR",
+            stateId: "br_national",
+            provisions: [
+              { legislationTypeId: typeId, policyOptionId: optionId, effectDirection: 1 },
+            ],
+          }) as never,
+          10
+        );
+        const update = db.collectionMocks.federalBudget.updateOne.mock.calls[0][1];
+        expect(update.$set.taxRates).toMatchObject({
+          ...rates,
+          [taxType]:
+            rates[taxType as keyof typeof rates] +
+            Math.sign(17 - rates[taxType as keyof typeof rates]),
+        });
+        expect(
+          db.collectionMocks.statePolicies.updateOne.mock.calls.some(
+            (call) => call[1].$set?.policyOptionId === optionId
+          )
+        ).toBe(true);
+        if (taxType !== "capitalGainsTaxHigh")
+          expect(update.$set["taxRatePhaseIn." + taxType]).toBe(17);
+        else expect(update.$unset["taxRatePhaseIn." + taxType]).toBe("");
+      }
+    );
 
     it.each([
       {

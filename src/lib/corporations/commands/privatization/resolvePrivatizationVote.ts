@@ -1,6 +1,15 @@
-import type { Db, UpdateFilter } from "mongodb";
+import type { Db, UpdateFilter, AnyBulkWriteOperation } from "mongodb";
+import {
+  holdingCostBasis,
+  mergeHoldingTerms,
+  positionHoldingTerms,
+  purchasedHoldingTerms,
+} from "@/lib/corporations/rules/holdingTerms";
+import { pendingStockTaxReceipt } from "@/lib/corporations/rules/stockTaxReceipt";
+import { buildPersonalBalanceInc } from "@/lib/currency/characterFunds";
 import type {
   Corporation,
+  Character,
   CorporationPrivatizationVote,
   IndexFund,
   Shareholder,
@@ -25,6 +34,8 @@ export interface ResolveInput {
   currentTurn: number;
   forexEnabled: boolean;
   force?: boolean;
+  stockTaxActive?: boolean;
+  fxByCurrency?: Map<CurrencyCode, number>;
 }
 
 export type ResolveResult =
@@ -188,20 +199,37 @@ export async function resolvePrivatizationVote(input: ResolveInput): Promise<Res
   // cash flow today. Fund payouts are tracked separately so the CEO's booked
   // outflow leg reflects only the char/corp/float portions it can attribute.
   const hasFundHolder = nonCeoHolders.some((h) => h.fundId && !h.characterId && !h.corporationId);
-  const fxByCurrency = hasFundHolder ? await loadFxRatesByCurrency(db) : null;
+  const fxByCurrency =
+    input.fxByCurrency ??
+    (hasFundHolder || input.stockTaxActive ? await loadFxRatesByCurrency(db) : null);
 
   let totalCharCorpPaid = 0;
+  const personalPayoutOps: AnyBulkWriteOperation<Character>[] = [];
   let totalFundPaidAnchor = 0;
   for (const holder of nonCeoHolders) {
     const payout = Math.round(holder.shares * vote.lockedBuyoutPrice);
     if (holder.characterId) {
-      await refundCharacterCash(
-        db,
-        holder.characterId,
-        vote.lockedBuyoutCurrency,
-        payout,
-        forexEnabled
-      );
+      const rate = fxByCurrency?.get(vote.lockedBuyoutCurrency as CurrencyCode) ?? 1;
+      const stockTax = input.stockTaxActive
+        ? pendingStockTaxReceipt({
+            id: vote._id.toHexString() + ":" + holder.characterId.toHexString(),
+            currencyCode: vote.lockedBuyoutCurrency,
+            holdingTerms: positionHoldingTerms(holder, currentTurn, vote.lockedBuyoutPrice / rate),
+            proceedsAnchor: payout / rate,
+            proceedsCredited: payout,
+            saleTurn: currentTurn,
+            assessmentTurn: currentTurn + 1,
+          })
+        : undefined;
+      personalPayoutOps.push({
+        updateOne: {
+          filter: { _id: holder.characterId },
+          update: {
+            $inc: buildPersonalBalanceInc(payout, vote.lockedBuyoutCurrency, forexEnabled),
+            ...(stockTax ? { $push: { pendingStockTaxReceipts: stockTax } } : {}),
+          },
+        },
+      });
       void emitTx(db, {
         type: "share_buyout_payout",
         turn: currentTurn,
@@ -214,6 +242,7 @@ export async function resolvePrivatizationVote(input: ResolveInput): Promise<Res
         counterpartyType: "corporation",
         counterpartyId: corp._id,
         counterpartyName: corp.name,
+        ...(stockTax ? { meta: { stockTax } } : {}),
       });
       totalCharCorpPaid += payout;
     } else if (holder.corporationId) {
@@ -246,6 +275,9 @@ export async function resolvePrivatizationVote(input: ResolveInput): Promise<Res
     }
   }
 
+  if (personalPayoutOps.length)
+    await db.collection<Character>("characters").bulkWrite(personalPayoutOps);
+
   // Public float buyback: pay corp treasury for the retired float shares.
   const floatPayout = Math.round(publicFloat * vote.lockedBuyoutPrice);
   if (floatPayout > 0) {
@@ -277,11 +309,31 @@ export async function resolvePrivatizationVote(input: ResolveInput): Promise<Res
     {
       characterId: corp.ceoId,
       shares: ceoSharesAfter,
+      ...(ceoEntry?.avgCostBasisUnit ? { avgCostBasisUnit: ceoEntry.avgCostBasisUnit } : {}),
       ...(ceoEntry?.avgCostPerShare !== undefined
         ? { avgCostPerShare: ceoEntry.avgCostPerShare }
         : {}),
     },
   ];
+  if (input.stockTaxActive || ceoEntry?.holdingTerms) {
+    const rate = fxByCurrency?.get(vote.lockedBuyoutCurrency as CurrencyCode) ?? 1;
+    const acquired = ceoSharesAfter - (ceoEntry?.shares ?? 0);
+    const prior = positionHoldingTerms(
+      ceoEntry ?? { shares: 0 },
+      currentTurn,
+      vote.lockedBuyoutPrice / rate
+    );
+    const actualBasis = totalCharCorpPaid / rate + totalFundPaidAnchor;
+    const addition = purchasedHoldingTerms(
+      acquired,
+      acquired > 0 ? actualBasis / acquired : 0,
+      currentTurn
+    );
+    const holdingTerms = mergeHoldingTerms(prior, addition, currentTurn);
+    newShareholders[0].holdingTerms = holdingTerms;
+    newShareholders[0].avgCostBasisUnit = "anchor";
+    newShareholders[0].avgCostPerShare = holdingCostBasis(holdingTerms) / ceoSharesAfter;
+  }
   const newTotalShares = ceoSharesAfter; // = old totalShares − publicFloat
 
   await db.collection<Corporation>("corporations").updateOne(

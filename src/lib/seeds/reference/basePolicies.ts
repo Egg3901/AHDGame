@@ -280,8 +280,11 @@ function buildBasePolicies(
       // Policy vacuum (preset-keyed): skip domains that do not exist yet.
       if (startYear !== undefined && !isLegislationTypeActive(lt._id, startYear)) continue;
 
-      const d = config.defaults[lt._id.split("__income_")[0]] ?? { economic: 0, social: 0 };
-      const overrideIdx = config.optionIndexes[lt._id.split("__income_")[0]];
+      const d = config.defaults[lt._id.split(/__(?:income|capital)_/)[0]] ?? {
+        economic: 0,
+        social: 0,
+      };
+      const overrideIdx = config.optionIndexes[lt._id.split(/__(?:income|capital)_/)[0]];
       const optIndex = overrideIdx ?? 3;
       const option = lt.policyOptions?.[optIndex];
       out.push({

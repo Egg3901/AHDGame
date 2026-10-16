@@ -261,9 +261,10 @@ export const LEGACY_DYNAMIC_COLLECTION_SITES: readonly LegacyDynamicCollectionSi
     file: "src/lib/corporations/commands/acquisitions/acquisitionSettlement.ts",
     owner: "applyAcquisitionLeg",
     argument: "leg.collection",
-    scopeHash: "0ca4b586081b2e51766d2a9e5706e693a19a2a20b2616aa7a1915011ac5863af",
+    scopeHash: "865133c464541ed054e5dfdc28be29403872ac66db44655cea9b74c7a91ab90e",
     count: 1,
-    reason: "The persisted transaction or recovery record carries its destination collection.",
+    reason:
+      "Reviewed stock-tax receipt addition: persisted acquisition legs target the existing characters, imperialCharacters or corporations collections; the receipt shares the keyed wallet write and inherits actor reset coverage.",
   },
   {
     file: "src/lib/corporations/commands/acquisitions/acquisitionSettlement.ts",

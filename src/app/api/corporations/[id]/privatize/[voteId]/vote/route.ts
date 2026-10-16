@@ -1,3 +1,4 @@
+import { rejectDuringTurn } from "@/lib/api/rejectDuringTurn";
 import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
@@ -42,6 +43,8 @@ export async function POST(request: Request, { params }: RouteParams) {
     }
 
     const db = await getDb();
+    const turnGuard = await rejectDuringTurn(db);
+    if (turnGuard) return turnGuard;
     const resolved = await resolveCorporation(db, id);
     if (!resolved.ok) return resolved.response;
     const { corporation } = resolved;
@@ -87,6 +90,9 @@ export async function POST(request: Request, { params }: RouteParams) {
           currentTurn,
           forexEnabled,
           force: true,
+          stockTaxActive:
+            gameState?.stockHoldingTaxStartTurn !== undefined &&
+            currentTurn >= gameState.stockHoldingTaxStartTurn,
         });
       }
     }

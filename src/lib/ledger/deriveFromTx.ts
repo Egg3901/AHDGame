@@ -332,7 +332,10 @@ export function deriveLedgerEntry(
 ): LedgerEntryInput | null {
   if (
     (tx.type === "player_income_tax" ||
-      (tx.type === "gov_tax_revenue" && tx.meta?.source === "player_income_tax")) &&
+      tx.type === "player_capital_gains_tax" ||
+      (tx.type === "gov_tax_revenue" &&
+        (tx.meta?.source === "player_income_tax" ||
+          tx.meta?.source === "player_capital_gains_tax"))) &&
     tx.meta?.ledgerOwnedBySettlement === true
   )
     return null;

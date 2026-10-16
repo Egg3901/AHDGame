@@ -139,7 +139,7 @@ describe("POST /api/corporations/[id]/shares/orders", () => {
         $inc: { publicFloat: 5, orderFlowWindowBuyValue: -50 },
         $set: expect.any(Object),
       },
-      { requireSufficient: true }
+      expect.objectContaining({ requireSufficient: true, holdingChange: expect.any(Object) })
     );
     expect(refundCharacterCash).toHaveBeenCalledWith(expect.anything(), charId, "USD", 50, false);
   });
@@ -268,7 +268,9 @@ describe("POST /api/corporations/[id]/shares/orders", () => {
       charId,
       5,
       { $set: expect.any(Object) },
-      { pricePerShare: 7 }
+      expect.objectContaining({
+        holdingChange: expect.objectContaining({ turn: expect.any(Number) }),
+      })
     );
   });
 });

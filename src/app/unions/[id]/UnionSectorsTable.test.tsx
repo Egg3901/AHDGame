@@ -61,6 +61,7 @@ describe("UnionSectorsTable", () => {
     renderTable();
     for (const label of [
       "Corporation",
+      "Representing union",
       "State",
       "Workers",
       "Wage",
@@ -134,4 +135,39 @@ describe("UnionSectorsTable", () => {
     expect(screen.queryByRole("button", { name: "Organize" })).toBeNull();
     expect(screen.queryByRole("button", { name: "What Drive means" })).toBeNull();
   });
+});
+
+it("names each shop's representative and counts only represented members across all unions", () => {
+  renderTable({
+    sectors: [
+      row("ours", {
+        representingUnionId: "u1",
+        representingUnionName: "Our union",
+        unionization: 20,
+      }),
+      row("rival", {
+        representingUnionId: "u2",
+        representingUnionName: "Rival union",
+        unionization: 30,
+      }),
+      row("none", { unionization: 90 }),
+      row("deleted", { representingUnionId: "gone", unionization: 10 }),
+    ],
+  });
+  expect(screen.getByRole("link", { name: "Our union" }).getAttribute("href")).toBe("/unions/u1");
+  expect(screen.getByRole("link", { name: "Rival union" }).getAttribute("href")).toBe("/unions/u2");
+  expect(screen.getByText("Unrepresented")).toBeTruthy();
+  expect(screen.getByText("Unknown union (gone)")).toBeTruthy();
+  for (const [shop, count] of [
+    ["ours", "20"],
+    ["rival", "30"],
+    ["deleted", "10"],
+  ]) {
+    const shopRow = screen.getByRole("link", { name: `Corp ${shop}` }).closest("tr")!;
+    expect(within(shopRow).getByText(count)).toBeTruthy();
+  }
+  const unrepresented = screen.getByRole("link", { name: "Corp none" }).closest("tr")!;
+  expect(within(unrepresented).getByText("0")).toBeTruthy();
+  expect(screen.getByText(/60 of 400 workers organized across all unions/)).toBeTruthy();
+  expect(screen.getByText(/one representing union per shop/i)).toBeTruthy();
 });

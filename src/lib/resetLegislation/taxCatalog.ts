@@ -10,6 +10,7 @@ import {
  * is deliberately not offered through this menu yet.
  */
 import type { ResetCountry } from "./fundingOwner";
+import { CAPITAL_GAINS_TAX_KEYS } from "@/lib/budget/rules/capitalGainsTax";
 
 export type TaxScope = "national" | "regional";
 export type ResetTaxType =
@@ -17,6 +18,9 @@ export type ResetTaxType =
   | "incomeTaxLow"
   | "incomeTaxMiddle"
   | "incomeTaxHigh"
+  | "capitalGainsTaxLow"
+  | "capitalGainsTaxMiddle"
+  | "capitalGainsTaxHigh"
   | "domesticCorporateTax"
   | "foreignCorporateTax"
   | "payrollTax"
@@ -210,13 +214,22 @@ export const resetTaxes: readonly ResetTaxDefinition[] = [
   ...regionalTaxes,
 ].flatMap((tax) =>
   tax.taxType === "incomeTax"
-    ? INCOME_TIERS.map((tier) => ({
-        ...tax,
-        id: tax.id + "_" + tier,
-        title: INCOME_TIER_LABELS[tier] + " Tax",
-        taxType: INCOME_TAX_KEYS[tier],
-        existingLegislationTypeId: tax.existingLegislationTypeId + "__income_" + tier,
-      }))
+    ? INCOME_TIERS.flatMap((tier) => [
+        {
+          ...tax,
+          id: tax.id + "_" + tier,
+          title: INCOME_TIER_LABELS[tier] + " Tax",
+          taxType: INCOME_TAX_KEYS[tier],
+          existingLegislationTypeId: tax.existingLegislationTypeId + "__income_" + tier,
+        },
+        {
+          ...tax,
+          id: tax.id + "_capital_" + tier,
+          title: INCOME_TIER_LABELS[tier] + " Capital Gains Tax",
+          taxType: CAPITAL_GAINS_TAX_KEYS[tier],
+          existingLegislationTypeId: tax.existingLegislationTypeId + "__capital_" + tier,
+        },
+      ])
     : [tax]
 );
 

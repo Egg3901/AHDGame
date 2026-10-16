@@ -44,11 +44,16 @@ const COLUMNS: Column[] = [
     help: "The employer running this shop. Opens the sector page.",
     sortKey: "corporation",
   },
+  {
+    key: "representative",
+    label: "Representing union",
+    help: "The one union representing this shop. The member count belongs to this union, not to every union in the industry.",
+  },
   { key: "state", label: "State", help: "Where the shop operates.", sortKey: "state" },
   {
     key: "workers",
     label: "Workers",
-    help: "Union members in this shop, over its whole workforce. Members are the workforce times unionization, and they are what dues are charged against. Sorts by workforce.",
+    help: "Members of the representing union in this shop, over its whole workforce. Unrepresented shops have no union members. Sorts by workforce.",
     sortKey: "workers",
     align: "right",
   },
@@ -69,7 +74,7 @@ const COLUMNS: Column[] = [
   {
     key: "unionization",
     label: "Unionization",
-    help: "Share of this shop's workers in the union. A drive pushes it up, and every turn it drifts back toward a level set by the union's approval.",
+    help: "Share of this shop's workforce belonging to its representing union. A successful raid transfers representation, rather than adding competing memberships.",
     sortKey: "unionization",
     align: "right",
   },
@@ -212,6 +217,11 @@ export function UnionSectorsTable({
 
   return (
     <div className="space-y-3">
+      <p className="text-xs text-muted">
+        One representing union per shop. Unionization is its members&apos; share of the workforce. A
+        successful raid transfers representation; there are no competing memberships or plurality
+        contests.
+      </p>
       <div className="flex flex-wrap items-end gap-2">
         <label className="flex flex-col gap-1">
           <span className="text-[11px] font-medium text-muted">Search</span>
@@ -272,7 +282,7 @@ export function UnionSectorsTable({
         <span className="ml-auto text-xs tabular-nums text-muted">
           {filtered ? `${visible.length} of ${sectors.length} shops` : `${sectors.length} shops`} ·{" "}
           {totalMembers.toLocaleString("en-US")} of {totalWorkers.toLocaleString("en-US")} workers
-          organized
+          organized across all unions
         </span>
       </div>
 
@@ -414,8 +424,17 @@ export function UnionSectorsTable({
                       >
                         {s.corporationName}
                       </Link>
-                      {rival && (
-                        <div className="text-[10px] text-warning">Rival union&apos;s shop</div>
+                    </td>
+                    <td className="px-3 py-3">
+                      {s.representingUnionId ? (
+                        <Link
+                          href={`/unions/${s.representingUnionId}`}
+                          className={`text-xs hover:underline ${rival ? "text-warning" : "text-primary"}`}
+                        >
+                          {s.representingUnionName ?? `Unknown union (${s.representingUnionId})`}
+                        </Link>
+                      ) : (
+                        <span className="text-xs text-muted">Unrepresented</span>
                       )}
                     </td>
                     <td className="px-3 py-3 text-muted">{s.stateId}</td>

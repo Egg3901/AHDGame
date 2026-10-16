@@ -124,12 +124,30 @@ export function applyEraRevenueCap(
   return (knee + (share - knee) * REVENUE_CAP_COMPRESS) * gdp;
 }
 
+import { initializeCapitalGainsTaxRates } from "./rules/capitalGainsTax";
+
 type LegacyFederalTaxRates = Partial<FederalTaxRates> & {
   corporateTax?: number;
 };
 
 function coerceRate(value: unknown): number | undefined {
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+function capitalGainsRateFields(taxRates: Partial<FederalTaxRates>) {
+  const initialized = initializeCapitalGainsTaxRates({
+    incomeTax: coerceRate(taxRates.incomeTax) ?? 0,
+    incomeTaxLow: coerceRate(taxRates.incomeTaxLow),
+    incomeTaxMiddle: coerceRate(taxRates.incomeTaxMiddle),
+    incomeTaxHigh: coerceRate(taxRates.incomeTaxHigh),
+    capitalGainsTaxLow: coerceRate(taxRates.capitalGainsTaxLow),
+    capitalGainsTaxMiddle: coerceRate(taxRates.capitalGainsTaxMiddle),
+    capitalGainsTaxHigh: coerceRate(taxRates.capitalGainsTaxHigh),
+  });
+  return {
+    capitalGainsTaxLow: initialized.capitalGainsTaxLow,
+    capitalGainsTaxMiddle: initialized.capitalGainsTaxMiddle,
+    capitalGainsTaxHigh: initialized.capitalGainsTaxHigh,
+  };
 }
 
 export function normalizeFederalTaxRates(
@@ -140,6 +158,7 @@ export function normalizeFederalTaxRates(
   const corporateFallback = coerceRate(taxRates.corporateTax) ?? 0;
 
   return {
+    ...capitalGainsRateFields(taxRates),
     ...initializeIncomeTaxRates({
       incomeTax: coerceRate(taxRates.incomeTax) ?? 0,
       incomeTaxLow: coerceRate(taxRates.incomeTaxLow),
@@ -171,6 +190,7 @@ export function normalizeStateTaxRates(
   if (!taxRates) return null;
 
   return {
+    ...capitalGainsRateFields(taxRates),
     ...initializeIncomeTaxRates({
       incomeTax: coerceRate(taxRates.incomeTax) ?? 0,
       incomeTaxLow: coerceRate(taxRates.incomeTaxLow),

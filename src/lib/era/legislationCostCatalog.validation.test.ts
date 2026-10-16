@@ -10,7 +10,9 @@ const byId = new Map(legislationTypes.map((t) => [t._id, t]));
 
 describe("cost class catalog — coverage", () => {
   it("every seed type has a cost class (key-set equality)", () => {
-    const seedIds = [...new Set(legislationTypes.map((t) => t._id.split("__income_")[0]))].sort();
+    const seedIds = [
+      ...new Set(legislationTypes.map((t) => t._id.split(/__(?:income|capital)_/)[0])),
+    ].sort();
     const classIds = Object.keys(LEGISLATION_COST_CLASS)
       .filter((k) => !k.startsWith("x_") && !k.startsWith("eraB_")) // strip test-seeded ids
       .sort();

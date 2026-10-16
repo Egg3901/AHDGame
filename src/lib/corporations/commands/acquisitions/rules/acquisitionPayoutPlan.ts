@@ -16,6 +16,9 @@
  */
 
 import type { ShareholderAllocation } from "@/lib/bonds/corporateBondDefault";
+import type { PendingStockTaxReceipt } from "@/lib/budget/rules/capitalGainsTax";
+import type { ShareHoldingTerms } from "@/lib/corporations/rules/holdingTerms";
+import { pendingStockTaxReceipt } from "@/lib/corporations/rules/stockTaxReceipt";
 import {
   anchorToCorpLiquidCapital,
   type CorpCapitalCurrencyInfo,
@@ -43,6 +46,7 @@ export interface PlannedLedger {
 }
 
 export interface PlannedLeg {
+  stockTaxReceipt?: PendingStockTaxReceipt;
   key: string;
   kind: AcquisitionLegKind;
   collection: "characters" | "imperialCharacters" | "corporations" | "federalBudget" | "indexFunds";
@@ -60,6 +64,7 @@ export interface PlannedLeg {
 }
 
 export interface PayoutPlanInput {
+  stockTax?: { saleTurn: number; holdingsByOwner: Record<string, ShareHoldingTerms> };
   offerHex: string;
   priceAnchor: number;
   priceInAcquirerCapital: number;
@@ -184,7 +189,22 @@ export function buildAcquisitionPayoutPlan(input: PayoutPlanInput): PayoutPlan {
       ? anchorToLocal(row.payout, currency, input.fxByCurrency)
       : row.payout;
     const imperial = row.isImperial === true;
+    const holdingTerms =
+      input.stockTax?.holdingsByOwner[(imperial ? "imperial:" : "character:") + row.characterId];
+    const stockTaxReceipt =
+      holdingTerms && input.stockTax
+        ? pendingStockTaxReceipt({
+            id: input.offerHex + ":" + (imperial ? "imperial:" : "character:") + row.characterId,
+            currencyCode: currency,
+            holdingTerms,
+            proceedsAnchor: row.payout,
+            proceedsCredited: amt,
+            saleTurn: input.stockTax.saleTurn,
+            assessmentTurn: input.stockTax.saleTurn + 1,
+          })
+        : undefined;
     legs.push({
+      ...(stockTaxReceipt ? { stockTaxReceipt } : {}),
       key: `holder:${imperial ? "imperial" : "character"}:${row.characterId}`,
       kind: "holder_credit",
       collection: imperial ? "imperialCharacters" : "characters",
@@ -203,7 +223,12 @@ export function buildAcquisitionPayoutPlan(input: PayoutPlanInput): PayoutPlan {
           subjectId: row.characterId,
           subjectName: "(shareholder)",
           ...counterparty,
-          meta: { kind: KIND, ...outcomeMeta, ...(imperial ? { imperial: true } : {}) },
+          meta: {
+            kind: KIND,
+            ...outcomeMeta,
+            ...(imperial ? { imperial: true } : {}),
+            ...(stockTaxReceipt ? { stockTax: stockTaxReceipt } : {}),
+          },
         },
       ],
     });

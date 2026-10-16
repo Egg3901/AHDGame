@@ -1,4 +1,5 @@
 import type { CorporationType, OperatingSectorType } from "@/lib/constants/corporations";
+import type { ShareHoldingTerms } from "@/lib/corporations/rules/holdingTerms";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import type { LoyaltyLabel } from "@/lib/market/brandLoyalty";
 import type { FillRateBand } from "@/lib/corporations/financialFogOfWar";
@@ -6,6 +7,8 @@ import type { BuildQueueSummary } from "@/lib/corporations/sectorBuildQueue";
 import type { CorpAutopilotAdvisoryKind } from "@/lib/db/types/corporation";
 
 export interface ShareholderInfo {
+  /** Owner-only purchase ages and cost basis. */
+  holdingTerms?: ShareHoldingTerms;
   /** Set for individual character shareholders */
   characterId?: string;
   /** Set for corporate shareholders */
@@ -381,6 +384,8 @@ export interface CorporationDetail {
 }
 
 export interface MyShareOrder {
+  holdingTerms?: ShareHoldingTerms;
+  holdingTurn?: number;
   _id: string;
   type: "buy" | "sell";
   shares: number;

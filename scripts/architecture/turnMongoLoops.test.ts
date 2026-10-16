@@ -23,6 +23,19 @@ describe("per-row Mongo operations", () => {
       'const ids=rows.map(row=>row.id); await db.collection("newState").find({_id:{$in:ids}}).toArray(); for (const row of rows) { values.push(row.value); } await col.bulkWrite(ops); rows.map(row=>row.labels.find(x=>x===wanted));';
     expect(findMongoOperationsInLoops(source, "fixture.ts")).toEqual([]);
   });
+  it("distinguishes a documented bounded contention retry from per-row queries", () => {
+    const annotated =
+      '// bounded-cas-retry(maxAttempts=8): Retry only when the single holder compare-and-set loses a concurrent trade.\nfor(let attempt=0;attempt<8;attempt++) await db.collection("corporations").updateOne({_id:id, shares:prior},{$set:{shares:next}});';
+    expect(findMongoOperationsInLoops(annotated, "fixture.ts")).toEqual([]);
+    for (const source of [
+      annotated.replace("attempt<8", "attempt<rows.length"),
+      annotated.replace("attempt<8", "attempt<9"),
+      annotated.replace("maxAttempts=8", "maxAttempts=100"),
+      annotated.replace("// bounded-cas-retry", "// ordinary retry"),
+      "for(const row of rows){\n" + annotated + "\n}",
+    ])
+      expect(findMongoOperationsInLoops(source, "fixture.ts")).toHaveLength(1);
+  });
   it("does not treat a function declared inside a loop as a repeated call", () => {
     expect(
       findMongoOperationsInLoops(

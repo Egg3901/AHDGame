@@ -1,4 +1,9 @@
 import { NextResponse } from "next/server";
+import {
+  positionHoldingTerms,
+  takeReservedHoldingShares,
+} from "@/lib/corporations/rules/holdingTerms";
+import { pendingStockTaxReceipt } from "@/lib/corporations/rules/stockTaxReceipt";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireCorporationActionsEnabled } from "@/lib/api/requireCorporationActions";
@@ -10,18 +15,22 @@ import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { resolveCorporation } from "@/lib/api/corporations/resolveQuery";
 import { assertCeoTradeNotBlocked } from "@/lib/corporations/commands/privatization/openVoteGuard";
 import {
-  creditShares,
-  creditSharesToCorp,
-  debitShares,
-  debitSharesFromCorp,
-} from "@/lib/corporations/shareholderOps";
+  beginShareFillAttempt,
+  buildShareFillFingerprint,
+  collectShareFillAuditRows,
+  insertShareFillAuditRows,
+  restoreFailedShareFillClaim,
+  settleShareFillAttempt,
+  type ShareFillAuditPlan,
+} from "./shareFillAudit";
+import {
+  executeShareFillMoneyFlow,
+  personalBalanceField,
+  type ShareFillMoneyPlan,
+} from "./shareFillMoney";
 import { getCharacterByUserId } from "@/lib/db/characterLookup";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
-import {
-  buildPersonalBalanceInc,
-  getHomeCurrency,
-  loadCharacterFxRate,
-} from "@/lib/currency/characterFunds";
+import { getHomeCurrency, loadCharacterFxRate } from "@/lib/currency/characterFunds";
 import {
   anchorToCorpLiquidCapital,
   corpLiquidCapitalToAnchor,
@@ -31,10 +40,7 @@ import {
 import { CURRENCY_SYMBOLS } from "@/lib/constants/currencies";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import { notifyHostileTakeoverThresholdIfEligible } from "@/lib/corporations/hostileTakeoverNotifications";
-import { recordShareTrade } from "@/lib/corporations/shareTradeHistory";
-import type { ShareTradeParty } from "@/lib/db/types/shareTradeHistory";
 import { getCurrentTurn } from "@/lib/turn/currentTurn";
-import { emitTx } from "@/lib/financialTxLog/emit";
 import { rejectDuringTurn } from "@/lib/api/rejectDuringTurn";
 import type {
   Character,
@@ -92,6 +98,9 @@ export async function acceptShareOffer(request: Request, { params }: RouteParams
       return errorResponse(404, "Listing not found");
     }
     if (!offer) return errorResponse(404, "Offer not found");
+    if (listing.activeShareFillKey) {
+      return errorResponse(409, "Listing settlement is in progress. Please refresh.");
+    }
     if (listing.status !== "open") return errorResponse(400, "Listing is not open");
     if (offer.status !== "pending") return errorResponse(400, "Offer is not pending");
     if (!offer.listingId.equals(listing._id))
@@ -124,6 +133,17 @@ export async function acceptShareOffer(request: Request, { params }: RouteParams
 
     const now = new Date();
     const currentTurn = await getCurrentTurn(db);
+    const reserved = !listing.sellerCorporationId
+      ? takeReservedHoldingShares(
+          positionHoldingTerms(
+            { shares: listing.sharesRemaining, holdingTerms: listing.holdingTerms },
+            currentTurn,
+            listing.marketPriceAtCreation
+          ),
+          sharesToAccept,
+          currentTurn
+        )
+      : undefined;
     // offer.pricePerShare and offer.escrowAmount are both stored in the listing
     // corp's liquidCurrencyCode (Option B). proceeds + refund always equals
     // offer.escrowAmount exactly in local terms, so we compute both in local
@@ -157,12 +177,11 @@ export async function acceptShareOffer(request: Request, { params }: RouteParams
       sellerFxRate = fxResult.rate;
     }
 
-    const buyerCharForRefund =
-      refund > 0 && !offer.buyerCorporationId
-        ? await db
-            .collection<Character>("characters")
-            .findOne({ _id: offer.buyerCharacterId }, { projection: { countryId: 1, name: 1 } })
-        : null;
+    const buyerCharForRefund = !offer.buyerCorporationId
+      ? await db
+          .collection<Character>("characters")
+          .findOne({ _id: offer.buyerCharacterId }, { projection: { countryId: 1, name: 1 } })
+      : null;
     const buyerCurrency = buyerCharForRefund ? getHomeCurrency(buyerCharForRefund) : "USD";
     let buyerFxRate = 1.0;
     if (refund > 0 && !offer.buyerCorporationId && forexEnabled) {
@@ -173,304 +192,180 @@ export async function acceptShareOffer(request: Request, { params }: RouteParams
       buyerFxRate = fxResult.rate;
     }
 
-    const claimedOffer = await db.collection<ShareOffer>("shareOffers").findOneAndUpdate(
-      {
-        _id: offer._id,
-        status: "pending",
+    const [sellerCorp, buyerCorp, activation] = await Promise.all([
+      listing.sellerCorporationId
+        ? db.collection<Corporation>("corporations").findOne({ _id: listing.sellerCorporationId })
+        : null,
+      offer.buyerCorporationId
+        ? db.collection<Corporation>("corporations").findOne({ _id: offer.buyerCorporationId })
+        : null,
+      db
+        .collection<{ _id: string; stockHoldingTaxStartTurn?: number }>("gameState")
+        .findOne({ _id: "current" }, { projection: { stockHoldingTaxStartTurn: 1 } }),
+    ]);
+    if (listing.sellerCorporationId ? !sellerCorp : !sellerChar)
+      return errorResponse(404, "Seller not found");
+    if (offer.buyerCorporationId ? !buyerCorp : !buyerCharForRefund)
+      return errorResponse(404, "Buyer not found");
+    const sellerId = listing.sellerCorporationId ?? listing.sellerCharacterId;
+    const buyerId = offer.buyerCorporationId ?? offer.buyerCharacterId;
+    const sellerAmount = sellerCorp
+      ? anchorToCorpLiquidCapital(proceeds, sellerCorp, await getCorpFxRate(db, sellerCorp))
+      : proceeds * sellerFxRate;
+    const buyerRefundAmount = buyerCorp
+      ? anchorToCorpLiquidCapital(refund, buyerCorp, await getCorpFxRate(db, buyerCorp))
+      : refund * buyerFxRate;
+    const sellerCcy = sellerCorp
+      ? (resolveCorpLiquidCurrencyCode(sellerCorp) ?? "USD")
+      : sellerCurrency;
+    const buyerCcy = buyerCorp
+      ? (resolveCorpLiquidCurrencyCode(buyerCorp) ?? "USD")
+      : buyerCurrency;
+    const stockTax =
+      !sellerCorp &&
+      activation?.stockHoldingTaxStartTurn !== undefined &&
+      currentTurn >= activation.stockHoldingTaxStartTurn
+        ? pendingStockTaxReceipt({
+            id: offer._id.toHexString(),
+            currencyCode: sellerCcy,
+            holdingTerms: reserved!.taken,
+            proceedsAnchor: proceeds,
+            proceedsCredited: sellerAmount,
+            saleTurn: currentTurn,
+            assessmentTurn: currentTurn + 1,
+          })
+        : undefined;
+    const moneyPlan: ShareFillMoneyPlan = {
+      version: 1,
+      fillKey: "",
+      orderIdHex: listing._id.toHexString(),
+      corpIdHex: listing.corporationId.toHexString(),
+      direction: "listing-fill",
+      shares: sharesToAccept,
+      turn: currentTurn,
+      nowIso: now.toISOString(),
+      fillerDebit: null,
+      fillerCredit: null,
+      sellerDebit: null,
+      fundInventoryDebit: null,
+      buyerHoldingsCredit: null,
+      buyerCredit: {
+        field: buyerCorp ? "corporationId" : "characterId",
+        idHex: buyerId.toHexString(),
+        pricePerShare: buyerCorp ? offer.pricePerShare : proceeds / sharesToAccept,
+        ...(!buyerCorp ? { holdingTurn: currentTurn } : {}),
       },
-      { $set: { status: "accepted" } },
-      { returnDocument: "before" }
+      sellerProceeds: {
+        collection: sellerCorp ? "corporations" : "characters",
+        idHex: sellerId.toHexString(),
+        field: sellerCorp ? "liquidCapital" : personalBalanceField(sellerCcy, forexEnabled),
+        amount: sellerAmount,
+        ...(stockTax ? { stockTaxReceipt: stockTax } : {}),
+      },
+      ...(buyerRefundAmount > 0
+        ? {
+            buyerRefund: {
+              collection: buyerCorp ? ("corporations" as const) : ("characters" as const),
+              idHex: buyerId.toHexString(),
+              field: buyerCorp ? "liquidCapital" : personalBalanceField(buyerCcy, forexEnabled),
+              amount: buyerRefundAmount,
+            },
+          }
+        : {}),
+    };
+    const plan: ShareFillAuditPlan = {
+      version: 1,
+      targetKind: "listing",
+      offerIdHex: offer._id.toHexString(),
+      listingMoneyPlan: moneyPlan,
+      orderIdHex: listing._id.toHexString(),
+      corpIdHex: listing.corporationId.toHexString(),
+      corpCcy: listingCorp?.liquidCurrencyCode,
+      orderType: "sell",
+      shares: sharesToAccept,
+      pricePerShare: offer.pricePerShare,
+      totalAnchor: proceeds,
+      turn: currentTurn,
+      nowIso: now.toISOString(),
+      preClaimRemaining: listing.sharesRemaining,
+      claimSnapshot: {
+        escrowAmount: 0,
+        holdingTerms: listing.holdingTerms,
+        previousFillKey: listing.lastShareFillKey,
+      },
+      filler: {
+        idHex: buyerId.toHexString(),
+        collection: buyerCorp ? "corporations" : "characters",
+        name: buyerCorp?.name ?? buyerCharForRefund!.name,
+        homeCurrency: buyerCcy,
+        imperial: false,
+      },
+      fillerAmount: proceeds,
+      placerKind: sellerCorp ? "corporation" : "character",
+      placerIdHex: sellerId.toHexString(),
+      placerName: sellerCorp?.name ?? sellerChar!.name,
+      sellerAmount,
+      sellerCurrency: sellerCcy,
+      fundTx: false,
+      moneyCommitted: false,
+      ...(stockTax ? { stockTax } : {}),
+      ...(buyerRefundAmount > 0
+        ? { buyerRefund: { amount: buyerRefundAmount, currency: buyerCcy } }
+        : {}),
+    };
+    const fillKey = await beginShareFillAttempt(
+      db,
+      plan,
+      buildShareFillFingerprint({
+        orderId: listing._id,
+        fillerId: buyerId,
+        shares: sharesToAccept,
+        pricePerShare: offer.pricePerShare,
+      })
     );
-
-    if (!claimedOffer) {
-      return errorResponse(409, "Offer changed before this acceptance could be applied");
-    }
-
-    // Atomic update: check sharesRemaining and update listing in one operation
-    // This prevents race condition where two sellers accept offers simultaneously
+    const listingSharesRemaining = listing.sharesRemaining - sharesToAccept;
     const listingUpdate = await db.collection<ShareListing>("shareListings").findOneAndUpdate(
       {
         _id: listing._id,
-        sharesRemaining: { $gte: sharesToAccept },
+        sharesRemaining: listing.sharesRemaining,
         status: "open",
+        activeShareFillKey: { $exists: false },
+        ...(listing.holdingTerms
+          ? { holdingTerms: listing.holdingTerms }
+          : { holdingTerms: { $exists: false } }),
       },
       {
-        $inc: { sharesRemaining: -sharesToAccept },
-        $set: { updatedAt: now },
+        $set: {
+          sharesRemaining: listingSharesRemaining,
+          status: listingSharesRemaining === 0 ? "filled" : "open",
+          activeShareFillKey: fillKey,
+          lastShareFillKey: fillKey,
+          updatedAt: now,
+          ...(reserved && listing.holdingTerms ? { holdingTerms: reserved.remaining } : {}),
+        },
       },
       { returnDocument: "after" }
     );
-
     if (!listingUpdate) {
-      // Either listing was already updated by another request, or not enough shares remaining
-      const freshListing = await db
-        .collection<ShareListing>("shareListings")
-        .findOne({ _id: listing._id });
-      await db
-        .collection<ShareOffer>("shareOffers")
-        .updateOne({ _id: offer._id, status: "accepted" }, { $set: { status: "pending" } });
-      if (!freshListing) {
-        return errorResponse(404, "Listing not found");
-      }
-      if (freshListing.status !== "open") {
-        return errorResponse(400, "Listing is no longer open");
-      }
-      return errorResponse(400, "Not enough shares remaining (concurrent acceptance detected)");
+      await restoreFailedShareFillClaim(db, fillKey);
+      await settleShareFillAttempt(db, fillKey, "failed", "listing:claim-lost");
+      return errorResponse(409, "Listing changed before this acceptance could be applied");
     }
-    const listingSharesRemaining = listingUpdate.sharesRemaining;
-    if (listingSharesRemaining === 0) {
-      await db
-        .collection<ShareListing>("shareListings")
-        .updateOne(
-          { _id: listing._id, status: "open", sharesRemaining: 0 },
-          { $set: { status: "filled", updatedAt: now } }
-        );
+    const claimedOffer = await db
+      .collection<ShareOffer>("shareOffers")
+      .findOneAndUpdate(
+        { _id: offer._id, status: "pending" },
+        { $set: { status: "accepted", acceptFillKey: fillKey } },
+        { returnDocument: "before" }
+      );
+    if (!claimedOffer) {
+      await restoreFailedShareFillClaim(db, fillKey);
+      await settleShareFillAttempt(db, fillKey, "failed", "listing:offer-claim-lost");
+      return errorResponse(409, "Offer changed before this acceptance could be applied");
     }
-    const rollback: Array<() => Promise<void>> = [];
-
-    try {
-      // Transfer shares to buyer (reserved shares already removed from seller when listing was created)
-      if (offer.buyerCorporationId) {
-        await creditSharesToCorp(
-          db,
-          listing.corporationId,
-          offer.buyerCorporationId,
-          sharesToAccept,
-          offer.pricePerShare,
-          { $set: { updatedAt: now } }
-        );
-        rollback.push(async () => {
-          await debitSharesFromCorp(
-            db,
-            listing.corporationId,
-            offer.buyerCorporationId!,
-            sharesToAccept,
-            {
-              $set: { updatedAt: now },
-            }
-          );
-        });
-      } else {
-        await creditShares(
-          db,
-          listing.corporationId,
-          offer.buyerCharacterId,
-          sharesToAccept,
-          { $set: { updatedAt: now } },
-          { pricePerShare: offer.pricePerShare }
-        );
-        rollback.push(async () => {
-          await debitShares(db, listing.corporationId, offer.buyerCharacterId, sharesToAccept, {
-            $set: { updatedAt: now },
-          });
-        });
-      }
-
-      // Pay seller proceeds
-      if (listing.sellerCorporationId) {
-        const sellerCorp = await db
-          .collection<Corporation>("corporations")
-          .findOne({ _id: listing.sellerCorporationId });
-        const sellerFxRate = await getCorpFxRate(db, sellerCorp ?? {});
-        const proceedsInSellerCapital = anchorToCorpLiquidCapital(
-          proceeds,
-          sellerCorp ?? {},
-          sellerFxRate
-        );
-        const sellerCredit = await db
-          .collection<Corporation>("corporations")
-          .updateOne(
-            { _id: listing.sellerCorporationId },
-            { $inc: { liquidCapital: proceedsInSellerCapital }, $set: { updatedAt: now } }
-          );
-        if (sellerCredit.matchedCount === 0) {
-          throw new Error("Seller corporation not found");
-        }
-        rollback.push(async () => {
-          await db
-            .collection<Corporation>("corporations")
-            .updateOne(
-              { _id: listing.sellerCorporationId! },
-              { $inc: { liquidCapital: -proceedsInSellerCapital }, $set: { updatedAt: now } }
-            );
-        });
-        await emitTx(db, {
-          type: "stock_trade_sell",
-          turn: currentTurn,
-          createdAt: now,
-          subjectType: "corporation",
-          subjectId: listing.sellerCorporationId,
-          subjectName: sellerCorp?.name ?? "Unknown corporation",
-          amount: proceedsInSellerCapital,
-          currencyCode: resolveCorpLiquidCurrencyCode(sellerCorp ?? {}) ?? "USD",
-          counterpartyType: offer.buyerCorporationId ? "corporation" : "character",
-          counterpartyId: offer.buyerCorporationId ?? offer.buyerCharacterId,
-          counterpartyName: offer.buyerCorporationId ? "Buyer corporation" : "Buyer",
-          meta: {
-            listingId: listing._id.toString(),
-            offerId: offer._id.toString(),
-            corporationId: listing.corporationId.toString(),
-            shares: sharesToAccept,
-            pricePerShare: offer.pricePerShare,
-          },
-        });
-      } else {
-        const proceedsInSellerHome = proceeds * sellerFxRate;
-        const sellerCredit = await db.collection<Character>("characters").updateOne(
-          { _id: listing.sellerCharacterId },
-          {
-            $inc: buildPersonalBalanceInc(proceedsInSellerHome, sellerCurrency, forexEnabled),
-            $set: { updatedAt: now },
-          }
-        );
-        if (sellerCredit.matchedCount === 0) {
-          throw new Error("Seller character not found");
-        }
-        rollback.push(async () => {
-          await db.collection<Character>("characters").updateOne(
-            { _id: listing.sellerCharacterId },
-            {
-              $inc: buildPersonalBalanceInc(-proceedsInSellerHome, sellerCurrency, forexEnabled),
-              $set: { updatedAt: now },
-            }
-          );
-        });
-        await emitTx(db, {
-          type: "stock_trade_sell",
-          turn: currentTurn,
-          createdAt: now,
-          subjectType: "character",
-          subjectId: listing.sellerCharacterId,
-          subjectName: sellerChar?.name ?? character.name,
-          amount: proceedsInSellerHome,
-          currencyCode: sellerCurrency,
-          counterpartyType: offer.buyerCorporationId ? "corporation" : "character",
-          counterpartyId: offer.buyerCorporationId ?? offer.buyerCharacterId,
-          counterpartyName: offer.buyerCorporationId ? "Buyer corporation" : "Buyer",
-          meta: {
-            listingId: listing._id.toString(),
-            offerId: offer._id.toString(),
-            corporationId: listing.corporationId.toString(),
-            shares: sharesToAccept,
-            pricePerShare: offer.pricePerShare,
-          },
-        });
-      }
-
-      // Refund unaccepted portion of offer escrow
-      if (refund > 0) {
-        if (offer.buyerCorporationId) {
-          const buyerCorp = await db
-            .collection<Corporation>("corporations")
-            .findOne({ _id: offer.buyerCorporationId });
-          const buyerFxRate = await getCorpFxRate(db, buyerCorp ?? {});
-          const refundInBuyerCapital = anchorToCorpLiquidCapital(
-            refund,
-            buyerCorp ?? {},
-            buyerFxRate
-          );
-          const buyerRefund = await db
-            .collection<Corporation>("corporations")
-            .updateOne(
-              { _id: offer.buyerCorporationId },
-              { $inc: { liquidCapital: refundInBuyerCapital }, $set: { updatedAt: now } }
-            );
-          if (buyerRefund.matchedCount === 0) {
-            throw new Error("Buyer corporation not found");
-          }
-          rollback.push(async () => {
-            await db
-              .collection<Corporation>("corporations")
-              .updateOne(
-                { _id: offer.buyerCorporationId! },
-                { $inc: { liquidCapital: -refundInBuyerCapital }, $set: { updatedAt: now } }
-              );
-          });
-          await emitTx(db, {
-            type: "share_listing_refund",
-            turn: currentTurn,
-            createdAt: now,
-            subjectType: "corporation",
-            subjectId: offer.buyerCorporationId,
-            subjectName: buyerCorp?.name ?? "Unknown corporation",
-            amount: refundInBuyerCapital,
-            currencyCode: resolveCorpLiquidCurrencyCode(buyerCorp ?? {}) ?? "USD",
-            counterpartyType: "system",
-            counterpartyName: "Private listing escrow",
-            meta: {
-              listingId: listing._id.toString(),
-              offerId: offer._id.toString(),
-              corporationId: listing.corporationId.toString(),
-              sharesRefunded: offer.shares - sharesToAccept,
-              pricePerShare: offer.pricePerShare,
-            },
-          });
-        } else {
-          const refundInBuyerHome = refund * buyerFxRate;
-          const buyerRefund = await db.collection<Character>("characters").updateOne(
-            { _id: offer.buyerCharacterId },
-            {
-              $inc: buildPersonalBalanceInc(refundInBuyerHome, buyerCurrency, forexEnabled),
-              $set: { updatedAt: now },
-            }
-          );
-          if (buyerRefund.matchedCount === 0) {
-            throw new Error("Buyer character not found");
-          }
-          rollback.push(async () => {
-            await db.collection<Character>("characters").updateOne(
-              { _id: offer.buyerCharacterId },
-              {
-                $inc: buildPersonalBalanceInc(-refundInBuyerHome, buyerCurrency, forexEnabled),
-                $set: { updatedAt: now },
-              }
-            );
-          });
-          await emitTx(db, {
-            type: "share_listing_refund",
-            turn: currentTurn,
-            createdAt: now,
-            subjectType: "character",
-            subjectId: offer.buyerCharacterId,
-            subjectName: buyerCharForRefund?.name ?? "Unknown character",
-            amount: refundInBuyerHome,
-            currencyCode: buyerCurrency,
-            counterpartyType: "system",
-            counterpartyName: "Private listing escrow",
-            meta: {
-              listingId: listing._id.toString(),
-              offerId: offer._id.toString(),
-              corporationId: listing.corporationId.toString(),
-              sharesRefunded: offer.shares - sharesToAccept,
-              pricePerShare: offer.pricePerShare,
-            },
-          });
-        }
-      }
-    } catch (err) {
-      for (const undo of rollback.reverse()) {
-        await undo();
-      }
-      await Promise.all([
-        db.collection<ShareListing>("shareListings").updateOne(
-          {
-            _id: listing._id,
-            status: { $in: ["open", "filled"] },
-          },
-          {
-            $inc: { sharesRemaining: sharesToAccept },
-            $set: {
-              status: "open",
-              updatedAt: new Date(),
-            },
-          }
-        ),
-        db
-          .collection<ShareOffer>("shareOffers")
-          .updateOne({ _id: offer._id, status: "accepted" }, { $set: { status: "pending" } }),
-      ]);
-      throw err;
-    }
+    await executeShareFillMoneyFlow(db, moneyPlan);
+    const audit = await insertShareFillAuditRows(db, fillKey, collectShareFillAuditRows(plan));
+    if (audit !== "failed") await settleShareFillAttempt(db, fillKey, "completed");
 
     // Notify buyer
     const buyerChar = await db
@@ -493,61 +388,6 @@ export async function acceptShareOffer(request: Request, { params }: RouteParams
         } as Omit<Notification, "_id">)
         .catch(() => undefined);
     }
-
-    void (async () => {
-      // Resolve party names for the history row. Listing seller is always a
-      // character or corp (per sellerCorporationId/sellerCharacterId schema),
-      // buyer may be either too.
-      let historyFrom: ShareTradeParty;
-      if (listing.sellerCorporationId) {
-        const sellerCorp = await db
-          .collection<Corporation>("corporations")
-          .findOne({ _id: listing.sellerCorporationId }, { projection: { name: 1 } });
-        historyFrom = {
-          corporationId: listing.sellerCorporationId,
-          name: sellerCorp?.name ?? "Unknown corporation",
-        };
-      } else {
-        const sellerCharDoc = await db
-          .collection<Character>("characters")
-          .findOne({ _id: listing.sellerCharacterId }, { projection: { name: 1 } });
-        historyFrom = {
-          characterId: listing.sellerCharacterId,
-          name: sellerCharDoc?.name ?? "Unknown character",
-        };
-      }
-      let historyTo: ShareTradeParty;
-      if (offer.buyerCorporationId) {
-        const buyerCorpDoc = await db
-          .collection<Corporation>("corporations")
-          .findOne({ _id: offer.buyerCorporationId }, { projection: { name: 1 } });
-        historyTo = {
-          corporationId: offer.buyerCorporationId,
-          name: buyerCorpDoc?.name ?? "Unknown corporation",
-        };
-      } else {
-        const buyerCharDoc = await db
-          .collection<Character>("characters")
-          .findOne({ _id: offer.buyerCharacterId }, { projection: { name: 1 } });
-        historyTo = {
-          characterId: offer.buyerCharacterId,
-          name: buyerCharDoc?.name ?? "Unknown character",
-        };
-      }
-      // offer.pricePerShare is stored in the listing corp's liquidCurrencyCode
-      // (Option B). Convert to ₳ for the audit row — `proceeds` above is already
-      // the ₳-anchored total, so per-share ₳ = proceeds / sharesToAccept.
-      void recordShareTrade(db, {
-        corporationId: listing.corporationId,
-        kind: "listing_fill",
-        turn: currentTurn,
-        shares: sharesToAccept,
-        pricePerShareAnchor: proceeds / sharesToAccept,
-        from: historyFrom,
-        to: historyTo,
-        corpCurrencyCode: listingCorp?.liquidCurrencyCode,
-      });
-    })().catch(() => undefined);
 
     void notifyHostileTakeoverThresholdIfEligible(db, listing.corporationId);
 

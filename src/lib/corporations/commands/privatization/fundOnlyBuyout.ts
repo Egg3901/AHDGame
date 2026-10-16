@@ -262,6 +262,8 @@ export async function executeFundOnlyBuyout(
     {
       characterId: corporation.ceoId,
       shares: ceoSharesAfter,
+      ...(ceoEntry?.avgCostBasisUnit ? { avgCostBasisUnit: ceoEntry.avgCostBasisUnit } : {}),
+      ...(ceoEntry?.holdingTerms ? { holdingTerms: ceoEntry.holdingTerms } : {}),
       ...(ceoEntry?.avgCostPerShare !== undefined
         ? { avgCostPerShare: ceoEntry.avgCostPerShare }
         : {}),

@@ -11,6 +11,7 @@ import type { CorporationDetail } from "./CorporationPageTypes";
 import MarketOverviewPanel from "./shares/MarketOverviewPanel";
 import MyHoldingsPanel from "./shares/MyHoldingsPanel";
 import OpenOrdersPanel from "./shares/OpenOrdersPanel";
+import { HoldingTermSelector } from "./shares/HoldingTermSelector";
 import PrivateSalePanel from "./shares/PrivateSalePanel";
 import ShareStructurePanel from "./shares/ShareStructurePanel";
 import ShareHistoryPanel from "./shares/ShareHistoryPanel";
@@ -239,19 +240,30 @@ export default function SharesTab({
 
             {/* Other players' open orders, filled from the row */}
             {marketOrders.length > 0 && (
-              <OpenOrdersPanel
-                marketOrders={marketOrders}
-                myCharacterId={myCharacterId}
-                corpCurrencyCode={corpCurrencyCode}
-                myCorporation={myCorporation ?? null}
-                fillAmounts={fillAmounts}
-                setFillAmounts={setFillAmounts}
-                fillAskAsCorp={trading.fillAskAsCorp}
-                setFillAskAsCorp={trading.setFillAskAsCorp}
-                loading={trading.loading}
-                handleFillOrder={trading.handleFillOrder}
-                handleCancelOrder={trading.handleCancelOrder}
-              />
+              <>
+                {trading.myHoldingTerms &&
+                  marketOrders.some((order) => order.type === "buy" && !order.isMine) && (
+                    <HoldingTermSelector
+                      terms={trading.myHoldingTerms}
+                      term={trading.holdingTerm}
+                      onChange={trading.setHoldingTerm}
+                      turn={corporation.currentTurn}
+                    />
+                  )}
+                <OpenOrdersPanel
+                  marketOrders={marketOrders}
+                  myCharacterId={myCharacterId}
+                  corpCurrencyCode={corpCurrencyCode}
+                  myCorporation={myCorporation ?? null}
+                  fillAmounts={fillAmounts}
+                  setFillAmounts={setFillAmounts}
+                  fillAskAsCorp={trading.fillAskAsCorp}
+                  setFillAskAsCorp={trading.setFillAskAsCorp}
+                  loading={trading.loading}
+                  handleFillOrder={trading.handleFillOrder}
+                  handleCancelOrder={trading.handleCancelOrder}
+                />
+              </>
             )}
 
             {myCharacterId && (
@@ -269,6 +281,11 @@ export default function SharesTab({
           <aside className="min-w-0 space-y-6">
             {myCharacterId && (
               <MyHoldingsPanel
+                holdingTerms={
+                  corporation.shareholders.find((holder) => holder.characterId === myCharacterId)
+                    ?.holdingTerms
+                }
+                turn={corporation.currentTurn}
                 myShares={trading.myShares}
                 myShareValue={trading.myShareValue}
                 myOwnershipPct={trading.myOwnershipPct}

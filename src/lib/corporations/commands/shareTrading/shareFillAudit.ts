@@ -1,4 +1,6 @@
 import { randomUUID } from "node:crypto";
+import type { StockTaxReceipt } from "@/lib/budget/rules/capitalGainsTax";
+import type { ShareHoldingTerms } from "@/lib/corporations/rules/holdingTerms";
 import * as Sentry from "@sentry/nextjs";
 import { ObjectId, type Collection, type Db, type Filter } from "mongodb";
 import {
@@ -15,9 +17,16 @@ import {
   type RecordShareTradeOutcome,
 } from "@/lib/corporations/shareTradeHistory";
 import { FUND_TRANSACTION_COLLECTION } from "@/lib/indexFunds/fundQueries";
-import { recoverShareFillMoneyOrphans } from "./shareFillMoney";
+import {
+  buildShareFillMoneyKey,
+  executeShareFillMoneyFlow,
+  recoverShareFillMoneyOrphans,
+  recoverShareFillMoneyByFillKey,
+  type ShareFillMoneyPlan,
+} from "./shareFillMoney";
 import type { IndexFundTransaction } from "@/lib/db/types";
 import type { ShareOrder } from "@/lib/db/types/corporation";
+import type { ShareListing, ShareOffer } from "@/lib/db/types/shareListings";
 import type { ShareTradeParty } from "@/lib/db/types/shareTradeHistory";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 
@@ -59,6 +68,18 @@ export type ShareFillFillerCollection = "characters" | "imperialCharacters" | "c
  * `markShareFillMoneyCommitted` in the same write that records the commit.
  */
 export interface ShareFillAuditPlan {
+  targetKind?: "listing";
+  offerIdHex?: string;
+  listingMoneyPlan?: ShareFillMoneyPlan;
+  buyerRefund?: { amount: number; currency: string };
+  claimSnapshot?: {
+    escrowAmount: number;
+    escrowAnchor?: number;
+    holdingTerms?: ShareHoldingTerms;
+    previousFillKey?: string;
+  };
+  sellerHoldingTerms?: ShareHoldingTerms;
+  stockTax?: StockTaxReceipt;
   version: 1;
   orderIdHex: string;
   corpIdHex: string;
@@ -145,8 +166,14 @@ export function buildShareFillClaimFilter(
   _id: ObjectId;
   status: "open";
   sharesRemaining: { $gte: number };
+  activeShareFillKey: { $exists: false };
 } {
-  return { _id: orderId, status: "open", sharesRemaining: { $gte: shares } };
+  return {
+    _id: orderId,
+    status: "open",
+    sharesRemaining: { $gte: shares },
+    activeShareFillKey: { $exists: false },
+  };
 }
 
 /**
@@ -160,11 +187,13 @@ export function buildShareFillRouteClaimPipeline(args: {
   shares: number;
   fillKey: string;
   now: Date;
+  holdingTerms?: ShareHoldingTerms;
 }): Record<string, unknown>[] {
   const { shares, fillKey, now } = args;
   return [
     {
       $set: {
+        ...(args.holdingTerms ? { holdingTerms: { $literal: args.holdingTerms } } : {}),
         sharesRemaining: { $subtract: ["$sharesRemaining", shares] },
         escrowAmount: {
           $cond: [
@@ -195,6 +224,7 @@ export function buildShareFillRouteClaimPipeline(args: {
           $cond: [{ $eq: [{ $subtract: ["$sharesRemaining", shares] }, 0] }, "filled", "open"],
         },
         lastShareFillKey: fillKey,
+        activeShareFillKey: fillKey,
         updatedAt: now,
       },
     },
@@ -220,6 +250,7 @@ export function buildShareFillTurnClaimUpdate(args: {
       escrowAnchor: args.remainingEscrowAnchor,
       status: args.status,
       lastShareFillKey: args.fillKey,
+      activeShareFillKey: args.fillKey,
       updatedAt: args.now,
     },
   };
@@ -291,26 +322,27 @@ export function collectShareFillAuditRows(plan: ShareFillAuditPlan): ShareFillAu
         counterpartyType: counterpartyType(fillerCounterpartyKind) as TxInput["counterpartyType"],
         counterpartyId: new ObjectId(plan.filler.idHex),
         counterpartyName: plan.filler.name,
-        meta: txMeta(plan),
+        meta: { ...txMeta(plan), ...(plan.stockTax ? { stockTax: plan.stockTax } : {}) },
       });
       txDomains.push(SHARE_FILL_TX_SELL_DOMAIN);
     }
-    txs.push({
-      type: "stock_trade_buy",
-      turn: plan.turn,
-      createdAt,
-      subjectType: fillerSubjectType as TxInput["subjectType"],
-      subjectId: new ObjectId(plan.filler.idHex),
-      subjectName: plan.filler.name,
-      amount: -plan.fillerAmount,
-      balanceAfter: plan.fillerBalanceAfter,
-      currencyCode: plan.filler.homeCurrency,
-      counterpartyType: counterpartyType(plan.placerKind) as TxInput["counterpartyType"],
-      counterpartyId: plan.placerKind === "fund" ? undefined : new ObjectId(plan.placerIdHex!),
-      counterpartyName: plan.placerName,
-      meta: txMeta(plan),
-    });
-    txDomains.push(SHARE_FILL_TX_BUY_DOMAIN);
+    if (plan.targetKind !== "listing")
+      txs.push({
+        type: "stock_trade_buy",
+        turn: plan.turn,
+        createdAt,
+        subjectType: fillerSubjectType as TxInput["subjectType"],
+        subjectId: new ObjectId(plan.filler.idHex),
+        subjectName: plan.filler.name,
+        amount: -plan.fillerAmount,
+        balanceAfter: plan.fillerBalanceAfter,
+        currencyCode: plan.filler.homeCurrency,
+        counterpartyType: counterpartyType(plan.placerKind) as TxInput["counterpartyType"],
+        counterpartyId: plan.placerKind === "fund" ? undefined : new ObjectId(plan.placerIdHex!),
+        counterpartyName: plan.placerName,
+        meta: txMeta(plan),
+      });
+    if (plan.targetKind !== "listing") txDomains.push(SHARE_FILL_TX_BUY_DOMAIN);
   } else {
     txs.push({
       type: "stock_trade_sell",
@@ -324,11 +356,27 @@ export function collectShareFillAuditRows(plan: ShareFillAuditPlan): ShareFillAu
       counterpartyType: counterpartyType(plan.placerKind) as TxInput["counterpartyType"],
       counterpartyId: plan.placerKind === "fund" ? undefined : new ObjectId(plan.placerIdHex!),
       counterpartyName: plan.placerName,
-      meta: txMeta(plan),
+      meta: { ...txMeta(plan), ...(plan.stockTax ? { stockTax: plan.stockTax } : {}) },
     });
     txDomains.push(SHARE_FILL_TX_SELL_DOMAIN);
   }
 
+  if (plan.targetKind === "listing" && plan.buyerRefund && plan.buyerRefund.amount > 0) {
+    txs.push({
+      type: "share_listing_refund",
+      turn: plan.turn,
+      createdAt,
+      subjectType: fillerSubjectType as TxInput["subjectType"],
+      subjectId: new ObjectId(plan.filler.idHex),
+      subjectName: plan.filler.name,
+      amount: plan.buyerRefund.amount,
+      currencyCode: plan.buyerRefund.currency as CurrencyCode,
+      counterpartyType: "system",
+      counterpartyName: "Listing escrow",
+      meta: txMeta(plan),
+    });
+    txDomains.push("share-fill-listing-refund");
+  }
   const fundTx: Omit<IndexFundTransaction, "_id"> | null =
     plan.orderType === "sell" && plan.fundTx
       ? {
@@ -346,7 +394,7 @@ export function collectShareFillAuditRows(plan: ShareFillAuditPlan): ShareFillAu
   const to = plan.orderType === "sell" ? fillerParty(plan) : placerParty(plan);
   const history: RecordShareTradeInput = {
     corporationId: new ObjectId(plan.corpIdHex),
-    kind: "peer_fill",
+    kind: plan.targetKind === "listing" ? "listing_fill" : "peer_fill",
     turn: plan.turn,
     shares: plan.shares,
     pricePerShareAnchor: plan.totalAnchor / plan.shares,
@@ -370,7 +418,16 @@ export async function beginShareFillAttempt(
   plan: ShareFillAuditPlan,
   fingerprint: string
 ): Promise<string> {
+  const activation = await db
+    .collection<{ _id: string; stockHoldingTaxStartTurn?: number }>("gameState")
+    .findOne({ _id: "current" }, { projection: { stockHoldingTaxStartTurn: 1 } });
+  if (
+    activation?.stockHoldingTaxStartTurn === undefined ||
+    plan.turn < activation.stockHoldingTaxStartTurn
+  )
+    delete plan.stockTax;
   const key = randomUUID();
+  if (plan.listingMoneyPlan) plan.listingMoneyPlan.fillKey = key;
   const claim = await claimMoneyFlowReceipt(receipts(db), key, fingerprint);
   if (claim !== "fresh") {
     throw new Error("SHARE_FILL_KEY_COLLISION");
@@ -406,6 +463,64 @@ export async function markShareFillMoneyCommitted(
     set["shareFillPlan.fillerBalanceAfter"] = fillerBalanceAfter;
   }
   await receiptsEx(db).updateOne({ _id: key }, { $set: set });
+  const receipt = await receiptsEx(db).findOne({ _id: key });
+  if (receipt?.shareFillPlan?.claimSnapshot) {
+    const plan = receipt.shareFillPlan;
+    if (plan.targetKind === "listing" && plan.offerIdHex)
+      await db
+        .collection<ShareOffer>("shareOffers")
+        .updateOne(
+          { _id: new ObjectId(plan.offerIdHex), acceptFillKey: key },
+          { $set: { status: "accepted" } }
+        );
+    await db
+      .collection<ShareOrder | ShareListing>(
+        plan.targetKind === "listing" ? "shareListings" : "shareOrders"
+      )
+      .updateOne(
+        { _id: new ObjectId(receipt.shareFillPlan.orderIdHex), activeShareFillKey: key },
+        { $unset: { activeShareFillKey: "" } }
+      );
+  }
+}
+
+/** Only the owning claim can restore its frozen escrow and inventory snapshot. */
+export async function restoreFailedShareFillClaim(db: Db, key: string): Promise<void> {
+  const receipt = await receiptsEx(db).findOne({ _id: key });
+  const plan = receipt?.shareFillPlan;
+  if (!plan?.claimSnapshot) return;
+  const before = plan.claimSnapshot;
+  await db
+    .collection<ShareOrder | ShareListing>(
+      plan.targetKind === "listing" ? "shareListings" : "shareOrders"
+    )
+    .updateOne(
+      { _id: new ObjectId(plan.orderIdHex), activeShareFillKey: key },
+      {
+        $set: {
+          sharesRemaining: plan.preClaimRemaining,
+          ...(plan.targetKind !== "listing" ? { escrowAmount: before.escrowAmount } : {}),
+          status: "open",
+          updatedAt: new Date(),
+          ...(before.escrowAnchor !== undefined ? { escrowAnchor: before.escrowAnchor } : {}),
+          ...(before.holdingTerms ? { holdingTerms: before.holdingTerms } : {}),
+          ...(before.previousFillKey ? { lastShareFillKey: before.previousFillKey } : {}),
+        },
+        $unset: {
+          activeShareFillKey: "",
+          ...(!before.previousFillKey ? { lastShareFillKey: "" as const } : {}),
+          ...(before.escrowAnchor === undefined ? { escrowAnchor: "" as const } : {}),
+          ...(!before.holdingTerms ? { holdingTerms: "" as const } : {}),
+        },
+      }
+    );
+  if (plan.targetKind === "listing" && plan.offerIdHex)
+    await db
+      .collection<ShareOffer>("shareOffers")
+      .updateOne(
+        { _id: new ObjectId(plan.offerIdHex), status: "accepted", acceptFillKey: key },
+        { $set: { status: "pending" }, $unset: { acceptFillKey: "" } }
+      );
 }
 
 export async function settleShareFillAttempt(
@@ -548,17 +663,94 @@ async function applyShareFillRecovery(
   db: Db,
   key: string,
   plan: ShareFillAuditPlan,
-  order: ShareOrder | null
+  order: ShareOrder | ShareListing | null
 ): Promise<ShareFillRecoveryAction> {
   if (!order) {
     await settleShareFillAttempt(db, key, "failed", "share-fill:order-missing");
     return "settled-failed-order-missing";
   }
-  if (order.sharesRemaining === plan.preClaimRemaining) {
+  if (
+    !plan.moneyCommitted &&
+    plan.targetKind === "listing" &&
+    plan.offerIdHex &&
+    order.activeShareFillKey === key
+  ) {
+    const offers = db.collection<ShareOffer>("shareOffers");
+    // Claim the listing first so cancellation cannot return its inventory
+    // while acceptance claims the offer. The pending-offer CAS arbitrates a
+    // concurrent buyer cancellation without spending refunded escrow.
+    await offers.updateOne(
+      { _id: new ObjectId(plan.offerIdHex), status: "pending" },
+      { $set: { status: "accepted", acceptFillKey: key } }
+    );
+    const offer = await offers.findOne({ _id: new ObjectId(plan.offerIdHex) });
+    if (offer?.status !== "accepted" || offer.acceptFillKey !== key) {
+      await restoreFailedShareFillClaim(db, key);
+      await settleShareFillAttempt(db, key, "failed", "listing:offer-claim-lost");
+      return "settled-failed-claim-never-landed";
+    }
+  }
+  if (
+    !plan.moneyCommitted &&
+    (order.sharesRemaining === plan.preClaimRemaining ||
+      (plan.targetKind === "listing" &&
+        order.activeShareFillKey !== key &&
+        order.lastShareFillKey !== key))
+  ) {
+    if (plan.targetKind === "listing") await restoreFailedShareFillClaim(db, key);
     await settleShareFillAttempt(db, key, "failed", "share-fill:claim-never-landed");
     return "settled-failed-claim-never-landed";
   }
-  if (!plan.moneyCommitted) return "left-in-progress-uncommitted";
+  if (!plan.moneyCommitted) {
+    if (plan.claimSnapshot) {
+      const money = await receipts(db).findOne({ _id: buildShareFillMoneyKey(key) });
+      if (money?.status === "completed") {
+        await recoverShareFillMoneyByFillKey(db, key);
+        const committed = await receiptsEx(db).findOne({ _id: key });
+        if (committed?.shareFillPlan?.moneyCommitted)
+          return applyShareFillRecovery(db, key, committed.shareFillPlan, order);
+      }
+      if (!money && plan.targetKind !== "listing" && order.activeShareFillKey === key) {
+        await restoreFailedShareFillClaim(db, key);
+        await settleShareFillAttempt(db, key, "failed", "share-fill:money-not-started");
+        return "settled-failed-claim-never-landed";
+      }
+      if (money?.status === "failed" || money?.status === "compensated") {
+        await restoreFailedShareFillClaim(db, key);
+        await settleShareFillAttempt(db, key, "failed", "share-fill:compensated-claim-restored");
+        return "settled-failed-claim-never-landed";
+      }
+      if (
+        plan.targetKind === "listing" &&
+        plan.listingMoneyPlan &&
+        order.activeShareFillKey === key &&
+        (!money || money.status === "in_progress")
+      ) {
+        // The audit plan precedes both claims and owns the immutable money
+        // inputs, including a crash between money-receipt insert and plan store.
+        if (money?.status === "in_progress")
+          await db
+            .collection<MoneyFlowReceipt & { shareFillMoneyPlan?: ShareFillMoneyPlan }>(
+              NON_ATOMIC_MONEY_FLOW_RECEIPTS_COLLECTION
+            )
+            .updateOne(
+              {
+                _id: buildShareFillMoneyKey(key),
+                status: "in_progress",
+                shareFillMoneyPlan: { $exists: false },
+              },
+              { $set: { shareFillMoneyPlan: plan.listingMoneyPlan } }
+            );
+        await executeShareFillMoneyFlow(db, plan.listingMoneyPlan);
+        const committed = await receiptsEx(db).findOne({ _id: key });
+        if (committed?.shareFillPlan?.moneyCommitted)
+          return applyShareFillRecovery(db, key, committed.shareFillPlan, order);
+      }
+    }
+    return "left-in-progress-uncommitted";
+  }
+  if (plan.claimSnapshot && order.activeShareFillKey === key)
+    await markShareFillMoneyCommitted(db, key, plan.fillerBalanceAfter);
   const outcome = await insertShareFillAuditRows(db, key, collectShareFillAuditRows(plan));
   if (outcome === "failed") return "audit-incomplete";
   await settleShareFillAttempt(db, key, "completed");
@@ -578,7 +770,9 @@ export async function recoverShareFillAttempt(
     return { key, action: "settled-failed-no-plan" };
   }
   const order = await db
-    .collection<ShareOrder>("shareOrders")
+    .collection<ShareOrder | ShareListing>(
+      plan.targetKind === "listing" ? "shareListings" : "shareOrders"
+    )
     .findOne({ _id: new ObjectId(plan.orderIdHex) });
   return { key, action: await applyShareFillRecovery(db, key, plan, order) };
 }
@@ -619,7 +813,7 @@ export async function prepareShareFillClaim(
     repaired = true;
   }
   let recovery: ShareFillRecoveryResult | null = null;
-  if (current.lastShareFillKey) {
+  if (current.lastShareFillKey && !current.activeShareFillKey) {
     recovery = await recoverShareFillAttempt(db, current.lastShareFillKey);
   }
   return { order: current, repaired, recovery };
@@ -923,27 +1117,37 @@ async function recoverLoadedReceipts(
     const plan = isShareFillAuditPlan(receipt.shareFillPlan) ? receipt.shareFillPlan : undefined;
     if (plan) plans.set(receipt._id, plan);
   }
-  const orderIds: ObjectId[] = [];
-  const hexes = new Set<string>();
-  for (const plan of plans.values()) {
-    if (hexes.has(plan.orderIdHex)) continue;
-    hexes.add(plan.orderIdHex);
-    try {
-      orderIds.push(new ObjectId(plan.orderIdHex));
-    } catch {
-      // Left out of the `$in` load: the per-row step settles `order-missing`.
-    }
-  }
-  const orderByIdHex = new Map<string, ShareOrder>();
-  if (orderIds.length > 0) {
-    const orders = await db
-      .collection<ShareOrder>("shareOrders")
-      .find({ _id: { $in: orderIds } }, { projection: { _id: 1, sharesRemaining: 1 } })
-      .toArray();
-    for (const order of orders) {
-      orderByIdHex.set(order._id.toHexString(), order as ShareOrder);
-    }
-  }
+  const idsFor = (listing: boolean) =>
+    [
+      ...new Set(
+        [...plans.values()]
+          .filter((plan) => (plan.targetKind === "listing") === listing)
+          .map((plan) => plan.orderIdHex)
+      ),
+    ]
+      .filter((id) => ObjectId.isValid(id))
+      .map((id) => new ObjectId(id));
+  const orderIds = idsFor(false);
+  const listingIds = idsFor(true);
+  const projection = { _id: 1, sharesRemaining: 1, activeShareFillKey: 1, lastShareFillKey: 1 };
+  const [orders, listings] = await Promise.all([
+    orderIds.length
+      ? db
+          .collection<ShareOrder>("shareOrders")
+          .find({ _id: { $in: orderIds } }, { projection })
+          .toArray()
+      : [],
+    listingIds.length
+      ? db
+          .collection<ShareListing>("shareListings")
+          .find({ _id: { $in: listingIds } }, { projection })
+          .toArray()
+      : [],
+  ]);
+  const orderByIdHex = new Map<string, ShareOrder | ShareListing>([
+    ...orders.map((row) => ["order:" + row._id.toHexString(), row] as const),
+    ...listings.map((row) => ["listing:" + row._id.toHexString(), row] as const),
+  ]);
   const results: ShareFillRecoveryResult[] = [];
   for (const receipt of eligible) {
     const key = receipt._id;
@@ -956,7 +1160,10 @@ async function recoverLoadedReceipts(
         results.push({ key, action: "settled-failed-no-plan" });
         continue;
       }
-      const order = orderByIdHex.get(plan.orderIdHex) ?? null;
+      const order =
+        orderByIdHex.get(
+          (plan.targetKind === "listing" ? "listing" : "order") + ":" + plan.orderIdHex
+        ) ?? null;
       results.push({ key, action: await applyShareFillRecovery(db, key, plan, order) });
     } catch (err) {
       captureRecoveryError(err, key);

@@ -165,6 +165,7 @@ export const setDividendRateSchema = z.object({
 });
 
 export const sellSharesSchema = z.object({
+  holdingTerm: z.enum(["short", "long"]).optional(),
   shares: z.number().int().positive("Must sell at least 1 share"),
   sellAsCorporation: z.boolean().optional().default(false),
   // When a sale would divest a CEO's entire remaining stake (auto-vacating the
@@ -179,6 +180,7 @@ export const buySharesSchema = z.object({
 });
 
 export const placeOrderSchema = z.object({
+  holdingTerm: z.enum(["short", "long"]).optional(),
   type: z.enum(["buy", "sell"]),
   shares: z.number().int().positive("Must be at least 1 share"),
   pricePerShare: z.number().positive("Price must be positive"),
@@ -204,6 +206,7 @@ export const consolidateSharesSchema = z.object({
 });
 
 export const fillOrderSchema = z.object({
+  holdingTerm: z.enum(["short", "long"]).optional(),
   shares: z.number().int().positive("Must fill at least 1 share"),
   /** When true and the open order is a sell (ask), pay from the CEO's corporation liquid capital and credit shares to that corporation. */
   fillAsCorporation: z.boolean().optional().default(false),
@@ -272,6 +275,7 @@ export const setSectorDisplayNameSchema = z.object({
 });
 
 export const createListingSchema = z.object({
+  holdingTerm: z.enum(["short", "long"]).optional(),
   shares: z.number().int().positive("Must list at least 1 share"),
   sellAsCorporation: z.boolean().optional().default(false),
   // When a listing would divest a CEO's entire remaining stake (auto-vacating

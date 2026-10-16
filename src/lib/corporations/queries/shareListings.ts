@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { matureHoldingTerms } from "@/lib/corporations/rules/holdingTerms";
 import type { ShareListing, ShareOffer } from "@/lib/db/types";
 import { getDb } from "@/lib/mongodb";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
@@ -88,6 +89,12 @@ export async function getShareListingsView(_request: Request, { params }: RouteP
         sellerSequentialId: sellerInfo?.sequentialId,
         sharesListed: listing.sharesListed,
         sharesRemaining: listing.sharesRemaining,
+        ...(isMySelling && listing.holdingTerms && !listing.sellerCorporationId
+          ? {
+              holdingTerms: matureHoldingTerms(listing.holdingTerms, nowTurn),
+              holdingTurn: nowTurn,
+            }
+          : {}),
         marketPriceAtCreation: listing.marketPriceAtCreation,
         priceFloor: listing.marketPriceAtCreation * 0.5,
         priceCeiling: listing.marketPriceAtCreation * 2.0,

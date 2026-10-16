@@ -68,6 +68,66 @@ describe("portfolioSnapshot", () => {
   });
 
   describe("snapshotPortfolioValues", () => {
+    it("snapshots bucket values without extra reads, including cash-only and imperial owners", async () => {
+      const regular = new ObjectId(),
+        imperial = new ObjectId(),
+        cashOnly = new ObjectId();
+      const corporations = [
+        {
+          _id: new ObjectId(),
+          sharePrice: 10,
+          shareholders: [
+            {
+              characterId: regular,
+              shares: 10,
+              holdingTerms: {
+                longTermShares: 4,
+                longTermCostBasisAnchor: 8,
+                shortTermLots: [{ shares: 6, acquiredTurn: 100, costBasisAnchor: 12 }],
+              },
+            },
+            { imperialCharacterId: imperial, shares: 3 },
+          ],
+        },
+      ];
+      const prepare = () => {
+        mockCollection.mockReturnValueOnce(createMockChain([{ _id: cashOnly, cashOnHand: 25 }]));
+        mockCollection.mockReturnValueOnce(createMockChain([]));
+        mockCollection.mockReturnValueOnce(createMockChain(corporations));
+        mockCollection.mockReturnValueOnce(createMockChain([]));
+      };
+      prepare();
+      await snapshotPortfolioValues(147);
+      const legacyCalls = mockCollection.mock.calls.length;
+      expect(mockInsertMany.mock.calls[0][0][0]).not.toHaveProperty("shortTermStockValue");
+      mockCollection.mockClear();
+      mockInsertMany.mockClear();
+      resetCorpFxRateCacheForTests();
+      prepare();
+      await snapshotPortfolioValues(147, 100);
+      expect(mockCollection.mock.calls.length).toBe(legacyCalls);
+      const rows = mockInsertMany.mock.calls[0][0] as Array<{
+        characterId: ObjectId;
+        stockValue: number;
+        shortTermStockValue: number;
+        longTermStockValue: number;
+      }>;
+      expect(rows.find((row) => row.characterId.equals(regular))).toMatchObject({
+        stockValue: 100,
+        shortTermStockValue: 60,
+        longTermStockValue: 40,
+      });
+      expect(rows.find((row) => row.characterId.equals(imperial))).toMatchObject({
+        stockValue: 30,
+        shortTermStockValue: 0,
+        longTermStockValue: 30,
+      });
+      expect(rows.find((row) => row.characterId.equals(cashOnly))).toMatchObject({
+        stockValue: 0,
+        shortTermStockValue: 0,
+        longTermStockValue: 0,
+      });
+    });
     it("returns 0 when no corporations have shareholders", async () => {
       mockCollection.mockReturnValueOnce(createMockChain([])); // characters
       mockCollection.mockReturnValueOnce(createMockChain([])); // imperialCharacters

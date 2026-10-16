@@ -1,4 +1,5 @@
 import type { Db } from "mongodb";
+import { positionHoldingTerms } from "@/lib/corporations/rules/holdingTerms";
 import { recordCorporationExit } from "@/lib/corporations/exits/recordCorporationExit";
 import { ObjectId } from "mongodb";
 import type {
@@ -142,9 +143,12 @@ async function runAgreedAcquisition(
   const { db, offer, currentTurn } = params;
   const corps = db.collection<Corporation>("corporations");
 
-  const [acquirer, target] = await Promise.all([
+  const [acquirer, target, stockTaxState] = await Promise.all([
     corps.findOne({ _id: offer.acquirerCorporationId }),
     corps.findOne({ _id: offer.targetCorporationId }),
+    db
+      .collection<{ _id: string; stockHoldingTaxStartTurn?: number }>("gameState")
+      .findOne({ _id: "current" }, { projection: { stockHoldingTaxStartTurn: 1 } }),
   ]);
   if (!acquirer || !target) {
     return handleMissingParty(db, offer, currentTurn, acquirer, target);
@@ -386,6 +390,35 @@ async function runAgreedAcquisition(
       ? Math.round(anchorToCorpLiquidCapital(targetCashAnchor, acquirer, acquirerFxRate))
       : 0;
   const plan = buildAcquisitionPayoutPlan({
+    ...(stockTaxState?.stockHoldingTaxStartTurn !== undefined &&
+    currentTurn >= stockTaxState.stockHoldingTaxStartTurn
+      ? {
+          stockTax: {
+            saleTurn: currentTurn,
+            holdingsByOwner: Object.fromEntries(
+              (target.shareholders ?? []).flatMap((holder) => {
+                const owner = holder.characterId
+                  ? "character:" + holder.characterId.toHexString()
+                  : holder.imperialCharacterId
+                    ? "imperial:" + holder.imperialCharacterId.toHexString()
+                    : undefined;
+                return owner && holder.shares > 0
+                  ? [
+                      [
+                        owner,
+                        positionHoldingTerms(
+                          holder,
+                          currentTurn,
+                          corpLiquidCapitalToAnchor(target.sharePrice ?? 0, target, targetFxRate)
+                        ),
+                      ],
+                    ]
+                  : [];
+              })
+            ),
+          },
+        }
+      : {}),
     offerHex: offer._id.toString(),
     priceAnchor: offer.priceAnchor,
     priceInAcquirerCapital,

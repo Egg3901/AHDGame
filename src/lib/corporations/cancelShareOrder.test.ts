@@ -255,7 +255,13 @@ describe("cancelShareOrderAndRefund — Option B escrow semantics", () => {
 
     expect(result).toEqual({ ok: true });
     expect(db.collectionMocks["shareOrders"].updateOne).toHaveBeenCalledWith(
-      { _id: orderId, status: "open" },
+      {
+        _id: orderId,
+        status: "open",
+        sharesRemaining: order.sharesRemaining,
+        escrowAmount: order.escrowAmount,
+        activeShareFillKey: { $exists: false },
+      },
       expect.objectContaining({
         $set: expect.objectContaining({ status: "cancelled" }),
       })
@@ -314,7 +320,13 @@ describe("cancelShareOrderAndRefund — Option B escrow semantics", () => {
 
     expect(result).toEqual({ ok: true });
     expect(db.collectionMocks["shareOrders"].updateOne).toHaveBeenCalledWith(
-      { _id: orderId, status: "open" },
+      {
+        _id: orderId,
+        status: "open",
+        sharesRemaining: order.sharesRemaining,
+        escrowAmount: order.escrowAmount,
+        activeShareFillKey: { $exists: false },
+      },
       expect.objectContaining({
         $set: expect.objectContaining({ status: "cancelled" }),
       })

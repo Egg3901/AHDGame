@@ -261,6 +261,18 @@ export async function GET(_request: Request, { params }: RouteParams) {
           .find({ _id: { $in: corpIds } }, { projection: { name: 1 } })
           .toArray()
       : [];
+    const representingUnionIds = [
+      ...new Set(
+        sectors.flatMap((s) => (s.representingUnionId ? [s.representingUnionId.toString()] : []))
+      ),
+    ].map((id) => new ObjectId(id));
+    const representingUnions = representingUnionIds.length
+      ? await db
+          .collection<Union>("unions")
+          .find({ _id: { $in: representingUnionIds } }, { projection: { name: 1 } })
+          .toArray()
+      : [];
+    const unionNameById = new Map(representingUnions.map((u) => [u._id.toString(), u.name]));
     const corpNameById = new Map(corps.map((c) => [c._id.toString(), c.name]));
     const sectorsByCorporation = new Map<string, typeof sectors>();
     for (const sector of sectors) {
@@ -388,6 +400,9 @@ export async function GET(_request: Request, { params }: RouteParams) {
         // may be this union, a rival, or null (unrepresented, an
         // organize-sector target). See `POST .../organize-sector`.
         representingUnionId: s.representingUnionId?.toString() ?? null,
+        representingUnionName: s.representingUnionId
+          ? (unionNameById.get(s.representingUnionId.toString()) ?? null)
+          : null,
         strikeActive: s.strikeStartedAtTurn != null,
         strikeCooldownUntilTurn: s.strikeCooldownUntilTurn ?? null,
         strikeBlockReason: unionStrikeBlockReason(s, currentTurn, protectedSectorIds),

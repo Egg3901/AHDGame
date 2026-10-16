@@ -1,4 +1,6 @@
 import type { Db, ObjectId } from "mongodb";
+import { matureHoldingTerms, type ShareHoldingTerms } from "@/lib/corporations/rules/holdingTerms";
+import { getCurrentTurn } from "@/lib/turn/currentTurn";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import type { Corporation, ShareOrder } from "@/lib/db/types";
 
@@ -9,6 +11,8 @@ import type { Corporation, ShareOrder } from "@/lib/db/types";
  * getShareOrdersView (see ./shareOrders.ts) plus corporation metadata.
  */
 export interface MyOpenShareOrder {
+  holdingTerms?: ShareHoldingTerms;
+  holdingTurn?: number;
   _id: string;
   corporationId: string;
   corporationSequentialId?: number;
@@ -62,6 +66,7 @@ export async function getMyOpenShareOrders(
     .toArray();
 
   const corpMap = new Map(corps.map((c) => [c._id.toString(), c]));
+  const turn = orders.some((order) => order.holdingTerms) ? await getCurrentTurn(db) : 0;
 
   return orders.map((order) => {
     const corp = corpMap.get(order.corporationId.toString());
@@ -76,6 +81,9 @@ export async function getMyOpenShareOrders(
       type: order.type,
       shares: order.shares,
       sharesRemaining: order.sharesRemaining,
+      ...(order.holdingTerms && !order.placerCorporationId
+        ? { holdingTerms: matureHoldingTerms(order.holdingTerms, turn), holdingTurn: turn }
+        : {}),
       pricePerShare: order.pricePerShare,
       escrowAmount: order.escrowAmount,
       status: order.status,

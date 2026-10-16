@@ -9,6 +9,7 @@ export interface PlayerTaxStatement {
   currentTier: IncomeTier;
   unpaidTaxAnchor: number;
   assessments: Array<{
+    taxKind?: "income" | "capitalGains";
     turn: number;
     currency: string;
     gross: number;
@@ -43,6 +44,7 @@ export async function loadPlayerIncomeTaxSummary(
           regional: 1,
           net: 1,
           sourceFx: 1,
+          taxKind: 1,
         },
       }
     )
@@ -68,6 +70,7 @@ export async function loadPlayerIncomeTaxSummary(
     ),
     assessments: records
       .map((record) => ({
+        ...(record.taxKind ? { taxKind: record.taxKind } : {}),
         turn: record.turn,
         currency: record.currency,
         gross: record.gross,

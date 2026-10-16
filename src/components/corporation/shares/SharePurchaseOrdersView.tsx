@@ -3,6 +3,7 @@
 import { InlineError } from "@/components/ui/InlineError";
 import { apiErrorText } from "@/lib/errors/catalog";
 import { useState } from "react";
+import { HoldingTermSummary } from "./HoldingTermSelector";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import { requestCharacterStatsRefetch } from "@/lib/characterStatsSync";
 import type { CurrencyCode } from "@/lib/constants/currencies";
@@ -124,6 +125,9 @@ export function SharePurchaseOrdersView({
                           )}
                         </span>
                       </div>
+                      {o.holdingTerms && (
+                        <HoldingTermSummary terms={o.holdingTerms} turn={o.holdingTurn ?? 0} />
+                      )}
                       <div className="text-xs text-muted">
                         {formatAmount(
                           Math.round(

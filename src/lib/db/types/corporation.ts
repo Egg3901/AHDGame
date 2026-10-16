@@ -4,6 +4,7 @@ import type {
   GroupDirection,
 } from "@/lib/corporations/groups/managementTypes";
 import type { OperatingSectorType } from "@/lib/constants/corporations";
+import type { ShareHoldingTerms } from "@/lib/corporations/rules/holdingTerms";
 import type { ObjectId } from "mongodb";
 import type {
   ManufacturingDevelopmentCashReceiptV2,
@@ -40,6 +41,10 @@ export interface Shareholder {
   shares: number;
   /** Weighted average purchase price per share. Null for pre-tracking positions. */
   avgCostPerShare?: number;
+  /** Legacy averages were in issuer currency; tracked averages are anchor-denominated. */
+  avgCostBasisUnit?: "anchor";
+  /** Direct personal shares only. Purchase turns are discarded after maturity. */
+  holdingTerms?: ShareHoldingTerms;
   /**
    * Founder supershare count (dual-class structure). Stamped at adoption with
    * the founder's then-current share count; never increased afterwards. The
@@ -101,6 +106,8 @@ export interface ShareOrder {
    * time. Legacy rows may omit this and still rely on reservation-only math.
    */
   sharesDebitedAtCreation?: boolean;
+  /** Inventory held in escrow; retain original purchase turns and anchor basis. */
+  holdingTerms?: ShareHoldingTerms;
   pricePerShare: number;
   escrowAmount: number;
   /**
@@ -117,6 +124,8 @@ export interface ShareOrder {
    * alongside the claim snapshot when a live attempt compensates.
    */
   lastShareFillKey?: string;
+  /** Serializes an order's money settlement, cancellation, and holding-lot claim. */
+  activeShareFillKey?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -210,6 +219,9 @@ export interface CorporationAutopilot {
 }
 
 export interface Corporation {
+  /** Frozen migration fallback for unrecorded legacy personal cost basis. */
+  stockHoldingRolloutAnchorPrice?: number;
+  stockHoldingRolloutTurn?: number;
   /** Group settings are runtime state and disappear with corporations on world reset. */
   groupManagement?: Partial<GroupManagement>;
   groupReceiving?: GroupReceivingPreference;

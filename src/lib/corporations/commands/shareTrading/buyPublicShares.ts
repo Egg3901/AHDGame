@@ -5,6 +5,7 @@
 import { loadForexSpreadStrengths } from "@/lib/currency/euro/quotes";
 import { loadEuroMonetaryUnion } from "@/lib/currency/euro/service";
 import { NextResponse } from "next/server";
+import { purchasedHoldingTerms } from "@/lib/corporations/rules/holdingTerms";
 import { getDb } from "@/lib/mongodb";
 import { ObjectId } from "mongodb";
 import { requireCorporationActionsEnabled } from "@/lib/api/requireCorporationActions";
@@ -432,6 +433,7 @@ export async function buyPublicShares(request: Request, { params }: RouteParams)
       { ...corporation, sharePrice: executionPrice },
       targetFxRate
     );
+    const purchaseTurn = await getCurrentTurn(db);
 
     if (isImperialMode) {
       // ── Imperial character share buy ────────────────────────────
@@ -552,7 +554,11 @@ export async function buyPublicShares(request: Request, { params }: RouteParams)
             },
             $set: { updatedAt: now },
           },
-          { pricePerShare: executionPrice, guardFilter: { publicFloat: { $gte: shares } } }
+          {
+            pricePerShare: cost / shares,
+            holdingChange: { turn: purchaseTurn },
+            guardFilter: { publicFloat: { $gte: shares } },
+          }
         );
         if (!credited) {
           await refundImperialCash(
@@ -635,7 +641,13 @@ export async function buyPublicShares(request: Request, { params }: RouteParams)
               },
               $set: { updatedAt: new Date() },
             },
-            { requireSufficient: true }
+            {
+              requireSufficient: true,
+              holdingChange: {
+                turn: purchaseTurn,
+                remove: purchasedHoldingTerms(shares, cost / shares, purchaseTurn),
+              },
+            }
           );
         }
         await refundImperialCash(
@@ -788,7 +800,11 @@ export async function buyPublicShares(request: Request, { params }: RouteParams)
           },
           $set: { updatedAt: now },
         },
-        { pricePerShare: executionPrice, guardFilter: { publicFloat: { $gte: shares } } }
+        {
+          pricePerShare: cost / shares,
+          holdingChange: { turn: purchaseTurn },
+          guardFilter: { publicFloat: { $gte: shares } },
+        }
       );
       if (!credited) {
         await refundCharacterCash(db, character._id, homeCurrency, costInHome, forexEnabled);
@@ -862,7 +878,13 @@ export async function buyPublicShares(request: Request, { params }: RouteParams)
             },
             $set: { updatedAt: new Date() },
           },
-          { requireSufficient: true }
+          {
+            requireSufficient: true,
+            holdingChange: {
+              turn: purchaseTurn,
+              remove: purchasedHoldingTerms(shares, cost / shares, purchaseTurn),
+            },
+          }
         );
       }
       await refundCharacterCash(db, character._id, homeCurrency, costInHome, forexEnabled);
