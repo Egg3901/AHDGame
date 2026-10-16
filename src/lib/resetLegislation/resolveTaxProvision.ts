@@ -1,3 +1,4 @@
+import { incomeTierForTaxKey, incomeTaxRate } from "@/lib/budget/rules/incomeTaxTiers";
 import type { Db } from "mongodb";
 import { getNationalBudgetId } from "@/lib/bonds/sovereign";
 import type { CountryId } from "@/lib/constants/countries";
@@ -128,13 +129,21 @@ async function loadCurrentRate(
         { _id: normalizedRegionId, countryId: countryId as StateBudget["countryId"] },
         { projection: { taxRates: 1 } }
       );
-    const rate = (budget?.taxRates as unknown as Record<string, unknown> | undefined)?.[taxType];
+    const tier = incomeTierForTaxKey(taxType);
+    const rate =
+      tier && budget?.taxRates
+        ? incomeTaxRate(budget.taxRates, tier)
+        : (budget?.taxRates as unknown as Record<string, unknown> | undefined)?.[taxType];
     return typeof rate === "number" && Number.isFinite(rate) ? rate : null;
   }
 
   const budget = await db
     .collection<FederalBudget>("federalBudget")
     .findOne({ _id: getNationalBudgetId(countryId as CountryId) }, { projection: { taxRates: 1 } });
-  const rate = (budget?.taxRates as Record<string, unknown> | undefined)?.[taxType];
+  const tier = incomeTierForTaxKey(taxType);
+  const rate =
+    tier && budget?.taxRates
+      ? incomeTaxRate(budget.taxRates, tier)
+      : (budget?.taxRates as unknown as Record<string, unknown> | undefined)?.[taxType];
   return typeof rate === "number" && Number.isFinite(rate) ? rate : null;
 }

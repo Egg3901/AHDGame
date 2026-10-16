@@ -20,6 +20,12 @@ import "@/lib/turnSystem";
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 
 vi.mock("@/lib/turn/actionRefresh", () => ({ processActionRefresh: vi.fn() }));
+vi.mock("@/lib/budget/incomeTaxShares", () => ({
+  refreshIncomeTaxShares: vi.fn().mockResolvedValue(undefined),
+}));
+vi.mock("@/lib/budget/playerIncomeTax", () => ({
+  processPlayerIncomeTax: vi.fn().mockResolvedValue({ assessed: 0, pending: 0 }),
+}));
 vi.mock("@/lib/turn/fundGeneration", () => ({ processFundGeneration: vi.fn() }));
 vi.mock("@/lib/turn/lineOfCreditTurn", () => ({
   processLineOfCreditTurn: vi

@@ -62,7 +62,7 @@ export interface PlantsRevenueInput {
     "outputRateMult" | "priceRealizationBonus"
   >;
   plantsEnabled: boolean;
-  /** Explicit clearing quotes settle at their offered price without price bonuses or ramp blending. */
+  /** Explicit clearing quotes settle at their offered price without ramp blending; tech price realization still applies on top. */
   costPlusPricingEnabled?: boolean;
   mothballed: boolean;
   /** P1 nameplate units from the market-tier computation (non-plants base). */
@@ -498,9 +498,12 @@ export function resolvePlantsRevenue(input: PlantsRevenueInput): PlantsRevenueRe
   // nameplate, the world supply ledger and idle upkeep) and NOT on the
   // clearing/priceRealization factor (which feeds the launch governor and
   // would clamp the bonus during the ramp).
-  const plantsTechPriceLeg = input.costPlusPricingEnabled
-    ? 1
-    : 1 + techEffects.priceRealizationBonus;
+  // Cost-plus sectors take it too: their quote is recorded cost times
+  // (1 + markup), and the cost basis is recorded from NOMINAL revenue, so the
+  // bonus lands as extra markup on top of the posted price rather than being
+  // quoted into the next price. Without it the upgrade was dead for every
+  // sector that priced cost-plus.
+  const plantsTechPriceLeg = 1 + techEffects.priceRealizationBonus;
   const plantsDerivedHourlyRevenue = plantsEnabled
     ? ((producedUnits * plantsMixPrice) / TURNS_PER_DAY) *
       clearingRevenueLeg *

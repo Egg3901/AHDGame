@@ -1345,9 +1345,12 @@ describe("onBillEnacted", () => {
         );
         expect(policyWrite).toBeDefined();
         const budgetWrite = db.collectionMocks.federalBudget.updateOne.mock.calls[0];
-        expect(budgetWrite[0]).toEqual({ _id: countryId });
+        expect(budgetWrite[0]).toMatchObject({ _id: countryId, taxRates: { incomeTax: current } });
         expect(budgetWrite[1].$set.taxRates.incomeTax).toBe(current + Math.sign(target - current));
-        expect(budgetWrite[1].$set["taxRatePhaseIn.incomeTax"]).toBe(target);
+        expect(budgetWrite[1].$set["taxRatePhaseIn.incomeTaxLow"]).toBe(target);
+        expect(budgetWrite[1].$set["taxRatePhaseIn.incomeTaxMiddle"]).toBe(target);
+        expect(budgetWrite[1].$set["taxRatePhaseIn.incomeTaxHigh"]).toBe(target);
+        expect(budgetWrite[1].$unset["taxRatePhaseIn.incomeTax"]).toBe("");
       }
     );
 
@@ -1392,7 +1395,7 @@ describe("onBillEnacted", () => {
 
       expect(calculateFederalRevenue).toHaveBeenCalled();
       const updateCall = db.collectionMocks["federalBudget"]!.updateOne.mock.calls[0];
-      expect(updateCall[0]).toEqual({ _id: "DE" });
+      expect(updateCall[0]).toMatchObject({ _id: "DE" });
       expect(updateCall[1].$set.taxRates).toMatchObject({
         incomeTax: 43, // 42 toward 48, one point per turn
         domesticCorporateTax: 15,

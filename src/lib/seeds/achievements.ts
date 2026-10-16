@@ -2,6 +2,7 @@ import { ObjectId } from "mongodb";
 import type { Achievement } from "@/lib/db/types";
 
 import { CONTEST_ACHIEVEMENTS } from "@/lib/contests/achievementDefinitions";
+import { SCOTUS_ACHIEVEMENTS } from "@/lib/scotus/achievementDefinitions";
 
 const now = new Date();
 
@@ -17,6 +18,11 @@ export const ACHIEVEMENT_SEED: Omit<Achievement, "_id">[] = [
     triggerType: "contest_result",
     isHidden: false,
     order: 600 + index,
+    createdAt: now,
+    updatedAt: now,
+  })),
+  ...SCOTUS_ACHIEVEMENTS.map((definition) => ({
+    ...definition,
     createdAt: now,
     updatedAt: now,
   })),

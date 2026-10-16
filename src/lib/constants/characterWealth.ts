@@ -46,7 +46,7 @@ export function getWealthBonus(level: WealthLevel, preset?: string): number {
 /** Display order + human label for each tier. */
 export const WEALTH_LEVELS: { value: WealthLevel; label: string }[] = [
   { value: "low", label: "Low Income" },
-  { value: "middle", label: "Middle Income" },
+  { value: "middle", label: "Medium Income" },
   { value: "high", label: "High Income" },
 ];
 

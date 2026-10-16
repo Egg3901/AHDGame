@@ -12,6 +12,16 @@ export type AcquisitionOfferStatus =
  */
 
 /**
+ * What happens to the target when an offer settles. `merge` (the default for
+ * every offer written before this field existed) folds the target's sectors and
+ * cash into the acquirer and deletes the shell. `subsidiary` keeps the target as
+ * a distinct corporation: the acquirer becomes its sole shareholder and the
+ * existing subsidiary machinery (derived >50% control plus the formalization
+ * marker) takes over.
+ */
+export type AcquisitionOutcome = "merge" | "subsidiary";
+
+/**
  * An agreed corp-to-corp acquisition offer: the acquirer's CEO offers to buy the
  * whole target corporation for `priceAnchor` (₳). The target's CEO accepts or
  * rejects. On accept, the target is absorbed into the acquirer and its
@@ -26,6 +36,8 @@ export interface AcquisitionOffer {
   proposedByCharacterId: ObjectId;
   /** The proposing user (for authorization checks on withdraw). */
   proposedByUserId?: ObjectId;
+  /** Absent on legacy offers, which always merge. */
+  outcome?: AcquisitionOutcome;
   /** Agreed all-in price for the whole target, in ₳ (anchor units). */
   priceAnchor: number;
   /** Canonical target valuation captured at propose time (₳) — display + fair-value floor. */

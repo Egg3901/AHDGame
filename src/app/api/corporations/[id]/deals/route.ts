@@ -23,6 +23,7 @@ import {
   resolveAcquisitionOfferStatus,
   listDealsForCorp,
 } from "@/lib/corporations/commands/acquisitions/acquisitionOffers";
+import { isSubsidiaryAcquisitionAvailable } from "@/lib/corporations/commands/acquisitions/subsidiaryOutcome";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -32,6 +33,8 @@ const dealsBodySchema = z.object({
   action: z.string().optional(),
   targetCorporationId: z.string().optional(),
   priceAnchor: z.number().optional(),
+  /** Absent means merge (the original behavior). */
+  outcome: z.enum(["merge", "subsidiary"]).optional(),
   offerId: z.string().optional(),
 });
 
@@ -53,8 +56,11 @@ export async function GET(_request: Request, { params }: RouteParams) {
     const enabled = Boolean(flagDoc?.corpDealsEnabled);
     if (!enabled) return NextResponse.json({ enabled: false, incoming: [], outgoing: [] });
 
-    const deals = await listDealsForCorp(db, resolved.corporation._id);
-    return NextResponse.json({ enabled: true, ...deals });
+    const [deals, subsidiaryAvailable] = await Promise.all([
+      listDealsForCorp(db, resolved.corporation._id),
+      isSubsidiaryAcquisitionAvailable(db),
+    ]);
+    return NextResponse.json({ enabled: true, subsidiaryAvailable, ...deals });
   } catch (error) {
     return handleRouteError(error);
   }
@@ -103,6 +109,7 @@ export async function POST(request: Request, { params }: RouteParams) {
         proposerCharacterId: myCorp.ceoId,
         proposerUserId: auth.user.userId ? new ObjectId(auth.user.userId) : undefined,
         currentTurn,
+        outcome: body.outcome,
       });
       if (!result.ok) return errorResponse(result.status, result.error);
       if (result.autoAccepted) {
@@ -113,6 +120,7 @@ export async function POST(request: Request, { params }: RouteParams) {
           sectorsMoved: result.sectorsMoved,
           acquirerName: result.acquirerName,
           targetName: result.targetName,
+          outcome: result.outcome ?? "merge",
         });
       }
       return NextResponse.json({ ok: true, offerId: result.offerId.toString() });
@@ -150,6 +158,7 @@ export async function POST(request: Request, { params }: RouteParams) {
         sectorsMoved: r.sectorsMoved,
         acquirerName: r.acquirerName,
         targetName: r.targetName,
+        outcome: r.outcome ?? "merge",
       });
     }
 

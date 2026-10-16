@@ -448,10 +448,17 @@ describe("resetGameWorld", () => {
     });
 
     expect(db.collectionMocks.imperialCharacters.drop).not.toHaveBeenCalled();
-    expect(db.collectionMocks.imperialCharacters.updateMany).toHaveBeenCalledWith(
-      {},
-      { $set: { cashOnHand: 0, "currencyBalances.personal": {} } }
-    );
+    expect(db.collectionMocks.imperialCharacters.updateMany).toHaveBeenCalledWith({}, [
+      {
+        $set: {
+          cashOnHand: 0,
+          "currencyBalances.personal": {},
+          incomeTaxBatchReceipt: null,
+          incomeTaxStartTurn: 1,
+          incomeTier: { $ifNull: ["$initialIncomeTier", "high"] },
+        },
+      },
+    ]);
     expect(db.collectionMocks.counters.updateOne).toHaveBeenCalledWith(
       { _id: "imperial" },
       { $set: { seq: 7 } },

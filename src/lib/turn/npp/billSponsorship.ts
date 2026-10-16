@@ -467,7 +467,13 @@ async function loadNationalLegislationTypes(
   };
 
   const query = {
-    $and: [countryScopeFilter, nationalScopeFilter],
+    $and: [
+      countryScopeFilter,
+      nationalScopeFilter,
+      // Retain historical types for old bills, but sponsor separate tier provisions.
+      { "taxSlider.taxType": { $ne: "incomeTax" } },
+      { "taxRateChange.taxType": { $ne: "incomeTax" } },
+    ],
     // Must have policy options for us to score/select
     "policyOptions.0": { $exists: true },
   };

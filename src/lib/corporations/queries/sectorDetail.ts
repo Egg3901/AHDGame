@@ -933,14 +933,16 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
       const ceoAcumen =
         (ceo as { stats?: { businessAcumen?: number } } | null)?.stats?.businessAcumen ??
         NEUTRAL_STAT;
-      const techBuildCostMultiplier = techTreesEnabled
+      const techBuildEffects = techTreesEnabled
         ? getSectorTechEffects(
             techCorpView,
             sectorType,
             sector.industryModel,
             sector.mediaDiscriminator
-          ).growthCostMultiplier
-        : 1;
+          )
+        : null;
+      const techBuildCostMultiplier = techBuildEffects?.growthCostMultiplier ?? 1;
+      const techDominanceShield = techBuildEffects?.dominanceShield ?? 0;
       // Tech margin points ride `policyCredit` under plants like every other
       // non-physical modifier, and `computeAllMarginModifiers` does not carry
       // them, so name the row here rather than letting it fall into the scale
@@ -1259,6 +1261,7 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
         ceoAcumen,
         hostCostOfLivingIndex: metrics.costOfLiving,
         techGrowthCostMultiplier: techBuildCostMultiplier,
+        techDominanceShield,
         eraUnitScale: sectorDetailUnitScale,
         preset: sectorDetailPreset,
         corpCapitalAnchor: corpLiquidCapitalToAnchor(

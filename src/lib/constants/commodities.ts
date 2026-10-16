@@ -44,7 +44,10 @@ import {
 } from "@/lib/corporations/rules/energyProductivityRamp";
 import { getOutputMultiplier, getInputMultiplier } from "@/lib/utils/productionPolicy";
 import { TRADE_EMBARGO_EXPORT_LOSS_SHARE } from "@/lib/trade/constants";
-import { inputDemandDeflator } from "@/lib/market/inputDemandRealPhase";
+import {
+  effectiveInputDemandRealPhase,
+  inputDemandDeflator,
+} from "@/lib/market/inputDemandRealPhase";
 
 export const COMMODITY_TYPES = [
   "steel",
@@ -2519,10 +2522,16 @@ export function computeRawSupplyDemand(
     // D12 residual: a mothballed plant buys nothing either. Before this, cold
     // capacity kept demanding its full nameplate inputs from the world ledger.
     if (!(suppressRetailConsumerDemand && st === "retail") && !plantsMothballed) {
-      // Input demand follows real output: revenue deflated by the sector's own
-      // realized price leg as the phase advances (inputDemandRealPhase.ts).
+      // Input demand follows real output. Legacy worlds deflate the revenue
+      // anchor by the sector's realized price leg as the phase advances; plants
+      // worlds already book the base-priced nameplate x utilization, which is
+      // the billed input quantity, so they never deflate (inputDemandRealPhase.ts).
       const demandRevenue =
-        sector.revenue / inputDemandDeflator(sector.priceLeg, inputDemandRealPhase);
+        sector.revenue /
+        inputDemandDeflator(
+          sector.priceLeg,
+          effectiveInputDemandRealPhase(inputDemandRealPhase, plantsEnabled)
+        );
       for (const [commodity, rate] of demandEntries) {
         const units =
           dollarsToUnits(

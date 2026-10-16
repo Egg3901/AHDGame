@@ -30,10 +30,10 @@ describe("queueBill — US state tax sliders (ticket #1106)", () => {
     db.collection("legislationTypes");
     db.collection("stateBudgets");
     db.collectionMocks.legislationTypes.findOne.mockResolvedValue({
-      _id: "us.tax.stateIncomeTax",
+      _id: "us.tax.stateIncomeTax__income_middle",
       taxSlider: {
         scope: "state",
-        taxType: "incomeTax",
+        taxType: "incomeTaxMiddle",
         minRate: 0,
         maxRate: 25,
         step: 0.5,
@@ -57,7 +57,7 @@ describe("queueBill — US state tax sliders (ticket #1106)", () => {
       category: "tax",
       provisions: [
         {
-          legislationTypeId: "us.tax.stateIncomeTax",
+          legislationTypeId: "us.tax.stateIncomeTax__income_middle",
           effectDirection: 1,
           proposedRate: 7,
         },
@@ -69,7 +69,7 @@ describe("queueBill — US state tax sliders (ticket #1106)", () => {
       provisions: Array<Record<string, unknown>>;
     };
     expect(inserted.provisions[0]).toMatchObject({
-      legislationTypeId: "us.tax.stateIncomeTax",
+      legislationTypeId: "us.tax.stateIncomeTax__income_middle",
       proposedRate: 7,
       policyOptionId: "rate:7",
       effectDirection: 1,
@@ -86,7 +86,11 @@ describe("queueBill — US state tax sliders (ticket #1106)", () => {
       summary: "Stay put.",
       category: "tax",
       provisions: [
-        { legislationTypeId: "us.tax.stateIncomeTax", effectDirection: 0, proposedRate: 5 },
+        {
+          legislationTypeId: "us.tax.stateIncomeTax__income_middle",
+          effectDirection: 0,
+          proposedRate: 5,
+        },
       ],
     });
     expect(res.status).toBe(400);

@@ -1,3 +1,5 @@
+import type { IncomeTaxBatchReceipt } from "./incomeTax";
+import type { IncomeTier } from "@/lib/budget/rules/incomeTaxTiers";
 import type { ObjectId } from "mongodb";
 import type { CountryId } from "../../constants/countries";
 import type { CurrencyCode } from "../../constants/currencies";
@@ -149,6 +151,14 @@ export interface CareerEvent {
 }
 
 export interface Character {
+  /** Monotonic tax-collection proof, reset with the owning world balance. */
+  incomeTaxBatchReceipt?: IncomeTaxBatchReceipt | null;
+  /** Immutable creation choice; legacy characters inherit demographics.wealth. */
+  initialIncomeTier?: IncomeTier;
+  /** Latest assessed tier, based on recurring personal earnings. */
+  incomeTier?: IncomeTier;
+  /** First taxable turn; prevents retroactive taxation of receipts before rollout. */
+  incomeTaxStartTurn?: number;
   /** Temporary receipts retained until an expired FX order acknowledges its refund. */
   forexExpiryRefunds?: string[];
   /** Promotional grant ids already credited, so a retried grant never pays twice. */

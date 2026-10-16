@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui";
 import type { RegionalTargetConfig } from "@/lib/constants/cabinetMechanicsTypes";
 import { apiErrorText } from "@/lib/errors/catalog";
+import { sortByRegionLabel } from "@/lib/regionOptions";
 
 interface RegionRow {
   regionId: string;
@@ -93,7 +94,7 @@ export function RegionalTargetPanel({
               .trim()}
           >
             <option value="">— No target —</option>
-            {regionData.map((r) => (
+            {sortByRegionLabel(regionData, (r) => r.regionName).map((r) => (
               <option key={r.regionId} value={r.regionId}>
                 {r.regionName}
               </option>

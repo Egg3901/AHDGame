@@ -66,6 +66,7 @@ export function openingLawReference(
   scope: "national" | "regional",
   familyId: string
 ): OpeningLawReference | undefined {
+  if (/^T01_(low|middle|high)$/.test(familyId)) familyId = "T01";
   return openingLawReferences.find(
     (reference) =>
       reference.country === country && reference.scope === scope && reference.familyId === familyId

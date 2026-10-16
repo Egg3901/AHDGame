@@ -759,26 +759,11 @@ export const stateEffectsAndNationalAggregationPhase: TurnPhaseAdapter = {
         }),
       ]);
     })();
-    const snapshotChainB = Promise.all([
-      runtime.runPhase("portfolioSnapshot", () => snapshotPortfolioValues(newTurn)),
-      runtime.runPhase("corpPortfolioSnapshot", () => snapshotCorporationPortfolioValues(newTurn)),
-      runtime.runPhase("stockExchangeSnapshot", () =>
-        generateStockExchangeSnapshots(newTurn, context.db)
-      ),
-      runtime.runPhase("investorRankingSnapshot", () =>
-        generateInvestorRankingSnapshot(newTurn, context.db)
-      ),
-      runtime.runPhase("wealthListSnapshot", () =>
-        generateWealthListSnapshots(newTurn, context.db)
-      ),
-    ]);
-    const [[metricHistResult, approvalSnapshotResult], [portfolioSnapshotResult]] =
-      await Promise.all([snapshotChainA, snapshotChainB]);
+    const [metricHistResult, approvalSnapshotResult] = await snapshotChainA;
     phaseResults.metricHistory = { snapshotsTaken: metricHistResult ?? 0 };
     phaseResults.approvalSnapshot = {
       countriesProcessed: approvalSnapshotResult?.countriesProcessed ?? 0,
     };
-    phaseResults.portfolioSnapshot = { charactersSnapshotted: portfolioSnapshotResult ?? 0 };
 
     // auditAnomalyScan and suspiciousDetection run after the turn commits
     // (#2694, src/lib/turn/postTurnScans.ts), in that order.
@@ -796,5 +781,27 @@ export const stateEffectsAndNationalAggregationPhase: TurnPhaseAdapter = {
     if (healthResult) {
       phaseResults.gameHealthSnapshot = healthResult;
     }
+  },
+};
+
+/** Closing financial snapshots follow all income and tax settlement phases. */
+export const closingFinancialSnapshotsPhase: TurnPhaseAdapter = {
+  key: "closingFinancialSnapshots",
+  async execute(context, runtime) {
+    const { newTurn, phaseResults } = context;
+    const [portfolioSnapshotResult] = await Promise.all([
+      runtime.runPhase("portfolioSnapshot", () => snapshotPortfolioValues(newTurn)),
+      runtime.runPhase("corpPortfolioSnapshot", () => snapshotCorporationPortfolioValues(newTurn)),
+      runtime.runPhase("stockExchangeSnapshot", () =>
+        generateStockExchangeSnapshots(newTurn, context.db)
+      ),
+      runtime.runPhase("investorRankingSnapshot", () =>
+        generateInvestorRankingSnapshot(newTurn, context.db)
+      ),
+      runtime.runPhase("wealthListSnapshot", () =>
+        generateWealthListSnapshots(newTurn, context.db)
+      ),
+    ]);
+    phaseResults.portfolioSnapshot = { charactersSnapshotted: portfolioSnapshotResult ?? 0 };
   },
 };

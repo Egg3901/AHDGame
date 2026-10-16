@@ -1,3 +1,4 @@
+import { initializeIncomeTaxRates, incomeTaxRevenue } from "./rules/incomeTaxTiers";
 /**
  * Federal / state revenue projections.
  *
@@ -139,7 +140,12 @@ export function normalizeFederalTaxRates(
   const corporateFallback = coerceRate(taxRates.corporateTax) ?? 0;
 
   return {
-    incomeTax: coerceRate(taxRates.incomeTax) ?? 0,
+    ...initializeIncomeTaxRates({
+      incomeTax: coerceRate(taxRates.incomeTax) ?? 0,
+      incomeTaxLow: coerceRate(taxRates.incomeTaxLow),
+      incomeTaxMiddle: coerceRate(taxRates.incomeTaxMiddle),
+      incomeTaxHigh: coerceRate(taxRates.incomeTaxHigh),
+    }),
     domesticCorporateTax: coerceRate(taxRates.domesticCorporateTax) ?? corporateFallback,
     foreignCorporateTax: coerceRate(taxRates.foreignCorporateTax) ?? corporateFallback,
     payrollTax: coerceRate(taxRates.payrollTax) ?? 0,
@@ -165,7 +171,12 @@ export function normalizeStateTaxRates(
   if (!taxRates) return null;
 
   return {
-    incomeTax: coerceRate(taxRates.incomeTax) ?? 0,
+    ...initializeIncomeTaxRates({
+      incomeTax: coerceRate(taxRates.incomeTax) ?? 0,
+      incomeTaxLow: coerceRate(taxRates.incomeTaxLow),
+      incomeTaxMiddle: coerceRate(taxRates.incomeTaxMiddle),
+      incomeTaxHigh: coerceRate(taxRates.incomeTaxHigh),
+    }),
     salesTax: coerceRate(taxRates.salesTax) ?? 0,
     domesticCorporateTax: coerceRate(taxRates.domesticCorporateTax) ?? 0,
     foreignCorporateTax: coerceRate(taxRates.foreignCorporateTax) ?? 0,
@@ -328,7 +339,11 @@ export async function calculateFederalRevenue(
     (budgetId in COUNTRY_CONFIGS ? (budgetId as CountryId) : COUNTRY_CONFIGS.US.id)) as CountryId;
 
   // Calculate revenue from bases × rates
-  const incomeTax = bases.taxableIncome * (normalizedTaxRates.incomeTax / 100);
+  const incomeTax = incomeTaxRevenue(
+    bases.taxableIncome,
+    normalizedTaxRates,
+    federalBudget?.incomeTaxShares
+  );
   const domesticCorporateTax =
     bases.domesticCorporateProfits * (normalizedTaxRates.domesticCorporateTax / 100);
   const foreignCorporateTax =
@@ -729,7 +744,11 @@ export async function calculateStateRevenue(
   }
 
   // Calculate revenue from bases × rates
-  const incomeTax = bases.taxableIncome * (normalizedTaxRates.incomeTax / 100);
+  const incomeTax = incomeTaxRevenue(
+    bases.taxableIncome,
+    normalizedTaxRates,
+    stateBudget?.incomeTaxShares
+  );
   const salesTax = bases.taxableSales * (normalizedTaxRates.salesTax / 100);
   const domesticCorporateTax =
     bases.domesticCorporateProfits * (normalizedTaxRates.domesticCorporateTax / 100);

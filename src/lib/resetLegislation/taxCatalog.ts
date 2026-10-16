@@ -1,3 +1,8 @@
+import {
+  INCOME_TIERS,
+  INCOME_TAX_KEYS,
+  INCOME_TIER_LABELS,
+} from "@/lib/budget/rules/incomeTaxTiers";
 /**
  * The reset tax menu retains the existing tax instruments. Tax bills choose an
  * exact percentage; ideological law levels never substitute for a tax rate.
@@ -9,6 +14,9 @@ import type { ResetCountry } from "./fundingOwner";
 export type TaxScope = "national" | "regional";
 export type ResetTaxType =
   | "incomeTax"
+  | "incomeTaxLow"
+  | "incomeTaxMiddle"
+  | "incomeTaxHigh"
   | "domesticCorporateTax"
   | "foreignCorporateTax"
   | "payrollTax"
@@ -197,7 +205,20 @@ const regionalTaxes: ResetTaxDefinition[] = [
   },
 ];
 
-export const resetTaxes: readonly ResetTaxDefinition[] = [...nationalTaxes, ...regionalTaxes];
+export const resetTaxes: readonly ResetTaxDefinition[] = [
+  ...nationalTaxes,
+  ...regionalTaxes,
+].flatMap((tax) =>
+  tax.taxType === "incomeTax"
+    ? INCOME_TIERS.map((tier) => ({
+        ...tax,
+        id: tax.id + "_" + tier,
+        title: INCOME_TIER_LABELS[tier] + " Tax",
+        taxType: INCOME_TAX_KEYS[tier],
+        existingLegislationTypeId: tax.existingLegislationTypeId + "__income_" + tier,
+      }))
+    : [tax]
+);
 
 export function resetTaxesFor(
   country: ResetCountry,

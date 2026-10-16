@@ -106,7 +106,7 @@ describe("native bucket labels", () => {
   it("resolves through bucketLabel with the country, and falls back without it", () => {
     expect(bucketLabel("education:hochschulabschluss", "DE")).toBe("Hochschulabschluss");
     expect(bucketLabel("education:university", "JP")).toBe("大学卒 (University)");
-    expect(dimensionLabelFor("income", "SE")).toBe("Inkomst");
+    expect(dimensionLabelFor("income", "SE")).toBe("Income");
     // No country → the US vocabulary, unchanged.
     expect(bucketLabel("race:black")).toBe("Black voters");
     expect(dimensionLabelFor("education")).toBe("Education");

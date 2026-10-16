@@ -294,6 +294,9 @@ export async function POST(request: Request) {
           // the player's first character only, so it cannot answer "where did THIS
           // character start" (ticket 1107).
           startingCountryId: countryId,
+          initialIncomeTier: demographics.wealth,
+          incomeTier: demographics.wealth,
+          incomeTaxStartTurn: gameTime.currentTurn + 1,
 
           // Core Stats (10% bonus if referred, except donorBase). Starting
           // influence never goes below the NPP seed of 10.

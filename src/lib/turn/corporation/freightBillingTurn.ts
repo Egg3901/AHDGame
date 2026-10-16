@@ -190,13 +190,25 @@ export function resolveSectorFreightBillingLegs(args: {
   currentTurn: number;
   sectorCurrencyCode: CurrencyCode | undefined;
   sectorFxRate: number;
+  /** Logistics-strength discount on the shipping bill (1 = none). Credit is untouched. */
+  shippingCostMultiplier?: number;
 }): { charge: number; credit: number; sectorUpdate: Record<string, unknown> } {
-  const { market, sector, embargoLegacyMothball, currentTurn, sectorCurrencyCode, sectorFxRate } =
-    args;
+  const {
+    market,
+    sector,
+    embargoLegacyMothball,
+    currentTurn,
+    sectorCurrencyCode,
+    sectorFxRate,
+    shippingCostMultiplier = 1,
+  } = args;
   const sectorId = sector._id.toString();
   const dailyCharge = embargoLegacyMothball
     ? 0
-    : (market.freightBillingChargeBySectorId?.get(sectorId) ?? 0);
+    : (market.freightBillingChargeBySectorId?.get(sectorId) ?? 0) *
+      (Number.isFinite(shippingCostMultiplier)
+        ? Math.max(0, Math.min(1, shippingCostMultiplier))
+        : 1);
   const dailyCredit = embargoLegacyMothball
     ? 0
     : (market.freightBillingCreditBySectorId?.get(sectorId) ?? 0);

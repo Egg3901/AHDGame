@@ -29,6 +29,21 @@ async function flushAsyncStatusWrites() {
 }
 
 describe("createTurnPhaseRuntime", () => {
+  it.each(["playerIncomeTax", "incomeTaxBases"])(
+    "replays the idempotent %s phase on resume",
+    async (name) => {
+      const execute = vi.fn().mockResolvedValue(42);
+      const runtime = createTurnPhaseRuntime({
+        db: createMockDb().db,
+        phaseStatuses: {},
+        warnings: [],
+        currentPhaseRef: { current: null },
+        alreadyApplied: new Set([name]),
+      });
+      await expect(runtime.runPhase(name, execute)).resolves.toBe(42);
+      expect(execute).toHaveBeenCalledOnce();
+    }
+  );
   it.each([
     { name: "financialSuspectScan", predicate: getAnomalyScanCadencePredicate(1, 3) },
     { name: "gameHealthSnapshot", predicate: getSingleplayerPhasePredicate(true) },

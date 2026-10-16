@@ -330,6 +330,12 @@ export function deriveLedgerEntry(
   tx: DerivableTx,
   emitSite = "financialTxLog/emit.ts:shim"
 ): LedgerEntryInput | null {
+  if (
+    (tx.type === "player_income_tax" ||
+      (tx.type === "gov_tax_revenue" && tx.meta?.source === "player_income_tax")) &&
+    tx.meta?.ledgerOwnedBySettlement === true
+  )
+    return null;
   // These marked rows describe tax-base or holder-service statistics. Their
   // emitters never move treasury cash; the fiscal accrual owner witnesses that.
   if (

@@ -11,6 +11,7 @@ import type {
   ElectionTypeFilter,
   CountryFilter,
 } from "./electionsAdminTypes";
+import { sortByRegionLabel } from "@/lib/regionOptions";
 
 const UK_REGION_IDS = UK_REGIONS.map((r) => r.id);
 const JP_REGION_IDS = JP_REGIONS.map((r) => r.id);
@@ -85,28 +86,28 @@ export function ElectionFilterBar({
       >
         <option value="">All states/Regions</option>
         <optgroup label="US">
-          {US_STATES.map((s) => (
+          {sortByRegionLabel(US_STATES, (s) => s).map((s) => (
             <option key={s} value={s}>
               {s}
             </option>
           ))}
         </optgroup>
         <optgroup label="UK">
-          {UK_REGION_IDS.map((id) => (
+          {sortByRegionLabel(UK_REGION_IDS, (id) => id).map((id) => (
             <option key={id} value={id}>
               {id}
             </option>
           ))}
         </optgroup>
         <optgroup label="JP">
-          {JP_REGION_IDS.map((id) => (
+          {sortByRegionLabel(JP_REGION_IDS, (id) => id).map((id) => (
             <option key={id} value={id}>
               {id}
             </option>
           ))}
         </optgroup>
         <optgroup label="IE">
-          {IE_REGION_IDS.map((id) => (
+          {sortByRegionLabel(IE_REGION_IDS, (id) => id).map((id) => (
             <option key={id} value={id}>
               {id}
             </option>

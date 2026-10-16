@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
-import { stateEffectsAndNationalAggregationPhase } from "@/simulation/phases/stateEffectsPhase";
+import {
+  stateEffectsAndNationalAggregationPhase,
+  closingFinancialSnapshotsPhase,
+} from "@/simulation/phases/stateEffectsPhase";
 
 /**
  * S4 (2026-07-16 core-sim audit): crisisTurn, ministerialOrders, and
@@ -128,7 +131,7 @@ describe("stateEffectsAndNationalAggregation phase ordering", () => {
     });
   });
 
-  it("runs the market snapshots alongside the long-horizon chain, then the health snapshot", async () => {
+  it("defers closing financial snapshots until the final adapter", async () => {
     const { events, runtime, context } = makeHarness();
 
     await stateEffectsAndNationalAggregationPhase.execute(context as never, runtime as never);
@@ -143,7 +146,8 @@ describe("stateEffectsAndNationalAggregation phase ordering", () => {
     expect(idx("end:longHorizonContext")).toBeLessThan(idx("start:metricHistory"));
     expect(idx("end:longHorizonContext")).toBeLessThan(idx("start:approvalSnapshot"));
 
-    // Chain B does not wait for the long-horizon context.
+    await closingFinancialSnapshotsPhase.execute(context as never, runtime as never);
+    // Closing snapshots are invoked separately, after income and taxes.
     for (const phase of [
       "portfolioSnapshot",
       "corpPortfolioSnapshot",
@@ -151,8 +155,8 @@ describe("stateEffectsAndNationalAggregation phase ordering", () => {
       "investorRankingSnapshot",
       "wealthListSnapshot",
     ]) {
-      expect(idx(`start:${phase}`)).toBeLessThan(idx("end:longHorizonContext"));
-      expect(idx(`end:${phase}`)).toBeLessThan(idx("start:gameHealthSnapshot"));
+      expect(idx(`start:${phase}`)).toBeGreaterThan(idx("end:gameHealthSnapshot"));
+      expect(idx(`end:${phase}`)).toBeGreaterThan(idx("end:gameHealthSnapshot"));
     }
     for (const phase of [
       "metricHistory",

@@ -6,7 +6,8 @@
 // asking price instead of waiting for a human Accept (#217).
 // Player-run seats need a human who can accept (missing `ceoType` counts as
 // character: founding historically omitted it). NPP seats need no acceptor but
-// must be genuinely AI-run: caretaker-run player corps stay excluded.
+// must be genuinely AI-run: caretaker-run player corps stay excluded, and so are
+// AI-run subsidiaries of another corporation.
 // Excludes state-owned corps, imperial seats, and the caller itself.
 // Auth: public read. Errors: none
 import { NextResponse } from "next/server";
@@ -35,7 +36,13 @@ export async function GET(request: Request) {
         countryOwnerId: { $exists: false },
         $or: [
           ...PLAYER_RUN_CEO_FILTER.$or,
-          { ceoType: "npp" as const, caretakerCeo: { $exists: false } },
+          // A formalized subsidiary belongs to its parent, which decides a sale:
+          // an AI-run one is not offered as an auto-resolving target.
+          {
+            ceoType: "npp" as const,
+            caretakerCeo: { $exists: false },
+            subsidiaryFormalizedAtTurn: { $exists: false },
+          },
         ],
         ...(excludeId && ObjectId.isValid(excludeId)
           ? { _id: { $ne: new ObjectId(excludeId) } }

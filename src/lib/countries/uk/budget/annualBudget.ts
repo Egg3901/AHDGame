@@ -1,3 +1,9 @@
+import {
+  incomeTierForTaxKey,
+  incomeTaxRate,
+  incomeBaseShares,
+  DEFAULT_INCOME_POPULATION,
+} from "@/lib/budget/rules/incomeTaxTiers";
 import type { Db } from "mongodb";
 import type { BillProvision, FederalBudget } from "@/lib/db/types";
 import { getCatalog, getLaw } from "@/lib/politicalLegislation/catalog";
@@ -33,6 +39,9 @@ export type AnnualBudgetPreviewResult =
 
 const TAX_BASE_BY_TYPE: Record<string, string> = {
   incomeTax: "taxableIncome",
+  incomeTaxLow: "taxableIncome",
+  incomeTaxMiddle: "taxableIncome",
+  incomeTaxHigh: "taxableIncome",
   domesticCorporateTax: "domesticCorporateProfits",
   foreignCorporateTax: "foreignCorporateProfits",
   payrollTax: "wagesAndSalaries",
@@ -73,10 +82,13 @@ export async function buildAnnualBudgetProvisions(
   for (const [lawId, targetRate] of Object.entries(measures.taxRates)) {
     const law = taxLaws.get(lawId);
     if (!law?.taxPolicy) return { ok: false, error: `Unknown UK tax measure: ${lawId}.` };
+    const tier = incomeTierForTaxKey(law.taxPolicy.taxType);
     const currentRate =
-      (currentBudget?.taxRates as unknown as Record<string, number> | undefined)?.[
-        law.taxPolicy.taxType
-      ] ?? law.taxPolicy.baselineRate;
+      tier && currentBudget?.taxRates
+        ? incomeTaxRate(currentBudget.taxRates, tier)
+        : ((currentBudget?.taxRates as unknown as Record<string, number> | undefined)?.[
+            law.taxPolicy.taxType
+          ] ?? law.taxPolicy.baselineRate);
     if (Math.abs(targetRate - currentRate) < 1e-9) continue;
 
     const resolved = await resolveTaxSliderProvisionFields(
@@ -142,15 +154,19 @@ export async function previewAnnualBudget(
   for (const [lawId, targetRate] of Object.entries(measures.taxRates)) {
     const law = getLaw(lawId);
     if (!law?.taxPolicy) continue;
-    const currentRate =
-      (budget.taxRates as unknown as Record<string, number>)[law.taxPolicy.taxType] ??
-      law.taxPolicy.baselineRate;
+    const tier = incomeTierForTaxKey(law.taxPolicy.taxType);
+    const currentRate = tier
+      ? incomeTaxRate(budget.taxRates, tier)
+      : ((budget.taxRates as unknown as Record<string, number>)[law.taxPolicy.taxType] ??
+        law.taxPolicy.baselineRate);
     if (Math.abs(targetRate - currentRate) < 1e-9) continue;
     const baseKey = TAX_BASE_BY_TYPE[law.taxPolicy.taxType];
     const taxBase = baseKey
       ? ((budget.taxBases as unknown as Record<string, number> | undefined)?.[baseKey] ?? 0)
       : 0;
-    taxLikeDelta += ((targetRate - currentRate) * taxBase) / 100;
+    taxLikeDelta +=
+      (((targetRate - currentRate) * taxBase) / 100) *
+      (tier ? (budget.incomeTaxShares ?? incomeBaseShares(DEFAULT_INCOME_POPULATION))[tier] : 1);
     phaseInTurns = Math.max(phaseInTurns, Math.ceil(Math.abs(targetRate - currentRate)));
   }
 

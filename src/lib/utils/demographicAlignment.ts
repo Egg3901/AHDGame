@@ -91,7 +91,7 @@ export const DEMOGRAPHIC_LABELS: Record<string, string> = {
   college: "College Educated",
   graduate: "Graduate Degree",
   low: "Low Income",
-  middle: "Middle Income",
+  middle: "Medium Income",
   high: "High Income",
 };
 

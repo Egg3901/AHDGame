@@ -46,7 +46,7 @@ describe("buildWealthOptions", () => {
   it("defaults to USD ($) labels when no country is selected", () => {
     expect(buildWealthOptions()).toEqual([
       { value: "low", label: "Low Income - $1,000,000" },
-      { value: "middle", label: "Middle Income - $2,500,000" },
+      { value: "middle", label: "Medium Income - $2,500,000" },
       { value: "high", label: "High Income - $5,000,000" },
     ]);
   });
@@ -54,7 +54,7 @@ describe("buildWealthOptions", () => {
   it("defaults to USD ($) labels for an empty country string", () => {
     expect(buildWealthOptions("")).toEqual([
       { value: "low", label: "Low Income - $1,000,000" },
-      { value: "middle", label: "Middle Income - $2,500,000" },
+      { value: "middle", label: "Medium Income - $2,500,000" },
       { value: "high", label: "High Income - $5,000,000" },
     ]);
   });
@@ -62,7 +62,7 @@ describe("buildWealthOptions", () => {
   it("renders China amounts in CNY (¥) at the initial rate", () => {
     expect(buildWealthOptions("cn")).toEqual([
       { value: "low", label: "Low Income - ¥7,200,000" },
-      { value: "middle", label: "Middle Income - ¥18,000,000" },
+      { value: "middle", label: "Medium Income - ¥18,000,000" },
       { value: "high", label: "High Income - ¥36,000,000" },
     ]);
   });
@@ -70,7 +70,7 @@ describe("buildWealthOptions", () => {
   it("renders Germany amounts in EUR (€) at the initial rate", () => {
     expect(buildWealthOptions("de")).toEqual([
       { value: "low", label: "Low Income - €920,000" },
-      { value: "middle", label: "Middle Income - €2,300,000" },
+      { value: "middle", label: "Medium Income - €2,300,000" },
       { value: "high", label: "High Income - €4,600,000" },
     ]);
   });
@@ -78,7 +78,7 @@ describe("buildWealthOptions", () => {
   it("renders Ireland amounts in IEP (IR£), distinct from Germany's euro", () => {
     expect(buildWealthOptions("ie")).toEqual([
       { value: "low", label: "Low Income - IR£920,000" },
-      { value: "middle", label: "Middle Income - IR£2,300,000" },
+      { value: "middle", label: "Medium Income - IR£2,300,000" },
       { value: "high", label: "High Income - IR£4,600,000" },
     ]);
   });
@@ -130,7 +130,7 @@ describe("euro preset handling (#2291)", () => {
   it("labels 2027 French wealth options in euros", () => {
     expect(buildWealthOptions("fr", euroWorldRates, "2027-default")).toEqual([
       { value: "low", label: "Low Income - €920,000" },
-      { value: "middle", label: "Middle Income - €2,300,000" },
+      { value: "middle", label: "Medium Income - €2,300,000" },
       { value: "high", label: "High Income - €4,600,000" },
     ]);
   });

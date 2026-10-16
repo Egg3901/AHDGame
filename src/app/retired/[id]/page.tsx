@@ -102,7 +102,7 @@ function getDemographicLabel(key: string, value: string): string {
     race: { white: "White", black: "Black", hispanic: "Hispanic", asian: "Asian", other: "Other" },
     gender: { male: "Male", female: "Female", nonbinary: "Non-binary" },
     education: { no_college: "No College", college: "College", graduate: "Graduate" },
-    wealth: { low: "Low Income", middle: "Middle Income", high: "High Income" },
+    wealth: { low: "Low Income", middle: "Medium Income", high: "High Income" },
   };
   return labels[key]?.[value] ?? value;
 }

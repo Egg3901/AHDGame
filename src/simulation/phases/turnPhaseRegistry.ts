@@ -1,3 +1,6 @@
+import { closingFinancialSnapshotsPhase } from "./stateEffectsPhase";
+import { processPlayerIncomeTax } from "@/lib/budget/playerIncomeTax";
+import { refreshIncomeTaxShares } from "@/lib/budget/incomeTaxShares";
 import { expireGovernmentTenders } from "@/lib/governmentContracts/reservations";
 import { getEraContext } from "@/lib/era/context";
 import { processStatePartyElections } from "@/lib/statePartyElections";
@@ -209,6 +212,7 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
     {
       key: "resourceAndFinanceStart",
       async execute(context, runtime) {
+        await runtime.runPhase("incomeTaxBases", () => refreshIncomeTaxShares(context.db));
         const {
           characters,
           config,
@@ -1627,6 +1631,31 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
         }
       },
     },
+    {
+      key: "playerIncomeTax",
+      async execute(context, runtime) {
+        const result = await runtime.runPhase("playerIncomeTax", () =>
+          processPlayerIncomeTax(
+            context.db,
+            context.newTurn,
+            context.gameNow,
+            context.gameState,
+            context.config?.treasuryCashLedgerEnabled === true,
+            context.config?.ledgerShadow === true,
+            context.config?.turnLengthMinutes ?? 60
+          )
+        );
+        if (context.phaseStatuses.playerIncomeTax?.status === "failed")
+          throw new Error(
+            "Player income-tax settlement failed; resume this turn before advancing."
+          );
+        if (result?.pending)
+          context.warnings.push(
+            "Player income tax has " + result.pending + " unpaid or unfinished assessments."
+          );
+      },
+    },
+    closingFinancialSnapshotsPhase,
     {
       key: "moneySupplySnapshot",
       async execute(context, runtime) {

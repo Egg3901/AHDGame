@@ -912,6 +912,11 @@ describe("stockExchangeSnapshot", () => {
         .mockReturnValueOnce(createMockChain([])) // exchangeRates (loadValuationFxRates)
         .mockReturnValueOnce(createMockChain([])) // gameState preset (loadValuationFxRates)
         .mockReturnValueOnce(createMockChain([])) // indexFundPositions (loadFundValueByCharacter)
+        .mockReturnValueOnce(
+          createMockChain([
+            { characterId: charId, currency: "USD", federal: 100, regional: 0, sourceFx: 1 },
+          ])
+        ) // unpaid income tax
         // wealthListSnapshots collection — bulkWrite at the end
         .mockReturnValueOnce({
           find: vi.fn().mockReturnThis(),
@@ -949,7 +954,7 @@ describe("stockExchangeSnapshot", () => {
       expect(snapshot.entries).toHaveLength(1);
       expect(snapshot.entries[0].cashValue).toBe(1000);
       expect(snapshot.entries[0].locDebtValue).toBe(300);
-      expect(snapshot.entries[0].totalWealth).toBe(700);
+      expect(snapshot.entries[0].totalWealth).toBe(600);
     });
   });
 

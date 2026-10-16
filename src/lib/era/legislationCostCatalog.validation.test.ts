@@ -1,12 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { LEGISLATION_COST_CLASS, COST_CLASS_OVERRIDES } from "./legislationCostCatalog";
+import {
+  LEGISLATION_COST_CLASS,
+  COST_CLASS_OVERRIDES,
+  getCostClass,
+} from "./legislationCostCatalog";
 import { legislationTypes } from "@/lib/seeds/reference/legislationTypes";
 
 const byId = new Map(legislationTypes.map((t) => [t._id, t]));
 
 describe("cost class catalog — coverage", () => {
   it("every seed type has a cost class (key-set equality)", () => {
-    const seedIds = legislationTypes.map((t) => t._id).sort();
+    const seedIds = [...new Set(legislationTypes.map((t) => t._id.split("__income_")[0]))].sort();
     const classIds = Object.keys(LEGISLATION_COST_CLASS)
       .filter((k) => !k.startsWith("x_") && !k.startsWith("eraB_")) // strip test-seeded ids
       .sort();
@@ -24,7 +28,7 @@ describe("cost class catalog — coverage", () => {
       const isTax = (t.policyOptions ?? []).some(
         (o) => (o as { rate?: number }).rate !== undefined
       );
-      if (isTax) expect(LEGISLATION_COST_CLASS[t._id], t._id).toBe("none");
+      if (isTax) expect(getCostClass(t._id), t._id).toBe("none");
     }
   });
 
@@ -34,7 +38,7 @@ describe("cost class catalog — coverage", () => {
 
   it("materialized option fields match each type's class", () => {
     for (const t of legislationTypes) {
-      const cls = LEGISLATION_COST_CLASS[t._id];
+      const cls = getCostClass(t._id);
       for (const o of t.policyOptions ?? []) {
         const opt = o as { gdpCostFraction?: number; incomeCostFraction?: number };
         if (cls === "gdpFraction") expect(opt.incomeCostFraction, t._id).toBeUndefined();
@@ -49,7 +53,7 @@ describe("cost class catalog — coverage", () => {
 
   it("every gdpFraction/perCapita type has at least one option with a positive fraction", () => {
     for (const t of legislationTypes) {
-      const cls = LEGISLATION_COST_CLASS[t._id];
+      const cls = getCostClass(t._id);
       if (cls !== "gdpFraction" && cls !== "perCapita") continue;
       if (!(t.policyOptions ?? []).length) continue;
       const anyPositive = (t.policyOptions ?? []).some((o) => {

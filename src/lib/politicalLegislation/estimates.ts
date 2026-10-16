@@ -1,3 +1,9 @@
+import {
+  incomeTierForTaxKey,
+  incomeTaxRate,
+  incomeBaseShares,
+  DEFAULT_INCOME_POPULATION,
+} from "@/lib/budget/rules/incomeTaxTiers";
 /**
  * Live fiscal-estimate payloads for new-generation legislation (spec §8).
  * One shared attachment used by the legislation-types API (propose modal),
@@ -35,6 +41,9 @@ export interface TaxSliderEstimate {
 /** FederalTaxBases key per FederalTaxRates key (revenue = rate% × base). */
 export const TAX_BASE_KEY: Record<string, keyof NonNullable<FederalBudget["taxBases"]>> = {
   incomeTax: "taxableIncome",
+  incomeTaxLow: "taxableIncome",
+  incomeTaxMiddle: "taxableIncome",
+  incomeTaxHigh: "taxableIncome",
   domesticCorporateTax: "domesticCorporateProfits",
   foreignCorporateTax: "foreignCorporateProfits",
   payrollTax: "wagesAndSalaries",
@@ -45,6 +54,9 @@ export const TAX_BASE_KEY: Record<string, keyof NonNullable<FederalBudget["taxBa
 /** State-budget taxBases keys for regional tax sliders (ticket #1106). */
 export const STATE_TAX_BASE_KEY: Record<string, keyof StateTaxBases> = {
   incomeTax: "taxableIncome",
+  incomeTaxLow: "taxableIncome",
+  incomeTaxMiddle: "taxableIncome",
+  incomeTaxHigh: "taxableIncome",
   domesticCorporateTax: "domesticCorporateProfits",
   foreignCorporateTax: "foreignCorporateProfits",
   salesTax: "taxableSales",
@@ -87,7 +99,10 @@ export async function attachPoliticalLegislationEstimates(
   const bandIndex = incomeBandIndexByCountry?.[countryId] ?? null;
   const budget = await db
     .collection<FederalBudget>("federalBudget")
-    .findOne({ _id: getNationalBudgetId(countryId) }, { projection: { taxRates: 1, taxBases: 1 } });
+    .findOne(
+      { _id: getNationalBudgetId(countryId) },
+      { projection: { taxRates: 1, taxBases: 1, incomeTaxShares: 1 } }
+    );
   const hasStateSlider = docs.some((d) => {
     const lt = d as unknown as LegislationType;
     return Boolean(
@@ -102,7 +117,7 @@ export async function attachPoliticalLegislationEstimates(
           .collection<StateBudget>("stateBudgets")
           .findOne(
             { _id: regionKey, countryId: countryId as StateBudget["countryId"] },
-            { projection: { taxRates: 1, taxBases: 1 } }
+            { projection: { taxRates: 1, taxBases: 1, incomeTaxShares: 1 } }
           )
       : null;
 
@@ -119,9 +134,11 @@ export async function attachPoliticalLegislationEstimates(
       if (lt.taxRateChange.scope === "state" && stateBudget == null) return doc;
       const useStateBudget = lt.taxRateChange.scope === "state" && stateBudget != null;
       const rates = useStateBudget ? stateBudget.taxRates : budget?.taxRates;
-      const currentRate = (rates as unknown as Record<string, unknown> | undefined)?.[
-        lt.taxRateChange.taxType
-      ];
+      const tier = incomeTierForTaxKey(lt.taxRateChange.taxType);
+      const currentRate =
+        tier && rates
+          ? incomeTaxRate(rates, tier)
+          : (rates as unknown as Record<string, unknown> | undefined)?.[lt.taxRateChange.taxType];
       if (typeof currentRate !== "number" || !Number.isFinite(currentRate)) return doc;
       const stateBaseKey = STATE_TAX_BASE_KEY[lt.taxRateChange.taxType];
       const federalBaseKey = TAX_BASE_KEY[lt.taxRateChange.taxType];
@@ -143,19 +160,27 @@ export async function attachPoliticalLegislationEstimates(
             Number.isFinite(option.rate)
           )
           .map((option) => ({ rate: option.rate, label: option.name })),
-        revenueDeltaPerPoint: taxBase / 100,
+        revenueDeltaPerPoint:
+          (taxBase / 100) *
+          (incomeTierForTaxKey((lt.taxSlider ?? lt.taxRateChange)!.taxType)
+            ? ((useStateBudget ? stateBudget?.incomeTaxShares : budget?.incomeTaxShares) ??
+                incomeBaseShares(DEFAULT_INCOME_POPULATION))[
+                incomeTierForTaxKey((lt.taxSlider ?? lt.taxRateChange)!.taxType)!
+              ]
+            : 1),
       };
       return { ...doc, taxSliderEstimate: estimate };
     }
 
     if (lt.taxSlider) {
       const useStateBudget = lt.taxSlider.scope === "state" && stateBudget != null;
-      const currentRate = useStateBudget
-        ? ((stateBudget.taxRates as unknown as Record<string, number> | undefined)?.[
-            lt.taxSlider.taxType
-          ] ?? lt.taxSlider.baselineRate)
-        : ((budget?.taxRates as Record<string, number> | undefined)?.[lt.taxSlider.taxType] ??
-          lt.taxSlider.baselineRate);
+      const rates = useStateBudget ? stateBudget.taxRates : budget?.taxRates;
+      const tier = incomeTierForTaxKey(lt.taxSlider.taxType);
+      const currentRate =
+        tier && rates
+          ? incomeTaxRate(rates, tier)
+          : ((rates as unknown as Record<string, number> | undefined)?.[lt.taxSlider.taxType] ??
+            lt.taxSlider.baselineRate);
       const stateBaseKey = STATE_TAX_BASE_KEY[lt.taxSlider.taxType];
       const federalBaseKey = TAX_BASE_KEY[lt.taxSlider.taxType];
       const taxBase = useStateBudget
@@ -172,7 +197,14 @@ export async function attachPoliticalLegislationEstimates(
         baselineRate: lt.taxSlider.baselineRate,
         currentRate,
         waypoints: lt.taxSlider.waypoints,
-        revenueDeltaPerPoint: taxBase / 100,
+        revenueDeltaPerPoint:
+          (taxBase / 100) *
+          (incomeTierForTaxKey((lt.taxSlider ?? lt.taxRateChange)!.taxType)
+            ? ((useStateBudget ? stateBudget?.incomeTaxShares : budget?.incomeTaxShares) ??
+                incomeBaseShares(DEFAULT_INCOME_POPULATION))[
+                incomeTierForTaxKey((lt.taxSlider ?? lt.taxRateChange)!.taxType)!
+              ]
+            : 1),
       };
       return { ...doc, taxSliderEstimate: estimate };
     }

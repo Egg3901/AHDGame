@@ -34,6 +34,7 @@ describe("runRequiredStartupMigrations", () => {
       "2026-10-14-contest-account-history",
       "2026-10-14-government-contract-bidding",
       "2026-10-15-income-tax-policy-parity",
+      "2026-10-16-income-tax-tiers",
       "2026-09-03-equity-market-pools",
       "2026-09-03-repair-orphan-index-fund-state",
       "2026-09-10-provider-identity-indexes",
@@ -59,6 +60,7 @@ describe("runRequiredStartupMigrations", () => {
       "2026-10-09-corporate-fund-positions",
       "2026-10-09-subhour-wiki-cadence",
       "2026-10-15-live-world-npp-autonomy-v6",
+      "2026-10-16-scotus-career-achievements",
     ]);
     expect(REQUIRED_STARTUP_MIGRATIONS.every((migration) => migration.idempotent)).toBe(true);
     expect(runMigrationsMock).toHaveBeenNthCalledWith(1, db, {

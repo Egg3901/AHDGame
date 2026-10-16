@@ -1,3 +1,4 @@
+import { isLegacyIncomeTax } from "@/lib/budget/incomeTaxCatalog";
 import { NextResponse } from "next/server";
 import { unstable_cache } from "next/cache";
 import { handleRouteError } from "@/lib/api/errors";
@@ -79,9 +80,24 @@ async function fetchLegislationTypes(
     .collection<LegislationType>("legislationTypes")
     .find(query)
     .sort({ policyDomain: 1, subCategory: 1 });
+  if (minimal)
+    cursor.project({
+      _id: 1,
+      name: 1,
+      policyDomain: 1,
+      positions: 1,
+      taxRateChange: 1,
+      taxSlider: 1,
+    });
+  const types = (await cursor.toArray()).filter((type) => !isLegacyIncomeTax(type));
   return minimal
-    ? await cursor.project({ _id: 1, name: 1, policyDomain: 1, positions: 1 }).toArray()
-    : await cursor.toArray();
+    ? types.map(({ _id, name, policyDomain, positions }) => ({
+        _id,
+        name,
+        policyDomain,
+        positions,
+      }))
+    : types;
 }
 
 function getCachedLegislationTypes(

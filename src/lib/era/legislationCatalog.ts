@@ -771,6 +771,7 @@ export const NEW_BADGE_YEARS = 2;
  * "always" ⇒ true. Unknown typeId ⇒ true (fail-open; validation forbids it).
  */
 export function isLegislationTypeActive(typeId: string, year: number | null): boolean {
+  typeId = typeId.split("__income_")[0];
   if (year == null || !Number.isFinite(year)) return true;
   const from = LEGISLATION_ERA[typeId];
   if (from === undefined || from === "always") return true;

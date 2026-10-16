@@ -24,8 +24,9 @@ const STATE_ID = "US-CA";
 const COUNTRY_ID = "US";
 const DAILY_REVENUE = 240_000;
 
-function makeCorp(): Corporation {
+function makeCorp(overrides: Partial<Corporation> = {}): Corporation {
   return {
+    ...overrides,
     _id: CORP_ID,
     name: "Freightco",
     countryId: COUNTRY_ID,
@@ -126,14 +127,15 @@ function sectorUpdateOf(env: SectorTurnEnv): Record<string, unknown> {
 function run(
   sector: CorporateSector,
   billing?: { charge?: Map<string, number>; credit?: Map<string, number> },
-  currentTurn = 1000
+  currentTurn = 1000,
+  corp: Corporation = makeCorp()
 ) {
   const env = makeEnv(currentTurn);
   if (billing) {
     env.market.freightBillingChargeBySectorId = billing.charge ?? new Map();
     env.market.freightBillingCreditBySectorId = billing.credit ?? new Map();
   }
-  const result = processSector(env, makeCorp(), sector, 1, undefined, 1);
+  const result = processSector(env, corp, sector, 1, undefined, 1);
   return { result, update: sectorUpdateOf(env) };
 }
 
@@ -172,6 +174,23 @@ describe("sector turn — canonical freight billing, flag ON", () => {
     const billed = run(makeSector(), { charge: new Map([[sectorKey, CHARGE]]) });
     const perTurn = billed.result.costs - baseline.result.costs;
     expect(perTurn * TURNS_PER_DAY).toBeCloseTo(CHARGE, 6);
+  });
+
+  it("logistics strength discounts the shipping bill but not haul revenue", () => {
+    const billing = {
+      charge: new Map([[sectorKey, CHARGE]]),
+      credit: new Map([[sectorKey, CREDIT]]),
+    };
+    const plain = run(makeSector(), billing);
+    // LS 100 of the 200 reference = half of the 40% maximum discount = x0.8.
+    const logistics = run(makeSector(), billing, 1000, makeCorp({ logisticsStrength: 100 }));
+    expect(logistics.update.freightBillingCharge as number).toBeCloseTo(CHARGE * 0.8, 8);
+    expect(logistics.update.freightBillingCredit as number).toBeCloseTo(CREDIT, 8);
+    expect(plain.result.costs - logistics.result.costs).toBeCloseTo(
+      (CHARGE * 0.2) / TURNS_PER_DAY,
+      8
+    );
+    expect(logistics.result.hourlyRevenue).toBeCloseTo(plain.result.hourlyRevenue, 8);
   });
 
   it("a sector with no apportioned money persists explicit zero legs", () => {

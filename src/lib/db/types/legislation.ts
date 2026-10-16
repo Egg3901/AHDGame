@@ -1044,6 +1044,9 @@ export interface LegislationType {
     scope: "federal" | "state";
     taxType:
       | "incomeTax"
+      | "incomeTaxLow"
+      | "incomeTaxMiddle"
+      | "incomeTaxHigh"
       | "domesticCorporateTax"
       | "foreignCorporateTax"
       | "payrollTax"
