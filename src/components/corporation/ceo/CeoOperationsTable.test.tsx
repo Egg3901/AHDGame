@@ -1,6 +1,7 @@
 /**
  * @vitest-environment happy-dom
  */
+import { uniformProducerQuotes } from "@/lib/market/producerMarket/quotePolicyRules";
 import { describe, expect, it, vi } from "vitest";
 import { render as rtlRender, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
@@ -51,7 +52,7 @@ function sector(overrides: Record<string, unknown> = {}) {
     productionPolicy: 0,
     productionPolicyLevel: 0,
     // CEO payload: the levers only the CEO receives.
-    pricingPosture: null,
+    producerQuotes: {},
     wageLevel: 1,
     ...overrides,
   };
@@ -126,17 +127,21 @@ describe("CeoOperationsTable: bulk bar", () => {
     expect(await screen.findByText("Output target +12% on 1 sectors")).toBeTruthy();
   });
 
-  it("bulk pricing sends the posture, and Auto sends null", async () => {
+  it("bulk pricing sends cost markups, and Auto clears quotes", async () => {
     const { onBulkOperations } = renderTable();
     fireEvent.change(screen.getByLabelText("Bulk pricing"), { target: { value: "-0.1" } });
     fireEvent.click(screen.getByText("Set pricing"));
     await waitFor(() =>
-      expect(onBulkOperations).toHaveBeenCalledWith("US", null, { pricingPosture: -0.1 })
+      expect(onBulkOperations).toHaveBeenCalledWith("US", null, {
+        quotes: uniformProducerQuotes(-0.1),
+      })
     );
     fireEvent.change(screen.getByLabelText("Bulk pricing"), { target: { value: "auto" } });
     fireEvent.click(screen.getByText("Set pricing"));
     await waitFor(() =>
-      expect(onBulkOperations).toHaveBeenLastCalledWith("US", null, { pricingPosture: null })
+      expect(onBulkOperations).toHaveBeenLastCalledWith("US", null, {
+        quotes: uniformProducerQuotes(null),
+      })
     );
   });
 
@@ -196,7 +201,9 @@ describe("CeoOperationsTable: per-sector levers", () => {
     fireEvent.change(screen.getByLabelText("Pricing, California Energy"), {
       target: { value: "0.05" },
     });
-    await waitFor(() => expect(onSetPricing).toHaveBeenCalledWith("s1", 0.05));
+    await waitFor(() =>
+      expect(onSetPricing).toHaveBeenCalledWith("s1", uniformProducerQuotes(0.05))
+    );
   });
 
   it("shows the error from a rejected lever", async () => {
@@ -211,7 +218,7 @@ describe("CeoOperationsTable: per-sector levers", () => {
     render(
       <CeoOperationsTable
         corporation={corporation}
-        sectors={[sector({ pricingPosture: undefined, wageLevel: undefined })] as never}
+        sectors={[sector({ producerQuotes: undefined, wageLevel: undefined })] as never}
         corpId="c1"
         onSavePolicy={vi.fn()}
         onSetPricing={vi.fn()}

@@ -21,6 +21,7 @@ describe("producer receipt views", () => {
       producedUnits: 2,
       labourCost: 20,
       revenue: 6,
+      breakEvenRevenue: 20,
       profit: -14,
       cashFlow: -14,
     });

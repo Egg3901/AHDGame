@@ -1,3 +1,4 @@
+import { uniformProducerQuotes } from "@/lib/market/producerMarket/quotePolicyRules";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ObjectId } from "mongodb";
 import type { Db } from "mongodb";
@@ -196,43 +197,50 @@ describe("bulkSetSectorOperations", () => {
     expect(vi.mocked(logEconomicAction)).toHaveBeenCalledTimes(1);
   });
 
-  it("applies pricingPosture across matched holdings", async () => {
+  it("applies product quotes across matched holdings", async () => {
     await wire([energySector("CA"), energySector("NY")]);
     await bulkSetSectorOperations(
-      req({ countryId: "US", sectorType: "energy", pricingPosture: -0.1 }),
+      req({ countryId: "US", sectorType: "energy", quotes: uniformProducerQuotes(-0.1) }),
       { params }
     );
     const ops = db.collectionMocks.corporateSectors.bulkWrite.mock.calls[0][0];
     expect(ops).toHaveLength(2);
-    expect(ops[0].updateOne.update.$set.pricingPosture).toBe(-0.1);
-    expect(ops[1].updateOne.update.$set.pricingPosture).toBe(-0.1);
+    expect(ops[0].updateOne.update.$set.producerQuotes).toEqual(uniformProducerQuotes(-0.1));
+    expect(ops[1].updateOne.update.$set.producerQuotes).toEqual(uniformProducerQuotes(-0.1));
   });
 
   it("pricing-only leaves growth and output policy untouched", async () => {
     await wire([energySector("CA")]);
-    await bulkSetSectorOperations(req({ countryId: "US", pricingPosture: 0.05 }), { params });
+    await bulkSetSectorOperations(req({ countryId: "US", quotes: uniformProducerQuotes(0.05) }), {
+      params,
+    });
     const set =
       db.collectionMocks.corporateSectors.bulkWrite.mock.calls[0][0][0].updateOne.update.$set;
-    expect(set.pricingPosture).toBe(0.05);
+    expect(set.producerQuotes).toEqual(uniformProducerQuotes(0.05));
     expect(set).not.toHaveProperty("productionPolicy"); // pragma: allowlist secret
     expect(set).not.toHaveProperty("targetGrowthRate");
   });
 
-  it("sets pricingPosture null for Auto", async () => {
+  it("sets product quotes null for Auto", async () => {
     await wire([energySector("CA")]);
-    await bulkSetSectorOperations(req({ countryId: "US", pricingPosture: null }), { params });
+    await bulkSetSectorOperations(req({ countryId: "US", quotes: uniformProducerQuotes(null) }), {
+      params,
+    });
     const set =
       db.collectionMocks.corporateSectors.bulkWrite.mock.calls[0][0][0].updateOne.update.$set;
-    expect(set.pricingPosture).toBeNull();
+    expect(set.producerQuotes).toEqual({});
   });
 
   it("returns 400 when pricing is requested but clearing is off", async () => {
     const { getMarketSystemMode } = await import("@/lib/market/featureFlag");
     vi.mocked(getMarketSystemMode).mockResolvedValueOnce("off" as never);
     await wire([energySector("CA")]);
-    const res = await bulkSetSectorOperations(req({ countryId: "US", pricingPosture: 0 }), {
-      params,
-    });
+    const res = await bulkSetSectorOperations(
+      req({ countryId: "US", quotes: uniformProducerQuotes(0) }),
+      {
+        params,
+      }
+    );
     expect(res.status).toBe(400);
     expect(db.collectionMocks.corporateSectors.bulkWrite).not.toHaveBeenCalled();
   });

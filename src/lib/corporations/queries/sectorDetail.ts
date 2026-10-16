@@ -108,7 +108,6 @@ import {
 } from "@/lib/corporations/queries/extractionOpportunities";
 import type { ExtractableResource } from "@/lib/constants/commodities";
 import { buildSectorCommoditySections } from "@/lib/corporations/queries/sectorDetailCommodities";
-import { supportsCostPlusPricing, validCostPlusBasis } from "@/lib/market/costPlusPricing/rules";
 import { sectorEconomicRevenue } from "@/lib/corporations/sectorRevenueBasis";
 import { buildPolicyStackRows } from "@/lib/corporations/plantsPnlBasis";
 import {
@@ -807,7 +806,6 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
       sectorType,
       sectorCountryId,
       eraUnitScale: sectorDetailUnitScale,
-      corporation,
       isCeo,
       commodityPrices,
       globalBalances,
@@ -920,15 +918,6 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
         glideMode: governorConfig?.marketGovernorGlideMode,
         glideFloor: governorConfig?.marketGovernorGlideFloor,
       });
-      if (
-        pricing &&
-        governorConfig?.explicitPlantCostsEnabled === true &&
-        supportsCostPlusPricing(sector.sectorType)
-      ) {
-        pricing.costPlusEnabled = true;
-        pricing.costPlusReady = validCostPlusBasis(sector.costPlusCostBasis);
-        pricing.pricingMode = sector.pricingMode === "costPlus" ? "costPlus" : "market";
-      }
       const primeRate = await resolveCountryPrimeRate(db, sectorCountryId);
       const ceoAcumen =
         (ceo as { stats?: { businessAcumen?: number } } | null)?.stats?.businessAcumen ??

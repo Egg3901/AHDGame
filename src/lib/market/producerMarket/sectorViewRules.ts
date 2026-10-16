@@ -26,6 +26,7 @@ export interface ProducerSectorView {
     labourCost: number;
     otherOperatingCost: number;
     unpaidBills: number;
+    breakEvenRevenue: number;
     profit: number;
     cashFlow: number;
   };
@@ -77,6 +78,7 @@ export function producerSectorView(input: {
             labourCost: receipt.labourPaid + receipt.labourArrears,
             otherOperatingCost: receipt.otherOperatingPaid + receipt.otherOperatingArrears,
             unpaidBills: receipt.operatingArrears,
+            breakEvenRevenue: receipt.revenue - receipt.profit,
             profit: receipt.profit,
             cashFlow: receipt.cashFlow,
           },

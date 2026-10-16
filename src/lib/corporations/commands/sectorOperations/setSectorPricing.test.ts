@@ -34,7 +34,7 @@ const params = Promise.resolve({ id: corpId.toString(), sectorId: sectorId.toStr
 const request = (body: object) =>
   new Request("http://localhost/pricing", { method: "POST", body: JSON.stringify(body) });
 
-describe("industrial pricing command", () => {
+describe("producer pricing command", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     db = createMockDb();
@@ -51,74 +51,74 @@ describe("industrial pricing command", () => {
     db.collectionMocks.gameConfig.findOne.mockResolvedValue({ explicitPlantCostsEnabled: true });
   });
 
-  it("preserves legacy pricing without reading the new feature gate", async () => {
-    const response = await setSectorPricing(request({ pricingPosture: 0.1 }), { params });
-    expect(response.status).toBe(200);
-    expect(db.collectionMocks.gameConfig.findOne).not.toHaveBeenCalled();
-    expect(db.collectionMocks.corporateSectors.updateOne.mock.calls[0][1].$set).not.toHaveProperty(
-      "pricingMode"
-    );
+  it.each(["manufacturing", "financial"])(
+    "accepts cost-plus for %s without a prior cost basis",
+    async (sectorType) => {
+      db.collectionMocks.corporateSectors.findOne.mockResolvedValue({
+        ...sector,
+        sectorType,
+        costPlusCostBasis: undefined,
+      });
+      const quotes = { financial_services: { kind: "costPlus", markup: 0.1 } };
+      const response = await setSectorPricing(request({ quotes }), { params });
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual({ success: true, quotes });
+      expect(db.collectionMocks.gameConfig.findOne).not.toHaveBeenCalled();
+      expect(db.collectionMocks.corporateSectors.updateOne).toHaveBeenCalledWith(
+        { _id: sectorId, corporationId: corpId },
+        { $set: { producerQuotes: quotes, updatedAt: expect.any(Date) } }
+      );
+    }
+  );
+
+  it("saves per-product fixed and automatic prices without changing settled receipts", async () => {
+    const quotes = {
+      financial_services: { kind: "manual", unitPrice: 4 },
+      energy: { kind: "automatic", targetMarkup: 0.15 },
+    };
+    expect((await setSectorPricing(request({ quotes }), { params })).status).toBe(200);
+    const update = db.collectionMocks.corporateSectors.updateOne.mock.calls[0][1];
+    expect(update.$set.producerQuotes).toEqual(quotes);
+    expect(update.$set).not.toHaveProperty("producerSettlement");
   });
 
-  it("refuses cost-plus while disabled without writing the sector", async () => {
-    db.collectionMocks.gameConfig.findOne.mockResolvedValue({ explicitPlantCostsEnabled: false });
-    const response = await setSectorPricing(
-      request({ pricingPosture: 0.1, pricingMode: "costPlus" }),
-      { params }
-    );
-    expect(response.status).toBe(400);
+  it.each([
+    { pricingPosture: 0.1, pricingMode: "costPlus" },
+    { quotes: { invented: { kind: "manual", unitPrice: 1 } } },
+    { quotes: { financial_services: { kind: "manual", unitPrice: -1 } } },
+    { quotes: { financial_services: { kind: "costPlus", markup: -1.1 } } },
+    { quotes: { financial_services: { kind: "automatic", targetMarkup: 1e100 } } },
+    { quotes: { financial_services: { kind: "manual", unitPrice: 1, revenueMultiplier: 2 } } },
+  ])("rejects invalid quote policies: %j", async (body) => {
+    expect((await setSectorPricing(request(body), { params })).status).toBe(400);
     expect(db.collectionMocks.corporateSectors.updateOne).not.toHaveBeenCalled();
   });
 
-  it("refuses nonindustrial cost-plus", async () => {
-    db.collectionMocks.corporateSectors.findOne.mockResolvedValue({
-      ...sector,
-      sectorType: "financial",
-    });
-    expect(
-      (
-        await setSectorPricing(request({ pricingPosture: 0.1, pricingMode: "costPlus" }), {
-          params,
-        })
-      ).status
-    ).toBe(400);
-    expect(db.collectionMocks.corporateSectors.updateOne).not.toHaveBeenCalled();
+  it("returns a conflict if ownership changes before the write", async () => {
+    db.collectionMocks.corporateSectors.updateOne.mockResolvedValue({ matchedCount: 0 });
+    expect((await setSectorPricing(request({ quotes: {} }), { params })).status).toBe(409);
   });
 
-  it("refuses an offer without recorded actual operating costs", async () => {
-    db.collectionMocks.corporateSectors.findOne.mockResolvedValue({
-      ...sector,
-      costPlusCostBasis: undefined,
-    });
-    const response = await setSectorPricing(
-      request({ pricingPosture: 0, pricingMode: "costPlus" }),
-      { params }
-    );
-    expect(response.status).toBe(400);
-    expect(db.collectionMocks.corporateSectors.updateOne).not.toHaveBeenCalled();
-  });
-
-  it("persists a valid owner choice within the owning corporation", async () => {
-    expect(
-      (
-        await setSectorPricing(request({ pricingPosture: 0.1, pricingMode: "costPlus" }), {
-          params,
-        })
-      ).status
-    ).toBe(200);
-    expect(db.collectionMocks.corporateSectors.updateOne).toHaveBeenCalledWith(
+  it("does not write a sector owned by another corporation", async () => {
+    db.collectionMocks.corporateSectors.findOne.mockResolvedValue(null);
+    expect((await setSectorPricing(request({ quotes: {} }), { params })).status).toBe(404);
+    expect(db.collectionMocks.corporateSectors.findOne).toHaveBeenCalledWith(
       { _id: sectorId, corporationId: corpId },
-      { $set: { pricingMode: "costPlus", pricingPosture: 0.1, updatedAt: expect.any(Date) } }
+      { projection: { _id: 1 } }
     );
+    expect(db.collectionMocks.corporateSectors.updateOne).not.toHaveBeenCalled();
   });
 
   it("refuses a non-CEO before reading or writing the sector", async () => {
     vi.mocked(requireCeo).mockReturnValue(new Response("Forbidden", { status: 403 }) as never);
     expect(
       (
-        await setSectorPricing(request({ pricingPosture: 0.1, pricingMode: "costPlus" }), {
-          params,
-        })
+        await setSectorPricing(
+          request({ quotes: { financial_services: { kind: "costPlus", markup: 0.1 } } }),
+          {
+            params,
+          }
+        )
       ).status
     ).toBe(403);
     expect(db.collectionMocks.corporateSectors.findOne).not.toHaveBeenCalled();

@@ -210,6 +210,7 @@ function ProducerMarketEditor({
               ["Inputs used", operations.inputsUsed],
               ["Workforce cost", operations.labourCost],
               ["Site costs", operations.otherOperatingCost],
+              ["Break-even revenue", operations.breakEvenRevenue],
               ["Operating profit", operations.profit],
               ["Operating cash flow", operations.cashFlow],
               ["Inputs purchased", operations.inputsPurchased],

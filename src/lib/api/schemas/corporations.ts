@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { COMMODITY_TYPES } from "@/lib/constants/commodities";
 import { MAX_REGION_ID_LENGTH } from "@/lib/constants/states";
 import { WAGE_LEVEL_MIN, WAGE_LEVEL_MAX } from "@/lib/labour/laborCost";
 import {
@@ -225,12 +226,32 @@ export const setSectorStockpileSchema = z.object({
   stockpileUnsold: z.boolean(),
 });
 
-// Posted-price market clearing (marketSystemMode >= "clearing"): posture is
-// the CEO's price relative to market, -20%..+20%; null reverts to auto.
-export const setSectorPricingSchema = z.object({
-  pricingPosture: z.number().min(-0.2).max(0.2).nullable(),
-  pricingMode: z.enum(["market", "costPlus"]).optional(),
-});
+// Quotes are anchor-currency prices per delivered unit. No sector exceptions.
+export const producerQuotePolicySchema = z.discriminatedUnion("kind", [
+  z
+    .object({
+      kind: z.literal("manual"),
+      unitPrice: z.number().min(0).max(Number.MAX_SAFE_INTEGER),
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal("automatic"),
+      targetMarkup: z.number().min(-1).max(Number.MAX_SAFE_INTEGER),
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal("costPlus"),
+      markup: z.number().min(-1).max(Number.MAX_SAFE_INTEGER),
+    })
+    .strict(),
+]);
+export const producerQuotesSchema = z.partialRecord(
+  z.enum(COMMODITY_TYPES),
+  producerQuotePolicySchema
+);
+export const setSectorPricingSchema = z.object({ quotes: producerQuotesSchema }).strict();
 
 export const setSectorWageLevelSchema = z.object({
   wageLevel: z.number().min(WAGE_LEVEL_MIN).max(WAGE_LEVEL_MAX),
@@ -247,16 +268,16 @@ export const bulkSectorOperationsSchema = z
       .max(MAX_GROWTH_RATE, `Growth rate cannot exceed ${MAX_GROWTH_RATE}%`)
       .optional(),
     productionPolicy: z.number().min(-25).max(25).optional(),
-    // Posted-price posture (−20%…+20% vs market); null = Auto. Requires clearing mode.
-    pricingPosture: z.number().min(-0.2).max(0.2).nullable().optional(),
+    quotes: producerQuotesSchema.optional(),
     wageLevel: z.number().min(WAGE_LEVEL_MIN).max(WAGE_LEVEL_MAX).optional(),
     preview: z.boolean().optional().default(false),
   })
+  .strict()
   .refine(
     (d) =>
       d.targetGrowthRate !== undefined ||
       d.productionPolicy !== undefined || // pragma: allowlist secret
-      d.pricingPosture !== undefined ||
+      d.quotes !== undefined ||
       d.wageLevel !== undefined,
     {
       message: "Need growth, production policy, pricing or wages", // pragma: allowlist secret

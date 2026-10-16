@@ -1,6 +1,7 @@
 /**
  * @vitest-environment happy-dom
  */
+import { uniformProducerQuotes } from "@/lib/market/producerMarket/quotePolicyRules";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { CeoOperationsPanel } from "./CeoOperationsPanel";
@@ -99,22 +100,22 @@ describe("CeoOperationsPanel — bulk by type", () => {
     });
   });
 
-  it("pricing posture chip posts to /sectors/bulk with pricingPosture", async () => {
+  it("pricing cost-plus chip posts to /sectors/bulk with product quotes", async () => {
     render(<CeoOperationsPanel vm={vm} corpId="c1" onRefresh={vi.fn()} />);
     // First "-10%" in the bulk-by-type energy card (pricing posture).
-    fireEvent.click(screen.getAllByText("-10%")[0]);
+    fireEvent.click(screen.getAllByText("Cost -10%")[0]);
     await waitFor(() => {
       const call = bulkCalls().at(-1);
       expect(call).toBeTruthy();
       expect(JSON.parse(String((call![1] as RequestInit).body))).toMatchObject({
         countryId: "US",
         sectorType: "energy",
-        pricingPosture: -0.1,
+        quotes: uniformProducerQuotes(-0.1),
       });
     });
   });
 
-  it("pricing Auto posts pricingPosture null", async () => {
+  it("pricing Auto posts product quotes null", async () => {
     render(<CeoOperationsPanel vm={vm} corpId="c1" onRefresh={vi.fn()} />);
     fireEvent.click(screen.getAllByText("Auto")[0]);
     await waitFor(() => {
@@ -122,7 +123,7 @@ describe("CeoOperationsPanel — bulk by type", () => {
       expect(call).toBeTruthy();
       expect(JSON.parse(String((call![1] as RequestInit).body))).toMatchObject({
         countryId: "US",
-        pricingPosture: null,
+        quotes: uniformProducerQuotes(null),
       });
     });
   });

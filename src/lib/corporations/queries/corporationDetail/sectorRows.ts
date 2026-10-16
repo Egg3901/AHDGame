@@ -154,7 +154,7 @@ export interface SectorRowContext {
   marketCtx: MarketViewContext;
   /**
    * The viewer is this corporation's CEO. Gates the sector levers only the
-   * CEO can set (posted-price posture, wage level): a rival reading them off
+   * CEO can set (product quote policy, wage level): a rival reading them off
    * the payload would see a competitor's pricing and pay stance for free.
    */
   viewerIsCeo?: boolean;
@@ -163,14 +163,14 @@ export interface SectorRowContext {
 /**
  * The sector levers only the CEO can set, for the CEO Office operations table.
  * Empty for every other viewer: a rival reading them off the payload would see
- * a competitor's posted-price posture and pay stance for free.
+ * a competitor's product quote policy and pay stance for free.
  */
 export function ceoSectorLevers(
-  sector: Pick<CorporateSector, "pricingPosture" | "wageLevel">,
+  sector: Pick<CorporateSector, "producerQuotes" | "wageLevel">,
   viewerIsCeo: boolean
-): { pricingPosture?: number | null; wageLevel?: number } {
+): { producerQuotes?: CorporateSector["producerQuotes"]; wageLevel?: number } {
   if (!viewerIsCeo) return {};
-  return { pricingPosture: sector.pricingPosture ?? null, wageLevel: sector.wageLevel ?? 1 };
+  return { producerQuotes: sector.producerQuotes ?? {}, wageLevel: sector.wageLevel ?? 1 };
 }
 
 export interface SectorFinancialTotals {

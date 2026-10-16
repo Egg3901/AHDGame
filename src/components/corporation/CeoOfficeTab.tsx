@@ -187,7 +187,7 @@ export default function CeoOfficeTab({
     body: {
       targetGrowthRate?: number;
       productionPolicy?: number; // pragma: allowlist secret
-      pricingPosture?: number | null;
+      quotes?: import("@/lib/market/producerMarket/quotePolicyRules").ProducerQuotes;
       wageLevel?: number;
       preview?: boolean;
     }
@@ -280,9 +280,7 @@ export default function CeoOfficeTab({
         onSavePolicy={(sectorId, productionPolicy) =>
           sectorLever(sectorId, "policy", { productionPolicy })
         }
-        onSetPricing={(sectorId, pricingPosture) =>
-          sectorLever(sectorId, "pricing", { pricingPosture })
-        }
+        onSetPricing={(sectorId, quotes) => sectorLever(sectorId, "pricing", { quotes })}
         onSetWage={(sectorId, wageLevel) => sectorLever(sectorId, "wage", { wageLevel })}
         onBulkOperations={handleBulkOperations}
         onSectorGrowth={handleSectorGrowth}

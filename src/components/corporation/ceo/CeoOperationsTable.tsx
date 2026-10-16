@@ -1,5 +1,10 @@
 "use client";
 
+import {
+  uniformProducerMarkup,
+  uniformProducerQuotes,
+  type ProducerQuotes,
+} from "@/lib/market/producerMarket/quotePolicyRules";
 import { Fragment, useMemo, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
@@ -59,7 +64,7 @@ export type BulkOperationsFn = (
   body: {
     targetGrowthRate?: number;
     productionPolicy?: number; // pragma: allowlist secret
-    pricingPosture?: number | null;
+    quotes?: ProducerQuotes;
     wageLevel?: number;
     preview?: boolean;
   }
@@ -85,12 +90,11 @@ export interface SectorLeverResult {
 
 const POLICY_MIN = -25;
 const POLICY_MAX = 25;
-const POSTURE_STEPS = [-0.2, -0.1, -0.05, 0, 0.05, 0.1, 0.2] as const;
+const MARKUP_STEPS = [-0.2, -0.1, -0.05, 0, 0.05, 0.1, 0.2] as const;
 
-function postureLabel(p: number | null): string {
+function markupLabel(p: number | null): string {
   if (p == null) return "Auto";
-  if (p === 0) return "Market";
-  return `${p > 0 ? "+" : ""}${Math.round(p * 100)}%`;
+  return `Cost ${p >= 0 ? "+" : ""}${Math.round(p * 100)}%`;
 }
 
 function signedPct(n: number): string {
@@ -125,7 +129,7 @@ interface RowProps {
   fmt: (local: number) => string;
   fmtSigned: (local: number) => string;
   onSavePolicy: (sectorId: string, productionPolicy: number) => Promise<SectorLeverResult>;
-  onSetPricing: (sectorId: string, posture: number | null) => Promise<SectorLeverResult>;
+  onSetPricing: (sectorId: string, quotes: ProducerQuotes) => Promise<SectorLeverResult>;
   onSetWage: (sectorId: string, wageLevel: number) => Promise<SectorLeverResult>;
   onSectorGrowth: SectorGrowthFn;
   columnCount: number;
@@ -152,9 +156,9 @@ function OperationsRow({
   const [pendingPolicy, setPendingPolicy] = useState<Pending<number> | null>(null);
   const policyValue = shown(serverPolicy, pendingPolicy);
 
-  const serverPosture = sector.pricingPosture ?? null;
-  const [pendingPosture, setPendingPosture] = useState<Pending<number | null> | null>(null);
-  const postureValue = shown(serverPosture, pendingPosture);
+  const serverMarkup = uniformProducerMarkup(sector.producerQuotes ?? {});
+  const [pendingMarkup, setPendingMarkup] = useState<Pending<number | null | "mixed"> | null>(null);
+  const markupValue = shown(serverMarkup, pendingMarkup);
 
   const serverWage = sector.wageLevel ?? 1;
   const [wageDraft, setWageDraft] = useState<string | null>(null);
@@ -201,10 +205,13 @@ function OperationsRow({
     if (ok) setPendingPolicy({ value: next, base: serverPolicy });
   }
 
-  async function commitPosture(raw: string) {
+  async function commitMarkup(raw: string) {
     const next = raw === "auto" ? null : Number(raw);
-    const ok = await run(() => onSetPricing(sector._id, next), `Pricing ${postureLabel(next)}`);
-    if (ok) setPendingPosture({ value: next, base: serverPosture });
+    const ok = await run(
+      () => onSetPricing(sector._id, uniformProducerQuotes(next)),
+      `Pricing ${markupLabel(next)}`
+    );
+    if (ok) setPendingMarkup({ value: next, base: serverMarkup });
   }
 
   async function commitWage() {
@@ -368,19 +375,24 @@ function OperationsRow({
             />
           </span>
         </Td>
-        {sector.pricingPosture !== undefined && (
+        {sector.producerQuotes !== undefined && (
           <Td align="right" numeric={false}>
             <select
               aria-label={`Pricing, ${sector.stateName} ${sector.sectorLabel}`}
-              value={postureValue == null ? "auto" : String(postureValue)}
+              value={markupValue == null ? "auto" : String(markupValue)}
               disabled={busy}
-              onChange={(e) => void commitPosture(e.target.value)}
+              onChange={(e) => void commitMarkup(e.target.value)}
               className="h-6 rounded border border-card-border bg-background px-1 text-xs text-foreground focus:border-foreground focus:outline-none disabled:opacity-50"
             >
               <option value="auto">Auto</option>
-              {POSTURE_STEPS.map((p) => (
+              {markupValue === "mixed" && (
+                <option value="mixed" disabled>
+                  Per product
+                </option>
+              )}
+              {MARKUP_STEPS.map((p) => (
                 <option key={p} value={String(p)}>
-                  {postureLabel(p)}
+                  {markupLabel(p)}
                 </option>
               ))}
             </select>
@@ -479,7 +491,7 @@ function BulkBar({
   const [scopeKey, setScopeKey] = useState(scopes[0]?.key ?? "");
   const scope = scopes.find((s) => s.key === scopeKey) ?? scopes[0];
   const [policy, setPolicy] = useState("0");
-  const [posture, setPosture] = useState("auto");
+  const [markup, setMarkup] = useState("auto");
   const [growth, setGrowth] = useState("0");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<{ tone: "success" | "error"; text: string } | null>(null);
@@ -589,24 +601,24 @@ function BulkBar({
             <select
               id="bulk-pricing"
               aria-label="Bulk pricing"
-              value={posture}
-              onChange={(e) => setPosture(e.target.value)}
+              value={markup}
+              onChange={(e) => setMarkup(e.target.value)}
               className="h-7 rounded-md border border-card-border bg-background px-1 text-xs text-foreground focus:border-foreground focus:outline-none"
             >
               <option value="auto">Auto</option>
-              {POSTURE_STEPS.map((p) => (
+              {MARKUP_STEPS.map((p) => (
                 <option key={p} value={String(p)}>
-                  {postureLabel(p)}
+                  {markupLabel(p)}
                 </option>
               ))}
             </select>
             <SmallButton
               disabled={busy}
               onClick={() => {
-                const value = posture === "auto" ? null : Number(posture);
+                const value = markup === "auto" ? null : Number(markup);
                 void apply(
-                  { pricingPosture: value },
-                  (n) => `Pricing ${postureLabel(value)} on ${n} sectors`
+                  { quotes: uniformProducerQuotes(value) },
+                  (n) => `Pricing ${markupLabel(value)} on ${n} sectors`
                 );
               }}
             >
@@ -688,7 +700,7 @@ interface CeoOperationsTableProps {
   sectors: SectorDetail[];
   corpId: string;
   onSavePolicy: (sectorId: string, productionPolicy: number) => Promise<SectorLeverResult>;
-  onSetPricing: (sectorId: string, posture: number | null) => Promise<SectorLeverResult>;
+  onSetPricing: (sectorId: string, quotes: ProducerQuotes) => Promise<SectorLeverResult>;
   onSetWage: (sectorId: string, wageLevel: number) => Promise<SectorLeverResult>;
   onBulkOperations: BulkOperationsFn;
   onSectorGrowth: SectorGrowthFn;
@@ -716,7 +728,7 @@ export default function CeoOperationsTable({
   const [sortKey, setSortKey] = useState<SortKey>("revenue");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
 
-  const pricingEnabled = sectors.some((s) => s.pricingPosture !== undefined);
+  const pricingEnabled = sectors.some((s) => s.producerQuotes !== undefined);
   const wagesEnabled = labourEnabled && sectors.some((s) => s.wageLevel !== undefined);
 
   const homeCountry = corporation.countryId;
