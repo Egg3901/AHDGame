@@ -1,6 +1,7 @@
 import type { ClientSession, Db, UpdateFilter } from "mongodb";
 import { ObjectId } from "mongodb";
 import type { Corporation } from "@/lib/db/types";
+import { updatePersonalHolding, type PersonalHoldingChange } from "./personalHoldingOps";
 
 /**
  * Atomic shareholder operations.
@@ -17,6 +18,7 @@ function mongoOptions(opts?: { session?: ClientSession }): { session: ClientSess
 }
 
 export type CreditSharesOpts = {
+  holdingChange?: PersonalHoldingChange;
   /**
    * ₳ anchor price per share for this credit (purchase / trade fill).
    * When set, updates weighted-average `avgCostPerShare` so portfolio unrealized P&L works.
@@ -36,6 +38,7 @@ function isGuardedCredit(opts?: CreditSharesOpts | Pick<CreditSharesOpts, "guard
 }
 
 export type DebitSharesOpts = {
+  holdingChange?: PersonalHoldingChange;
   /**
    * When true, the debit only matches holders that still have at least
    * `shares` available. Returns `-1` instead of mutating the position when a
@@ -74,6 +77,22 @@ export async function creditShares(
   extraUpdate?: { $inc?: Record<string, number>; $set?: Record<string, unknown> },
   opts?: CreditSharesOpts
 ): Promise<boolean> {
+  if (opts?.holdingChange)
+    return (
+      (await updatePersonalHolding({
+        db,
+        corporationId,
+        ownerId: characterId,
+        ownerKey: "characterId",
+        shares,
+        credit: true,
+        pricePerShare: opts.pricePerShare,
+        change: opts.holdingChange,
+        extra: extraUpdate,
+        guardFilter: opts.guardFilter,
+        session: opts.session,
+      })) !== null
+    );
   const price = opts?.pricePerShare;
   const guardFilter = opts?.guardFilter ?? {};
   let newAvg: number | undefined;
@@ -182,6 +201,22 @@ export async function creditSharesToImperial(
   extraUpdate?: { $inc?: Record<string, number>; $set?: Record<string, unknown> },
   opts?: CreditSharesOpts
 ): Promise<boolean> {
+  if (opts?.holdingChange)
+    return (
+      (await updatePersonalHolding({
+        db,
+        corporationId,
+        ownerId: imperialCharacterId,
+        ownerKey: "imperialCharacterId",
+        shares,
+        credit: true,
+        pricePerShare: opts.pricePerShare,
+        change: opts.holdingChange,
+        extra: extraUpdate,
+        guardFilter: opts.guardFilter,
+        session: opts.session,
+      })) !== null
+    );
   const price = opts?.pricePerShare;
   const guardFilter = opts?.guardFilter ?? {};
   let newAvg: number | undefined;
@@ -300,6 +335,21 @@ export async function debitShares(
   extraUpdate?: ShareholderExtraUpdate,
   opts?: DebitSharesOpts
 ): Promise<number> {
+  if (opts?.holdingChange)
+    return (
+      (await updatePersonalHolding({
+        db,
+        corporationId,
+        ownerId: characterId,
+        ownerKey: "characterId",
+        shares,
+        credit: false,
+        change: opts.holdingChange,
+        extra: extraUpdate,
+        guardFilter: opts.guardFilter,
+        session: opts.session,
+      })) ?? -1
+    );
   // Decrement atomically.
   const filter = opts?.requireSufficient
     ? {
@@ -357,6 +407,21 @@ export async function debitSharesFromImperial(
   extraUpdate?: ShareholderExtraUpdate,
   opts?: DebitSharesOpts
 ): Promise<number> {
+  if (opts?.holdingChange)
+    return (
+      (await updatePersonalHolding({
+        db,
+        corporationId,
+        ownerId: imperialCharacterId,
+        ownerKey: "imperialCharacterId",
+        shares,
+        credit: false,
+        change: opts.holdingChange,
+        extra: extraUpdate,
+        guardFilter: opts.guardFilter,
+        session: opts.session,
+      })) ?? -1
+    );
   const filter = opts?.requireSufficient
     ? {
         _id: corporationId,
@@ -552,33 +617,6 @@ export async function debitSharesFromCorp(
   }
 
   return remaining;
-}
-
-// ── Transfer shares between two characters ─────────────────────────
-
-/**
- * Atomically transfer `shares` from one character to another.
- *
- * If the recipient already has an entry it is incremented; otherwise a
- * new entry is pushed. The sender's entry is decremented and removed
- * if it reaches zero.
- */
-export async function transferShares(
-  db: Db,
-  corporationId: ObjectId,
-  fromCharacterId: ObjectId,
-  toCharacterId: ObjectId,
-  shares: number,
-  extraSet?: Record<string, unknown>
-): Promise<void> {
-  // 1. Debit sender (atomic).
-  await debitShares(db, corporationId, fromCharacterId, shares, {
-    $set: extraSet as Record<string, unknown> | undefined,
-  });
-
-  // 2. Credit recipient (atomic).
-  // We don't pass extraSet again to avoid double-setting updatedAt etc.
-  await creditShares(db, corporationId, toCharacterId, shares);
 }
 
 // ── Add / credit shares (index fund buyer) ────────────────────────

@@ -19,6 +19,43 @@ function tx(overrides: Partial<DerivableTx>): DerivableTx {
 }
 
 describe("deriveLedgerEntry (Phase 1 shim)", () => {
+  it.each(["player_income_tax", "player_capital_gains_tax"] as const)(
+    "does not re-import settlement-owned %s wallet or government receipts",
+    (type) => {
+      expect(deriveLedgerEntry(tx({ type, meta: { ledgerOwnedBySettlement: true } }))).toBeNull();
+      for (const regional of [false, true]) {
+        expect(
+          deriveLedgerEntry(
+            tx({
+              type: "gov_tax_revenue",
+              subjectType: "government",
+              countryId: "US",
+              amount: 20,
+              anchorAmount: 20,
+              meta: {
+                source: type,
+                ledgerOwnedBySettlement: true,
+                treasuryCashMovement: !regional,
+                ...(regional ? { stateId: "US_CA" } : {}),
+              },
+            })
+          )
+        ).toBeNull();
+      }
+      // Unmarked historical rows still need an imported witness.
+      expect(deriveLedgerEntry(tx({ type }))).not.toBeNull();
+      expect(
+        deriveLedgerEntry(
+          tx({
+            type: "gov_tax_revenue",
+            subjectType: "government",
+            countryId: "US",
+            meta: { source: type },
+          })
+        )
+      ).not.toBeNull();
+    }
+  );
   it.each(["bank_cb_advance", "bank_prop_trade_buy", "bank_prop_trade_sell"] as const)(
     "keeps marked %s vault movements separate from corporate liquid capital",
     (type) =>

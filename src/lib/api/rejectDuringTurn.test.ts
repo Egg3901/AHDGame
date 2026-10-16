@@ -19,6 +19,17 @@ describe("rejectDuringTurn", () => {
     expect(response?.status).toBe(409);
   });
 
+  it("keeps a failed stock migration blocked even after its heartbeat is stale", async () => {
+    const db = createMockDb();
+    db.collection("gameState");
+    db.collectionMocks.gameState.findOne.mockResolvedValue({
+      _id: "current",
+      isProcessing: false,
+      processingKind: "stockTaxMigration",
+      processingHeartbeatAt: new Date(0),
+    });
+    expect((await rejectDuringTurn(db as unknown as Db))?.status).toBe(409);
+  });
   it("does not block on an abandoned stale lock", async () => {
     const db = createMockDb();
     db.collection("gameState");

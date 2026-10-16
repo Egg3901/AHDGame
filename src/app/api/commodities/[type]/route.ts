@@ -28,7 +28,6 @@ import {
   EXTRACTABLE_RESOURCES,
   SECTOR_SUPPLY,
   SECTOR_DEMAND,
-  MARKETING_ADVERTISING_DEMAND_RATE,
   GOVT_HEALTHCARE_DEMAND_RATE,
   GOVT_HEALTHCARE_BUDGET_CATEGORIES,
   govtSpendForCategory,
@@ -119,7 +118,6 @@ function buildCorpVolumeRows(
       | "name"
       | "type"
       | "industryModel"
-      | "marketingBudget"
       | "sequentialId"
       | "logoUrl"
       | "countryId"
@@ -195,7 +193,6 @@ export async function getCommodityDetailData(
       | "_id"
       | "name"
       | "type"
-      | "marketingBudget"
       | "sequentialId"
       | "logoUrl"
       | "countryId"
@@ -216,7 +213,6 @@ export async function getCommodityDetailData(
               | "name"
               | "type"
               | "industryModel"
-              | "marketingBudget"
               | "sequentialId"
               | "logoUrl"
               | "countryId"
@@ -228,7 +224,6 @@ export async function getCommodityDetailData(
             name: 1,
             type: 1,
             industryModel: 1,
-            marketingBudget: 1,
             sequentialId: 1,
             logoUrl: 1,
             countryId: 1,
@@ -306,12 +301,8 @@ export async function getCommodityDetailData(
     // Build corp lookup
     const corpMap = new Map(allCorps.map((c) => [c._id.toString(), c]));
 
-    // Per-corp FX so per-sector revenue + marketingBudget normalize to ₳
-    // before commodity-unit math (dollarsToUnits /
-    // MARKETING_ADVERTISING_DEMAND_RATE are ₳-calibrated). Empty map on the
-    // light-path (includeHeavy=false) — the synthetic retail and per-corp
-    // producer/consumer blocks below check includeHeavy themselves, so the
-    // lookup stays unused in that case.
+    // Per-corp FX normalizes sector revenue to ₳ for retail demand and
+    // realized producer/consumer volumes. Unused on the light header path.
     const fxByCurrency = includeHeavy ? await loadFxRatesByCurrency(db) : new Map();
     const fxByCorpId = new Map<string, { code: CurrencyCode | undefined; rate: number }>();
     for (const c of allCorps) {
@@ -438,12 +429,6 @@ export async function getCommodityDetailData(
       >
     > = {};
 
-    // Advertising-budget demand, kept OUT of corporate input consumption and
-    // reported as its own labelled row (see below). It is market-level demand
-    // generated from marketing budgets, not plant input use.
-    const advertisingBudgetByCorp = new Map<string, number>();
-    let advertisingBudgetTotal = 0;
-
     if (includeHeavy) {
       // Realized physical-unit basis, shared with the corporation tab: every
       // sector runs through `computeSectorCommodityUnits` (measured production
@@ -534,29 +519,6 @@ export async function getCommodityDetailData(
       const corpSupplyByCountry = realized.supplyByCountry as Map<CountryId, Map<string, number>>;
       const corpDemandByCountry = realized.demandByCountry as Map<CountryId, Map<string, number>>;
 
-      // Advertising-budget demand is computed but NOT folded into corporate
-      // consumption: it stays a separately labelled market-level row.
-      if (commodity === "advertising") {
-        for (const corp of allCorps) {
-          if (!(corp.marketingBudget > 0)) continue;
-          const corpId = corp._id.toString();
-          const fx = fxByCorpId.get(corpId);
-          const budgetAnchor = readCorpEconomicAnchor(
-            corp.marketingBudget,
-            fx?.code,
-            fx?.rate ?? 1
-          );
-          const msUnits = dollarsToUnits(
-            budgetAnchor * MARKETING_ADVERTISING_DEMAND_RATE,
-            basePrice
-          );
-          if (msUnits > 0) {
-            advertisingBudgetByCorp.set(corpId, msUnits);
-            advertisingBudgetTotal += msUnits;
-          }
-        }
-      }
-
       // Sort all producers and consumers (client handles pagination)
       topProducers.push(...buildCorpVolumeRows(corpSupply.entries(), corpMap));
       topConsumers.push(...buildCorpVolumeRows(corpDemand.entries(), corpMap));
@@ -573,6 +535,8 @@ export async function getCommodityDetailData(
         totalDemand > 0 ? Math.round((nonCorporateDemand / totalDemand) * 1000) / 10 : 0;
     }
 
+    const otherAdvertisingDemand = Math.max(0, totalDemand - totalCorporateDemand);
+
     // ── Demand driver metadata ──────────────────────────────────────────────
     let demandDriver: {
       type: string;
@@ -587,13 +551,15 @@ export async function getCommodityDetailData(
       demandDriver = {
         type: "corporate",
         label: "Corporate Demand",
-        description: `Driven by marketing spending. Corporations allocate marketing budgets that convert to advertising commodity demand at a ${(MARKETING_ADVERTISING_DEMAND_RATE * 100).toFixed(0)}% rate. That budget demand is market-level demand reported separately below. Top Consumers shows plant input demand only, on the same realized basis as corporation commodity pages.`,
-        ...(includeHeavy && advertisingBudgetTotal > 0
+        description:
+          "Across the global market, marketing spending contributes to advertising demand after funding limits and market adjustments. Other demand is stored total demand minus realized plant input demand. It includes marketing and other market demand, not an exact marketing total or per-company attribution.",
+        consumerNote:
+          "Top Consumers shows realized plant input demand only. Marketing and other market demand are excluded; no per-company marketing attribution is available.",
+        ...(includeHeavy
           ? {
-              sourceLabel: "Marketing-budget demand (separate from corporate consumption)",
-              sourceUnits: Math.round(advertisingBudgetTotal * 100) / 100,
-              consumerNote:
-                "Top Consumers shows realized plant input demand only. Marketing-budget demand is listed separately under system demand, not as corporation consumption.",
+              sourceLabel: "Other global demand (including marketing)",
+              sourceUnits: Math.round(otherAdvertisingDemand * 100) / 100,
+              sourceShare: nonCorporateDemandShare,
             }
           : {}),
       };
@@ -628,29 +594,31 @@ export async function getCommodityDetailData(
       type: "system";
       units: number;
       description: string;
-    }[] = [
-      {
-        name: "Base Economic Demand",
-        type: "system",
-        units: getCommodityStabilizer(commodity),
-        description: "Baseline market activity representing background economic demand",
-      },
-    ];
+    }[] =
+      commodity === "advertising"
+        ? []
+        : [
+            {
+              name: "Base Economic Demand",
+              type: "system",
+              units: getCommodityStabilizer(commodity),
+              description: "Baseline market activity representing background economic demand",
+            },
+          ];
 
-    // Advertising-budget demand is market-level demand, not corporation input
-    // consumption: it stays visible here as a labelled system row instead of
-    // inflating any corporation's Top Consumers figure.
-    if (includeHeavy && commodity === "advertising" && advertisingBudgetTotal > 0) {
+    // The residual includes baseline and retail demand, so do not add those again.
+    if (includeHeavy && commodity === "advertising" && otherAdvertisingDemand > 0) {
       syntheticDemandSources.push({
-        name: "Corporate Marketing Budgets",
+        name: "Other demand (including marketing)",
         type: "system",
-        units: Math.round(advertisingBudgetTotal * 100) / 100,
+        units: Math.round(otherAdvertisingDemand * 100) / 100,
         description:
-          "Market-level advertising demand generated from corporation marketing budgets. Reported separately: it is not plant input consumption and never appears in a corporation's Top Consumers figure.",
+          "Stored global demand minus realized plant input demand. Includes marketing and other market demand; not an exact marketing total or per-company attribution.",
       });
     }
 
-    const retailDemandFlows = includeHeavy ? SECTOR_DEMAND["retail"] : undefined;
+    const retailDemandFlows =
+      includeHeavy && commodity !== "advertising" ? SECTOR_DEMAND["retail"] : undefined;
     if (retailDemandFlows) {
       const retailFlow = retailDemandFlows.find((f) => f.commodity === commodity);
       if (retailFlow) {
@@ -894,15 +862,6 @@ export async function getCommodityDetailData(
         extractionException: isExtractionExceptionCommodity(commodity),
         advertisingBudgetSeparate: commodity === "advertising",
       },
-      // Marketing-budget demand per corporation, deliberately NOT part of Top
-      // Consumers. Null when the commodity is not advertising.
-      advertisingBudgetDemand:
-        commodity === "advertising"
-          ? {
-              total: Math.round(advertisingBudgetTotal * 100) / 100,
-              byCorp: buildCorpVolumeRows(advertisingBudgetByCorp.entries(), corpMap),
-            }
-          : null,
       demandDriver,
       syntheticDemandSources,
       capacityByState,

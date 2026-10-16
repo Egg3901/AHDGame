@@ -20,7 +20,7 @@ beforeEach(() => {
   settlementMocks.checkTotalSharesAfterFill.mockResolvedValue(undefined);
 });
 
-function corporation(id: ObjectId): Corporation {
+function corporation(id: ObjectId, sellerId?: ObjectId): Corporation {
   return {
     _id: id,
     name: "Acme",
@@ -29,7 +29,7 @@ function corporation(id: ObjectId): Corporation {
     sharePrice: 10,
     totalShares: 10_000,
     publicFloat: 1_000,
-    shareholders: [],
+    shareholders: sellerId ? [{ characterId: sellerId, shares: 100, avgCostPerShare: 2 }] : [],
   } as unknown as Corporation;
 }
 
@@ -71,7 +71,7 @@ describe("fillBestBuyOrderForMarketSell", () => {
 
     const result = await fillBestBuyOrderForMarketSell({
       db: db as unknown as Db,
-      corporation: corporation(corporationId),
+      corporation: corporation(corporationId, sellerId),
       seller: {
         id: sellerId,
         name: "Seller",
@@ -152,7 +152,7 @@ describe("fillBestBuyOrderForMarketSell", () => {
 
     const result = await fillBestBuyOrderForMarketSell({
       db: db as unknown as Db,
-      corporation: corporation(corporationId),
+      corporation: corporation(corporationId, sellerId),
       seller: {
         id: sellerId,
         name: "Seller",

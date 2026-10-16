@@ -4,6 +4,8 @@ import type { IncomeTier } from "@/lib/budget/rules/incomeTaxTiers";
 
 /** One immutable assessed liability. Collection and payment status can advance. */
 export interface PlayerIncomeTaxAssessment {
+  /** Absent on legacy income-tax receipts. Both levies share guarded settlement. */
+  taxKind?: "income" | "capitalGains";
   _id: string;
   characterId: ObjectId;
   ownerCollection: "characters" | "imperialCharacters";
@@ -14,6 +16,8 @@ export interface PlayerIncomeTaxAssessment {
   currency: string;
   sourcePath: string;
   sourceFx: number;
+  /** Wallet units per anchor; absent preserves already-frozen legacy debit terms. */
+  walletFx?: number;
   countryId: CountryId;
   nationalBudgetId: string;
   nationalCurrency: string;
@@ -46,4 +50,6 @@ export interface PlayerIncomeTaxTurnPlan {
   ownerCollection: "characters" | "imperialCharacters";
   tier: IncomeTier;
   assessments: PlayerIncomeTaxAssessment[];
+  /** Sale-credit identities frozen with this plan, including delayed credits. */
+  stockTaxReceiptIds?: string[];
 }

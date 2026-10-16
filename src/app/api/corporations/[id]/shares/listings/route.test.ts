@@ -98,7 +98,7 @@ describe("POST /api/corporations/[id]/shares/listings", () => {
       charId,
       100,
       expect.anything(),
-      { requireSufficient: true }
+      expect.objectContaining({ requireSufficient: true, holdingChange: expect.any(Object) })
     );
   });
 
@@ -170,7 +170,7 @@ describe("POST /api/corporations/[id]/shares/listings", () => {
         }),
         $unset: { ceoId: "", userId: "", pendingCeoCharacterId: "" },
       },
-      { requireSufficient: true }
+      expect.objectContaining({ requireSufficient: true, holdingChange: expect.any(Object) })
     );
     expect(db.collectionMocks["corporationCeoVotes"].deleteMany).toHaveBeenCalledWith({
       corporationId: corpId,
@@ -299,7 +299,7 @@ describe("POST /api/corporations/[id]/shares/listings", () => {
       expect.objectContaining({
         $set: expect.not.objectContaining({ ceoVacant: true }),
       }),
-      { requireSufficient: true }
+      expect.objectContaining({ requireSufficient: true, holdingChange: expect.any(Object) })
     );
   });
 
@@ -443,7 +443,9 @@ describe("POST /api/corporations/[id]/shares/listings", () => {
       charId,
       100,
       expect.anything(),
-      { pricePerShare: 7 }
+      expect.objectContaining({
+        holdingChange: expect.objectContaining({ turn: expect.any(Number) }),
+      })
     );
     expect(db.collectionMocks["corporations"].updateOne).toHaveBeenCalledWith(
       { _id: corpId },

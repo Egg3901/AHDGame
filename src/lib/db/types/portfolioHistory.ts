@@ -16,6 +16,9 @@ export interface PortfolioHistory {
   netValue?: number;
   /** Stock holdings value (shares × sharePrice) */
   stockValue?: number;
+  /** Direct-share bucket values in anchor units. Absent before tracking activation. */
+  shortTermStockValue?: number;
+  longTermStockValue?: number;
   /** Bond holdings value (units × faceValue × marketPrice) */
   bondValue?: number;
   /**

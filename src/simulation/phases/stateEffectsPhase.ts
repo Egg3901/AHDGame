@@ -790,7 +790,9 @@ export const closingFinancialSnapshotsPhase: TurnPhaseAdapter = {
   async execute(context, runtime) {
     const { newTurn, phaseResults } = context;
     const [portfolioSnapshotResult] = await Promise.all([
-      runtime.runPhase("portfolioSnapshot", () => snapshotPortfolioValues(newTurn)),
+      runtime.runPhase("portfolioSnapshot", () =>
+        snapshotPortfolioValues(newTurn, context.gameState.stockHoldingTaxStartTurn)
+      ),
       runtime.runPhase("corpPortfolioSnapshot", () => snapshotCorporationPortfolioValues(newTurn)),
       runtime.runPhase("stockExchangeSnapshot", () =>
         generateStockExchangeSnapshots(newTurn, context.db)

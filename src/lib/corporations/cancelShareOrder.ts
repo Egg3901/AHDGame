@@ -60,6 +60,14 @@ export async function cancelShareOrderAndRefund(db: Db, order: ShareOrder): Prom
   if (order.status !== "open") return { ok: false, error: "Order is not open" };
 
   const now = new Date();
+  const claimFilter = {
+    _id: order._id,
+    status: "open" as const,
+    sharesRemaining: order.sharesRemaining,
+    escrowAmount: order.escrowAmount,
+    activeShareFillKey: { $exists: false },
+    ...(order.holdingTerms ? { holdingTerms: order.holdingTerms } : {}),
+  };
 
   if (order.type === "buy") {
     const targetCorp = await db
@@ -84,10 +92,7 @@ export async function cancelShareOrderAndRefund(db: Db, order: ShareOrder): Prom
         // Cancel without refund and move on.
         const claim = await db
           .collection<ShareOrder>("shareOrders")
-          .updateOne(
-            { _id: order._id, status: "open" },
-            { $set: { status: "cancelled", updatedAt: now } }
-          );
+          .updateOne(claimFilter, { $set: { status: "cancelled", updatedAt: now } });
         if (claim.matchedCount === 0) return { ok: false, error: "Order is not open" };
         return { ok: true };
       }
@@ -101,10 +106,7 @@ export async function cancelShareOrderAndRefund(db: Db, order: ShareOrder): Prom
 
       const claim = await db
         .collection<ShareOrder>("shareOrders")
-        .updateOne(
-          { _id: order._id, status: "open" },
-          { $set: { status: "cancelled", updatedAt: now } }
-        );
+        .updateOne(claimFilter, { $set: { status: "cancelled", updatedAt: now } });
       if (claim.matchedCount === 0) return { ok: false, error: "Order is not open" };
 
       try {
@@ -174,10 +176,7 @@ export async function cancelShareOrderAndRefund(db: Db, order: ShareOrder): Prom
       // restructures and market maintenance on an otherwise orphaned document.
       const claim = await db
         .collection<ShareOrder>("shareOrders")
-        .updateOne(
-          { _id: order._id, status: "open" },
-          { $set: { status: "cancelled", updatedAt: now } }
-        );
+        .updateOne(claimFilter, { $set: { status: "cancelled", updatedAt: now } });
       if (claim.matchedCount === 0) return { ok: false, error: "Order is not open" };
       return { ok: true };
     }
@@ -196,10 +195,7 @@ export async function cancelShareOrderAndRefund(db: Db, order: ShareOrder): Prom
 
     const claim = await db
       .collection<ShareOrder>("shareOrders")
-      .updateOne(
-        { _id: order._id, status: "open" },
-        { $set: { status: "cancelled", updatedAt: now } }
-      );
+      .updateOne(claimFilter, { $set: { status: "cancelled", updatedAt: now } });
     if (claim.matchedCount === 0) return { ok: false, error: "Order is not open" };
 
     try {
@@ -243,10 +239,7 @@ export async function cancelShareOrderAndRefund(db: Db, order: ShareOrder): Prom
 
   const claim = await db
     .collection<ShareOrder>("shareOrders")
-    .updateOne(
-      { _id: order._id, status: "open" },
-      { $set: { status: "cancelled", updatedAt: now } }
-    );
+    .updateOne(claimFilter, { $set: { status: "cancelled", updatedAt: now } });
   if (claim.matchedCount === 0) return { ok: false, error: "Order is not open" };
 
   try {
@@ -261,14 +254,20 @@ export async function cancelShareOrderAndRefund(db: Db, order: ShareOrder): Prom
       );
     } else if (order.sharesDebitedAtCreation && order.characterId) {
       // Reserved-share restore for a character sell order (funds never sell here).
-      await creditShares(
+      const restored = await creditShares(
         db,
         order.corporationId,
         order.characterId,
         order.sharesRemaining,
         { $set: { updatedAt: now } },
-        { pricePerShare: order.pricePerShare }
+        {
+          pricePerShare: order.pricePerShare,
+          ...(order.holdingTerms
+            ? { holdingChange: { turn: await getCurrentTurn(db), restore: order.holdingTerms } }
+            : {}),
+        }
       );
+      if (!restored) throw new Error("Reserved stock holding changed during cancellation");
     }
   } catch (error) {
     await restoreOrderToOpen(db, order._id);

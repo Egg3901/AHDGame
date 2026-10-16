@@ -1,3 +1,4 @@
+import { playerTaxWalletDebit } from "./rules/incomeTaxTiers";
 /**
  * Income-tax collection batches guarded wallet debits and treasury credits.
  * One active batch freezes each payer's outcome before any treasury is credited;
@@ -235,7 +236,8 @@ async function deliver(db: Db, original: Batch): Promise<void> {
   if (batch.stage === "credited") {
     const transactions = assessments.map((assessment) => ({
       _id: idFor(assessment._id + ":tax"),
-      type: "player_income_tax",
+      type:
+        assessment.taxKind === "capitalGains" ? "player_capital_gains_tax" : "player_income_tax",
       turn: batch.turn,
       createdAt: batch.createdAt,
       expiresAt: computeExpiresAtSync(batch.createdAt, batch.turnLengthMinutes),
@@ -256,6 +258,7 @@ async function deliver(db: Db, original: Batch): Promise<void> {
         nationalTax: assessment.federal,
         regionalTax: assessment.regional,
         netIncome: assessment.net,
+        taxKind: assessment.taxKind ?? "income",
       },
     }));
     const governmentReceipts = assessments.flatMap((assessment) => [
@@ -275,7 +278,10 @@ async function deliver(db: Db, original: Batch): Promise<void> {
               anchorAmount: assessment.federal / assessment.sourceFx,
               flagged: false,
               meta: {
-                source: "player_income_tax",
+                source:
+                  assessment.taxKind === "capitalGains"
+                    ? "player_capital_gains_tax"
+                    : "player_income_tax",
                 assessmentId: assessment._id,
                 ledgerOwnedBySettlement: true,
                 treasuryCashMovement: true,
@@ -299,7 +305,10 @@ async function deliver(db: Db, original: Batch): Promise<void> {
               anchorAmount: assessment.regional / assessment.sourceFx,
               flagged: false,
               meta: {
-                source: "player_income_tax",
+                source:
+                  assessment.taxKind === "capitalGains"
+                    ? "player_capital_gains_tax"
+                    : "player_income_tax",
                 assessmentId: assessment._id,
                 stateId: assessment.stateId,
                 ledgerOwnedBySettlement: true,
@@ -342,7 +351,10 @@ async function deliver(db: Db, original: Batch): Promise<void> {
           });
         if (assessment.regional)
           legs.push({
-            account: "sink:regional_income_tax:" + assessment.regionalCurrency,
+            account:
+              (assessment.taxKind === "capitalGains"
+                ? "sink:regional_capital_gains_tax:"
+                : "sink:regional_income_tax:") + assessment.regionalCurrency,
             amount: (assessment.regional / assessment.sourceFx) * assessment.regionalFx,
             currencyCode: assessment.regionalCurrency,
             anchorAmount: assessment.regional / assessment.sourceFx,
@@ -352,7 +364,10 @@ async function deliver(db: Db, original: Batch): Promise<void> {
           _id: idFor(assessment._id + ":ledger"),
           turn: batch.turn,
           createdAt: batch.createdAt,
-          txType: "player_income_tax",
+          txType:
+            assessment.taxKind === "capitalGains"
+              ? "player_capital_gains_tax"
+              : "player_income_tax",
           legs,
           balanced: true,
           emitSite: "budget/playerIncomeTaxSettlement",
@@ -483,7 +498,11 @@ export async function settlePlayerIncomeTaxAssessments(
         ? wallet?.cashOnHand
         : wallet?.currencyBalances?.personal?.[assessment.currency]) ??
       0;
-    const owed = assessment.federal + assessment.regional;
+    const owed = playerTaxWalletDebit(
+      assessment.federal + assessment.regional,
+      assessment.sourceFx,
+      assessment.walletFx
+    );
     if (!Number.isFinite(balance) || balance < owed) return false;
     available.set(key, balance - owed);
     return true;
@@ -498,7 +517,12 @@ export async function settlePlayerIncomeTaxAssessments(
       assessmentIds: [],
     };
     payer.debits[assessment.sourcePath] =
-      (payer.debits[assessment.sourcePath] ?? 0) + assessment.federal + assessment.regional;
+      (payer.debits[assessment.sourcePath] ?? 0) +
+      playerTaxWalletDebit(
+        assessment.federal + assessment.regional,
+        assessment.sourceFx,
+        assessment.walletFx
+      );
     payer.assessmentIds.push(assessment._id);
     payerMap.set(id, payer);
   }

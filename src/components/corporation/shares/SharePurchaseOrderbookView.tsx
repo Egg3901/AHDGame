@@ -3,6 +3,12 @@
 import { InlineError } from "@/components/ui/InlineError";
 import { apiErrorText } from "@/lib/errors/catalog";
 import { useState } from "react";
+import {
+  availableHoldingShares,
+  type HoldingTerm,
+  type ShareHoldingTerms,
+} from "@/lib/corporations/rules/holdingTerms";
+import { HoldingTermSelector } from "./HoldingTermSelector";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import { requestCharacterStatsRefetch } from "@/lib/characterStatsSync";
 import type { CurrencyCode } from "@/lib/constants/currencies";
@@ -18,7 +24,11 @@ export function SharePurchaseOrderbookView({
   corpCurrencyCode,
   corpId,
   onSuccess,
+  holdingTerms,
+  currentTurn = 0,
 }: {
+  holdingTerms?: ShareHoldingTerms;
+  currentTurn?: number;
   orderbookAsks: MarketOrder[];
   orderbookBids: MarketOrder[];
   myCorporation: {
@@ -40,6 +50,13 @@ export function SharePurchaseOrderbookView({
   const [fillingId, setFillingId] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState("");
   const [error, setError] = useState("");
+  const [requestedTerm, setRequestedTerm] = useState<HoldingTerm>("long");
+  const holdingTerm =
+    holdingTerms && !availableHoldingShares(holdingTerms, requestedTerm)
+      ? requestedTerm === "long"
+        ? "short"
+        : "long"
+      : requestedTerm;
 
   const orderbookCount = orderbookAsks.length + orderbookBids.length;
 
@@ -61,6 +78,7 @@ export function SharePurchaseOrderbookView({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           shares,
+          ...(orderType === "buy" ? { holdingTerm } : {}),
           fillAsCorporation: orderType === "sell" && !!myCorporation && fillOrderbookAsCorp,
         }),
       });
@@ -89,6 +107,14 @@ export function SharePurchaseOrderbookView({
 
   return (
     <div className="space-y-5">
+      {holdingTerms && orderbookBids.length > 0 && (
+        <HoldingTermSelector
+          terms={holdingTerms}
+          term={holdingTerm}
+          turn={currentTurn}
+          onChange={setRequestedTerm}
+        />
+      )}
       {orderbookCount === 0 ? (
         <p className="py-4 text-center text-sm text-muted">No open orders from other players.</p>
       ) : (

@@ -1,3 +1,4 @@
+import { holdingMaturationWrites } from "./holdingMaturationWrites";
 /**
  * The per-turn corporation ledger: why a corp lost money this turn. processSectors
  * runs every sector's revenue, margin and costs, then charges corp-level marketing,
@@ -6,6 +7,7 @@
  * (rdMoraleFactor, computeRdDemandFactor), and converts each sector from its host currency.
  */
 import { prepareInternalSupplySectorResults } from "./internalSupplySectorPass";
+import { holdingDividendSplit, positionHoldingTerms } from "@/lib/corporations/rules/holdingTerms";
 import { formalizedSubsidiaryCountByParentId } from "@/lib/corporations/subsidiaries/helpers";
 import type { AnyBulkWriteOperation, ObjectId } from "mongodb";
 import type { Bond, Corporation, MediaProductAdvertisingObligationV1 } from "@/lib/db/types";
@@ -232,6 +234,7 @@ export function processSectors(
 
   const ceoSalaryPayments = new Map<string, Map<CurrencyCode, number>>();
   const dividendPayments = new Map<string, Map<CurrencyCode, number>>();
+  const capitalDividendPayments = new Map<string, Map<CurrencyCode, number>>();
   const corpDividendPaymentsAnchorByCorpId = new Map<string, number>();
   // Same totals as above, but split by the PAYING corp's currency so a
   // cross-currency corp→corp dividend can be charged the FX spread downstream.
@@ -856,11 +859,33 @@ export function processSectors(
         if (payment > 0) {
           if (sh.characterId) {
             addToPaymentMap(dividendPayments, sh.characterId.toString(), payment, corp.countryId);
+            const capital = holdingDividendSplit(
+              positionHoldingTerms(sh, currentTurn, 0),
+              payment,
+              currentTurn
+            ).capital;
+            addToPaymentMap(
+              capitalDividendPayments,
+              sh.characterId.toString(),
+              capital,
+              corp.countryId
+            );
           } else if (sh.imperialCharacterId) {
             addToPaymentMap(
               dividendPayments,
               `imperial:${sh.imperialCharacterId.toString()}`,
               payment,
+              corp.countryId
+            );
+            const capital = holdingDividendSplit(
+              positionHoldingTerms(sh, currentTurn, 0),
+              payment,
+              currentTurn
+            ).capital;
+            addToPaymentMap(
+              capitalDividendPayments,
+              `imperial:${sh.imperialCharacterId.toString()}`,
+              capital,
               corp.countryId
             );
           } else if (sh.nppId) {
@@ -1625,11 +1650,15 @@ export function processSectors(
 
   return {
     sectorOps,
-    corpOps: corpOps as AnyBulkWriteOperation<Corporation>[],
+    corpOps: [
+      ...(corpOps as AnyBulkWriteOperation<Corporation>[]),
+      ...lookups.corporations.flatMap((corp) => holdingMaturationWrites(corp, currentTurn)),
+    ],
     manufacturingDevelopmentCashOps,
     corpSnapshots,
     ceoSalaryPayments,
     dividendPayments,
+    capitalDividendPayments,
     corpDividendPaymentsAnchorByCorpId,
     corpDividendPaymentsAnchorByCorpCurrency,
     sectorFxSpreadFees,

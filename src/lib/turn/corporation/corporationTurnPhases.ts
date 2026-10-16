@@ -1,3 +1,7 @@
+import { garnishLocFromIncome } from "@/lib/lineOfCredit/garnishment";
+import { fillPendingShareOrders } from "./shareOrders";
+import { expireShareListings } from "./shareListings";
+import { snapshotMarketCap } from "./marketCapSnapshot";
 import { ObjectId } from "mongodb";
 import type { AnyBulkWriteOperation, Db } from "mongodb";
 import type {
@@ -498,6 +502,7 @@ export async function emitCorporationTurnTx(args: {
   corpSnapshots: CorpSnapshot[];
   ceoSalaryPayments: Map<string, Map<CurrencyCode, number>>;
   dividendPayments: Map<string, Map<CurrencyCode, number>>;
+  capitalDividendPayments?: Map<string, Map<CurrencyCode, number>>;
   dividendTaxPaidByCountry: Map<string, Map<string, number>>;
   turn: number | undefined;
   now: Date;
@@ -509,6 +514,7 @@ export async function emitCorporationTurnTx(args: {
     corpSnapshots,
     ceoSalaryPayments,
     dividendPayments,
+    capitalDividendPayments,
     dividendTaxPaidByCountry,
     turn,
     now,
@@ -702,6 +708,16 @@ export async function emitCorporationTurnTx(args: {
           counterpartyType: "corporation",
           meta: {
             source: metaSource,
+            ...(txType === "corp_dividend" && capitalDividendPayments
+              ? {
+                  stockTax: {
+                    version: 1,
+                    assessmentTurn: turn ?? 0,
+                    capitalAmount: capitalDividendPayments.get(id)?.get(currency) ?? 0,
+                    incomeAmount: amount - (capitalDividendPayments.get(id)?.get(currency) ?? 0),
+                  },
+                }
+              : {}),
             ...(isImperial ? { imperial: true } : {}),
           },
         });
@@ -718,4 +734,65 @@ export async function emitCorporationTurnTx(args: {
     // dropped audit write cannot silently shrink a borrower's verified income history.
     await emitTxBulk(db, txEntries, thresholds);
   }
+}
+
+/** Close orders and listings before publishing the closing stock-market snapshot. */
+export async function settleShareMarketTurn(args: {
+  db: Db;
+  now: Date;
+  turn: number | undefined;
+  lookups: CorporationLookups;
+  corpSnapshots: CorpSnapshot[];
+  dividendIncomeReceivedByCorpId: Map<string, number>;
+  dividendTaxPaidByCountry: Map<string, Map<string, number>>;
+  rng: () => number;
+  mark: (phase: string) => void;
+}): Promise<void> {
+  const {
+    db,
+    now,
+    turn,
+    lookups,
+    corpSnapshots,
+    dividendIncomeReceivedByCorpId,
+    dividendTaxPaidByCountry,
+    rng,
+    mark,
+  } = args;
+  await fillPendingShareOrders(db, now, turn ?? 0, lookups.stockHoldingTaxStartTurn);
+  await expireShareListings(db, now, turn ?? 0);
+  mark("fillOrders+expireListings");
+  if (typeof turn === "number")
+    await snapshotMarketCap(
+      db,
+      turn,
+      lookups.corporations,
+      corpSnapshots,
+      lookups.corpById,
+      lookups.exchangeRatesByCurrency,
+      now,
+      rng,
+      dividendIncomeReceivedByCorpId,
+      dividendTaxPaidByCountry
+    );
+  mark("snapshotMarketCap");
+}
+
+/** Debt diversion changes payout destination, not whether a dividend was earned. */
+export async function garnishCorporationIncome(args: {
+  db: Db;
+  charPayments: Map<string, Map<CurrencyCode, number>>;
+  dividendPayments: Map<string, Map<CurrencyCode, number>>;
+  turn: number | undefined;
+  stockTaxActive: boolean;
+}): Promise<Map<string, Map<CurrencyCode, number>>> {
+  const { db, charPayments, dividendPayments, turn, stockTaxActive } = args;
+  const taxableDividends = stockTaxActive
+    ? new Map([...dividendPayments].map(([id, amounts]) => [id, new Map(amounts)]))
+    : dividendPayments;
+  if (charPayments.size && typeof turn === "number")
+    await garnishLocFromIncome(db, charPayments, turn, "ceo_dividend", {
+      auxiliaryPayments: [dividendPayments],
+    });
+  return taxableDividends;
 }

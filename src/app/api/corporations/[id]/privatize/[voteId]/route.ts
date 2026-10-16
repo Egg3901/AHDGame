@@ -1,3 +1,4 @@
+import { rejectDuringTurn } from "@/lib/api/rejectDuringTurn";
 import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
@@ -25,6 +26,8 @@ export async function GET(_request: Request, { params }: RouteParams) {
       return errorResponse(400, "Invalid vote id");
     }
     const db = await getDb();
+    const turnGuard = await rejectDuringTurn(db);
+    if (turnGuard) return turnGuard;
     const resolved = await resolveCorporation(db, id);
     if (!resolved.ok) return resolved.response;
     const { corporation } = resolved;
@@ -39,7 +42,15 @@ export async function GET(_request: Request, { params }: RouteParams) {
 
     if (vote.status === "open" && currentTurn > vote.deadlineAtTurn) {
       const forex = await isForexEnabled();
-      await resolvePrivatizationVote({ db, vote, currentTurn, forexEnabled: forex });
+      await resolvePrivatizationVote({
+        db,
+        vote,
+        currentTurn,
+        forexEnabled: forex,
+        stockTaxActive:
+          gameState?.stockHoldingTaxStartTurn !== undefined &&
+          currentTurn >= gameState.stockHoldingTaxStartTurn,
+      });
       vote = await db
         .collection<CorporationPrivatizationVote>("corporationPrivatizationVotes")
         .findOne({ _id: vote._id });

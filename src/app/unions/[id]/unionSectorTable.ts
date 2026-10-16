@@ -82,7 +82,9 @@ export function sectorDriveCost(s: SectorRow, unionId: string): number {
 }
 
 export function sectorMembers(s: SectorRow): number {
-  return unionMembers([{ workers: s.workers, unionization: s.unionization }]);
+  return s.representingUnionId
+    ? unionMembers([{ workers: s.workers, unionization: s.unionization }])
+    : 0;
 }
 
 export interface SectorFilter {

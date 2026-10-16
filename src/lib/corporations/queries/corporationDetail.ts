@@ -206,6 +206,12 @@ export async function loadCorporationDetailView(args: {
   });
 
   const shareholders = buildShareholderList({
+    viewerUserId:
+      gameState?.stockHoldingTaxStartTurn !== undefined &&
+      currentTurn >= gameState.stockHoldingTaxStartTurn
+        ? viewerUserId
+        : undefined,
+    currentTurn,
     corporationForControl,
     corporation,
     shareholderCtx,

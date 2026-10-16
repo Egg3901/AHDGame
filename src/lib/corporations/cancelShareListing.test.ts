@@ -6,6 +6,8 @@ import { cancelShareListingAndRefund } from "./cancelShareListing";
 vi.mock("@/lib/corporations/shareholderOps", () => ({
   creditShares: vi.fn().mockResolvedValue(true),
   creditSharesToCorp: vi.fn().mockResolvedValue(true),
+  debitShares: vi.fn(),
+  debitSharesFromCorp: vi.fn(),
 }));
 vi.mock("@/lib/financialTxLog/emit", () => ({
   emitTx: vi.fn().mockResolvedValue(undefined),
@@ -22,6 +24,37 @@ beforeEach(() => {
 });
 
 describe("cancelShareListingAndRefund", () => {
+  it("does not debit a holder when returning reserved shares fails", async () => {
+    const id = new ObjectId(),
+      corporationId = new ObjectId(),
+      sellerId = new ObjectId();
+    const listing = {
+      _id: id,
+      corporationId,
+      sellerCharacterId: sellerId,
+      sharesListed: 5,
+      sharesRemaining: 5,
+      marketPriceAtCreation: 10,
+      status: "open" as const,
+      createdAt: new Date(),
+      expiresAt: new Date(),
+      holdingTerms: { longTermShares: 5, longTermCostBasisAnchor: 20, shortTermLots: [] },
+    };
+    const { creditShares, debitShares } = await import("./shareholderOps");
+    vi.mocked(creditShares).mockResolvedValueOnce(false);
+    await expect(
+      cancelShareListingAndRefund(db as never, listing, new Date(), false, {
+        _id: corporationId,
+        countryId: "US",
+        liquidCurrencyCode: "USD",
+      } as never)
+    ).rejects.toThrow("restore seller shares");
+    expect(debitShares).not.toHaveBeenCalled();
+    expect(db.collectionMocks.shareListings.updateOne).toHaveBeenLastCalledWith(
+      { _id: id, status: "cancelled" },
+      expect.objectContaining({ $set: expect.objectContaining({ status: "open" }) })
+    );
+  });
   it("restores the listing when buyer FX data is unavailable", async () => {
     const listingId = new ObjectId();
     const listingCorpId = new ObjectId();

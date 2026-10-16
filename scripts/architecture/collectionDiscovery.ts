@@ -3,6 +3,11 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import ts from "typescript";
 
+/** Checkout line endings must not change a reviewed collection selector's fingerprint. */
+export function collectionScopeHash(source: string): string {
+  return createHash("sha256").update(source.replace(/\r\n?/g, "\n")).digest("hex");
+}
+
 export interface CollectionCallSite {
   file: string;
   line: number;
@@ -374,9 +379,9 @@ export function discoverCollectionCalls(
             receiverType: checker.typeToString(
               checker.getTypeAtLocation(node.expression.expression)
             ),
-            scopeHash: createHash("sha256")
-              .update(enclosingFunction(node)?.getText(sourceFile) ?? sourceFile.text)
-              .digest("hex"),
+            scopeHash: collectionScopeHash(
+              enclosingFunction(node)?.getText(sourceFile) ?? sourceFile.text
+            ),
           });
       }
       ts.forEachChild(node, visit);

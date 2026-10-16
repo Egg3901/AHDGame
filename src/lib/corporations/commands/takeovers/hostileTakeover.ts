@@ -1,4 +1,7 @@
+import { rejectDuringTurn } from "@/lib/api/rejectDuringTurn";
 import { NextResponse } from "next/server";
+import { positionHoldingTerms } from "@/lib/corporations/rules/holdingTerms";
+import { pendingStockTaxReceipt } from "@/lib/corporations/rules/stockTaxReceipt";
 import { recordCorporationExit } from "@/lib/corporations/exits/recordCorporationExit";
 import type { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
@@ -152,6 +155,11 @@ export async function runHostileTakeover(request: Request, { params }: RoutePara
     }
 
     const db = await getDb();
+    const turnGuard = await rejectDuringTurn(db);
+    if (turnGuard) return turnGuard;
+    const stockTaxState = await db
+      .collection<{ _id: string; stockHoldingTaxStartTurn?: number }>("gameState")
+      .findOne({ _id: "current" }, { projection: { stockHoldingTaxStartTurn: 1 } });
     const corpGuard = await requireCorporationActionsEnabled(db);
     if (corpGuard) return corpGuard;
 
@@ -431,6 +439,27 @@ export async function runHostileTakeover(request: Request, { params }: RoutePara
               {
                 $inc: buildPersonalBalanceInc(amountLocal, home, forexEnabled),
                 $set: { updatedAt: now },
+                ...(stockTaxState?.stockHoldingTaxStartTurn !== undefined &&
+                takeoverTurn >= stockTaxState.stockHoldingTaxStartTurn
+                  ? {
+                      $push: {
+                        pendingStockTaxReceipts: pendingStockTaxReceipt({
+                          id:
+                            target._id.toHexString() +
+                            ":" +
+                            takeoverTurn +
+                            ":" +
+                            sh.characterId.toHexString(),
+                          currencyCode: home,
+                          holdingTerms: positionHoldingTerms(sh, takeoverTurn, pricePerShareAnchor),
+                          proceedsAnchor: payoutAnchor,
+                          proceedsCredited: amountLocal,
+                          saleTurn: takeoverTurn,
+                          assessmentTurn: takeoverTurn + 1,
+                        }),
+                      },
+                    }
+                  : {}),
               }
             );
             holderParty = { characterId: sh.characterId, name: ch.name };
@@ -462,6 +491,27 @@ export async function runHostileTakeover(request: Request, { params }: RoutePara
               {
                 $inc: buildPersonalBalanceInc(amountLocal, home, forexEnabled),
                 $set: { updatedAt: now },
+                ...(stockTaxState?.stockHoldingTaxStartTurn !== undefined &&
+                takeoverTurn >= stockTaxState.stockHoldingTaxStartTurn
+                  ? {
+                      $push: {
+                        pendingStockTaxReceipts: pendingStockTaxReceipt({
+                          id:
+                            target._id.toHexString() +
+                            ":" +
+                            takeoverTurn +
+                            ":" +
+                            sh.imperialCharacterId.toHexString(),
+                          currencyCode: home,
+                          holdingTerms: positionHoldingTerms(sh, takeoverTurn, pricePerShareAnchor),
+                          proceedsAnchor: payoutAnchor,
+                          proceedsCredited: amountLocal,
+                          saleTurn: takeoverTurn,
+                          assessmentTurn: takeoverTurn + 1,
+                        }),
+                      },
+                    }
+                  : {}),
               }
             );
             holderParty = { imperialCharacterId: sh.imperialCharacterId, name: ich.name };

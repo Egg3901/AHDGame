@@ -37,6 +37,10 @@ export function DocketExplainer() {
         policy, national and state metrics, and regional lean.
       </p>
       <p>
+        Cases resolve automatically using the seated justices&apos; recorded positions. Player
+        justices do not cast votes on individual cases. Some landmark outcomes are fixed to history.
+      </p>
+      <p>
         Players cannot file cases. Landmark cases reach the docket on their historical dates, and
         rare unscripted cases can appear on their own. You shape rulings through who sits on the
         bench: the President nominates and the Senate confirms.

@@ -161,8 +161,7 @@ describe("POST /api/corporations/[id]/shares/self-issue", () => {
       expect.any(Number),
       false
     );
-    expect(db.collectionMocks["corporations"].updateOne).toHaveBeenNthCalledWith(
-      2,
+    expect(db.collectionMocks["corporations"].updateOne).toHaveBeenCalledWith(
       { _id: corporationId },
       {
         $set: {

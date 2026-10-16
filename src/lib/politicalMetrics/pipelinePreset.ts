@@ -72,6 +72,7 @@ export const POLITICAL_LEGISLATION_RETAINED_OLD_IDS: ReadonlySet<string> = new S
  * added to one would silently miss the others.
  */
 export function isOldLegislationTypeExcluded(lt: { _id: string; countryScope?: string }): boolean {
-  if (POLITICAL_LEGISLATION_RETAINED_OLD_IDS.has(lt._id.split("__income_")[0])) return false;
+  if (POLITICAL_LEGISLATION_RETAINED_OLD_IDS.has(lt._id.split(/__(?:income|capital)_/)[0]))
+    return false;
   return POLITICAL_LEGISLATION_EXCLUDED_SCOPES.has(lt.countryScope ?? "us");
 }
