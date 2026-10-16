@@ -1842,6 +1842,29 @@ export function getSprawlModifier(
 }
 
 /**
+ * Largest cut to shipping costs that logistics strength can buy, reached at
+ * {@link LOGISTICS_MAX_SPRAWL_EFFECT}. Applies to the freight bill and to the
+ * landed-price surcharge on out-of-state inputs under plants.
+ */
+export const LOGISTICS_SHIPPING_DISCOUNT_MAX = 0.4;
+
+/**
+ * Multiplier on a corporation's shipping costs (freight bill and landed input
+ * surcharge) from its logistics strength: 1 at LS 0, linear down to
+ * `1 - LOGISTICS_SHIPPING_DISCOUNT_MAX` at LS 200 and flat beyond. Unlike the
+ * sprawl relief this bites at every footprint size, so a corporation under
+ * the sprawl threshold still gets a return on its logistics.
+ */
+export function getLogisticsShippingMultiplier(logisticsStrength?: number | null): number {
+  const ls =
+    typeof logisticsStrength === "number" && Number.isFinite(logisticsStrength)
+      ? logisticsStrength
+      : 0;
+  const fraction = Math.min(1, Math.max(0, ls) / LOGISTICS_MAX_SPRAWL_EFFECT);
+  return 1 - LOGISTICS_SHIPPING_DISCOUNT_MAX * fraction;
+}
+
+/**
  * Logistics sectors are the network that carries the sprawl, so they never pay
  * the sprawl penalty on their own margin. They still count toward the
  * corporation's sector total, so every other sector's penalty is unchanged.

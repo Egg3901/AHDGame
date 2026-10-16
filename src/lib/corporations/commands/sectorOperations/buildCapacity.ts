@@ -61,6 +61,7 @@ import { STARTING_YEAR, TURNS_PER_YEAR } from "@/lib/constants/turnTime";
 import {
   CAPACITY_BUILD_CANCEL_REFUND,
   CAPACITY_BUILD_TURNS,
+  techBuildTurns,
   MAX_BUILD_UNITS_PER_ORDER,
   computeBuildCost,
 } from "@/lib/constants/capacityEconomy";
@@ -588,7 +589,7 @@ export async function buildCapacity(request: Request, { params }: RouteParams) {
     // Tech-tree growth-cost reduction, re-homed onto the build price (it bought
     // nothing under plants, where the growth slider is vestigial). Scoped to the
     // corp's primary type exactly as `expandSector` scopes its own discount.
-    const techBuildCostMultiplier = (await isSectorTechTreesEnabled())
+    const techBuildEffects = (await isSectorTechTreesEnabled())
       ? getSectorTechEffects(
           {
             type: corporation.type,
@@ -600,8 +601,9 @@ export async function buildCapacity(request: Request, { params }: RouteParams) {
           sector.sectorType,
           sector.industryModel,
           sector.mediaDiscriminator
-        ).growthCostMultiplier
-      : 1;
+        )
+      : null;
+    const techBuildCostMultiplier = techBuildEffects?.growthCostMultiplier ?? 1;
 
     const cost = computeBuildCost({
       sectorType: sector.sectorType,
@@ -622,8 +624,13 @@ export async function buildCapacity(request: Request, { params }: RouteParams) {
       acumen: ceoAcumen,
       hostCostOfLivingIndex,
       techGrowthCostMultiplier: techBuildCostMultiplier,
+      techDominanceShield: techBuildEffects?.dominanceShield ?? 0,
     });
-    const buildTurns = CAPACITY_BUILD_TURNS(sector.sectorType);
+    // The same research that discounts the price also shortens the build.
+    const buildTurns = techBuildTurns(
+      CAPACITY_BUILD_TURNS(sector.sectorType),
+      techBuildCostMultiplier
+    );
     const corpFxRate = await getCorpFxRate(db, corporation);
     const spread = corpToSectorCountrySpread(corporation, countryId, cost.totalAnchor);
     const totalCostAnchor = cost.totalAnchor + spread.spreadAnchor;

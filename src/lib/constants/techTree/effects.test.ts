@@ -86,9 +86,21 @@ describe("effect display", () => {
   });
   it("describes the shield effects", () => {
     expect(describeTechEffect({ kind: "dominanceShield", pct: 0.25 })).toBe(
-      "−25% market-dominance penalty"
+      "−25% market-dominance toll on new capacity"
     );
     expect(techEffectCategory("dominanceShield")).toBe("dominance");
     expect(techEffectCategory("expansionDiscount")).toBe("expansion");
+  });
+
+  it("describes the plants-economy effect of the four reworked upgrades", () => {
+    expect(describeTechEffect({ kind: "growthCostReduction", pct: 0.2 })).toBe(
+      "−20% capacity build cost, −12% build time"
+    );
+    expect(describeTechEffect({ kind: "priceRealization", pct: 0.013 })).toBe(
+      "+1.3% output sale price (adds to cost-plus markup)"
+    );
+    expect(describeTechEffect({ kind: "logisticsStrength", flat: 25 })).toContain(
+      "cheaper freight and landed inputs"
+    );
   });
 });

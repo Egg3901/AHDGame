@@ -126,6 +126,7 @@ import { plantsNetMarginPct } from "@/lib/corporations/rules/netMargin";
 import type { RetoolHint } from "@/lib/corporations/retoolHint";
 import {
   CAPACITY_BUILD_TURNS,
+  techBuildTurns,
   capacityRescaleRatio,
   IDLE_UPKEEP_FRACTION,
   MOTHBALL_UPKEEP_FRACTION,
@@ -1202,6 +1203,8 @@ export function buildSectorPlantsSection(args: {
   ceoAcumen: number;
   hostCostOfLivingIndex: number | null;
   techGrowthCostMultiplier: number;
+  /** Tech dominance shield (cuts the dominance build toll). Optional for older fixtures. */
+  techDominanceShield?: number;
   /** The world's era unit-basis scale (`getEraUnitScale(preset)`). */
   eraUnitScale: number;
   preset?: string;
@@ -1288,6 +1291,7 @@ export function buildSectorPlantsSection(args: {
     ceoAcumen,
     hostCostOfLivingIndex,
     techGrowthCostMultiplier,
+    techDominanceShield = 0,
     eraUnitScale,
     preset,
     corpCapitalAnchor,
@@ -1449,6 +1453,7 @@ export function buildSectorPlantsSection(args: {
     acumen: ceoAcumen,
     hostCostOfLivingIndex,
     techGrowthCostMultiplier,
+    techDominanceShield,
   });
   const perUnitAnchor = oneUnit.totalAnchor;
   // C9: the server charges construction cost PLUS the cross-currency spread
@@ -1679,7 +1684,7 @@ export function buildSectorPlantsSection(args: {
     buildQueue,
     constructionInProgressAnchor: cipAnchor,
     depreciationPerTurn: CAPITAL_DEPRECIATION_PER_TURN,
-    buildTurns: CAPACITY_BUILD_TURNS(sectorType),
+    buildTurns: techBuildTurns(CAPACITY_BUILD_TURNS(sectorType), techGrowthCostMultiplier),
     workers,
     workersDesired: num(sector.workersDesired) ?? workers,
     labourStaffingFactor: Math.max(0, Math.min(1, num(sector.labourStaffingFactor) ?? 1)),
