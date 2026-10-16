@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  holdingMarketSnapshotValues,
+  holdingMarketValues,
+  holdingMarketTotals,
   anchorHoldingPosition,
   scaleHoldingTerms,
   subtractHoldingTerms,
@@ -17,6 +20,47 @@ import {
 } from "./holdingTerms";
 import { reconstructLegacyHoldingBasis, allocateLegacyUnknownBasis } from "./legacyHoldingBasis";
 
+describe("holding market values", () => {
+  it("preserves rounded totals when fractional quote values straddle a cent", () => {
+    expect(holdingMarketSnapshotValues(0.01, 0.005)).toEqual({
+      stockValue: 0.01,
+      shortTermStockValue: 0.01,
+      longTermStockValue: 0,
+    });
+    expect(() => holdingMarketSnapshotValues(1, 2)).toThrow();
+  });
+  it("moves value at exactly 48 turns and preserves the combined total", () => {
+    const position = {
+      shares: 10,
+      holdingTerms: {
+        longTermShares: 4,
+        longTermCostBasisAnchor: 0,
+        shortTermLots: [{ shares: 6, acquiredTurn: 100, costBasisAnchor: 0 }],
+      },
+    };
+    expect(holdingMarketValues(position, 147, 5)).toEqual({
+      stockValue: 50,
+      shortTermStockValue: 30,
+      longTermStockValue: 20,
+    });
+    expect(holdingMarketValues(position, 148, 5)).toEqual({
+      stockValue: 50,
+      shortTermStockValue: 0,
+      longTermStockValue: 50,
+    });
+    expect(
+      holdingMarketTotals([
+        { position, turn: 147, anchorSharePrice: 5 },
+        { position: { shares: 2 }, turn: 147, anchorSharePrice: 10 },
+      ])
+    ).toEqual({ stockValue: 70, shortTermStockValue: 30, longTermStockValue: 40 });
+    expect(holdingMarketTotals([])).toEqual({
+      stockValue: 0,
+      shortTermStockValue: 0,
+      longTermStockValue: 0,
+    });
+  });
+});
 describe("stock holding terms", () => {
   it("converts only unmarked legacy averages from issuer-local currency", () => {
     expect(anchorHoldingPosition({ shares: 10, avgCostPerShare: 8 }, 2)).toEqual({

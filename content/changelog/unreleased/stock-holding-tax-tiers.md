@@ -19,3 +19,5 @@ areas: [fullstack, engine]
 - The migration initializes each capital gains rate from its corresponding current income tax rate.
 
 - Collected personal income and capital gains taxes immediately credit the applicable regional balance and national Treasury, independently of annual budget projections. Ledger replay preserves the original settlement witness.
+
+- See combined, short-term and long-term stock values in your portfolio, filter your holdings by bucket, and switch the existing history chart between stock buckets. Bucket history begins with measured snapshots after activation.

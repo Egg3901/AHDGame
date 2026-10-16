@@ -325,3 +325,56 @@ export function scaleHoldingTerms(
   validateHoldingTerms(result, newShares);
   return result;
 }
+
+/** Market values in the caller's quote unit; mature lots before classifying value. */
+export function holdingMarketValues(
+  position: HoldingPosition,
+  turn: number,
+  anchorSharePrice: number
+): {
+  stockValue: number;
+  shortTermStockValue: number;
+  longTermStockValue: number;
+} {
+  cost(anchorSharePrice);
+  const terms = positionHoldingTerms(position, turn, 0);
+  return {
+    stockValue: position.shares * anchorSharePrice,
+    shortTermStockValue: availableHoldingShares(terms, "short") * anchorSharePrice,
+    longTermStockValue: terms.longTermShares * anchorSharePrice,
+  };
+}
+
+export function holdingMarketTotals(
+  positions: readonly { position: HoldingPosition; turn: number; anchorSharePrice: number }[]
+): ReturnType<typeof holdingMarketValues> {
+  return positions.reduce(
+    (sum, input) => {
+      const values = holdingMarketValues(input.position, input.turn, input.anchorSharePrice);
+      return {
+        stockValue: sum.stockValue + values.stockValue,
+        shortTermStockValue: sum.shortTermStockValue + values.shortTermStockValue,
+        longTermStockValue: sum.longTermStockValue + values.longTermStockValue,
+      };
+    },
+    { stockValue: 0, shortTermStockValue: 0, longTermStockValue: 0 }
+  );
+}
+
+/** Round displayed history buckets while preserving the rounded combined total. */
+export function holdingMarketSnapshotValues(
+  stockValue: number,
+  shortTermStockValue: number
+): ReturnType<typeof holdingMarketValues> {
+  cost(stockValue);
+  cost(shortTermStockValue);
+  if (shortTermStockValue > stockValue + 1e-7)
+    throw new Error("Short-term value exceeds total holdings");
+  const total = Math.round(stockValue * 100) / 100;
+  const short = Math.min(total, Math.round(shortTermStockValue * 100) / 100);
+  return {
+    stockValue: total,
+    shortTermStockValue: short,
+    longTermStockValue: Math.round((total - short) * 100) / 100,
+  };
+}

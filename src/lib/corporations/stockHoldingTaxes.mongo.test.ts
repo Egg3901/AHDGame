@@ -16,6 +16,9 @@ import {
   type ShareFillMoneyPlan,
 } from "./commands/shareTrading/shareFillMoney";
 import { processPlayerIncomeTax } from "@/lib/budget/playerIncomeTax";
+import { getDb } from "@/lib/mongodb";
+import { snapshotPortfolioValues } from "@/lib/turn/portfolioSnapshot";
+import { resetCorpFxRateCacheForTests } from "@/lib/currency/corporationCapital";
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 vi.mock("@sentry/nextjs", () => ({ captureException: vi.fn() }));
 
@@ -27,6 +30,7 @@ describe.skipIf(!REAL_MONGO_ENABLED)("real Mongo stock holding and tax settlemen
   let commandCount = 0,
     responseBsonBytes = 0,
     cursorCommands = 0;
+  let requestBsonBytes = 0;
   const corporationId = new ObjectId(),
     sellerId = new ObjectId(),
     buyerId = new ObjectId();
@@ -35,6 +39,9 @@ describe.skipIf(!REAL_MONGO_ENABLED)("real Mongo stock holding and tax settlemen
     measuredClient = new MongoClient(handle.uri, { monitorCommands: true });
     await measuredClient.connect();
     db = measuredClient.db(handle.dbName);
+    measuredClient.on("commandStarted", (event) => {
+      if (measuring) requestBsonBytes += BSON.calculateObjectSize(event.command);
+    });
     measuredClient.on("commandSucceeded", (event) => {
       if (measuring) {
         commandCount++;
@@ -100,6 +107,44 @@ describe.skipIf(!REAL_MONGO_ENABLED)("real Mongo stock holding and tax settlemen
       totalShares: 10,
       publicFloat: 0,
     });
+  });
+  it("records portfolio bucket history with unchanged round trips and measured wire overhead", async () => {
+    vi.mocked(getDb).mockResolvedValue(db);
+    await db.collection("corporations").updateOne(
+      { _id: corporationId },
+      {
+        $set: {
+          "shareholders.0.holdingTerms": {
+            longTermShares: 6,
+            longTermCostBasisAnchor: 12,
+            shortTermLots: [{ shares: 4, acquiredTurn: 100, costBasisAnchor: 8 }],
+          },
+        },
+      }
+    );
+    const results = [];
+    for (const active of [false, true]) {
+      await db.collection("portfolioHistory").deleteMany({});
+      resetCorpFxRateCacheForTests();
+      commandCount = 0;
+      responseBsonBytes = 0;
+      requestBsonBytes = 0;
+      measuring = true;
+      await snapshotPortfolioValues(147, active ? 100 : undefined);
+      measuring = false;
+      results.push({ active, commands: commandCount, responseBsonBytes, requestBsonBytes });
+      const row = await db.collection("portfolioHistory").findOne({ characterId: sellerId });
+      if (active)
+        expect(row).toMatchObject({
+          stockValue: 100,
+          shortTermStockValue: 40,
+          longTermStockValue: 60,
+        });
+      else expect(row).not.toHaveProperty("shortTermStockValue");
+    }
+    expect(results[1].commands).toBe(results[0].commands);
+    expect(results[1].responseBsonBytes).toBe(results[0].responseBsonBytes);
+    console.info("STOCK_BUCKET_SNAPSHOT_MONGO_PROFILE " + JSON.stringify(results));
   });
   it("migrates native cost units and preserves inventory through concurrent purchases and exact compensation", async () => {
     await migration.execute(db, { dryRun: true });

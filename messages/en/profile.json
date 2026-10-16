@@ -313,6 +313,8 @@
       "skippedTour": "You skipped the tour. The <link>two-minute basics</link> are here whenever you want them."
     },
     "stockHoldings": {
+      "all": "All Stock Holdings",
+      "filter": "Holding bucket",
       "short": "Short Term Holdings",
       "long": "Long Term Holdings",
       "bucket": "Sell from",
