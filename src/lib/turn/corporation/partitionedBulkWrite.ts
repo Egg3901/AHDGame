@@ -8,12 +8,13 @@
  * each other, so the batches can be applied side by side instead.
  *
  * The final state is the same as one ordered bulkWrite because:
- * - every op is keyed by a plain `{ _id }` filter, and all ops for one `_id`
+ * - every op fixes one scalar `_id` (with optional document-local guards),
+ *   and all ops for one `_id`
  *   land in the same partition in their original relative order, and each
  *   partition is itself an ordered bulkWrite; and
  * - an update/replace/delete keyed by `_id` reads and writes that one
  *   document only, so ops on different documents commute.
- * Anything else (inserts, filters on other fields, an `_id` operator query)
+ * Anything else (inserts, filters without a scalar `_id`, an `_id` operator query)
  * falls back to the single ordered bulkWrite this replaces.
  *
  * The one behavioural difference is on failure: an ordered bulkWrite stops at
@@ -39,8 +40,8 @@ function idKeyOf(op: AnyBulkWriteOperation<Document>): string | null {
   if (!body) return null;
   const filter = body.filter as Record<string, unknown> | undefined;
   if (!filter) return null;
-  const keys = Object.keys(filter);
-  if (keys.length !== 1 || keys[0] !== "_id") return null;
+  // Extra predicates can reject this document but cannot select another id.
+  // Keep guarded writes with the same document's earlier economic writes.
   const id = filter._id;
   if (id instanceof ObjectId) return `o:${id.toHexString()}`;
   if (typeof id === "string") return `s:${id}`;
