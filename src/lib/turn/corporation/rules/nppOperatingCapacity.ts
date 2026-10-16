@@ -1,3 +1,7 @@
+/**
+ * NPC plant operation. Demand-limited, losing plants can park spare capacity.
+ * nppOperatingCapacityTarget restores it when buyers or physical constraints require it.
+ */
 import { activeCapacityFraction } from "@/lib/corporations/investment/rules";
 import { DEMAND_THROTTLE_FLOOR } from "./demandThrottle";
 import { IDLE_RETIRE_HEADROOM, IDLE_RETIRE_STRUCTURAL_THROTTLE } from "./idleCapacityRetirement";

@@ -1,3 +1,6 @@
+/**
+ * Synthetic NPC plant fixture shared by native operation tests and simulations.
+ */
 import { ObjectId } from "mongodb";
 import type { CommodityType } from "@/lib/constants/commodities";
 import type { Corporation, CorporateSector } from "@/lib/db/types";
