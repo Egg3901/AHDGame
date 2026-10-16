@@ -73,6 +73,7 @@ import { withLatentDemand } from "./demandThrottle";
 import { idleCapacityRetirement } from "./rules/idleCapacityRetirement";
 import { seedPlantLedger } from "@/lib/corporations/plantLedger";
 import {
+  costPlusFixedDenominatorRevenue,
   inputBasketCostIndex,
   recordCostPlusBasis,
   supportsCostPlusPricing,
@@ -1251,6 +1252,11 @@ export function processSector(
         plantsCapacity > 0
           ? ((plantsNameplateRevenue / TURNS_PER_DAY) * producedUnits) / plantsCapacity
           : 0,
+      fixedDenominatorRevenue: costPlusFixedDenominatorRevenue(
+        plantsNameplateRevenue / TURNS_PER_DAY,
+        producedUnits,
+        plantsCapacity
+      ),
       inputCostIndex: inputBasketCostIndex(
         effectiveDemand ?? {},
         lookups.reachableInputPriceRatiosByCountry?.get(sectorCountryId) ??

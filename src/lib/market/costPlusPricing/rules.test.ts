@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { computeClearingFactors, costPlusPriceFactor } from "../clearing";
-import { inputBasketCostIndex, recordCostPlusBasis } from "./rules";
+import {
+  costPlusFixedDenominatorRevenue,
+  inputBasketCostIndex,
+  recordCostPlusBasis,
+} from "./rules";
 import { computeInputsCost } from "@/lib/corporations/physicalPnl";
 import { COMMODITY_BASE_PRICES, type CommodityType } from "@/lib/constants/commodities";
 
@@ -46,6 +50,74 @@ describe("cost-plus offers", () => {
       })
     ).toBeUndefined();
   });
+
+  it("allocates fixed costs over half capacity at 10% utilisation without diluting inputs", () => {
+    const basisAt = (nominalProducedRevenue: number) =>
+      recordCostPlusBasis({
+        inputsCost: nominalProducedRevenue * 0.67 * 1.5,
+        inputCostIndex: 1.5,
+        fixedCost: 238,
+        nominalProducedRevenue,
+        fixedDenominatorRevenue: costPlusFixedDenominatorRevenue(
+          1000,
+          nominalProducedRevenue,
+          1000
+        ),
+        turn: 12,
+      })!;
+    const throttled = basisAt(100);
+    const half = basisAt(500);
+    expect(throttled.fixedCostShare).toBeCloseTo(0.476);
+    expect(throttled.fixedCostShare).toBe(half.fixedCostShare);
+    expect(throttled.inputCostShare).toBeCloseTo(0.67);
+    expect(throttled.inputCostShare).toBeCloseTo(half.inputCostShare);
+  });
+
+  it("preserves full-utilisation and omitted fixed denominators", () => {
+    const input = {
+      inputsCost: 670,
+      inputCostIndex: 1,
+      fixedCost: 238,
+      nominalProducedRevenue: 1000,
+      turn: 12,
+    };
+    expect(
+      recordCostPlusBasis({
+        ...input,
+        fixedDenominatorRevenue: costPlusFixedDenominatorRevenue(1000, 1000, 1000),
+      })
+    ).toEqual(recordCostPlusBasis(input));
+    expect(recordCostPlusBasis({ ...input, fixedDenominatorRevenue: undefined })).toEqual({
+      inputCostShare: 0.67,
+      fixedCostShare: 0.238,
+      turn: 12,
+    });
+    const zeroCapacityDenominator = costPlusFixedDenominatorRevenue(1000, 0, 0);
+    expect(zeroCapacityDenominator).toBe(0);
+    expect(
+      recordCostPlusBasis({
+        ...input,
+        nominalProducedRevenue: 0,
+        fixedDenominatorRevenue: zeroCapacityDenominator,
+      })
+    ).toBeUndefined();
+  });
+
+  it.each([0, -1, Number.NaN, Number.POSITIVE_INFINITY])(
+    "rejects invalid separate fixed denominator %s",
+    (fixedDenominatorRevenue) => {
+      expect(
+        recordCostPlusBasis({
+          inputsCost: 67,
+          inputCostIndex: 1,
+          fixedCost: 23.8,
+          nominalProducedRevenue: 100,
+          fixedDenominatorRevenue,
+          turn: 12,
+        })
+      ).toBeUndefined();
+    }
+  );
 
   it("sells behind a cheaper market offer and charges the indexed price", () => {
     const result = computeClearingFactors({

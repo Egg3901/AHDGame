@@ -388,6 +388,55 @@ describe("recorded cost-plus operating basis", () => {
     );
   });
 
+  it("floors only the fixed-cost denominator when demand throttles production", () => {
+    const sector = makeSector({
+      capitalStock: STOCK,
+      plantsStartTurn: 0,
+      producedUnits: STOCK,
+      soldUnits: 0,
+    });
+    const env = makeEnv("plants", 1000, makeLookups({}));
+    env.currentYear = 1991;
+    env.market.explicitPlantCostsEnabled = true;
+    processSector(env, makeCorp(), sector, 1, undefined, 1);
+    const update = env.sectorOps[0].updateOne.update.$set as Record<string, unknown>;
+    const basis = update.costPlusCostBasis as {
+      inputCostShare: number;
+      fixedCostShare: number;
+    };
+    const pnl = update.plantsPnl as {
+      inputs: number;
+      labour: number;
+      otherOpex: number;
+      upkeep: number;
+      compliance: number;
+      financialLegs: number;
+      policyCredit: number;
+    };
+    expect(update.capitalUtilization).toBeCloseTo(0.1);
+    const mixPrice =
+      1 /
+      Object.entries(SUPPLY).reduce(
+        (sum, [commodity, rate]) => sum + rate / COMMODITY_BASE_PRICES[commodity as CommodityType],
+        0
+      );
+    const fixedCost =
+      pnl.labour +
+      pnl.otherOpex +
+      pnl.upkeep +
+      pnl.compliance +
+      pnl.financialLegs +
+      Math.max(0, -pnl.policyCredit);
+    expect(basis.fixedCostShare).toBeCloseTo(
+      fixedCost / (0.5 * Number(update.operatingCapacityUnits) * mixPrice),
+      4
+    );
+    expect(basis.inputCostShare).toBeCloseTo(
+      pnl.inputs / (Number(update.producedUnits) * mixPrice),
+      3
+    );
+  });
+
   it("writes no basis while explicit operating costs are disabled", () => {
     const result = run("plants", makeSector({ capitalStock: STOCK }));
     expect(result.update).not.toHaveProperty("costPlusCostBasis");

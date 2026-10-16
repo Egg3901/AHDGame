@@ -28,6 +28,21 @@ export function inputBasketCostIndex(
   return weight > 0 ? priced / weight : 1;
 }
 
+export const COST_PLUS_UTILISATION_FLOOR = 0.5;
+
+/** Spread fixed costs over at least half capacity so throttling cannot inflate the quote. */
+export function costPlusFixedDenominatorRevenue(
+  nameplateRevenuePerTurn: number,
+  producedUnits: number,
+  plantsCapacity: number
+): number {
+  return plantsCapacity > 0
+    ? (nameplateRevenuePerTurn *
+        Math.max(producedUnits, COST_PLUS_UTILISATION_FLOOR * plantsCapacity)) /
+        plantsCapacity
+    : 0;
+}
+
 export const PRICING_POSTURE_MIN = -0.2;
 export const PRICING_POSTURE_MAX = 0.2;
 
@@ -58,24 +73,28 @@ export function validCostPlusBasis(
   );
 }
 
-/** Preserve actual operating cost per nominal output value, excluding taxes and financing. */
+/** Record input costs per actual output and fixed costs per the supplied allocation basis. */
 export function recordCostPlusBasis(input: {
   inputsCost: number;
   fixedCost: number;
   nominalProducedRevenue: number;
+  fixedDenominatorRevenue?: number;
   inputCostIndex: number;
   turn: number;
 }): CostPlusCostBasis | undefined {
+  const fixedDenominatorRevenue = input.fixedDenominatorRevenue ?? input.nominalProducedRevenue;
   if (
     !Number.isFinite(input.nominalProducedRevenue) ||
     input.nominalProducedRevenue <= 0 ||
+    !Number.isFinite(fixedDenominatorRevenue) ||
+    fixedDenominatorRevenue <= 0 ||
     !Number.isFinite(input.inputCostIndex) ||
     input.inputCostIndex <= 0
   )
     return undefined;
   const basis = {
     inputCostShare: input.inputsCost / input.inputCostIndex / input.nominalProducedRevenue,
-    fixedCostShare: input.fixedCost / input.nominalProducedRevenue,
+    fixedCostShare: input.fixedCost / fixedDenominatorRevenue,
     turn: input.turn,
   };
   return validCostPlusBasis(basis) ? basis : undefined;
