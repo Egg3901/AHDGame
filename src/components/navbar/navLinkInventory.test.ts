@@ -29,7 +29,7 @@ describe("nav link inventory parity", () => {
       .filter((i) => i.show)
       .map((i) => i.href);
 
-    expect(hrefs).toContain("/world/legacy");
+    expect(hrefs).not.toContain("/world/legacy");
     expect(hrefs).toContain("/world/trade");
     expect(hrefs).toContain("/world/conflicts");
     expect(hrefs).toContain("/unions");
