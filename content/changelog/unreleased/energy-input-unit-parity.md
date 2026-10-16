@@ -1,4 +1,5 @@
 ---
+date: 2026-10-16
 title: Match productive energy plants' input bills to their recorded consumption
 badges: [patch]
 areas: [engine]
