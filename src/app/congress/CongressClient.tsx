@@ -1,6 +1,5 @@
 "use client";
 
-import { apiErrorText } from "@/lib/errors/catalog";
 import { useState, useEffect, useCallback, Suspense } from "react";
 import Link from "next/link";
 import { HeroImage } from "@/components/HeroImage";
@@ -17,290 +16,10 @@ import {
   type LeaderStrip,
 } from "./components/CongressConstants";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
-import { COMMODITY_LABELS } from "@/lib/constants/commodities";
-import { fetchJson } from "@/lib/observability/fetchJson";
 import { TariffsTab } from "@/components/legislature/TariffsTab";
 import { SubsidiesTab } from "@/components/legislature/SubsidiesTab";
-import { GrantContractModal } from "@/components/congress/GrantContractModal";
-import { IssueExtractionContractModal } from "@/components/extraction/IssueExtractionContractModal";
-import { ContractStatusBadge } from "@/components/extraction/ContractStatusBadge";
-import { effectiveContractStatus } from "@/components/extraction/types";
-import { useExtractionIssuerAccess } from "@/hooks/useExtractionIssuerAccess";
 import type { CongressMembersResponse } from "@/lib/congress/types";
 import type { BillsResponse } from "@/lib/legislature/dto/billDisplay";
-
-// ─── Contracts Tab ───────────────────────────────────────────────────────────
-
-interface ContractRow {
-  _id: string;
-  stateId: string;
-  corporationId: string;
-  corporationName?: string;
-  resource: string;
-  share: number;
-  grantedByLevel: "state" | "national";
-  status?: "offered" | "active" | "declined" | "expired" | "defaulted";
-  revokedTurn?: number;
-  royaltyRatePerTurn?: number;
-  termTurns?: number;
-  offerExpiresTurn?: number;
-}
-
-function ContractsTab({ countryId }: { countryId: string }) {
-  const [contracts, setContracts] = useState<ContractRow[]>([]);
-  const [offers, setOffers] = useState<ContractRow[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [isAdmin, setIsAdmin] = useState(false);
-  const [showGrantModal, setShowGrantModal] = useState(false);
-  const [showIssueModal, setShowIssueModal] = useState(false);
-  const [revoking, setRevoking] = useState<string | null>(null);
-  const [revokeError, setRevokeError] = useState("");
-  const [refreshKey, setRefreshKey] = useState(0);
-  const [loadError, setLoadError] = useState(false);
-  const [stateOptions, setStateOptions] = useState<{ id: string; name: string }[]>([]);
-  const [contractIssuanceEnabled, setContractIssuanceEnabled] = useState(false);
-  const { isNationalIssuer } = useExtractionIssuerAccess(countryId);
-  // Flag-gated for everyone, including admins — the admin escape hatch is the
-  // separate Admin Grant flow, matching the state resources tab's gating.
-  const canIssue = contractIssuanceEnabled && (isAdmin || isNationalIssuer);
-
-  useEffect(() => {
-    fetchJson<{ states?: { id: string; name: string }[] }>(
-      `/api/country/${encodeURIComponent(countryId)}/states`,
-      { feature: "congress:contract-states" }
-    )
-      .then((data) => setStateOptions(data.states ?? []))
-      .catch(() => setStateOptions([]));
-  }, [countryId]);
-
-  useEffect(() => {
-    // A 401 here just means "not an admin" — expected. fetchJson still routes any
-    // 5xx to GlitchTip; we treat every failure as non-admin.
-    fetchJson<{ user?: { isAdmin?: boolean } }>("/api/auth/me", { feature: "congress:auth" })
-      .then((data) => setIsAdmin(data.user?.isAdmin === true))
-      .catch(() => setIsAdmin(false));
-  }, []);
-
-  useEffect(() => {
-    const q = `countryId=${encodeURIComponent(countryId)}`;
-    Promise.all([
-      fetchJson<{ contracts?: ContractRow[]; contractIssuanceEnabled?: boolean }>(
-        `/api/contracts/extraction?${q}`,
-        { feature: "congress:contracts" }
-      ),
-      // Pending offers are excluded from the plain countryId query (they don't
-      // allocate capacity yet) — ask for them explicitly so this tab can show
-      // "Pending offers" for national officials to act on.
-      fetchJson<{ contracts?: ContractRow[] }>(`/api/contracts/extraction?${q}&status=offered`, {
-        feature: "congress:contract-offers",
-      }).catch(() => ({ contracts: [] })),
-    ])
-      .then(([activeData, offersData]) => {
-        setContracts(activeData.contracts ?? []);
-        setOffers(offersData.contracts ?? []);
-        setContractIssuanceEnabled(activeData.contractIssuanceEnabled === true);
-        setLoadError(false);
-        setLoading(false);
-      })
-      .catch(() => {
-        // Surface the failure instead of rendering an empty list that reads as
-        // "no contracts" — that ambiguity is exactly what hid errors before.
-        setLoadError(true);
-        setLoading(false);
-      });
-  }, [countryId, refreshKey]);
-
-  async function handleRevoke(id: string) {
-    setRevoking(id);
-    setRevokeError("");
-    const res = await fetch(`/api/contracts/extraction/${id}/revoke`, { method: "POST" });
-    setRevoking(null);
-    if (!res.ok) {
-      // Defensive parse of the error body after we've already detected !res.ok
-      // and are surfacing the failure via setRevokeError.
-      const json = await res.json().catch(() => ({}));
-      setRevokeError(apiErrorText(json, "Failed to revoke contract"));
-      return;
-    }
-    setRefreshKey((k) => k + 1);
-  }
-
-  if (loading) {
-    return (
-      <div className="space-y-2">
-        {[...Array(3)].map((_, i) => (
-          <div key={i} className="h-12 rounded-lg bg-card/60 animate-pulse" />
-        ))}
-      </div>
-    );
-  }
-
-  return (
-    <>
-      <div className="mb-4 flex items-center justify-between gap-2 flex-wrap">
-        <p className="text-sm text-muted">
-          {contracts.length} active extraction contract{contracts.length !== 1 ? "s" : ""}
-        </p>
-        <div className="flex gap-2">
-          {canIssue && (
-            <button
-              onClick={() => setShowIssueModal(true)}
-              className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary-dark transition-colors"
-            >
-              Publish tender
-            </button>
-          )}
-          {isAdmin && (
-            <button
-              onClick={() => setShowGrantModal(true)}
-              className="rounded-lg border border-card-border bg-card px-4 py-2 text-sm font-medium hover:bg-card-elevated transition-colors"
-            >
-              Admin grant
-            </button>
-          )}
-        </div>
-      </div>
-
-      {revokeError && (
-        <p className="mb-3 rounded-lg border border-error/30 bg-error/10 px-3 py-2 text-sm text-error">
-          {revokeError}
-        </p>
-      )}
-
-      {offers.length > 0 && (
-        <div className="mb-6">
-          <h3 className="mb-2 text-sm font-semibold text-muted">Pending offers</h3>
-          <div className="space-y-2">
-            {offers.map((c) => (
-              <div
-                key={c._id}
-                className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-primary/30 bg-primary/5 px-4 py-2 text-sm"
-              >
-                <span>
-                  {c.corporationName ?? c.corporationId} in {c.stateId},{" "}
-                  {(COMMODITY_LABELS as Record<string, string>)[c.resource] ?? c.resource} (
-                  {(c.share * 100).toFixed(1)}%)
-                </span>
-                <div className="flex items-center gap-2">
-                  <ContractStatusBadge status="offered" />
-                  {(isAdmin || isNationalIssuer) && (
-                    <button
-                      onClick={() => handleRevoke(c._id)}
-                      disabled={revoking === c._id}
-                      className="rounded px-2 py-1 text-xs text-error hover:bg-error/10 disabled:opacity-50 transition-colors"
-                    >
-                      {revoking === c._id ? "Revoking…" : "Revoke"}
-                    </button>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {loadError ? (
-        <div className="rounded-lg border border-error/30 bg-error/10 p-6 text-center text-sm text-error">
-          Couldn&apos;t load extraction contracts. This may be a temporary issue.{" "}
-          <button
-            onClick={() => setRefreshKey((k) => k + 1)}
-            className="underline hover:no-underline"
-          >
-            Try again
-          </button>
-          .
-        </div>
-      ) : contracts.length === 0 ? (
-        <div className="rounded-lg border border-card-border bg-card/60 p-6 text-center text-sm text-muted">
-          No active extraction contracts.
-        </div>
-      ) : (
-        <div className="overflow-x-auto rounded-lg border border-card-border">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-card-border bg-card-elevated">
-                <th className="px-4 py-3 text-left font-medium text-muted">State</th>
-                <th className="px-4 py-3 text-left font-medium text-muted">Corporation</th>
-                <th className="px-4 py-3 text-left font-medium text-muted">Resource</th>
-                <th className="px-4 py-3 text-right font-medium text-muted">Share</th>
-                <th className="px-4 py-3 text-right font-medium text-muted">Royalty/turn</th>
-                <th className="px-4 py-3 text-right font-medium text-muted">Granted by</th>
-                <th className="px-4 py-3 text-right font-medium text-muted">Status</th>
-                {isAdmin && <th className="px-4 py-3" />}
-              </tr>
-            </thead>
-            <tbody>
-              {contracts.map((c) => (
-                <tr key={c._id} className="border-b border-card-border last:border-0">
-                  <td className="px-4 py-3 font-medium">{c.stateId}</td>
-                  <td className="px-4 py-3 text-sm">
-                    {c.corporationName ?? (
-                      <span className="font-mono text-xs text-muted">{c.corporationId}</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3">
-                    {(COMMODITY_LABELS as Record<string, string>)[c.resource] ?? c.resource}
-                  </td>
-                  <td className="px-4 py-3 text-right tabular-nums">
-                    {(c.share * 100).toFixed(1)}%
-                  </td>
-                  <td className="px-4 py-3 text-right tabular-nums">
-                    {c.royaltyRatePerTurn != null
-                      ? `${(c.royaltyRatePerTurn * 100).toFixed(2)}%`
-                      : "n/a"}
-                  </td>
-                  <td className="px-4 py-3 text-right text-xs text-muted">
-                    {c.grantedByLevel === "national" ? "National" : "State"} legislature
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <ContractStatusBadge status={effectiveContractStatus(c)} />
-                  </td>
-                  {isAdmin && (
-                    <td className="px-4 py-3 text-right">
-                      <button
-                        onClick={() => handleRevoke(c._id)}
-                        disabled={revoking === c._id}
-                        className="rounded px-2 py-1 text-xs text-error hover:bg-error/10 disabled:opacity-50 transition-colors"
-                      >
-                        {revoking === c._id ? "Revoking…" : "Revoke"}
-                      </button>
-                    </td>
-                  )}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {isAdmin && showGrantModal && (
-        <GrantContractModal
-          legislatureId={countryId}
-          legislatureLevel="national"
-          countryId={countryId}
-          onClose={() => setShowGrantModal(false)}
-          onGranted={() => {
-            setShowGrantModal(false);
-            setRefreshKey((k) => k + 1);
-          }}
-        />
-      )}
-
-      {canIssue && showIssueModal && (
-        <IssueExtractionContractModal
-          level="national"
-          countryId={countryId}
-          stateOptions={stateOptions}
-          onClose={() => setShowIssueModal(false)}
-          onIssued={() => {
-            setShowIssueModal(false);
-            setRefreshKey((k) => k + 1);
-          }}
-        />
-      )}
-    </>
-  );
-}
 
 export function USCongressPage({ countryId }: { countryId: CountryId }) {
   const searchParams = useSearchParams();
@@ -318,9 +37,7 @@ export function USCongressPage({ countryId }: { countryId: CountryId }) {
           ? "tariffs"
           : searchParams.get("tab") === "subsidies"
             ? "subsidies"
-            : searchParams.get("tab") === "contracts"
-              ? "contracts"
-              : "bills"
+            : "bills"
   );
   const setPageTab = useCallback(
     (tab: PageTab) => {
@@ -356,18 +73,21 @@ export function USCongressPage({ countryId }: { countryId: CountryId }) {
   // Sync URL params to state - only update if different to avoid loops
   useEffect(() => {
     const tab = searchParams.get("tab");
+    if (tab === "contracts") {
+      router.replace(`/country/${countryId.toLowerCase()}/government-contracts?type=extraction`);
+      return;
+    }
     if (
       (tab === "bills" ||
         tab === "composition" ||
         tab === "leadership" ||
         tab === "tariffs" ||
-        tab === "subsidies" ||
-        tab === "contracts") &&
+        tab === "subsidies") &&
       tab !== pageTabState
     ) {
       setPageTabState(tab as typeof pageTabState);
     }
-  }, [searchParams, pageTabState]);
+  }, [searchParams, pageTabState, countryId, router]);
 
   useEffect(() => {
     const chamber = searchParams.get("chamber");
@@ -475,7 +195,6 @@ export function USCongressPage({ countryId }: { countryId: CountryId }) {
     { key: "leadership", label: "Leadership" },
     { key: "tariffs", label: "Tariffs" },
     { key: "subsidies", label: "Subsidies" },
-    { key: "contracts", label: "Contracts" },
   ];
 
   const hero = CHAMBER_HERO[activeTab];
@@ -701,7 +420,6 @@ export function USCongressPage({ countryId }: { countryId: CountryId }) {
             )}
             {pageTab === "tariffs" && <TariffsTab countryId={countryId} />}
             {pageTab === "subsidies" && <SubsidiesTab countryId={countryId} />}
-            {pageTab === "contracts" && <ContractsTab countryId={countryId} />}
           </div>
         )}
 

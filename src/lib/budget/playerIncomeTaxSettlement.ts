@@ -420,20 +420,24 @@ export async function settlePlayerIncomeTaxAssessments(
   if (active && active.turn >= turn) return;
   // A rotating bounded scan prevents long-lived unfunded debts from growing
   // the active BSON plan indefinitely or starving other taxpayers.
-  const scan = (after?: string) =>
+  const scanLimit = 1000;
+  const scan = (limit: number, after?: string, through?: string) =>
     db
       .collection<Assessment>("playerIncomeTaxAssessments")
       .find({
         worldId,
         status: "unpaid",
         turn: { $lte: turn },
-        ...(after ? { _id: { $gt: after } } : {}),
+        ...(after ? { _id: { $gt: after } } : through ? { _id: { $lte: through } } : {}),
       })
       .sort({ _id: 1 })
-      .limit(1000)
+      .limit(limit)
       .toArray();
-  let candidates = await scan(active?.scanAfter);
-  if (!candidates.length && active?.scanAfter) candidates = await scan();
+  const candidates = await scan(scanLimit, active?.scanAfter);
+  // Fresh income can keep the forward range nonempty forever. Fill unused
+  // capacity from the disjoint older range so those liabilities get revisited.
+  if (active?.scanAfter && candidates.length < scanLimit)
+    candidates.push(...(await scan(scanLimit - candidates.length, undefined, active.scanAfter)));
   const [regularWallets, imperialWallets] = await Promise.all([
     db
       .collection("characters")

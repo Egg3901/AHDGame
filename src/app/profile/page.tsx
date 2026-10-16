@@ -44,6 +44,8 @@ import {
 } from "@/lib/utils/fundGeneration";
 import {
   calculateFavorabilityAboveThresholdPenalty,
+  calculateNationalInfluenceDecay,
+  calculateNationalInfluenceGain,
   calculateNetNationalInfluencePerTurn,
   calculatePoliticalInfluenceDecay,
 } from "@shared/constants/formulas";
@@ -623,6 +625,11 @@ export default async function ProfilePage() {
     influence,
     roleBonuses.positionNiBonus
   ).toFixed(2);
+  const nationalBreakdown = {
+    fromStateInfluence: calculateNationalInfluenceGain(influence),
+    fromPosition: roleBonuses.positionNiBonus,
+    decay: calculateNationalInfluenceDecay(character.nationalInfluence ?? 0),
+  };
 
   const profileBaseOffice =
     character.currentOffice && CABINET_OFFICE_TYPES.has(character.currentOffice.type)
@@ -678,6 +685,9 @@ export default async function ProfilePage() {
     DEFAULT_PARTY_INFLUENCE_MAX_BONUS
   );
   let partyInfluenceNetGain: number | undefined;
+  let partyInfluenceBreakdown:
+    | { fromAlignment: number; fromLeadership: number; infamyPenalty: number; decay: number }
+    | undefined;
   let bonusActionsFromParty: number | undefined;
   let partyInfluenceShare: number | undefined;
   if (hasParty && party) {
@@ -694,6 +704,12 @@ export default async function ProfilePage() {
     const tGain = computeTurnGain(closeness, lBonus, piPenalty, piBaseRate);
     const decayRate = gameConfig?.partyInfluenceDecayRate ?? 0.04;
     partyInfluenceNetGain = tGain - (character.partyInfluence ?? 0) * decayRate;
+    partyInfluenceBreakdown = {
+      fromAlignment: piBaseRate * closeness,
+      fromLeadership: lBonus,
+      infamyPenalty: piPenalty,
+      decay: (character.partyInfluence ?? 0) * decayRate,
+    };
 
     const charCountry = character.countryId ?? "US";
     const piDb = await getDb();
@@ -849,6 +865,8 @@ export default async function ProfilePage() {
               bonusActionsFromParty={bonusActionsFromParty}
               partyInfluenceMaxBonus={partyInfluenceMaxBonus}
               partyInfluenceNetGain={partyInfluenceNetGain}
+              partyInfluenceBreakdown={partyInfluenceBreakdown}
+              nationalBreakdown={nationalBreakdown}
               partyInfluenceShare={partyInfluenceShare}
             />
 

@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { ObjectId, type Db } from "mongodb";
 import { createInMemoryDb } from "@/lib/test-utils/inMemoryDb";
 import { processPlayerIncomeTax } from "./playerIncomeTax";
+import { settlePlayerIncomeTaxAssessments } from "./playerIncomeTaxSettlement";
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 
 function fixture() {
@@ -274,6 +275,71 @@ describe("player income-tax settlement", () => {
     expect((await processPlayerIncomeTax(db, 2, now, state, true)).pending).toBe(0);
     expect((await db.collection("characters").findOne({}))?.currencyBalances.personal.USD).toBe(65);
     expect((await db.collection("federalBudget").findOne({}))?.treasuryCashLocal).toBe(130);
+  });
+  it("revisits affordable older debt while fresh taxable income keeps arriving", async () => {
+    const { db, id } = fixture();
+    await db
+      .collection("characters")
+      .updateOne({}, { $set: { "currencyBalances.personal.USD": 0 } });
+    expect((await processPlayerIncomeTax(db, 1, now, state, true)).pending).toBe(1);
+    await db
+      .collection("characters")
+      .updateOne({}, { $set: { "currencyBalances.personal.USD": 100 } });
+    await db.collection("financialTxLog").insertOne({
+      _id: new ObjectId(),
+      subjectId: id,
+      subjectType: "character",
+      type: "corp_salary",
+      turn: 2,
+      amount: 100,
+      anchorAmount: 100,
+      currencyCode: "USD",
+    });
+    expect((await processPlayerIncomeTax(db, 2, now, state, true)).pending).toBe(0);
+    await processPlayerIncomeTax(db, 2, now, state, true);
+    expect((await db.collection("characters").findOne({}))?.currencyBalances.personal.USD).toBe(30);
+    expect((await db.collection("federalBudget").findOne({}))?.treasuryCashLocal).toBe(160);
+    expect((await db.collection("stateBudgets").findOne({}))?.balance).toBe(20);
+    const receipts = await db
+      .collection("financialTxLog")
+      .find({ type: "player_income_tax" })
+      .toArray();
+    expect(receipts).toHaveLength(2);
+    expect(receipts.every((row) => row.turn === 2)).toBe(true);
+    expect(receipts.map((row) => row.meta.assessedTurn).sort()).toEqual([1, 2]);
+  });
+  it("wraps a full debt scan without starving an older funded liability", async () => {
+    const { db } = fixture();
+    await db
+      .collection("characters")
+      .updateOne({}, { $set: { "currencyBalances.personal.USD": 0 } });
+    await processPlayerIncomeTax(db, 1, now, state, true);
+    const old = await db.collection("playerIncomeTaxAssessments").findOne({ status: "unpaid" });
+    const unfundedId = new ObjectId();
+    await db
+      .collection<{ _id: string; characterId: ObjectId }>("playerIncomeTaxAssessments")
+      .insertMany(
+        Array.from({ length: 1001 }, (_, index) => ({
+          ...old,
+          _id: "z:" + String(index).padStart(4, "0"),
+          characterId: unfundedId,
+        }))
+      );
+    await settlePlayerIncomeTaxAssessments(db, 2, now, state.resetWorldId, true, false, 60);
+    expect(
+      (await db.collection("playerIncomeTaxAssessments").findOne({ _id: old!._id }))?.status
+    ).toBe("unpaid");
+    await db
+      .collection("characters")
+      .updateOne({}, { $set: { "currencyBalances.personal.USD": 100 } });
+    await settlePlayerIncomeTaxAssessments(db, 3, now, state.resetWorldId, true, false, 60);
+    expect(
+      (await db.collection("playerIncomeTaxAssessments").findOne({ _id: old!._id }))?.status
+    ).toBe("paid");
+    expect((await db.collection("characters").findOne({}))?.currencyBalances.personal.USD).toBe(65);
+    expect(
+      await db.collection("financialTxLog").countDocuments({ type: "player_income_tax" })
+    ).toBe(1);
   });
   it("exempts transfers and principal and never retroactively taxes pre-rollout earnings", async () => {
     const { db, id } = fixture();

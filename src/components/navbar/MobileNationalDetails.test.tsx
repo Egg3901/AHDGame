@@ -16,23 +16,33 @@ function renderWithIntl(ui: React.ReactElement) {
 vi.mock("next/navigation", () => ({ usePathname: () => "/country/uk/economy" }));
 
 describe("MobileNationalDetails", () => {
-  it("renders every section as a collapsible, chevron-affordanced button", () => {
+  it("renders every grouped section as a collapsible, chevron-affordanced button", () => {
     renderWithIntl(<MobileNationalDetails countryId="UK" onNavigate={() => {}} />);
-    for (const title of ["Government", "Politics", "Economy", "Other"]) {
+    for (const title of ["Government", "Politics", "Economy"]) {
       const toggle = screen.getByRole("button", { name: new RegExp(`^${title}$`, "i") });
       expect(toggle.getAttribute("aria-expanded")).not.toBeNull();
     }
   });
 
-  it("starts every section collapsed", () => {
+  it("starts every section collapsed except Economy", () => {
     renderWithIntl(<MobileNationalDetails countryId="UK" onNavigate={() => {}} />);
-    for (const title of ["Government", "Politics", "Economy", "Other"]) {
+    for (const [title, expanded] of [
+      ["Government", "false"],
+      ["Politics", "false"],
+      ["Economy", "true"],
+    ]) {
       expect(
         screen
           .getByRole("button", { name: new RegExp(`^${title}$`, "i") })
           .getAttribute("aria-expanded")
-      ).toBe("false");
+      ).toBe(expanded);
     }
+  });
+
+  it("pins Map as a top-level link and drops the Other group", () => {
+    renderWithIntl(<MobileNationalDetails countryId="UK" onNavigate={() => {}} />);
+    expect(screen.getByRole("link", { name: /^Map$/i })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /^Other$/i })).toBeNull();
   });
 
   it("expands a collapsed section on click and reveals its links", () => {
@@ -53,7 +63,6 @@ describe("MobileNationalDetails", () => {
 
   it("marks the link for the current path as the active page", () => {
     renderWithIntl(<MobileNationalDetails countryId="UK" onNavigate={() => {}} />);
-    fireEvent.click(screen.getByRole("button", { name: /^Economy$/i }));
     expect(screen.getByRole("link", { name: /^Economy$/i }).getAttribute("aria-current")).toBe(
       "page"
     );

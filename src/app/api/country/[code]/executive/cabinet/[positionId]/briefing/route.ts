@@ -817,23 +817,27 @@ export async function GET(_request: Request, { params }: RouteParams) {
               { projection: { _id: 1, name: 1, policyOptions: 1 } }
             )
             .toArray();
-    const departmentFinances = departmentDefinitions.map((definition) => {
-      const departmentName = resolveDepartmentDefinitionName(definition, liveYear);
-      return cabinetV2
-        ? buildResetDepartmentFinanceReadModel({
-            definition,
-            departmentName,
-            account: resetAccountById.get(definition.id),
-            currentPrograms: currentResetLawPrograms,
-          })
-        : buildDepartmentFinanceReadModel({
-            enabled: true,
-            definition,
-            departmentName,
-            account: budget?.departmentAccounts?.[definition.id],
-            legislationTypes: departmentLegislationTypes,
-          });
-    });
+    // An office with no law portfolio (such as the Chief of Staff) has no department
+    // account to show, so the Allocations tab and its panel are omitted for it.
+    const departmentFinances = departmentDefinitions
+      .filter((definition) => !cabinetV2 || definition.portfolioIds.length > 0)
+      .map((definition) => {
+        const departmentName = resolveDepartmentDefinitionName(definition, liveYear);
+        return cabinetV2
+          ? buildResetDepartmentFinanceReadModel({
+              definition,
+              departmentName,
+              account: resetAccountById.get(definition.id),
+              currentPrograms: currentResetLawPrograms,
+            })
+          : buildDepartmentFinanceReadModel({
+              enabled: true,
+              definition,
+              departmentName,
+              account: budget?.departmentAccounts?.[definition.id],
+              legislationTypes: departmentLegislationTypes,
+            });
+      });
 
     return NextResponse.json({
       // Gates the Treasury-tab "Fund Geological Survey" action (per-surface flag

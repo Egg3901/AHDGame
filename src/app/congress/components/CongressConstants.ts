@@ -49,8 +49,7 @@ export const STATUS_LABELS: Record<string, string> = {
 };
 
 export type ChamberTab = "senate" | "house";
-export type PageTab =
-  "composition" | "bills" | "leadership" | "tariffs" | "subsidies" | "contracts";
+export type PageTab = "composition" | "bills" | "leadership" | "tariffs" | "subsidies";
 export type SenateClassFilter = 0 | 1 | 2 | 3;
 
 /** Convert senate class number (1-3) to Roman numeral (I, II, III) */

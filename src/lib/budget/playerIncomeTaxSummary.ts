@@ -58,8 +58,11 @@ export async function loadPlayerIncomeTaxSummary(
       (sum, record) =>
         sum +
         (record.status === "unpaid"
-          ? (record.federal + record.regional) /
-            (rates?.[record.currency as CurrencyCode] ?? record.sourceFx)
+          ? incomeTaxDebtAnchor(
+              record.federal + record.regional,
+              record.sourceFx,
+              rates?.[record.currency as CurrencyCode]
+            )
           : 0),
       0
     ),
