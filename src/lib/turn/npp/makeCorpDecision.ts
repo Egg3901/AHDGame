@@ -68,6 +68,14 @@ import { advanceStrategy, type StrategySituation } from "@/lib/turn/npp/corpStra
 import { memoizeOnce } from "@/lib/turn/npp/rules/strategyCadence";
 import { existingPlantGrowthStep, existingPlantGrowthUnits } from "./rules/existingPlantGrowth";
 import {
+  AUTOPILOT_CAPEX_SIZING_SLACK,
+  AUTOPILOT_GROWTH_STEP_OF_RUN,
+  AUTOPILOT_MAX_INFLIGHT_GROWTH_STEPS,
+  autopilotBoundGrowthUnits,
+  autopilotCapexBudgetLocal,
+  evaluateAutopilotGrowthGate,
+} from "./rules/autopilotReinvest";
+import {
   allowsNppIndustryInvestment,
   isNppDivestmentProtected,
 } from "./rules/investmentProtection";
@@ -1136,6 +1144,13 @@ export function makeNppCorpDecision(
     const poolFor = createReinvestPoolLookup(unownedByCountry);
 
     const candidates: ReinvestCandidate[] = [];
+    // Autopilot commits at most a fixed share of cash above the floor to new
+    // capacity per turn, spread over candidates in ranking order. NPP corps
+    // are unbounded here (their own rails apply).
+    const autopilotCapexBudgetTurn = autopilot
+      ? autopilotCapexBudgetLocal(cashLocal, effectiveCashFloor)
+      : Number.POSITIVE_INFINITY;
+    let autopilotCapexSpent = 0;
     // `plants` narrowing does not persist into the pool callback below.
     const plantsEraUnitScale = plants.eraUnitScale;
     // Observation for one evaluated reinvestment candidate; see
@@ -1349,7 +1364,8 @@ export function makeNppCorpDecision(
         0
       );
       const canGrow =
-        (sp.isProfitable || criticalShortage) &&
+        // Autopilot never grows on a shortage alone: the plant must already earn.
+        (sp.isProfitable || (criticalShortage && !autopilot)) &&
         levers.allowGrowthCapex &&
         !(ctx.retailExpansionPaused && sector.sectorType === "retail") &&
         stateShortage > NPP_GROWTH_MIN_SHORTAGE &&
@@ -1390,26 +1406,35 @@ export function makeNppCorpDecision(
         : 0;
       // A firm behind a dominant sector leader deploys more of its surplus and
       // steps faster. The leader and healthy sectors read 1, so nothing slows.
-      const challengerPull = Math.max(
-        1,
-        ctx.challengerBoostOf?.(sector.sectorType, corp._id.toString()) ?? 1
-      );
-      const growthBudgetLocal =
-        Math.max(0, cashLocal - effectiveCashFloor) *
-        Math.min(1, NPP_GROWTH_DEPLOY_FRACTION * challengerPull);
+      // Autopilot is a hands-off owner's money: no catch-up boost.
+      const challengerPull = autopilot
+        ? 1
+        : Math.max(1, ctx.challengerBoostOf?.(sector.sectorType, corp._id.toString()) ?? 1);
+      const growthBudgetLocal = autopilot
+        ? autopilotCapexBudgetTurn * AUTOPILOT_CAPEX_SIZING_SLACK
+        : Math.max(0, cashLocal - effectiveCashFloor) *
+          Math.min(1, NPP_GROWTH_DEPLOY_FRACTION * challengerPull);
       // Demand anchor: grow by at most this share of proven throughput a turn
       // (at least one unit for demand-side sectors), not the whole treasury
       // at once. Extraction growth is additionally scaled by finite deposit
       // headroom and never floors up to a facility when the deposit cannot
       // support one.
-      const growthStepOfRun = Math.min(1, NPP_GROWTH_MAX_STEP_OF_RUN * challengerPull);
+      const growthStepOfRun = autopilot
+        ? AUTOPILOT_GROWTH_STEP_OF_RUN
+        : Math.min(1, NPP_GROWTH_MAX_STEP_OF_RUN * challengerPull);
       const growthStepUnits =
         sector.sectorType === "extraction"
           ? Math.floor(runUnits * growthStepOfRun * extractionHeadroom)
           : existingPlantGrowthStep(runUnits, growthStepOfRun);
       const growthCapUnits = Math.min(
         growthStepUnits,
-        Math.floor(growthStepUnits * NPP_REINVEST_MAX_GROWTH_QUEUE_DEPTH - pendingUnits)
+        Math.floor(
+          growthStepUnits *
+            (autopilot
+              ? AUTOPILOT_MAX_INFLIGHT_GROWTH_STEPS
+              : NPP_REINVEST_MAX_GROWTH_QUEUE_DEPTH) -
+            pendingUnits
+        )
       );
       // Existing-site top-ups use the player's one-unit minimum. Keep the
       // throughput step, in-flight ceiling and protected cash reserve; a full
@@ -1424,17 +1449,47 @@ export function makeNppCorpDecision(
               )
             )
           : 0;
-      const growthUnits = existingPlantGrowthUnits(affordableGrowthUnits, growthCapUnits);
+      let growthUnits = existingPlantGrowthUnits(affordableGrowthUnits, growthCapUnits);
+      // Autopilot builds only where the plant already earns, the market has
+      // room and the order repays itself; a refused growth leg still lets the
+      // replacement leg through.
+      let autopilotGate: ReturnType<typeof evaluateAutopilotGrowthGate> = null;
+      if (autopilot && growthUnits > 0) {
+        growthUnits = autopilotBoundGrowthUnits(growthUnits, headroomUnits);
+        autopilotGate = evaluateAutopilotGrowthGate({
+          sectorProfitLocal: sectorEconomicToCorpLocal(sp.income, sector),
+          operatingCapacityUnits: productionCapacity,
+          corpEarningsLocal: totalIncome,
+          growthUnits,
+          growthCostLocal: perUnitGrowthLocal * growthUnits,
+          demandHeadroomUnits: headroomUnits,
+        });
+        if (autopilotGate) {
+          growthUnits = 0;
+          // Recorded even when the replacement leg still places, so a refused
+          // growth leg is never invisible in the capacity funnel.
+          observeReinvestCandidate(
+            autopilotGate,
+            sector,
+            capitalStock,
+            headroomUnits,
+            replacementUnits,
+            null
+          );
+        }
+      }
       const units = replacementUnits + growthUnits;
       if (!(units > 0)) {
-        observeReinvestCandidate(
-          "below_minimum_order",
-          sector,
-          capitalStock,
-          headroomUnits,
-          units,
-          null
-        );
+        if (!autopilotGate) {
+          observeReinvestCandidate(
+            "below_minimum_order",
+            sector,
+            capitalStock,
+            headroomUnits,
+            units,
+            null
+          );
+        }
         continue;
       }
 
@@ -1523,6 +1578,25 @@ export function makeNppCorpDecision(
         );
         continue;
       }
+      // Autopilot's per-turn capex ceiling, shared by every growth order in
+      // ranking order. A refused order frees the budget for the next candidate.
+      if (
+        autopilot &&
+        candidate.growthUnits > 0 &&
+        autopilotCapexSpent + costLocal > autopilotCapexBudgetTurn
+      ) {
+        observePricedReinvestCandidate(
+          "autopilot_capex_cap",
+          sector,
+          capitalStock,
+          candidate.headroomUnits,
+          units,
+          costAnchor,
+          reinvestPrice.dominanceMultiplier,
+          cashToAnchor(cashLocal)
+        );
+        continue;
+      }
       const affordable =
         candidate.growthUnits > 0
           ? cashLocal - costLocal >= effectiveCashFloor
@@ -1591,6 +1665,7 @@ export function makeNppCorpDecision(
       // for it. (Market share stays well-defined: owned capacity rises, so the
       // owner's share of owned+headroom rises, without touching the pool.)
       cashLocal -= costLocal;
+      autopilotCapexSpent += costLocal;
       reinvestments.push({
         sectorId: sector._id,
         sectorType: sector.sectorType,
