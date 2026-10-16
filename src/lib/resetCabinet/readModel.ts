@@ -27,12 +27,7 @@ export function buildResetDepartmentFinanceReadModel(input: {
       departmentName,
       kind: definition.kind,
       accountPolicyId: definition.accountPolicyId,
-      // An office with no law portfolio has nothing to fund by design, whether or
-      // not its zero-value account has been written into this world yet.
-      explanation:
-        definition.portfolioIds.length === 0
-          ? ZERO_BUDGET_OFFICE_EXPLANATION
-          : "This world has no verified v2 account for the department.",
+      explanation: "This world has no verified v2 account for the department.",
       programs: [],
     };
   }
