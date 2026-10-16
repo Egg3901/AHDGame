@@ -20,9 +20,12 @@ vi.mock("@/lib/financialTxLog/emit", () => ({
   emitTx: vi.fn(),
 }));
 
+vi.mock("@sentry/nextjs", () => ({ captureMessage: vi.fn() }));
+
+import * as Sentry from "@sentry/nextjs";
 import { executeShareFillMoneyFlow } from "./shareFillMoney";
 import {
-  reconcileTotalSharesAfterFill,
+  checkTotalSharesAfterFill,
   emitSellerFundProceedsRow,
   settleBuyOrderFill,
 } from "./fillShareOrderSettlement";
@@ -383,7 +386,44 @@ describe("settleBuyOrderFill — fund buy order (peer fill) moves no fund cash",
   });
 });
 
-describe("reconcileTotalSharesAfterFill reservation accounting", () => {
+describe("checkTotalSharesAfterFill reservation accounting", () => {
+  beforeEach(() => {
+    vi.mocked(Sentry.captureMessage).mockClear();
+  });
+
+  it("never shrinks issued shares while a sell reservation is half written", async () => {
+    const store = createInMemoryDb();
+    const database = store as unknown as Db;
+    const corporationId = new ObjectId();
+    const seller = new ObjectId();
+    store.seed("corporations", [
+      {
+        _id: corporationId,
+        totalShares: 100,
+        publicFloat: 10,
+        shareholders: [
+          { characterId: seller, shares: 60 },
+          { characterId: new ObjectId(), shares: 30 },
+        ],
+      },
+    ]);
+    // Placement debits the seller before inserting the order, and a peer fill
+    // checks the invariant in between.
+    await debitShares(database, corporationId, seller, 60);
+    await checkTotalSharesAfterFill(database, corporationId);
+    expect(
+      (await store.collection("corporations").findOne({ _id: corporationId }))?.totalShares
+    ).toBe(100);
+    // The order is later cancelled and the reservation returns to the seller.
+    await creditShares(database, corporationId, seller, 60);
+    const corp = await store.collection("corporations").findOne({ _id: corporationId });
+    const holderSum = (corp?.shareholders as { shares: number }[]).reduce(
+      (sum, holder) => sum + holder.shares,
+      0
+    );
+    expect(holderSum + (corp?.publicFloat as number)).toBe(corp?.totalShares);
+  });
+
   it.each([true, false, undefined])(
     "preserves issued shares in a world with character flag %s",
     async (flag) => {
@@ -444,18 +484,25 @@ describe("reconcileTotalSharesAfterFill reservation accounting", () => {
           sharesRemaining: 500,
         },
       ]);
-      await reconcileTotalSharesAfterFill(store as unknown as Db, corporationId);
+      await checkTotalSharesAfterFill(store as unknown as Db, corporationId);
       expect(
         (await store.collection("corporations").findOne({ _id: corporationId }))?.totalShares
       ).toBe(100);
-      // Also exercise the correction write, not just its no-op branch.
+      expect(Sentry.captureMessage).not.toHaveBeenCalled();
+      // Drift is reported, never written back.
       await store
         .collection("corporations")
         .updateOne({ _id: corporationId }, { $set: { totalShares: 1 } });
-      await reconcileTotalSharesAfterFill(store as unknown as Db, corporationId);
+      await checkTotalSharesAfterFill(store as unknown as Db, corporationId);
       expect(
         (await store.collection("corporations").findOne({ _id: corporationId }))?.totalShares
-      ).toBe(100);
+      ).toBe(1);
+      expect(Sentry.captureMessage).toHaveBeenCalledWith(
+        "share fill invariant drift",
+        expect.objectContaining({
+          extra: expect.objectContaining({ totalShares: 1, accounted: 100 }),
+        })
+      );
     }
   );
 
@@ -470,7 +517,7 @@ describe("reconcileTotalSharesAfterFill reservation accounting", () => {
         shareholders: [{ characterId: new ObjectId(), shares: 100 }],
       },
     ]);
-    await reconcileTotalSharesAfterFill(store as unknown as Db, corporationId);
+    await checkTotalSharesAfterFill(store as unknown as Db, corporationId);
     expect(
       (await store.collection("corporations").findOne({ _id: corporationId }))?.totalShares
     ).toBe(100);
@@ -518,7 +565,7 @@ describe("reservation transition conservation", () => {
         },
       ]);
       const expectConserved = async () => {
-        await reconcileTotalSharesAfterFill(database, corporationId);
+        await checkTotalSharesAfterFill(database, corporationId);
         expect(
           (await store.collection("corporations").findOne({ _id: corporationId }))?.totalShares
         ).toBe(100);

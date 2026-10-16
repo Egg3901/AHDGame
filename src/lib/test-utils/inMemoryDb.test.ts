@@ -4,6 +4,26 @@ import { plantCapacityDeltaPipeline } from "@/lib/corporations/plantLedger";
 import { plantSizeUnits } from "@/lib/constants/facilityQuantum";
 
 describe("inMemoryDb document paths", () => {
+  it("compares string cursor keys lexically without matching numeric fields", async () => {
+    const db = createInMemoryDb();
+    db.seed("cursorRows", [{ _id: "tax:1" }, { _id: "tax:2" }, { _id: "tax:3" }, { _id: 2 }]);
+    expect(
+      (
+        await db
+          .collection("cursorRows")
+          .find({ _id: { $gt: "tax:1", $lte: "tax:2" } })
+          .toArray()
+      ).map((row) => row._id)
+    ).toEqual(["tax:2"]);
+    expect(
+      (
+        await db
+          .collection("cursorRows")
+          .find({ _id: { $gte: "tax:2", $lt: "tax:3" } })
+          .toArray()
+      ).map((row) => row._id)
+    ).toEqual(["tax:2"]);
+  });
   it("upserts a capacity pipeline and replays it against the same identity", async () => {
     const db = createInMemoryDb();
     const filter = { stateId: "US-CA", sectorType: "manufacturing", mediaDiscriminator: null };

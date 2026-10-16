@@ -159,13 +159,29 @@ function matchesCondition(value: unknown, condition: unknown): boolean {
           case "$ne":
             return !equalsAny(value, operand);
           case "$gte":
-            return typeof value === "number" && value >= (operand as number);
+            return (
+              ((typeof value === "number" && typeof operand === "number") ||
+                (typeof value === "string" && typeof operand === "string")) &&
+              value >= operand
+            );
           case "$gt":
-            return typeof value === "number" && value > (operand as number);
+            return (
+              ((typeof value === "number" && typeof operand === "number") ||
+                (typeof value === "string" && typeof operand === "string")) &&
+              value > operand
+            );
           case "$lte":
-            return typeof value === "number" && value <= (operand as number);
+            return (
+              ((typeof value === "number" && typeof operand === "number") ||
+                (typeof value === "string" && typeof operand === "string")) &&
+              value <= operand
+            );
           case "$lt":
-            return typeof value === "number" && value < (operand as number);
+            return (
+              ((typeof value === "number" && typeof operand === "number") ||
+                (typeof value === "string" && typeof operand === "string")) &&
+              value < operand
+            );
           case "$in":
             return (operand as unknown[]).some((o) => equalsAny(value, o));
           case "$elemMatch":

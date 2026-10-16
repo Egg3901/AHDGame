@@ -5,7 +5,7 @@ import type { Corporation, ShareOrder } from "@/lib/db/types";
 
 const settlementMocks = vi.hoisted(() => ({
   settleBuyOrderFill: vi.fn(),
-  reconcileTotalSharesAfterFill: vi.fn(),
+  checkTotalSharesAfterFill: vi.fn(),
 }));
 vi.mock("./fillShareOrderSettlement", () => settlementMocks);
 vi.mock("@/lib/corporations/shareTradeHistory", () => ({ recordShareTrade: vi.fn() }));
@@ -17,7 +17,7 @@ beforeEach(() => {
   db = createMockDb();
   vi.clearAllMocks();
   settlementMocks.settleBuyOrderFill.mockResolvedValue(null);
-  settlementMocks.reconcileTotalSharesAfterFill.mockResolvedValue(undefined);
+  settlementMocks.checkTotalSharesAfterFill.mockResolvedValue(undefined);
 });
 
 function corporation(id: ObjectId): Corporation {

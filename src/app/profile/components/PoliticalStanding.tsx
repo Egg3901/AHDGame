@@ -36,6 +36,15 @@ interface PoliticalStandingProps {
   partyInfluenceMaxBonus?: number;
   /** Net party influence gain/loss per turn */
   partyInfluenceNetGain?: number;
+  /** Per-turn sources behind the party influence change, from the turn formula inputs. */
+  partyInfluenceBreakdown?: {
+    fromAlignment: number;
+    fromLeadership: number;
+    infamyPenalty: number;
+    decay: number;
+  };
+  /** Per-turn sources behind the national influence change. */
+  nationalBreakdown?: { fromStateInfluence: number; fromPosition: number; decay: number };
   /** Character's share of total party influence (0-100%) */
   partyInfluenceShare?: number;
   /** Whether this is the viewer's own profile; controls Campaign Office link visibility */
@@ -63,6 +72,9 @@ const TONE_CLASS: Record<Tone, string> = {
 
 const MINUS = "−";
 
+/** Rows whose per-turn change can be tapped to see where the gain comes from. */
+const GAIN_TOOLTIP_ROWS = new Set(["actions", "national", "party"]);
+
 /** Signed per-turn change, coloured by direction; zero reads as neutral. */
 function signedChange(value: number, digits: number): { text: string; tone: Tone } {
   const magnitude = Math.abs(value).toFixed(digits);
@@ -70,6 +82,24 @@ function signedChange(value: number, digits: number): { text: string; tone: Tone
   return value > 0
     ? { text: `+${magnitude}`, tone: "gain" }
     : { text: `${MINUS}${magnitude}`, tone: "loss" };
+}
+
+function BreakdownLine({
+  label,
+  amount,
+  digits,
+}: {
+  label: string;
+  amount: number;
+  digits: number;
+}) {
+  const change = signedChange(amount, digits);
+  return (
+    <div className="flex justify-between gap-3 tabular-nums">
+      <span>{label}</span>
+      <span className={TONE_CLASS[change.tone]}>{change.text}</span>
+    </div>
+  );
 }
 
 /** Per-source action breakdown shown in the Actions tooltip. */
@@ -162,6 +192,8 @@ export function PoliticalStanding({
   bonusActionsFromParty,
   partyInfluenceMaxBonus,
   partyInfluenceNetGain,
+  partyInfluenceBreakdown,
+  nationalBreakdown,
   partyInfluenceShare,
   isOwnProfile = true,
 }: PoliticalStandingProps) {
@@ -220,7 +252,37 @@ export function PoliticalStanding({
     {
       key: "national",
       label: t("nationalInfluence"),
-      tooltip: <p>{t("nationalTooltip")}</p>,
+      tooltip: (
+        <>
+          <p>{t("nationalTooltip")}</p>
+          {nationalBreakdown && (
+            <div className="space-y-0.5 border-t border-card-border/30 pt-1">
+              <BreakdownLine
+                label={t("nationalFromState")}
+                amount={nationalBreakdown.fromStateInfluence}
+                digits={2}
+              />
+              {nationalBreakdown.fromPosition > 0 && (
+                <BreakdownLine
+                  label={t("nationalFromPosition")}
+                  amount={nationalBreakdown.fromPosition}
+                  digits={2}
+                />
+              )}
+              <BreakdownLine
+                label={t("nationalDecay")}
+                amount={-nationalBreakdown.decay}
+                digits={2}
+              />
+              <BreakdownLine
+                label={t("netPerTurn")}
+                amount={Number(nationalGainPerTurn)}
+                digits={2}
+              />
+            </div>
+          )}
+        </>
+      ),
       value: nationalInfluence.toFixed(1),
       perTurn: nationalChange.text,
       perTurnTone: nationalChange.tone,
@@ -259,6 +321,35 @@ export function PoliticalStanding({
       tooltip: (
         <>
           <p>{t("partyInfluenceTooltip")}</p>
+          {partyInfluenceBreakdown && partyInfluenceNetGain != null && (
+            <div className="space-y-0.5 border-t border-card-border/30 pt-1">
+              <BreakdownLine
+                label={t("partyFromAlignment")}
+                amount={partyInfluenceBreakdown.fromAlignment}
+                digits={1}
+              />
+              {partyInfluenceBreakdown.fromLeadership > 0 && (
+                <BreakdownLine
+                  label={t("partyFromLeadership")}
+                  amount={partyInfluenceBreakdown.fromLeadership}
+                  digits={1}
+                />
+              )}
+              {partyInfluenceBreakdown.infamyPenalty > 0 && (
+                <BreakdownLine
+                  label={t("partyInfamyPenalty")}
+                  amount={-partyInfluenceBreakdown.infamyPenalty}
+                  digits={1}
+                />
+              )}
+              <BreakdownLine
+                label={t("partyDecay")}
+                amount={-partyInfluenceBreakdown.decay}
+                digits={1}
+              />
+              <BreakdownLine label={t("netPerTurn")} amount={partyInfluenceNetGain} digits={1} />
+            </div>
+          )}
           {bonusActionsFromParty != null && (
             <p>
               {t("partyBonusEarning", {
@@ -317,7 +408,9 @@ export function PoliticalStanding({
               <th scope="row" className="py-3 pr-3 text-left align-baseline">
                 <InfoTooltip
                   trigger={
-                    <span className="text-[15px] font-medium text-foreground">{row.label}</span>
+                    <span className="text-[15px] font-medium text-foreground underline decoration-dotted decoration-muted/60 underline-offset-4">
+                      {row.label}
+                    </span>
                   }
                 >
                   <div className="space-y-1 text-muted">{row.tooltip}</div>
@@ -336,7 +429,21 @@ export function PoliticalStanding({
               <td
                 className={`whitespace-nowrap py-3 pl-3 text-right align-baseline text-body tabular-nums md:pr-3 ${TONE_CLASS[row.perTurnTone]}`}
               >
-                {row.perTurn}
+                {row.perTurn != null && GAIN_TOOLTIP_ROWS.has(row.key) ? (
+                  <InfoTooltip
+                    trigger={
+                      <span
+                        className={`underline decoration-dotted underline-offset-4 ${TONE_CLASS[row.perTurnTone]}`}
+                      >
+                        {row.perTurn}
+                      </span>
+                    }
+                  >
+                    <div className="space-y-1 text-muted">{row.tooltip}</div>
+                  </InfoTooltip>
+                ) : (
+                  row.perTurn
+                )}
               </td>
               <td
                 className={`hidden py-3 pl-6 align-baseline text-[13px] md:table-cell ${TONE_CLASS[row.noteTone]}`}
