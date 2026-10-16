@@ -325,6 +325,8 @@ Aggressive policy maximizes revenue and commodity throughput but also raises inp
 
 Your corporation's Overview has an **Autopilot** switch. You stay CEO and can still act by hand. Each turn, while it is on, autopilot sets the marketing, logistics and R&D budgets and the dividend, grows plants that are selling, pauses plants stuck in a glut, and opens new plants when there is spare cash. Budgets and dividends you set by hand are reset the next turn.
 
+Autopilot reinvests slowly. Each turn it commits at most 15% of the cash above the corporation's reserve to new capacity, adds at most 5% to any one plant, and keeps only one growth order in flight per plant. It builds only where the plant made a profit last turn, sells nearly everything it makes, the market has room for more, the corporation's earnings are positive, and the extra output should repay the build within 30 turns of coming online. Turning it on asks you to confirm, and the Overview shows what it may spend, with a button to turn it off.
+
 It never borrows, picks research, retools, sells or closes plants, or buys rivals. When one of those is worth doing, it lists it on the Overview, and urgent items also arrive in your inbox. A corporation on autopilot is not penalised for an inactive CEO, but its CEO's national influence is capped at the standard rate rather than the higher top-listed-company rate. Appointing an NPP caretaker switches autopilot off.
 
 ### Simple and Pro views
