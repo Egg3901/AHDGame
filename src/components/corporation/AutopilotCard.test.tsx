@@ -40,8 +40,28 @@ describe("AutopilotCard", () => {
     renderCard();
     expect(screen.getByText(/never borrows/i)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Turn on" }));
+    // Nothing is sent until the owner has read the spending warning.
+    expect(screen.getByText(/may spend part of the corporation/i)).toBeTruthy();
+    expect(fetch).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Turn on autopilot" }));
     await waitFor(() => expect(onRefresh).toHaveBeenCalled());
     expect(fetch).toHaveBeenCalledWith("/api/corporations/446/autopilot", { method: "POST" });
+  });
+
+  it("lets the owner back out of the spending warning", () => {
+    renderCard();
+    fireEvent.click(screen.getByRole("button", { name: "Turn on" }));
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(fetch).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Turn on" })).toBeTruthy();
+  });
+
+  it("shows what autopilot may spend and a way to turn it off while on", async () => {
+    renderCard({ autopilot: { enabledTurn: 100, advisories: [] } });
+    expect(screen.getByText(/may spend up to 15%/i)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Turn off autopilot" }));
+    await waitFor(() => expect(onRefresh).toHaveBeenCalled());
+    expect(fetch).toHaveBeenCalledWith("/api/corporations/446/autopilot", { method: "DELETE" });
   });
 
   it("lists what autopilot leaves to the owner, with a way to act on each", () => {

@@ -46,7 +46,8 @@ export type CapacityDecisionStage = "quote" | "order";
  * The first five are the player build route's historical outcomes. The rest
  * are first-rejecting gates, in evaluation order within each path (see
  * FOUNDING_GATE_PRECEDENCE / REINVEST_GATE_PRECEDENCE): at most one is
- * recorded per candidate, the earliest gate that rejected it.
+ * recorded per candidate, the earliest gate that rejected it (autopilot growth
+ * gates are the one exception: they may accompany a placed replacement leg).
  */
 export type CapacityDecisionOutcome =
   | "quoted"
@@ -72,7 +73,11 @@ export type CapacityDecisionOutcome =
   | "fill_below_min"
   | "state_controlled"
   | "property_unavailable"
-  | "below_minimum_order";
+  | "below_minimum_order"
+  | "autopilot_unprofitable"
+  | "autopilot_no_payback"
+  | "autopilot_demand_headroom"
+  | "autopilot_capex_cap";
 
 /** Gates evaluated on the NPP founding path, earliest first. */
 export type FoundingCapacityGate = Extract<
@@ -103,6 +108,10 @@ export type ReinvestCapacityGate = Extract<
   | "state_controlled"
   | "property_unavailable"
   | "below_minimum_order"
+  | "autopilot_unprofitable"
+  | "autopilot_no_payback"
+  | "autopilot_demand_headroom"
+  | "autopilot_capex_cap"
   | "insufficient_cash"
 >;
 
