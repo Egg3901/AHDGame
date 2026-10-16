@@ -28,6 +28,8 @@ import { rollDivergentDeparture } from "@/lib/scotus/tenure";
 import { generateScotusVacancyNews } from "@/lib/scotus/scotusNews";
 import { createNotifications, type NotificationInput } from "@/lib/notifications";
 import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
+import { awardAchievement } from "@/lib/achievements";
+import { SCOTUS_DIED_IN_OFFICE_SLUG } from "@/lib/scotus/achievementDefinitions";
 
 export interface ScotusTenureTurnResult {
   seatsAdvanced: number;
@@ -95,6 +97,13 @@ async function notifySeatVacated(
         .collection<Character>("characters")
         .findOne({ _id: seat.justiceCharacterId }, { projection: { userId: 1 } });
       if (occupant?.userId) {
+        if (cause === "death") {
+          await awardAchievement(
+            occupant.userId,
+            SCOTUS_DIED_IN_OFFICE_SLUG,
+            seat.justiceCharacterId
+          );
+        }
         notifiedUserIds.add(occupant.userId.toString());
         notifications.push({
           userId: occupant.userId,

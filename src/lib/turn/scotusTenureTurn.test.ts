@@ -6,6 +6,7 @@ import { DIVERGENT_TENURE_FLOOR_TURNS } from "@/lib/scotus/tenure";
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 vi.mock("@/lib/gameState", () => ({ getGameState: vi.fn() }));
 vi.mock("@/lib/notifications", () => ({ createNotifications: vi.fn() }));
+vi.mock("@/lib/achievements", () => ({ awardAchievement: vi.fn().mockResolvedValue(true) }));
 vi.mock("@/lib/scotus/scotusNews", () => ({
   generateScotusVacancyNews: vi.fn().mockResolvedValue(undefined),
 }));
@@ -426,6 +427,12 @@ describe("processScotusTenureTurn", () => {
       justiceName: "Lyndon B. Johnson",
       cause: "death",
     });
+    const { awardAchievement } = await import("@/lib/achievements");
+    expect(awardAchievement).toHaveBeenCalledWith(
+      occupantUserId,
+      "died_in_office_justice",
+      occupantCharId
+    );
     expect(createNotifications).toHaveBeenCalledWith([
       expect.objectContaining({
         userId: occupantUserId,
