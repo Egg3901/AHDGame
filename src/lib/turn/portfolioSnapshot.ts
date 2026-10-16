@@ -1,3 +1,7 @@
+import {
+  holdingMarketValues,
+  holdingMarketSnapshotValues,
+} from "@/lib/corporations/rules/holdingTerms";
 import { loadUnpaidIncomeTaxByCharacter } from "@/lib/budget/playerIncomeTaxSummary";
 import { personalNetWorth } from "@/lib/portfolio/rules/netWorth";
 import type { ObjectId } from "mongodb";
@@ -34,7 +38,10 @@ import { computeCorporationLiabilityValueAnchor } from "@/lib/corporations/netWo
  * end-of-turn state rather than an intraturn partial.
  * Stores gross/net totals and breakdown values (stocks, bonds, cash, LOC debt).
  */
-export async function snapshotPortfolioValues(turn: number): Promise<number> {
+export async function snapshotPortfolioValues(
+  turn: number,
+  stockHoldingTaxStartTurn?: number
+): Promise<number> {
   const db = await getDb();
   const now = new Date();
   const forexEnabled = await isForexEnabled();
@@ -145,6 +152,11 @@ export async function snapshotPortfolioValues(turn: number): Promise<number> {
     });
   }
 
+  const stockTermValues = new Map<
+    string,
+    { shortTermStockValue: number; longTermStockValue: number }
+  >();
+  const trackTerms = stockHoldingTaxStartTurn !== undefined && turn >= stockHoldingTaxStartTurn;
   // Stock and bond values are each stored in their own local currency
   // (v0.2.6); sum each contribution as ₳ so a character's portfolioHistory
   // totals compare apples-to-apples across different asset currencies.
@@ -156,6 +168,21 @@ export async function snapshotPortfolioValues(turn: number): Promise<number> {
       if (!charId) continue;
       const stockValueLocal = sh.shares * price;
       const stockValue = corpLiquidCapitalToAnchor(stockValueLocal, corp, corpFxRate);
+      if (trackTerms) {
+        const bucket = holdingMarketValues(
+          sh,
+          turn,
+          corpLiquidCapitalToAnchor(price, corp, corpFxRate)
+        );
+        const previous = stockTermValues.get(charId) ?? {
+          shortTermStockValue: 0,
+          longTermStockValue: 0,
+        };
+        stockTermValues.set(charId, {
+          shortTermStockValue: previous.shortTermStockValue + bucket.shortTermStockValue,
+          longTermStockValue: previous.longTermStockValue + bucket.longTermStockValue,
+        });
+      }
       const existing = portfolioMap.get(charId) ?? {
         totalValue: 0,
         netValue: 0,
@@ -298,6 +325,12 @@ export async function snapshotPortfolioValues(turn: number): Promise<number> {
         ) / 100,
       incomeTaxDebtValue: incomeTaxDebts.get(charId) ?? 0,
       stockValue: Math.round(values.stockValue * 100) / 100,
+      ...(trackTerms
+        ? holdingMarketSnapshotValues(
+            values.stockValue,
+            stockTermValues.get(charId)?.shortTermStockValue ?? 0
+          )
+        : {}),
       bondValue: Math.round(values.bondValue * 100) / 100,
       fundValue: Math.round(values.fundValue * 100) / 100,
       cashValue: Math.round(values.cashValue * 100) / 100,

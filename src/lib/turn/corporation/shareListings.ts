@@ -1,5 +1,9 @@
 import { ObjectId } from "mongodb";
-import type { Db } from "mongodb";
+import {
+  matureHoldingTerms,
+  SHORT_TERM_HOLDING_TURNS,
+} from "@/lib/corporations/rules/holdingTerms";
+import type { Db, AnyBulkWriteOperation } from "mongodb";
 import type {
   Character,
   Corporation,
@@ -32,15 +36,48 @@ export async function expireShareListings(db: Db, now: Date, currentTurn: number
   // listings created before `expiresAtTurn` existed.
   const expiryFilter = {
     status: "open" as const,
+    activeShareFillKey: { $exists: false },
     $or: [
       { expiresAtTurn: { $lte: currentTurn } },
       { expiresAtTurn: { $exists: false }, expiresAt: { $lte: now } },
     ],
   };
-  const expiredListings = await db
+  const candidates = await db
     .collection<ShareListing>("shareListings")
-    .find(expiryFilter)
+    .find({
+      status: "open",
+      activeShareFillKey: { $exists: false },
+      $or: [
+        ...expiryFilter.$or,
+        {
+          "holdingTerms.shortTermLots.acquiredTurn": {
+            $lte: currentTurn - SHORT_TERM_HOLDING_TURNS,
+          },
+        },
+      ],
+    })
     .toArray();
+  const expiredListings = candidates.filter((listing) =>
+    listing.expiresAtTurn !== undefined
+      ? listing.expiresAtTurn <= currentTurn
+      : listing.expiresAt <= now
+  );
+  const maturationOps: AnyBulkWriteOperation<ShareListing>[] = candidates
+    .filter((listing) => !expiredListings.includes(listing) && listing.holdingTerms)
+    .map((listing) => ({
+      updateOne: {
+        filter: {
+          _id: listing._id,
+          status: "open",
+          activeShareFillKey: { $exists: false },
+          sharesRemaining: listing.sharesRemaining,
+          holdingTerms: listing.holdingTerms,
+        },
+        update: { $set: { holdingTerms: matureHoldingTerms(listing.holdingTerms!, currentTurn) } },
+      },
+    }));
+  if (maturationOps.length)
+    await db.collection<ShareListing>("shareListings").bulkWrite(maturationOps);
 
   if (expiredListings.length === 0) return;
 
@@ -288,6 +325,24 @@ export async function expireShareListings(db: Db, now: Date, currentTurn: number
         { $set: { updatedAt: now } }
       );
     } else {
+      if (listing.holdingTerms) {
+        const restored = await creditShares(
+          db,
+          listing.corporationId,
+          listing.sellerCharacterId,
+          listing.sharesRemaining,
+          { $set: { updatedAt: now } },
+          {
+            holdingChange: {
+              turn: currentTurn,
+              restore: listing.holdingTerms,
+              trackingEnabled: true,
+            },
+          }
+        );
+        if (!restored) throw new Error("Expired stock holding could not be restored");
+        continue;
+      }
       const targetCorp = await db
         .collection<Corporation>("corporations")
         .findOne(

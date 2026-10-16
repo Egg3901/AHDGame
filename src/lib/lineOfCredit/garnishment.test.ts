@@ -1,3 +1,9 @@
+import {
+  garnishCorporationIncome,
+  emitCorporationTurnTx,
+} from "@/lib/turn/corporation/corporationTurnPhases";
+import { processPlayerIncomeTax } from "@/lib/budget/playerIncomeTax";
+import type { CorporationLookups } from "@/lib/turn/corporation/types";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ObjectId, type Db } from "mongodb";
 import type { CurrencyCode } from "@/lib/constants/currencies";
@@ -33,6 +39,88 @@ async function bind(db: ReturnType<typeof world>) {
 }
 describe("LOC accepted income event", () => {
   beforeEach(() => vi.clearAllMocks());
+  it("preserves tax treatment of short and long dividends diverted into debt repayment", async () => {
+    const memory = world(),
+      db = memory as unknown as Db;
+    await bind(memory);
+    await memory
+      .collection("characters")
+      .updateOne(
+        { _id: owner },
+        { $set: { homeState: "US_TEST", incomeTaxStartTurn: 1, incomeTier: "low" } }
+      );
+    memory.seed("federalBudget", [
+      {
+        _id: "federal",
+        countryId: "US",
+        currencyCode: "USD",
+        taxRates: {
+          incomeTaxLow: 30,
+          incomeTaxMiddle: 30,
+          incomeTaxHigh: 30,
+          capitalGainsTaxLow: 10,
+          capitalGainsTaxMiddle: 10,
+          capitalGainsTaxHigh: 10,
+        },
+        treasuryCashLocal: 0,
+        treasuryBalance: 0,
+      },
+    ]);
+    memory.seed("stateBudgets", [
+      {
+        _id: "US_TEST",
+        countryId: "US",
+        taxRates: {
+          incomeTax: 5,
+          capitalGainsTaxLow: 5,
+          capitalGainsTaxMiddle: 5,
+          capitalGainsTaxHigh: 5,
+        },
+        balance: 0,
+      },
+    ]);
+    memory.seed("macroMetrics", [{ _id: "US_TEST", economic: { medianIncome: { value: 1000 } } }]);
+    const combined = income(150),
+      dividends = income(50);
+    const taxable = await garnishCorporationIncome({
+      db,
+      charPayments: combined,
+      dividendPayments: dividends,
+      turn: 12,
+      stockTaxActive: true,
+    });
+    expect(dividends.size).toBe(0);
+    expect(taxable.get(owner.toHexString())?.get("USD")).toBe(50);
+    await emitCorporationTurnTx({
+      db,
+      lookups: {
+        corpById: new Map(),
+        exchangeRatesByCurrency: new Map([["USD", 1]]),
+      } as unknown as CorporationLookups,
+      corpSnapshots: [],
+      ceoSalaryPayments: income(100),
+      dividendPayments: taxable,
+      capitalDividendPayments: income(30),
+      dividendTaxPaidByCountry: new Map(),
+      turn: 12,
+      now: new Date(),
+      thresholds: {} as never,
+    });
+    await processPlayerIncomeTax(
+      db,
+      12,
+      new Date(),
+      { forexEnabled: true, stockHoldingTaxStartTurn: 0, resetWorldId: "synthetic" },
+      true
+    );
+    expect(
+      (await db.collection("characters").findOne({ _id: owner }))!.currencyBalances.personal.USD
+    ).toBe(4);
+    expect(
+      await db.collection("playerIncomeTaxAssessments").findOne({ taxKind: "capitalGains" })
+    ).toMatchObject({ gross: 30, federal: 3, regional: 1 });
+    expect((await db.collection("federalBudget").findOne({}))!.treasuryCashLocal).toBe(39);
+  });
   it("joins debt and residual payout, suppressing source bulk payout on first delivery and repeat", async () => {
     const db = world();
     await bind(db);

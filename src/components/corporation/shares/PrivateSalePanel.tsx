@@ -1,6 +1,12 @@
 "use client";
 
 import { useState, useCallback, useEffect } from "react";
+import {
+  availableHoldingShares,
+  type HoldingTerm,
+  type ShareHoldingTerms,
+} from "@/lib/corporations/rules/holdingTerms";
+import { HoldingTermSelector, HoldingTermSummary } from "./HoldingTermSelector";
 import Link from "next/link";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import { LocalTime } from "@/components/time/LocalTime";
@@ -20,6 +26,8 @@ interface ShareOfferData {
 }
 
 interface ShareListingData {
+  holdingTerms?: ShareHoldingTerms;
+  holdingTurn?: number;
   _id: string;
   sellerCharacterId: string;
   sellerName: string;
@@ -87,6 +95,17 @@ export default function PrivateSalePanel({
 
   // Create listing form
   const [listingShares, setListingShares] = useState(0);
+  const terms = corporation.shareholders.find(
+    (holder) => holder.characterId === myCharacterId
+  )?.holdingTerms;
+  const [requestedTerm, setRequestedTerm] = useState<HoldingTerm>("long");
+  const holdingTerm =
+    terms && !availableHoldingShares(terms, requestedTerm)
+      ? requestedTerm === "long"
+        ? "short"
+        : "long"
+      : requestedTerm;
+  const availableShares = terms ? availableHoldingShares(terms, holdingTerm) : myShares;
   const [ceoVacateConfirm, setCeoVacateConfirm] = useState<{ message: string } | null>(null);
 
   // Submit offer forms — keyed by listingId
@@ -116,6 +135,7 @@ export default function PrivateSalePanel({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           shares: listingShares,
+          holdingTerm,
           ...(confirmVacate ? { confirmCeoVacate: true } : {}),
         }),
       });
@@ -252,6 +272,17 @@ export default function PrivateSalePanel({
       {myCharacterId && myShares > 0 && (
         <div>
           <h3 className="mb-1.5 text-xs font-medium text-muted">List your shares</h3>
+          {terms && (
+            <HoldingTermSelector
+              terms={terms}
+              term={holdingTerm}
+              turn={corporation.currentTurn}
+              onChange={(value) => {
+                setRequestedTerm(value);
+                setListingShares(0);
+              }}
+            />
+          )}
           <div className="flex items-end gap-3 flex-wrap">
             <div>
               <label className="block text-xs text-muted mb-1">Shares to list</label>
@@ -261,13 +292,13 @@ export default function PrivateSalePanel({
                 onChange={(e) => setListingShares(Math.max(0, Math.floor(Number(e.target.value))))}
                 placeholder="Quantity"
                 min={1}
-                max={myShares}
+                max={availableShares}
                 className="h-7 w-36 rounded-md border border-card-border bg-background px-2 text-right text-[13px] tabular-nums text-foreground focus:border-foreground focus:outline-none"
               />
             </div>
             <button
               onClick={() => void handleCreateListing()}
-              disabled={loading || listingShares <= 0}
+              disabled={loading || listingShares <= 0 || listingShares > availableShares}
               className="inline-flex h-7 items-center rounded-md border border-primary bg-primary px-2.5 text-xs font-medium text-white hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {loading ? "Listing" : "Create listing"}
@@ -350,6 +381,12 @@ export default function PrivateSalePanel({
                   </button>
                 </div>
 
+                {listing.holdingTerms && (
+                  <HoldingTermSummary
+                    terms={listing.holdingTerms}
+                    turn={listing.holdingTurn ?? corporation.currentTurn ?? 0}
+                  />
+                )}
                 {listing.offers.length === 0 ? (
                   <p className="text-xs text-muted">No offers yet</p>
                 ) : (

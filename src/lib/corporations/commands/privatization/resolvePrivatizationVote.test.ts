@@ -90,7 +90,11 @@ describe("resolvePrivatizationVote — atomic claim", () => {
       collection: vi.fn().mockImplementation((name: string) => {
         if (name === "corporationPrivatizationVotes") return { updateOne };
         if (name === "corporations") return { findOne: corpFindOne, updateOne: corpUpdateOne };
-        return { findOne: vi.fn(), updateOne: vi.fn() };
+        return {
+          findOne: vi.fn(),
+          updateOne: vi.fn(),
+          bulkWrite: vi.fn().mockResolvedValue({ matchedCount: 1 }),
+        };
       }),
     } as unknown as Db;
 
@@ -133,7 +137,11 @@ describe("resolvePrivatizationVote — atomic claim", () => {
         if (name === "corporations") {
           return { findOne: vi.fn().mockResolvedValue(corp), updateOne: corpUpdateOne };
         }
-        return { findOne: vi.fn(), updateOne: vi.fn() };
+        return {
+          findOne: vi.fn(),
+          updateOne: vi.fn(),
+          bulkWrite: vi.fn().mockResolvedValue({ matchedCount: 1 }),
+        };
       }),
     } as unknown as Db;
 
@@ -195,7 +203,11 @@ describe("resolvePrivatizationVote — atomic claim", () => {
         if (name === "corporations")
           return { findOne: vi.fn().mockResolvedValue(corp), updateOne: corpUpdateOne };
         if (name === "indexFunds") return { updateOne: fundUpdateOne };
-        return { findOne: vi.fn(), updateOne: vi.fn() };
+        return {
+          findOne: vi.fn(),
+          updateOne: vi.fn(),
+          bulkWrite: vi.fn().mockResolvedValue({ matchedCount: 1 }),
+        };
       }),
     } as unknown as Db;
 
@@ -253,7 +265,11 @@ describe("resolvePrivatizationVote — atomic claim", () => {
         if (name === "corporationPrivatizationVotes") return { updateOne };
         if (name === "corporations")
           return { findOne: vi.fn().mockResolvedValue(corp), updateOne: corpUpdateOne };
-        return { findOne: vi.fn(), updateOne: vi.fn() };
+        return {
+          findOne: vi.fn(),
+          updateOne: vi.fn(),
+          bulkWrite: vi.fn().mockResolvedValue({ matchedCount: 1 }),
+        };
       }),
     } as unknown as Db;
 
@@ -306,7 +322,11 @@ describe("resolvePrivatizationVote — atomic claim", () => {
         if (name === "corporationPrivatizationVotes") return { updateOne: voteUpdateOne };
         if (name === "corporations")
           return { findOne: vi.fn().mockResolvedValue(corp), updateOne: corpUpdateOne };
-        return { findOne: vi.fn(), updateOne: vi.fn() };
+        return {
+          findOne: vi.fn(),
+          updateOne: vi.fn(),
+          bulkWrite: vi.fn().mockResolvedValue({ matchedCount: 1 }),
+        };
       }),
     } as unknown as Db;
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { apiErrorText } from "@/lib/errors/catalog";
+import { HoldingTermSummary } from "@/components/corporation/shares/HoldingTermSelector";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { CURRENCY_SYMBOLS } from "@/lib/constants/currencies";
@@ -200,6 +201,12 @@ export function OpenShareOrdersPanel() {
                         </td>
                         <td className="py-2 pr-4">
                           {formatShares(order.sharesRemaining)}
+                          {order.holdingTerms && (
+                            <HoldingTermSummary
+                              terms={order.holdingTerms}
+                              turn={order.holdingTurn ?? 0}
+                            />
+                          )}
                           {order.sharesRemaining !== order.shares ? (
                             <span className="text-xs text-muted">
                               {" "}

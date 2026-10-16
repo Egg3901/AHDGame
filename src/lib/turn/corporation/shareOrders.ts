@@ -1,4 +1,20 @@
 import { ObjectId } from "mongodb";
+import {
+  holdingCostBasis,
+  holdingShares,
+  mergeHoldingTerms,
+  positionHoldingTerms,
+  anchorHoldingPosition,
+  purchasedHoldingTerms,
+  takeReservedHoldingShares,
+  matureHoldingTerms,
+  type ShareHoldingTerms,
+} from "@/lib/corporations/rules/holdingTerms";
+import {
+  pendingStockTaxReceipt,
+  stockSaleTaxReceipt,
+} from "@/lib/corporations/rules/stockTaxReceipt";
+import type { PendingStockTaxReceipt } from "@/lib/budget/rules/capitalGainsTax";
 import type { Db } from "mongodb";
 import type { Character, Corporation, IndexFund, ShareOrder } from "@/lib/db/types";
 import { emitTxBulk, loadTxThresholds } from "@/lib/financialTxLog/emit";
@@ -29,6 +45,7 @@ import { EQUITY_MARKET_POOLS_COLLECTION } from "@/lib/db/types/equityMarketPool"
 
 /** Per-character delta for a corp, plus the fill price for new-entry cost basis. */
 interface ShareDelta {
+  holdingTerms?: ShareHoldingTerms;
   delta: number;
   /**
    * Per-share fill price (₳). Set when this delta *increases* a holding (buy fill)
@@ -43,6 +60,8 @@ interface ShareDelta {
  * Names are resolved in a batch lookup after all fills are applied.
  */
 interface PendingHistoryEmit {
+  taxCreditId?: string;
+  sellerHoldingTerms?: ShareHoldingTerms;
   corporationId: ObjectId;
   kind: "limit_fill";
   shares: number;
@@ -60,7 +79,14 @@ interface PendingHistoryEmit {
  *
  * `turn` is stamped on every emitted `shareTradeHistory` row.
  */
-export async function fillPendingShareOrders(db: Db, now: Date, turn: number): Promise<void> {
+export async function fillPendingShareOrders(
+  db: Db,
+  now: Date,
+  turn: number,
+  holdingTaxStartTurn?: number
+): Promise<void> {
+  const holdingTaxActive = holdingTaxStartTurn !== undefined && turn >= holdingTaxStartTurn;
+  let personalForexEnabled = false;
   // Peer-fill orphan recovery (issue #1672) deliberately does NOT run here:
   // the receipt scan is a query-per-row N+1 that does not belong on the turn
   // path. Lonely receipts are re-driven by the periodic
@@ -73,7 +99,7 @@ export async function fillPendingShareOrders(db: Db, now: Date, turn: number): P
   const openOrders = await db
     .collection<ShareOrder>("shareOrders")
     .find(
-      { status: "open" },
+      { status: "open", activeShareFillKey: { $exists: false } },
       {
         projection: {
           _id: 1,
@@ -85,6 +111,7 @@ export async function fillPendingShareOrders(db: Db, now: Date, turn: number): P
           placerFundId: 1,
           pricePerShare: 1,
           sharesDebitedAtCreation: 1,
+          holdingTerms: 1,
           sharesRemaining: 1,
           type: 1,
         },
@@ -163,6 +190,24 @@ export async function fillPendingShareOrders(db: Db, now: Date, turn: number): P
   const orderFillOps: {
     updateOne: { filter: Record<string, unknown>; update: Record<string, unknown> };
   }[] = [];
+  for (const order of openOrders) {
+    if (!order.holdingTerms || order.placerCorporationId || order.placerFundId) continue;
+    const matured = matureHoldingTerms(order.holdingTerms, turn);
+    if (matured.shortTermLots.length === order.holdingTerms.shortTermLots.length) continue;
+    orderFillOps.push({
+      updateOne: {
+        filter: {
+          _id: order._id,
+          status: "open",
+          activeShareFillKey: { $exists: false },
+          sharesRemaining: order.sharesRemaining,
+          holdingTerms: order.holdingTerms,
+        },
+        update: { $set: { holdingTerms: matured } },
+      },
+    });
+    order.holdingTerms = matured;
+  }
 
   // One pool document per currency; read them once for the whole loop.
   const equityPools = await loadEquityPoolsByCurrency(db);
@@ -364,9 +409,23 @@ export async function fillPendingShareOrders(db: Db, now: Date, turn: number): P
         // gets its avgCostPerShare stamped (matches /shares/buy convention).
         const delta = corpShareholderUpdates.get(corpIdStr) ?? new Map<string, ShareDelta>();
         const existing = delta.get(charIdStr) ?? { delta: 0 };
+        const holder = corp.shareholders?.find((row) => row.characterId?.toString() === charIdStr);
+        const priorTerms =
+          existing.holdingTerms ??
+          positionHoldingTerms(
+            anchorHoldingPosition(holder ?? { shares: 0 }, targetFxRate),
+            turn,
+            0
+          );
+        const fillPriceAnchor = corpLiquidCapitalToAnchor(currentPrice, corp, targetFxRate);
         delta.set(charIdStr, {
           delta: existing.delta + toFill,
-          pricePerShare: currentPrice,
+          pricePerShare: fillPriceAnchor,
+          holdingTerms: mergeHoldingTerms(
+            priorTerms,
+            purchasedHoldingTerms(toFill, fillPriceAnchor, turn),
+            turn
+          ),
         });
         corpShareholderUpdates.set(corpIdStr, delta);
 
@@ -476,6 +535,28 @@ export async function fillPendingShareOrders(db: Db, now: Date, turn: number): P
           treasuryDelta -= proceedsLocal;
         }
         const proceedsAnchor = corpLiquidCapitalToAnchor(proceedsLocal, corp, targetFxRate);
+        let sellerHoldingTerms: ShareHoldingTerms | undefined;
+        let reservedRemainingTerms: ShareHoldingTerms | undefined;
+        if (!order.placerCorporationId && charIdStr) {
+          const holder = corp.shareholders?.find(
+            (row) => row.characterId?.toString() === charIdStr
+          );
+          const terms = order.sharesDebitedAtCreation
+            ? positionHoldingTerms(
+                { shares: order.sharesRemaining, holdingTerms: order.holdingTerms },
+                turn,
+                proceedsAnchor / toFill
+              )
+            : (corpShareholderUpdates.get(corpIdStr)?.get(charIdStr)?.holdingTerms ??
+              positionHoldingTerms(
+                anchorHoldingPosition(holder ?? { shares: 0 }, targetFxRate),
+                turn,
+                proceedsAnchor / toFill
+              ));
+          const selected = takeReservedHoldingShares(terms, toFill, turn);
+          sellerHoldingTerms = selected.taken;
+          reservedRemainingTerms = selected.remaining;
+        }
 
         // Corp sell orders: pay the placing corporation, not the CEO character.
         // Character sell orders: pay the character directly.
@@ -503,7 +584,10 @@ export async function fillPendingShareOrders(db: Db, now: Date, turn: number): P
         if (!order.placerCorporationId && charIdStr && order.sharesDebitedAtCreation !== true) {
           const delta = corpShareholderUpdates.get(corpIdStr) ?? new Map<string, ShareDelta>();
           const existing = delta.get(charIdStr) ?? { delta: 0 };
-          delta.set(charIdStr, { delta: existing.delta - toFill });
+          delta.set(charIdStr, {
+            delta: existing.delta - toFill,
+            holdingTerms: reservedRemainingTerms,
+          });
           corpShareholderUpdates.set(corpIdStr, delta);
         }
 
@@ -514,6 +598,8 @@ export async function fillPendingShareOrders(db: Db, now: Date, turn: number): P
           corporationId: new ObjectId(corpIdStr),
           kind: "limit_fill",
           shares: toFill,
+          sellerHoldingTerms,
+          taxCreditId: order._id.toHexString() + ":" + turn + ":" + order.sharesRemaining,
           pricePerShareAnchor: corpLiquidCapitalToAnchor(currentPrice, corp, targetFxRate),
           corpCurrencyCode,
           fromPartyRef: order.placerCorporationId
@@ -529,6 +615,9 @@ export async function fillPendingShareOrders(db: Db, now: Date, turn: number): P
               $set: {
                 sharesRemaining: filled ? 0 : order.sharesRemaining - toFill,
                 status: filled ? "filled" : "open",
+                ...(order.sharesDebitedAtCreation && reservedRemainingTerms
+                  ? { holdingTerms: reservedRemainingTerms }
+                  : {}),
                 updatedAt: now,
               },
             },
@@ -579,6 +668,7 @@ export async function fillPendingShareOrders(db: Db, now: Date, turn: number): P
     charId: ObjectId;
     delta: number;
     pricePerShare?: number;
+    holdingTerms?: ShareHoldingTerms;
   }[] = [];
 
   for (const [corpIdStr, charDeltas] of corpShareholderUpdates) {
@@ -606,7 +696,7 @@ export async function fillPendingShareOrders(db: Db, now: Date, turn: number): P
       });
     }
 
-    for (const [charIdStr, { delta, pricePerShare }] of charDeltas) {
+    for (const [charIdStr, { delta, pricePerShare, holdingTerms }] of charDeltas) {
       if (existingCharIds.has(charIdStr)) {
         // Atomic positional $inc on existing entry
         incOps.push({
@@ -617,7 +707,18 @@ export async function fillPendingShareOrders(db: Db, now: Date, turn: number): P
             },
             update: {
               $inc: { "shareholders.$.shares": delta },
-              $set: { updatedAt: now },
+              $set: {
+                updatedAt: now,
+                ...(holdingTerms
+                  ? {
+                      "shareholders.$.avgCostBasisUnit": "anchor",
+                      ...(holdingTaxActive ? { "shareholders.$.holdingTerms": holdingTerms } : {}),
+                      "shareholders.$.avgCostPerShare": holdingShares(holdingTerms)
+                        ? holdingCostBasis(holdingTerms) / holdingShares(holdingTerms)
+                        : 0,
+                    }
+                  : {}),
+              },
             },
           },
         });
@@ -627,6 +728,7 @@ export async function fillPendingShareOrders(db: Db, now: Date, turn: number): P
           charId: new ObjectId(charIdStr),
           delta,
           pricePerShare,
+          holdingTerms,
         });
       }
     }
@@ -658,7 +760,7 @@ export async function fillPendingShareOrders(db: Db, now: Date, turn: number): P
   // Include avgCostPerShare so the pushed entry matches the shape /shares/buy
   // writes — otherwise portfolio PnL display shows "-" for these holdings.
   if (pushNeeded.length > 0) {
-    const pushOps = pushNeeded.map(({ corpId, charId, delta, pricePerShare }) => ({
+    const pushOps = pushNeeded.map(({ corpId, charId, delta, pricePerShare, holdingTerms }) => ({
       updateOne: {
         filter: { _id: corpId },
         update: {
@@ -666,7 +768,17 @@ export async function fillPendingShareOrders(db: Db, now: Date, turn: number): P
             shareholders: {
               characterId: charId,
               shares: delta,
-              ...(pricePerShare !== undefined ? { avgCostPerShare: pricePerShare } : {}),
+              ...(pricePerShare !== undefined
+                ? { avgCostPerShare: pricePerShare, avgCostBasisUnit: "anchor" }
+                : {}),
+              ...(holdingTerms && holdingTaxActive
+                ? {
+                    holdingTerms,
+                    avgCostPerShare: holdingShares(holdingTerms)
+                      ? holdingCostBasis(holdingTerms) / holdingShares(holdingTerms)
+                      : 0,
+                  }
+                : {}),
             },
           },
           $set: { updatedAt: now },
@@ -678,6 +790,7 @@ export async function fillPendingShareOrders(db: Db, now: Date, turn: number): P
   }
   if (charCashAdjustments.size > 0) {
     const forexEnabled = await isForexEnabled();
+    personalForexEnabled = forexEnabled;
     const adjCharIds = [...charCashAdjustments.keys()].map((id) => new ObjectId(id));
     const adjChars = await db
       .collection<Character>("characters")
@@ -685,6 +798,31 @@ export async function fillPendingShareOrders(db: Db, now: Date, turn: number): P
       .project<{ _id: ObjectId; countryId: string }>({ _id: 1, countryId: 1 })
       .toArray();
     const charCountryMap = new Map(adjChars.map((c) => [c._id.toString(), c.countryId]));
+    const receiptsByCharacter = new Map<string, PendingStockTaxReceipt[]>();
+    if (holdingTaxActive)
+      for (const fill of historyEmits) {
+        const id = fill.fromPartyRef?.characterId?.toString();
+        if (!id || !fill.sellerHoldingTerms || !fill.taxCreditId) continue;
+        const country = charCountryMap.get(id) ?? "US";
+        const currency =
+          COUNTRY_CURRENCY_MAP[country as keyof typeof COUNTRY_CURRENCY_MAP] ?? "USD";
+        const proceedsAnchor = fill.shares * fill.pricePerShareAnchor;
+        const receipts = receiptsByCharacter.get(id) ?? [];
+        receipts.push(
+          pendingStockTaxReceipt({
+            id: fill.taxCreditId,
+            currencyCode: currency,
+            holdingTerms: fill.sellerHoldingTerms,
+            proceedsAnchor,
+            proceedsCredited: forexEnabled
+              ? proceedsAnchor * (fxByCurrency.get(currency) ?? 1)
+              : proceedsAnchor,
+            saleTurn: turn,
+            assessmentTurn: turn,
+          })
+        );
+        receiptsByCharacter.set(id, receipts);
+      }
 
     // Map values are ₳ (normalized at attribution). Convert to each character's
     // home currency for the wallet credit.
@@ -694,12 +832,24 @@ export async function fillPendingShareOrders(db: Db, now: Date, turn: number): P
         COUNTRY_CURRENCY_MAP[countryId as keyof typeof COUNTRY_CURRENCY_MAP] ?? "USD";
       const rate = fxByCurrency.get(currency) ?? 1.0;
       const amountInCurrency = forexEnabled ? amountAnchor * rate : amountAnchor;
-      return buildPersonalBalanceBulkOp(
+      const operation = buildPersonalBalanceBulkOp(
         new ObjectId(charIdStr),
         amountInCurrency,
         currency,
         forexEnabled
       );
+      const receipts = receiptsByCharacter.get(charIdStr);
+      return {
+        updateOne: {
+          ...operation.updateOne,
+          update: {
+            ...operation.updateOne.update,
+            ...(receipts?.length
+              ? { $push: { pendingStockTaxReceipts: { $each: receipts } } }
+              : {}),
+          },
+        },
+      };
     });
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await db.collection("characters").bulkWrite(charOps as any);
@@ -946,7 +1096,11 @@ export async function fillPendingShareOrders(db: Db, now: Date, turn: number): P
         ? db
             .collection<Character>("characters")
             .find({ _id: { $in: [...charIdSet].map((id) => new ObjectId(id)) } })
-            .project<{ _id: ObjectId; name: string }>({ _id: 1, name: 1 })
+            .project<{ _id: ObjectId; name: string; countryId?: string }>({
+              _id: 1,
+              name: 1,
+              countryId: 1,
+            })
             .toArray()
         : Promise.resolve([] as { _id: ObjectId; name: string }[]),
       corpIdSet.size > 0
@@ -958,6 +1112,9 @@ export async function fillPendingShareOrders(db: Db, now: Date, turn: number): P
         : Promise.resolve([] as { _id: ObjectId; name: string }[]),
     ]);
     const charNameMap = new Map(nameChars.map((c) => [c._id.toString(), c.name]));
+    const charCountryMap = new Map(
+      nameChars.map((c) => [c._id.toString(), "countryId" in c ? c.countryId : "US"])
+    );
     const corpNameMap = new Map(nameCorps.map((c) => [c._id.toString(), c.name]));
 
     const toParty = (
@@ -978,6 +1135,44 @@ export async function fillPendingShareOrders(db: Db, now: Date, turn: number): P
       }
       return null;
     };
+
+    const taxableSales = historyEmits.flatMap((emit) => {
+      const sellerId = emit.fromPartyRef?.characterId;
+      if (!holdingTaxActive || !sellerId || !emit.sellerHoldingTerms) return [];
+      const currency =
+        COUNTRY_CURRENCY_MAP[
+          (charCountryMap.get(sellerId.toString()) ?? "US") as keyof typeof COUNTRY_CURRENCY_MAP
+        ] ?? "USD";
+      const proceedsAnchor = emit.shares * emit.pricePerShareAnchor;
+      const amount = personalForexEnabled
+        ? proceedsAnchor * (fxByCurrency.get(currency) ?? 1)
+        : proceedsAnchor;
+      return [
+        {
+          type: "stock_trade_sell" as const,
+          turn,
+          createdAt: now,
+          subjectType: "character" as const,
+          subjectId: sellerId,
+          subjectName: charNameMap.get(sellerId.toString()) ?? "Unknown character",
+          amount,
+          currencyCode: currency,
+          meta: {
+            corporationId: emit.corporationId.toString(),
+            shares: emit.shares,
+            source: "turn_limit_fill",
+            stockTax: stockSaleTaxReceipt({
+              holdingTerms: emit.sellerHoldingTerms,
+              proceedsAnchor,
+              proceedsCredited: amount,
+              saleTurn: turn,
+              assessmentTurn: turn,
+            }),
+          },
+        },
+      ];
+    });
+    if (taxableSales.length) await emitTxBulk(db, taxableSales, await loadTxThresholds(db));
 
     await recordShareTrades(
       db,

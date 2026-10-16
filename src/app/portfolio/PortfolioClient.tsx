@@ -12,6 +12,7 @@ import { isTransientRequestFailure } from "@/lib/errors/transient";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import { Skeleton } from "@/components/ui";
 import BackButton from "@/components/BackButton";
+import { StockHoldingsView, StockHoldingValues } from "@/components/portfolio/StockHoldingsView";
 import { PortfolioChart } from "@/components/charts/PortfolioChart";
 import { PortfolioBreakdownChart } from "@/components/charts/PortfolioBreakdownChart";
 import { WireTransferCard } from "./components/WireTransferCard";
@@ -37,12 +38,7 @@ import {
 } from "./components/PortfolioShell";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import { LoansPane, type LocSnapshot } from "./components/LoansPane";
-import {
-  StocksTable,
-  BondsTable,
-  type Holding,
-  type BondHolding,
-} from "@/components/portfolio/HoldingsTables";
+import { BondsTable, type Holding, type BondHolding } from "@/components/portfolio/HoldingsTables";
 
 interface MeCeoCorporation {
   _id: string;
@@ -54,13 +50,15 @@ interface MeCeoCorporation {
 type Section =
   "overview" | "cash" | "stocks" | "bonds" | "orders" | "trades" | "funds" | "transfers" | "loans";
 type ChartView = "total" | "breakdown";
-type SeriesView = "total" | "stocks" | "bonds" | "cash" | "savings";
+type SeriesView = "total" | "stocks" | "shortStocks" | "longStocks" | "bonds" | "cash" | "savings";
 
 interface HistoryPoint {
   turn: number;
   totalValue: number;
   netValue?: number;
   stockValue?: number;
+  shortTermStockValue?: number;
+  longTermStockValue?: number;
   bondValue?: number;
   cashValue?: number;
   liquidCashValue?: number;
@@ -658,7 +656,7 @@ function PortfolioPageInner({ initialPortfolio }: PortfolioClientProps) {
           )}
           {activeSection === "overview" && (
             <OverviewPane
-              totalValue={totalValue}
+              holdings={holdings}
               totalBondValue={totalBondValue}
               totalBondIncomePerTurn={totalBondIncomePerTurn}
               garnishedPerTurnInternal={locSnapshot?.garnishedPerTurnInternal}
@@ -694,7 +692,7 @@ function PortfolioPageInner({ initialPortfolio }: PortfolioClientProps) {
             </div>
           )}
 
-          {activeSection === "stocks" && <StocksTable holdings={holdings} />}
+          {activeSection === "stocks" && <StockHoldingsView holdings={holdings} />}
 
           {activeSection === "bonds" && (
             <BondsTable
@@ -734,7 +732,7 @@ function PortfolioPageInner({ initialPortfolio }: PortfolioClientProps) {
 /* ============================ Sub-components ============================ */
 
 function OverviewPane({
-  totalValue,
+  holdings,
   totalBondValue,
   totalBondIncomePerTurn,
   garnishedPerTurnInternal,
@@ -744,7 +742,7 @@ function OverviewPane({
   seriesView,
   setSeriesView,
 }: {
-  totalValue: number;
+  holdings: Holding[];
   totalBondValue: number;
   totalBondIncomePerTurn: number;
   garnishedPerTurnInternal?: number;
@@ -758,8 +756,8 @@ function OverviewPane({
   const isGarnished = (garnishedPerTurnInternal ?? 0) > 0;
   return (
     <>
+      <StockHoldingValues holdings={holdings} />
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-        <StatCard label="Stock holdings" value={formatAmount(totalValue)} />
         <StatCard label="Bond holdings" value={formatAmount(totalBondValue)} />
         <StatCard
           label="Bond income"
@@ -789,9 +787,13 @@ function OverviewPane({
                 {chartView === "total"
                   ? seriesView === "total"
                     ? "Total net worth history"
-                    : seriesView === "savings"
-                      ? "High-yield savings balance history (internal units)"
-                      : `${seriesView.charAt(0).toUpperCase() + seriesView.slice(1)} value history`
+                    : seriesView === "shortStocks"
+                      ? "Short Term Holdings value history"
+                      : seriesView === "longStocks"
+                        ? "Long Term Holdings value history"
+                        : seriesView === "savings"
+                          ? "High-yield savings balance history (internal units)"
+                          : `${seriesView.charAt(0).toUpperCase() + seriesView.slice(1)} value history`
                   : "Breakdown of stocks, bonds, and cash"}
               </p>
             </div>
@@ -816,6 +818,20 @@ function OverviewPane({
                     activeTone="success"
                   >
                     Stocks
+                  </ChartPill>
+                  <ChartPill
+                    active={seriesView === "shortStocks"}
+                    onClick={() => setSeriesView("shortStocks")}
+                    activeTone="info"
+                  >
+                    STH
+                  </ChartPill>
+                  <ChartPill
+                    active={seriesView === "longStocks"}
+                    onClick={() => setSeriesView("longStocks")}
+                    activeTone="success"
+                  >
+                    LTH
                   </ChartPill>
                   <ChartPill
                     active={seriesView === "bonds"}

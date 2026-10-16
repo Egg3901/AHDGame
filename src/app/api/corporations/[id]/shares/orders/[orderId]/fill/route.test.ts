@@ -100,7 +100,9 @@ function expectKeyedCapTransfer(
     writes.some(
       ([filter, update]) =>
         filter.shareholders?.$elemMatch?.[sellerField]?.equals(sellerId) &&
-        update.$inc?.["shareholders.$.shares"] === -shares &&
+        (update.$inc?.["shareholders.$.shares"] === -shares ||
+          update.$set?.["shareholders.$.shares"] ===
+            filter.shareholders.$elemMatch.shares - shares) &&
         update.$push?.appliedMoneyFlowKeys
     )
   ).toBe(true);

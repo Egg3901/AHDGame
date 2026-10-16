@@ -79,6 +79,8 @@ export interface IterationStampFields {
 }
 
 export interface GameState {
+  /** Set only after the stock holding and capital-gains migration completes. */
+  stockHoldingTaxStartTurn?: number;
   /** World-local activation boundary for the twelve-turn hardware input reduction. */
   hardwareInputReliefStartTurn?: number;
   /** Unique world identity for replay receipts; replaced on each reset. */
@@ -415,7 +417,7 @@ export interface GameState {
   /** Concurrency guard - true while a turn is being processed */
   isProcessing?: boolean;
   /** Which workflow currently owns the processing lock */
-  processingKind?: "turn" | "forexMigration" | null;
+  processingKind?: "turn" | "forexMigration" | "stockTaxMigration" | null;
   /** When the active turn lock was acquired; used to recover stale locks after crashed runs */
   processingStartedAt?: Date | null;
   /** The turn number currently being processed while the lock is held */

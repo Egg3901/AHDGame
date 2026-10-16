@@ -1,6 +1,11 @@
 import type { ObjectId } from "mongodb";
+import type { ShareHoldingTerms } from "@/lib/corporations/rules/holdingTerms";
 
 export interface ShareListing {
+  activeShareFillKey?: string;
+  lastShareFillKey?: string;
+  /** Personal inventory held in escrow, including purchase ages and cost basis. */
+  holdingTerms?: ShareHoldingTerms;
   _id: ObjectId;
   /** The corporation whose shares are being listed */
   corporationId: ObjectId;
@@ -30,6 +35,7 @@ export interface ShareListing {
 }
 
 export interface ShareOffer {
+  acceptFillKey?: string;
   _id: ObjectId;
   listingId: ObjectId;
   /** Denormalized for bulk lookups during expiry */

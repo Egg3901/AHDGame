@@ -24,6 +24,7 @@ import type { MediaProductProject } from "@/lib/products/mediaProduct";
 export interface CorporationLookups {
   /** Originating reset preset selects the qualified input baskets. */
   preset?: string;
+  stockHoldingTaxStartTurn?: number;
   hardwareInputReliefStartTurn?: number;
   corporations: Corporation[];
   sectorsByCorp: Map<string, CorporateSector[]>;
@@ -495,6 +496,8 @@ export interface SectorCalculationsResult {
   corpSnapshots: CorpSnapshot[];
   ceoSalaryPayments: Map<string, Map<CurrencyCode, number>>;
   dividendPayments: Map<string, Map<CurrencyCode, number>>;
+  /** Long-term direct personal dividends, in the same credited currency as dividendPayments. */
+  capitalDividendPayments: Map<string, Map<CurrencyCode, number>>;
   /** Dividends owed to corporate shareholders, amounts in ₳ (internal) — convert to treasury currency when applying. */
   corpDividendPaymentsAnchorByCorpId: Map<string, number>;
   /** Same dividends split by the PAYING corp's currency (recipientId → payerCcy → ₳), for cross-currency FX spread. */

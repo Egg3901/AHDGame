@@ -441,7 +441,7 @@ export async function cancelFundShareOrder(
   const claimed = await db
     .collection<ShareOrder>("shareOrders")
     .findOneAndUpdate(
-      { _id: orderId, status: "open" },
+      { _id: orderId, status: "open", activeShareFillKey: { $exists: false } },
       { $set: { status: "cancelled", updatedAt: new Date() } },
       { returnDocument: "before" }
     );
@@ -525,7 +525,12 @@ export async function cancelFundShareOrdersBatch(
   await db.collection<ShareOrder>("shareOrders").bulkWrite(
     orderIds.map((_id) => ({
       updateOne: {
-        filter: { _id, status: "open", placerFundId: fund._id },
+        filter: {
+          _id,
+          status: "open",
+          placerFundId: fund._id,
+          activeShareFillKey: { $exists: false },
+        },
         update: { $set: { status: "cancelled", updatedAt: now, cancelClaimId: claimId } },
       },
     })),

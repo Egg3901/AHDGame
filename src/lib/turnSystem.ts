@@ -118,6 +118,7 @@ export async function initializeGameState(): Promise<GameState> {
     resetWorldId: randomUUID(),
     currentTurn: 1,
     hardwareInputReliefStartTurn: 1,
+    stockHoldingTaxStartTurn: 1,
     currentYear: STARTING_YEAR,
     // Always pair `startingYear` with the matching `preset`. Writing only
     // `startingYear` previously left `preset` undefined, which made
@@ -426,6 +427,7 @@ async function processTurnImpl(
     const lockResult = await db.collection<GameState>("gameState").findOneAndUpdate(
       {
         _id: "current",
+        processingKind: { $ne: "stockTaxMigration" },
         $or: [
           { isProcessing: { $ne: true } },
           { processingHeartbeatAt: { $lt: staleLockCutoff } },

@@ -10,6 +10,8 @@ interface HistoryPoint {
   totalValue: number;
   netValue?: number;
   stockValue?: number;
+  shortTermStockValue?: number;
+  longTermStockValue?: number;
   bondValue?: number;
   cashValue?: number;
   liquidCashValue?: number;
@@ -21,7 +23,7 @@ interface HistoryPoint {
 
 interface Props {
   history: HistoryPoint[];
-  view?: "total" | "stocks" | "bonds" | "cash" | "savings";
+  view?: "total" | "stocks" | "shortStocks" | "longStocks" | "bonds" | "cash" | "savings";
 }
 
 const WIDTH = 600;
@@ -36,6 +38,8 @@ const INNER_H = HEIGHT - PAD_TOP - PAD_BOTTOM;
 const COLORS = {
   total: "var(--color-primary, #6366f1)",
   stocks: "var(--color-success, #22c55e)",
+  shortStocks: "var(--color-info, #3b82f6)",
+  longStocks: "var(--color-success, #22c55e)",
   bonds: "var(--color-warning, #f59e0b)",
   cash: "var(--color-info, #3b82f6)",
   savings: "var(--color-primary, #8b5cf6)",
@@ -45,15 +49,25 @@ export function PortfolioChart({ history, view = "total" }: Props) {
   const { resolveDisplayAt } = useCurrency();
   const [hovered, setHovered] = useState<number | null>(null);
 
-  if (history.length < 2) {
+  // Bucket history starts when measured. Never fabricate old zero-valued points.
+  const measuredHistory = history.filter((point) =>
+    view === "shortStocks"
+      ? point.shortTermStockValue !== undefined
+      : view === "longStocks"
+        ? point.longTermStockValue !== undefined
+        : true
+  );
+  if (measuredHistory.length < 2) {
     return (
       <div className="flex h-24 items-center justify-center text-sm text-muted">
-        Not enough data yet — check back after the next turn.
+        Not enough data yet. Check back after the next turn.
       </div>
     );
   }
 
   const getAnchor = (p: HistoryPoint): number => {
+    if (view === "shortStocks") return p.shortTermStockValue!;
+    if (view === "longStocks") return p.longTermStockValue!;
     if (view === "stocks") return p.stockValue ?? 0;
     if (view === "bonds") return p.bondValue ?? 0;
     if (view === "cash") return p.cashValue ?? 0;
@@ -64,7 +78,9 @@ export function PortfolioChart({ history, view = "total" }: Props) {
   // Convert each anchor value through its own snapshot rate so a moving ₳/local
   // rate doesn't repaint historical points. resolveDisplayAt falls back to live
   // rates when the snapshot is missing (pre-fix history).
-  const displays = history.map((p) => resolveDisplayAt(getAnchor(p), p.exchangeRatesSnapshot));
+  const displays = measuredHistory.map((p) =>
+    resolveDisplayAt(getAnchor(p), p.exchangeRatesSnapshot)
+  );
   const values = displays.map((d) => d.value);
   const symbol = displays[displays.length - 1]?.symbol ?? "₳";
   const fmt = (v: number) => formatFundsCompact(Math.round(v), symbol);
@@ -73,15 +89,15 @@ export function PortfolioChart({ history, view = "total" }: Props) {
   const range = maxVal - minVal || 1;
 
   function toX(i: number): number {
-    if (history.length <= 1) return PAD_LEFT + INNER_W / 2;
-    return PAD_LEFT + (i / (history.length - 1)) * INNER_W;
+    if (measuredHistory.length <= 1) return PAD_LEFT + INNER_W / 2;
+    return PAD_LEFT + (i / (measuredHistory.length - 1)) * INNER_W;
   }
 
   function toY(value: number): number {
     return PAD_TOP + ((maxVal - value) / range) * INNER_H;
   }
 
-  const points = history.map((p, i) => ({
+  const points = measuredHistory.map((p, i) => ({
     x: toX(i),
     y: toY(values[i]),
     displayValue: values[i],
@@ -96,15 +112,15 @@ export function PortfolioChart({ history, view = "total" }: Props) {
 
   // X-axis: up to 5 evenly spaced turn labels
   const xLabelIndices: number[] = [];
-  if (history.length <= 5) {
-    history.forEach((_, i) => xLabelIndices.push(i));
+  if (measuredHistory.length <= 5) {
+    measuredHistory.forEach((_, i) => xLabelIndices.push(i));
   } else {
-    const step = Math.floor((history.length - 1) / 4);
+    const step = Math.floor((measuredHistory.length - 1) / 4);
     for (let i = 0; i <= 4; i++) {
-      xLabelIndices.push(Math.min(i * step, history.length - 1));
+      xLabelIndices.push(Math.min(i * step, measuredHistory.length - 1));
     }
-    if (!xLabelIndices.includes(history.length - 1)) {
-      xLabelIndices[xLabelIndices.length - 1] = history.length - 1;
+    if (!xLabelIndices.includes(measuredHistory.length - 1)) {
+      xLabelIndices[xLabelIndices.length - 1] = measuredHistory.length - 1;
     }
   }
 
@@ -113,6 +129,14 @@ export function PortfolioChart({ history, view = "total" }: Props) {
   return (
     <div className="relative select-none">
       <svg
+        role="img"
+        aria-label={
+          view === "shortStocks"
+            ? "Short Term Holdings history"
+            : view === "longStocks"
+              ? "Long Term Holdings history"
+              : "Portfolio value history"
+        }
         viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
         className="w-full"
         style={{ height: HEIGHT }}
@@ -215,7 +239,7 @@ export function PortfolioChart({ history, view = "total" }: Props) {
             fontSize={9}
             className="fill-muted/70"
           >
-            T{history[i].turn}
+            T{measuredHistory[i].turn}
           </text>
         ))}
       </svg>

@@ -22,6 +22,7 @@ export type AcquisitionLegKind =
  * of a landed leg matches nothing and is read back as applied from the stamp.
  */
 export interface AcquisitionSettlementLeg {
+  stockTaxReceipt?: import("@/lib/budget/rules/capitalGainsTax").PendingStockTaxReceipt;
   /** Stable within the offer (e.g. "debit", "holder:character:<hex>"). */
   key: string;
   kind: AcquisitionLegKind;

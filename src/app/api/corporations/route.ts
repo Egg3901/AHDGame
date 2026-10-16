@@ -1,4 +1,6 @@
+import { rejectDuringTurn } from "@/lib/api/rejectDuringTurn";
 import { NextResponse } from "next/server";
+import { purchasedHoldingTerms } from "@/lib/corporations/rules/holdingTerms";
 import { ObjectId } from "mongodb";
 import { loadCampaignCurrencyRates } from "@/lib/campaigns/campaignCurrency";
 import { getDb } from "@/lib/mongodb";
@@ -290,6 +292,8 @@ export async function POST(request: Request) {
     } = parsed.data;
     const { sectorType: type, industryModel, mediaDiscriminator } = operatingSectorIdentity(lane);
     const db = await getDb();
+    const turnGuard = await rejectDuringTurn(db);
+    if (turnGuard) return turnGuard;
     // Founding is intentionally exempt from BOTH pause signals:
     // - `isActive === false` (turns paused for registration / settling) — players
     //   must still be able to found during that window (ticket #1009; #1004
@@ -729,6 +733,18 @@ export async function POST(request: Request) {
         {
           characterId: character._id,
           shares: founderShares,
+          avgCostPerShare: totalPlayerCost / foundingRate / founderShares,
+          avgCostBasisUnit: "anchor",
+          ...(foundingGameState?.stockHoldingTaxStartTurn !== undefined &&
+          foundedAtTurn >= foundingGameState.stockHoldingTaxStartTurn
+            ? {
+                holdingTerms: purchasedHoldingTerms(
+                  founderShares,
+                  totalPlayerCost / foundingRate / founderShares,
+                  foundedAtTurn
+                ),
+              }
+            : {}),
           ...(superShareMultiplier !== undefined ? { superShares: founderShares } : {}),
         },
       ],

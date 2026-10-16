@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import { availableHoldingShares, type HoldingTerm } from "@/lib/corporations/rules/holdingTerms";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import {
   MAX_FORWARD_SHARE_SPLIT_MULTIPLIER,
@@ -40,6 +41,16 @@ export function useShareTrading({
 
   // ─── State ────────────────────────────────────────────────────────────────────
   const [sellSharesAmount, setSellSharesAmount] = useState(0);
+  const [requestedTerm, setHoldingTerm] = useState<HoldingTerm>("long");
+  const myHoldingTerms = corporation.shareholders.find(
+    (holder) => holder.characterId === myCharacterId
+  )?.holdingTerms;
+  const holdingTerm =
+    myHoldingTerms && !availableHoldingShares(myHoldingTerms, requestedTerm)
+      ? requestedTerm === "long"
+        ? "short"
+        : "long"
+      : requestedTerm;
   const [buySharesAmount, setBuySharesAmount] = useState(0);
   const [buyAsCorp, setBuyAsCorp] = useState(false);
   const [fillAskAsCorp, setFillAskAsCorp] = useState(false);
@@ -162,7 +173,7 @@ export function useShareTrading({
       const res = await fetch(`/api/corporations/${corpId}/shares/sell`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ shares: sellSharesAmount }),
+        body: JSON.stringify({ shares: sellSharesAmount, holdingTerm }),
       });
       const data = await res.json();
       if (res.ok) {
@@ -222,6 +233,7 @@ export function useShareTrading({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           type: orderType,
+          ...(orderType === "sell" ? { holdingTerm } : {}),
           shares: orderShares,
           // Server stores pricePerShare in target corp's liquidCurrencyCode
           // (Option B). Convert display → target-local here; fallback to ₳
@@ -308,6 +320,7 @@ export function useShareTrading({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           shares,
+          ...(fillType === "buy" ? { holdingTerm } : {}),
           fillAsCorporation: fillType === "sell" && !!myCorporation && fillAskAsCorp,
         }),
       });
@@ -422,6 +435,9 @@ export function useShareTrading({
   }
 
   return {
+    holdingTerm,
+    setHoldingTerm,
+    myHoldingTerms,
     // State
     sellSharesAmount,
     setSellSharesAmount,

@@ -103,6 +103,9 @@ export interface FederalTaxRates {
   incomeTaxLow?: number;
   incomeTaxMiddle?: number;
   incomeTaxHigh?: number;
+  capitalGainsTaxLow?: number;
+  capitalGainsTaxMiddle?: number;
+  capitalGainsTaxHigh?: number;
   /** Rate applied to corps HQ'd in this country. */
   domesticCorporateTax: number;
   /** Rate applied to corps HQ'd elsewhere. All-or-nothing — no country targeting. */
@@ -975,6 +978,9 @@ export interface StateRevenue {
 }
 
 export interface StateTaxRates {
+  capitalGainsTaxLow?: number;
+  capitalGainsTaxMiddle?: number;
+  capitalGainsTaxHigh?: number;
   /** Legacy aggregate retained for old saves and historical readouts. */
   incomeTax: number;
   incomeTaxLow?: number;

@@ -1,4 +1,5 @@
 import type { Db, ObjectId } from "mongodb";
+import { loadFxRatesByCurrency } from "@/lib/currency/corporationCapital";
 import { ObjectId as MongoObjectId } from "mongodb";
 import type { CorporationVote } from "@/lib/db/types/corporationVote";
 import type { Character, Corporation, CorporationPrivatizationVote } from "@/lib/db/types";
@@ -136,7 +137,8 @@ export async function processVoteReminders(db: Db, currentTurn: number): Promise
 export async function processVoteAutoResolve(
   db: Db,
   currentTurn: number,
-  forexEnabled: boolean
+  forexEnabled: boolean,
+  stockTaxActive = false
 ): Promise<void> {
   const [genericVotes, privVotes] = await Promise.all([
     db.collection<CorporationVote>("corporationVotes").find({ status: "open" }).toArray(),
@@ -180,9 +182,17 @@ export async function processVoteAutoResolve(
     })
   );
 
+  const stockFx = stockTaxActive && privVotes.length ? await loadFxRatesByCurrency(db) : undefined;
   await Promise.all(
     privVotes.map(async (vote) => {
-      await resolvePrivatizationVote({ db, vote, currentTurn, forexEnabled });
+      await resolvePrivatizationVote({
+        db,
+        vote,
+        currentTurn,
+        forexEnabled,
+        stockTaxActive,
+        fxByCurrency: stockFx,
+      });
     })
   );
 }

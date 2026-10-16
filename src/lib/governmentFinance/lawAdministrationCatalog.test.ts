@@ -34,8 +34,11 @@ function hasCost(type: (typeof legislationTypes)[number]): boolean {
 
 describe("law administration catalog", () => {
   it("classifies every US, UK, and Japan law", () => {
-    expect(initialCatalog.filter((type) => !type._id.includes("__income_"))).toHaveLength(195);
+    expect(initialCatalog.filter((type) => !/__(?:income|capital)_/.test(type._id))).toHaveLength(
+      195
+    );
     expect(initialCatalog.some((type) => type._id.endsWith("__income_low"))).toBe(true);
+    expect(initialCatalog.some((type) => type._id.endsWith("__capital_low"))).toBe(true);
     for (const type of initialCatalog) {
       expect(type.allowedScope, type._id).toMatch(/^(national|state|both)$/);
       expect(type.administration, type._id).toBeDefined();

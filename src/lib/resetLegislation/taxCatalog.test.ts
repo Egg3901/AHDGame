@@ -9,8 +9,8 @@ import { projectLawToLegislationType } from "@/lib/politicalLegislation/project"
 import { resetTaxes, resetTaxesFor } from "./taxCatalog";
 
 describe("reset tax instruments", () => {
-  it("splits income tax into three of eleven types and exact-rate legislation mappings", () => {
-    expect(new Set(resetTaxes.map((tax) => tax.id)).size).toBe(11);
+  it("offers independent income and capital-gains tiers among fourteen exact-rate tax instruments", () => {
+    expect(new Set(resetTaxes.map((tax) => tax.id)).size).toBe(14);
     const runtimeTypes = expandIncomeTaxTypes([
       ...legislationTypes,
       ...US_LAWS.map(projectLawToLegislationType),

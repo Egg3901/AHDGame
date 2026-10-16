@@ -18,7 +18,9 @@ const byId = new Map(legislationTypes.map((t) => [t._id, t]));
 describe("legislation era catalog — authoring validation", () => {
   it("LEGISLATION_ERA keys exactly equal the live seed catalog (full coverage, no orphans)", () => {
     // Tier provisions inherit the authored era of their historical instrument.
-    const seedIds = [...new Set(legislationTypes.map((t) => t._id.split("__income_")[0]))].sort();
+    const seedIds = [
+      ...new Set(legislationTypes.map((t) => t._id.split(/__(?:income|capital)_/)[0])),
+    ].sort();
     const catalogIds = Object.keys(LEGISLATION_ERA).sort();
     expect(catalogIds).toEqual(seedIds);
   });

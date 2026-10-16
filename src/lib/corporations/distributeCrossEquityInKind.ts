@@ -12,7 +12,11 @@ import {
   creditSharesToFund,
 } from "@/lib/corporations/shareholderOps";
 import { upsertFundHoldingShares } from "@/lib/indexFunds/fundQueries";
-import { getCorpFxRate, shareTradeAnchorValue } from "@/lib/currency/corporationCapital";
+import {
+  fxRateForCorpFromMap,
+  loadFxRatesByCurrency,
+  shareTradeAnchorValue,
+} from "@/lib/currency/corporationCapital";
 
 /**
  * Distribute a dissolving corp's holdings in OTHER corps IN-KIND, pro-rata to
@@ -31,8 +35,18 @@ import { getCorpFxRate, shareTradeAnchorValue } from "@/lib/currency/corporation
 export async function distributeCrossEquityInKind(
   db: Db,
   dissolvingCorp: Pick<Corporation, "_id" | "shareholders" | "totalShares" | "publicFloat">,
-  now: Date
+  now: Date,
+  currentTurn: number = 0
 ): Promise<void> {
+  const [fxByCurrency, activation] = await Promise.all([
+    loadFxRatesByCurrency(db),
+    db
+      .collection<{ _id: string; stockHoldingTaxStartTurn?: number }>("gameState")
+      .findOne({ _id: "current" }, { projection: { stockHoldingTaxStartTurn: 1 } }),
+  ]);
+  const trackingEnabled =
+    activation?.stockHoldingTaxStartTurn !== undefined &&
+    currentTurn >= activation.stockHoldingTaxStartTurn;
   const inKindShareholders = (dissolvingCorp.shareholders ?? [])
     .map((s): InKindShareholder | null => {
       if (s.characterId)
@@ -91,6 +105,11 @@ export async function distributeCrossEquityInKind(
 
     // Carry the dissolving corp's cost basis for this holding to recipients.
     const basis = entry.avgCostPerShare ?? issuer.sharePrice ?? 0;
+    const basisAnchor = shareTradeAnchorValue(
+      1,
+      { ...issuer, sharePrice: basis },
+      fxRateForCorpFromMap(issuer, fxByCurrency)
+    );
     for (const alloc of credits) {
       const recipientId = new ObjectId(alloc.id);
       if (alloc.kind === "character") {
@@ -100,7 +119,7 @@ export async function distributeCrossEquityInKind(
           recipientId,
           alloc.shares,
           { $set: { updatedAt: now } },
-          { pricePerShare: basis }
+          { pricePerShare: basisAnchor, holdingChange: { turn: currentTurn, trackingEnabled } }
         );
       } else if (alloc.kind === "imperial") {
         await creditSharesToImperial(
@@ -109,7 +128,7 @@ export async function distributeCrossEquityInKind(
           recipientId,
           alloc.shares,
           { $set: { updatedAt: now } },
-          { pricePerShare: basis }
+          { pricePerShare: basisAnchor, holdingChange: { turn: currentTurn, trackingEnabled } }
         );
       } else if (alloc.kind === "fund") {
         await creditSharesToFund(db, issuer._id, recipientId, alloc.shares, basis, {
@@ -118,8 +137,6 @@ export async function distributeCrossEquityInKind(
         // Mirror the cap-table credit into the fund's own holdings ledger
         // (anchor currency) so NAV reflects the windfall; non-constituent
         // positions are liquidated by the next rebalance sweep.
-        const fxRate = await getCorpFxRate(db, issuer);
-        const basisAnchor = shareTradeAnchorValue(1, { ...issuer, sharePrice: basis }, fxRate);
         await upsertFundHoldingShares(db, recipientId, issuer._id, alloc.shares, basisAnchor);
       } else {
         await creditSharesToCorp(db, issuer._id, recipientId, alloc.shares, basis, {

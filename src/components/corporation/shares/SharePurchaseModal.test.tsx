@@ -1,6 +1,8 @@
 /** @vitest-environment happy-dom */
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { NextIntlClientProvider } from "next-intl";
+import messages from "../../../../messages/en/profile.json";
 import type { ComponentProps } from "react";
 import type { CorporationDetail } from "../CorporationPageTypes";
 import SharePurchaseModal from "./SharePurchaseModal";
@@ -66,20 +68,22 @@ function corporation(overrides: Partial<CorporationDetail> = {}): CorporationDet
 }
 function setup(overrides: Partial<ComponentProps<typeof SharePurchaseModal>> = {}) {
   render(
-    <SharePurchaseModal
-      corporation={corporation()}
-      corpId="target"
-      myCharacterId="ceo"
-      myCashOnHand={1_000_000}
-      myShares={0}
-      myCorporation={null}
-      myOrders={[]}
-      marketOrders={[]}
-      isCeo
-      onClose={() => {}}
-      onSuccess={() => {}}
-      {...overrides}
-    />
+    <NextIntlClientProvider locale="en" messages={messages}>
+      <SharePurchaseModal
+        corporation={corporation()}
+        corpId="target"
+        myCharacterId="ceo"
+        myCashOnHand={1_000_000}
+        myShares={0}
+        myCorporation={null}
+        myOrders={[]}
+        marketOrders={[]}
+        isCeo
+        onClose={() => {}}
+        onSuccess={() => {}}
+        {...overrides}
+      />
+    </NextIntlClientProvider>
   );
 }
 function enterQuantity(value: number) {
@@ -91,6 +95,38 @@ function enterQuantity(value: number) {
 afterEach(() => {
   cleanup();
   fx.rates = { USD: 1, GBP: 1 };
+});
+
+describe("holding bucket sale selection", () => {
+  it("shows purchase age and caps a personal sale to the selected bucket", () => {
+    setup({
+      myShares: 12,
+      isCeo: true,
+      corporation: corporation({
+        shareholders: [
+          {
+            characterId: "ceo",
+            name: "Synthetic holder",
+            shares: 12,
+            holdingTerms: {
+              longTermShares: 7,
+              longTermCostBasisAnchor: 14,
+              shortTermLots: [{ acquiredTurn: 190, shares: 5, costBasisAnchor: 15 }],
+            },
+          },
+        ],
+      }),
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Sell" }));
+    expect(screen.getByText(/Capital Gains Tax for your income group/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /Short Term Holdings/ }));
+    expect(screen.getByText(/Bought on turn 190.*38 turns/)).toBeTruthy();
+    expect(screen.getByText(/subject to Income Tax/)).toBeTruthy();
+    expect(enterQuantity(9)).toBe("5");
+    expect(screen.queryByText(/Selling all.*remaining/)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /Long Term Holdings/ }));
+    expect(enterQuantity(9)).toBe("7");
+  });
 });
 
 describe("personal CEO market purchases", () => {

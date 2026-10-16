@@ -6,6 +6,7 @@ import type { CurrencyCode } from "@/lib/constants/currencies";
 import type { ProfileBorderKey } from "./patreon";
 
 export interface ImperialCharacter {
+  pendingStockTaxReceipts?: import("@/lib/budget/rules/capitalGainsTax").PendingStockTaxReceipt[];
   initialIncomeTier?: IncomeTier;
   incomeTier?: IncomeTier;
   incomeTaxStartTurn?: number;

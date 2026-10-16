@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { matureHoldingTerms } from "@/lib/corporations/rules/holdingTerms";
+import { getCurrentTurn } from "@/lib/turn/currentTurn";
 import type { ShareOrder } from "@/lib/db/types";
 import { getDb } from "@/lib/mongodb";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
@@ -43,11 +45,18 @@ export async function getShareOrdersView(_request: Request, { params }: RoutePar
     );
 
     const myCharacterId = character?._id.toString();
+    const currentTurn = await getCurrentTurn(db);
 
     const myOrders = allOrders
       .filter((order) => myCharacterId && order.characterId?.toString() === myCharacterId)
       .map((order) => ({
         _id: order._id.toString(),
+        ...(order.holdingTerms && !order.placerCorporationId
+          ? {
+              holdingTerms: matureHoldingTerms(order.holdingTerms, currentTurn),
+              holdingTurn: currentTurn,
+            }
+          : {}),
         type: order.type,
         shares: order.shares,
         sharesRemaining: order.sharesRemaining,

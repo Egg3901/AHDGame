@@ -77,12 +77,16 @@ export async function cancelShareListingAndRefund(
 ): Promise<CancelListingResult | CancelListingError> {
   if (listing.status !== "open") return { ok: false, error: "Listing is not open" };
 
-  const listingClaim = await db
-    .collection<ShareListing>("shareListings")
-    .updateOne(
-      { _id: listing._id, status: "open" },
-      { $set: { status: "cancelled", updatedAt: now } }
-    );
+  const listingClaim = await db.collection<ShareListing>("shareListings").updateOne(
+    {
+      _id: listing._id,
+      status: "open",
+      activeShareFillKey: { $exists: false },
+      sharesRemaining: listing.sharesRemaining,
+      ...(listing.holdingTerms ? { holdingTerms: listing.holdingTerms } : {}),
+    },
+    { $set: { status: "cancelled", updatedAt: now } }
+  );
   if (listingClaim.matchedCount === 0) {
     return { ok: false, error: "Listing is not open" };
   }
@@ -273,7 +277,6 @@ export async function cancelShareListingAndRefund(
     }
 
     if (listing.sharesRemaining > 0) {
-      sharesReturned = listing.sharesRemaining;
       if (listing.sellerCorporationId) {
         const targetCorp = await db.collection<Corporation>("corporations").findOne(
           {
@@ -310,12 +313,18 @@ export async function cancelShareListingAndRefund(
           listing.sellerCharacterId,
           listing.sharesRemaining,
           { $set: { updatedAt: now } },
-          { pricePerShare: returnPrice }
+          {
+            pricePerShare: returnPrice,
+            ...(listing.holdingTerms
+              ? { holdingChange: { turn: currentTurn, restore: listing.holdingTerms } }
+              : {}),
+          }
         );
         if (!restored) {
           throw new Error("Failed to restore seller shares");
         }
       }
+      sharesReturned = listing.sharesRemaining;
     }
   } catch (error) {
     if (sharesReturned > 0) {
@@ -335,7 +344,12 @@ export async function cancelShareListingAndRefund(
           listing.sellerCharacterId,
           listing.sharesRemaining,
           { $set: { updatedAt: new Date() } },
-          { requireSufficient: true }
+          {
+            requireSufficient: true,
+            ...(listing.holdingTerms
+              ? { holdingChange: { turn: currentTurn, remove: listing.holdingTerms } }
+              : {}),
+          }
         );
       }
     }

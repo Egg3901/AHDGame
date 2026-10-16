@@ -13,9 +13,9 @@ describe("legislative parity audit", () => {
     });
     expect(audit.catalogErrors).toEqual([]);
     expect(audit.countries.map((country) => [country.countryId, country.lawCount])).toEqual([
-      ["US", 74],
-      ["UK", 66],
-      ["JP", 67],
+      ["US", 80],
+      ["UK", 69],
+      ["JP", 70],
     ]);
     expect(audit.countries.every((country) => country.missingAdministration.length === 0)).toBe(
       true

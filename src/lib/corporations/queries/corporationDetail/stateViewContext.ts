@@ -77,13 +77,20 @@ export async function loadStateViewContext(
                 currentYear: 1,
                 currentTurn: 1,
                 hardwareInputReliefStartTurn: 1,
+                stockHoldingTaxStartTurn: 1,
                 startingYear: 1,
                 eraSystemEnabled: 1,
               },
             }
           ),
         ])
-      : [[], [], null];
+      : [
+          [],
+          [],
+          await db
+            .collection<GameState>("gameState")
+            .findOne({ _id: "current" }, { projection: { stockHoldingTaxStartTurn: 1 } }),
+        ];
   const states = allStates.filter((s) => uniqueStateIdSet.has(s._id));
   // SP4 §4a: political margin overlays for playable regions among this corp's states.
   const politicalDocs: PoliticalMetricsDoc[] =

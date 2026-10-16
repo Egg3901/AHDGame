@@ -31,12 +31,14 @@ describe("DD Land regional sidecar", () => {
   it("is merged into getCatalog but not the core topology catalog", () => {
     expect(getCoreCatalog("DD")).toHaveLength(110);
     expect(getRegionalCatalog("DD")).toHaveLength(6);
-    expect(getCatalog("DD")).toHaveLength(118);
+    expect(getCatalog("DD")).toHaveLength(121);
+    expect(getCatalog("DD").filter((law) => law.id.includes("__capital_"))).toHaveLength(3);
     expect(getCatalog("DD").filter((l) => l.allowedScope === "regional")).toHaveLength(6);
   });
 
   it("keeps RU catalog free of regional sidecars", () => {
     expect(getRegionalCatalog("RU")).toHaveLength(0);
-    expect(getCatalog("RU")).toHaveLength(112);
+    expect(getCatalog("RU")).toHaveLength(115);
+    expect(getCatalog("RU").filter((law) => law.id.includes("__capital_"))).toHaveLength(3);
   });
 });

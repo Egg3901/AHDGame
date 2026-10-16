@@ -18,6 +18,7 @@ export function PlayerIncomeTaxStatement({ statement }: { statement: PlayerTaxSt
             <thead>
               <tr>
                 <th>{t("turn")}</th>
+                <th>{t("taxType")}</th>
                 <th>{t("gross")}</th>
                 <th>{t("tax")}</th>
                 <th>{t("net")}</th>
@@ -31,6 +32,7 @@ export function PlayerIncomeTaxStatement({ statement }: { statement: PlayerTaxSt
                 return (
                   <tr key={row.turn + ":" + index}>
                     <td>{row.turn}</td>
+                    <td>{t(row.taxKind === "capitalGains" ? "capitalGains" : "tax")}</td>
                     <td>{format(row.gross)}</td>
                     <td>{format(row.tax)}</td>
                     <td>{format(row.net)}</td>

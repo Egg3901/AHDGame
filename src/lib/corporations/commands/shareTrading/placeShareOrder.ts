@@ -5,6 +5,15 @@
 import { loadForexSpreadStrengths } from "@/lib/currency/euro/quotes";
 import { loadEuroMonetaryUnion } from "@/lib/currency/euro/service";
 import { NextResponse } from "next/server";
+import {
+  availableHoldingShares,
+  chooseHoldingTerm,
+  positionHoldingTerms,
+  purchasedHoldingTerms,
+  type HoldingTerm,
+} from "@/lib/corporations/rules/holdingTerms";
+import { pendingStockTaxReceipt } from "@/lib/corporations/rules/stockTaxReceipt";
+import type { PersonalHoldingChange } from "@/lib/corporations/personalHoldingOps";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireCorporationActionsEnabled } from "@/lib/api/requireCorporationActions";
@@ -786,7 +795,8 @@ export async function placeShareOrder(request: Request, { params }: RouteParams)
               $set: { updatedAt: now },
             },
             {
-              pricePerShare: executionPrice,
+              pricePerShare: cost / shares,
+              holdingChange: { turn: currentTurn },
               guardFilter: { publicFloat: { $gte: shares } },
             }
           );
@@ -847,7 +857,13 @@ export async function placeShareOrder(request: Request, { params }: RouteParams)
                 },
                 $set: { updatedAt: new Date() },
               },
-              { requireSufficient: true }
+              {
+                requireSufficient: true,
+                holdingChange: {
+                  turn: currentTurn,
+                  remove: purchasedHoldingTerms(shares, cost / shares, currentTurn),
+                },
+              }
             );
           }
           await refundCharacterCash(db, character._id, homeCurrency, costInHome, forexEnabled);
@@ -976,6 +992,18 @@ export async function placeShareOrder(request: Request, { params }: RouteParams)
         0
       );
       const availableShares = ownedShares - alreadyReserved;
+      const terms = positionHoldingTerms(shareholderEntry ?? { shares: 0 }, currentTurn, 0);
+      let selectedTerm: HoldingTerm;
+      try {
+        selectedTerm = chooseHoldingTerm(terms, parsed.data.holdingTerm);
+      } catch {
+        return errorResponse(409, "Choose Short Term Holdings or Long Term Holdings", {
+          extra: { requiresHoldingTerm: true },
+        });
+      }
+      if (availableHoldingShares(terms, selectedTerm) < shares)
+        return errorResponse(400, "Insufficient shares in selected holding bucket");
+      const holdingChange: PersonalHoldingChange = { turn: currentTurn, term: selectedTerm };
 
       if (availableShares < shares) {
         return errorResponse(
@@ -1012,7 +1040,7 @@ export async function placeShareOrder(request: Request, { params }: RouteParams)
             },
             $set: { updatedAt: now },
           },
-          { requireSufficient: true }
+          { requireSufficient: true, holdingChange }
         );
         if (remainingAfterSale < 0) {
           await reverseFloatSellDebit(db, corporation, issuerBuyback, {
@@ -1020,6 +1048,17 @@ export async function placeShareOrder(request: Request, { params }: RouteParams)
           });
           return errorResponse(409, "Shares were already sold or reserved by another action");
         }
+        const stockTax = holdingChange.tracked
+          ? pendingStockTaxReceipt({
+              id: new ObjectId().toHexString(),
+              currencyCode: homeCurrency,
+              holdingTerms: holdingChange.taken!,
+              proceedsAnchor: proceeds,
+              proceedsCredited: proceedsInHome,
+              saleTurn: currentTurn,
+              assessmentTurn: currentTurn + 1,
+            })
+          : undefined;
         let sellerCredited = false;
         try {
           const sellerCredit = await db.collection<Character>("characters").updateOne(
@@ -1027,6 +1066,7 @@ export async function placeShareOrder(request: Request, { params }: RouteParams)
             {
               $inc: buildPersonalBalanceInc(proceedsInHome, homeCurrency, forexEnabled),
               $set: { updatedAt: now },
+              ...(stockTax ? { $push: { pendingStockTaxReceipts: stockTax } } : {}),
             }
           );
           if (sellerCredit.matchedCount === 0) {
@@ -1057,6 +1097,8 @@ export async function placeShareOrder(request: Request, { params }: RouteParams)
             counterpartyId: corporation._id,
             counterpartyName: corporation.name,
             meta: {
+              ...(stockTax ? { stockTax } : {}),
+              holdingTerm: selectedTerm,
               corporationId: corporation._id.toString(),
               shares,
               pricePerShare: executionPrice,
@@ -1070,6 +1112,7 @@ export async function placeShareOrder(request: Request, { params }: RouteParams)
               {
                 $inc: buildPersonalBalanceInc(-proceedsInHome, homeCurrency, forexEnabled),
                 $set: { updatedAt: new Date() },
+                ...(stockTax ? { $pull: { pendingStockTaxReceipts: { id: stockTax.id } } } : {}),
               }
             );
           }
@@ -1087,7 +1130,7 @@ export async function placeShareOrder(request: Request, { params }: RouteParams)
               },
               $set: { updatedAt: new Date() },
             },
-            { pricePerShare: shareholderEntry?.avgCostPerShare ?? executionPrice }
+            { holdingChange: { turn: currentTurn, restore: holdingChange.taken } }
           );
           await reverseFloatSellDebit(db, corporation, issuerBuyback, {
             split: issuerBuybackSplit,
@@ -1131,7 +1174,7 @@ export async function placeShareOrder(request: Request, { params }: RouteParams)
         character._id,
         shares,
         { $set: { updatedAt: now } },
-        { requireSufficient: true }
+        { requireSufficient: true, holdingChange }
       );
       if (reservedShares < 0) {
         return errorResponse(409, "Shares were already sold or reserved by another action");
@@ -1145,6 +1188,7 @@ export async function placeShareOrder(request: Request, { params }: RouteParams)
           shares,
           sharesRemaining: shares,
           sharesDebitedAtCreation: true,
+          holdingTerms: holdingChange.taken,
           pricePerShare,
           escrowAmount: 0,
           status: "open",
@@ -1158,7 +1202,7 @@ export async function placeShareOrder(request: Request, { params }: RouteParams)
           character._id,
           shares,
           { $set: { updatedAt: new Date() } },
-          { pricePerShare: shareholderEntry?.avgCostPerShare ?? executionPrice }
+          { holdingChange: { turn: currentTurn, restore: holdingChange.taken } }
         );
         throw error;
       }

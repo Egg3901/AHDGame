@@ -36,6 +36,7 @@ interface SharePurchaseAtMarketViewProps {
     isInvestmentBank?: boolean;
   } | null;
   myShares: number;
+  totalPersonalShares?: number;
   myCorporationShares: number;
   /** Whether the viewer is the current CEO of this corporation — drives the divest warning. */
   isCeo?: boolean;
@@ -90,6 +91,7 @@ export function SharePurchaseAtMarketView({
   parseQtyDigits,
   myCorporation,
   myShares,
+  totalPersonalShares = myShares,
   myCorporationShares,
   isCeo = false,
   myCurrencyBalances,
@@ -561,11 +563,11 @@ export function SharePurchaseAtMarketView({
             </div>
           )}
 
-          {isCeo && !sellAsCorp && myShares > 0 && quantity === myShares && (
+          {isCeo && !sellAsCorp && totalPersonalShares > 0 && quantity === totalPersonalShares && (
             <div className="rounded-lg border border-error/30 bg-error/5 px-3 py-2.5 text-xs text-error">
-              You are the CEO. Selling all {myShares.toLocaleString("en-US")} of your remaining
-              shares will remove you as CEO. You&apos;ll need to be re-appointed to become CEO
-              again. You&apos;ll be asked to confirm before this goes through.
+              You are the CEO. Selling all {totalPersonalShares.toLocaleString("en-US")} of your
+              remaining shares will remove you as CEO. You&apos;ll need to be re-appointed to become
+              CEO again. You&apos;ll be asked to confirm before this goes through.
             </div>
           )}
 

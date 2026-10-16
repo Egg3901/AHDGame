@@ -66,6 +66,18 @@ export function openingLawReference(
   scope: "national" | "regional",
   familyId: string
 ): OpeningLawReference | undefined {
+  if (/^T01_capital_(low|middle|high)$/.test(familyId))
+    return {
+      key: country + ":" + scope + ":" + familyId,
+      country,
+      scope,
+      familyId,
+      status: "game-mechanic",
+      currentLaw: "Tiered Capital Gains Tax on long-term direct share income",
+      legalNote:
+        "Initialized from the income-tax tier in this world. Actual player receipts are collected separately from historical macro tax projections.",
+      sourceComponents: [],
+    };
   if (/^T01_(low|middle|high)$/.test(familyId)) familyId = "T01";
   return openingLawReferences.find(
     (reference) =>

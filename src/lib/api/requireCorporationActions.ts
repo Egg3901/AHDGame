@@ -38,9 +38,11 @@ export async function requireCorporationActionsEnabled(db: Db): Promise<NextResp
   const col = await getGameStateCollection(db);
   const gameState = await col.findOne(
     { _id: "current" },
-    { projection: { corporationActionsPaused: 1 } }
+    { projection: { corporationActionsPaused: 1, processingKind: 1 } }
   );
 
+  if (gameState?.processingKind === "stockTaxMigration")
+    return errorResponse(409, "Stock holding maintenance is in progress, try again shortly.");
   if (gameState?.corporationActionsPaused) {
     return errorResponse(403, "Corporation actions are currently paused by an admin");
   }

@@ -151,6 +151,8 @@ export interface CareerEvent {
 }
 
 export interface Character {
+  /** Atomic stock-credit evidence, retained until an immutable tax plan is published. */
+  pendingStockTaxReceipts?: import("@/lib/budget/rules/capitalGainsTax").PendingStockTaxReceipt[];
   /** Monotonic tax-collection proof, reset with the owning world balance. */
   incomeTaxBatchReceipt?: IncomeTaxBatchReceipt | null;
   /** Immutable creation choice; legacy characters inherit demographics.wealth. */

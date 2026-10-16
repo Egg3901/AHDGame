@@ -1,4 +1,6 @@
+import { rejectDuringTurn } from "@/lib/api/rejectDuringTurn";
 import { NextResponse } from "next/server";
+import { holdingCostBasis, scaleHoldingTerms } from "@/lib/corporations/rules/holdingTerms";
 import { ObjectId } from "mongodb";
 import * as Sentry from "@sentry/nextjs";
 import { getDb } from "@/lib/mongodb";
@@ -66,6 +68,8 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     const { targetTotalShares } = parsed.data;
     const db = await getDb();
+    const turnGuard = await rejectDuringTurn(db);
+    if (turnGuard) return turnGuard;
     const corpGuard = await requireCorporationActionsEnabled(db);
     if (corpGuard) return corpGuard;
 
@@ -183,6 +187,30 @@ export async function POST(request: Request, { params }: RouteParams) {
       const alloc = allocateProportionalShareTotals(freshCorporation, targetTotalShares);
       newPublicFloat = alloc.publicFloat;
       newShareholders = alloc.shareholders;
+      newShareholders = newShareholders.map((holder) => {
+        const previous = freshCorporation.shareholders?.find((row) =>
+          holder.characterId
+            ? row.characterId?.equals(holder.characterId)
+            : holder.imperialCharacterId
+              ? row.imperialCharacterId?.equals(holder.imperialCharacterId)
+              : false
+        );
+        if (!previous) return holder;
+        if (previous.holdingTerms) {
+          const holdingTerms = scaleHoldingTerms(previous.holdingTerms, holder.shares, currentTurn);
+          return {
+            ...holder,
+            holdingTerms,
+            avgCostPerShare: holdingCostBasis(holdingTerms) / holder.shares,
+          };
+        }
+        return {
+          ...holder,
+          ...(previous.avgCostPerShare !== undefined
+            ? { avgCostPerShare: (previous.avgCostPerShare * previous.shares) / holder.shares }
+            : {}),
+        };
+      });
     } catch {
       return errorResponse(
         400,
