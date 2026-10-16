@@ -136,3 +136,28 @@ describe("CEO purchase allowance", () => {
     }
   );
 });
+
+describe("ceoIsInactive banner", () => {
+  const STALE = new Date(Date.now() - 200 * 60 * 60 * 1000);
+
+  async function flagFor(overrides: Parameters<typeof makeCorporation>[0]) {
+    const db = createInMemoryDb();
+    const userId = new ObjectId();
+    db.seed("users", [{ _id: userId, lastActivity: STALE, createdAt: STALE }]);
+    const corporation = makeCorporation({ userId, ceoId: new ObjectId(), ...overrides });
+    return (await loadCeoViewFlags(db as never, corporation, null, false, 200)).ceoIsInactive;
+  }
+
+  it("flags a human CEO whose user has been away past the threshold", async () => {
+    expect(await flagFor({ ceoType: "character" })).toBe(true);
+  });
+
+  it("never flags an NPP caretaker corp that keeps the owner's userId", async () => {
+    expect(await flagFor({ ceoType: "npp" })).toBe(false);
+  });
+
+  it("does not flag vacant or nationalized corps", async () => {
+    expect(await flagFor({ ceoType: "character", ceoVacant: true })).toBe(false);
+    expect(await flagFor({ ceoType: "character", isNationalized: true })).toBe(false);
+  });
+});
