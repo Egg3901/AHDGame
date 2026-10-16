@@ -91,6 +91,13 @@ On success, one random sector receives a **revenue boost** (2-10% for regular co
 
 Tech trees and breakthroughs complement each other: trees give targeted permanent power, and breakthroughs add random sector growth on top.
 
+## What the common effects do under the plants system
+
+- **Capacity build cost** (growth cost reduction): discounts what you pay to build capacity, and shortens construction by 60% of the same percentage. A 20% discount means 12% faster builds. The total discount is capped at 50%.
+- **Output sale price** (price realization): raises revenue per unit sold. On cost-plus sectors it adds to your markup, because your posted price is recorded cost plus markup and the upgrade sits on top of it. Capped at 6% in total.
+- **Market-dominance toll** (dominance shield): once you hold a dominant share, new capacity costs extra. The shield removes that percentage of the extra, permanently. It does nothing while you are below the dominance threshold. Capped at 60%.
+- **Logistics strength**: eases the sprawl penalty above the sector threshold, and cuts your freight bill and the landed-price surcharge on inputs bought from other states, by up to 40% at a strength of 200.
+
 ## Strategic notes
 
 - **Lane and specialization choices matter**: Corporate lane bonuses help every sector; Sector lane unlocks methods and margins specific to your industry; the final specialization decides whether that decade favors scale, premium output, or resilience.

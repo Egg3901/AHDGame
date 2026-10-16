@@ -29,6 +29,7 @@ import {
 } from "@/lib/constants/corporations";
 import {
   CAPACITY_BUILD_TURNS,
+  techBuildTurns,
   computeBuildCost,
   revenuePerCapacityUnit,
 } from "@/lib/constants/capacityEconomy";
@@ -274,10 +275,16 @@ export async function expandSector(request: Request, { params }: RouteParams) {
         acumen: ceoChar?.stats?.businessAcumen ?? NEUTRAL_STAT,
         hostCostOfLivingIndex: hostMetrics?.economic?.costOfLiving?.value ?? null,
         techGrowthCostMultiplier: techEffects?.growthCostMultiplier ?? 1,
+        techDominanceShield: techEffects?.dominanceShield ?? 0,
         founding: true,
       }).totalAnchor;
 
-      starterOnlineTurn = currentTurn + Math.max(1, CAPACITY_BUILD_TURNS(sectorType, true));
+      starterOnlineTurn =
+        currentTurn +
+        techBuildTurns(
+          CAPACITY_BUILD_TURNS(sectorType, true),
+          techEffects?.growthCostMultiplier ?? 1
+        );
     }
 
     // Cross-border expansion (target state in a different-currency country) pays

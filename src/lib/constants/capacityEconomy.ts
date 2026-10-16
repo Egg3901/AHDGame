@@ -39,6 +39,7 @@ import {
   getOperatingSectorType,
 } from "./sectorStrategies";
 import { MODERN_ERA_START_YEAR } from "./monetaryEra";
+import { TECH_BUILD_TIME_PER_GROWTH_REDUCTION } from "./techTree/effects";
 import { eraLaborMultiplier } from "@/lib/labour/laborCost";
 
 /**
@@ -521,6 +522,19 @@ export function CAPACITY_BUILD_TURNS(sectorType: OperatingSectorType, founding =
   );
 }
 
+/**
+ * Construction turns after the tech tree's growth-cost reduction.
+ * `growthCostMultiplier` is the capped aggregate (1 = no tech). Never below 1.
+ */
+export function techBuildTurns(baseTurns: number, growthCostMultiplier = 1): number {
+  const mult =
+    Number.isFinite(growthCostMultiplier) && growthCostMultiplier > 0 && growthCostMultiplier <= 1
+      ? growthCostMultiplier
+      : 1;
+  const timeMult = 1 - TECH_BUILD_TIME_PER_GROWTH_REDUCTION * (1 - mult);
+  return Math.max(1, Math.round(baseTurns * timeMult));
+}
+
 /** Every sector type, for exhaustive iteration in tests and tooling. */
 export const CAPACITY_SECTOR_TYPES: ReadonlyArray<OperatingSectorType> = OPERATING_SECTOR_TYPES;
 
@@ -744,6 +758,13 @@ export interface BuildCostInputs {
    * TECH_GROWTH_REDUCTION_CAP). Absent ⇒ 1 (no tech / tree disabled).
    */
   techGrowthCostMultiplier?: number;
+  /**
+   * The corp's aggregated tech dominance shield
+   * (`AggregatedTechEffects.dominanceShield`, already capped at
+   * TECH_SHIELD_CAP). Under plants the build multiplier is the whole dominance
+   * toll, so the shield cuts that toll's excess over 1.0. Absent ⇒ 0.
+   */
+  techDominanceShield?: number;
 }
 
 /** Itemized build cost, so UI/tests/NPPs can show WHY a build costs what it does. */
@@ -774,7 +795,8 @@ export interface BuildCostBreakdown {
  *
  *     total = units × capacityPricePerUnit(type, year)
  *                   × max(localDominanceMult, nationalDominanceMult)
- *                     adjusted for competitorCount
+ *                     adjusted for competitorCount and the tech dominance
+ *                     shield (excess over 1.0 only)
  *                   × rateMult(primeRate, acumen)
  *                   × acumenMult(acumen)
  *                   × techMult(growthCostMultiplier)
@@ -840,6 +862,7 @@ export function computeBuildCost(inputs: BuildCostInputs): BuildCostBreakdown {
     founding = false,
     hostCostOfLivingIndex = null,
     techGrowthCostMultiplier = 1,
+    techDominanceShield = 0,
   } = inputs;
   const safeUnits = Number.isFinite(units) && units > 0 ? units : 0;
   const unitPriceAnchor = capacityPricePerUnit(
@@ -866,7 +889,15 @@ export function computeBuildCost(inputs: BuildCostInputs): BuildCostBreakdown {
     getDominanceGrowthCostMultiplier(localShare),
     getNationalDominanceGrowthCostMultiplier(nationalShare)
   );
-  const dominanceMultiplier = 1 + (rawDominance - 1) * dominanceDensityFactor(competitorCount);
+  // Tech dominance shield: neutralises a fraction of the toll's excess, so a
+  // sub-threshold sector (excess 0) is untouched and the price stays continuous
+  // in share. Clamped below 1 so a malformed caller cannot zero the toll.
+  const dominanceShield =
+    Number.isFinite(techDominanceShield) && techDominanceShield > 0
+      ? Math.min(0.95, techDominanceShield)
+      : 0;
+  const dominanceMultiplier =
+    1 + (rawDominance - 1) * dominanceDensityFactor(competitorCount) * (1 - dominanceShield);
   const rateMultiplier = Math.max(
     0.5,
     1 + ((Number.isFinite(primeRate) ? primeRate : 0) / 10) * acumenRateSensitivity(acumen)

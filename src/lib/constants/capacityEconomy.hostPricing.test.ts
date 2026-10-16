@@ -11,6 +11,8 @@ import {
   HOST_BUILD_PRICE_INDEX_MIN,
   computeBuildCost,
   hostBuildPriceIndex,
+  techBuildTurns,
+  CAPACITY_BUILD_TURNS,
 } from "./capacityEconomy";
 
 /**
@@ -174,5 +176,76 @@ describe("dominance is tolled at build time", () => {
         getDominanceGrowthCostMultiplier(share)
       );
     }
+  });
+});
+
+describe("tech growth-cost reduction also shortens construction", () => {
+  it("is neutral without tech and on a malformed multiplier", () => {
+    expect(techBuildTurns(48)).toBe(48);
+    for (const bad of [0, -1, 2, Number.NaN]) expect(techBuildTurns(48, bad)).toBe(48);
+  });
+
+  it("cuts 60% of the cost reduction off the build time", () => {
+    // 20% cheaper builds -> 12% faster: 48 turns -> 42.
+    expect(techBuildTurns(48, 0.8)).toBe(42);
+    // The 50% aggregate cap -> 30% faster: 48 -> 34.
+    expect(techBuildTurns(48, 1 - TECH_GROWTH_REDUCTION_CAP)).toBe(34);
+  });
+
+  it("never rounds a build below one turn", () => {
+    expect(techBuildTurns(1, 0.5)).toBe(1);
+    expect(techBuildTurns(0, 0.5)).toBe(1);
+  });
+
+  it("shortens a real sector type's queue window", () => {
+    const base = CAPACITY_BUILD_TURNS("manufacturing");
+    expect(techBuildTurns(base, 0.85)).toBeLessThan(base);
+  });
+});
+
+describe("tech dominance shield cuts the build-price dominance toll", () => {
+  const DOMINANT = { ...BASE, marketSharePercent: 80 };
+
+  it("lowers a dominant sector's build price by the shielded share of the toll excess", () => {
+    const plain = computeBuildCost(DOMINANT);
+    const shielded = computeBuildCost({ ...DOMINANT, techDominanceShield: 0.3 });
+    expect(plain.dominanceMultiplier).toBeGreaterThan(1);
+    expect(shielded.dominanceMultiplier).toBeCloseTo(1 + (plain.dominanceMultiplier - 1) * 0.7, 9);
+    expect(shielded.totalAnchor).toBeLessThan(plain.totalAnchor);
+    expect(shielded.totalAnchor / plain.totalAnchor).toBeCloseTo(
+      shielded.dominanceMultiplier / plain.dominanceMultiplier,
+      9
+    );
+  });
+
+  it("does nothing below the dominance threshold", () => {
+    const plain = computeBuildCost({ ...BASE, marketSharePercent: 20 });
+    const shielded = computeBuildCost({
+      ...BASE,
+      marketSharePercent: 20,
+      techDominanceShield: 0.6,
+    });
+    expect(shielded.dominanceMultiplier).toBe(1);
+    expect(shielded.totalAnchor).toBeCloseTo(plain.totalAnchor, 9);
+  });
+
+  it("clamps a malformed shield so it can neither zero nor invert the toll", () => {
+    const plain = computeBuildCost(DOMINANT);
+    for (const bad of [-1, Number.NaN]) {
+      expect(computeBuildCost({ ...DOMINANT, techDominanceShield: bad }).dominanceMultiplier).toBe(
+        plain.dominanceMultiplier
+      );
+    }
+    expect(
+      computeBuildCost({ ...DOMINANT, techDominanceShield: 5 }).dominanceMultiplier
+    ).toBeGreaterThan(1);
+  });
+
+  it("is permanent: it does not fade the way the margin penalty does", () => {
+    const agg = aggregateTechEffects([{ kind: "dominanceShield", pct: 0.25 }]);
+    const a = computeBuildCost({ ...DOMINANT, techDominanceShield: agg.dominanceShield });
+    const b = computeBuildCost({ ...DOMINANT, techDominanceShield: agg.dominanceShield });
+    expect(a.dominanceMultiplier).toBeLessThan(computeBuildCost(DOMINANT).dominanceMultiplier);
+    expect(a.dominanceMultiplier).toBe(b.dominanceMultiplier);
   });
 });

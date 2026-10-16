@@ -17,6 +17,7 @@ import {
   TURNS_PER_DAY,
   getDominanceGrowthCostMultiplier,
   getNationalDominanceGrowthCostMultiplier,
+  getLogisticsShippingMultiplier,
   softCapEffectiveMargin,
   nextNegativeProductionCounter,
 } from "@/lib/constants/corporations";
@@ -772,6 +773,12 @@ export function processSector(
   // ₳/turn. Charge rides `costs` and credit rides the returned revenue below;
   // both legs and the flag-off stale-clear behavior live in
   // `resolveSectorFreightBillingLegs`. Off ⇒ both 0 and no fields written.
+  // Logistics strength (research grants it, the CEO's logistics budget grows
+  // it) cuts the freight bill and the landed surcharge on out-of-state inputs.
+  // Haul revenue is not discounted: it is what the haulier earns, not a cost.
+  const shippingCostMultiplier = isStateOwned(corp)
+    ? 1
+    : getLogisticsShippingMultiplier(corp.logisticsStrength);
   const freightBilling = resolveSectorFreightBillingLegs({
     market,
     sector,
@@ -779,6 +786,7 @@ export function processSector(
     currentTurn,
     sectorCurrencyCode,
     sectorFxRate,
+    shippingCostMultiplier,
   });
 
   // ─── P3.5: physical cost decomposition (plants only) ──────────────────────
@@ -817,6 +825,7 @@ export function processSector(
     mothballed,
     stateId: sector.stateId,
     landedPremiumByState: lookups.landedPremiumByState,
+    shippingCostMultiplier,
     storedOtherOpexAnchor,
     healedOtherOpexPerUnitAnchor: healedOpex?.otherOpexPerUnitAnchor,
     otherOpexAnchorMarginBasis: sector.otherOpexAnchorMarginBasis,

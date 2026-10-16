@@ -7,7 +7,11 @@
  *
  * Per-turn (recomputed from the unlocked set):
  *  - marginBonus         → added into `totalMarginMod` (capped in aggregate)
- *  - growthCostReduction → scales daily growth cost (capped in aggregate)
+ *  - growthCostReduction → scales daily growth cost and, under plants, the
+ *                          capacity build price and (at 60% weight) build time
+ *                          (capped in aggregate)
+ *  - dominanceShield     → under plants, cuts the dominance toll on new
+ *                          capacity (the build price multiplier)
  *  - inputCost           → reduces a production method's demand rate for a commodity
  *  - outputRate          → raises a production method's supply rate for a commodity
  * One-time (applied at unlock):
@@ -19,6 +23,13 @@
 export const TECH_MARGIN_BONUS_CAP_PP = 8;
 /** Total tech growth-cost reduction is capped (multiplier floored at 1 − this). */
 export const TECH_GROWTH_REDUCTION_CAP = 0.5;
+/**
+ * Share of the growth-cost reduction that also shortens construction under
+ * plants. A 20% reduction cuts build time by 12%; the 50% aggregate cap cuts it
+ * by 30%. Deliberately smaller than the price leg: speed compounds (capacity
+ * earns sooner), so it is the weaker benefit.
+ */
+export const TECH_BUILD_TIME_PER_GROWTH_REDUCTION = 0.6;
 /** Total tech labor-cost reduction (automation) is capped (multiplier floored at 1 − this). */
 export const TECH_LABOR_REDUCTION_CAP = 0.5;
 /** Shield-style effects (dominance/tariff/expansion) cap at this fraction. */
@@ -43,7 +54,11 @@ export interface MarginBonusEffect {
   pp: number;
 }
 
-/** Proportional reduction to a sector's daily growth cost (per turn). */
+/**
+ * Proportional reduction to a sector's capacity build cost (per turn). Under
+ * plants it also shortens construction by `TECH_BUILD_TIME_PER_GROWTH_REDUCTION`
+ * of the same fraction; the legacy growth slider is retired there.
+ */
 export interface GrowthCostReductionEffect {
   kind: "growthCostReduction";
   pct: number;
@@ -81,13 +96,24 @@ export interface MarketingStrengthEffect {
   flat: number;
 }
 
-/** One-time flat boost to the corp's logistics strength, applied at unlock. */
+/**
+ * One-time flat boost to the corp's logistics strength, applied at unlock.
+ * Logistics strength eases the sprawl penalty and, under plants, cuts the
+ * corporation's freight bill and landed-price surcharge on out-of-state inputs
+ * (see `getLogisticsShippingMultiplier`).
+ */
 export interface LogisticsStrengthEffect {
   kind: "logisticsStrength";
   flat: number;
 }
 
-/** Reduces the antitrust/political dominance margin penalty + regulatory burden. */
+/**
+ * Reduces the dominance toll. Under plants the toll is the build-price
+ * multiplier on new capacity, so the shield cuts that multiplier's excess over
+ * 1.0 (permanent, unlike the margin penalty and regulatory burden, which fade
+ * out over the plants ramp). Outside plants it reduces the margin penalty and
+ * regulatory burden as before.
+ */
 export interface DominanceShieldEffect {
   kind: "dominanceShield";
   /** Fraction of the dominance penalty neutralized (0.5 = halve it). */
@@ -117,7 +143,8 @@ export interface UnlockStrategyEffect {
  * branding, contract terms). Under plants this multiplies the derived revenue
  * leg (`producedUnits × mixPrice × sales legs`), the plants-native way to say
  * "your output sells for more" — it cannot invert and does not touch the
- * nameplate or the world supply ledger.
+ * nameplate or the world supply ledger. Cost-plus sectors take it too, as extra
+ * markup on top of their posted price.
  */
 export interface PriceRealizationEffect {
   kind: "priceRealization";
@@ -323,6 +350,13 @@ export function sumStrengthGrants(effects: TechEffect[]): TechStrengthGrants {
   return { marketingStrength, logisticsStrength };
 }
 
+function formatPct(fraction: number): string {
+  const pct = fraction * 100;
+  return Number.isInteger(Math.round(pct * 10) / 10)
+    ? String(Math.round(pct))
+    : (Math.round(pct * 10) / 10).toFixed(1);
+}
+
 function prettyCommodity(c: string): string {
   return c.replace(/_/g, " ");
 }
@@ -333,9 +367,11 @@ export function describeTechEffect(effect: TechEffect): string {
     case "marginBonus":
       return `+${effect.pp}pp profit margin`;
     case "priceRealization":
-      return `+${Math.round(effect.pct * 100)}% realised output price`;
+      return `+${formatPct(effect.pct)}% output sale price (adds to cost-plus markup)`;
     case "growthCostReduction":
-      return `−${Math.round(effect.pct * 100)}% growth cost`;
+      return `−${formatPct(effect.pct)}% capacity build cost, −${formatPct(
+        effect.pct * TECH_BUILD_TIME_PER_GROWTH_REDUCTION
+      )}% build time`;
     case "laborCostReduction":
       return `−${Math.round(effect.pct * 100)}% labor cost`;
     case "inputCost":
@@ -343,7 +379,7 @@ export function describeTechEffect(effect: TechEffect): string {
     case "outputRate":
       return `+${Math.round(effect.pct * 100)}% ${prettyCommodity(effect.commodity)} output`;
     case "dominanceShield":
-      return `−${Math.round(effect.pct * 100)}% market-dominance penalty`;
+      return `−${Math.round(effect.pct * 100)}% market-dominance toll on new capacity`;
     case "tariffShield":
       return `−${Math.round(effect.pct * 100)}% foreign-tariff penalty`;
     case "expansionDiscount":
@@ -351,7 +387,7 @@ export function describeTechEffect(effect: TechEffect): string {
     case "marketingStrength":
       return `+${effect.flat} marketing strength`;
     case "logisticsStrength":
-      return `+${effect.flat} logistics strength`;
+      return `+${effect.flat} logistics strength (cheaper freight and landed inputs, less sprawl penalty)`;
     case "unlockStrategy":
       return `Unlocks production method: ${effect.strategyId}`;
   }
