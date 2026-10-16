@@ -5,6 +5,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import { useRegisteredCountries } from "@/contexts/RegisteredCountriesContext";
 import { COMMODITY_LABELS } from "@/lib/constants/commodities";
 import type { CommodityType } from "@/lib/constants/commodities";
+import { sortByRegionLabel } from "@/lib/regionOptions";
 
 interface CommodityRow {
   commodity: string;
@@ -840,7 +841,7 @@ export function CommoditiesAdminPanel() {
                 className="rounded border border-card-border bg-background px-3 py-1.5 text-sm disabled:opacity-40"
               >
                 <option value="">Select state</option>
-                {regionStates.map((s) => (
+                {sortByRegionLabel(regionStates, (s) => s.name).map((s) => (
                   <option key={s.id} value={s.id}>
                     {s.name}
                   </option>

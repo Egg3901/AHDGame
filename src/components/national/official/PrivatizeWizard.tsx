@@ -14,6 +14,7 @@ import type {
 import type { NatOfficialActions } from "../NationalCorporationView";
 import { natMoney as money } from "../natMoney";
 import { apiErrorText } from "@/lib/errors/catalog";
+import { sortByRegionLabel } from "@/lib/regionOptions";
 
 /**
  * Treasury privatization wizard: carve selected sectors out of this National
@@ -281,7 +282,7 @@ export function PrivatizeWizard({
               disabled={busy}
               className="rounded border border-card-border bg-card-elevated px-2 py-1"
             >
-              {vm.countryRegions.map((r) => (
+              {sortByRegionLabel(vm.countryRegions, (r) => r.stateName).map((r) => (
                 <option key={r.stateId} value={r.stateId}>
                   {r.stateName}
                 </option>

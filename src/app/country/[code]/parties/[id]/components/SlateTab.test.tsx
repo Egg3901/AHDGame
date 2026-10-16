@@ -1,6 +1,6 @@
 /** @vitest-environment happy-dom */
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SlateTab } from "./SlateTab";
 
 vi.mock("next/dynamic", () => ({ default: () => () => null }));
@@ -63,6 +63,7 @@ function response(body: unknown, ok = true) {
   return { ok, status: ok ? 200 : 500, json: async () => body };
 }
 
+beforeEach(() => window.localStorage.clear());
 afterEach(() => vi.unstubAllGlobals());
 
 describe("SlateTab race details", () => {
@@ -115,6 +116,8 @@ describe("SlateTab race details", () => {
       String(fetchMock.mock.calls.filter(([url]) => String(url).includes("/slate/"))[1]![0])
     ).toContain(raceB);
 
+    // Details reset on a state change; forget the remembered open choice so cards start closed.
+    window.localStorage.clear();
     view.rerender(<SlateTab {...props} scopeState="SCT" />);
     await screen.findByRole("button", { name: "Show slate" });
     expect(screen.queryByText("No one is assigned to this race yet.")).toBeNull();
@@ -198,6 +201,7 @@ describe("SlateTab race details", () => {
         cache: "no-store",
       })
     );
+    window.localStorage.clear();
     view.rerender(<SlateTab {...props} partyId="2" />);
 
     await screen.findByRole("button", { name: "Show slate" });
@@ -211,6 +215,43 @@ describe("SlateTab race details", () => {
       expect(fetchMock).toHaveBeenCalledWith(`/api/country/uk/parties/2/slate/${raceA}`, {
         cache: "no-store",
       })
+    );
+  });
+
+  it("opens cards for viewers who can assign candidates and remembers a manual close", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/slate"))
+        return response({ items: races.slice(0, 2), stateAggregates: [] });
+      if (url.includes("/slate/")) return response(detailResponse(url.split("/").pop()!));
+      return response({ isActive: true, pausedAt: null, lastTurnProcessed: null });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const props = {
+      countryCode: "uk",
+      countryId: "UK",
+      partyId: "1",
+      partyColor: "#123456",
+      canManageSlate: true,
+      partyMembers: [],
+      scopeState: "NEE",
+    };
+    const first = render(<SlateTab {...props} />);
+
+    await waitFor(() =>
+      expect(screen.getAllByRole("button", { name: "Hide slate" })).toHaveLength(2)
+    );
+    await waitFor(() =>
+      expect(fetchMock.mock.calls.filter(([url]) => String(url).includes("/slate/"))).toHaveLength(
+        2
+      )
+    );
+
+    fireEvent.click(screen.getAllByRole("button", { name: "Hide slate" })[0]!);
+    first.unmount();
+    render(<SlateTab {...props} />);
+    await waitFor(() =>
+      expect(screen.getAllByRole("button", { name: "Show slate" })).toHaveLength(2)
     );
   });
 });

@@ -32,6 +32,7 @@ import { SuperShareAdoptionCard } from "./SuperShareAdoptionCard";
 import { TickerChangeCard } from "./TickerChangeCard";
 import { useCeoAdminState, type DissolvePreviewData, type StateOption } from "./useCeoAdminState";
 import { apiErrorText } from "@/lib/errors/catalog";
+import { sortByRegionLabel } from "@/lib/regionOptions";
 
 const ADDRESS_COOLDOWN_MS = 12 * 60 * 60 * 1000;
 
@@ -524,7 +525,7 @@ export default function CeoGovernancePanel({
               disabled={loadingStates}
             >
               <option value="">{loadingStates ? "Loading" : "Choose a region"}</option>
-              {stateOptions.map((opt) => (
+              {sortByRegionLabel(stateOptions, (opt) => opt.name).map((opt) => (
                 <option key={opt.id} value={opt.id}>
                   {opt.name}
                 </option>

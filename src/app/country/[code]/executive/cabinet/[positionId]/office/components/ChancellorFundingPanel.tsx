@@ -5,6 +5,7 @@ import { Button, Input, Slider } from "@/components/ui";
 import { getCountryConfig, type CountryId } from "@/lib/constants/countries";
 import { COUNTRY_CURRENCY_MAP, CURRENCY_SYMBOLS } from "@/lib/constants/currencies";
 import { apiErrorText } from "@/lib/errors/catalog";
+import { sortByRegionLabel } from "@/lib/regionOptions";
 
 interface RegionRow {
   regionId: string;
@@ -80,7 +81,7 @@ export function ChancellorFundingPanel({
   const amountMode = totalPool > 0;
 
   const sortedRegions = useMemo(
-    () => [...regionData].sort((a, b) => a.regionName.localeCompare(b.regionName)),
+    () => sortByRegionLabel(regionData, (region) => region.regionName),
     [regionData]
   );
 

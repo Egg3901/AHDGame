@@ -7,6 +7,7 @@ import { US_STATES } from "@/lib/constants";
 import { OfficialsFilters } from "./officials/OfficialsFilters";
 import { OfficialsList } from "./officials/OfficialsList";
 import { apiErrorText } from "@/lib/errors/catalog";
+import { sortByRegionLabel } from "@/lib/regionOptions";
 
 interface ElectedOfficial {
   _id: string;
@@ -401,7 +402,7 @@ export function OfficialsManager() {
                   className="rounded-lg border border-card-border bg-card px-3 py-2 text-sm"
                 >
                   <option value="">Select state</option>
-                  {US_STATES.map((s) => (
+                  {sortByRegionLabel(US_STATES, (s) => s).map((s) => (
                     <option key={s} value={s}>
                       {s}
                     </option>

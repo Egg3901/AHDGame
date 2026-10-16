@@ -15,6 +15,7 @@ import { listCountryOffices } from "@/lib/elections/officeResolution";
 import { ELECTION_STATE_NAMES } from "@/app/elections/electionsHelpers";
 import type { ContestFilter, PrimaryFilter, RaceFilter } from "../electionsUrlState";
 import { CLOSE_RACE_RULE_TEXT } from "@/lib/elections/rules/closeRace";
+import { sortByRegionLabel } from "@/lib/regionOptions";
 
 const CLASS_ROMAN = ["I", "II", "III"];
 
@@ -117,7 +118,10 @@ export function ElectionsControls({
         label={`Select ${regionLabel}`}
         options={[
           { value: "", label: `All ${regionLabelPlural}` },
-          ...availableRegions.map((r) => ({ value: r, label: ELECTION_STATE_NAMES[r] ?? r })),
+          ...sortByRegionLabel(
+            availableRegions.map((r) => ({ value: r, label: ELECTION_STATE_NAMES[r] ?? r })),
+            (option) => option.label
+          ),
         ]}
       />
 
