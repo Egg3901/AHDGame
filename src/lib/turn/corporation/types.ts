@@ -468,7 +468,11 @@ export interface FundDividendAccrual {
  */
 export interface SectorUpdateOp {
   updateOne: {
-    filter: { _id: ObjectId };
+    filter: {
+      _id: ObjectId;
+      /** Compare the turn snapshot before changing the operating share. */
+      activeCapacityPercent?: number | { $exists: false };
+    };
     /**
      * C4: not just `$set`. The turn's build-queue write is a `$pull` of the
      * orders that landed plus an `$inc` of the CIP they held, so that an order

@@ -17,7 +17,7 @@ export interface NppOperatingCapacityInput {
   /** Undefined means reservations were not resolved, rather than zero demand. */
   contractDemand?: number;
   /** Every positive output leg must have an authoritative current book. */
-  outputBooks: readonly ({ supply: number; demand: number } | undefined)[];
+  outputBooks: readonly ({ supply: number; demand: number } | null | undefined)[];
   physicalConstraintsClear: boolean;
   constructionOrRetool: boolean;
 }
