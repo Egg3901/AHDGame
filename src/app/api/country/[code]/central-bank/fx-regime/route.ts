@@ -3,6 +3,7 @@
 // Auth: requireAuthWithCharacter, seated chair (or admin)
 // Errors: 400, 401, 403, 404, 429
 
+import { effectiveInterventionPolicy } from "@/lib/currency/intervention/rules";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
@@ -136,12 +137,23 @@ export async function POST(request: Request, context: RouteContext) {
           capitalControls,
           pegTarget: regime === "peg" ? pegTarget : null,
           fxRegimeSetAtTurn: turn,
+          ...(regime === "peg"
+            ? {
+                interventionPolicy: {
+                  ...effectiveInterventionPolicy({ ...fx, fxRegime: regime, pegTarget })!,
+                  setByCharacterId: auth.user.character._id,
+                  setByCharacterName: auth.user.character.name,
+                  setAtTurn: turn,
+                  lastAdjustedAtTurn: turn,
+                },
+              }
+            : {}),
           updatedAt: new Date(),
         },
-        // Declaring a float cancels any standing band: they are contradictory
-        // promises, and leaving the band behind would keep the trinity binding
-        // against a commitment the chair just withdrew.
-        ...(regime === "float" ? { $unset: { interventionPolicy: "" } } : {}),
+        // Leaving a peg for band requires a corridor through the band controls.
+        ...(regime === "float" || (fx.fxRegime === "peg" && regime === "band")
+          ? { $unset: { interventionPolicy: "" } }
+          : {}),
       }
     );
 

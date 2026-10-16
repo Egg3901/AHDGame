@@ -61,3 +61,28 @@ describe("public forex queries", () => {
     expect(result?.history).toEqual([{ turn: 2, rate: 1 }]);
   });
 });
+
+it("public collection and detail agree on an effective peg with unknown metadata", async () => {
+  const row = {
+    countryId: "US",
+    currencyCode: "USD",
+    rate: 1,
+    baseRate: 1,
+    fxRegime: "peg",
+    pegTarget: 0.5,
+    interventionPolicy: { floor: 0.5, ceiling: 0.51, recentInterventions: [{ reservesSpent: 99 }] },
+  };
+  const db = createMockDb();
+  db.collection("exchangeRates").find().toArray.mockResolvedValue([row]);
+  db.collectionMocks.exchangeRates.findOne.mockResolvedValue(row);
+  const { queryForexRates, queryForexCurrency } = await import("./forex");
+  const collection = await queryForexRates(db as unknown as Db);
+  const detail = await queryForexCurrency(db as unknown as Db, "USD");
+  expect(collection.currencies[0].interventionBand).toEqual({
+    floor: 0.5,
+    ceiling: 0.5,
+    setAtTurn: null,
+    defending: true,
+  });
+  expect(detail?.interventionBand).toEqual(collection.currencies[0].interventionBand);
+});

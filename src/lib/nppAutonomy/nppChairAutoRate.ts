@@ -381,7 +381,7 @@ export async function processNppCurrencyDefence(
     depreciation: fxDepreciation(fx.rateHistory, fx.rate, currentTurn),
     hasBand: !!band,
     ownBand: !!band && band.setByCharacterId?.toString() === bank.chairNppId.toString(),
-    turnsSinceBandChange: band ? currentTurn - band.lastAdjustedAtTurn : null,
+    turnsSinceBandChange: band ? currentTurn - (band.lastAdjustedAtTurn ?? 0) : null,
     cooldownTurns: INTERVENTION_POLICY_COOLDOWN_TURNS,
   });
   const now = new Date();

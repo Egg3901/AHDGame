@@ -1,3 +1,4 @@
+import { effectiveInterventionPolicy } from "@/lib/currency/intervention/rules";
 import { euroCurrencyRate } from "@/lib/currency/euro/rules";
 import { loadEuroMonetaryUnion } from "@/lib/currency/euro/service";
 import { clampForexSpreadStrength } from "@/lib/constants/currencies";
@@ -33,7 +34,7 @@ export async function GET() {
     const interventionBands: Partial<
       Record<
         CurrencyCode,
-        { floor: number; ceiling: number; setAtTurn: number; defending: boolean }
+        { floor: number; ceiling: number; setAtTurn: number | null; defending: boolean }
       >
     > = {};
     for (const row of rateRows) {
@@ -41,8 +42,8 @@ export async function GET() {
       spreadStrengths[row.currencyCode] = clampForexSpreadStrength(row.forexSpreadStrength);
       baseRates[row.currencyCode] = row.baseRate;
       regimes[row.currencyCode] = resolveMonetaryRegime(row.monetaryRegime);
-      if (row.interventionPolicy) {
-        const p = row.interventionPolicy;
+      const p = effectiveInterventionPolicy(row);
+      if (p) {
         interventionBands[row.currencyCode] = {
           floor: p.floor,
           ceiling: p.ceiling,
