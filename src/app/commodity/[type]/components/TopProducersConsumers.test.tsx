@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import TopProducersConsumers from "./TopProducersConsumers";
 
@@ -45,5 +45,77 @@ describe("advertising consumer display", () => {
     expect(screen.getByText(/plant inputs only; excludes marketing budgets/)).toBeTruthy();
     expect(screen.queryByText(/shown separately/)).toBeNull();
     expect(screen.queryByText(otherDemand.name)).toBeNull();
+  });
+});
+
+describe("marketing budget list", () => {
+  it("renders and paginates budgets independently of plant demand", () => {
+    const rows = Array.from({ length: 11 }, (_, i) => ({
+      corpId: String(i),
+      name: "Advertiser " + i,
+      sequentialId: 100 + i,
+      dailyBudgetAnchor: 1000 - i,
+    }));
+    const { rerender } = render(
+      <TopProducersConsumers
+        topProducers={[]}
+        topConsumers={[]}
+        syntheticDemandSources={[]}
+        unit="campaigns"
+        commodity="advertising"
+        marketingBudgets={rows}
+        marketLabel="UK Market"
+      />
+    );
+    expect(screen.getByText("Marketing budgets by company")).toBeTruthy();
+    expect(screen.getByText(/configured daily budgets/i)).toBeTruthy();
+    expect(screen.getByText(/not settled spending or recorded demand/i)).toBeTruthy();
+    expect(screen.getByText(/funding and delivery/i)).toBeTruthy();
+    expect(screen.getByText(/headquarters/i)).toBeTruthy();
+    expect(screen.getByText("Advertiser 0").closest("a")?.getAttribute("href")).toBe(
+      "/corporation/100"
+    );
+    expect(screen.getByText("₳1,000/day")).toBeTruthy();
+    expect(screen.queryByText("Advertiser 10")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /Next/ }));
+    expect(screen.getByText("Advertiser 10")).toBeTruthy();
+    expect(screen.queryByText("Advertiser 0")).toBeNull();
+    // Scope changes reset pagination without hiding the only result.
+    rerender(
+      <TopProducersConsumers
+        topProducers={[]}
+        topConsumers={[]}
+        syntheticDemandSources={[]}
+        unit="campaigns"
+        commodity="advertising"
+        marketingBudgets={rows.slice(0, 1)}
+        marketLabel="US Market"
+      />
+    );
+    expect(screen.getByText("Advertiser 0")).toBeTruthy();
+  });
+  it("shows an empty message only for a loaded advertising budget list", () => {
+    const { rerender } = render(
+      <TopProducersConsumers
+        topProducers={[]}
+        topConsumers={[]}
+        syntheticDemandSources={[]}
+        unit="campaigns"
+        commodity="advertising"
+        marketingBudgets={[]}
+      />
+    );
+    expect(screen.getByText(/No companies with positive marketing budgets/)).toBeTruthy();
+    rerender(
+      <TopProducersConsumers
+        topProducers={[]}
+        topConsumers={[]}
+        syntheticDemandSources={[]}
+        unit="tonnes"
+        commodity="steel"
+        marketingBudgets={[]}
+      />
+    );
+    expect(screen.queryByText("Marketing budgets by company")).toBeNull();
   });
 });

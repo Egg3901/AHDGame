@@ -23,6 +23,7 @@ export interface CommodityMarketScope {
   totalCapacity?: number;
   topProducers: CorpVolume[];
   topConsumers: CorpVolume[];
+  marketingBudgets?: CommodityDetail["marketingBudgets"];
   syntheticDemandSources: SyntheticDemandSource[];
 }
 
@@ -98,6 +99,9 @@ export function buildCommodityMarketScope(
       totalCapacity: data.capacityByState?.[activeState],
       topProducers: (stateCountry ? data.topProducersByCountry?.[stateCountry] : undefined) ?? [],
       topConsumers: (stateCountry ? data.topConsumersByCountry?.[stateCountry] : undefined) ?? [],
+      marketingBudgets: data.marketingBudgets?.filter(
+        (row) => row.headquartersState === activeState
+      ),
       syntheticDemandSources: [],
     };
   }
@@ -122,6 +126,7 @@ export function buildCommodityMarketScope(
       totalCapacity: data.totalCapacity,
       topProducers: data.topProducers,
       topConsumers: data.topConsumers,
+      marketingBudgets: data.marketingBudgets,
       syntheticDemandSources: data.syntheticDemandSources,
     };
   }
@@ -185,6 +190,7 @@ export function buildCommodityMarketScope(
     totalCapacity: sumValues(countryCapacityByState),
     topProducers: data.topProducersByCountry?.[activeCountry] ?? [],
     topConsumers: data.topConsumersByCountry?.[activeCountry] ?? [],
+    marketingBudgets: data.marketingBudgets?.filter((row) => row.countryId === activeCountry),
     syntheticDemandSources: [],
   };
 }

@@ -312,6 +312,7 @@ export default function CommodityDetailClient({ initialData }: CommodityDetailCl
         <TopProducersConsumers
           topProducers={marketScope.topProducers}
           topConsumers={marketScope.topConsumers}
+          marketingBudgets={marketScope.marketingBudgets}
           syntheticDemandSources={marketScope.syntheticDemandSources}
           unit={data.unit}
           commodity={data.commodity}

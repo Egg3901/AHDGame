@@ -24,6 +24,12 @@ export interface CorpVolume {
   units: number;
 }
 
+export interface MarketingBudget extends Omit<CorpVolume, "units"> {
+  dailyBudgetAnchor: number;
+  headquartersState?: string;
+  countryId?: string;
+}
+
 export interface DemandDriver {
   type: string;
   label: string;
@@ -110,12 +116,14 @@ export interface CommodityDetail {
   consumers: SectorFlow[];
   topProducers: CorpVolume[];
   topConsumers: CorpVolume[];
+  /** Current configured daily budgets in ₳, not settled spend or demand units. Heavy advertising only. */
+  marketingBudgets?: MarketingBudget[];
   topProducersByCountry?: Partial<Record<CountryId, CorpVolume[]>>;
   topConsumersByCountry?: Partial<Record<CountryId, CorpVolume[]>>;
   /**
    * Documented realized physical-unit basis shared with corporation commodity
    * pages (issue #1999). Top Consumers excludes marketing-budget demand for
-   * advertising; that demand ships separately below.
+   * advertising; current budgets are separate from recorded demand.
    */
   volumeBasis?: {
     basis: "realized_physical_units";

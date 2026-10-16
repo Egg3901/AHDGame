@@ -45,6 +45,7 @@ import { SECTOR_STRATEGIES } from "@/lib/constants/sectorStrategies";
 import { getStateResourceCapacityCollection } from "@/lib/db/collections/stateResourceCapacity";
 import { computeRollingAnnualizedPercentChange } from "@/lib/utils/rollingAnnualizedChange";
 import {
+  resolveCorpLiquidCurrencyCode,
   fxRateForSectorHostFromMap,
   loadFxRatesByCurrency,
   resolveSectorHostCurrencyCode,
@@ -193,11 +194,14 @@ export async function getCommodityDetailData(
       | "_id"
       | "name"
       | "type"
+      | "industryModel"
       | "sequentialId"
       | "logoUrl"
       | "countryId"
       | "countryOwnerId"
       | "liquidCurrencyCode"
+      | "marketingBudget"
+      | "headquartersState"
     >[] = [];
     let allStates: State[] = [];
     if (includeHeavy) {
@@ -218,6 +222,8 @@ export async function getCommodityDetailData(
               | "countryId"
               | "countryOwnerId"
               | "liquidCurrencyCode"
+              | "marketingBudget"
+              | "headquartersState"
             >
           >({
             _id: 1,
@@ -229,6 +235,7 @@ export async function getCommodityDetailData(
             countryId: 1,
             countryOwnerId: 1,
             liquidCurrencyCode: 1,
+            ...(commodity === "advertising" ? { marketingBudget: 1, headquartersState: 1 } : {}),
           })
           .toArray(),
         db
@@ -367,6 +374,39 @@ export async function getCommodityDetailData(
         if (authoredRate !== undefined) fxByCurrency.set(code, authoredRate);
       }
     }
+    const marketingBudgets =
+      includeHeavy && commodity === "advertising"
+        ? allCorps
+            .flatMap((corp) => {
+              if (!Number.isFinite(corp.marketingBudget) || corp.marketingBudget <= 0) return [];
+              if (allowedStateIds && !allowedStateIds.has(corp.headquartersState)) return [];
+              const code = resolveCorpLiquidCurrencyCode(corp);
+              const rate =
+                (code
+                  ? (fxByCurrency.get(code) ?? eraRateForCurrency(code, worldPreset))
+                  : undefined) ?? 1;
+              const dailyBudgetAnchor = readCorpEconomicAnchor(corp.marketingBudget, code, rate);
+              if (!Number.isFinite(dailyBudgetAnchor) || dailyBudgetAnchor <= 0) return [];
+              return [
+                {
+                  corpId: corp._id.toString(),
+                  name: corp.name,
+                  type: corp.type,
+                  typeLabel:
+                    corp.type === "manufacturing" && corp.industryModel === "vehicles"
+                      ? "Vehicle manufacturing"
+                      : OPERATING_SECTOR_TYPE_LABELS[corp.type],
+                  sequentialId: corp.sequentialId,
+                  logoUrl: corp.logoUrl,
+                  headquartersState: corp.headquartersState,
+                  countryId: stateCountryMap[corp.headquartersState],
+                  dailyBudgetAnchor,
+                },
+              ];
+            })
+            .sort((a, b) => b.dailyBudgetAnchor - a.dailyBudgetAnchor)
+        : undefined;
+
     const stateResourcesByState = new Map(
       (stateResourceDocs ?? []).map((doc) => [doc.stateId, doc.resources ?? null])
     );
@@ -554,7 +594,7 @@ export async function getCommodityDetailData(
         description:
           "Across the global market, marketing spending contributes to advertising demand after funding limits and market adjustments. Other demand is stored total demand minus realized plant input demand. It includes marketing and other market demand, not an exact marketing total or per-company attribution.",
         consumerNote:
-          "Top Consumers shows realized plant input demand only. Marketing and other market demand are excluded; no per-company marketing attribution is available.",
+          "Top Consumers shows realized plant input demand only. Marketing and other market demand are excluded. Configured company budgets are listed separately; historical marketing demand is not attributed per company.",
         ...(includeHeavy
           ? {
               sourceLabel: "Other global demand (including marketing)",
@@ -850,6 +890,7 @@ export async function getCommodityDetailData(
       topConsumers,
       topProducersByCountry,
       topConsumersByCountry,
+      marketingBudgets,
       // Documented realized physical-unit basis shared with the corporation
       // commodity tab (see `realizedCommodityBasis`). Same turn, same
       // geographic scope; per-corp volumes round to

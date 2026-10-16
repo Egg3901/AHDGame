@@ -4,13 +4,15 @@ import { useState } from "react";
 import Link from "next/link";
 import { CorporationLogo } from "@/components/corporation/CorporationLogo";
 import { formatUnits } from "../lib/helpers";
-import type { CorpVolume, SyntheticDemandSource } from "../types";
+import { formatCurrencyFull } from "@/lib/utils/formatters";
+import type { MarketingBudget, CorpVolume, SyntheticDemandSource } from "../types";
 
 const PAGE_SIZE = 10;
 
 interface TopProducersConsumersProps {
   topProducers: CorpVolume[];
   topConsumers: CorpVolume[];
+  marketingBudgets?: MarketingBudget[];
   syntheticDemandSources: SyntheticDemandSource[];
   unit: string;
   commodity: string;
@@ -58,9 +60,71 @@ function Pagination({
   );
 }
 
+function MarketingBudgets({
+  rows,
+  marketLabel,
+}: {
+  rows: MarketingBudget[];
+  marketLabel?: string;
+}) {
+  const [page, setPage] = useState(1);
+  const currentPage = Math.min(page, Math.max(1, Math.ceil(rows.length / PAGE_SIZE)));
+  return (
+    <div className="rounded-xl border border-card-border bg-card p-6 sm:col-span-2">
+      <h2 className="text-lg font-bold text-foreground mb-1">Marketing budgets by company</h2>
+      <p className="text-xs text-muted mb-3">
+        Current configured daily budgets in ₳ (anchor currency)
+        {marketLabel ? `; companies by headquarters in the ${marketLabel.toLowerCase()}` : ""}.{" "}
+        These are not settled spending or recorded demand. Budgets may be limited by funding and
+        delivery.
+      </p>
+      {rows.length === 0 && (
+        <p className="text-sm text-muted">
+          No companies with positive marketing budgets in this market.
+        </p>
+      )}
+      <div className="space-y-2">
+        {rows.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE).map((c, i) => (
+          <Link
+            key={c.corpId}
+            href={`/corporation/${c.sequentialId ?? c.corpId}`}
+            className="flex items-center justify-between text-sm hover:bg-card-elevated/50 -mx-2 px-2 py-1 rounded-lg transition-colors"
+          >
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="text-xs text-muted tabular-nums font-mono w-4 text-right shrink-0">
+                {(currentPage - 1) * PAGE_SIZE + i + 1}
+              </span>
+              <CorporationLogo
+                logoUrl={c.logoUrl}
+                name={c.name}
+                size="h-5 w-5"
+                className="rounded border border-card-border bg-card-elevated"
+              />
+              <span className="text-foreground font-medium truncate">{c.name}</span>
+              {c.typeLabel && (
+                <span className="text-[10px] text-muted shrink-0">{c.typeLabel}</span>
+              )}
+            </div>
+            <span className="text-foreground font-medium tabular-nums shrink-0 ml-2">
+              {formatCurrencyFull(c.dailyBudgetAnchor, "₳")}/day
+            </span>
+          </Link>
+        ))}
+      </div>
+      <Pagination
+        page={currentPage}
+        total={rows.length}
+        onPrev={() => setPage(Math.max(1, currentPage - 1))}
+        onNext={() => setPage(currentPage + 1)}
+      />
+    </div>
+  );
+}
+
 export default function TopProducersConsumers({
   topProducers,
   topConsumers,
+  marketingBudgets,
   syntheticDemandSources,
   unit,
   commodity,
@@ -70,7 +134,14 @@ export default function TopProducersConsumers({
   const [producerPage, setProducerPage] = useState(1);
   const [consumerPage, setConsumerPage] = useState(1);
 
-  if (topProducers.length === 0 && topConsumers.length === 0 && syntheticDemandSources.length === 0)
+  const showMarketingBudgets = commodity === "advertising" && marketingBudgets !== undefined;
+
+  if (
+    !showMarketingBudgets &&
+    topProducers.length === 0 &&
+    topConsumers.length === 0 &&
+    syntheticDemandSources.length === 0
+  )
     return null;
 
   const pagedProducers = topProducers.slice(
@@ -195,6 +266,9 @@ export default function TopProducersConsumers({
             }
           />
         </div>
+      )}
+      {showMarketingBudgets && (
+        <MarketingBudgets key={marketLabel} rows={marketingBudgets} marketLabel={marketLabel} />
       )}
     </div>
   );

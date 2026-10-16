@@ -218,3 +218,41 @@ describe("buildCommodityMarketScope", () => {
     expect(scope.marketLabel).not.toContain("GOSPLAN");
   });
 });
+
+describe("marketing budget scope", () => {
+  const rows = [
+    {
+      corpId: "us-ca",
+      name: "California",
+      dailyBudgetAnchor: 300,
+      headquartersState: "CA",
+      countryId: "US",
+    },
+    {
+      corpId: "us-tx",
+      name: "Texas",
+      dailyBudgetAnchor: 200,
+      headquartersState: "TX",
+      countryId: "US",
+    },
+    {
+      corpId: "de",
+      name: "Bremen",
+      dailyBudgetAnchor: 100,
+      headquartersState: "BRE",
+      countryId: "DE",
+    },
+    { corpId: "unknown", name: "Unknown HQ", dailyBudgetAnchor: 50 },
+  ];
+  it("filters by headquarters without substituting global rows", () => {
+    const data = makeCommodityDetail({ commodity: "advertising", marketingBudgets: rows });
+    expect(buildCommodityMarketScope(data, null).marketingBudgets).toEqual(rows);
+    expect(buildCommodityMarketScope(data, "US").marketingBudgets).toEqual(rows.slice(0, 2));
+    expect(buildCommodityMarketScope(data, "US", "CA").marketingBudgets).toEqual(rows.slice(0, 1));
+    expect(buildCommodityMarketScope(data, "UK").marketingBudgets).toEqual([]);
+    expect(buildCommodityMarketScope(data, "US", "MISSING").marketingBudgets).toEqual([]);
+  });
+  it("keeps budgets absent before the heavy payload arrives", () => {
+    expect(buildCommodityMarketScope(makeCommodityDetail(), "US").marketingBudgets).toBeUndefined();
+  });
+});
