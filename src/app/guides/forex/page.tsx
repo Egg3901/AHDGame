@@ -336,8 +336,8 @@ export default function ForexGuidePage() {
                 a central bank moves, just the month it moves in.
               </li>
               <li>
-                Use limit orders for planned entries and exits; the 0.1 point of spread you save
-                versus the market maker compounds if you trade often.
+                Use limit orders for planned entries and exits; the roughly 0.36 point of spread you
+                save versus the market maker compounds if you trade often.
               </li>
               <li>
                 The ±5% volume-pressure cap means crowd surges fade. If a currency spikes on player
