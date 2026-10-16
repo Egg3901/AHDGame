@@ -199,12 +199,10 @@ async function collectBalanceState(
   const gameState = await db
     .collection<{ _id: string; preset?: string; worldEpochId?: string }>("gameState")
     .findOne({ _id: "current" }, { projection: { preset: 1, worldEpochId: 1 } });
-  for await (const wallet of db
+  const producerWalletCursor = db
     .collection<ProducerEconomyAccount>("producerEconomyAccounts")
-    .find(
-      { worldEpoch: gameState?.worldEpochId ?? "" },
-      { projection: { currency: 1, cash: 1 } }
-    )) {
+    .find({ worldEpoch: gameState?.worldEpochId ?? "" }, { projection: { currency: 1, cash: 1 } });
+  for await (const wallet of producerWalletCursor) {
     const currency = ZOD_CURRENCY_ENUM.find((code) => code === wallet.currency);
     const rate = currency && rates.get(currency);
     if (!currency || !rate || !Number.isFinite(rate) || rate <= 0 || !Number.isFinite(wallet.cash))
