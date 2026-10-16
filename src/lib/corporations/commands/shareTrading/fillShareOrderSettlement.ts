@@ -2,8 +2,9 @@
  * Settlement helpers for fillShareOrder — extracted verbatim (pure code
  * motion; no behavior change). Live production money-path code: the
  * buy-order settlement branch, party-name resolvers, and the post-fill
- * totalShares invariant correction.
+ * totalShares invariant check.
  */
+import * as Sentry from "@sentry/nextjs";
 import { NextResponse } from "next/server";
 import type { Db } from "mongodb";
 import { ObjectId } from "mongodb";
@@ -276,14 +277,14 @@ export async function settleBuyOrderFill(args: {
 }
 
 /**
- * Post-fill invariant: recompute totalShares from live positions and atomically
- * correct any drift. The update filter includes the expected totalShares value so
- * a concurrent correction from another fill doesn't stomp a valid update.
+ * Post-fill invariant check: compare totalShares against live positions and
+ * report drift. It never writes. The three reads are not one snapshot, and
+ * reservation writers debit holdings before inserting the order or listing, so
+ * a read between those writes undercounts. Writing that result once shrank
+ * issued shares by a whole open reservation, and its later cancel left the
+ * holders above 100%. Drift is repaired by the admin share heal instead.
  */
-export async function reconcileTotalSharesAfterFill(
-  db: Db,
-  corporationId: ObjectId
-): Promise<void> {
+export async function checkTotalSharesAfterFill(db: Db, corporationId: ObjectId): Promise<void> {
   try {
     const [postFillCorp, postFillListings, postFillSellOrders] = await Promise.all([
       db.collection<Corporation>("corporations").findOne({ _id: corporationId }),
@@ -304,15 +305,17 @@ export async function reconcileTotalSharesAfterFill(
     if (postFillCorp) {
       const accounted = computeAccountedShares(postFillCorp, postFillListings, postFillSellOrders);
       if (accounted !== (postFillCorp.totalShares ?? 0)) {
-        await db
-          .collection<Corporation>("corporations")
-          .updateOne(
-            { _id: corporationId, totalShares: postFillCorp.totalShares },
-            { $set: { totalShares: accounted, updatedAt: new Date() } }
-          );
+        Sentry.captureMessage("share fill invariant drift", {
+          level: "warning",
+          extra: {
+            corporationId: corporationId.toString(),
+            totalShares: postFillCorp.totalShares ?? 0,
+            accounted,
+          },
+        });
       }
     }
   } catch {
-    // Non-fatal: fill succeeded; invariant correction is best-effort.
+    // Non-fatal: fill succeeded; the invariant check is diagnostic only.
   }
 }
