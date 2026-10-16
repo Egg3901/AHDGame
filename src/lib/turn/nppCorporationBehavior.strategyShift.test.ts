@@ -135,6 +135,67 @@ describe("extraction placement headroom", () => {
 });
 
 describe("NPP input-squeeze strategy shift (section 2e)", () => {
+  const enabledPlants: NppPlantsContext = {
+    enabled: true,
+    year: 2019,
+    eraUnitScale: 1,
+    preset: "2019-default",
+    primeRateOf: () => 5,
+    costOfLivingOf: () => 100,
+  };
+
+  it("does not start a corrective retool on a sector mothballed by this decision", () => {
+    const cold = sector({
+      sectorType: "media",
+      mediaDiscriminator: "entertainment",
+      strategyId: "legacy_broadcast",
+      soldFraction: 1,
+      pnlLossTurns: 12,
+      capitalStock: 1_000,
+      otherOpexPerUnitAnchor: 12.5,
+    });
+    const d = decide(corp(), [cold], () => 1, enabledPlants);
+    expect(d.sectorUpdates).toContainEqual({
+      filter: { _id: cold._id },
+      update: { $set: { mothballed: true, updatedAt: expect.any(Date) } },
+    });
+    expect(strategySets(d)).toHaveLength(0);
+  });
+
+  it("does not start a price-seeking retool on a sector mothballed by this decision", () => {
+    const cold = sector({ strategyId: "standard", soldFraction: 1, pnlLossTurns: 12 });
+    const d = decide(corp(), [cold], fertilizerSqueeze, enabledPlants);
+    expect(d.sectorUpdates).toContainEqual({
+      filter: { _id: cold._id },
+      update: { $set: { mothballed: true, updatedAt: expect.any(Date) } },
+    });
+    expect(strategySets(d)).toHaveLength(0);
+  });
+
+  it("can correct another running sector when one sector is mothballed", () => {
+    const cold = sector({
+      sectorType: "media",
+      mediaDiscriminator: "entertainment",
+      strategyId: "legacy_broadcast",
+      soldFraction: 1,
+      pnlLossTurns: 12,
+    });
+    const running = sector({
+      sectorType: "media",
+      mediaDiscriminator: "entertainment",
+      strategyId: "legacy_broadcast",
+      soldFraction: 1,
+      pnlLossTurns: 0,
+    });
+    const d = decide(corp(), [cold, running], () => 1, enabledPlants);
+    expect(d.sectorUpdates).toContainEqual({
+      filter: { _id: cold._id },
+      update: { $set: { mothballed: true, updatedAt: expect.any(Date) } },
+    });
+    expect(strategySets(d)).toHaveLength(1);
+    expect(strategySets(d)[0].filter._id).toEqual(running._id);
+  });
+
   it("corrects one obsolete recipe only in the corporation's normal cohort", () => {
     const a = sector({
       sectorType: "media",
