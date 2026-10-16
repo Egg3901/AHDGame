@@ -3,6 +3,10 @@ import {
   expansionGapAfterExistingCapacity,
   sellableExpansionUnits,
 } from "@/lib/corporations/investment/expansion/rules";
+import {
+  commodityTollModels,
+  loadCommodityDominanceContext,
+} from "@/lib/corporations/commodityDominanceContext";
 import { deliveredFraction } from "@/lib/corporations/buildDelivery";
 import { loadInvestmentBondReference } from "@/lib/corporations/investment/bondReference";
 import { NextResponse } from "next/server";
@@ -1235,9 +1239,19 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
         basePrices: eraScaledBasePrices(sectorDetailUnitScale),
       });
 
+      const commodityDominanceCtx = await loadCommodityDominanceContext(db, {
+        corporation,
+        sector,
+        turn: currentTurn,
+        currentYear: techCurrentYear,
+      });
+
       plants = buildSectorPlantsSection({
         sector,
         sectorType,
+        commodityTollModels: commodityDominanceCtx
+          ? commodityTollModels(commodityDominanceCtx)
+          : [],
         currentTurn,
         currentYear: techCurrentYear,
         governorCap: marketCtx.governorCap,
