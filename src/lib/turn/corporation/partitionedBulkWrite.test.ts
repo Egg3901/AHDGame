@@ -76,9 +76,8 @@ describe("partitionBulkOpsById", () => {
     expect(
       partitionBulkOpsById([keyed, { updateOne: { filter: { status: "x" }, update: {} } }], 4)
     ).toBeNull();
-    expect(
-      partitionBulkOpsById([keyed, { updateOne: { filter: { _id, status: "x" }, update: {} } }], 4)
-    ).toBeNull();
+    const guarded: Op = { updateOne: { filter: { _id, status: "x" }, update: {} } };
+    expect(partitionBulkOpsById([keyed, guarded], 4)).toEqual([[keyed, guarded]]);
     expect(
       partitionBulkOpsById(
         [keyed, { updateOne: { filter: { _id: { $in: [_id] } }, update: {} } }],
@@ -96,6 +95,30 @@ describe("partitionedBulkWrite", () => {
     Array.from({ length: count }, (_, sequence) => ({
       updateOne: { filter: { _id: new ObjectId() }, update: { $set: { sequence } } },
     }));
+
+  it("keeps guarded sector updates partitioned and ordered with their economic writes", async () => {
+    const ops = manyOps(3000).flatMap((op) => {
+      const _id = (op as { updateOne: { filter: { _id: ObjectId } } }).updateOne.filter._id;
+      return [
+        op,
+        {
+          updateOne: {
+            filter: { _id, activeCapacityPercent: { $exists: false } },
+            update: { $set: { activeCapacityPercent: 25 } },
+          },
+        } as Op,
+      ];
+    });
+    const bulkWrite = vi.fn().mockResolvedValue({});
+    await partitionedBulkWrite({ bulkWrite } as unknown as Collection<Document>, ops);
+    expect(bulkWrite).toHaveBeenCalledTimes(4);
+    for (const [group] of bulkWrite.mock.calls) {
+      for (let index = 0; index < group.length; index += 2) {
+        expect(idOf(group[index])).toBe(idOf(group[index + 1]));
+        expect(group[index + 1].updateOne.filter.activeCapacityPercent).toEqual({ $exists: false });
+      }
+    }
+  });
 
   it("sends small writes as the original single bulkWrite", async () => {
     const bulkWrite = vi.fn().mockResolvedValue({});
