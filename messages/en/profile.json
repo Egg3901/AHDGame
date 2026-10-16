@@ -311,6 +311,26 @@
       "raceNone": "No race in your home region is taking candidates right now. Keep campaigning; the next one opens soon and you will start it ahead.",
       "raceDone": "You are in the arena.",
       "skippedTour": "You skipped the tour. The <link>two-minute basics</link> are here whenever you want them."
+    },
+    "incomeTax": {
+      "title": "Income tax",
+      "tiers": {
+        "low": "Low Income",
+        "middle": "Medium Income",
+        "high": "High Income"
+      },
+      "target": "Target: {rate}%",
+      "startingTier": "Starting income group",
+      "currentTier": "Current income group",
+      "gross": "Gross income",
+      "tax": "Income tax",
+      "net": "Net income",
+      "pending": "Unpaid assessment",
+      "latest": "Latest tax assessments",
+      "none": "No income-tax assessments yet.",
+      "turn": "Turn",
+      "status": "Status",
+      "paid": "Paid"
     }
   }
 }

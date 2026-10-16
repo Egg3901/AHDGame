@@ -12,6 +12,7 @@ import type { FinancialTxType } from "@/lib/db/types/financialTxLog";
  * If the two diverge, `assertCoverage` below catches it at typecheck time.
  */
 export const ALL_TX_TYPES: readonly FinancialTxType[] = [
+  "player_income_tax",
   // ── Character / imperial cash ──────────────────────────────────────────
   "corp_sector_founding",
   "org_cash",
@@ -167,6 +168,7 @@ export const ALL_TX_TYPES: readonly FinancialTxType[] = [
 ] as const;
 
 export const TX_TYPE_LABELS: Record<FinancialTxType, string> = {
+  player_income_tax: "Personal Income Tax",
   corp_sector_founding: "Corporation Sector Founding",
   org_cash: "Organization Cash Settlement",
   org_tribute_mint: "Unmodeled Organization Tribute",

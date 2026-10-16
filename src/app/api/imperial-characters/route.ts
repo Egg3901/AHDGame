@@ -31,6 +31,7 @@ const createSchema = z.object({
   // single source of truth without a code redeploy when a new imperial country
   // ships.
   countryId: z.string(),
+  incomeTier: z.enum(["low", "middle", "high"]).default("high"),
   name: z.string().min(2).max(50),
   gender: z.enum(["male", "female", "nonbinary"]),
   royalHouse: z.string().min(2).max(80),
@@ -75,6 +76,9 @@ export async function POST(request: Request) {
       return errorResponse(400, "Imperial configuration not found for this country");
     }
 
+    const world = await db
+      .collection<{ _id: string; currentTurn?: number }>("gameState")
+      .findOne({ _id: "current" }, { projection: { currentTurn: 1 } });
     const now = new Date();
     const adminUserId = new ObjectId(auth.admin.userId);
     const imperialId = new ObjectId();
@@ -82,6 +86,9 @@ export async function POST(request: Request) {
 
     // Create imperial character document
     const imperialCharacter: ImperialCharacter = {
+      initialIncomeTier: parsed.data.incomeTier,
+      incomeTier: parsed.data.incomeTier,
+      incomeTaxStartTurn: (world?.currentTurn ?? 0) + 1,
       _id: imperialId,
       userId: adminUserId,
       countryId: countryId as CountryId,

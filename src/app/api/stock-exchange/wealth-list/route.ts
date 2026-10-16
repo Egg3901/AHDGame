@@ -1,3 +1,4 @@
+import { loadUnpaidIncomeTaxByCharacter } from "@/lib/budget/playerIncomeTaxSummary";
 import { NextResponse } from "next/server";
 import { ObjectId, type Db } from "mongodb";
 import { getDb } from "@/lib/mongodb";
@@ -183,6 +184,7 @@ async function computeWealthListFallback(
   const stockValueByCharId = sumStockValueByCharacter(corporations, characterIdSet, fxByCurrency);
   const bondValueByCharId = sumBondValueByCharacter(bonds, characterIdSet, fxByCurrency);
   const fundValueByCharId = await loadFundValueByCharacter(db, characterIds, characterIdSet);
+  const incomeTaxDebts = await loadUnpaidIncomeTaxByCharacter(db, exchangeRates);
 
   // Fetch border data
   const borderMap = await fetchBordersByUserIds(
@@ -200,7 +202,8 @@ async function computeWealthListFallback(
           bondValueByCharId,
           forexEnabled,
           exchangeRates,
-          fundValueByCharId
+          fundValueByCharId,
+          incomeTaxDebts
         );
       const countryId = resolveCountryId(character);
       const countryName = COUNTRY_CONFIGS[countryId]?.name ?? countryId;

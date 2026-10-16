@@ -1,3 +1,5 @@
+import { isLegacyIncomeTax } from "@/lib/budget/incomeTaxCatalog";
+import { incomeTierForTaxKey, incomeTaxRate } from "@/lib/budget/rules/incomeTaxTiers";
 import type { Db, ObjectId } from "mongodb";
 import type {
   StatePolicyRecord,
@@ -213,6 +215,8 @@ export function getBudgetTaxRate(
   const taxRates = budget.taxRates as FederalTaxRates & {
     corporateTax?: number;
   };
+  const tier = incomeTierForTaxKey(taxType);
+  if (tier) return incomeTaxRate(taxRates, tier);
   const directRate = taxRates[taxType];
   if (typeof directRate === "number") return directRate;
 
@@ -470,6 +474,13 @@ export async function assembleNationalPolicyRecords(
         record.legislationTypeId
       );
       if (!legislationType) return null;
+      if (
+        isLegacyIncomeTax(legislationType) &&
+        types.legislationTypes.some((type) =>
+          type._id.startsWith(legislationType._id + "__income_")
+        )
+      )
+        return null;
       let activeOrder: ActiveOrderInfo | null = null;
       if (record.enactedBy?.kind === "order") {
         const order = activeOrderById.get(record.enactedBy.id.toString());

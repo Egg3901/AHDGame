@@ -1,3 +1,5 @@
+import { TAXABLE_PLAYER_INCOME_TYPES } from "@/lib/budget/rules/incomeTaxTiers";
+import { recurringIncomePerTurn } from "./rules/income";
 import type { Db } from "mongodb";
 import type { Character } from "@/lib/db/types";
 import type { FinancialTxLogEntry } from "@/lib/db/types/financialTxLog";
@@ -13,9 +15,8 @@ import { fromInternalUnits, toInternalUnits } from "./locMath";
 export const LOC_INCOME_AVERAGING_TURNS = 48;
 
 const LOC_RECURRING_INCOME_TX_TYPES: FinancialTxLogEntry["type"][] = [
-  "bond_coupon",
-  "corp_dividend",
-  "corp_salary",
+  ...TAXABLE_PLAYER_INCOME_TYPES,
+  "player_income_tax",
 ];
 
 /**
@@ -42,7 +43,6 @@ export async function estimatePerTurnCurrencyIncomeHomeFace(
       subjectType: "character",
       subjectId: character._id,
       type: { $in: LOC_RECURRING_INCOME_TX_TYPES },
-      amount: { $gt: 0 },
       turn: { $gte: windowStartTurn, $lte: currentTurn },
     })
     .project({ amount: 1, currencyCode: 1, anchorAmount: 1 })
@@ -61,6 +61,6 @@ export async function estimatePerTurnCurrencyIncomeHomeFace(
     totalInternal += toInternalUnits(row.amount, rate);
   }
 
-  const averageInternalPerTurn = observationTurns > 0 ? totalInternal / observationTurns : 0;
+  const averageInternalPerTurn = recurringIncomePerTurn(totalInternal, observationTurns);
   return fromInternalUnits(averageInternalPerTurn, rateHome);
 }

@@ -1,9 +1,15 @@
+import type { IncomeTier } from "@/lib/budget/rules/incomeTaxTiers";
+import type { IncomeTaxBatchReceipt } from "./incomeTax";
 import type { ObjectId } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import type { ProfileBorderKey } from "./patreon";
 
 export interface ImperialCharacter {
+  initialIncomeTier?: IncomeTier;
+  incomeTier?: IncomeTier;
+  incomeTaxStartTurn?: number;
+  incomeTaxBatchReceipt?: IncomeTaxBatchReceipt | null;
   _id: ObjectId;
   userId: ObjectId;
   countryId: CountryId;

@@ -1,3 +1,4 @@
+import { INCOME_TAX_INDEXES } from "@/lib/budget/incomeTaxIndexes";
 import type { Db } from "mongodb";
 import { ensureIndex } from "./helpers";
 import { MONEY_MOVE_COLLECTION } from "@/lib/banking/moneyMove";
@@ -31,6 +32,8 @@ export const BANK_TREASURY_TRADES_INDEX = {
  */
 export async function seedBankingIndexes(db: Db, log: (msg: string) => void) {
   log("Banking money-move indexes:");
+  for (const index of INCOME_TAX_INDEXES)
+    await ensureIndex(db, index.collection, index.keys, { name: index.name }, log);
 
   await ensureIndex(
     db,

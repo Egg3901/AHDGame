@@ -1,3 +1,5 @@
+import { isLegacyIncomeTax } from "@/lib/budget/incomeTaxCatalog";
+import { incomeTierForTaxKey, incomeTaxRate } from "@/lib/budget/rules/incomeTaxTiers";
 /**
  * Tax-slider mechanics (ruling #16, spec §5.1b): continuous-rate tax laws.
  * Proposals carry `proposedRate` + a synthetic policyOptionId "rate:<value>";
@@ -136,7 +138,9 @@ export async function resolveTaxSliderProvisionFields(
         { projection: { taxRates: 1 } }
       );
     currentRate =
-      (stateBudget?.taxRates as Record<string, number> | undefined)?.[slider.taxType] ??
+      (incomeTierForTaxKey(slider.taxType) && stateBudget?.taxRates
+        ? incomeTaxRate(stateBudget.taxRates, incomeTierForTaxKey(slider.taxType)!)
+        : (stateBudget?.taxRates as Record<string, number> | undefined)?.[slider.taxType]) ??
       slider.baselineRate;
   } else {
     const budgetId = getNationalBudgetId(countryId as CountryId);
@@ -144,7 +148,9 @@ export async function resolveTaxSliderProvisionFields(
       .collection<FederalBudget>("federalBudget")
       .findOne({ _id: budgetId }, { projection: { taxRates: 1 } });
     currentRate =
-      (budget?.taxRates as Record<string, number> | undefined)?.[slider.taxType] ??
+      (incomeTierForTaxKey(slider.taxType) && budget?.taxRates
+        ? incomeTaxRate(budget.taxRates, incomeTierForTaxKey(slider.taxType)!)
+        : (budget?.taxRates as Record<string, number> | undefined)?.[slider.taxType]) ??
       slider.baselineRate;
   }
 
@@ -200,6 +206,8 @@ export async function stampTaxSliderProvisions<T extends StampableProvision>(
       continue;
     }
     const lt = await db.collection<LegislationType>("legislationTypes").findOne({ _id: ltId });
+    if (lt && isLegacyIncomeTax(lt))
+      return { ok: false, error: "Choose a separate low, medium, or high income-tax provision." };
     if (!lt?.taxSlider) {
       const withoutUnvalidatedRate = { ...p };
       delete withoutUnvalidatedRate.proposedRate;

@@ -52,6 +52,25 @@ describe("estimatePerTurnCurrencyIncomeHomeFace", () => {
     });
   });
 
+  it.each([
+    { tax: -20, expected: 80 },
+    { tax: -200, expected: 0 },
+  ])("subtracts tax payments from credit underwriting ($tax)", async ({ tax, expected }) => {
+    db.collectionMocks.gameState.findOne.mockResolvedValue({ currentTurn: 1 });
+    installFinancialTxFindMock(db, [
+      { type: "corp_salary", turn: 1, amount: 100, anchorAmount: 100, currencyCode: "USD" },
+      { type: "player_income_tax", turn: 1, amount: tax, anchorAmount: tax, currencyCode: "USD" },
+    ]);
+    const { estimatePerTurnCurrencyIncomeHomeFace } = await import("./currencyIncomeEstimate");
+    expect(
+      await estimatePerTurnCurrencyIncomeHomeFace(
+        db as unknown as Db,
+        { _id: new ObjectId() } as never,
+        { USD: 1 }
+      )
+    ).toBe(expected);
+  });
+
   it("averages recurring income across the last 48 turns and ignores older spikes", async () => {
     const characterId = new ObjectId();
 

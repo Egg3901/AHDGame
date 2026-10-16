@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { IncomeTaxRates } from "./IncomeTaxRates";
 import { BudgetSummaryCard } from "./BudgetSummaryCard";
 import type { StateBudget } from "@/lib/db/types/budget";
 import { regionApiSubUrl } from "@/lib/urls";
@@ -97,6 +98,7 @@ export function StateBudgetSection({ stateId, countryId, regionCode }: StateBudg
         />
       </div>
 
+      {budget.taxRates && <IncomeTaxRates rates={budget.taxRates} />}
       {/* Revenue & Spending */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div className="rounded-xl border border-card-border bg-card p-4">

@@ -1,3 +1,4 @@
+import { isLegacyIncomeTax } from "@/lib/budget/incomeTaxCatalog";
 import { loadEuroMonetaryUnion } from "@/lib/currency/euro/service";
 // src/lib/congress/billProposal.ts
 // Provision validation for bill proposals. Called by the congress/bills POST route.
@@ -747,6 +748,12 @@ export async function validateBillProvisions(
         error: `Legislation type "${lt.name}" is not in the selected category (${category}).`,
       };
     }
+    if (isLegacyIncomeTax(lt))
+      return {
+        ok: false,
+        status: 400,
+        error: "Choose a separate low, medium, or high income-tax provision.",
+      };
     validatedLegislationTypes.push(lt);
 
     // Tax-slider laws (ruling #16): server-side bounds/grid/min-step

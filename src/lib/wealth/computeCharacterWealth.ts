@@ -1,3 +1,4 @@
+import { personalNetWorth } from "@/lib/portfolio/rules/netWorth";
 import type { Db, ObjectId } from "mongodb";
 import type { Bond, Character, Corporation } from "@/lib/db/types";
 import { BOND_UNIT_FACE_VALUE } from "@/lib/db/types/bond";
@@ -174,7 +175,8 @@ export function computeCharacterWealth(
   bondValueByCharId: ReadonlyMap<string, number>,
   forexEnabled: boolean,
   exchangeRates: Partial<Record<CurrencyCode, number>> | undefined,
-  fundValueByCharId: ReadonlyMap<string, number> = new Map()
+  fundValueByCharId: ReadonlyMap<string, number> = new Map(),
+  incomeTaxDebtByCharId: ReadonlyMap<string, number> = new Map()
 ): CharacterWealth {
   const charId = character._id.toString();
   const stockValue = roundCurrency(stockValueByCharId.get(charId) ?? 0);
@@ -183,6 +185,12 @@ export function computeCharacterWealth(
   const portfolioValue = roundCurrency(stockValue + bondValue + fundValue);
   const cashValue = roundCurrency(getTotalPersonalWealth(character, forexEnabled, exchangeRates));
   const locDebtValue = roundCurrency(computeLocDebtInternal(character, exchangeRates ?? {}));
-  const totalWealth = roundCurrency(Math.max(0, portfolioValue + cashValue - locDebtValue));
+  const totalWealth = roundCurrency(
+    personalNetWorth(
+      portfolioValue + cashValue,
+      locDebtValue,
+      incomeTaxDebtByCharId.get(charId) ?? 0
+    )
+  );
   return { stockValue, bondValue, fundValue, portfolioValue, cashValue, locDebtValue, totalWealth };
 }

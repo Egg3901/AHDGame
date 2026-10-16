@@ -34,6 +34,9 @@ export const DEFAULT_PHASE_ROUND_TRIP_BUDGET = 500;
 export const PHASE_ROUND_TRIP_BUDGETS: Readonly<Record<string, number>> = {
   // One expiry update, one projected read, two batched releases and one completion update.
   governmentContractExpiry: 10,
+  // Synthetic tax qualification: 36 commands at 1, 10 and 100 funded players.
+  playerIncomeTax: 40,
+  incomeTaxBases: 8,
   russianCouncilComposition: 100,
   corporationTurn: 4500,
   ministerialOrders: 2000,

@@ -176,7 +176,13 @@ describe("stampTaxSliderProvisions", () => {
     db.collection("legislationTypes");
     db.collection("stateBudgets");
     db.collectionMocks.legislationTypes.findOne = vi.fn().mockResolvedValue({
-      taxSlider: { ...SLIDER, scope: "state", maxRate: 25, baselineRate: 5 },
+      taxSlider: {
+        ...SLIDER,
+        scope: "state",
+        taxType: "incomeTaxLow",
+        maxRate: 25,
+        baselineRate: 5,
+      },
     });
     db.collectionMocks.stateBudgets.findOne = vi.fn().mockResolvedValue({
       taxRates: { incomeTax: 5 },
@@ -186,14 +192,20 @@ describe("stampTaxSliderProvisions", () => {
   it("stamps slider fields on matching policy provisions", async () => {
     const stamped = await stampTaxSliderProvisions(
       db as unknown as Db,
-      [{ legislationTypeId: "us.tax.stateIncomeTax", effectDirection: 0, proposedRate: 7 }],
+      [
+        {
+          legislationTypeId: "us.tax.stateIncomeTax__income_low",
+          effectDirection: 0,
+          proposedRate: 7,
+        },
+      ],
       "US",
       "NC"
     );
     expect(stamped.ok).toBe(true);
     if (!stamped.ok) return;
     expect(stamped.provisions[0]).toMatchObject({
-      legislationTypeId: "us.tax.stateIncomeTax",
+      legislationTypeId: "us.tax.stateIncomeTax__income_low",
       proposedRate: 7,
       policyOptionId: "rate:7",
       effectDirection: 1,
@@ -203,7 +215,7 @@ describe("stampTaxSliderProvisions", () => {
   it("rejects a no-move proposal against the live state rate", async () => {
     const stamped = await stampTaxSliderProvisions(
       db as unknown as Db,
-      [{ legislationTypeId: "us.tax.stateIncomeTax", proposedRate: 5 }],
+      [{ legislationTypeId: "us.tax.stateIncomeTax__income_low", proposedRate: 5 }],
       "US",
       "NC"
     );
@@ -212,7 +224,7 @@ describe("stampTaxSliderProvisions", () => {
 
   it("strips an unvalidated exact rate from a non-slider policy", async () => {
     db.collectionMocks.legislationTypes.findOne = vi.fn().mockResolvedValue({
-      taxRateChange: { scope: "state", taxType: "incomeTax" },
+      taxRateChange: { scope: "state", taxType: "salesTax" },
     });
 
     const stamped = await stampTaxSliderProvisions(

@@ -26,9 +26,10 @@ vi.mock("@/lib/budget/revenue", () => ({
 describe("getProjectedPoliticalLegislationTypes", () => {
   it("projects all core + regional sidecar laws with unique ids", () => {
     const docs = getProjectedPoliticalLegislationTypes();
-    // 440 core + 6 DD Land regional sidecars + 5 US state tax sliders
-    expect(docs.length).toBe(451);
-    expect(new Set(docs.map((d) => d._id)).size).toBe(451);
+    // Preserve historical instruments alongside all new tier provisions.
+    expect(docs.length).toBe(getAllNewGenerationLawIds().length);
+    expect(new Set(docs.map((d) => d._id)).size).toBe(docs.length);
+    expect(docs.some((d) => d._id === "us.tax.stateIncomeTax__income_low")).toBe(true);
     expect(docs.some((d) => d._id === "dd.sec.landPolytechnicEducation")).toBe(true);
     expect(docs.find((d) => d._id === "dd.sec.landPolytechnicEducation")?.allowedScope).toBe(
       "state"

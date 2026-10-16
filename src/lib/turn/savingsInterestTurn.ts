@@ -359,7 +359,7 @@ export async function processSavingsInterestTurn(
           .project({ _id: 1, name: 1 })
           .toArray();
         const nameById = new Map(nameDocs.map((c) => [c._id.toString(), c.name as string]));
-        void emitTxBulk(
+        await emitTxBulk(
           db,
           ledgerBatch.map((e) => ({
             type: "savings_interest" as const,
@@ -462,7 +462,7 @@ export async function processSavingsInterestTurn(
     // Emit savings_interest tx log entries (legacy path — per-turn credit)
     const thresholds = await loadTxThresholds(db);
     const nameMap = new Map(characters.map((c) => [c._id.toString(), (c as Character).name]));
-    void emitTxBulk(
+    await emitTxBulk(
       db,
       ledgerBatch.map((e) => ({
         type: "savings_interest" as const,

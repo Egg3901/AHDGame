@@ -1,3 +1,8 @@
+import {
+  INCOME_TIERS,
+  INCOME_TAX_KEYS,
+  INCOME_TIER_LABELS,
+} from "@/lib/budget/rules/incomeTaxTiers";
 /**
  * Catalog registry — the read surface every consumer (projection, seeding,
  * cost UI, deleters) uses. Content lives in laws/*Laws.ts (transcribed).
@@ -110,7 +115,16 @@ export function baselineLevelFor(law: PoliticalLaw, year: number): 0 | 1 | 2 | 3
  */
 export function getCatalog(countryId: string, year?: number): PoliticalLaw[] {
   const all = CATALOGS[countryId as LawCountryId] ?? [];
-  return year == null ? all : all.filter((law) => isLawActive(law, year));
+  return (year == null ? all : all.filter((law) => isLawActive(law, year))).flatMap((law) =>
+    law.taxPolicy?.taxType === "incomeTax"
+      ? INCOME_TIERS.map((tier) => ({
+          ...law,
+          id: law.id + "__income_" + tier,
+          title: INCOME_TIER_LABELS[tier] + " Tax",
+          taxPolicy: { ...law.taxPolicy!, taxType: INCOME_TAX_KEYS[tier] },
+        }))
+      : [law]
+  );
 }
 
 /** Core catalog only — excludes regional sidecars (DD Land laws, etc.). */
@@ -126,15 +140,26 @@ export function getRegionalCatalog(countryId: string, year?: number): PoliticalL
 }
 
 export function getLaw(lawId: string): PoliticalLaw | null {
-  return LAWS_BY_ID.get(lawId) ?? null;
+  const direct = LAWS_BY_ID.get(lawId);
+  if (direct) return direct;
+  return (
+    Object.keys(CATALOGS)
+      .flatMap((country) => getCatalog(country))
+      .find((law) => law.id === lawId) ?? null
+  );
 }
 
 /** All new-generation law ids including regional sidecars (used by seed deleters). */
 export function getAllNewGenerationLawIds(): string[] {
-  return [...LAWS_BY_ID.keys()];
+  return [
+    ...new Set([
+      ...LAWS_BY_ID.keys(),
+      ...Object.keys(CATALOGS).flatMap((country) => getCatalog(country).map((law) => law.id)),
+    ]),
+  ];
 }
 
 /** True iff the id belongs to the new political-legislation catalogs. */
 export function isNewGenerationLawId(id: string): boolean {
-  return LAWS_BY_ID.has(id);
+  return getLaw(id) !== null;
 }

@@ -5,6 +5,18 @@ import type { CollectionEntry } from "./seedManifestTypes";
 
 export const RUNTIME: CollectionEntry[] = [
   {
+    name: "playerIncomeTaxAssessments",
+    category: "runtime",
+    notes:
+      "Immutable player tax liabilities and payment status, scoped to the world. Wiped on reset.",
+  },
+  {
+    name: "playerIncomeTaxBatches",
+    category: "runtime",
+    notes:
+      "One durable active tax batch per world; retained target watermarks prevent stale replay. Wiped on reset.",
+  },
+  {
     name: "governmentTenders",
     category: "runtime",
     notes:

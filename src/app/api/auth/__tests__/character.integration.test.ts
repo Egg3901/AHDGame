@@ -346,6 +346,9 @@ describe("POST /api/auth/character - Character Creation", () => {
     expect(res.status).toBe(201);
 
     const insertedCharacter = charactersInsertOne.mock.calls[0][0];
+    expect(insertedCharacter.initialIncomeTier).toBe("middle");
+    expect(insertedCharacter.incomeTier).toBe("middle");
+    expect(insertedCharacter.incomeTaxStartTurn).toBe(43);
     // Campaign funds come from gameConfig.startingFunds; personal cash from wealth bonus + referral
     expect(insertedCharacter.funds).toBe(50_000);
     expect(insertedCharacter.cashOnHand).toBe(2_500_000 + 500_000);

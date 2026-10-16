@@ -56,7 +56,7 @@ describe("buildAnnualBudgetProvisions", () => {
   it("compiles changed tax rates and programme levels into ordinary UK policy provisions", async () => {
     const result = await buildAnnualBudgetProvisions(fakeDb(), {
       taxRates: {
-        "uk.tax.incomeTax": 50,
+        "uk.tax.incomeTax__income_middle": 50,
         "uk.tax.payrollTax": 10,
       },
       programLevels: {
@@ -69,7 +69,7 @@ describe("buildAnnualBudgetProvisions", () => {
     expect(result.provisions).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          legislationTypeId: "uk.tax.incomeTax",
+          legislationTypeId: "uk.tax.incomeTax__income_middle",
           proposedRate: 50,
           policyOptionId: "rate:50",
         }),
@@ -100,14 +100,16 @@ describe("buildAnnualBudgetProvisions", () => {
     } as never;
 
     const result = await buildAnnualBudgetProvisions(db, {
-      taxRates: { "uk.tax.incomeTax": 46 },
+      taxRates: { "uk.tax.incomeTax__income_middle": 46 },
       programLevels: { [law.id]: law.baselineLevel ?? 0 },
     });
 
     expect(result).toMatchObject({ ok: true });
     if (!result.ok) throw new Error(result.error);
     expect(result.provisions).toHaveLength(1);
-    expect(result.provisions[0]).toMatchObject({ legislationTypeId: "uk.tax.incomeTax" });
+    expect(result.provisions[0]).toMatchObject({
+      legislationTypeId: "uk.tax.incomeTax__income_middle",
+    });
   });
 
   it("rejects impossible law levels instead of creating an inert Budget", async () => {
@@ -138,6 +140,7 @@ describe("previewAnnualBudget", () => {
                 programCostScaleBaseline: scale,
                 taxRates: { incomeTax: 20 },
                 taxBases: { taxableIncome: 500 },
+                incomeTaxShares: { low: 0.2, middle: 0.5, high: 0.3 },
                 revenue: {
                   incomeTax: 100,
                   lawRevenue: 20,
@@ -172,7 +175,7 @@ describe("previewAnnualBudget", () => {
       } as never;
 
       const result = await previewAnnualBudget(db, {
-        taxRates: { "uk.tax.incomeTax": 30 },
+        taxRates: { "uk.tax.incomeTax__income_middle": 30 },
         programLevels: { "uk.defense.armedForces.primary": 1 },
       });
 
@@ -180,9 +183,9 @@ describe("previewAnnualBudget", () => {
         ok: true,
         current: { revenue: 220, spending: 500, balance: -280 },
         projected: {
-          revenue: 270,
+          revenue: 245,
           spending: 500 - 22.7 * scale,
-          balance: 270 - (500 - 22.7 * scale),
+          balance: 245 - (500 - 22.7 * scale),
         },
         categoryDeltas: { defense: -22.7 * scale },
         phaseInTurns: 10,

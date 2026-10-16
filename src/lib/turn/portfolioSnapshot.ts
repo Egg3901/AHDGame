@@ -1,3 +1,5 @@
+import { loadUnpaidIncomeTaxByCharacter } from "@/lib/budget/playerIncomeTaxSummary";
+import { personalNetWorth } from "@/lib/portfolio/rules/netWorth";
 import type { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import type {
@@ -279,13 +281,22 @@ export async function snapshotPortfolioValues(turn: number): Promise<number> {
   // when ₳/local floats (the Antonelli/Aurora "missing $6bn" report).
   const exchangeRatesSnapshot = fxMapToRecord(charFxByCurrency);
 
+  const incomeTaxDebts = await loadUnpaidIncomeTaxByCharacter(db, exchangeRatesSnapshot);
   const { ObjectId } = await import("mongodb");
   const docs: Omit<PortfolioHistory, "_id">[] = Array.from(portfolioMap.entries()).map(
     ([charId, values]) => ({
       characterId: new ObjectId(charId),
       turn,
       totalValue: Math.round(values.totalValue * 100) / 100,
-      netValue: Math.round(values.netValue * 100) / 100,
+      netValue:
+        Math.round(
+          personalNetWorth(
+            values.totalValue,
+            values.locDebtValue,
+            incomeTaxDebts.get(charId) ?? 0
+          ) * 100
+        ) / 100,
+      incomeTaxDebtValue: incomeTaxDebts.get(charId) ?? 0,
       stockValue: Math.round(values.stockValue * 100) / 100,
       bondValue: Math.round(values.bondValue * 100) / 100,
       fundValue: Math.round(values.fundValue * 100) / 100,

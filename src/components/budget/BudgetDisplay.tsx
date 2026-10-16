@@ -2,6 +2,7 @@
 
 import type { FederalBudget, CreditRating } from "@/lib/db/types/budget";
 import { useCurrency } from "@/contexts/CurrencyContext";
+import { IncomeTaxRates } from "./IncomeTaxRates";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import { formatFundsCompact1dp } from "@/lib/utils/formatters";
 import { Skeleton } from "@/components/ui";
@@ -370,6 +371,10 @@ export function BudgetDisplay({
           </div>
         ))}
       </div>
+
+      {budget.taxRates && (
+        <IncomeTaxRates rates={budget.taxRates} pending={budget.taxRatePhaseIn} />
+      )}
 
       {/* Revenue breakdown bar */}
       <div className="rounded-xl border border-card-border bg-card p-4 space-y-3">
