@@ -8,6 +8,11 @@ import {
   shouldRedactCorporationForViewer,
 } from "@/lib/corporations/reservedCorporateHoldings";
 import { computeCorpCommodityFlows } from "@/lib/corporations/corpCommodityFlows";
+import {
+  inputDemandRealPhaseProgress,
+  inputDemandRealPhaseStartTurnFrom,
+  sectorPriceLeg,
+} from "@/lib/market/inputDemandRealPhase";
 import { computeCorpMarketShare } from "@/lib/corporations/corpMarketShare";
 import { getMarketSystemMode, marketAtLeast } from "@/lib/market/featureFlag";
 import { buildMarketContext } from "@/lib/market/marketContext";
@@ -52,6 +57,8 @@ type CommoditySector = Pick<
   | "embargoExportExposure"
   | "militaryDivertedFraction"
   | "militaryDivertedTurn"
+  | "clearingFactor"
+  | "soldFraction"
 >;
 
 // GET /api/corporations/[id]/commodities — Per-turn commodity output/consumption,
@@ -123,6 +130,9 @@ export async function GET(request: Request, { params }: RouteParams) {
         embargoExportExposure: 1,
         militaryDivertedFraction: 1,
         militaryDivertedTurn: 1,
+        // Realized price leg, the input-demand deflator's input.
+        clearingFactor: 1,
+        soldFraction: 1,
         _id: 1,
       })
       .toArray();
@@ -171,6 +181,7 @@ export async function GET(request: Request, { params }: RouteParams) {
             supplyAgreementsEnabled: 1,
             marketSystemMode: 1,
             commandEconomyEnabled: 1,
+            inputDemandRealPhaseStartTurn: 1,
           },
         }
       ),
@@ -344,6 +355,7 @@ export async function GET(request: Request, { params }: RouteParams) {
         fxRateForSectorHostFromMap(sector, corporation, fxByCurrency)
       ),
       capacityUnits: sector.operatingCapacityUnits ?? sector.capitalStock ?? null,
+      priceLeg: sectorPriceLeg(sector.clearingFactor, sector.soldFraction),
     }));
     const stateResourcesByState = new Map(
       stateResourceCapacityDocs.map((doc) => [doc.stateId, doc.resources])
@@ -361,6 +373,10 @@ export async function GET(request: Request, { params }: RouteParams) {
         eraUnitScale: getEraUnitScale(worldPreset),
         preset: worldPreset,
         hardwareInputReliefStartTurn: gameState?.hardwareInputReliefStartTurn,
+        inputDemandRealPhase: inputDemandRealPhaseProgress(
+          inputDemandRealPhaseStartTurnFrom(gameConfig),
+          currentTurn
+        ),
         stateResourcesByState,
         currentYear: gameState?.currentYear,
         commandEconomyEnabled: gameConfig?.commandEconomyEnabled === true,
