@@ -1,3 +1,4 @@
+import { createInMemoryDb } from "@/lib/test-utils/inMemoryDb";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ObjectId } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
@@ -19,11 +20,8 @@ vi.mock("@/lib/currency/corporationCapital", () => ({
   getCorpFxRate: vi.fn().mockResolvedValue(1),
 }));
 vi.mock("@/lib/corporations/shareTradeHistory", () => ({ recordShareTrade: vi.fn() }));
-vi.mock("@/lib/corporations/shareInvariant", () => ({
-  computeAccountedShares: vi.fn((corp: { totalShares?: number }) => corp.totalShares ?? 0),
-}));
 vi.mock("@/lib/turn/currentTurn", () => ({ getCurrentTurn: vi.fn().mockResolvedValue(42) }));
-vi.mock("@/lib/financialTxLog/emit", () => ({ emitTx: vi.fn() }));
+vi.mock("@/lib/financialTxLog/emit", () => ({ emitTx: vi.fn().mockResolvedValue(undefined) }));
 vi.mock("@/lib/financialTxLog/atomicCashGuard", () => ({
   atomicallyDebitCharacterCash: vi.fn().mockResolvedValue({ ok: true, newBalance: 850 }),
   refundCharacterCash: vi.fn().mockResolvedValue(undefined),
@@ -240,9 +238,17 @@ describe("POST /api/corporations/[id]/shares/self-issue", () => {
       toArray: async () => [],
     } as any);
     db.collection("shareOrders");
-    db.collectionMocks["shareOrders"].find.mockReturnValue({
-      toArray: async () => [],
-    } as any);
+    const store = createInMemoryDb();
+    const orders = store.seed("shareOrders", [
+      {
+        corporationId,
+        type: "sell",
+        status: "open",
+        sharesDebitedAtCreation: true,
+        sharesRemaining: 900,
+      },
+    ]);
+    db.collectionMocks["shareOrders"].find.mockImplementation(orders.find.bind(orders));
 
     const { emitTx } = await import("@/lib/financialTxLog/emit");
     vi.mocked(emitTx).mockRejectedValueOnce(new Error("ledger offline"));
@@ -259,6 +265,10 @@ describe("POST /api/corporations/[id]/shares/self-issue", () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(res.status).toBe(200);
+    expect(Sentry.captureMessage).not.toHaveBeenCalledWith(
+      "self-issue share invariant drift",
+      expect.anything()
+    );
     expect(vi.mocked(Sentry.captureException)).toHaveBeenCalledWith(
       expect.any(Error),
       expect.objectContaining({
