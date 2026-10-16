@@ -62,6 +62,11 @@ import {
   REALIZED_COMMODITY_ROUNDING_UNIT,
 } from "@/lib/commodities/realizedCommodityBasis";
 import type { RealizedLeaderboardSector } from "@/lib/commodities/realizedCommodityBasis";
+import {
+  inputDemandRealPhaseProgress,
+  inputDemandRealPhaseStartTurnFrom,
+  sectorPriceLeg,
+} from "@/lib/market/inputDemandRealPhase";
 
 /** Sector-type flow rows for the Production Flow panel: base tables plus strategies that add commodities not present in the base map. */
 function buildSectorFlowRows(
@@ -336,8 +341,15 @@ export async function getCommodityDetailData(
     const [gameConfigDoc, gameStateDoc, stateResourceDocs] = includeHeavy
       ? await Promise.all([
           db
-            .collection<{ _id: string; commandEconomyEnabled?: boolean }>("gameConfig")
-            .findOne({ _id: "default" }, { projection: { commandEconomyEnabled: 1 } }),
+            .collection<{
+              _id: string;
+              commandEconomyEnabled?: boolean;
+              inputDemandRealPhaseStartTurn?: number;
+            }>("gameConfig")
+            .findOne(
+              { _id: "default" },
+              { projection: { commandEconomyEnabled: 1, inputDemandRealPhaseStartTurn: 1 } }
+            ),
           db
             .collection<{
               _id: string;
@@ -485,6 +497,7 @@ export async function getCommodityDetailData(
               fxByCurrency
             )
           ),
+          priceLeg: sectorPriceLeg(sector.clearingFactor, sector.soldFraction),
           producedUnits: sector.producedUnits,
           capacityUnits: sector.operatingCapacityUnits ?? sector.capitalStock ?? null,
           mothballed: sector.mothballed,
@@ -507,6 +520,10 @@ export async function getCommodityDetailData(
           currentYear: gameStateDoc?.currentYear ?? null,
           preset: gameStateDoc?.preset,
           hardwareInputReliefStartTurn: gameStateDoc?.hardwareInputReliefStartTurn,
+          inputDemandRealPhase: inputDemandRealPhaseProgress(
+            inputDemandRealPhaseStartTurnFrom(gameConfigDoc),
+            currentTurn
+          ),
           commandEconomyEnabled: gameConfigDoc?.commandEconomyEnabled === true,
           stateResourcesByState,
         },

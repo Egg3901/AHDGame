@@ -781,9 +781,17 @@ export async function resetGameWorld(
   // Imperial characters are account identities, so preserve their documents,
   // but a new world starts their personal wallets empty. Reset the legacy
   // scalar and forex wallet together so either read path observes zero wealth.
-  await db
-    .collection<ImperialCharacter>("imperialCharacters")
-    .updateMany({}, { $set: { cashOnHand: 0, "currencyBalances.personal": {} } });
+  await db.collection<ImperialCharacter>("imperialCharacters").updateMany({}, [
+    {
+      $set: {
+        cashOnHand: 0,
+        "currencyBalances.personal": {},
+        incomeTaxBatchReceipt: null,
+        incomeTaxStartTurn: 1,
+        incomeTier: { $ifNull: ["$initialIncomeTier", "high"] },
+      },
+    },
+  ]);
 
   // The imperial roll also survives the reset. Restore its sequential counter
   // from the preserved roster after the generic counter sweep, so a new

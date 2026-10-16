@@ -6,6 +6,7 @@ import { US_STATE_TAX_LAWS } from "./laws/usStateTaxLaws";
 import { attachPoliticalLegislationEstimates } from "./estimates";
 import { projectLawToLegislationType } from "./project";
 import { jpLegislationTypes } from "@/lib/countries/jp/data/jpLegislationTypes";
+import { getCatalog } from "./catalog";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 
@@ -23,6 +24,24 @@ describe("attachPoliticalLegislationEstimates", () => {
       taxRates: { payrollTax: 7.2 },
       taxBases: { wagesAndSalaries: 7_200_000_000 },
     });
+  });
+
+  it("prices a regional income tier against its share and falls back to the legacy rate", async () => {
+    db.collection("stateBudgets");
+    db.collectionMocks.stateBudgets.findOne.mockResolvedValue({
+      taxRates: { incomeTax: 7 },
+      taxBases: { taxableIncome: 50_000_000 },
+      incomeTaxShares: { low: 0.1, middle: 0.5, high: 0.4 },
+    });
+    const law = getCatalog("US").find((law) => law.id === "us.tax.stateIncomeTax__income_low")!;
+    const [doc] = await attachPoliticalLegislationEstimates(
+      db as unknown as Db,
+      [projectLawToLegislationType(law) as unknown as Record<string, unknown>],
+      "us",
+      "nc",
+      null
+    );
+    expect(doc.taxSliderEstimate).toMatchObject({ currentRate: 7, revenueDeltaPerPoint: 50_000 });
   });
 
   it("attaches per-level estimates to program laws on the rollup base", async () => {

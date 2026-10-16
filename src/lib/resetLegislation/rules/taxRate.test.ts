@@ -1,3 +1,4 @@
+import { expandIncomeTaxTypes } from "@/lib/budget/incomeTaxCatalog";
 import { describe, expect, it } from "vitest";
 import { legislationTypes } from "@/lib/seeds/reference/legislationTypes";
 import { US_LAWS } from "@/lib/countries/us/data/usLaws";
@@ -9,12 +10,12 @@ import { taxRateBoundsFromExistingOptions, validateExactTaxRate } from "./taxRat
 
 describe("exact reset tax-rate choices", () => {
   it("derives each instrument's bounds from its existing in-game options", () => {
-    const runtimeTypes = [
+    const runtimeTypes = expandIncomeTaxTypes([
       ...legislationTypes,
       ...US_LAWS.map(projectLawToLegislationType),
       ...UK_LAWS.map(projectLawToLegislationType),
       ...US_STATE_TAX_LAWS.map(projectLawToLegislationType),
-    ];
+    ]);
     for (const tax of resetTaxes) {
       const type = runtimeTypes.find((row) => row._id === tax.existingLegislationTypeId)!;
       const bounds = type.taxSlider

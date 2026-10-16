@@ -1,3 +1,4 @@
+import { incomeTaxRevenue, type IncomeShares } from "@/lib/budget/rules/incomeTaxTiers";
 /**
  * Budget calculation utilities
  * - Recalculate revenue from tax bases and rates
@@ -35,9 +36,10 @@ export function calculateFederalRevenue(
   rates: FederalTaxRates,
   otherRevenue: number = 200000000000,
   healthcareIncome: number = 0,
-  gdp: number = 0
+  gdp: number = 0,
+  incomeTaxShares?: IncomeShares
 ): FederalRevenue {
-  const incomeTax = bases.taxableIncome * (rates.incomeTax / 100);
+  const incomeTax = incomeTaxRevenue(bases.taxableIncome, rates, incomeTaxShares);
   const domesticCorporateTax = bases.domesticCorporateProfits * (rates.domesticCorporateTax / 100);
   const foreignCorporateTax = bases.foreignCorporateProfits * (rates.foreignCorporateTax / 100);
   const payrollTax = bases.wagesAndSalaries * (rates.payrollTax / 100);
@@ -96,9 +98,10 @@ export function calculateStateRevenue(
   bases: StateTaxBases,
   rates: StateTaxRates,
   federalGrants: number,
-  otherRevenue: number = 0
+  otherRevenue: number = 0,
+  incomeTaxShares?: IncomeShares
 ): StateRevenue {
-  const incomeTax = bases.taxableIncome * (rates.incomeTax / 100);
+  const incomeTax = incomeTaxRevenue(bases.taxableIncome, rates, incomeTaxShares);
   const salesTax = bases.taxableSales * (rates.salesTax / 100);
   const domesticCorporateTax = bases.domesticCorporateProfits * (rates.domesticCorporateTax / 100);
   const foreignCorporateTax = bases.foreignCorporateProfits * (rates.foreignCorporateTax / 100);

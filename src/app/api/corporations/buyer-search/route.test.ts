@@ -35,7 +35,14 @@ describe("GET /api/corporations/buyer-search", () => {
     expect(db.collectionMocks.corporations!.find).toHaveBeenCalledWith(
       expect.objectContaining({
         countryOwnerId: { $exists: false },
-        $or: [...PLAYER_RUN_CEO_FILTER.$or, { ceoType: "npp", caretakerCeo: { $exists: false } }],
+        $or: [
+          ...PLAYER_RUN_CEO_FILTER.$or,
+          {
+            ceoType: "npp",
+            caretakerCeo: { $exists: false },
+            subsidiaryFormalizedAtTurn: { $exists: false },
+          },
+        ],
         name: { $regex: "Creek", $options: "i" },
       })
     );

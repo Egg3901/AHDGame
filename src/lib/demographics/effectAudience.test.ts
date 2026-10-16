@@ -45,7 +45,7 @@ describe("describing approval effects", () => {
     expect(de.some((r) => /[ÄÖÜäöüß]|Einkommen|Abschluss|Großstadt/.test(r.label))).toBe(true);
     const jp = describeApprovalEffects({ salaryman_conservative: 5 }, "JP", name);
     // Native script with the English gloss the labels carry.
-    expect(jp.every((r) => /\(.+\)$/.test(r.label))).toBe(true);
+    expect(jp.every((r) => r.id.startsWith("income:") || /\(.+\)$/.test(r.label))).toBe(true);
   });
 
   // A world with no Layer-1 model has no buckets to name.

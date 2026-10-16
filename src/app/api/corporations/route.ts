@@ -21,7 +21,10 @@ import { foundCorporationSchema } from "@/lib/api/schemas/corporations";
 import { randomBrandColor } from "@/lib/corporations/brandColor";
 import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import type { Character, Corporation, CorporateSector, State, User } from "@/lib/db/types";
-import { INACTIVE_CEO_TURN_THRESHOLD } from "@/lib/turn/corporation/inactiveCeoSectorShed";
+import {
+  INACTIVE_CEO_TURN_THRESHOLD,
+  isInactiveCeoPenaltyCandidate,
+} from "@/lib/turn/corporation/inactiveCeoSectorShed";
 import { getNextSequentialId } from "@/lib/db/sequentialId";
 import { openCeoTenure } from "@/lib/corporations/ceoHistory";
 import {
@@ -140,19 +143,11 @@ export async function GET(request: Request) {
     const ceoMap = new Map(characters.map((c) => [c._id.toString(), c]));
 
     // Fetch CEO-owning users to derive ceoIsInactive.
-    // Eligibility must mirror inactiveCeoSectorShed.isInactiveCeoPenaltyCandidate exactly,
-    // otherwise the UI would flag state-owned/nationalized corps as inactive
-    // even though the turn step never sheds them.
+    // Eligibility is the turn step's own predicate, so the UI never flags
+    // state-owned, nationalized, autopilot or NPP-run corps as inactive when
+    // the turn step will not shed them.
     const ceoUserIds = corporations
-      .filter(
-        (c) =>
-          c.userId != null &&
-          c.ceoVacant !== true &&
-          c.ceoType !== "imperial" &&
-          c.countryOwnerId == null &&
-          c.isNationalized !== true &&
-          !c.autopilot
-      )
+      .filter(isInactiveCeoPenaltyCandidate)
       .map((c) => c.userId as ObjectId);
     const ceoUsers =
       ceoUserIds.length > 0
@@ -213,13 +208,7 @@ export async function GET(request: Request) {
       const income = sectorIncome - corp.marketingBudget - (corp.ceoSalary ?? 0);
 
       let ceoIsInactive = false;
-      if (
-        corp.userId != null &&
-        corp.ceoVacant !== true &&
-        corp.ceoType !== "imperial" &&
-        corp.countryOwnerId == null &&
-        corp.isNationalized !== true
-      ) {
+      if (isInactiveCeoPenaltyCandidate(corp) && corp.userId != null) {
         const u = ceoUserMap.get(corp.userId.toString());
         const reference = u?.lastActivity ?? u?.createdAt;
         if (reference && reference.getTime() < inactiveCutoffMs) {

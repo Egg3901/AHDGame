@@ -3,6 +3,7 @@ import { ObjectId } from "mongodb";
 import {
   computeGrowthAndRegulatory,
   decomposePhysicalCosts,
+  scaleLandedPremiums,
   type GrowthRegulatoryInput,
   type PhysicalCostsInput,
 } from "./sectorCosts";
@@ -270,5 +271,37 @@ describe("decomposePhysicalCosts — P3.5 calibration exactness (#588)", () => {
       );
       expect(billed.capitalBookAnchor).toBe(0);
     });
+  });
+});
+
+describe("logistics strength cuts the landed input surcharge", () => {
+  const premiums = new Map([["steel" as const, 80]]);
+  const withPremium = (shippingCostMultiplier?: number) =>
+    decomposePhysicalCosts(
+      physicalInput({
+        explicitPlantCostsEnabled: true,
+        effectiveDemand: { steel: 0.3 },
+        landedPremiumByState: new Map([["US-CA", premiums]]),
+        shippingCostMultiplier,
+      })
+    );
+
+  it("scales only the surcharge and leaves the base price alone", () => {
+    const none = decomposePhysicalCosts(
+      physicalInput({ explicitPlantCostsEnabled: true, effectiveDemand: { steel: 0.3 } })
+    );
+    const full = withPremium();
+    const discounted = withPremium(0.7);
+    expect(full.inputsCost).toBeGreaterThan(none.inputsCost);
+    expect(discounted.inputsCost).toBeLessThan(full.inputsCost);
+    const surcharge = full.inputsCost - none.inputsCost;
+    expect(discounted.inputsCost - none.inputsCost).toBeCloseTo(surcharge * 0.7, 8);
+  });
+
+  it("scaleLandedPremiums is a no-op at 1 and clamps at zero", () => {
+    expect(scaleLandedPremiums(premiums, 1)).toBe(premiums);
+    expect(scaleLandedPremiums(undefined, 0.5)).toBeUndefined();
+    expect(scaleLandedPremiums(premiums, 0.6)?.get("steel")).toBeCloseTo(48, 10);
+    expect(scaleLandedPremiums(premiums, -2)?.get("steel")).toBe(0);
   });
 });

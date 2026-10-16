@@ -1,3 +1,4 @@
+import { taxablePlayerIncome } from "@/lib/budget/rules/incomeTaxTiers";
 import * as Sentry from "@sentry/nextjs";
 import { ObjectId, type Db } from "mongodb";
 import {
@@ -347,13 +348,24 @@ export async function emitTxBulk(
     const turnLengthMinutes = await loadTurnLengthMinutes(db);
     const ratesByCurrency = await loadAnchorRateMap(db, entries);
     const docs = buildTxDocs(entries, thresholds, turnLengthMinutes, ratesByCurrency);
-    await db.collection<FinancialTxLogEntry>("financialTxLog").insertMany(docs, { ordered: false });
+    if (
+      entries.some((entry) => entry.subjectType === "character" && taxablePlayerIncome(entry.type))
+    ) {
+      await persistTaxableIncomeBatch(db, docs);
+    } else
+      await db
+        .collection<FinancialTxLogEntry>("financialTxLog")
+        .insertMany(docs, { ordered: false });
     await shadowLedgerFromTx(db, docs);
     // BULK path so the hot loop (bondTurn / corporationTurn, hundreds of
     // entries/turn) pays one insertMany at flush time, not one per row.
     recordAuditBulk(docs.map(buildAuditEnvelope));
   } catch (err) {
     Sentry.captureException(err, { extra: { phase: "emitTxBulk", count: entries.length } });
+    if (
+      entries.some((entry) => entry.subjectType === "character" && taxablePlayerIncome(entry.type))
+    )
+      throw err;
   }
 }
 
@@ -534,4 +546,26 @@ function sameTxValue(a: unknown, b: unknown): boolean {
     );
   }
   return false;
+}
+
+/** Retry one immutable batch at most three times, adopting lost acknowledgements by id. */
+async function persistTaxableIncomeBatch(
+  db: Db,
+  docs: FinancialTxLogEntry[],
+  attemptsLeft = 3
+): Promise<void> {
+  try {
+    await db.collection<FinancialTxLogEntry>("financialTxLog").insertMany(docs, { ordered: false });
+  } catch (error) {
+    const saved = await db
+      .collection<FinancialTxLogEntry>("financialTxLog")
+      .find({ _id: { $in: docs.map((doc) => doc._id) } })
+      .toArray();
+    const expected = new Map(docs.map((doc) => [doc._id.toHexString(), doc]));
+    if (saved.some((doc) => txRowDiffs(doc, expected.get(doc._id.toHexString())!).length))
+      throw new Error("Taxable income receipt conflicts with its original write");
+    if (saved.length === docs.length) return;
+    if (attemptsLeft <= 1) throw error;
+    return persistTaxableIncomeBatch(db, docs, attemptsLeft - 1);
+  }
 }

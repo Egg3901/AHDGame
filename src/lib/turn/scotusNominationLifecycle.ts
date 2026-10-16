@@ -13,7 +13,7 @@
  * a generated NPP "legal scholar" as well as a player character (cabinet
  * nominations are player-character-only today) — see `nominateJustice.ts`.
  */
-import type { Db } from "mongodb";
+import type { AnyBulkWriteOperation, Db } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { ObjectId } from "mongodb";
 import { createNotifications, type NotificationInput } from "@/lib/notifications";
@@ -29,6 +29,9 @@ import { DIVERGENT_TENURE_FLOOR_TURNS } from "@/lib/scotus/tenure";
 import { initialJusticeActionFields } from "@/lib/constants/justiceActions";
 import { DISCORD_COLORS, sendCountryGameEvent } from "@/lib/discordWebhooks";
 import { getCountryConfig, type CountryId } from "@/lib/constants/countries";
+import { awardAchievement } from "@/lib/achievements";
+import { SCOTUS_CONFIRMED_SLUG } from "@/lib/scotus/achievementDefinitions";
+import { buildScotusConfirmationCareerEvent } from "@/lib/scotus/careerEvents";
 
 export interface ScotusNominationLifecycleResult {
   nominationsProcessed: number;
@@ -236,6 +239,8 @@ export async function processScotusNominationLifecycle(
   const nppAvatarById = new Map(nppPortraits.map((npp) => [npp._id.toString(), npp.avatarUrl]));
 
   const notificationInputs: NotificationInput[] = [];
+  const confirmationCareerWrites: AnyBulkWriteOperation<Character>[] = [];
+  const confirmationAwards: Array<{ userId: ObjectId; characterId: ObjectId }> = [];
   let confirmed = 0;
   let rejected = 0;
 
@@ -313,6 +318,27 @@ export async function processScotusNominationLifecycle(
         const nomineeChar = await database
           .collection<Character>("characters")
           .findOne({ _id: nom.nomineeCharacterId });
+        if (nomineeChar) {
+          // Judicial seats have no OfficeType, so the profile reads this entry.
+          confirmationCareerWrites.push({
+            updateOne: {
+              filter: { _id: nomineeChar._id },
+              update: {
+                $push: {
+                  careerHistory: buildScotusConfirmationCareerEvent({
+                    seatNumber: nom.seatNumber,
+                    party: nom.nomineeParty,
+                    partyCountryId: nom.countryId,
+                    date: now,
+                  }),
+                },
+              },
+            },
+          });
+          if (nomineeChar.userId) {
+            confirmationAwards.push({ userId: nomineeChar.userId, characterId: nomineeChar._id });
+          }
+        }
         if (nomineeChar?.userId && !nomineeChar._id.equals(nom.proposedByPresidentId)) {
           notificationInputs.push({
             userId: nomineeChar.userId,
@@ -364,6 +390,12 @@ export async function processScotusNominationLifecycle(
     }
   }
 
+  if (confirmationCareerWrites.length > 0) {
+    await database.collection<Character>("characters").bulkWrite(confirmationCareerWrites);
+  }
+  for (const award of confirmationAwards) {
+    await awardAchievement(award.userId, SCOTUS_CONFIRMED_SLUG, award.characterId);
+  }
   await createNotifications(notificationInputs);
 
   return {

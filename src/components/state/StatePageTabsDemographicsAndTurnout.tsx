@@ -855,7 +855,7 @@ export function DemographicsAndTurnoutTab({
     const wealthRows = buildRows(
       usData.wealth,
       WEALTH_COLORS,
-      { low: "Low Income", middle: "Middle Income", high: "High Income" },
+      { low: "Low Income", middle: "Medium Income", high: "High Income" },
       "wealth"
     );
     const ageRows = buildRows(

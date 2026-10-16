@@ -1,5 +1,7 @@
 "use client";
 
+import { PlayerIncomeTaxStatement } from "@/components/portfolio/PlayerIncomeTaxStatement";
+import type { PlayerTaxStatement } from "@/lib/budget/playerIncomeTaxSummary";
 import { useGameEvents } from "@/hooks/useGameEvents";
 
 import { useState, useEffect, Suspense, useMemo, useCallback, useRef } from "react";
@@ -174,6 +176,7 @@ function PortfolioPageInner({ initialPortfolio }: PortfolioClientProps) {
   const [homeCurrency, setHomeCurrency] = useState<CurrencyCode | null>(null);
   const [ceoCorporation, setCeoCorporation] = useState<MeCeoCorporation | null>(null);
   const [corpViewIsCeo, setCorpViewIsCeo] = useState(false);
+  const [incomeTaxStatement, setIncomeTaxStatement] = useState<PlayerTaxStatement | null>(null);
   const [locSnapshot, setLocSnapshot] = useState<LocSnapshot | null>(null);
   const [fundHoldingsValue, setFundHoldingsValue] = useState(0);
   const [fundsFeatureEnabled, setFundsFeatureEnabled] = useState(false);
@@ -205,6 +208,7 @@ function PortfolioPageInner({ initialPortfolio }: PortfolioClientProps) {
   // fetched on refetch) to the portfolio-derived state.
   const applyPortfolio = useCallback((portfolio: PortfolioSeed) => {
     setHoldings(portfolio.holdings || []);
+    setIncomeTaxStatement(portfolio.incomeTax ?? null);
     setBondHoldings(portfolio.bondHoldings || []);
     setTotalValue(portfolio.totalValue || 0);
     setTotalBondValue(portfolio.totalBondValue || 0);
@@ -236,6 +240,7 @@ function PortfolioPageInner({ initialPortfolio }: PortfolioClientProps) {
     ) => {
       if (me?.character) {
         setMyCharacterId(me.character._id || "");
+        if (me.character.isImperial) setIncomeTaxStatement(me.character.incomeTax ?? null);
         setMyCountryId(me.character.countryId || "US");
         if (me.character.currencyBalances) {
           setCurrencyBalances({
@@ -384,7 +389,8 @@ function PortfolioPageInner({ initialPortfolio }: PortfolioClientProps) {
   // loans showed a "Net Worth" identical to their stock-only total.
   const investmentTotal = totalValue + totalBondValue + fundHoldingsValue;
   const loanObligation = locSnapshot?.outstandingInternal ?? 0;
-  const combinedTotal = investmentTotal + cashOnHand - loanObligation;
+  const combinedTotal =
+    investmentTotal + cashOnHand - loanObligation - (incomeTaxStatement?.unpaidTaxAnchor ?? 0);
   const stockMarketFundsHref = myCountryId
     ? `/country/${myCountryId.toLowerCase()}/stockmarket?tab=funds`
     : "/country/us/stockmarket?tab=funds";
@@ -647,6 +653,9 @@ function PortfolioPageInner({ initialPortfolio }: PortfolioClientProps) {
           active={activeSection}
           onSelect={handleSectionChange}
         >
+          {incomeTaxStatement && (activeSection === "overview" || activeSection === "cash") && (
+            <PlayerIncomeTaxStatement statement={incomeTaxStatement} />
+          )}
           {activeSection === "overview" && (
             <OverviewPane
               totalValue={totalValue}

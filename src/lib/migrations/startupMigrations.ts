@@ -1,3 +1,4 @@
+import { migration as incomeTaxTiers } from "./entries/2026-10-16-income-tax-tiers";
 import { migration as incomeTaxPolicyParity } from "./entries/2026-10-15-income-tax-policy-parity";
 import { migration as governmentContractBidding } from "./entries/2026-10-14-government-contract-bidding";
 import { migration as contestAccountHistory } from "./entries/2026-10-14-contest-account-history";
@@ -29,6 +30,7 @@ import { migration as marketCapTickIndexes } from "./entries/2026-10-09-market-c
 import { migration as supplyAgreementStatusIndex } from "./entries/2026-10-10-supply-agreement-status-index";
 import { migration as subhourWikiCadence } from "./entries/2026-10-09-subhour-wiki-cadence";
 import { runMigrations, type RunSummary } from "./runner";
+import { migration as scotusCareerAchievements } from "./entries/2026-10-16-scotus-career-achievements";
 import type { Migration } from "./types";
 
 /**
@@ -45,6 +47,7 @@ export const REQUIRED_STARTUP_MIGRATIONS: readonly Migration[] = [
   contestAccountHistory,
   governmentContractBidding,
   incomeTaxPolicyParity,
+  incomeTaxTiers,
   equityMarketPools,
   repairOrphanIndexFundState,
   providerIdentityIndexes,
@@ -89,6 +92,8 @@ export const REQUIRED_STARTUP_MIGRATIONS: readonly Migration[] = [
   // NPP engine 6 on the hosted world ships with the build that carries it;
   // singleplayer worlds keep their chosen level.
   liveWorldNppAutonomyV6,
+  // Justice confirmations must reach career history and the new achievements.
+  scotusCareerAchievements,
 ];
 
 /** Index metadata can disappear on reset even when migration markers survive. */

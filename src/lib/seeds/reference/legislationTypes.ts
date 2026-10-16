@@ -1,3 +1,4 @@
+import { expandIncomeTaxTypes } from "@/lib/budget/incomeTaxCatalog";
 import type { LegislationType, EffectTargetWeighted, MetricCategoryId } from "@/lib/db/types";
 import { policyOptions, taxRateOptions, withPerCapitaCosts } from "./policyOptionHelpers";
 import { withEraCosts } from "@/lib/era/legislationCostCatalog";
@@ -8910,7 +8911,7 @@ const rawLegislationTypes: LegislationType[] = [
  * on any option are preserved. Flag-off ignores these; flag-on uses them.
  */
 export const legislationTypes: LegislationType[] = withLawAdministration(
-  withEraCosts(rawLegislationTypes)
+  withEraCosts(expandIncomeTaxTypes(rawLegislationTypes))
 );
 
 export default legislationTypes;

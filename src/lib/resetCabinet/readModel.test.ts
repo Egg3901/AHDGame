@@ -119,4 +119,24 @@ describe("v2 Cabinet finance read model", () => {
 
     expect(model.programs.map((program) => program.programId)).toEqual(["L19"]);
   });
+
+  it("explains a zero-budget office without an account instead of a missing-account dead end", () => {
+    const office = DEPARTMENT_DEFINITIONS.find((entry) => entry.id === "us_chief_of_staff_office")!;
+    expect(office.portfolioIds).toEqual([]);
+    const model = buildResetDepartmentFinanceReadModel({
+      definition: office,
+      departmentName: "Executive Office of the President",
+    });
+    expect(model.explanation).toContain("legislative budget is intentionally zero");
+    expect(model.explanation).not.toContain("no verified v2 account");
+    expect(model.programs).toEqual([]);
+  });
+
+  it("still flags a missing account for a department that owns laws", () => {
+    const model = buildResetDepartmentFinanceReadModel({
+      definition,
+      departmentName: "Health and Human Services",
+    });
+    expect(model.explanation).toContain("no verified v2 account");
+  });
 });

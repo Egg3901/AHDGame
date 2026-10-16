@@ -53,6 +53,19 @@ export interface GrowthRegulatoryResult {
   regulatoryBurden: number;
 }
 
+/**
+ * Landed-price surcharges after the corporation's logistics discount. Returns
+ * the input map untouched when there is nothing to scale.
+ */
+export function scaleLandedPremiums(
+  premiums: ReadonlyMap<CommodityType, number> | undefined,
+  multiplier: number
+): ReadonlyMap<CommodityType, number> | undefined {
+  if (!premiums || !Number.isFinite(multiplier) || multiplier >= 1) return premiums;
+  const factor = Math.max(0, multiplier);
+  return new Map([...premiums].map(([commodity, premium]) => [commodity, premium * factor]));
+}
+
 export function computeGrowthAndRegulatory(input: GrowthRegulatoryInput): GrowthRegulatoryResult {
   const {
     corp,
@@ -144,6 +157,12 @@ export interface PhysicalCostsInput {
   mothballed: boolean;
   stateId: string;
   landedPremiumByState: CorporationLookups["landedPremiumByState"];
+  /**
+   * Owning corporation's shipping-cost multiplier from logistics strength
+   * (`getLogisticsShippingMultiplier`). Scales the landed-price surcharge on
+   * out-of-state inputs. Absent ⇒ 1.
+   */
+  shippingCostMultiplier?: number;
   storedOtherOpexAnchor: number | null;
   healedOtherOpexPerUnitAnchor: number | undefined;
   otherOpexAnchorMarginBasis: number | null | undefined;
@@ -213,6 +232,7 @@ export function decomposePhysicalCosts(input: PhysicalCostsInput): PhysicalCosts
     mothballed,
     stateId,
     landedPremiumByState,
+    shippingCostMultiplier = 1,
     storedOtherOpexAnchor,
     healedOtherOpexPerUnitAnchor,
     otherOpexAnchorMarginBasis,
@@ -309,7 +329,10 @@ export function decomposePhysicalCosts(input: PhysicalCostsInput): PhysicalCosts
         mothballed,
         // Money wiring (step 5, phase A): empty map when the flag is off, so
         // this is a no-op until interstateMoneyWiringEnabled is flipped on.
-        statePremiums: landedPremiumByState?.get(stateId),
+        statePremiums: scaleLandedPremiums(
+          landedPremiumByState?.get(stateId),
+          shippingCostMultiplier
+        ),
         groupAllocations: input.groupAllocations,
       })
     : { total: 0, lines: [] };

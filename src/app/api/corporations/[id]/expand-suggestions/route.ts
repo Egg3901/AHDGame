@@ -29,7 +29,11 @@ import { commodityDemandGap, isStateScopedCommodity } from "@/lib/market/commodi
 import { latentTopUpForCountry, latentTopUpForState } from "@/lib/market/latentShortageSignal";
 import { bookFor, loadReachableBooks } from "@/lib/trade/queries/loadReachableBooks";
 import { getStrategyForOperatingModel } from "@/lib/constants/sectorStrategies";
-import { CAPACITY_BUILD_TURNS, computeBuildCost } from "@/lib/constants/capacityEconomy";
+import {
+  CAPACITY_BUILD_TURNS,
+  computeBuildCost,
+  techBuildTurns,
+} from "@/lib/constants/capacityEconomy";
 import { foundingStarterUnits, sectorEntryFeeAnchor } from "@/lib/corporations/foundingPlant";
 import { resolveCountryPrimeRates } from "@/lib/corporations/sectorGrowthCost";
 import { getSectorTechEffects } from "@/lib/constants/techTree";
@@ -442,7 +446,10 @@ export async function GET(request: Request, { params }: RouteParams) {
       // to found — not `corporation.type`. Off-primary founding is exactly the
       // case where quoting the wrong type's build turns misleads most.
       starterUnits = foundingStarterUnits(sectorType, industryModel, mediaDiscriminator);
-      foundingBuildTurns = Math.max(1, CAPACITY_BUILD_TURNS(operatingType, true));
+      foundingBuildTurns = techBuildTurns(
+        CAPACITY_BUILD_TURNS(operatingType, true),
+        techEffects?.growthCostMultiplier ?? 1
+      );
 
       const ceoChar = corporation.ceoId
         ? await db
@@ -495,6 +502,7 @@ export async function GET(request: Request, { params }: RouteParams) {
             acumen,
             hostCostOfLivingIndex: costOfLivingByState.get(state._id) ?? null,
             techGrowthCostMultiplier: techEffects?.growthCostMultiplier ?? 1,
+            techDominanceShield: techEffects?.dominanceShield ?? 0,
             founding: true,
           }).totalAnchor
         );

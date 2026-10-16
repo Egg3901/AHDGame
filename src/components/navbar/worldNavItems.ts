@@ -84,14 +84,6 @@ export function buildWorldNavItems({
       primary: true,
     },
     {
-      id: "legacyLeaderboard",
-      label: "Hall of Fame",
-      labelKey: "menus.world.hallOfFame",
-      href: "/world/legacy",
-      section: "leaderboard",
-      show: true,
-    },
-    {
       id: "nations",
       // The world map lives on the Nations page; say so, since "Country Map"
       // below is the player's own country.
@@ -239,11 +231,11 @@ export function visibleWorldNavItems(opts: WorldNavOpts): WorldNavItem[] {
 // and in-group item order for the mobile World section — this is where a
 // future traffic-informed reorder should edit (reorder the group entries,
 // or the `itemIds` arrays within a group).
-export type WorldNavGroupId = "leaderboards" | "diplomacy" | "economy" | "other";
+export type WorldNavGroupId = "diplomacy" | "economy" | "other";
 
 export interface WorldNavGroup {
   id: WorldNavGroupId;
-  title: "Leaderboards" | "Diplomacy" | "Economy" | "Other";
+  title: "Diplomacy" | "Economy" | "Other";
   /** Message id under the "nav" namespace for the group header. */
   titleKey: string;
   items: WorldNavItem[];
@@ -260,9 +252,7 @@ interface WorldNavGroupDef {
 // Group and item order is set by measured traffic (Umami, 24 days to
 // 2026-07-23, 318k pageviews), quoted as % of all site pageviews. Economy
 // leads on Stock Market alone (2.82%, plus 0.82% for the country-scoped
-// route); everything in Diplomacy is under 0.4%; Hall of Fame did not appear
-// in the top-30 routes at all, so Leaderboards sits last despite being first
-// in the original taxonomy-ordered list.
+// route); everything in Diplomacy is under 0.4%.
 const WORLD_NAV_GROUPS: WorldNavGroupDef[] = [
   {
     id: "economy",
@@ -294,17 +284,11 @@ const WORLD_NAV_GROUPS: WorldNavGroupDef[] = [
     itemIds: ["nations", "map", "internationalOrgs", "crises", "germanQuestion", "conflicts"],
   },
   { id: "other", title: "Other", titleKey: "menus.world.groups.other", itemIds: ["news"] },
-  {
-    id: "leaderboards",
-    title: "Leaderboards",
-    titleKey: "menus.world.groups.leaderboards",
-    itemIds: ["legacyLeaderboard"],
-  },
 ];
 
 /**
- * Groups visible World nav items into the mobile drawer's four collapsible
- * categories (Leaderboards / Diplomacy / Economy / Other). Personal organization
+ * Groups visible World nav items into the mobile drawer's three collapsible
+ * categories (Economy / Diplomacy / Other). Personal organization
  * shortcuts are intentionally excluded — they are pinned links surfaced separately
  * via {@link looseWorldNavItems} above the grouped categories (mirrors the
  * Nation section's loose Home Nation / My Party links above its groups).

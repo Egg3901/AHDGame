@@ -1,3 +1,4 @@
+import { loadPlayerIncomeTaxSummary } from "@/lib/budget/playerIncomeTaxSummary";
 import { charterMay } from "@/lib/banking/rules/capabilities";
 import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
@@ -91,6 +92,12 @@ export async function GET() {
               tintColor: imperial.tintColor ?? null,
               activeElection: null,
               isImperial: true,
+              incomeTax: await loadPlayerIncomeTaxSummary(
+                db,
+                imperial,
+                (await getGameState())?.currentTurn ?? 0,
+                "imperialCharacters"
+              ),
               ...(forexEnabled && imperial.currencyBalances
                 ? {
                     currencyBalances: imperial.currencyBalances,

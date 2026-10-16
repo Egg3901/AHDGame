@@ -1,3 +1,4 @@
+import { loadUnpaidIncomeTaxByCharacter } from "@/lib/budget/playerIncomeTaxSummary";
 /**
  * Investor-ranking and wealth-list snapshots. Split out of
  * stockExchangeSnapshot.ts (pure code motion) — both are re-exported from that
@@ -310,6 +311,7 @@ export async function generateWealthListSnapshots(currentTurn: number, db?: Db):
   const bondValueByCharId = sumBondValueByCharacter(bonds, characterIdSet, fxByCurrency);
   const fundValueByCharId = await loadFundValueByCharacter(database, characterIds, characterIdSet);
 
+  const incomeTaxDebts = await loadUnpaidIncomeTaxByCharacter(database, exchangeRates);
   // Build the global entry list sorted by totalWealth
   const globalEntries: WealthListEntry[] = activeCharacters
     .map((character) => {
@@ -321,7 +323,8 @@ export async function generateWealthListSnapshots(currentTurn: number, db?: Db):
           bondValueByCharId,
           forexEnabled,
           exchangeRates,
-          fundValueByCharId
+          fundValueByCharId,
+          incomeTaxDebts
         );
       const countryId = resolveCountryId(character);
       const countryName = COUNTRY_CONFIGS[countryId]?.name ?? countryId;

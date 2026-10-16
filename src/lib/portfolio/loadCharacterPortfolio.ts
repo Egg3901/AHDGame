@@ -1,3 +1,4 @@
+import { loadPlayerIncomeTaxSummary } from "@/lib/budget/playerIncomeTaxSummary";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { getCharacterByUserId } from "@/lib/db/characterLookup";
@@ -255,6 +256,7 @@ export async function loadCharacterPortfolio(userId: string) {
         liquidCashValue: 1,
         savingsCashValue: 1,
         locDebtValue: 1,
+        incomeTaxDebtValue: 1,
         exchangeRatesSnapshot: 1,
       })
       .toArray(),
@@ -290,13 +292,20 @@ export async function loadCharacterPortfolio(userId: string) {
   }
 
   const currentCashWealth = getTotalPersonalWealth(character, forexEnabled, exchangeRates);
+  const incomeTax = await loadPlayerIncomeTaxSummary(
+    db,
+    character,
+    currentTurn,
+    "characters",
+    exchangeRates
+  );
   const currentLocDebt = computeLocDebtInternal(character, exchangeRates ?? {});
   const historyWithDerivedNet = history.map((point) => ({
     ...point,
     netValue:
       point.netValue ??
       (point.turn === currentTurn
-        ? Math.max(0, point.totalValue - currentLocDebt)
+        ? Math.max(0, point.totalValue - currentLocDebt - incomeTax.unpaidTaxAnchor)
         : point.totalValue),
     locDebtValue:
       point.locDebtValue ??
@@ -333,6 +342,7 @@ export async function loadCharacterPortfolio(userId: string) {
 
   return {
     holdings,
+    incomeTax,
     bondHoldings,
     totalValue: Math.round(totalValue * 100) / 100,
     totalBondValue: Math.round(totalBondValue * 100) / 100,

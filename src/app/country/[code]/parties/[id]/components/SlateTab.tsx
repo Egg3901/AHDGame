@@ -1,7 +1,7 @@
 "use client";
 
 import { InlineError } from "@/components/ui/InlineError";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import { useCountdownTimer } from "@/hooks/useCountdownTimer";
@@ -13,6 +13,10 @@ import { SlateElectionResults } from "@/components/elections/SlateElectionResult
 import type { StateMapData } from "@/components/USAMapPaths";
 import { SLATE_REFUSAL_LABEL, isSlateFilingFailure } from "@/lib/slateRefusalReasons";
 import { formatSlateCapNote, type SlateAssignmentUsage } from "@/lib/slateAssignmentCap";
+import {
+  readSlateExpandedPreference,
+  writeSlateExpandedPreference,
+} from "@/lib/ui/slateExpandPreference";
 import { AssignmentPicker } from "./SlateAssignmentPicker";
 import { formatSlateLabel, formatSlateRaceTitle } from "./slateFormatting";
 
@@ -727,7 +731,9 @@ function RaceSlatePanel({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
-  const [expanded, setExpanded] = useState(false);
+  // Cards open by default for viewers who can assign candidates, and a viewer's
+  // own last choice (kept across races, states and visits) wins over that default.
+  const [expanded, setExpanded] = useState(() => readSlateExpandedPreference() ?? canManageSlate);
 
   const fetchDetail = useCallback(async () => {
     setLoading(true);
@@ -748,6 +754,14 @@ function RaceSlatePanel({
       setLoading(false);
     }
   }, [countryCode, partyId, item.electionId]);
+
+  // A card that starts open loads its own slate once on mount.
+  const startedExpanded = useRef(expanded);
+  useEffect(() => {
+    if (startedExpanded.current) void fetchDetail();
+    // Mount only: later opens are loaded by the toggle handler.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <div className="rounded-xl border border-card-border bg-card p-4 space-y-3">
@@ -775,6 +789,7 @@ function RaceSlatePanel({
             onClick={() => {
               const shouldExpand = !expanded;
               setExpanded(shouldExpand);
+              writeSlateExpandedPreference(shouldExpand);
               if (shouldExpand && !detail && !loading) void fetchDetail();
             }}
             className="rounded-md border border-card-border px-3 py-1.5 text-xs font-medium text-muted hover:text-foreground transition-colors"

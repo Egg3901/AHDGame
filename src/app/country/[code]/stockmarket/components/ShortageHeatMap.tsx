@@ -13,6 +13,7 @@ import { useCountryDisplayName } from "@/contexts/RegisteredCountriesContext";
 import { logger } from "@/lib/observability/logger";
 import type { CountryId } from "@/lib/constants/countries";
 import { getStateDisplayName } from "@/lib/commodity-map/commodityRegionMappings";
+import { sortByRegionLabel } from "@/lib/regionOptions";
 
 /**
  * Diverging ranked heat of what a scope is short on. Warm (hot) = shortage,
@@ -223,7 +224,10 @@ export function ShortageHeatMap({ commodities }: { commodities: CommodityData[] 
     );
   }, [countryId, scopeMeta, pageCode]);
 
-  const stateOptions = scopeMeta?.statesByCountry[effectiveCountryId] ?? [];
+  const stateOptions = sortByRegionLabel(
+    scopeMeta?.statesByCountry[effectiveCountryId] ?? [],
+    (s) => getStateDisplayName(countryId as CountryId, s)
+  );
   const effectiveStateId =
     stateId && stateOptions.includes(stateId) ? stateId : (stateOptions[0] ?? "");
 

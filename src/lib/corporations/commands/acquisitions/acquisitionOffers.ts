@@ -1,6 +1,11 @@
 import { ObjectId, type Db } from "mongodb";
 import type { CentralBank, Corporation, CorporateSector } from "@/lib/db/types";
-import type { AcquisitionOffer, AcquisitionOfferStatus } from "@/lib/db/types/acquisitionOffer";
+import type {
+  AcquisitionOffer,
+  AcquisitionOfferStatus,
+  AcquisitionOutcome,
+} from "@/lib/db/types/acquisitionOffer";
+import { getControllingCorporateParent } from "@/lib/corporations/corporateOwnership";
 import { buildPrimeRateMap } from "@/lib/bonds/corporateBondDefault";
 import { sectorExitValueAnchor } from "@/lib/bonds/sectorExitBasis";
 import { getMarketSystemModeForDb, marketAtLeast } from "@/lib/market/featureFlag";
@@ -19,6 +24,8 @@ import {
 } from "./acquisitionSettlement";
 import { loadWorldEraUnitScale } from "@/lib/currency/gdpAnchorRate";
 import { acquisitionsBarredByDivestiture } from "@/lib/corporations/mergerReview/gate";
+import { checkSubsidiaryAcquisition } from "./subsidiaryOutcome";
+import { acquisitionOutcomeOf } from "./rules/subsidiaryOutcome";
 import {
   isNppAutoResolvableTarget,
   meetsNppAcquisitionThreshold,
@@ -89,6 +96,7 @@ export type ProposeAcquisitionOfferResult =
       priceAnchor: number;
       acquirerName: string;
       targetName: string;
+      outcome?: AcquisitionOutcome;
     };
 
 export async function proposeAcquisitionOffer(
@@ -100,9 +108,14 @@ export async function proposeAcquisitionOffer(
     proposerCharacterId: ObjectId;
     proposerUserId?: ObjectId;
     currentTurn: number;
+    /** Defaults to a merge, the only behavior before subsidiary mode existed. */
+    outcome?: AcquisitionOutcome;
   }
 ): Promise<ProposeAcquisitionOfferResult> {
   const { acquirer, target, priceAnchor, proposerCharacterId, proposerUserId, currentTurn } = input;
+  const outcome = acquisitionOutcomeOf(input);
+  // Merge offers keep their legacy document shape: no outcome field.
+  const outcomeField = outcome === "subsidiary" ? { outcome } : {};
 
   if (acquirer._id.equals(target._id))
     return { ok: false, error: "A corporation cannot acquire itself", status: 400 };
@@ -134,6 +147,23 @@ export async function proposeAcquisitionOffer(
   if (freshTarget.countryOwnerId || freshTarget.ownershipState === "stateOwned")
     return { ok: false, error: "State-owned corporations cannot be acquired", status: 400 };
 
+  // A corporation another corporation controls is that parent's to sell. An
+  // AI-run one has no human who could accept, and auto-resolving an offer for
+  // it would hand a player's subsidiary to a rival at the asking price with no
+  // consent from anyone.
+  if (isNppAutoResolvableTarget(freshTarget) && getControllingCorporateParent(freshTarget)) {
+    return {
+      ok: false,
+      error:
+        "That corporation is controlled by another corporation, which decides whether it is sold.",
+      status: 400,
+    };
+  }
+  if (outcome === "subsidiary") {
+    const eligibility = await checkSubsidiaryAcquisition(db, acquirer, freshTarget);
+    if (!eligibility.ok) return { ok: false, error: eligibility.error, status: eligibility.status };
+  }
+
   const targetValuationAnchor = await referenceValuationAnchor(db, freshTarget);
   const valuationAnchor = Math.round(targetValuationAnchor);
   const now = new Date();
@@ -150,6 +180,7 @@ export async function proposeAcquisitionOffer(
       targetCorporationId: freshTarget._id,
       proposedByCharacterId: proposerCharacterId,
       ...(proposerUserId ? { proposedByUserId: proposerUserId } : {}),
+      ...outcomeField,
       priceAnchor: Math.round(priceAnchor),
       targetValuationAnchor: valuationAnchor,
       status: "pending",
@@ -165,7 +196,10 @@ export async function proposeAcquisitionOffer(
         userId: freshTarget.userId,
         type: "corp_vote_opened",
         title: "Acquisition offer received",
-        message: `${acquirer.name} has offered to acquire ${freshTarget.name}. Review it in the Deals tab.`,
+        message:
+          outcome === "subsidiary"
+            ? `${acquirer.name} has offered to acquire ${freshTarget.name} and keep it as a subsidiary. Review it in the Deals tab.`
+            : `${acquirer.name} has offered to acquire ${freshTarget.name}. Review it in the Deals tab.`,
         metadata: {
           acquisitionOfferId: res.insertedId.toHexString(),
           corporationId: freshTarget._id.toHexString(),
@@ -190,6 +224,7 @@ export async function proposeAcquisitionOffer(
       targetCorporationId: target._id,
       proposedByCharacterId: proposerCharacterId,
       ...(proposerUserId ? { proposedByUserId: proposerUserId } : {}),
+      ...outcomeField,
       priceAnchor: Math.round(priceAnchor),
       targetValuationAnchor: valuationAnchor,
       status: "rejected",
@@ -214,6 +249,7 @@ export async function proposeAcquisitionOffer(
     targetCorporationId: target._id,
     proposedByCharacterId: proposerCharacterId,
     ...(proposerUserId ? { proposedByUserId: proposerUserId } : {}),
+    ...outcomeField,
     priceAnchor: Math.round(priceAnchor),
     targetValuationAnchor: valuationAnchor,
     status: "accepted",
@@ -268,6 +304,7 @@ export async function proposeAcquisitionOffer(
     priceAnchor: result.priceAnchor,
     acquirerName: result.acquirerName,
     targetName: result.targetName,
+    ...(result.outcome ? { outcome: result.outcome } : {}),
   };
 }
 
@@ -275,7 +312,13 @@ export async function acceptAcquisitionOffer(
   db: Db,
   input: { offer: AcquisitionOffer; currentTurn: number }
 ): Promise<
-  Result<{ sectorsMoved: number; priceAnchor: number; acquirerName: string; targetName: string }>
+  Result<{
+    sectorsMoved: number;
+    priceAnchor: number;
+    acquirerName: string;
+    targetName: string;
+    outcome?: AcquisitionOutcome;
+  }>
 > {
   const { offer, currentTurn } = input;
   const offers = db.collection<AcquisitionOffer>(OFFERS);
@@ -388,6 +431,7 @@ export interface DealSummary {
   targetValuationAnchor: number;
   status: AcquisitionOfferStatus;
   expiresAtTurn: number;
+  outcome: AcquisitionOutcome;
 }
 
 /** Pending incoming (offers to buy THIS corp) + outgoing (offers THIS corp made). */
@@ -428,6 +472,7 @@ export async function listDealsForCorp(
     targetValuationAnchor: o.targetValuationAnchor,
     status: o.status,
     expiresAtTurn: o.expiresAtTurn,
+    outcome: acquisitionOutcomeOf(o),
   });
 
   const idStr = corpId.toString();

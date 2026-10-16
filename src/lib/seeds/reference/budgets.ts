@@ -1,3 +1,8 @@
+import {
+  initializeIncomeTaxRates,
+  incomeBaseShares,
+  DEFAULT_INCOME_POPULATION,
+} from "@/lib/budget/rules/incomeTaxTiers";
 import { NG_1991_NOMINAL_GDP_NGN } from "@/lib/countries/ng/data/ngGdp1991";
 import { rebaseBudgetNominals } from "./rules/rebaseBudgetNominals";
 import { anchorBudget1991 } from "./rules/anchorBudget1991";
@@ -6035,6 +6040,9 @@ export function getInitialNationalBudgetsForPreset(preset: string): SupportedNat
   // and runs a permanent placeholder-only deficit. Add taxRateOverrides or a
   // legislation module rather than shipping a country that levies no taxes.
   for (const b of budgets) {
+    b.taxRates = initializeIncomeTaxRates(b.taxRates);
+    b.incomeTaxBatchReceipt = null;
+    b.incomeTaxShares = incomeBaseShares(DEFAULT_INCOME_POPULATION);
     const hasBase =
       b.taxBases.taxableIncome > 0 ||
       b.taxBases.wagesAndSalaries > 0 ||
@@ -7478,7 +7486,9 @@ export function generateStateBudgets(
         other: 0,
         total: totalRevenue,
       },
-      taxRates: rates,
+      taxRates: initializeIncomeTaxRates(rates),
+      incomeTaxShares: incomeBaseShares(DEFAULT_INCOME_POPULATION),
+      incomeTaxBatchReceipt: null,
       spending: {
         byCategory: {
           education: totalRevenue * 0.35,

@@ -253,10 +253,10 @@ describe("proposeStateBill — US state tax sliders (ticket #1106)", () => {
     db.collection("characters").updateOne.mockResolvedValue({ modifiedCount: 1 });
     db.collection("stateBills").insertOne.mockResolvedValue({ insertedId: new ObjectId() });
     db.collectionMocks.legislationTypes.findOne.mockResolvedValue({
-      _id: "us.tax.stateIncomeTax",
+      _id: "us.tax.stateIncomeTax__income_middle",
       taxSlider: {
         scope: "state",
-        taxType: "incomeTax",
+        taxType: "incomeTaxMiddle",
         minRate: 0,
         maxRate: 25,
         step: 0.5,
@@ -277,7 +277,7 @@ describe("proposeStateBill — US state tax sliders (ticket #1106)", () => {
       category: "tax",
       provisions: [
         {
-          legislationTypeId: "us.tax.stateIncomeTax",
+          legislationTypeId: "us.tax.stateIncomeTax__income_middle",
           effectDirection: 1,
           proposedRate: 7,
         },
@@ -289,7 +289,7 @@ describe("proposeStateBill — US state tax sliders (ticket #1106)", () => {
       provisions: Array<Record<string, unknown>>;
     };
     expect(inserted.provisions[0]).toMatchObject({
-      legislationTypeId: "us.tax.stateIncomeTax",
+      legislationTypeId: "us.tax.stateIncomeTax__income_middle",
       proposedRate: 7,
       policyOptionId: "rate:7",
       effectDirection: 1,
@@ -304,7 +304,7 @@ describe("proposeStateBill — US state tax sliders (ticket #1106)", () => {
       category: "tax",
       provisions: [
         {
-          legislationTypeId: "us.tax.stateIncomeTax",
+          legislationTypeId: "us.tax.stateIncomeTax__income_middle",
           proposedRate: 5,
         },
       ],
@@ -346,8 +346,8 @@ describe("proposeStateBill — US state tax sliders (ticket #1106)", () => {
       summary: "Attempts to set the same tax twice.",
       category: "tax",
       provisions: [
-        { legislationTypeId: "us.tax.stateIncomeTax", proposedRate: 7 },
-        { legislationTypeId: "us.tax.stateIncomeTax", proposedRate: 8 },
+        { legislationTypeId: "us.tax.stateIncomeTax__income_middle", proposedRate: 7 },
+        { legislationTypeId: "us.tax.stateIncomeTax__income_middle", proposedRate: 8 },
       ],
     });
 

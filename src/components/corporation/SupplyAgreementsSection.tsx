@@ -23,6 +23,7 @@ import {
   negotiateDraftFromSearch,
   type NegotiateDraft,
 } from "@/lib/corporations/supplyExchange/negotiateLink";
+import { sortByRegionLabel } from "@/lib/regionOptions";
 
 interface SupplyAgreement {
   _id: string;
@@ -412,7 +413,12 @@ export default function SupplyAgreementsSection({
   const asSupplier = visible.filter((a) => a.supplierCorpId === corpId);
   const asBuyer = visible.filter((a) => a.buyerCorpId === corpId);
   const requiresState = supplyAgreementRequiresState(commodity);
-  const stateOptions = requiresState ? Object.entries(capacityByState[commodity] ?? {}) : [];
+  const stateOptions = requiresState
+    ? sortByRegionLabel(
+        Object.entries(capacityByState[commodity] ?? {}),
+        ([, snapshot]) => snapshot.stateName
+      )
+    : [];
   const selectedCapacity = requiresState
     ? proposalRole === "supplier"
       ? stateId

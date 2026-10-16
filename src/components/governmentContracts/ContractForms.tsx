@@ -5,6 +5,7 @@ import { useState } from "react";
 import { useTranslations } from "next-intl";
 import type { ContractType, TenderView } from "@/lib/governmentContracts/types";
 import { apiErrorText } from "@/lib/errors/catalog";
+import { sortByRegionLabel } from "@/lib/regionOptions";
 export interface ContractAccess {
   currentTurn: number;
   defenceAnchorPrice?: number | null;
@@ -63,7 +64,8 @@ export function PublishTenderForm({
   );
   const [grade, setGrade] = useState(0);
   const defenceWindowAvailable = access.currentTurn + 2 <= access.window.endTurn + 1;
-  const [stateId, setStateId] = useState(access.states[0]?.stateId ?? "");
+  const sortedStates = sortByRegionLabel(access.states, (s) => s.stateId);
+  const [stateId, setStateId] = useState(sortedStates[0]?.stateId ?? "");
   const [busy, setBusy] = useState(false),
     [error, setError] = useState("");
   const resources = access.states.find((s) => s.stateId === stateId)?.resources ?? [];
@@ -270,7 +272,7 @@ export function PublishTenderForm({
               onChange={(e) => setStateId(e.target.value)}
               className={inputClass}
             >
-              {access.states.map((s) => (
+              {sortedStates.map((s) => (
                 <option key={s.stateId}>{s.stateId}</option>
               ))}
             </select>
