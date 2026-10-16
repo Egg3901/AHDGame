@@ -274,8 +274,8 @@ export default function RunningForOfficeIntlPage() {
                     ],
                     [
                       "Minority government",
-                      "≥130 (20%) but <326",
-                      "Party must manually initiate; requires ≥130 votes to pass (not 326)",
+                      "≥100 (about 15%) but <326",
+                      "The party chair must initiate the nomination; the Commons then votes on it. A minority bid is allowed even when another party holds a majority",
                     ],
                     [
                       "Nomination fails",
@@ -435,8 +435,8 @@ export default function RunningForOfficeIntlPage() {
               Most regions operate as an LDP vs CDP two-party race. The exception is{" "}
               <strong className="text-foreground">Kansai</strong>, where Nippon Ishin (Ishin)
               replaces CDP as the primary opposition to the LDP. If you are running in Kansai on a
-              CDP ticket, you are fighting as a third party; the 20% threshold means you risk
-              winning zero seats if your vote share falls short.
+              CDP ticket, you are fighting as a third party; the Shugiin 10% threshold means you
+              risk winning zero seats if your vote share falls short.
             </p>
           </section>
 
