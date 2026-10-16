@@ -980,6 +980,7 @@ export default function CommodityWorldMapView({
             commodityLabel={commodityLabel}
             unit={unit}
             data={selectedCountry.data}
+            imports={reachableBooks?.[selectedCountry.countryId]?.imports ?? null}
             mode={mode}
             onModeChange={onModeChange}
             forexEnabled={forexEnabled}
