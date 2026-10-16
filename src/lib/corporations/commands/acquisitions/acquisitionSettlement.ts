@@ -33,6 +33,7 @@ import type {
   AcquisitionSettlementLeg,
   AcquisitionSettlementResult,
 } from "@/lib/db/types/acquisitionSettlement";
+import type { AcquisitionOutcome } from "@/lib/db/types/acquisitionOffer";
 import type { PlannedLeg, PayoutPlan } from "./rules/acquisitionPayoutPlan";
 
 export const ACQUISITION_SETTLEMENTS = "acquisitionSettlements";
@@ -130,6 +131,8 @@ export interface ClaimSpec {
   sectorTotal: number;
   /** Review whose remedy attaches on commit; persisted so a post-teardown retry can finish the tail. */
   remedyReviewId?: string;
+  /** Persisted so a retry resumes the same outcome. Absent means merge. */
+  outcome?: AcquisitionOutcome;
   plan: PayoutPlan;
 }
 
@@ -152,6 +155,9 @@ export async function claimAcquisitionSettlement(
     _id: spec.offerId,
     key: spec.plan.key,
     ...(spec.remedyReviewId ? { remedyReviewId: spec.remedyReviewId } : {}),
+    ...(spec.outcome === "subsidiary"
+      ? { outcome: "subsidiary" as const, equityTransferred: false }
+      : {}),
     status: "in_progress",
     acquirerCorporationId: new ObjectId(spec.acquirerHex),
     targetCorporationId: new ObjectId(spec.targetHex),
@@ -502,7 +508,10 @@ export async function markAcquisitionProgress(
   db: Db,
   offerId: ObjectId,
   progress: Partial<
-    Pick<AcquisitionSettlement, "sectorsMoved" | "bankCharterTransferred" | "shellDeleted">
+    Pick<
+      AcquisitionSettlement,
+      "sectorsMoved" | "bankCharterTransferred" | "shellDeleted" | "equityTransferred"
+    >
   >
 ): Promise<void> {
   await settlements(db).updateOne(

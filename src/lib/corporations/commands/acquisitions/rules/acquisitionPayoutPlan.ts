@@ -94,6 +94,12 @@ export interface PayoutPlanInput {
    */
   shellCashTargetLocal: number;
   targetCurrency: string;
+  /**
+   * Stamped on every ledger entry when the target is kept as a subsidiary, so
+   * the log can tell a buyout that left the corporation standing from a merge.
+   * Absent for a merge: legacy ledger bytes are unchanged.
+   */
+  outcome?: "merge" | "subsidiary";
 }
 
 export interface PayoutPlan {
@@ -123,6 +129,7 @@ export function buildAcquisitionPayoutPlan(input: PayoutPlanInput): PayoutPlan {
   const legs: PlannedLeg[] = [];
   const unpayable: Array<{ key: string; reason: string }> = [];
   const { allocation, acquirerHex, acquirerName, targetHex, targetName } = input;
+  const outcomeMeta = input.outcome === "subsidiary" ? { outcome: "subsidiary" } : {};
 
   const costOfAnchor = (payoutAnchor: number): number =>
     Math.round(
@@ -157,7 +164,7 @@ export function buildAcquisitionPayoutPlan(input: PayoutPlanInput): PayoutPlan {
           subjectId: acquirerHex,
           subjectName: acquirerName,
           ...counterparty,
-          meta: { kind: KIND, offerId: input.offerHex },
+          meta: { kind: KIND, ...outcomeMeta, offerId: input.offerHex },
         },
       ],
     });
@@ -196,7 +203,7 @@ export function buildAcquisitionPayoutPlan(input: PayoutPlanInput): PayoutPlan {
           subjectId: row.characterId,
           subjectName: "(shareholder)",
           ...counterparty,
-          meta: { kind: KIND, ...(imperial ? { imperial: true } : {}) },
+          meta: { kind: KIND, ...outcomeMeta, ...(imperial ? { imperial: true } : {}) },
         },
       ],
     });
@@ -236,7 +243,7 @@ export function buildAcquisitionPayoutPlan(input: PayoutPlanInput): PayoutPlan {
           subjectId: row.corporationId,
           subjectName: "(corp shareholder)",
           ...counterparty,
-          meta: { kind: KIND },
+          meta: { kind: KIND, ...outcomeMeta },
         },
       ],
     });
@@ -272,7 +279,7 @@ export function buildAcquisitionPayoutPlan(input: PayoutPlanInput): PayoutPlan {
             subjectName: `${input.targetCountryId} treasury`,
             countryId: input.targetCountryId,
             ...counterparty,
-            meta: { kind: KIND, side: "public_float" },
+            meta: { kind: KIND, ...outcomeMeta, side: "public_float" },
           },
         ],
       });
@@ -330,7 +337,7 @@ export function buildAcquisitionPayoutPlan(input: PayoutPlanInput): PayoutPlan {
           counterpartyType: "corporation",
           counterpartyId: targetHex,
           counterpartyName: targetName,
-          meta: { kind: KIND, side: "shell_cash_absorbed" },
+          meta: { kind: KIND, ...outcomeMeta, side: "shell_cash_absorbed" },
         },
         {
           type: "corp_dissolution_distribution",
@@ -342,7 +349,7 @@ export function buildAcquisitionPayoutPlan(input: PayoutPlanInput): PayoutPlan {
           counterpartyType: "corporation",
           counterpartyId: acquirerHex,
           counterpartyName: acquirerName,
-          meta: { kind: KIND, side: "shell_cash_released" },
+          meta: { kind: KIND, ...outcomeMeta, side: "shell_cash_released" },
         },
       ],
     });
