@@ -634,7 +634,6 @@ export function processSector(
   const plantCrew = explicitPlantCostsEnabled
     ? plantCrewShare({
         demandThrottleFactor,
-        throughputFactor,
         ramp: plantsRampLambda,
         floor: PLANT_CREW_FLOOR_SHARE,
       })

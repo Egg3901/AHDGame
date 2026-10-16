@@ -6,18 +6,17 @@
  *
  * Headcount and payroll used to follow full active nameplate, so a plant the
  * demand throttle held at 10% of its run still staffed and paid 100% of its
- * crew. The run is the demand throttle times input throughput, the two legs
- * that decide how much of the active plant is scheduled. Strikes, labour
+ * crew. The run is the demand throttle: the share of the plant the market
+ * asked for. Input throughput is deliberately left out: almost every sector
+ * sits on the 0.85 throughput floor, so counting it would cut wages at plants
+ * running flat out, which is not what this rule is for. Strikes, labour
  * rationing and the owner's production slider are deliberately left out:
  * rationing already shrinks headcount through the staffing factor (counting it
  * here would apply it twice), and a strike or a slider choice is not a
  * scheduling decision the payroll should follow.
  */
-export function plantRunShare(args: {
-  demandThrottleFactor: number;
-  throughputFactor: number;
-}): number {
-  const raw = args.demandThrottleFactor * args.throughputFactor;
+export function plantRunShare(args: { demandThrottleFactor: number }): number {
+  const raw = args.demandThrottleFactor;
   if (!Number.isFinite(raw)) return 1;
   return Math.max(0, Math.min(1, raw));
 }
@@ -31,7 +30,6 @@ export function plantRunShare(args: {
  */
 export function plantCrewShare(args: {
   demandThrottleFactor: number;
-  throughputFactor: number;
   ramp: number;
   floor: number;
 }): number {
