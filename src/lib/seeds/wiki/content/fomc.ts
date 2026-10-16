@@ -24,7 +24,7 @@ The President nominates a chair or governor; the nomination appears in a **Senat
 
 Meetings open every **8 turns** (6 per game year) when the board is due.
 
-The chair proposes **hike**, **cut**, or **hold**, with a signed rate delta (0 for a hold). Player seats get a **24-hour / 24-turn** window to ballot. A no-show is an abstain. NPP seats auto-vote from the same rule the autonomous chair uses, tilted hawk or dove, when the meeting opens, but the motion is not resolved until the window closes, so the chair and seated members always get their vote before it carries.
+The chair proposes **hike**, **cut**, or **hold**, with a signed rate delta (0 for a hold), and can use **Table your motion** to replace the automatic motion with their own before any seated governor has voted. Player seats get a **24-hour** window to ballot, and a no-show is an abstain. NPP seats auto-vote from the same rule the autonomous chair uses, tilted hawk or dove, when the meeting opens. The motion carries as soon as every seated player has voted, or at the 24-turn deadline if some have not, and never on the turn the meeting opened.
 
 A motion passes on a **strict majority of seated governors**. Vacancies do not count; seated governors without a ballot abstain, so the committee is biased toward holding when members do not vote.
 

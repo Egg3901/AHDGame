@@ -10,7 +10,7 @@ NPPs are politician records in the \`npps\` collection. They have:
 - A **party affiliation**
 - **Policy positions** on the economic and social axes (-5 to +5)
 - A **personality** (loyalty, ambition, stubbornness, each 0 to 100)
-- A **Political Influence** score (0 to 100, with a **floor of 10%** that never decays)
+- A **Political Influence** score (0 to 100, with a **floor of 10** that never decays)
 - A **favorability** score (0 to 100)
 
 They appear on state pages, the Congress page, election candidate lists, and bill vote tallies. An "NPP" badge distinguishes them from player characters everywhere they appear.
@@ -29,7 +29,7 @@ Admins can spawn NPPs in bulk (1 to 500 at a time) for any party, with weighting
 
 ## Party NPP capacity
 
-Party-controlled NPP capacity depends on active player membership. Each of the first five active members adds five slots; the next five add four each; members up to twenty add three each; later members add two each. The country ceiling is three NPPs per region, with a minimum ceiling of 25. That minimum applies to the ceiling, not to every party's allowance. An active member needs at least two game actions in the last fourteen real days. The party controls show its current count and capacity.
+Party-controlled NPP capacity depends on active player membership. Each of the first five active members adds five slots; the next five add four each; members up to twenty add three each; later members add two each. The country ceiling is six NPPs per region, with a minimum ceiling of 25. That minimum applies to the ceiling, not to every party's allowance. An active member needs at least two game actions in the last fourteen real days. The party controls show its current count and capacity.
 
 ## Key constraints
 
@@ -59,7 +59,7 @@ NPP profile pages are at \`/npp/[id]\`. NPPs appear with their assigned politici
 
 ## Related
 
-- [NPP Autonomy](/wiki/npp-autonomy): graduated smarter-NPP levels (v0 to v3).
+- [NPP Autonomy](/wiki/npp-autonomy): graduated smarter-NPP levels (up to v6).
 - [NPP Behavior](/wiki/npp-behavior): how NPPs decide to vote on bills and leadership elections.
 - [NPP Elections](/wiki/npp-elections): how NPPs enter primaries and generals.
 - [Party Actions](/wiki/party-actions): party-level NPP influence using party resources.

@@ -156,7 +156,7 @@ The fee is a real drag on your return as a holder. It is on the card. Compare it
 
 The fee is also never taken by forcing a sale. If the fund has no spare cash, the sponsor is simply not paid that turn.
 
-**Winding up.** A sponsor can close a fund they charter, but not instantly. The fund enters wind-up, stops buying and stops charging its fee, and sells its holdings back into the market over the following turns. Once the portfolio is cash, every unit holder is paid out at the final value, which is what the portfolio actually sold for rather than the last quoted NAV, and only then does the sponsor get back whatever remains of their seed capital.
+**Winding up.** A sponsor can close a fund they charter, but not instantly. The fund enters wind-up, stops buying and stops charging its fee, and sells its holdings back into the market over the following turns, sovereign and corporate bonds included. Once the portfolio is cash, every unit holder is paid out at the final value, which is what the portfolio actually sold for rather than the last quoted NAV, and only then does the sponsor get back whatever remains of their seed capital.
 
 Seed capital is last in line. A fund that lost money costs its sponsor before it costs anyone else.
 

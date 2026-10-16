@@ -91,9 +91,9 @@ State Senators vote on state-level legislation and fill the state legislature. C
 
 The Fed Chair proposes US rate moves to the seven-seat FOMC, which affect bond yields, corporate borrowing costs, and the USD exchange rate. This is the highest action-bonus non-executive office. When a chair or governor seat's term ends it falls vacant and waits for a presidential nomination and a Senate vote; the engine never seats a machine candidate. See [FOMC / Rate-Setting Board](/wiki/fomc).
 
-### US Cabinet positions (15 offices)
+### US Cabinet positions
 
-Cabinet members are nominated by the President and confirmed by the Senate. A Cabinet seat adds +1 action per turn and the 1.5 national influence tier (0.75 while acting). The 15 Cabinet positions in succession order:
+Cabinet members are nominated by the President and confirmed by the Senate, except the White House Chief of Staff. A Cabinet seat adds +1 action per turn and the 1.5 national influence tier (0.75 while acting). The 15 department secretaries, in succession order:
 
 | # | Position |
 |---|---|
@@ -112,6 +112,8 @@ Cabinet members are nominated by the President and confirmed by the Senate. A Ca
 | 13 | Secretary of Education |
 | 14 | Secretary of Veterans Affairs |
 | 15 | Secretary of Homeland Security |
+
+Two cabinet-rank White House seats were added from 1946: the Director of Central Intelligence, and the White House Chief of Staff, who is appointed by the President alone with no Senate vote and is not in the line of succession.
 
 The Secretary of the Treasury is the Finance Minister equivalent and can authorize FX Reserve Transfers.
 

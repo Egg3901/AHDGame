@@ -178,7 +178,7 @@ export default function ForexGuidePage() {
 
             <SubHeader>Noise and guardrails</SubHeader>
             <p className="text-sm text-muted leading-relaxed">
-              A ±0.3% per-turn jitter keeps movements from being perfectly predictable, and every
+              A ±0.4% per-turn jitter keeps movements from being perfectly predictable, and every
               rate is hard-capped at ±50% from its base rate. A currency cannot hyperinflate to zero
               or moon without limit.
             </p>

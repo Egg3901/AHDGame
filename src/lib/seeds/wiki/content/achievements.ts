@@ -67,6 +67,10 @@ Career rankings give politics, business, enacted legislation, contest performanc
 
 The ranking uses your strongest political and business career, adds enacted laws and contest wins across all your characters, and counts account achievements once. Retiring extra characters does not add their scores together. Your display identity defaults to your current character, or the latest retired character when none is active. You may choose a different recorded character; the ranking also names the career supplying the score. New retirement snapshots save enacted laws and converted balances before a world reset clears them. Historical information that was already erased cannot be reconstructed.
 
+## Supreme Court career milestones
+
+A confirmed Supreme Court justice receives a career-history entry and the **Equal Justice Under Law** achievement. A further achievement, **Served for Life**, recognises a justice who dies in office while serving. Past confirmations were backfilled when these achievements shipped.
+
 ## Strategic notes
 
 - **Achievements are flavor, not power.** Earning them does not grant mechanical bonuses. They are a record of accomplishment, not a progression system.
