@@ -17,6 +17,9 @@ function finiteNonNegative(value: number | undefined): number {
 /** Action points a union head spends to run one targeted drive. */
 export const ORGANIZE_SECTOR_ACTION_COST = 1;
 
+/** Most sectors one batched organize request may target. */
+export const ORGANIZE_SECTORS_BATCH_MAX = 10;
+
 /**
  * Treasury per worker to organize a shop this union does not yet hold.
  * A default-sized shop ({@link DEFAULT_ORGANIZE_SHOP_WORKERS}) therefore
