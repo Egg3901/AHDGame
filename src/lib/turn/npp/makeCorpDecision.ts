@@ -46,6 +46,7 @@ import type { UnownedSector } from "@/lib/db/types/unownedSector";
 import { CAPITAL_DEPRECIATION_PER_TURN } from "@/lib/market/capital";
 import { isStateOwned } from "@/lib/nationalization/nationalCorporation";
 import { isAutopilotRun } from "@/lib/corporations/autopilot";
+import { getControllingCorporateParent } from "@/lib/corporations/corporateOwnership";
 import { bucketKey } from "@/lib/nationalization/stateControlledBuckets";
 import { NEUTRAL_STAT } from "@/lib/stats/statsConstants";
 import {
@@ -413,6 +414,13 @@ export function makeNppCorpDecision(
   // proceeds. It reports the losers to the owner instead.
   const autopilot = isAutopilotRun(corp);
   const autopilotLosers = autopilot ? divestedSectorIds.splice(0).length : 0;
+  // The same holds for an AI-run corporation a parent corporation owns: its
+  // sectors are the parent's property (often bought at a premium), and a divest
+  // deletes them for nothing. Derived from the cap table, like every other
+  // subsidiary fact, so it cannot drift from who actually controls the corp.
+  const ownedByParent =
+    corp.subsidiaryFormalizedAtTurn != null && getControllingCorporateParent(corp) != null;
+  if (ownedByParent) divestedSectorIds.splice(0);
 
   // Divest-leg flag (section 1): a completed shed; blocked-shed flags are set
   // inside the margin-divest loop above.
@@ -586,8 +594,13 @@ export function makeNppCorpDecision(
   // shift never target a sector scheduled to become cold in this decision.
   // Another running sector may still shift, and only one shift per corp
   // per turn keeps the cohort gradual. SOEs are exempt for 2c's reason.
-  // Autopilot leaves retooling to the owner.
-  if (!corp.countryOwnerId && !autopilot && glutStaggerEligible(corp._id.toString(), ctx.turn)) {
+  // Autopilot and a parent-owned corporation leave retooling to the owner.
+  if (
+    !corp.countryOwnerId &&
+    !autopilot &&
+    !ownedByParent &&
+    glutStaggerEligible(corp._id.toString(), ctx.turn)
+  ) {
     const retool = chooseNppStrategyRetool({
       corp,
       sectors: sectors.filter((sector) => !newlyMothballedIds.has(sector._id.toString())),

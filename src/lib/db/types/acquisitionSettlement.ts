@@ -1,5 +1,6 @@
 import type { ObjectId } from "mongodb";
 import type { FinancialTxType } from "./financialTxLog";
+import type { AcquisitionOutcome } from "./acquisitionOffer";
 
 /** Lifecycle of one agreed-acquisition money settlement (one row per offer). */
 export type AcquisitionSettlementStatus = "in_progress" | "applied" | "compensated";
@@ -75,6 +76,8 @@ export interface AcquisitionSettlementResult {
   acquirerName: string;
   targetName: string;
   bankCharterTransferred: boolean;
+  /** Absent on settlements written before subsidiary mode existed (merge). */
+  outcome?: AcquisitionOutcome;
 }
 
 /**
@@ -115,6 +118,10 @@ export interface AcquisitionSettlement {
   bankCharterTransferred: boolean;
   /** Set after the target shell row is deleted. */
   shellDeleted: boolean;
+  /** Absent on settlements written before subsidiary mode existed (merge). */
+  outcome?: AcquisitionOutcome;
+  /** Subsidiary mode: set once the acquirer holds the target's whole cap table. */
+  equityTransferred?: boolean;
   completedResult?: AcquisitionSettlementResult;
   error?: string;
   createdAt: Date;

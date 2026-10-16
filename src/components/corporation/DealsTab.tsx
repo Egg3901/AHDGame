@@ -15,10 +15,14 @@ interface DealSummary {
   targetValuationAnchor: number;
   status: string;
   expiresAtTurn: number;
+  /** Absent only on a payload from before subsidiary mode shipped (merge). */
+  outcome?: "merge" | "subsidiary";
 }
 
 interface DealsResponse {
   enabled: boolean;
+  /** Whether this world lets an acquirer keep the target as a subsidiary. */
+  subsidiaryAvailable?: boolean;
   incoming: DealSummary[];
   outgoing: DealSummary[];
 }
@@ -33,6 +37,9 @@ interface CorpSearchResult {
 
 const fmt = (n: number) => "₳" + Math.round(n).toLocaleString("en-US");
 
+const outcomeLabel = (outcome: DealSummary["outcome"]) =>
+  outcome === "subsidiary" ? "Keep as subsidiary" : "Merge";
+
 export default function DealsTab({ corpId, isCeo }: { corpId: string; isCeo: boolean }) {
   const [data, setData] = useState<DealsResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -45,6 +52,7 @@ export default function DealsTab({ corpId, isCeo }: { corpId: string; isCeo: boo
   const [targetSearching, setTargetSearching] = useState(false);
   const [selectedTarget, setSelectedTarget] = useState<CorpSearchResult | null>(null);
   const [price, setPrice] = useState("");
+  const [keepAsSubsidiary, setKeepAsSubsidiary] = useState(false);
   const [proposeBusy, setProposeBusy] = useState(false);
   const [proposeErr, setProposeErr] = useState("");
   const [proposeMsg, setProposeMsg] = useState("");
@@ -135,12 +143,17 @@ export default function DealsTab({ corpId, isCeo }: { corpId: string; isCeo: boo
           action: "propose",
           targetCorporationId: selectedTarget.id,
           priceAnchor: Number(price),
+          outcome: keepAsSubsidiary && data?.subsidiaryAvailable ? "subsidiary" : "merge",
         }),
       });
       const d = await res.json();
       if (!res.ok) setProposeErr(apiErrorText(d, "Failed to send offer"));
       else if (d.autoAccepted) {
-        setProposeMsg(`Acquired ${d.targetName ?? selectedTarget.name}.`);
+        setProposeMsg(
+          d.outcome === "subsidiary"
+            ? `Acquired ${d.targetName ?? selectedTarget.name} as a subsidiary.`
+            : `Acquired ${d.targetName ?? selectedTarget.name}.`
+        );
         setSelectedTarget(null);
         setTargetQuery("");
         setPrice("");
@@ -175,6 +188,7 @@ export default function DealsTab({ corpId, isCeo }: { corpId: string; isCeo: boo
             <thead>
               <tr>
                 <Th>Acquirer</Th>
+                <Th>Outcome</Th>
                 <Th align="right">Offer</Th>
                 <Th align="right" title="This corporation's estimated value.">
                   Est. value
@@ -188,6 +202,7 @@ export default function DealsTab({ corpId, isCeo }: { corpId: string; isCeo: boo
               {data.incoming.map((o) => (
                 <tr key={o.offerId}>
                   <Td className="text-foreground">{o.acquirerName}</Td>
+                  <Td className="text-muted">{outcomeLabel(o.outcome)}</Td>
                   <Td align="right">{fmt(o.priceAnchor)}</Td>
                   <Td align="right" className="text-muted">
                     {fmt(o.targetValuationAnchor)}
@@ -199,9 +214,15 @@ export default function DealsTab({ corpId, isCeo }: { corpId: string; isCeo: boo
                         onClick={() => {
                           if (
                             confirm(
-                              `Accept ${o.acquirerName}'s offer of ${fmt(
-                                o.priceAnchor
-                              )}? Your corporation will be absorbed into theirs and shareholders paid out.`
+                              o.outcome === "subsidiary"
+                                ? `Accept ${o.acquirerName}'s offer of ${fmt(
+                                    o.priceAnchor
+                                  )}? Your corporation stays as it is, with its sectors, cash and management, but ${
+                                    o.acquirerName
+                                  } becomes its only shareholder and your current shareholders are paid out.`
+                                : `Accept ${o.acquirerName}'s offer of ${fmt(
+                                    o.priceAnchor
+                                  )}? Your corporation will be absorbed into theirs and shareholders paid out.`
                             )
                           )
                             void act("accept", o.offerId);
@@ -233,6 +254,7 @@ export default function DealsTab({ corpId, isCeo }: { corpId: string; isCeo: boo
             <thead>
               <tr>
                 <Th>Target</Th>
+                <Th>Outcome</Th>
                 <Th align="right">Offer</Th>
                 <Th align="right">
                   <span className="sr-only">Actions</span>
@@ -243,6 +265,7 @@ export default function DealsTab({ corpId, isCeo }: { corpId: string; isCeo: boo
               {data.outgoing.map((o) => (
                 <tr key={o.offerId}>
                   <Td className="text-foreground">{o.targetName}</Td>
+                  <Td className="text-muted">{outcomeLabel(o.outcome)}</Td>
                   <Td align="right">{fmt(o.priceAnchor)}</Td>
                   <Td align="right" numeric={false}>
                     <SmallButton
@@ -262,11 +285,13 @@ export default function DealsTab({ corpId, isCeo }: { corpId: string; isCeo: boo
       <DenseSection title="Make an acquisition offer">
         <div className="space-y-2 py-1">
           <p className="text-xs text-muted">
-            Buy another corporation outright. If a player CEO accepts, its sectors and cash fold
-            into yours and its shareholders are paid the offer price. AI-run private companies
-            accept automatically at or above their asking price (fair value plus 10%) and reject
-            below it. State-owned firms cannot be acquired. The target must have no outstanding
-            bonds and hold no shares in other corporations.
+            Buy another corporation outright. If a player CEO accepts, its shareholders are paid the
+            offer price and the deal settles one of two ways. Merge folds its sectors and cash into
+            yours, and then the target must have no outstanding bonds and hold no shares in other
+            corporations. Keep as subsidiary leaves the target running as it is, with its own
+            sectors, cash, bonds and management, and makes your corporation its only shareholder.
+            AI-run private companies accept automatically at or above their asking price (fair value
+            plus 10%) and reject below it. State-owned firms cannot be acquired.
           </p>
           <form onSubmit={propose} className="flex flex-wrap items-center gap-1.5">
             {selectedTarget ? (
@@ -333,6 +358,37 @@ export default function DealsTab({ corpId, isCeo }: { corpId: string; isCeo: boo
                 required
               />
             </label>
+            <fieldset
+              className="flex items-center gap-3 text-xs text-muted"
+              aria-label="Acquisition outcome"
+            >
+              <label className="flex items-center gap-1">
+                <input
+                  type="radio"
+                  name="acquisition-outcome"
+                  checked={!keepAsSubsidiary}
+                  onChange={() => setKeepAsSubsidiary(false)}
+                />
+                Merge
+              </label>
+              <label
+                className="flex items-center gap-1"
+                title={
+                  data.subsidiaryAvailable
+                    ? undefined
+                    : "Subsidiary corporations are not enabled in this world."
+                }
+              >
+                <input
+                  type="radio"
+                  name="acquisition-outcome"
+                  checked={keepAsSubsidiary}
+                  disabled={!data.subsidiaryAvailable}
+                  onChange={() => setKeepAsSubsidiary(true)}
+                />
+                Keep as subsidiary
+              </label>
+            </fieldset>
             <SmallButton tone="primary" type="submit" disabled={proposeBusy || !selectedTarget}>
               {proposeBusy ? "Sending" : "Send offer"}
             </SmallButton>

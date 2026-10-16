@@ -10,7 +10,7 @@ import type {
 } from "@/lib/db/types";
 import type { IndexFund } from "@/lib/db/types";
 import type { FederalBudget } from "@/lib/db/types/budget";
-import type { AcquisitionOffer } from "@/lib/db/types/acquisitionOffer";
+import type { AcquisitionOffer, AcquisitionOutcome } from "@/lib/db/types/acquisitionOffer";
 import {
   anchorToCorpLiquidCapital,
   corpLiquidCapitalToAnchor,
@@ -20,7 +20,10 @@ import {
 } from "@/lib/currency/corporationCapital";
 import { getHomeCurrency } from "@/lib/currency/characterFunds";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
-import { cleanupShareMarketActivityForCorporations } from "@/lib/corporations/cleanupShareMarketActivity";
+import {
+  cleanupShareMarketActivityForCorporations,
+  cleanupShareMarketActivityForCorporationTargets,
+} from "@/lib/corporations/cleanupShareMarketActivity";
 import { stampSubjectDeleted } from "@/lib/financialTxLog/stampDeleted";
 import { allocateShareholderPool } from "@/lib/bonds/corporateBondDefault";
 import { moveSectorToCorp } from "@/lib/corporations/moveSector";
@@ -38,6 +41,12 @@ import {
 } from "@/lib/banking/transferCharter";
 import { withCorpLock } from "@/lib/corporations/corpMoneyLock";
 import { buildAcquisitionPayoutPlan } from "./rules/acquisitionPayoutPlan";
+import { acquisitionOutcomeOf } from "./rules/subsidiaryOutcome";
+import {
+  checkSubsidiaryAcquisition,
+  equityAlreadyTransferred,
+  transferTargetEquityToAcquirer,
+} from "./subsidiaryOutcome";
 import {
   applyAcquisitionLeg,
   claimAcquisitionSettlement,
@@ -64,6 +73,8 @@ export type ExecuteAgreedAcquisitionResult =
       acquirerName: string;
       targetName: string;
       bankCharterTransferred: boolean;
+      /** Present only when the target was kept as a subsidiary. */
+      outcome?: AcquisitionOutcome;
     };
 
 /**
@@ -87,6 +98,13 @@ export type ExecuteAgreedAcquisitionResult =
  * v1 scope: the target must have NO outstanding bonds and hold NO equity in other
  * corporations (bond assumption and cross-holding transfer are deferred). Both
  * are blocked with a clear error rather than mishandled.
+ *
+ * Subsidiary outcome (`offer.outcome === "subsidiary"`): the same pinned debit and
+ * holder payouts, but the target is not dissolved. Its sectors, cash, bonds,
+ * charter, identity and CEO stay put; the last step makes the acquirer its only
+ * shareholder and formalizes it as the acquirer's subsidiary. Because the target
+ * survives, its bonds and minority cross-holdings are no obstacle; chaining,
+ * ownership cycles, the one-person rule and the subsidiary feature gate are.
  */
 export async function executeAgreedAcquisition(
   params: ExecuteAgreedAcquisitionParams
@@ -98,6 +116,11 @@ export async function executeAgreedAcquisition(
   // must NOT resume and pay holders past the closure.
   const completed = await loadAcquisitionSettlement(params.db, params.offer._id);
   if (completed?.status === "applied" && completed.completedResult) {
+    // A crash between the commit mark and the claim release leaves the claim on
+    // a target that survives (a merge deletes it). Release it now.
+    if (completed.outcome === "subsidiary") {
+      await releaseAcquisitionTarget(params.db, completed.targetCorporationId, params.offer._id);
+    }
     return { ok: true, ...completed.completedResult };
   }
   if (completed?.status === "compensated") {
@@ -131,25 +154,54 @@ async function runAgreedAcquisition(
   if (target.countryOwnerId || target.ownershipState === "stateOwned")
     return { ok: false, error: "State-owned corporations cannot be acquired", status: 400 };
 
-  // v1 scope guards — defer bond assumption + cross-holding transfer.
-  const openBonds = await db
-    .collection<Bond>("bonds")
-    .countDocuments({ corporationId: target._id, matured: false });
-  if (openBonds > 0)
-    return {
-      ok: false,
-      error:
-        "The target has outstanding bonds; acquiring an indebted corporation is not yet supported (have it repay or refinance first).",
-      status: 400,
-    };
-  const targetOwnsEquity = await corps.countDocuments({ "shareholders.corporationId": target._id });
-  if (targetOwnsEquity > 0)
-    return {
-      ok: false,
-      error:
-        "The target holds equity in other corporations; acquiring a corporate parent is not yet supported.",
-      status: 400,
-    };
+  const outcome = acquisitionOutcomeOf(offer);
+  const subsidiary = outcome === "subsidiary";
+  const priorSettlement = await loadAcquisitionSettlement(db, offer._id);
+
+  // Subsidiary resume: the structural write of an interrupted run already
+  // landed (flag set, or the cap table is the acquirer's alone with a live
+  // settlement behind it). Everything that gates a first run is moot; finish
+  // the commit tail instead of re-judging a target that is now, correctly, a
+  // subsidiary.
+  if (
+    subsidiary &&
+    priorSettlement?.status === "in_progress" &&
+    (priorSettlement.equityTransferred === true || equityAlreadyTransferred(target, acquirer._id))
+  ) {
+    if (!priorSettlement.equityTransferred) {
+      await markAcquisitionProgress(db, offer._id, { equityTransferred: true });
+      priorSettlement.equityTransferred = true;
+    }
+    return finishCommitTail(db, priorSettlement, currentTurn);
+  }
+
+  if (subsidiary) {
+    // The target survives, so its own bonds and minority holdings stay with it.
+    const eligibility = await checkSubsidiaryAcquisition(db, acquirer, target);
+    if (!eligibility.ok) return { ok: false, error: eligibility.error, status: eligibility.status };
+  } else {
+    // v1 scope guards — defer bond assumption + cross-holding transfer.
+    const openBonds = await db
+      .collection<Bond>("bonds")
+      .countDocuments({ corporationId: target._id, matured: false });
+    if (openBonds > 0)
+      return {
+        ok: false,
+        error:
+          "The target has outstanding bonds; acquiring an indebted corporation is not yet supported (have it repay or refinance first).",
+        status: 400,
+      };
+    const targetOwnsEquity = await corps.countDocuments({
+      "shareholders.corporationId": target._id,
+    });
+    if (targetOwnsEquity > 0)
+      return {
+        ok: false,
+        error:
+          "The target holds equity in other corporations; acquiring a corporate parent is not yet supported.",
+        status: 400,
+      };
+  }
 
   // Banked target (ticket-1267): the charter is a sub-document on the target,
   // so deleting the shell would delete its bank with it. Blocked up front,
@@ -160,7 +212,7 @@ async function runAgreedAcquisition(
   // the slot charter is this target's own charter by identity and a live
   // settlement for this offer owns the run. (Identity compare mirrors
   // #2016's; the protocol itself is not duplicated here.)
-  const bankConflict = bankTransferConflict(target, acquirer);
+  const bankConflict = subsidiary ? null : bankTransferConflict(target, acquirer);
   if (
     bankConflict &&
     (target.bankPropForexFee ||
@@ -213,10 +265,13 @@ async function runAgreedAcquisition(
 
   const now = new Date();
   const [targetSectors, fxByCurrency, acquirerFxRate, targetFxRate] = await Promise.all([
-    db
-      .collection<CorporateSector>("corporateSectors")
-      .find({ corporationId: target._id })
-      .toArray(),
+    // A subsidiary keeps its sectors where they are.
+    subsidiary
+      ? Promise.resolve<CorporateSector[]>([])
+      : db
+          .collection<CorporateSector>("corporateSectors")
+          .find({ corporationId: target._id })
+          .toArray(),
     loadFxRatesByCurrency(db),
     getCorpFxRate(db, acquirer),
     getCorpFxRate(db, target),
@@ -224,10 +279,42 @@ async function runAgreedAcquisition(
   const acquirerCurrency = resolveCorpLiquidCurrencyCode(acquirer);
   const targetCurrency = resolveCorpLiquidCurrencyCode(target);
 
+  // Subsidiary, first attempt only: open orders, listings and pending offers on
+  // the target's shares are cancelled and refunded BEFORE the cap table is
+  // read. A resting sell order has already debited its seller's holding, so
+  // an allocation read over it would leave those shares unpaid and then erase
+  // them. Refuse an unaffordable offer first so a doomed attempt cancels
+  // nothing. A retry has a pinned plan and must not re-read the cap table.
+  let planTarget: Corporation = target;
+  if (subsidiary && !priorSettlement) {
+    const affordable = Math.round(
+      anchorToCorpLiquidCapital(offer.priceAnchor, acquirer, acquirerFxRate)
+    );
+    if ((acquirer.liquidCapital ?? 0) < affordable) {
+      await releaseAcquisitionTarget(db, target._id, offer._id);
+      return {
+        ok: false,
+        error: `Insufficient corporate funds. Need ${affordable.toLocaleString()} ${
+          acquirerCurrency ?? "USD"
+        } to complete the acquisition.`,
+        status: 400,
+      };
+    }
+    await cleanupShareMarketActivityForCorporationTargets(
+      db,
+      [target._id],
+      now,
+      await isForexEnabled()
+    );
+    planTarget = (await corps.findOne({ _id: target._id })) ?? target;
+  }
+
   // 1. Pin the payout plan: allocate the pool, resolve every recipient's
   // currency, and freeze every amount. A retry replays these legs verbatim.
   const allocation =
-    offer.priceAnchor > 0 ? allocateShareholderPool(target, offer.priceAnchor, new Map()) : null;
+    offer.priceAnchor > 0
+      ? allocateShareholderPool(planTarget, offer.priceAnchor, new Map())
+      : null;
   const charIds = (allocation?.characterRows ?? [])
     .filter((r) => !r.isImperial && r.payout > 0)
     .map((r) => new ObjectId(r.characterId));
@@ -290,11 +377,10 @@ async function runAgreedAcquisition(
   const priceInAcquirerCapital = Math.round(
     anchorToCorpLiquidCapital(offer.priceAnchor, acquirer, acquirerFxRate)
   );
-  const targetCashAnchor = corpLiquidCapitalToAnchor(
-    target.liquidCapital ?? 0,
-    target,
-    targetFxRate
-  );
+  // A subsidiary keeps its own cash: nothing relocates to the acquirer.
+  const targetCashAnchor = subsidiary
+    ? 0
+    : corpLiquidCapitalToAnchor(target.liquidCapital ?? 0, target, targetFxRate);
   const shellCashInAcquirerCapital =
     targetCashAnchor > 0
       ? Math.round(anchorToCorpLiquidCapital(targetCashAnchor, acquirer, acquirerFxRate))
@@ -329,8 +415,9 @@ async function runAgreedAcquisition(
     forexEnabled,
     shellCashAnchor: targetCashAnchor,
     shellCashInAcquirerCapital,
-    shellCashTargetLocal: Math.round(target.liquidCapital ?? 0),
+    shellCashTargetLocal: subsidiary ? 0 : Math.round(target.liquidCapital ?? 0),
     targetCurrency: targetCurrency ?? "USD",
+    ...(subsidiary ? { outcome } : {}),
   });
 
   const { settlement, fresh } = await claimAcquisitionSettlement(db, {
@@ -342,8 +429,9 @@ async function runAgreedAcquisition(
     priceAnchor: offer.priceAnchor,
     priceInAcquirerCapital,
     acquirerCurrency: acquirerCurrency ?? "USD",
-    shellCashTargetLocal: Math.round(target.liquidCapital ?? 0),
+    shellCashTargetLocal: subsidiary ? 0 : Math.round(target.liquidCapital ?? 0),
     targetCurrency: targetCurrency ?? "USD",
+    ...(subsidiary ? { outcome } : {}),
     // First-attempt sector count: this read precedes every move, so on the
     // claiming attempt it is the true total. On retry it is only the
     // remainder and the claim discards it in favor of the pinned value.
@@ -352,7 +440,7 @@ async function runAgreedAcquisition(
     plan,
   });
 
-  if (targetSectors.some(hasProtectedConstructionProperty)) {
+  if (!subsidiary && targetSectors.some(hasProtectedConstructionProperty)) {
     if (fresh) await releaseAcquisitionTarget(db, target._id, offer._id);
     return {
       ok: false,
@@ -421,6 +509,33 @@ async function runAgreedAcquisition(
         };
       }
       throw err;
+    }
+
+    if (subsidiary) {
+      // 3s. Pay the target's former holders from the pinned legs.
+      if (offer.priceAnchor > 0) {
+        for (const leg of settlement.legs) {
+          if (leg.kind !== "holder_credit") continue;
+          await applyStep(leg.key);
+        }
+      }
+      // 4s. Only now, with every holder paid, change who owns the shares.
+      const transferred = await transferTargetEquityToAcquirer(db, {
+        targetId: target._id,
+        acquirerId: acquirer._id,
+        offerId: offer._id,
+        priceAnchor: offer.priceAnchor,
+        turn: currentTurn,
+        now,
+      });
+      if (!transferred) {
+        // Holders are paid and the cap table moved under us. Never guess: the
+        // retry re-judges the target and, if it is gone, compensates.
+        throw new Error("Acquisition could not take the target's equity; retry the offer");
+      }
+      await markAcquisitionProgress(db, offer._id, { equityTransferred: true });
+      settlement.equityTransferred = true;
+      return finishCommitTail(db, settlement, currentTurn);
     }
 
     // 3. Move the bank charter BEFORE any payout: a conflict still unwinds
@@ -661,7 +776,7 @@ async function handleMissingParty(
       : 0;
     // Target gone, money fully delivered, nothing left to move: the crash
     // landed between the shell delete and its flag. Finish the tail.
-    if (!target && moneyDone && sectorsRemain === 0) {
+    if (!target && moneyDone && sectorsRemain === 0 && settlement.outcome !== "subsidiary") {
       await markAcquisitionProgress(db, offer._id, { shellDeleted: true });
       settlement.shellDeleted = true;
       return finishCommitTail(db, settlement, currentTurn);
@@ -689,7 +804,11 @@ async function handleMissingParty(
   return { ok: false, error: "Target corporation no longer exists", status: 404 };
 }
 
-/** Post-teardown tail: remedy (re-runnable), commit mark, recorded result. */
+/**
+ * Post-teardown tail: remedy (re-runnable), commit mark, recorded result. For a
+ * subsidiary this is also where the audit row is written and the target claim
+ * is released, because the target outlives the settlement.
+ */
 async function finishCommitTail(
   db: Db,
   settlement: AcquisitionSettlement,
@@ -703,13 +822,39 @@ async function finishCommitTail(
       await attachMergerRemedy(db, review, settlement.acquirerCorporationId, currentTurn);
     }
   }
+  const subsidiary = settlement.outcome === "subsidiary";
   const result = {
     sectorsMoved: settlement.sectorsMoved,
     priceAnchor: settlement.priceAnchor,
     acquirerName: settlement.acquirerName,
     targetName: settlement.targetName,
     bankCharterTransferred: settlement.bankCharterTransferred,
+    ...(subsidiary ? { outcome: "subsidiary" as const } : {}),
   };
   await markAcquisitionApplied(db, settlement, result);
+  if (subsidiary) {
+    await releaseAcquisitionTarget(db, settlement.targetCorporationId, settlement._id);
+    recordAudit({
+      source: "api",
+      action: "acquisition.execute",
+      category: "corp",
+      turn: currentTurn,
+      ts: new Date(),
+      subject: {
+        type: "corporation",
+        id: settlement.acquirerCorporationId,
+        name: settlement.acquirerName,
+      },
+      refs: { corporationId: settlement.acquirerCorporationId },
+      outcome: "ok",
+      meta: {
+        offerId: settlement._id,
+        targetCorporationId: settlement.targetCorporationId,
+        targetName: settlement.targetName,
+        priceAnchor: settlement.priceAnchor,
+        acquisitionOutcome: "subsidiary",
+      },
+    });
+  }
   return { ok: true, ...result };
 }
