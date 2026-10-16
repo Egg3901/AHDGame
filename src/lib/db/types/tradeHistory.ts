@@ -27,6 +27,8 @@ export interface TradeHistoryEntry {
   toCurrency: CurrencyCode;
   /** Amount in fromCurrency */
   amount: number;
+  /** Exact destination wallet credit, including spread and rounding. Older rows reconstruct it. */
+  receivedAmount?: number;
   /** Exchange rate at time of execution */
   rate: number;
   /** Spread charged on this trade */

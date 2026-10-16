@@ -1,3 +1,4 @@
+import { migration as incomeTaxTiers } from "./entries/2026-10-16-income-tax-tiers";
 import { migration as incomeTaxPolicyParity } from "./entries/2026-10-15-income-tax-policy-parity";
 import { migration as governmentContractBidding } from "./entries/2026-10-14-government-contract-bidding";
 import { migration as contestAccountHistory } from "./entries/2026-10-14-contest-account-history";
@@ -381,6 +382,7 @@ export const MIGRATIONS: Migration[] = [
   liveWorldNppAutonomyV6,
   governmentContractBidding,
   incomeTaxPolicyParity,
+  incomeTaxTiers,
 ];
 
 // D13 rollback drill - registered but deliberately OUTSIDE the normal chain.

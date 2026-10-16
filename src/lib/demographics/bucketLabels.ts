@@ -1,3 +1,4 @@
+import { INCOME_TIER_LABELS, isIncomeTier } from "@/lib/budget/rules/incomeTaxTiers";
 import { GRANULAR_DIMENSIONS, type GranularDim } from "./granularCells";
 import { COUNTRY_BUCKET_LABELS } from "./bucketLabelsByCountry";
 
@@ -37,9 +38,9 @@ export const BUCKET_LABELS: Record<GranularDim, Record<string, string>> = {
     graduate: "Postgraduates",
   },
   wealth: {
-    low: "Lower income",
-    middle: "Middle income",
-    high: "Higher income",
+    low: "Low Income",
+    middle: "Medium Income",
+    high: "High Income",
   },
 };
 
@@ -60,6 +61,7 @@ export const DIMENSION_LABELS: Record<GranularDim, string> = {
 export function bucketLabel(bucketId: string, countryId?: string): string {
   const [dim, ...rest] = bucketId.split(":");
   const key = rest.join(":");
+  if ((dim === "wealth" || dim === "income") && isIncomeTier(key)) return INCOME_TIER_LABELS[key];
   // The country's own language first — see `bucketLabelsByCountry.ts`. Falls
   // back to the US labels, then to a humanised key, so a country with no table
   // yet renders unpolished rather than blank.
@@ -74,6 +76,7 @@ export function bucketLabel(bucketId: string, countryId?: string): string {
 
 /** Player-facing dimension header, in the country's own language when known. */
 export function dimensionLabelFor(dim: string, countryId?: string): string {
+  if (dim === "wealth" || dim === "income") return "Income";
   const native = countryId ? COUNTRY_BUCKET_LABELS[countryId.toUpperCase()]?.dims[dim] : undefined;
   if (native) return native;
   return (

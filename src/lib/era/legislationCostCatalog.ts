@@ -740,6 +740,7 @@ export const COST_CLASS_OVERRIDES: Record<string, string> = {};
 
 /** Unknown typeId ⇒ "none" (fail-safe: never invent a phantom cost line). */
 export function getCostClass(typeId: string): CostClass {
+  typeId = typeId.split("__income_")[0];
   return LEGISLATION_COST_CLASS[typeId] ?? "none";
 }
 

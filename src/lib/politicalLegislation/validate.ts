@@ -1,3 +1,4 @@
+import { incomeTierForTaxKey } from "@/lib/budget/rules/incomeTaxTiers";
 /**
  * §10 catalog validators — pure, no db. Every rule returns a human-readable
  * error string naming the offending law id; an empty array means the catalog
@@ -188,7 +189,7 @@ export function validateCatalog(laws: PoliticalLaw[], countryId: LawCountryId): 
     if (law.baselineLevel !== undefined) {
       errors.push(`${law.id}: tax law must not carry baselineLevel`);
     }
-    if (!(tp.taxType in seedRates)) {
+    if (!(tp.taxType in seedRates) && !incomeTierForTaxKey(tp.taxType)) {
       errors.push(`${law.id}: taxType ${tp.taxType} not a seeded FederalTaxRates key`);
       continue;
     }
@@ -196,7 +197,8 @@ export function validateCatalog(laws: PoliticalLaw[], countryId: LawCountryId): 
     if (!(tp.minRate <= tp.baselineRate && tp.baselineRate <= tp.maxRate)) {
       errors.push(`${law.id}: baselineRate ${tp.baselineRate} outside [min, max]`);
     }
-    const seeded = seedRates[tp.taxType as SeedTaxType];
+    const seeded =
+      seedRates[(incomeTierForTaxKey(tp.taxType) ? "incomeTax" : tp.taxType) as SeedTaxType];
     if (tp.baselineRate !== seeded) {
       errors.push(
         `${law.id}: baselineRate ${tp.baselineRate} ≠ SEED_TAX_RATES_1953.${countryId}.${tp.taxType} (${seeded})`

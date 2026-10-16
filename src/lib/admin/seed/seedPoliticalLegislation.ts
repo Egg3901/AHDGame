@@ -19,6 +19,7 @@ import type { LegislationType, StatePolicyRecord } from "@/lib/db/types/legislat
 import {
   getAllNewGenerationLawIds,
   getCatalog,
+  getCoreCatalog,
   getRegionalCatalog,
   baselineLevelFor,
 } from "@/lib/politicalLegislation/catalog";
@@ -61,7 +62,13 @@ export { isPoliticalPipelinePreset as isPoliticalLegislationPreset } from "@/lib
  */
 export function getProjectedPoliticalLegislationTypes(year?: number): LegislationType[] {
   return LAW_COUNTRY_IDS.flatMap((countryId) =>
-    getCatalog(countryId, year).map(projectLawToLegislationType)
+    [
+      ...getCatalog(countryId, year),
+      // Historical bills still resolve their aggregate instrument after a reseed.
+      ...[...getCoreCatalog(countryId, year), ...getRegionalCatalog(countryId, year)].filter(
+        (law) => law.taxPolicy?.taxType === "incomeTax"
+      ),
+    ].map(projectLawToLegislationType)
   );
 }
 

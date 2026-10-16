@@ -1,3 +1,4 @@
+import { alignSeedIncomeTaxTierRecords } from "@/lib/budget/incomeTaxSeedPolicies";
 import type { AnyBulkWriteOperation, Db } from "mongodb";
 import { logWarning } from "@/lib/utils/errorLog";
 import type { StatePolicyRecord } from "@/lib/db/types";
@@ -42,9 +43,9 @@ export async function seedStatePolicies(
     ? new Set(legislationTypes.filter((lt) => isOldLegislationTypeExcluded(lt)).map((lt) => lt._id))
     : new Set<string>();
 
-  const basePolicies = (await getBasePolicies(preset)).filter(
-    (r) => !excludedOldIds.has(r.legislationTypeId)
-  );
+  const basePolicies = (
+    await alignSeedIncomeTaxTierRecords(db, await getBasePolicies(preset))
+  ).filter((r) => !excludedOldIds.has(r.legislationTypeId));
 
   // Build list of valid policy keys for cleanup
   const validPolicyKeys = new Set<string>();

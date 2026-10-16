@@ -297,9 +297,9 @@ export function createTurnPhaseRuntime(input: {
     // interrupted phase, or a completed one without a valid copy, returns null and
     // records why; `requirePhaseResult` turns that into an explicit failure.
     if (
-      alreadyApplied?.has(name) ||
-      resumed?.completed.has(name) ||
-      resumed?.interrupted.has(name)
+      name !== "playerIncomeTax" &&
+      name !== "incomeTaxBases" &&
+      (alreadyApplied?.has(name) || resumed?.completed.has(name) || resumed?.interrupted.has(name))
     ) {
       const resumeCarried = resumed?.completed.has(name) ? "completed" : "interrupted";
       const restored =

@@ -1,3 +1,4 @@
+import { alignSeedIncomeTaxTierRecords } from "@/lib/budget/incomeTaxSeedPolicies";
 /**
  * Seed base policy records for the nation and each state.
  * Non-destructive by default: upserts into statePolicies. Use --reset to drop and re-seed.
@@ -51,7 +52,10 @@ async function main() {
         )
         .toArray(),
     ]);
-    const basePolicies = alignIncomeTaxPolicyRecords(authoredPolicies, budgets, taxTypes);
+    const basePolicies = await alignSeedIncomeTaxTierRecords(
+      db,
+      alignIncomeTaxPolicyRecords(authoredPolicies, budgets, taxTypes)
+    );
     if (RESET) {
       await db
         .collection("statePolicies")

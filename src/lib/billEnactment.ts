@@ -1,3 +1,9 @@
+import {
+  INCOME_TIERS,
+  INCOME_TAX_KEYS,
+  incomeTaxRate,
+  aggregateIncomeTaxRate,
+} from "@/lib/budget/rules/incomeTaxTiers";
 import { loadEuroMonetaryUnion } from "@/lib/currency/euro/service";
 /**
  * Bill Enactment Hook
@@ -165,7 +171,8 @@ async function applyTaxRateChange(
   db: Db,
   legislationType: LegislationType,
   selectedOptionRate: number | undefined,
-  stateId: string
+  stateId: string,
+  retry = 0
 ): Promise<void> {
   // Slider tax laws (ruling #16) carry scope+taxType on `taxSlider`, not the discrete
   // `taxRateChange` schema — the two are projected side by side, but only for freshly
@@ -203,6 +210,24 @@ async function applyTaxRateChange(
       [taxType as keyof FederalTaxRates]: rampedRate,
     };
 
+    if (taxType === "incomeTax")
+      for (const tier of INCOME_TIERS)
+        newTaxRates[INCOME_TAX_KEYS[tier]] = stepTaxRate(
+          incomeTaxRate(normalizedTaxRates, tier),
+          selectedOptionRate
+        );
+    const legacyPendingSet = Object.fromEntries(
+      INCOME_TIERS.filter((tier) =>
+        needsPhaseIn(incomeTaxRate(normalizedTaxRates, tier), selectedOptionRate)
+      ).map((tier) => ["taxRatePhaseIn." + INCOME_TAX_KEYS[tier], selectedOptionRate])
+    );
+    const legacyPendingUnset = Object.fromEntries(
+      INCOME_TIERS.filter(
+        (tier) => !needsPhaseIn(incomeTaxRate(normalizedTaxRates, tier), selectedOptionRate)
+      ).map((tier) => ["taxRatePhaseIn." + INCOME_TAX_KEYS[tier], ""])
+    );
+    newTaxRates.incomeTax = aggregateIncomeTaxRate(newTaxRates, budget.incomeTaxShares);
+
     // Money wiring (interstate-logistics plan step 5, phase B): a tax-rate
     // change bill is a rare event, not a per-turn hot loop, so a direct read
     // here is cheap. Only the tariffs base has a sourced-flow counterpart -
@@ -236,21 +261,33 @@ async function applyTaxRateChange(
     );
     const newSurplus = newRevenue.total - budget.spending.total;
 
-    await db.collection<FederalBudget>("federalBudget").updateOne(
-      { _id: budgetId },
+    const written = await db.collection<FederalBudget>("federalBudget").updateOne(
+      { _id: budgetId, ...(taxType.startsWith("incomeTax") ? { taxRates: budget.taxRates } : {}) },
       {
         $set: {
           taxRates: newTaxRates,
           revenue: newRevenue,
           surplus: newSurplus,
           updatedAt: new Date(),
-          ...(rampPending ? { [`taxRatePhaseIn.${taxType}`]: selectedOptionRate } : {}),
+          ...(taxType === "incomeTax"
+            ? legacyPendingSet
+            : rampPending
+              ? { [`taxRatePhaseIn.${taxType}`]: selectedOptionRate }
+              : {}),
         },
         // A fresh enactment on the same tax replaces any ramp still running,
         // rather than leaving a stale target to drag the rate back later.
-        ...(rampPending ? {} : { $unset: { [`taxRatePhaseIn.${taxType}`]: "" } }),
+        ...(taxType === "incomeTax"
+          ? { $unset: { "taxRatePhaseIn.incomeTax": "", ...legacyPendingUnset } }
+          : rampPending
+            ? {}
+            : { $unset: { [`taxRatePhaseIn.${taxType}`]: "" } }),
       }
     );
+    if (written.matchedCount === 0 && taxType.startsWith("incomeTax")) {
+      if (retry >= 3) throw new Error("Income-tax budget changed repeatedly during enactment");
+      return applyTaxRateChange(db, legislationType, selectedOptionRate, stateId, retry + 1);
+    }
     return;
   }
 
@@ -292,6 +329,9 @@ async function applyTaxRateChange(
     };
 
     const federalGrants = budget.revenue?.federalGrants ?? 0;
+    if (taxType === "incomeTax")
+      for (const tier of INCOME_TIERS) newTaxRates[INCOME_TAX_KEYS[tier]] = selectedOptionRate;
+    newTaxRates.incomeTax = aggregateIncomeTaxRate(newTaxRates, budget.incomeTaxShares);
     const newRevenue = await calculateStateRevenue(
       db,
       stateId,
@@ -301,8 +341,12 @@ async function applyTaxRateChange(
     );
     const newSurplus = newRevenue.total - (budget.spending?.total ?? 0);
 
-    await db.collection<StateBudget>("stateBudgets").updateOne(
-      { _id: stateId, countryId: stateBudgetCountryId },
+    const written = await db.collection<StateBudget>("stateBudgets").updateOne(
+      {
+        _id: stateId,
+        countryId: stateBudgetCountryId,
+        ...(taxType.startsWith("incomeTax") ? { taxRates: budget.taxRates } : {}),
+      },
       {
         $set: {
           taxRates: newTaxRates,
@@ -312,6 +356,11 @@ async function applyTaxRateChange(
         },
       }
     );
+    if (written.matchedCount === 0 && taxType.startsWith("incomeTax")) {
+      if (retry >= 3)
+        throw new Error("Regional income-tax budget changed repeatedly during enactment");
+      return applyTaxRateChange(db, legislationType, selectedOptionRate, stateId, retry + 1);
+    }
   }
 }
 

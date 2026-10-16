@@ -1,3 +1,5 @@
+import type { IncomeTaxBatchReceipt } from "./incomeTax";
+import type { IncomeShares } from "@/lib/budget/rules/incomeTaxTiers";
 import type { ObjectId } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
 import type { EconomicSystemTarget, JurisdictionMode, LawImplementationMode } from "./legislation";
@@ -96,7 +98,11 @@ export interface FederalRevenue {
 }
 
 export interface FederalTaxRates {
+  /** Legacy aggregate retained for old saves and historical readouts. */
   incomeTax: number;
+  incomeTaxLow?: number;
+  incomeTaxMiddle?: number;
+  incomeTaxHigh?: number;
   /** Rate applied to corps HQ'd in this country. */
   domesticCorporateTax: number;
   /** Rate applied to corps HQ'd elsewhere. All-or-nothing — no country targeting. */
@@ -545,6 +551,10 @@ export interface BankSovereignClaim {
 }
 
 export interface FederalBudget {
+  /** Monotonic tax-collection proof, reset with the owning world balance. */
+  incomeTaxBatchReceipt?: IncomeTaxBatchReceipt | null;
+  /** Income-weighted census shares; independent of the numeric tax-base vector. */
+  incomeTaxShares?: IncomeShares;
   /** Cutover receipts prevent releasing an unanswered direct offer twice. */
   governmentDirectOfferWithdrawals?: Record<string, boolean>;
   treasuryAccrual?: TreasuryAccrualReceipt;
@@ -965,7 +975,11 @@ export interface StateRevenue {
 }
 
 export interface StateTaxRates {
+  /** Legacy aggregate retained for old saves and historical readouts. */
   incomeTax: number;
+  incomeTaxLow?: number;
+  incomeTaxMiddle?: number;
+  incomeTaxHigh?: number;
   salesTax: number;
   /** Rate applied to corps HQ'd in the same country as this state. */
   domesticCorporateTax: number;
@@ -1016,6 +1030,10 @@ export interface StateSpending {
 }
 
 export interface StateBudget {
+  /** Monotonic tax-collection proof, reset with the owning world balance. */
+  incomeTaxBatchReceipt?: IncomeTaxBatchReceipt | null;
+  /** Income-weighted census shares; independent of the numeric tax-base vector. */
+  incomeTaxShares?: IncomeShares;
   _id: string;
   stateId: string;
   /**

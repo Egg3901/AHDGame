@@ -18,6 +18,7 @@ import { MongoServerError, ObjectId } from "mongodb";
 
 type Doc = Record<string, unknown>;
 type Update = Doc | Doc[];
+const REMOVE_FIELD = Symbol("Mongo $REMOVE");
 
 function isPlainObject(value: unknown): value is Doc {
   return (
@@ -234,6 +235,7 @@ function matchesCondition(value: unknown, condition: unknown): boolean {
 
 /** Tiny aggregation-expression evaluator, enough for the `$expr` guards. */
 function evalExpr(expr: unknown, doc: Doc, variables: Doc = {}): unknown {
+  if (expr === "$REMOVE") return REMOVE_FIELD;
   if (typeof expr === "string" && expr.startsWith("$$")) return getPath(variables, expr.slice(2));
   if (typeof expr === "string" && expr.startsWith("$")) return getPath(doc, expr.slice(1));
   if (Array.isArray(expr)) return expr.map((item) => evalExpr(item, doc, variables));
@@ -471,6 +473,14 @@ function applyUpdate(doc: Doc, update: Update): void {
   if (Array.isArray(update)) {
     for (const stage of update) {
       const entries = Object.entries(stage);
+      if (entries.length === 1 && entries[0][0] === "$unset") {
+        const paths = Array.isArray(entries[0][1]) ? entries[0][1] : [entries[0][1]];
+        for (const path of paths) {
+          if (typeof path !== "string") throw new Error("Invalid pipeline $unset path");
+          unsetPath(doc, path);
+        }
+        continue;
+      }
       if (entries.length !== 1 || entries[0][0] !== "$set") {
         throw new Error(`inMemoryDb: unsupported update pipeline stage ${entries[0]?.[0]}`);
       }
@@ -479,7 +489,10 @@ function applyUpdate(doc: Doc, update: Update): void {
       const values = Object.entries(entries[0][1] as Doc).map(
         ([path, expression]) => [path, evalExpr(expression, doc)] as const
       );
-      for (const [path, value] of values) setPath(doc, path, value);
+      for (const [path, value] of values) {
+        if (value === REMOVE_FIELD) unsetPath(doc, path);
+        else setPath(doc, path, value);
+      }
     }
     return;
   }

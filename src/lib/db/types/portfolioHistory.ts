@@ -34,6 +34,8 @@ export interface PortfolioHistory {
   savingsCashValue?: number;
   /** Outstanding LOC principal + arrears in anchor units. */
   locDebtValue?: number;
+  /** Outstanding personal income tax at snapshot time, in anchor units. */
+  incomeTaxDebtValue?: number;
   /**
    * FX rates (local per 1 ₳) at snapshot time, keyed by currency code. Used by
    * portfolio charts to convert each historical point's anchor-denominated

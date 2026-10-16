@@ -3,6 +3,15 @@ import { getTurnPhaseRegistry } from "@/simulation/phases/turnPhaseRegistry";
 import { TURN_PHASE_NAMES } from "@/simulation/phases/turnPhaseNames";
 
 describe("turn phase registry", () => {
+  it("stops turn advancement when player-tax settlement fails", async () => {
+    const adapter = getTurnPhaseRegistry().find((entry) => entry.key === "playerIncomeTax")!;
+    await expect(
+      adapter.execute(
+        { phaseStatuses: { playerIncomeTax: { status: "failed" } }, warnings: [] } as never,
+        { runPhase: vi.fn().mockResolvedValue(null) } as never
+      )
+    ).rejects.toThrow("resume this turn");
+  });
   it("preserves the high-level Wave 7 execution order", () => {
     const keys = getTurnPhaseRegistry().map((entry) => entry.key);
 
@@ -17,6 +26,8 @@ describe("turn phase registry", () => {
       "fiscalYearBoundary",
       "stateEffectsAndNationalAggregation",
       "indexFunds",
+      "playerIncomeTax",
+      "closingFinancialSnapshots",
       "moneySupplySnapshot",
       "ledgerBalanceSnapshot",
       "ledgerReconcile",
@@ -166,6 +177,10 @@ describe("turn phase registry", () => {
   it("runs wealth and portfolio snapshots after the value-affecting turn phases", () => {
     const phaseIndex = new Map(TURN_PHASE_NAMES.map((name, index) => [name, index]));
 
+    expect(phaseIndex.get("portfolioSnapshot")).toBeGreaterThan(
+      phaseIndex.get("playerIncomeTax") ?? -1
+    );
+    expect(phaseIndex.get("playerIncomeTax")).toBeGreaterThan(phaseIndex.get("indexFunds") ?? -1);
     expect(phaseIndex.get("portfolioSnapshot")).toBeGreaterThan(phaseIndex.get("forexTurn") ?? -1);
     expect(phaseIndex.get("portfolioSnapshot")).toBeGreaterThan(
       phaseIndex.get("centralBankChairSelection") ?? -1

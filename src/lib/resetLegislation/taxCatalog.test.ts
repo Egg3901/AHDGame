@@ -1,3 +1,4 @@
+import { expandIncomeTaxTypes } from "@/lib/budget/incomeTaxCatalog";
 import { describe, expect, it } from "vitest";
 import { legislationTypes } from "@/lib/seeds/reference/legislationTypes";
 import { getCabinetPositions } from "@/lib/constants/cabinetMechanics";
@@ -8,14 +9,14 @@ import { projectLawToLegislationType } from "@/lib/politicalLegislation/project"
 import { resetTaxes, resetTaxesFor } from "./taxCatalog";
 
 describe("reset tax instruments", () => {
-  it("keeps the nine existing types and exact-rate legislation mappings", () => {
-    expect(new Set(resetTaxes.map((tax) => tax.id)).size).toBe(9);
-    const runtimeTypes = [
+  it("splits income tax into three of eleven types and exact-rate legislation mappings", () => {
+    expect(new Set(resetTaxes.map((tax) => tax.id)).size).toBe(11);
+    const runtimeTypes = expandIncomeTaxTypes([
       ...legislationTypes,
       ...US_LAWS.map(projectLawToLegislationType),
       ...UK_LAWS.map(projectLawToLegislationType),
       ...US_STATE_TAX_LAWS.map(projectLawToLegislationType),
-    ];
+    ]);
     for (const tax of resetTaxes) {
       const existing = runtimeTypes.find((type) => type._id === tax.existingLegislationTypeId);
       expect(existing, `${tax.country} ${tax.scope} ${tax.id}`).toBeDefined();

@@ -1,3 +1,5 @@
+import type { Db, Filter, UpdateFilter } from "mongodb";
+import { aggregateIncomeTaxRate } from "@/lib/budget/rules/incomeTaxTiers";
 import {
   treasuryAccrualWithBankCouponReserve,
   treasuryAnchorValuation,
@@ -420,15 +422,23 @@ export async function processTreasuryTurn(_turn: number): Promise<{ countriesPro
       for (const [taxType, rate] of Object.entries(ramp.rates)) {
         rampSet[`taxRates.${taxType}`] = rate;
       }
+      if (ramp.changed && b.taxRates)
+        rampSet["taxRates.incomeTax"] = aggregateIncomeTaxRate(
+          { ...b.taxRates, ...ramp.rates },
+          b.incomeTaxShares
+        );
       const rampUnset: Record<string, ""> = {};
       for (const taxType of Object.keys(b.taxRatePhaseIn ?? {})) {
         if (!(taxType in ramp.pending)) rampUnset[`taxRatePhaseIn.${taxType}`] = "";
       }
 
-      const applied = await db.collection<FederalBudget>("federalBudget").updateOne(
+      const applied = await claimTreasuryAccrual(
+        db,
         {
           _id: b._id,
           treasuryBalance: b.treasuryBalance ?? null,
+          taxRates: b.taxRates ?? null,
+          $expr: { $eq: [{ $ifNull: ["$taxRatePhaseIn", null] }, b.taxRatePhaseIn ?? null] },
           $or: [
             { "treasuryAccrual.turn": { $exists: false } },
             { "treasuryAccrual.turn": { $lt: _turn } },
@@ -494,4 +504,13 @@ export async function processTreasuryTurn(_turn: number): Promise<{ countriesPro
   );
   steps.mark("budgets");
   return { countriesProcessed };
+}
+
+/** The existing bounded accrual retry uses this single atomic fiscal/rate claim. */
+async function claimTreasuryAccrual(
+  db: Db,
+  filter: Filter<FederalBudget>,
+  update: UpdateFilter<FederalBudget>
+) {
+  return db.collection<FederalBudget>("federalBudget").updateOne(filter, update);
 }
