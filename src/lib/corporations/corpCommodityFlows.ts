@@ -53,6 +53,7 @@ import {
   plantUtilizationForInputs,
 } from "@/lib/corporations/rules/energyProductivityRamp";
 import { getInputMultiplier, getOutputMultiplier } from "@/lib/utils/productionPolicy";
+import { inputDemandDeflator } from "@/lib/market/inputDemandRealPhase";
 
 /** Market context for one commodity, from the latest global flow ledger row. */
 export interface CommodityMarketContext {
@@ -171,6 +172,12 @@ export type FlowSector = Pick<
   militaryDivertedTurn?: number | null;
   /** Host country, for the planned-economy output remap. */
   countryId?: string | null;
+  /**
+   * Last turn's realized price leg (`sectorPriceLeg(clearingFactor, soldFraction)`).
+   * With `context.inputDemandRealPhase` it deflates the revenue that drives
+   * input demand, exactly as the world ledger does. Absent = 1.
+   */
+  priceLeg?: number | null;
 };
 
 /** World context the flow derivation needs beyond the sectors themselves. */
@@ -178,6 +185,14 @@ export interface CorpCommodityFlowContext {
   /** Originating preset selects input recipes without following the game clock. */
   preset?: string;
   hardwareInputReliefStartTurn?: number;
+  /**
+   * Progress (0..1) of the input-demand-follows-real-output phase-in
+   * (`inputDemandRealPhaseProgress`). The world ledger divides each sector's
+   * revenue by its price leg as this advances; a surface that omits it reports
+   * corporate demand on the pre-correction basis and its rows can sum past the
+   * ledger's global total. Absent = 0, the legacy basis.
+   */
+  inputDemandRealPhase?: number;
   /** `marketSystemMode >= "plants"` — measured production replaces the nameplate. */
   plantsEnabled?: boolean;
   /** State-owned corp: carries `NATCORP_COMMODITY_MULTIPLIER`. */
@@ -376,12 +391,16 @@ export function computeSectorCommodityUnits(
     if (!(units > 0)) continue;
     supply.set(commodity, (supply.get(commodity) ?? 0) + units);
   }
+  // Input demand follows real output: the same deflated revenue the ledger
+  // feeds its demand leg (see `computeRawSupplyDemand`).
+  const demandRevenue =
+    revenueAnchor / inputDemandDeflator(sector.priceLeg, context.inputDemandRealPhase ?? 0);
   for (const [commodity, rate] of Object.entries(rates.demand) as [CommodityType, number][]) {
     if (!rate || rate <= 0) continue;
     const basePrice = COMMODITY_BASE_PRICES[commodity];
     if (!(basePrice > 0)) continue;
     const units =
-      dollarsToUnits(revenueAnchor * rate, basePrice) *
+      dollarsToUnits(demandRevenue * rate, basePrice) *
       eraUnitScale *
       natcorpScale *
       getInputMultiplier(policyLevel) *
