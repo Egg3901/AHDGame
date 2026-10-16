@@ -169,6 +169,9 @@ export interface CampaignData {
       total: number;
     };
     expenses: {
+      fundraisingMaintenance: number;
+      oppositionResearchMaintenance: number;
+      fieldOfficeMaintenance: number;
       groundGameMaintenance: number;
       mediaSpendingMaintenance: number;
       total: number;

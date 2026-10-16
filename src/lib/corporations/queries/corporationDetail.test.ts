@@ -1,3 +1,4 @@
+import { createInMemoryDb } from "@/lib/test-utils/inMemoryDb";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { type Db, ObjectId } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
@@ -62,6 +63,38 @@ describe("loadCorporationDetailView", () => {
     db.collection("corporateSectors");
     db.collection("bonds");
     db.collection("corporationHistory");
+  });
+
+  it("does not award the CEO a synthetic remainder for debited character reservations", async () => {
+    const ceo = makeCharacter({ name: "CEO" });
+    const corporation = makeCorporation({
+      ceoId: ceo._id,
+      totalShares: 1000,
+      shareholders: [{ characterId: ceo._id, shares: 750 }],
+      publicFloat: 0,
+    });
+    db.collectionMocks["characters"]!.findOne.mockResolvedValue(ceo);
+    db.collectionMocks["characters"]!.find.mockReturnValue({ toArray: async () => [ceo] });
+    const store = createInMemoryDb();
+    const orders = store.seed("shareOrders", [
+      {
+        corporationId: corporation._id,
+        type: "sell",
+        status: "open",
+        sharesDebitedAtCreation: true,
+        sharesRemaining: 250,
+      },
+    ]);
+    db.collection("shareOrders").find.mockImplementation(orders.find.bind(orders));
+    const result = await loadCorporationDetailView({
+      db: db as unknown as Db,
+      corporation,
+      currentTurn: 10,
+      viewerUserId: null,
+    });
+    expect(result.corporation.shareholders).toEqual([
+      expect.objectContaining({ characterId: ceo._id.toString(), shares: 750 }),
+    ]);
   });
 
   it("includes fund NAV assets in portfolio totals, book value, and equity", async () => {

@@ -69,7 +69,7 @@ export async function loadCorporationDetailView(args: {
         corporationId: corporation._id,
         type: "sell",
         status: "open",
-        placerCorporationId: { $exists: true },
+        $or: [{ placerCorporationId: { $exists: true } }, { sharesDebitedAtCreation: true }],
       })
       .toArray(),
   ]);

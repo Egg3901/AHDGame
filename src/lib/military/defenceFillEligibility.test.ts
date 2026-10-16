@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { canSupply, resolveFillEligibility, deliveredGrade } from "./defenceFillEligibility";
+import {
+  canSupply,
+  resolveFillEligibility,
+  deliveredGrade,
+  FILL_REASON_TEXT,
+} from "./defenceFillEligibility";
 import { DEFENCE_FACTORY_SLOTS_PER_PLANT } from "./defenceLotEconomics";
 import { rawLotsFromSector } from "./arsenal";
 
@@ -113,6 +118,9 @@ describe("resolveFillEligibility", () => {
     });
     expect(r.eligible).toBe(false);
     expect(r.reason).toBe("retooled_off_component");
+    expect(r.reason && FILL_REASON_TEXT[r.reason]).toBe(
+      "This plant's current production line does not supply the component this order requires."
+    );
   });
 
   // Ticket #1099's sibling: a plant between production turns is a plant a minister may

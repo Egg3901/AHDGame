@@ -167,6 +167,10 @@ export interface SparklineBarVM {
 export interface MoneyVM {
   symbol: string;
   incomeTotal: number;
+  fundraisingUpkeep: number;
+  oppositionUpkeep: number;
+  fieldOfficeUpkeep: number;
+  expenseTotal: number;
   groundUpkeep: number;
   mediaUpkeep: number;
   net: number;
@@ -600,6 +604,10 @@ export function buildCampaignBlendViewModel(inp: CampaignBlendInput): CampaignBl
     ? {
         symbol,
         incomeTotal: budget.income.total,
+        fundraisingUpkeep: budget.expenses.fundraisingMaintenance,
+        oppositionUpkeep: budget.expenses.oppositionResearchMaintenance,
+        fieldOfficeUpkeep: budget.expenses.fieldOfficeMaintenance,
+        expenseTotal: budget.expenses.total,
         groundUpkeep: budget.expenses.groundGameMaintenance,
         mediaUpkeep: budget.expenses.mediaSpendingMaintenance,
         net: budget.netIncome,

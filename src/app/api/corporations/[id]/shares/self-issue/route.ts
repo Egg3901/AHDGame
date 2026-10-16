@@ -332,7 +332,7 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     // Re-read the fresh corp to both report the true post-op totalShares and
     // verify the share invariant: totalShares must still equal
-    // shareholders + publicFloat + open listings + open corp sell orders.
+    // shareholders + publicFloat + open listings + open debited sell orders.
     // If it drifts, shares have silently been added or lost — report to
     // Sentry so we can trace the next "shares disappeared" claim.
     const freshCorp = await db
@@ -342,7 +342,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       freshCorp?.totalShares ?? (corporation.totalShares ?? 10_000_000) + shares;
 
     if (freshCorp) {
-      const [openListings, openCorpSellOrders] = await Promise.all([
+      const [openListings, openSellOrders] = await Promise.all([
         db
           .collection<ShareListing>("shareListings")
           .find({ corporationId: corporation._id, status: "open" })
@@ -353,11 +353,11 @@ export async function POST(request: Request, { params }: RouteParams) {
             corporationId: corporation._id,
             type: "sell",
             status: "open",
-            placerCorporationId: { $exists: true },
+            $or: [{ placerCorporationId: { $exists: true } }, { sharesDebitedAtCreation: true }],
           })
           .toArray(),
       ]);
-      const accounted = computeAccountedShares(freshCorp, openListings, openCorpSellOrders);
+      const accounted = computeAccountedShares(freshCorp, openListings, openSellOrders);
       if (accounted !== newTotalShares) {
         Sentry.captureMessage("self-issue share invariant drift", {
           level: "error",
