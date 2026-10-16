@@ -99,6 +99,8 @@ export interface SectorRow {
   unionization: number;
   representingUnionId: string | null;
   representingUnionName?: string | null;
+  /** Normalized approval; null when no representing union exists. */
+  representingUnionApproval?: number | null;
   strikeActive: boolean;
   strikeCooldownUntilTurn: number | null;
   strikeBlockReason:

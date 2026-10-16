@@ -269,10 +269,13 @@ export async function GET(_request: Request, { params }: RouteParams) {
     const representingUnions = representingUnionIds.length
       ? await db
           .collection<Union>("unions")
-          .find({ _id: { $in: representingUnionIds } }, { projection: { name: 1 } })
+          .find({ _id: { $in: representingUnionIds } }, { projection: { name: 1, approval: 1 } })
           .toArray()
       : [];
     const unionNameById = new Map(representingUnions.map((u) => [u._id.toString(), u.name]));
+    const unionApprovalById = new Map(
+      representingUnions.map((u) => [u._id.toString(), unionApproval(u)])
+    );
     const corpNameById = new Map(corps.map((c) => [c._id.toString(), c.name]));
     const sectorsByCorporation = new Map<string, typeof sectors>();
     for (const sector of sectors) {
@@ -402,6 +405,9 @@ export async function GET(_request: Request, { params }: RouteParams) {
         representingUnionId: s.representingUnionId?.toString() ?? null,
         representingUnionName: s.representingUnionId
           ? (unionNameById.get(s.representingUnionId.toString()) ?? null)
+          : null,
+        representingUnionApproval: s.representingUnionId
+          ? (unionApprovalById.get(s.representingUnionId.toString()) ?? null)
           : null,
         strikeActive: s.strikeStartedAtTurn != null,
         strikeCooldownUntilTurn: s.strikeCooldownUntilTurn ?? null,

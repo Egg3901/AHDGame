@@ -6,6 +6,7 @@ import { EmptyState, Tooltip } from "@/components/ui";
 import {
   ORGANIZE_SECTORS_BATCH_MAX,
   RAID_APPROVAL_EDGE_REQUIRED,
+  clamp0to100,
 } from "@/lib/unions/organizeSectorEconomy";
 import type { SectorRow } from "./unionTypes";
 import {
@@ -28,6 +29,15 @@ import {
 
 /** Rows shown before "Show all", so a big industry does not become a wall. */
 const PAGE_SIZE = 25;
+
+function formatApprovalEdge(edge: number): string {
+  const rounded = Number(edge.toFixed(3));
+  // Preserve which side of the raid threshold an unrounded edge falls on.
+  if (rounded === RAID_APPROVAL_EDGE_REQUIRED && edge !== rounded) {
+    return `${edge < rounded ? "<" : ">"}${rounded}`;
+  }
+  return String(rounded);
+}
 
 interface Column {
   key: string;
@@ -97,6 +107,7 @@ const ORGANIZE_COLUMN: Column = {
 
 export interface UnionSectorsTableProps {
   unionId: string;
+  approval: number;
   sectors: SectorRow[];
   treasury: number;
   myActions: number | null;
@@ -118,6 +129,7 @@ export interface UnionSectorsTableProps {
  */
 export function UnionSectorsTable({
   unionId,
+  approval,
   sectors,
   treasury,
   myActions,
@@ -220,7 +232,8 @@ export function UnionSectorsTable({
       <p className="text-xs text-muted">
         One representing union per shop. Unionization is its members&apos; share of the workforce. A
         successful raid transfers representation; there are no competing memberships or plurality
-        contests.
+        contests. Current approval is a comparison, not a forecast: approval can change before a
+        drive runs.
       </p>
       <div className="flex flex-wrap items-end gap-2">
         <label className="flex flex-col gap-1">
@@ -394,6 +407,10 @@ export function UnionSectorsTable({
               {shown.map((s) => {
                 const isSelected = selected.includes(s.sectorId);
                 const rival = sectorHolding(s, unionId) === "rival";
+                const approvalEdge =
+                  rival && s.representingUnionApproval != null
+                    ? clamp0to100(approval) - clamp0to100(s.representingUnionApproval)
+                    : null;
                 const rowCost = sectorDriveCost(s, unionId);
                 const cannotAffordAp = myActions != null && myActions < organizeActionCost;
                 const cannotAfford = cannotAffordAp || treasury < rowCost;
@@ -435,6 +452,38 @@ export function UnionSectorsTable({
                         </Link>
                       ) : (
                         <span className="text-xs text-muted">Unrepresented</span>
+                      )}
+                      {rival && (
+                        <div className="mt-1 space-y-0.5 text-[10px] tabular-nums text-muted">
+                          {approvalEdge == null ? (
+                            <p>
+                              Rival approval unavailable
+                              {s.representingUnionApproval === null
+                                ? "; no live rival to contest."
+                                : "."}
+                            </p>
+                          ) : (
+                            <>
+                              <p>Rival approval: {s.representingUnionApproval}%</p>
+                              <p>This union: {approval}%</p>
+                              <p title={`Unrounded edge: ${approvalEdge} points`}>
+                                Current edge: {formatApprovalEdge(approvalEdge)} points (needs{" "}
+                                {RAID_APPROVAL_EDGE_REQUIRED})
+                              </p>
+                              <p
+                                className={
+                                  approvalEdge >= RAID_APPROVAL_EDGE_REQUIRED
+                                    ? "text-success"
+                                    : "text-warning"
+                                }
+                              >
+                                {approvalEdge >= RAID_APPROVAL_EDGE_REQUIRED
+                                  ? "Meets current raid edge"
+                                  : "Below current raid edge"}
+                              </p>
+                            </>
+                          )}
+                        </div>
                       )}
                     </td>
                     <td className="px-3 py-3 text-muted">{s.stateId}</td>
