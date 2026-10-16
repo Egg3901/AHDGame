@@ -1283,3 +1283,116 @@ describe("player chair sets the motion (ticket #1523)", () => {
     expect(other.actions.find((a) => a.action === "set_motion")?.allowed).toBe(false);
   });
 });
+
+describe("motion policy explanations", () => {
+  const turn = 243;
+  const meetingState = (overrides: Partial<JurisdictionState> = {}, openedAtTurn = 240) =>
+    baseState({
+      primeRate: 0.5,
+      rateChangesThisTerm: 3,
+      lastRateChangeTurn: 213,
+      activeMeeting: {
+        ...nppMajorityMeeting(openedAtTurn),
+        motion: "hold",
+        proposedDelta: 0,
+        ballots: [],
+      },
+      ...overrides,
+    });
+  const hike = { type: "set_motion", motion: "hike", delta: 0.5 } as const;
+
+  it.each([
+    ["peg", "The currency is pegged", "Float the currency"],
+    ["band", "The currency is committed to an intervention band", "Cancel the band"],
+  ] as const)(
+    "explains the %s with open capital without changing the refusal",
+    (regime, policy, escape) => {
+      for (const openedAtTurn of [240, turn]) {
+        const state = meetingState(
+          { fxCommitment: { regime, capitalControls: false } },
+          openedAtTurn
+        );
+        const before = structuredClone(state);
+        expect(allowedActionsFor(state, CHAIR, clock(turn)).actions).toContainEqual(
+          expect.objectContaining({ action: "set_motion", allowed: true })
+        );
+        const decision = decideGovernance(state, hike, CHAIR, clock(turn));
+        expect(decision.allowed).toBe(false);
+        if (decision.allowed) continue;
+        expect(decision.reason).toBe("fx-committed");
+        expect(decision.message).toContain(policy);
+        expect(decision.message).toContain("capital account is open");
+        expect(decision.message).toContain(`${escape} or impose capital controls`);
+        expect(state).toEqual(before);
+      }
+    }
+  );
+
+  it.each([
+    ["float/open", { regime: "float", capitalControls: false }],
+    ["peg/controls", { regime: "peg", capitalControls: true }],
+    ["legacy absent FX", null],
+  ] as const)("still allows a valid hike with %s", (_name, fxCommitment) => {
+    for (const openedAtTurn of [240, turn]) {
+      const state = meetingState({ fxCommitment }, openedAtTurn);
+      const decision = decideGovernance(state, hike, CHAIR, clock(turn));
+      expect(decision.allowed).toBe(true);
+      if (!decision.allowed) continue;
+      expect(decision.next.activeMeeting).toMatchObject({ motion: "hike", proposedDelta: 0.5 });
+      expect(decision.next.primeRate).toBe(0.5);
+      expect(decision.next.rateChangesThisTerm).toBe(3);
+      expect(decision.next.lastRateChangeTurn).toBe(213);
+      expect(decision.next.fxCommitment).toEqual(fxCommitment);
+      expect(Object.keys(decision.transition.set)).toEqual(["activeFomcMeeting"]);
+    }
+  });
+
+  it.each(["peg", "band"] as const)("keeps hold behavior under a %s", (regime) => {
+    const state = meetingState({
+      fxCommitment: { regime, capitalControls: false },
+      rateChangesThisTerm: RATE_CHANGES_PER_TERM,
+      lastRateChangeTurn: turn - 1,
+    });
+    const hold = { type: "set_motion", motion: "hold" } as const;
+    expect(decideGovernance(state, hold, CHAIR, clock(turn))).toMatchObject({
+      allowed: false,
+      reason: "already-motion",
+    });
+    state.activeMeeting = { ...nppMajorityMeeting(240), ballots: [] };
+    const decision = decideGovernance(state, hold, CHAIR, clock(turn));
+    expect(decision.allowed).toBe(true);
+    if (decision.allowed) {
+      expect(decision.next.activeMeeting).toMatchObject({ motion: "hold", proposedDelta: 0 });
+      expect(decision.next.primeRate).toBe(0.5);
+    }
+  });
+
+  it("preserves earlier validation and execution refusal ordering", () => {
+    const state = meetingState({ fxCommitment: { regime: "peg", capitalControls: false } });
+    for (const [delta, reason] of [
+      [0.1, "off-grid"],
+      [-0.5, "wrong-direction"],
+      [5, "delta-hike"],
+    ] as const) {
+      expect(decideGovernance(state, { ...hike, delta }, CHAIR, clock(turn))).toMatchObject({
+        allowed: false,
+        reason,
+      });
+    }
+    expect(decideGovernance({ ...state, commandEconomy: true }, hike, CHAIR, clock(turn))).toEqual({
+      allowed: false,
+      reason: "command-economy",
+      message: "The committee cannot move the rate by that much right now.",
+    });
+    for (const [overrides, reason] of [
+      [{ rateChangesThisTerm: RATE_CHANGES_PER_TERM }, "term-cap"],
+      [{ lastRateChangeTurn: turn - 1 }, "cooldown"],
+    ] as const) {
+      expect(decideGovernance(meetingState(overrides), hike, CHAIR, clock(turn))).toEqual({
+        allowed: false,
+        reason,
+        message: "The committee cannot move the rate by that much right now.",
+      });
+    }
+  });
+});
