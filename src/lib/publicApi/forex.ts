@@ -1,3 +1,4 @@
+import { effectiveInterventionPolicy } from "@/lib/currency/intervention/rules";
 import type { Db } from "mongodb";
 import type { ExchangeRate } from "@/lib/db/types";
 import type { CurrencyCode } from "@/lib/constants/currencies";
@@ -8,7 +9,7 @@ function percentChange(value: number, base: number): number | null {
 }
 
 function mapRate(row: ExchangeRate, historyLimit = 0) {
-  const policy = row.interventionPolicy;
+  const policy = effectiveInterventionPolicy(row);
   const history = historyLimit > 0 ? (row.rateHistory ?? []).slice(-historyLimit) : undefined;
   return {
     countryId: row.countryId,

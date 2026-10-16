@@ -5,7 +5,7 @@ import type { CountryId } from "@/lib/constants/countries";
 export interface PublicInterventionBand {
   floor: number;
   ceiling: number;
-  setAtTurn: number;
+  setAtTurn: number | null;
   defending: boolean;
 }
 

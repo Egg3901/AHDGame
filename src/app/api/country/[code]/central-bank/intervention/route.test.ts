@@ -314,10 +314,40 @@ describe("intervention bands use the world's base rate", () => {
         }),
       });
       const route = await import("./route");
-      const response = await route[method](makeRequest({ floor: 340, ceiling: 380 }, method), {
-        params: Promise.resolve({ code: "JP" }),
-      });
+      const response = await route[method as "POST" | "PATCH" | "DELETE"](
+        makeRequest({ floor: 340, ceiling: 380 }, method),
+        {
+          params: Promise.resolve({ code: "JP" }),
+        }
+      );
       expect(response.status).toBe(200);
     }
   );
+});
+
+describe("declared peg cannot be bypassed by band controls", () => {
+  it.each(
+    (["POST", "PATCH", "DELETE"] as const).flatMap((method) =>
+      [false, true].map((isAdmin) => ({ method, isAdmin }))
+    )
+  )("$method refuses peg band writes (admin=$isAdmin)", async ({ method, isAdmin }) => {
+    await setup({
+      rate: makeRate({
+        fxRegime: "peg",
+        pegTarget: 1,
+        interventionPolicy: {
+          floor: 0.9,
+          ceiling: 1.1,
+          lastAdjustedAtTurn: 0,
+          recentInterventions: [],
+        },
+      }),
+      user: makeUser({ isAdmin }),
+    });
+    const route = await import("./route");
+    const response = await route[method](makeRequest({ floor: 0.9, ceiling: 1.1 }, method), ctx());
+    expect(response.status).toBe(409);
+    expect(JSON.stringify(await response.json())).toContain("Currency regime");
+    expect(db.collectionMocks.exchangeRates.updateOne).not.toHaveBeenCalled();
+  });
 });

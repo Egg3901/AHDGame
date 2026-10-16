@@ -364,7 +364,10 @@ describe("runForexHalfStep", () => {
 
   it("writes rate, macroTarget and the stamp under CAS, and nothing hourly", async () => {
     state();
-    seed(baseRows());
+    seed(baseRows({ US: { fxRegime: "peg", pegTarget: 0.5 } }), [
+      bank("US", { spreadFeeReserveBalances: { GBP: 750_000 } }),
+      ...BANKS.slice(1),
+    ]);
     db.collectionMocks.exchangeRates.bulkWrite.mockResolvedValue({ matchedCount: 3 });
     const now = new Date("2026-10-09T10:30:00Z");
     const stats = await runForexHalfStep(db as unknown as Db, TURN, now);
@@ -399,6 +402,17 @@ describe("runForexHalfStep", () => {
     expect(db.collectionMocks.exchangeRates.find.mock.calls[0][1].projection).not.toHaveProperty(
       "rateHistory"
     );
+    // The hourly phase still owns the single reserve draw and audit entry.
+    await processForexTurn(db as unknown as Db, TURN, undefined, YEAR);
+    const draws = db.collectionMocks.centralBanks.updateOne.mock.calls.filter(
+      ([filter, update]) => filter._id === "US" && update.$inc
+    );
+    expect(draws).toHaveLength(1);
+    const peg = turnSet("US").interventionPolicy as {
+      recentInterventions: Array<{ turn: number }>;
+    };
+    expect(peg.recentInterventions).toHaveLength(1);
+    expect(peg.recentInterventions[0].turn).toBe(TURN);
   });
 
   it("counts a row changed since the read as skipped until the turn", async () => {

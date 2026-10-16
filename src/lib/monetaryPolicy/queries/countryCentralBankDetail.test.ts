@@ -280,8 +280,13 @@ describe("loadCountryCentralBankDetail money supply", () => {
     annualizedM2GrowthPct: null,
   };
 
-  function createDetailDb(moneySupplyEnabled: boolean | undefined, hasSnapshot = true): Db {
+  function createDetailDb(
+    moneySupplyEnabled: boolean | undefined,
+    hasSnapshot = true,
+    fx?: Record<string, unknown>
+  ): Db {
     const documents: Record<string, Record<string, unknown>> = {
+      ...(fx ? { exchangeRates: { _id: "US", ...fx } } : {}),
       gameConfig: {
         _id: "default",
         lineOfCreditEnabled: true,
@@ -318,6 +323,26 @@ describe("loadCountryCentralBankDetail money supply", () => {
     } as unknown as Db;
   }
 
+  it("shows effective peg before an hourly turn without disclosing reserve history", async () => {
+    const result = await loadCountryCentralBankDetail({
+      db: createDetailDb(true, true, {
+        fxRegime: "peg",
+        pegTarget: 0.5,
+        rate: 1,
+        baseRate: 1,
+        interventionPolicy: { floor: 0.9, ceiling: 1.1, recentInterventions: [{ turn: 119 }] },
+      }),
+      countryId: "US",
+      viewer: null,
+    });
+    if (!result.ok) throw new Error(result.error);
+    expect(result.body.intervention).toMatchObject({
+      fxRegime: "peg",
+      policy: { floor: 0.5, ceiling: 0.5, recentInterventions: [] },
+      forexRevenue: null,
+      reserveBalance: null,
+    });
+  });
   it("returns the stored money supply for a public viewer when enabled", async () => {
     const result = await loadCountryCentralBankDetail({
       db: createDetailDb(true),

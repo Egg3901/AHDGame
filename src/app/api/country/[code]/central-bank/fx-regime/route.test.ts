@@ -79,3 +79,89 @@ describe("euro FX regime", () => {
     }
   );
 });
+
+describe("declared peg lifecycle", () => {
+  function declare(regime: string, pegTarget?: number) {
+    return POST(
+      new Request("http://localhost", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ regime, capitalControls: false, pegTarget }),
+      }),
+      context
+    );
+  }
+  it("prepares funded point defence with the authenticated actor before the first turn", async () => {
+    expect((await declare("peg", 0.5)).status).toBe(200);
+    const set = db.collectionMocks.exchangeRates.updateOne.mock.calls[0][1].$set;
+    expect(set.interventionPolicy).toMatchObject({
+      floor: 0.5,
+      ceiling: 0.5,
+      setByCharacterId: chairId,
+      setByCharacterName: "Chair",
+      setAtTurn: 400,
+      lastAdjustedAtTurn: 400,
+      recentInterventions: [],
+    });
+    expect(set).not.toHaveProperty("rate");
+    expect(set).not.toHaveProperty("hardPeg");
+  });
+  it("preserves the audit log and ongoing failure when changing a peg target", async () => {
+    const records = [
+      {
+        turn: 350,
+        direction: "buy",
+        reservesSpent: 5,
+        fundingSource: "forexRevenue",
+        resultingRate: 0.6,
+      },
+    ];
+    db.collection("exchangeRates").findOne.mockResolvedValue({
+      countryId: "DE",
+      fxRegime: "peg",
+      pegTarget: 0.5,
+      interventionPolicy: {
+        floor: 0.5,
+        ceiling: 0.5,
+        recentInterventions: records,
+        lastInfamyChargedAtTurn: 350,
+      },
+    });
+    expect((await declare("peg", 0.6)).status).toBe(200);
+    expect(
+      db.collectionMocks.exchangeRates.updateOne.mock.calls[0][1].$set.interventionPolicy
+    ).toMatchObject({
+      floor: 0.6,
+      ceiling: 0.6,
+      recentInterventions: records,
+      lastInfamyChargedAtTurn: 350,
+    });
+  });
+  it.each(["float", "band"])(
+    "clears point defence when exiting to %s without inventing a corridor",
+    async (regime) => {
+      db.collection("exchangeRates").findOne.mockResolvedValue({
+        countryId: "DE",
+        fxRegime: "peg",
+        pegTarget: 0.5,
+        interventionPolicy: { floor: 0.5, ceiling: 0.5, recentInterventions: [] },
+      });
+      expect((await declare(regime)).status).toBe(200);
+      expect(db.collectionMocks.exchangeRates.updateOne.mock.calls[0][1].$unset).toEqual({
+        interventionPolicy: "",
+      });
+    }
+  );
+  it.each(["float", "band", "peg"])(
+    "keeps the 48-turn regime commitment before switching to %s",
+    async (regime) => {
+      db.collection("exchangeRates").findOne.mockResolvedValue({
+        countryId: "DE",
+        fxRegime: "peg",
+        fxRegimeSetAtTurn: 399,
+      });
+      expect((await declare(regime, 0.6)).status).toBe(409);
+      expect(db.collectionMocks.exchangeRates.updateOne).not.toHaveBeenCalled();
+    }
+  );
+});

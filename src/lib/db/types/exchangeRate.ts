@@ -20,11 +20,12 @@ export interface InterventionRecord {
 export interface InterventionPolicy {
   floor: number;
   ceiling: number;
-  setByCharacterId: ObjectId;
-  setByCharacterName: string;
-  setAtTurn: number;
+  /** Legacy peg declarations can have unknown attribution and turn metadata. */
+  setByCharacterId: ObjectId | null;
+  setByCharacterName: string | null;
+  setAtTurn: number | null;
   /** Last turn the band was narrowed or cancelled — gates the 6-turn cooldown. */
-  lastAdjustedAtTurn: number;
+  lastAdjustedAtTurn: number | null;
   /** Last turn infamy was charged for the current breach cycle (dedup). */
   lastInfamyChargedAtTurn?: number;
   recentInterventions: InterventionRecord[];
