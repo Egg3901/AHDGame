@@ -162,19 +162,23 @@ describe("processScotusNominationLifecycle", { timeout: 60000 }, () => {
     const result = await processScotusNominationLifecycle(new Date(0), db as unknown as Db);
     expect(result.confirmed).toBe(1);
 
-    expect(db.collectionMocks.characters!.updateOne).toHaveBeenCalledWith(
-      { _id: nomineeCharacterId },
+    expect(db.collectionMocks.characters!.bulkWrite).toHaveBeenCalledWith([
       {
-        $push: {
-          careerHistory: expect.objectContaining({
-            type: "appointed",
-            officeLabel: "Supreme Court Justice (Seat 3)",
-            party: "12",
-            partyCountryId: "US",
-          }),
+        updateOne: {
+          filter: { _id: nomineeCharacterId },
+          update: {
+            $push: {
+              careerHistory: expect.objectContaining({
+                type: "appointed",
+                officeLabel: "Supreme Court Justice (Seat 3)",
+                party: "12",
+                partyCountryId: "US",
+              }),
+            },
+          },
         },
-      }
-    );
+      },
+    ]);
     const { awardAchievement } = await import("@/lib/achievements");
     expect(awardAchievement).toHaveBeenCalledWith(
       nomineeUserId,
@@ -222,7 +226,7 @@ describe("processScotusNominationLifecycle", { timeout: 60000 }, () => {
 
     const { awardAchievement } = await import("@/lib/achievements");
     expect(awardAchievement).not.toHaveBeenCalled();
-    expect(db.collectionMocks.characters!.updateOne).not.toHaveBeenCalled();
+    expect(db.collectionMocks.characters!.bulkWrite).not.toHaveBeenCalled();
   });
 
   it("rejects a nomination when votesAgainst >= votesFor and never seats a justice", async () => {
