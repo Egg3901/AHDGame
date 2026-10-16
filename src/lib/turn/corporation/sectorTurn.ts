@@ -70,6 +70,7 @@ import {
 } from "@/lib/corporations/rules/marketBoost";
 import { isStateScopedCommodity } from "@/lib/market/commodityMarketScope";
 import { withLatentDemand } from "./demandThrottle";
+import { nppOperatingCapacityTarget } from "./rules/nppOperatingCapacity";
 import { idleCapacityRetirement } from "./rules/idleCapacityRetirement";
 import { seedPlantLedger } from "@/lib/corporations/plantLedger";
 import {
@@ -328,6 +329,54 @@ export function processSector(
     perTurnGrowthRate,
     eraUnitScale: lookups.eraUnitScale,
   });
+  // Resolve operation where allocated named demand and physical books are known.
+  // NPP proposals must not strand a new buyer behind yesterday's parked share.
+  const originalActivePercent = sector.activeCapacityPercent;
+  const operatingCapacityEligible =
+    plantsEnabled &&
+    corp.ceoType === "npp" &&
+    sector.sectorType !== "media" &&
+    !corp.caretakerCeo &&
+    !corp.autopilot &&
+    !isStateOwned(corp) &&
+    !corp.suspended &&
+    !corp.ceoVacant &&
+    corp.subsidiaryFormalizedAtTurn == null &&
+    lookups.engineSixCountries?.has(corp.countryId) === true;
+  const operatingCapacityTarget = operatingCapacityEligible
+    ? nppOperatingCapacityTarget({
+        eligible: true,
+        mothballed: sector.mothballed === true,
+        activePercent: originalActivePercent,
+        demandThrottle: sector.demandThrottleFactor,
+        measuredProfit: sector.plantsPnl?.profit,
+        measuredTurn: sector.plantsPnl?.turn,
+        currentTurn,
+        contractDemand:
+          market.contractProductionTargetBySectorId?.get(sector._id.toString()) ??
+          (market.contractProductionTargetBySectorId ? 0 : undefined),
+        outputBooks: Object.entries(strategyRates.supply)
+          .filter(([, rate]) => (rate ?? 0) > 0)
+          .map(([rawCommodity]) => {
+            const commodity = rawCommodity as CommodityType;
+            return withLatentDemand(
+              isStateScopedCommodity(commodity)
+                ? lookups.rawStateBalances?.get(sector.stateId)?.get(commodity)
+                : wideCommodityBalances?.get(commodity),
+              lookups.latentDemandFactorByCommodity?.get(commodity)
+            );
+          }),
+        physicalConstraintsClear:
+          throughputRaw.throughput >= 1 &&
+          labourOutputFactor >= 1 &&
+          capacityUtil.utilization >= 1 &&
+          !lookups.activeDisasterEffectsByState.has(sector.stateId),
+        constructionOrRetool: strategyRates.isTransitioning || (sector.buildQueue?.length ?? 0) > 0,
+      })
+    : null;
+  if (operatingCapacityTarget != null) {
+    sector = { ...sector, activeCapacityPercent: operatingCapacityTarget };
+  }
   // (moved to computeMarketTiers: throughput coupling + downside floor)
   // (moved to computeMarketTiers: capital tier + P1 nameplate units)
   // Plants tier: capacity is AUTHORITATIVE, not a haircut.
@@ -1323,6 +1372,19 @@ export function processSector(
       update: sectorUpdateDoc,
     },
   });
+  if (operatingCapacityTarget != null) {
+    // Preserve an explicit operating choice made after this turn's snapshot.
+    sectorOps.push({
+      updateOne: {
+        filter: {
+          _id: sector._id,
+          activeCapacityPercent:
+            originalActivePercent === undefined ? { $exists: false } : originalActivePercent,
+        },
+        update: { $set: { activeCapacityPercent: operatingCapacityTarget } },
+      },
+    });
+  }
   // Shortage build speed-up: positional per-order updates, after the `$pull`
   // above (bulkWrite is ordered), matched by order identity so an order placed
   // during this phase is never touched.
