@@ -6,6 +6,7 @@ import { DIVERGENT_TENURE_FLOOR_TURNS } from "@/lib/scotus/tenure";
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 vi.mock("@/lib/gameState", () => ({ getGameState: vi.fn() }));
 vi.mock("@/lib/notifications", () => ({ createNotifications: vi.fn() }));
+vi.mock("@/lib/achievements", () => ({ awardAchievement: vi.fn().mockResolvedValue(true) }));
 vi.mock("@/lib/congress/governmentVoteBreakdown", () => ({
   computeCabinetNominationTally: vi.fn(),
 }));
@@ -112,6 +113,116 @@ describe("processScotusNominationLifecycle", { timeout: 60000 }, () => {
         cardVoteSplit: [expect.objectContaining({ votesFor: 55, votesAgainst: 45 })],
       })
     );
+  });
+
+  it("records a confirmed player nominee in career history and awards the achievement", async () => {
+    const nomineeCharacterId = new ObjectId();
+    const nomineeUserId = new ObjectId();
+    const nomination = {
+      _id: new ObjectId(),
+      countryId: "US",
+      seatNumber: 3,
+      status: "active",
+      nomineeMode: "character",
+      nomineeCharacterId,
+      nomineeNppId: null,
+      nomineeName: "Player Justice",
+      nomineeParty: "12",
+      proposedByPresidentId: new ObjectId(),
+      votes: {},
+      votingEndsOnTurn: 90,
+    };
+    db.collectionMocks.scotusNominations!.find.mockImplementation(
+      (query: Record<string, unknown>) => {
+        const orClause = (query?.$or as Array<{ votingEndsOnTurn?: Record<string, unknown> }>)?.[0]
+          ?.votingEndsOnTurn;
+        const isExpiredQuery = !!orClause && "$lte" in orClause;
+        return { toArray: vi.fn().mockResolvedValue(isExpiredQuery ? [nomination] : []) } as never;
+      }
+    );
+    const { computeCabinetNominationTally } =
+      await import("@/lib/congress/governmentVoteBreakdown");
+    vi.mocked(computeCabinetNominationTally).mockResolvedValue({
+      votesFor: 60,
+      votesAgainst: 40,
+      votesAbstain: 0,
+    } as never);
+    db.collectionMocks.characters!.find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([{ _id: nomineeCharacterId }]),
+    });
+    db.collectionMocks.characters!.findOne.mockResolvedValue({
+      _id: nomineeCharacterId,
+      userId: nomineeUserId,
+      economicPosition: 0,
+      socialPosition: 0,
+    });
+    db.collectionMocks.politicalParties!.findOne.mockResolvedValue(null);
+
+    const { processScotusNominationLifecycle } = await import("./scotusNominationLifecycle");
+    const result = await processScotusNominationLifecycle(new Date(0), db as unknown as Db);
+    expect(result.confirmed).toBe(1);
+
+    expect(db.collectionMocks.characters!.updateOne).toHaveBeenCalledWith(
+      { _id: nomineeCharacterId },
+      {
+        $push: {
+          careerHistory: expect.objectContaining({
+            type: "appointed",
+            officeLabel: "Supreme Court Justice (Seat 3)",
+            party: "12",
+            partyCountryId: "US",
+          }),
+        },
+      }
+    );
+    const { awardAchievement } = await import("@/lib/achievements");
+    expect(awardAchievement).toHaveBeenCalledWith(
+      nomineeUserId,
+      "supreme_court_justice",
+      nomineeCharacterId
+    );
+  });
+
+  it("does not award or record anything when a nomination is rejected", async () => {
+    const nomination = {
+      _id: new ObjectId(),
+      countryId: "US",
+      seatNumber: 3,
+      status: "active",
+      nomineeMode: "character",
+      nomineeCharacterId: new ObjectId(),
+      nomineeNppId: null,
+      nomineeName: "Player Justice",
+      proposedByPresidentId: new ObjectId(),
+      votes: {},
+      votingEndsOnTurn: 90,
+    };
+    db.collectionMocks.scotusNominations!.find.mockImplementation(
+      (query: Record<string, unknown>) => {
+        const orClause = (query?.$or as Array<{ votingEndsOnTurn?: Record<string, unknown> }>)?.[0]
+          ?.votingEndsOnTurn;
+        const isExpiredQuery = !!orClause && "$lte" in orClause;
+        return { toArray: vi.fn().mockResolvedValue(isExpiredQuery ? [nomination] : []) } as never;
+      }
+    );
+    const { computeCabinetNominationTally } =
+      await import("@/lib/congress/governmentVoteBreakdown");
+    vi.mocked(computeCabinetNominationTally).mockResolvedValue({
+      votesFor: 40,
+      votesAgainst: 60,
+      votesAbstain: 0,
+    } as never);
+    db.collectionMocks.characters!.find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([]),
+    });
+    db.collectionMocks.characters!.findOne.mockResolvedValue(null);
+
+    const { processScotusNominationLifecycle } = await import("./scotusNominationLifecycle");
+    await processScotusNominationLifecycle(new Date(0), db as unknown as Db);
+
+    const { awardAchievement } = await import("@/lib/achievements");
+    expect(awardAchievement).not.toHaveBeenCalled();
+    expect(db.collectionMocks.characters!.updateOne).not.toHaveBeenCalled();
   });
 
   it("rejects a nomination when votesAgainst >= votesFor and never seats a justice", async () => {

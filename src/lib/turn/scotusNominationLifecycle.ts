@@ -29,6 +29,9 @@ import { DIVERGENT_TENURE_FLOOR_TURNS } from "@/lib/scotus/tenure";
 import { initialJusticeActionFields } from "@/lib/constants/justiceActions";
 import { DISCORD_COLORS, sendCountryGameEvent } from "@/lib/discordWebhooks";
 import { getCountryConfig, type CountryId } from "@/lib/constants/countries";
+import { awardAchievement } from "@/lib/achievements";
+import { SCOTUS_CONFIRMED_SLUG } from "@/lib/scotus/achievementDefinitions";
+import { buildScotusConfirmationCareerEvent } from "@/lib/scotus/careerEvents";
 
 export interface ScotusNominationLifecycleResult {
   nominationsProcessed: number;
@@ -313,6 +316,25 @@ export async function processScotusNominationLifecycle(
         const nomineeChar = await database
           .collection<Character>("characters")
           .findOne({ _id: nom.nomineeCharacterId });
+        if (nomineeChar) {
+          // Judicial seats have no OfficeType, so the profile reads this entry.
+          await database.collection<Character>("characters").updateOne(
+            { _id: nomineeChar._id },
+            {
+              $push: {
+                careerHistory: buildScotusConfirmationCareerEvent({
+                  seatNumber: nom.seatNumber,
+                  party: nom.nomineeParty,
+                  partyCountryId: nom.countryId,
+                  date: now,
+                }),
+              },
+            }
+          );
+          if (nomineeChar.userId) {
+            await awardAchievement(nomineeChar.userId, SCOTUS_CONFIRMED_SLUG, nomineeChar._id);
+          }
+        }
         if (nomineeChar?.userId && !nomineeChar._id.equals(nom.proposedByPresidentId)) {
           notificationInputs.push({
             userId: nomineeChar.userId,

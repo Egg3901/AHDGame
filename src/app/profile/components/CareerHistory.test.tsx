@@ -68,4 +68,21 @@ describe("CareerHistory", () => {
       "/elections"
     );
   });
+
+  it("lists a Supreme Court confirmation on the Executive tab", () => {
+    renderHistory({
+      countryId: "US",
+      currentOffice: null,
+      careerHistory: [
+        {
+          type: "appointed",
+          officeLabel: "Supreme Court Justice (Seat 2)",
+          party: "1",
+          partyCountryId: "US",
+          date: new Date("2026-09-01T12:00:00Z"),
+        },
+      ],
+    });
+    expect(screen.getByText(/Supreme Court Justice \(Seat 2\)/)).toBeTruthy();
+  });
 });
