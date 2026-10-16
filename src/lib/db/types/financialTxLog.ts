@@ -2,6 +2,7 @@ import type { ObjectId } from "mongodb";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 
 export type FinancialTxType =
+  | "producer_market_settlement"
   | "player_income_tax" // personal earnings assessment, paired with treasury receipts
   | "player_capital_gains_tax"
   | "corp_sector_founding" // exact NPP founding cash, including entry fee and starter build

@@ -4,8 +4,13 @@ import { treasuryAnchorValuation } from "@/lib/budget/rules/treasuryAccrual";
 import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
 import * as Sentry from "@sentry/nextjs";
 import { ObjectId, type Db } from "mongodb";
-import { COUNTRY_CURRENCY_MAP, type CurrencyCode } from "@/lib/constants/currencies";
+import {
+  COUNTRY_CURRENCY_MAP,
+  ZOD_CURRENCY_ENUM,
+  type CurrencyCode,
+} from "@/lib/constants/currencies";
 import { COUNTRY_CONFIGS } from "@/lib/constants/countries";
+import type { ProducerEconomyAccount } from "@/lib/db/types/producerEconomy";
 import { accountId } from "@/lib/ledger/accounts";
 import type { BalanceSnapshot } from "@/lib/ledger/types";
 
@@ -192,8 +197,22 @@ async function collectBalanceState(
 
   // --- Governments: federalBudget treasuryBalance ----------------------------
   const gameState = await db
-    .collection<{ _id: string; preset?: string }>("gameState")
-    .findOne({ _id: "current" }, { projection: { preset: 1 } });
+    .collection<{ _id: string; preset?: string; worldEpochId?: string }>("gameState")
+    .findOne({ _id: "current" }, { projection: { preset: 1, worldEpochId: 1 } });
+  for await (const wallet of db
+    .collection<ProducerEconomyAccount>("producerEconomyAccounts")
+    .find(
+      { worldEpoch: gameState?.worldEpochId ?? "" },
+      { projection: { currency: 1, cash: 1 } }
+    )) {
+    const currency = ZOD_CURRENCY_ENUM.find((code) => code === wallet.currency);
+    const rate = currency && rates.get(currency);
+    if (!currency || !rate || !Number.isFinite(rate) || rate <= 0 || !Number.isFinite(wallet.cash))
+      throw new Error(
+        "Producer wallet snapshot requires native cash and an observed currency rate"
+      );
+    add(balances, accountId("economy_wallet", wallet._id, currency), wallet.cash / rate);
+  }
   const accountValuations: NonNullable<BalanceSnapshot["accountValuations"]> = {};
   const budgets = db.collection<{
     countryId?: string;

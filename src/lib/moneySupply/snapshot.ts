@@ -1,5 +1,6 @@
 import type { Db } from "mongodb";
-import type { CurrencyCode } from "@/lib/constants/currencies";
+import { ZOD_CURRENCY_ENUM, type CurrencyCode } from "@/lib/constants/currencies";
+import type { ProducerEconomyAccount } from "@/lib/db/types/producerEconomy";
 import type { CountryId } from "@/lib/constants/countries";
 import type {
   Bond,
@@ -60,8 +61,8 @@ export async function snapshotMoneySupply(db: Db, turn: number): Promise<number>
     config?.bankConstructionFinanceEnabled === true;
 
   const gameState = await db
-    .collection<{ _id: string; preset?: string }>("gameState")
-    .findOne({ _id: "current" }, { projection: { preset: 1 } });
+    .collection<{ _id: string; preset?: string; worldEpochId?: string }>("gameState")
+    .findOne({ _id: "current" }, { projection: { preset: 1, worldEpochId: 1 } });
   const preset = gameState?.preset ?? DEFAULT_SEED_PRESET;
   const currencyFor = (countryId: CountryId) => homeCurrency(countryId, preset);
   let banks = await db.collection<CentralBank>("centralBanks").find({}).toArray();
@@ -83,6 +84,7 @@ export async function snapshotMoneySupply(db: Db, turn: number): Promise<number>
     exchangeRateRows,
     bondPools,
     equityPools,
+    producerAccounts,
   ] = await Promise.all([
     db
       .collection("characters")
@@ -193,8 +195,28 @@ export async function snapshotMoneySupply(db: Db, turn: number): Promise<number>
       .collection<{ _id: string; cashLocal?: number }>("equityMarketPools")
       .find({}, { projection: { cashLocal: 1 } })
       .toArray(),
+    db
+      .collection<ProducerEconomyAccount>("producerEconomyAccounts")
+      .find(
+        { worldEpoch: gameState?.worldEpochId ?? "" },
+        { projection: { kind: 1, currency: 1, cash: 1 } }
+      )
+      .toArray(),
   ]);
   const byCurrency = new Map<CurrencyCode, MutableComponents>();
+
+  for (const wallet of producerAccounts) {
+    const currency = ZOD_CURRENCY_ENUM.find((code) => code === wallet.currency);
+    if (!currency || !Number.isFinite(wallet.cash))
+      throw new Error("Invalid producer wallet monetary stock");
+    const component =
+      wallet.kind === "households"
+        ? "householdLiquid"
+        : wallet.kind === "publicBuyer"
+          ? "governmentLiquid"
+          : "corporateLiquid";
+    addComponent(byCurrency, currency, component, wallet.cash);
+  }
 
   // Construction escrow is funded native cash held for a corporation, not a
   // construction-in-progress or collateral mark. Read it only when both the

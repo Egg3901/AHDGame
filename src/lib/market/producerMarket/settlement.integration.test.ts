@@ -2,6 +2,10 @@ import { describe, expect, it, vi } from "vitest";
 import { ObjectId, type Db } from "mongodb";
 import { createInMemoryDb } from "@/lib/test-utils/inMemoryDb";
 import { withInjectedCrash } from "@/lib/test-utils/faultyDb";
+import { collectBalances } from "@/lib/ledger/balanceSnapshot";
+import { reconcileLedger } from "@/lib/ledger/reconcile";
+import type { LedgerEntry } from "@/lib/ledger/types";
+import { snapshotMoneySupply } from "@/lib/moneySupply/snapshot";
 import { settleProducerTurn } from "./settlement";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
@@ -17,6 +21,8 @@ function fixture() {
     {
       _id: new ObjectId(corporationId),
       liquidCapital: 1000,
+      liquidCurrencyCode: "USD",
+      countryId: "US",
       bankCharter: { cashReserves: 9000, totalLoans: 6000, totalDeposits: 8000 },
     },
   ]);
@@ -28,8 +34,22 @@ function fixture() {
     },
   ]);
   memory.seed("producerEconomyAccounts", [
-    { _id: "households", worldEpoch: "example", cash: 100 },
-    { _id: "operating", worldEpoch: "example", cash: 0 },
+    {
+      _id: "households",
+      worldEpoch: "example",
+      cash: 100,
+      currency: "USD",
+      kind: "households",
+      countryId: "US",
+    },
+    {
+      _id: "operating",
+      worldEpoch: "example",
+      cash: 0,
+      currency: "USD",
+      kind: "operatingPayee",
+      countryId: "US",
+    },
   ]);
   const input: Parameters<typeof settleProducerTurn>[1] = {
     worldEpoch: "example",
@@ -129,6 +149,60 @@ describe("frozen producer turn settlement", () => {
     expect(memory.collection("corporations").docs[0].liquidCapital).toBe(1030);
   });
 
+  it("conserves observed money and reconciles every real wallet against one durable primary witness", async () => {
+    const { memory, input, db } = fixture();
+    memory.seed("exchangeRates", [{ currencyCode: "USD", rate: 2 }]);
+    memory.seed("gameConfig", [{ _id: "default", moneySupplyEnabled: true }]);
+    memory.seed("centralBanks", [{ _id: "US", countryId: "US", externalBroadMoney: 0 }]);
+    memory
+      .collection("producerEconomyAccounts")
+      .docs.push({
+        _id: "stale",
+        worldEpoch: "other",
+        cash: 1000000,
+        currency: "USD",
+        kind: "households",
+      });
+    const opening = await collectBalances(db);
+    expect(opening).not.toHaveProperty("economy_wallet:stale:USD");
+    await snapshotMoneySupply(db, 0);
+    const before = memory.collection("moneySupplySnapshots").docs[0];
+    await settleProducerTurn(db, input);
+    const closing = await collectBalances(db);
+    await snapshotMoneySupply(db, 1);
+    const after = memory.collection("moneySupplySnapshots").docs.find((row) => row.turn === 1)!;
+    expect(after.m2).toBe(before.m2);
+    expect(after.householdLiquid).toBe(60);
+    expect(after.corporateLiquid).toBe(1040);
+    const entries = await db.collection<LedgerEntry>("ledgerEntries").find({}).toArray();
+    expect(entries).toHaveLength(1);
+    expect(entries[0].legs.every((leg) => leg.role === "primary")).toBe(true);
+    expect(
+      reconcileLedger({ turn: 1, entries, openingBalances: opening, closingBalances: closing })
+        .status
+    ).toBe("green");
+    await settleProducerTurn(db, input);
+    expect(memory.collection("ledgerEntries").docs).toHaveLength(1);
+  });
+
+  it.each([false, true])(
+    "recovers the cash witness after interruption, afterWrite=%s",
+    async (afterWrite) => {
+      const { memory, input, db } = fixture();
+      const faulty = withInjectedCrash(memory, {
+        collection: "ledgerEntries",
+        op: "insertOne",
+        onCall: 1,
+        afterWrite,
+      });
+      await expect(settleProducerTurn(faulty.db, input)).rejects.toThrow("crash");
+      expect(memory.collection("corporations").docs[0].liquidCapital).toBe(1030);
+      await settleProducerTurn(db, input);
+      expect(memory.collection("corporations").docs[0].liquidCapital).toBe(1030);
+      expect(memory.collection("ledgerEntries").docs).toHaveLength(1);
+    }
+  );
+
   it.each([false, true])(
     "recovers publication after cash landed, afterWrite=%s",
     async (afterWrite) => {
@@ -190,6 +264,14 @@ describe("frozen producer turn settlement", () => {
     expect(memory.collection("producerEconomyTurnChunks").docs.length).toBeGreaterThan(0);
     memory.collection("producerEconomyTurnChunks").docs.splice(0);
     await expect(settleProducerTurn(db, input)).rejects.toThrow("Missing producer receipt chunk");
+    expect(memory.collection("corporations").docs[0].liquidCapital).toBe(1000);
+  });
+
+  it("rejects an unsupported native currency before freezing or moving cash", async () => {
+    const { memory, input, db } = fixture();
+    input.bindings = input.bindings.map((binding) => ({ ...binding, currency: "unvalued" }));
+    await expect(settleProducerTurn(db, input)).rejects.toThrow("native ledger currency");
+    expect(memory.collection("producerEconomyTurns").docs).toHaveLength(0);
     expect(memory.collection("corporations").docs[0].liquidCapital).toBe(1000);
   });
 

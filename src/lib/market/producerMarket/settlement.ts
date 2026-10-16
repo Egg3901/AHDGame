@@ -1,3 +1,7 @@
+import { createHash } from "node:crypto";
+import { ZOD_CURRENCY_ENUM } from "@/lib/constants/currencies";
+import { accountId } from "@/lib/ledger/accounts";
+import type { LedgerEntry } from "@/lib/ledger/types";
 /** Freeze a complete turn before moving cash, then publish replayable absolute receipts. */
 import { ObjectId, type Db } from "mongodb";
 import type { CorporateSector } from "@/lib/db/types/corporation";
@@ -17,6 +21,7 @@ export interface ProducerSectorTarget {
 
 interface FrozenProducerTurn {
   version: 1;
+  createdAt: string;
   worldEpoch: string;
   request: EconomyInput;
   bindings: readonly ProducerCashBinding[];
@@ -44,6 +49,57 @@ async function readFrozen(db: Db, record: ProducerTurnRecord): Promise<FrozenPro
   )
     throw new Error("Producer receipt identity mismatch");
   return payload;
+}
+
+function cashWithLedger(payload: FrozenProducerTurn, receiptDigest: string) {
+  const transition = producerCashTransition({
+    worldEpoch: payload.worldEpoch,
+    turn: payload.request.turn,
+    opening: payload.request.accounts,
+    closing: payload.result.accounts,
+    bindings: payload.bindings,
+    receiptDigest,
+  });
+  const opening = new Map(payload.request.accounts.map((account) => [account.id, account.cash]));
+  const closing = new Map(payload.result.accounts.map((account) => [account.id, account.cash]));
+  const ledgerLegs: LedgerEntry["legs"] = [];
+  for (const binding of payload.bindings) {
+    const currency = ZOD_CURRENCY_ENUM.find((code) => code === binding.currency);
+    if (!currency) throw new Error("Producer settlement requires a native ledger currency");
+    const change = closing.get(binding.accountId)! - opening.get(binding.accountId)!;
+    if (change === 0) continue;
+    ledgerLegs.push({
+      account:
+        binding.kind === "corporation"
+          ? accountId("corporation", binding.corporationId, currency)
+          : accountId("economy_wallet", binding.economyAccountId, currency),
+      amount: change * binding.localPerAnchor,
+      currencyCode: currency,
+      anchorAmount: change,
+      role: "primary",
+    });
+  }
+  const createdAt = new Date(payload.createdAt);
+  if (!Number.isFinite(createdAt.getTime())) throw new Error("Invalid producer receipt time");
+  if (ledgerLegs.length) {
+    const entry: LedgerEntry = {
+      _id: new ObjectId(
+        createHash("sha256").update(`${transition.key}:ledger`).digest("hex").slice(0, 24)
+      ),
+      turn: payload.request.turn,
+      createdAt,
+      txType: "producer_market_settlement",
+      legs: ledgerLegs,
+      balanced: true,
+      emitSite: "producerMarket/settlement",
+    };
+    transition.projections.push({
+      collection: "ledgerEntries",
+      insert: { ...entry },
+      note: "Complete producer cash witness, all balance changes are primary",
+    });
+  }
+  return transition;
 }
 
 function validateTargets(payload: FrozenProducerTurn): void {
@@ -114,6 +170,7 @@ export async function settleProducerTurn(
   if (!record) {
     const payload: FrozenProducerTurn = {
       version: 1,
+      createdAt: new Date().toISOString(),
       worldEpoch: input.worldEpoch,
       request: input.production,
       bindings: input.bindings,
@@ -131,14 +188,7 @@ export async function settleProducerTurn(
       payload: encoded.payload,
     };
     // Validate native balances and restricted cash targets before claiming any receipt.
-    producerCashTransition({
-      worldEpoch: input.worldEpoch,
-      turn,
-      opening: input.production.accounts,
-      closing: payload.result.accounts,
-      bindings: payload.bindings,
-      receiptDigest: candidate.digest,
-    });
+    cashWithLedger(payload, candidate.digest);
     await stageReceiptChunks(db, encoded.chunks);
     try {
       await turns.insertOne(candidate);
@@ -186,14 +236,7 @@ export async function settleProducerTurn(
     )
       throw new Error("Producer ownership or receipt generation changed");
   }
-  const cash = producerCashTransition({
-    worldEpoch: frozen.worldEpoch,
-    turn,
-    opening: frozen.request.accounts,
-    closing: frozen.result.accounts,
-    bindings: frozen.bindings,
-    receiptDigest: record.digest,
-  });
+  const cash = cashWithLedger(frozen, record.digest);
   await assertTurnFence(db, frozen.worldEpoch, turn);
   const settled = await settleTransition(db, cash);
   if (settled.status !== "applied" && settled.status !== "replayed")

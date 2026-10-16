@@ -105,6 +105,32 @@ describe("snapshotMoneySupply", () => {
     });
   });
 
+  it("counts funded economy wallets once in the current world, without spending demographic estimates", async () => {
+    db.collectionMocks.gameState.findOne.mockResolvedValue({
+      preset: "1991-default",
+      worldEpochId: "example",
+    });
+    db.collection("producerEconomyAccounts");
+    db.collectionMocks.producerEconomyAccounts.find.mockReturnValue(
+      cursorWith([
+        { currency: "USD", kind: "households", cash: 40 },
+        { currency: "USD", kind: "publicBuyer", cash: 30 },
+        { currency: "USD", kind: "operatingPayee", cash: 20 },
+      ])
+    );
+    await snapshotMoneySupply(db as unknown as Db, 12);
+    const doc = db.collectionMocks[MONEY_SUPPLY_SNAPSHOTS_COLLECTION].replaceOne.mock.calls[0][1];
+    expect(doc.householdLiquid).toBe(40);
+    expect(doc.governmentLiquid).toBe(30);
+    expect(doc.corporateLiquid).toBe(20);
+    expect(doc.m2 - doc.externalBroadMoney).toBe(90);
+    expect(doc.estimatedHouseholdLiquid).toBeGreaterThan(0);
+    expect(db.collectionMocks.producerEconomyAccounts.find).toHaveBeenCalledWith(
+      { worldEpoch: "example" },
+      { projection: { kind: 1, currency: 1, cash: 1 } }
+    );
+  });
+
   it("counts savings held at a private bank once, alongside its separate NPC deposits", async () => {
     db.collectionMocks.gameConfig.findOne.mockResolvedValue({
       moneySupplyEnabled: true,
