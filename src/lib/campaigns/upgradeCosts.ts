@@ -533,6 +533,21 @@ export const OPS_TREES: Record<UpgradeCategory, OpsTreeDef> = {
   },
 };
 
+/**
+ * Balance (ground game + media only): a maxed presidential campaign raises tens
+ * of millions while the whole branch tree costs a few percent of that, so these
+ * levers were never a real spending decision. Upkeep is doubled and the tier-3
+ * purchase is 1.5x. Fundraising and opposition research are unchanged.
+ */
+export const OPS_UPKEEP_MULTIPLIER: Readonly<Partial<Record<UpgradeCategory, number>>> = {
+  groundGame: 2,
+  mediaSpending: 2,
+};
+export const OPS_TIER3_FUNDS_MULTIPLIER: Readonly<Partial<Record<UpgradeCategory, number>>> = {
+  groundGame: 1.5,
+  mediaSpending: 1.5,
+};
+
 /** Returns the branch definition for a lever + branch key, or null. */
 export function getOpsBranch(category: UpgradeCategory, branch: OpsBranchKey): OpsBranchDef | null {
   return OPS_TREES[category].branches.find((b) => b.key === branch) ?? null;
@@ -578,17 +593,25 @@ export function getEffectiveBranchCost(
       funds: Math.ceil(Math.round(s.funds * scalar) * surge),
       actions: Math.ceil(s.actions * surge),
       effect: s.effect,
-      maintenance: s.maintenance != null ? Math.round(s.maintenance * scalar) : undefined,
+      maintenance:
+        s.maintenance != null
+          ? Math.round(s.maintenance * (OPS_UPKEEP_MULTIPLIER[category] ?? 1) * scalar)
+          : undefined,
     };
   }
   const def = getOpsBranch(category, branch);
   const tier = def?.tiers.find((t) => t.level === nextLevel);
   if (!tier) return null;
+  const tierFunds =
+    tier.level >= 3 ? tier.funds * (OPS_TIER3_FUNDS_MULTIPLIER[category] ?? 1) : tier.funds;
   return {
-    funds: Math.ceil(Math.round(tier.funds * scalar) * surge),
+    funds: Math.ceil(Math.round(tierFunds * scalar) * surge),
     actions: Math.ceil(tier.actions * surge),
     effect: tier.effect,
-    maintenance: tier.maintenance != null ? Math.round(tier.maintenance * scalar) : undefined,
+    maintenance:
+      tier.maintenance != null
+        ? Math.round(tier.maintenance * (OPS_UPKEEP_MULTIPLIER[category] ?? 1) * scalar)
+        : undefined,
     lumpSum: tier.lumpSum != null ? Math.round(tier.lumpSum * scalar) : tier.lumpSum,
   };
 }
@@ -616,7 +639,7 @@ export function getTreeMaintenanceCost(
       reduction = branchDef.tiers[level - 1]?.magnitude ?? 0;
     }
   }
-  total = total * (1 - reduction);
+  total = total * (OPS_UPKEEP_MULTIPLIER[category] ?? 1) * (1 - reduction);
   const scalar = getCampaignFamilyScalar(electionType);
   return Math.round(total * scalar);
 }

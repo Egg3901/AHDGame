@@ -6,7 +6,6 @@ import Link from "next/link";
 import { UNION_STRENGTH_DECAY_PER_TURN } from "@/lib/unions/unionEconomy";
 import {
   ORGANIZE_SECTOR_ACTION_COST,
-  organizeSectorTreasuryCost,
   sectorUnionizationGain,
 } from "@/lib/unions/organizeSectorEconomy";
 import { WAGE_LEVEL_MAX, WAGE_LEVEL_MIN } from "@/lib/labour/laborCost";
@@ -27,7 +26,7 @@ import { UnionDuesPanel } from "@/components/unions/UnionDuesPanel";
 import { UnionServicesPanel } from "@/components/unions/UnionServicesPanel";
 import { UnionFundTreasuryPanel } from "@/components/unions/UnionFundTreasuryPanel";
 import { UnionPoliticalContributionsPanel } from "@/components/unions/UnionPoliticalContributionsPanel";
-import { BASE_APPROVAL, unionMembers } from "@/lib/unions/unionDues";
+import { BASE_APPROVAL } from "@/lib/unions/unionDues";
 import { normalizeServiceIds } from "@/lib/unions/unionServices";
 import { buildCharacterHref, buildNppHref } from "@/lib/utils/profileUrls";
 import type {
@@ -45,25 +44,37 @@ import {
   UndergroundOrganizePanel,
   ActionResult,
   StatCell,
+  UnionAtAGlance,
+  describeOrganizeBatchResult,
+  describeOrganizeSectorResult,
   describeUndergroundResult,
+  type OrganizeBatchResponse,
 } from "./UnionPanels";
+import { UnionSectorsTable } from "./UnionSectorsTable";
+import type { SectorStatus } from "./unionSectorTable";
 
 interface PageProps {
   params: Promise<{ id: string }>;
 }
 
-type Tab = "leadership" | "sectors" | "bargaining" | "stances";
+type Tab = "overview" | "sectors" | "finances" | "bargaining" | "leadership" | "stances";
 
 const HERO_IMAGE_URL =
   "https://upload.wikimedia.org/wikipedia/commons/thumb/5/59/IWW_demonstration_NY_1914.jpg/1280px-IWW_demonstration_NY_1914.jpg";
 
 /**
- * v3 Phase 8 union leadership dashboard, restyled to match the stock market
- * page: hero banner + stats strip + tabbed content. Leadership is a rolling
+ * v3 Phase 8 union leadership dashboard. Laid out like the corporation page
+ * (player suggestion 374): a compact masthead with the key figures, then every
+ * panel behind a tab instead of one long scroll. Leadership is a rolling
  * contest (CEO-style) on its own tab, not a one-shot election that locks.
  */
 export default function UnionDashboardPage({ params }: PageProps) {
   const { id } = usePromise(params);
+  // A new route owns fresh data and UI state; late refreshes belong to the old dashboard.
+  return <UnionDashboard key={id} id={id} />;
+}
+
+function UnionDashboard({ id }: { id: string }) {
   const [union, setUnion] = useState<UnionDetail | null>(null);
   const [sectors, setSectors] = useState<SectorRow[]>([]);
   const [workforce, setWorkforce] = useState<WorkforceSummary | null>(null);
@@ -106,12 +117,11 @@ export default function UnionDashboardPage({ params }: PageProps) {
   // Draft wage claim, as typed. Kept as a string so the field can be emptied
   // while editing without snapping back to the last committed number.
   const [wageDemandDraft, setWageDemandDraft] = useState("");
-  const [tab, setTab] = useState<Tab>("sectors");
+  const [tab, setTab] = useState<Tab>("overview");
+  // Status the Sectors tab opens filtered to, when the Overview links there.
+  const [sectorStatusFilter, setSectorStatusFilter] = useState<SectorStatus | "">("");
 
-  async function loadData() {
-    setLoading(true);
-    setLoadError(null);
-    setNotFound(false);
+  async function loadData(initial = false) {
     try {
       const [unionRes, meRes, voteRes] = await Promise.all([
         fetch(`/api/unions/${id}`),
@@ -119,6 +129,8 @@ export default function UnionDashboardPage({ params }: PageProps) {
         fetch(`/api/unions/${id}/leader/vote`),
       ]);
       const unionData = await unionRes.json();
+      setLoadError(null);
+      setNotFound(false);
       if (unionRes.ok) {
         setUnion(unionData.union);
         setWageDemandDraft(
@@ -133,7 +145,7 @@ export default function UnionDashboardPage({ params }: PageProps) {
         setEmployerOptions(unionData.employerOptions ?? []);
         setBargainingCampaigns(unionData.bargainingCampaigns ?? []);
         setPensionScheme(unionData.pensionScheme ?? null);
-      } else if (unionRes.status === 404) {
+      } else if (unionRes.status === 404 && initial) {
         setNotFound(true);
       } else {
         setLoadError(apiErrorText(unionData, "Failed to load union."));
@@ -180,13 +192,51 @@ export default function UnionDashboardPage({ params }: PageProps) {
     }
   }
 
+  function shopName(sectorId: string): string {
+    const row = sectors.find((s) => s.sectorId === sectorId);
+    return row ? `${row.corporationName} (${row.stateId})` : "the shop";
+  }
+
+  /** Runs drives on several shops in one request; resolves to the ids that landed. */
+  async function runOrganizeBatch(sectorIds: string[]): Promise<string[]> {
+    setActionPending(true);
+    setActionResult(null);
+    try {
+      const res = await fetch(`/api/unions/${id}/organize-sectors`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sectorIds }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setActionResult({ ok: false, text: apiErrorText(data, "The drives failed.") });
+        return [];
+      }
+      const batch = data as OrganizeBatchResponse;
+      setActionResult(describeOrganizeBatchResult(batch, shopName));
+      await loadData();
+      return batch.results.filter((r) => r.ok).map((r) => r.sectorId);
+    } catch {
+      setActionResult({
+        ok: false,
+        text: "Network error. Reload the page to see which drives ran.",
+      });
+      return [];
+    } finally {
+      setActionPending(false);
+    }
+  }
+
   useEffect(() => {
-    loadData();
+    loadData(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
   async function runAction(path: string, body?: unknown) {
-    const setResult = path.startsWith("organize") ? setOrganizeResult : setActionResult;
+    // Only the open drives report into the Organize panel. A targeted sector
+    // drive reports under the sectors table it was run from.
+    const setResult =
+      path === "organize" || path === "organize-underground" ? setOrganizeResult : setActionResult;
     setActionPending(true);
     setResult(null);
     try {
@@ -200,6 +250,10 @@ export default function UnionDashboardPage({ params }: PageProps) {
       // the player learns the quiet/mass tradeoff by observation.
       if (res.ok && path === "organize-underground") {
         setResult({ ok: true, text: describeUndergroundResult(data) });
+      } else if (res.ok && path === "organize-sector") {
+        setResult(
+          describeOrganizeSectorResult(data, shopName((body as { sectorId: string }).sectorId))
+        );
       } else {
         setResult({
           ok: res.ok,
@@ -241,19 +295,19 @@ export default function UnionDashboardPage({ params }: PageProps) {
     (wageDemandNumber < WAGE_LEVEL_MIN || wageDemandNumber > WAGE_LEVEL_MAX);
   if (loading) {
     return (
-      <main className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+      <main className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8 space-y-8">
         {/* Hero card + stats strip */}
         <header className="overflow-hidden rounded-2xl border border-card-border bg-card shadow-lg">
-          <div className="flex h-[175px] w-full flex-col justify-between bg-card-elevated px-5 py-4 sm:h-[220px] sm:px-6 sm:py-5">
+          <div className="flex h-[120px] w-full flex-col justify-between bg-card-elevated px-5 py-4 sm:h-[140px] sm:px-6 sm:py-5">
             <Skeleton className="h-8 w-8 rounded-lg" />
             <div className="space-y-2">
               <Skeleton className="h-3 w-40" />
               <Skeleton className="h-7 w-64 sm:h-9" />
             </div>
           </div>
-          <div className="flex items-center overflow-x-auto divide-x divide-card-border border-t border-card-border">
-            {Array.from({ length: 4 }).map((_, i) => (
-              <div key={i} className="flex min-w-max flex-col gap-1.5 px-5 py-3">
+          <div className="grid grid-cols-2 gap-px border-t border-card-border bg-card-border sm:grid-cols-3 lg:grid-cols-6">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="flex min-w-0 flex-col gap-1.5 bg-card px-5 py-3">
                 <Skeleton className="h-2.5 w-20" />
                 <Skeleton className="h-5 w-16" />
               </div>
@@ -263,7 +317,7 @@ export default function UnionDashboardPage({ params }: PageProps) {
 
         {/* Tabs + sector table */}
         <section className="space-y-6">
-          <TabRowSkeleton count={2} />
+          <TabRowSkeleton count={6} />
           <div className="overflow-hidden rounded-xl border border-card-border bg-card">
             <div className="border-b border-card-border bg-card-elevated px-4 py-3">
               <Skeleton className="h-3 w-48" />
@@ -282,16 +336,16 @@ export default function UnionDashboardPage({ params }: PageProps) {
       </main>
     );
   }
-  if (loadError) {
+  if (loadError && !union) {
     return (
-      <main className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8 py-8">
+      <main className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
         <EmptyState title="Couldn't load this union" description={loadError} />
       </main>
     );
   }
   if (notFound || !union) {
     return (
-      <main className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8 py-8">
+      <main className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
         <EmptyState
           title="Union not found"
           description="This union doesn't exist or is no longer available."
@@ -306,9 +360,10 @@ export default function UnionDashboardPage({ params }: PageProps) {
   const historicalEndorsements = endorsements.filter(
     (endorsement) => !actionableBillIds.has(endorsement.billId)
   );
-  const tabs: { key: Tab; label: string; count: number }[] = [
-    { key: "leadership", label: "Leadership", count: organizers.length },
+  const tabs: { key: Tab; label: string; count?: number }[] = [
+    { key: "overview", label: "Overview" },
     { key: "sectors", label: "Sectors", count: sectors.length },
+    { key: "finances", label: "Dues & services" },
     {
       key: "bargaining",
       label: "Bargaining",
@@ -316,6 +371,7 @@ export default function UnionDashboardPage({ params }: PageProps) {
         (campaign) => campaign.status === "negotiating" || campaign.status === "dispute"
       ).length,
     },
+    { key: "leadership", label: "Leadership", count: organizers.length },
     {
       key: "stances",
       label: "Legislative stances",
@@ -328,7 +384,6 @@ export default function UnionDashboardPage({ params }: PageProps) {
 
   const organizeSectorActionCost = union.organizeSectorActionCost ?? ORGANIZE_SECTOR_ACTION_COST;
   const organizeSectorGain = sectorUnionizationGain(approval);
-  const cannotAffordSectorOrganizeAp = myActions != null && myActions < organizeSectorActionCost;
 
   const presidentHref = leader
     ? leader.isNPP
@@ -343,10 +398,10 @@ export default function UnionDashboardPage({ params }: PageProps) {
     : null;
 
   return (
-    <main className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+    <main className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8 space-y-8">
       {/* Hero Card + Stats Strip */}
       <header className="relative overflow-hidden rounded-2xl border border-card-border bg-card shadow-lg">
-        <div className="relative h-[175px] w-full sm:h-[220px]">
+        <div className="relative h-[120px] w-full sm:h-[140px]">
           <HeroImage
             src={HERO_IMAGE_URL}
             alt="Labour union demonstration"
@@ -392,8 +447,8 @@ export default function UnionDashboardPage({ params }: PageProps) {
         </div>
 
         {/* Stats strip */}
-        <div className="flex items-center overflow-x-auto divide-x divide-card-border border-t border-card-border">
-          <div className="flex min-w-[140px] flex-col gap-0.5 px-4 py-3 sm:px-5">
+        <div className="grid grid-cols-2 gap-px border-t border-card-border bg-card-border sm:grid-cols-3 lg:grid-cols-6">
+          <div className="flex min-w-0 flex-col gap-0.5 bg-card px-4 py-3 sm:px-5">
             <span className="text-body-sm font-medium text-muted">President</span>
             {presidentHref && leader ? (
               <Link
@@ -452,6 +507,16 @@ export default function UnionDashboardPage({ params }: PageProps) {
         </div>
       </header>
 
+      {loadError && (
+        <div
+          role="alert"
+          className="rounded-xl border border-warning/30 bg-warning/10 p-4 text-sm text-warning"
+        >
+          Couldn&apos;t refresh this union. {loadError} Showing previously loaded data. Reload the
+          page to try again.
+        </div>
+      )}
+
       {partialError && (
         <div
           role="alert"
@@ -488,138 +553,6 @@ export default function UnionDashboardPage({ params }: PageProps) {
         </div>
       )}
 
-      {/* Open to everyone, led or not: the rank-and-file loop. Under a ban the
-          legal loop is fully off and cells organize underground instead. */}
-      {suspended && union.underground ? (
-        <UndergroundOrganizePanel
-          countryName={union.countryName}
-          underground={union.underground}
-          currentTurn={union.currentTurn}
-          myActions={myActions}
-          actionPending={actionPending}
-          result={organizeResult}
-          onDrive={(mode) => runAction("organize-underground", { mode })}
-        />
-      ) : suspended ? (
-        <section className="rounded-xl border border-card-border bg-card p-5 text-sm text-muted">
-          Underground cell details are available to characters in {union.countryName}. Legal
-          organizing remains suspended while the ban holds.
-        </section>
-      ) : (
-        <section className="space-y-4 rounded-xl border border-card-border bg-card p-5">
-          <div className="flex items-center gap-3">
-            <h2 className="text-sm font-semibold text-muted">Organize</h2>
-            <div className="h-px flex-1 bg-card-border" />
-          </div>
-
-          <p className="text-sm text-muted">
-            Anyone in {union.countryName} can organize this union. Every drive adds{" "}
-            {union.organizeStrengthGain} strength to the union and the same amount to your own
-            banked total, which is your vote weight in the leadership contest. Strength decays{" "}
-            {(UNION_STRENGTH_DECAY_PER_TURN * 100).toFixed(1)}% a turn, so a union nobody works at
-            loses its power, and so does an organizer who stops showing up.
-          </p>
-
-          <div className="flex flex-wrap gap-4 text-sm">
-            <div>
-              <span className="text-muted">Union strength:</span>{" "}
-              <span className="font-semibold tabular-nums">{Math.round(union.strength)}</span>
-            </div>
-            <div>
-              <span className="text-muted">Organizers:</span>{" "}
-              <span className="font-semibold tabular-nums">{organizerCount}</span>
-            </div>
-            <div>
-              <span className="text-muted">Your voting power:</span>{" "}
-              <span className="font-semibold tabular-nums">{Math.round(myVotingPower)}</span>
-            </div>
-          </div>
-
-          <div className="flex flex-col gap-1">
-            <button
-              type="button"
-              disabled={actionPending || suspended || cannotAffordOrganize}
-              onClick={() => runAction("organize")}
-              className="w-fit rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition-all hover:bg-primary/90 active:scale-95 disabled:opacity-50"
-            >
-              Run organize drive
-            </button>
-            <span className="text-[11px] text-muted">
-              Costs {organizeActionCost} action points
-              {myActions != null && ` · you have ${myActions}`}
-            </span>
-            {cannotAffordOrganize && (
-              <span className="text-[11px] font-medium text-error">
-                Not enough action points. They refresh each turn.
-              </span>
-            )}
-          </div>
-
-          <ActionResult result={organizeResult} />
-        </section>
-      )}
-
-      {/* Dues, services and political contributions: the head's levers over
-          the union's finances and approval. Everyone sees the current values;
-          only the head can move them. */}
-      <section className="space-y-5 rounded-xl border border-card-border bg-card p-5">
-        <div className="flex items-center gap-3">
-          <h2 className="text-sm font-semibold text-muted">Dues, services &amp; politics</h2>
-          <div className="h-px flex-1 bg-card-border" />
-        </div>
-        <UnionDuesPanel
-          unionId={id}
-          countryId={union.countryId}
-          members={members}
-          duesPerWorkerAnnual={duesPerWorkerAnnual}
-          annualWage={annualWage}
-          activeServices={activeServices}
-          politicalContributionPct={politicalContributionPct}
-          isHead={isLeader}
-          suspended={suspended}
-          onSaved={loadData}
-        />
-        <UnionFundTreasuryPanel
-          unionId={id}
-          countryId={union.countryId}
-          treasury={union.treasury}
-          isHead={isLeader}
-          suspended={suspended}
-          onFunded={loadData}
-        />
-        <UnionServicesPanel
-          unionId={id}
-          countryId={union.countryId}
-          members={members}
-          annualWage={annualWage}
-          treasury={union.treasury}
-          duesPerWorkerAnnual={duesPerWorkerAnnual}
-          activeServices={activeServices}
-          paidServices={union.paidServices ?? []}
-          approval={union.approval}
-          politicalContributionPct={politicalContributionPct}
-          isHead={isLeader}
-          suspended={suspended}
-          onSaved={loadData}
-        />
-        <UnionPoliticalContributionsPanel
-          unionId={id}
-          countryId={union.countryId}
-          members={members}
-          duesPerWorkerAnnual={duesPerWorkerAnnual}
-          annualWage={annualWage}
-          activeServices={activeServices}
-          politicalContributionPct={politicalContributionPct}
-          myInfluencePct={
-            organizers.find((organizer) => organizer.characterId === myCharacterId)?.influencePct ??
-            0
-          }
-          isHead={isLeader}
-          suspended={suspended}
-          onSaved={loadData}
-        />
-      </section>
-
       {union.pendingLeaderCharacterId &&
         myCharacterId === union.pendingLeaderCharacterId &&
         !isLeader && (
@@ -650,138 +583,308 @@ export default function UnionDashboardPage({ params }: PageProps) {
           </section>
         )}
 
-      {/* Leader Actions */}
-      {isLeader && (
-        <section className="space-y-4 rounded-xl border border-card-border bg-card p-5">
-          <div className="flex items-center gap-3">
-            <h2 className="text-sm font-semibold text-muted">Leader actions</h2>
-            <div className="h-px flex-1 bg-card-border" />
-          </div>
-
-          {/* The recruitment drive that used to live here is retired. It only
-              ever raised `membershipPressure`, which no longer exists: members
-              are now counted from the workers in the sectors this union
-              actually represents. Growing the union means organizing a
-              specific sector, which happens on that sector's own page. */}
-          <p className="text-[11px] text-muted">
-            To grow this union, open the Sectors tab and organize a local. A drive costs treasury
-            plus one action and raises that shop&apos;s unionization. Cost scales with the
-            shop&apos;s size, or with how unionized it already is if you hold it. If a rival holds
-            it, it is a raid.
-          </p>
-
-          {/* Public wage claim: a pressure signal, not a contract. It shows up
-              as the per-local gap column below and as a callout on the CEO's
-              own wage panel, and does nothing else. */}
-          <div className="space-y-2 border-t border-card-border pt-3">
-            <p className="text-body-sm font-medium text-muted">Public wage claim</p>
-            <p className="text-xs text-muted">
-              The wage level this union says the industry should pay. Employers see it on their own
-              wage panel and every local&apos;s shortfall is listed below. It binds nobody: to make
-              an employer actually pay it, open a bargaining campaign.
-            </p>
-            <div className="flex flex-wrap items-end gap-2">
-              <label className="flex flex-col gap-1">
-                <span className="text-body-sm font-medium text-muted">Wage level</span>
-                <input
-                  type="number"
-                  step={0.05}
-                  min={WAGE_LEVEL_MIN}
-                  max={WAGE_LEVEL_MAX}
-                  value={wageDemandDraft}
-                  onChange={(e) => setWageDemandDraft(e.target.value)}
-                  placeholder="1.15"
-                  className="w-32 rounded-lg border border-card-border bg-background px-3 py-2 text-xs"
-                />
-              </label>
-              <button
-                type="button"
-                disabled={
-                  actionPending ||
-                  suspended ||
-                  !Number.isFinite(Number(wageDemandDraft)) ||
-                  wageDemandDraft.trim() === ""
-                }
-                onClick={() =>
-                  runAction("demand-wage", { demandedWageLevel: Number(wageDemandDraft) })
-                }
-                className="rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-white transition-all hover:bg-primary/90 active:scale-95 disabled:opacity-50"
-              >
-                Set demand
-              </button>
-              {union.demandedWageLevel != null && (
-                <button
-                  type="button"
-                  disabled={actionPending || suspended}
-                  onClick={() => runAction("demand-wage", { demandedWageLevel: null })}
-                  className="rounded-lg border border-card-border px-3 py-2 text-xs font-medium transition-colors hover:bg-card-elevated disabled:opacity-50"
-                >
-                  Withdraw demand
-                </button>
-              )}
-            </div>
-            {wageDemandOutOfRange && (
-              <p className="text-xs font-medium text-warning">
-                Claims are accepted between {WAGE_LEVEL_MIN.toFixed(2)}× and{" "}
-                {WAGE_LEVEL_MAX.toFixed(2)}×.
-              </p>
-            )}
-            <p className="text-xs text-muted">
-              {union.demandedWageLevel == null
-                ? "This union has no standing wage claim."
-                : `Standing claim: ${union.demandedWageLevel.toFixed(2)}× the regional median.`}
-            </p>
-          </div>
-
-          <ActionResult result={actionResult} />
-
-          <div className="border-t border-card-border pt-3">
-            <button
-              type="button"
-              disabled={actionPending || suspended}
-              onClick={() => {
-                if (
-                  window.confirm(
-                    "Resign leadership of this union? Treasury and membership are preserved."
-                  )
-                ) {
-                  runAction("resign");
-                }
-              }}
-              className="text-xs font-medium text-muted transition-colors hover:text-error disabled:opacity-50"
-            >
-              Resign leadership
-            </button>
-          </div>
-        </section>
-      )}
-
-      {/* Tabs */}
+      {/* Tabs: the corporation page's flat bar. It wraps rather than
+          scrolling sideways, so every tab stays in view on a phone. */}
       <section className="space-y-6">
         <div className="border-b border-card-border">
-          <nav className="-mb-px flex gap-6 overflow-x-auto" aria-label="Tabs">
+          <nav className="flex flex-wrap items-center gap-x-1" aria-label="Tabs">
             {tabs.map((t) => (
               <button
                 key={t.key}
-                onClick={() => setTab(t.key)}
-                className={`whitespace-nowrap border-b-2 px-1 py-4 text-sm font-medium transition-colors ${
+                type="button"
+                onClick={() => {
+                  if (t.key === "sectors") setSectorStatusFilter("");
+                  setTab(t.key);
+                }}
+                aria-current={tab === t.key ? "page" : undefined}
+                className={`-mb-px flex items-center whitespace-nowrap border-b-2 px-3 py-2.5 text-sm font-medium transition-colors ${
                   tab === t.key
-                    ? "border-primary text-primary"
-                    : "border-transparent text-muted hover:border-card-border hover:text-foreground"
+                    ? "border-primary text-foreground"
+                    : "border-transparent text-muted hover:border-muted hover:text-foreground"
                 }`}
               >
                 {t.label}
-                <span
-                  className={`ml-2 rounded-full px-2 py-0.5 text-xs ${
-                    tab === t.key ? "bg-primary/10 text-primary" : "bg-card-elevated text-muted"
-                  }`}
-                >
-                  {t.count}
-                </span>
+                {t.count != null && (
+                  <span
+                    className={`ml-2 rounded-full px-2 py-0.5 text-xs ${
+                      tab === t.key ? "bg-primary/10 text-primary" : "bg-card-elevated text-muted"
+                    }`}
+                  >
+                    {t.count}
+                  </span>
+                )}
               </button>
             ))}
           </nav>
         </div>
+
+        {tab === "overview" && (
+          <div className="space-y-6">
+            {/* Open to everyone, led or not: the rank-and-file loop. Under a ban the
+          legal loop is fully off and cells organize underground instead. */}
+            {suspended && union.underground ? (
+              <UndergroundOrganizePanel
+                countryName={union.countryName}
+                underground={union.underground}
+                currentTurn={union.currentTurn}
+                myActions={myActions}
+                actionPending={actionPending}
+                result={organizeResult}
+                onDrive={(mode) => runAction("organize-underground", { mode })}
+              />
+            ) : suspended ? (
+              <section className="rounded-xl border border-card-border bg-card p-5 text-sm text-muted">
+                Underground cell details are available to characters in {union.countryName}. Legal
+                organizing remains suspended while the ban holds.
+              </section>
+            ) : (
+              <section className="space-y-4 rounded-xl border border-card-border bg-card p-5">
+                <div className="flex items-center gap-3">
+                  <h2 className="text-sm font-semibold text-muted">Organize</h2>
+                  <div className="h-px flex-1 bg-card-border" />
+                </div>
+
+                <p className="text-sm text-muted">
+                  Anyone in {union.countryName} can organize this union. Every drive adds{" "}
+                  {union.organizeStrengthGain} strength to the union and the same amount to your own
+                  banked total, which is your vote weight in the leadership contest. Strength decays{" "}
+                  {(UNION_STRENGTH_DECAY_PER_TURN * 100).toFixed(1)}% a turn, so a union nobody
+                  works at loses its power, and so does an organizer who stops showing up.
+                </p>
+
+                <div className="flex flex-wrap gap-4 text-sm">
+                  <div>
+                    <span className="text-muted">Union strength:</span>{" "}
+                    <span className="font-semibold tabular-nums">{Math.round(union.strength)}</span>
+                  </div>
+                  <div>
+                    <span className="text-muted">Organizers:</span>{" "}
+                    <span className="font-semibold tabular-nums">{organizerCount}</span>
+                  </div>
+                  <div>
+                    <span className="text-muted">Your voting power:</span>{" "}
+                    <span className="font-semibold tabular-nums">{Math.round(myVotingPower)}</span>
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <button
+                    type="button"
+                    disabled={actionPending || suspended || cannotAffordOrganize}
+                    onClick={() => runAction("organize")}
+                    className="w-fit rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition-all hover:bg-primary/90 active:scale-95 disabled:opacity-50"
+                  >
+                    Run organize drive
+                  </button>
+                  <span className="text-[11px] text-muted">
+                    Costs {organizeActionCost} action points
+                    {myActions != null && ` · you have ${myActions}`}
+                  </span>
+                  {cannotAffordOrganize && (
+                    <span className="text-[11px] font-medium text-error">
+                      Not enough action points. They refresh each turn.
+                    </span>
+                  )}
+                </div>
+
+                <ActionResult result={organizeResult} />
+              </section>
+            )}
+
+            {/* Leader Actions */}
+            {isLeader && (
+              <section className="space-y-4 rounded-xl border border-card-border bg-card p-5">
+                <div className="flex items-center gap-3">
+                  <h2 className="text-sm font-semibold text-muted">Leader actions</h2>
+                  <div className="h-px flex-1 bg-card-border" />
+                </div>
+
+                {/* The recruitment drive that used to live here is retired. It only
+              ever raised `membershipPressure`, which no longer exists: members
+              are now counted from the workers in the sectors this union
+              actually represents. Growing the union means organizing a
+              specific sector, which happens on that sector's own page. */}
+                <p className="text-[11px] text-muted">
+                  To grow this union, open the{" "}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSectorStatusFilter("");
+                      setTab("sectors");
+                    }}
+                    className="font-medium text-primary hover:underline"
+                  >
+                    Sectors tab
+                  </button>{" "}
+                  and organize a local, or tick several and run them together. A drive costs
+                  treasury plus one action and raises that shop&apos;s unionization. Cost scales
+                  with the shop&apos;s size, or with how unionized it already is if you hold it. If
+                  a rival holds it, it is a raid.
+                </p>
+
+                {/* Public wage claim: a pressure signal, not a contract. It shows up
+              as the per-local gap column on the Sectors tab and as a callout on the CEO's
+              own wage panel, and does nothing else. */}
+                <div className="space-y-2 border-t border-card-border pt-3">
+                  <p className="text-body-sm font-medium text-muted">Public wage claim</p>
+                  <p className="text-xs text-muted">
+                    The wage level this union says the industry should pay. Employers see it on
+                    their own wage panel and every local&apos;s shortfall is listed on the Sectors
+                    tab. It binds nobody: to make an employer actually pay it, open a bargaining
+                    campaign.
+                  </p>
+                  <div className="flex flex-wrap items-end gap-2">
+                    <label className="flex flex-col gap-1">
+                      <span className="text-body-sm font-medium text-muted">Wage level</span>
+                      <input
+                        type="number"
+                        step={0.05}
+                        min={WAGE_LEVEL_MIN}
+                        max={WAGE_LEVEL_MAX}
+                        value={wageDemandDraft}
+                        onChange={(e) => setWageDemandDraft(e.target.value)}
+                        placeholder="1.15"
+                        className="w-32 rounded-lg border border-card-border bg-background px-3 py-2 text-xs"
+                      />
+                    </label>
+                    <button
+                      type="button"
+                      disabled={
+                        actionPending ||
+                        suspended ||
+                        !Number.isFinite(Number(wageDemandDraft)) ||
+                        wageDemandDraft.trim() === ""
+                      }
+                      onClick={() =>
+                        runAction("demand-wage", { demandedWageLevel: Number(wageDemandDraft) })
+                      }
+                      className="rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-white transition-all hover:bg-primary/90 active:scale-95 disabled:opacity-50"
+                    >
+                      Set demand
+                    </button>
+                    {union.demandedWageLevel != null && (
+                      <button
+                        type="button"
+                        disabled={actionPending || suspended}
+                        onClick={() => runAction("demand-wage", { demandedWageLevel: null })}
+                        className="rounded-lg border border-card-border px-3 py-2 text-xs font-medium transition-colors hover:bg-card-elevated disabled:opacity-50"
+                      >
+                        Withdraw demand
+                      </button>
+                    )}
+                  </div>
+                  {wageDemandOutOfRange && (
+                    <p className="text-xs font-medium text-warning">
+                      Claims are accepted between {WAGE_LEVEL_MIN.toFixed(2)}× and{" "}
+                      {WAGE_LEVEL_MAX.toFixed(2)}×.
+                    </p>
+                  )}
+                  <p className="text-xs text-muted">
+                    {union.demandedWageLevel == null
+                      ? "This union has no standing wage claim."
+                      : `Standing claim: ${union.demandedWageLevel.toFixed(2)}× the regional median.`}
+                  </p>
+                </div>
+
+                <ActionResult result={actionResult} />
+
+                <div className="border-t border-card-border pt-3">
+                  <button
+                    type="button"
+                    disabled={actionPending || suspended}
+                    onClick={() => {
+                      if (
+                        window.confirm(
+                          "Resign leadership of this union? Treasury and membership are preserved."
+                        )
+                      ) {
+                        runAction("resign");
+                      }
+                    }}
+                    className="text-xs font-medium text-muted transition-colors hover:text-error disabled:opacity-50"
+                  >
+                    Resign leadership
+                  </button>
+                </div>
+              </section>
+            )}
+
+            <UnionAtAGlance
+              unionId={union.id}
+              sectors={sectors}
+              demandedWageLevel={union.demandedWageLevel}
+              onOpenSectors={(status) => {
+                setSectorStatusFilter(status);
+                setTab("sectors");
+              }}
+            />
+          </div>
+        )}
+
+        {tab === "finances" && (
+          <>
+            {/* Dues, services and political contributions: the head's levers over
+          the union's finances and approval. Everyone sees the current values;
+          only the head can move them. */}
+            <section className="space-y-5 rounded-xl border border-card-border bg-card p-5">
+              <div className="flex items-center gap-3">
+                <h2 className="text-sm font-semibold text-muted">Dues, services &amp; politics</h2>
+                <div className="h-px flex-1 bg-card-border" />
+              </div>
+              <UnionDuesPanel
+                unionId={id}
+                countryId={union.countryId}
+                members={members}
+                duesPerWorkerAnnual={duesPerWorkerAnnual}
+                annualWage={annualWage}
+                activeServices={activeServices}
+                politicalContributionPct={politicalContributionPct}
+                isHead={isLeader}
+                suspended={suspended}
+                onSaved={loadData}
+              />
+              <UnionFundTreasuryPanel
+                unionId={id}
+                countryId={union.countryId}
+                treasury={union.treasury}
+                isHead={isLeader}
+                suspended={suspended}
+                onFunded={loadData}
+              />
+              <UnionServicesPanel
+                unionId={id}
+                countryId={union.countryId}
+                members={members}
+                annualWage={annualWage}
+                treasury={union.treasury}
+                duesPerWorkerAnnual={duesPerWorkerAnnual}
+                activeServices={activeServices}
+                paidServices={union.paidServices ?? []}
+                approval={union.approval}
+                politicalContributionPct={politicalContributionPct}
+                isHead={isLeader}
+                suspended={suspended}
+                onSaved={loadData}
+              />
+              <UnionPoliticalContributionsPanel
+                unionId={id}
+                countryId={union.countryId}
+                members={members}
+                duesPerWorkerAnnual={duesPerWorkerAnnual}
+                annualWage={annualWage}
+                activeServices={activeServices}
+                politicalContributionPct={politicalContributionPct}
+                myInfluencePct={
+                  organizers.find((organizer) => organizer.characterId === myCharacterId)
+                    ?.influencePct ?? 0
+                }
+                isHead={isLeader}
+                suspended={suspended}
+                onSaved={loadData}
+              />
+            </section>
+          </>
+        )}
 
         {tab === "leadership" && (
           <div className="space-y-6 rounded-xl border border-card-border bg-card p-5">
@@ -931,146 +1034,25 @@ export default function UnionDashboardPage({ params }: PageProps) {
           </div>
         )}
 
-        {tab === "sectors" &&
-          (sectors.length === 0 ? (
-            <div className="rounded-xl border border-card-border bg-card p-6">
-              <EmptyState
-                title="No sectors in scope"
-                description="No corp-owned sector of this type exists in this country yet."
-              />
-            </div>
-          ) : (
-            <>
-              <div className="overflow-x-auto rounded-xl border border-card-border bg-card">
-                <table className="w-full min-w-[760px] text-sm">
-                  <thead>
-                    <tr className="border-b border-card-border bg-card-elevated text-left text-sm font-semibold text-foreground">
-                      <th className="px-4 py-3 font-medium">Corporation</th>
-                      <th className="px-4 py-3 font-medium">State</th>
-                      <th className="px-4 py-3 text-right font-medium">Workers</th>
-                      <th className="px-4 py-3 text-right font-medium">Wage</th>
-                      <th className="px-4 py-3 text-right font-medium">Demand gap</th>
-                      <th className="px-4 py-3 text-right font-medium">Unionization</th>
-                      <th className="px-4 py-3 font-medium">Status</th>
-                      {isLeader && !suspended && (
-                        <th className="px-4 py-3 font-medium">Organize</th>
-                      )}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {sectors.map((s) => (
-                      <tr
-                        key={s.sectorId}
-                        className="border-b border-card-border transition-colors last:border-0 hover:bg-card-elevated/60"
-                      >
-                        <td className="px-4 py-3">
-                          <Link
-                            href={`/corporation/${s.corporationId}/sector/${s.sectorId}`}
-                            className="font-medium text-primary hover:underline"
-                          >
-                            {s.corporationName}
-                          </Link>
-                        </td>
-                        <td className="px-4 py-3 text-muted">{s.stateId}</td>
-                        <td className="px-4 py-3 text-right font-mono tabular-nums">
-                          {(() => {
-                            const unionized = unionMembers([
-                              { workers: s.workers, unionization: s.unionization },
-                            ]);
-                            return (
-                              <>
-                                <div>{unionized.toLocaleString("en-US")}</div>
-                                <div className="text-[10px] text-muted">
-                                  of {(s.workers ?? 0).toLocaleString("en-US")}
-                                </div>
-                              </>
-                            );
-                          })()}
-                        </td>
-                        <td className="px-4 py-3 text-right font-mono tabular-nums">
-                          {s.wageLevel.toFixed(2)}×
-                        </td>
-                        <td className="px-4 py-3 text-right font-mono tabular-nums">
-                          {s.wageGap == null ? (
-                            <span className="text-muted">No demand</span>
-                          ) : s.wageGap <= 0 ? (
-                            <span className="text-success">Met</span>
-                          ) : (
-                            <span className="text-warning">{s.wageGap.toFixed(2)}× short</span>
-                          )}
-                        </td>
-                        <td className="px-4 py-3 text-right">
-                          <div className="flex items-center justify-end gap-2">
-                            <div className="hidden h-1.5 w-16 overflow-hidden rounded-full bg-card-elevated sm:block">
-                              <div
-                                className="h-full rounded-full bg-primary"
-                                style={{ width: `${Math.min(100, s.unionization)}%` }}
-                              />
-                            </div>
-                            <span className="font-mono tabular-nums">
-                              {s.unionization.toFixed(1)}%
-                            </span>
-                          </div>
-                        </td>
-                        <td className="px-4 py-3">
-                          {s.strikeActive || s.strikeBlockReason === "already_striking" ? (
-                            <span className="rounded-md bg-error/15 px-2 py-0.5 text-xs font-medium text-error">
-                              Striking
-                            </span>
-                          ) : s.strikeBlockReason === "underorganized" ? (
-                            <span className="text-xs text-muted">Needs organizing</span>
-                          ) : s.strikeBlockReason === "sector_cooldown" ? (
-                            <span className="text-xs text-warning">
-                              Cooldown to turn {s.strikeCooldownUntilTurn}
-                            </span>
-                          ) : s.strikeBlockReason === "collective_agreement" ? (
-                            <span className="text-xs font-medium text-info">Under agreement</span>
-                          ) : (
-                            <span className="text-xs font-medium text-success">Strike ready</span>
-                          )}
-                        </td>
-                        {isLeader && !suspended && (
-                          <td className="px-4 py-3">
-                            {(() => {
-                              const rowCost = organizeSectorTreasuryCost({
-                                workers: s.workers,
-                                unionization: s.unionization,
-                                isOwnSector: s.representingUnionId === union.id,
-                              });
-                              const cannotAfford =
-                                cannotAffordSectorOrganizeAp || union.treasury < rowCost;
-                              return (
-                                <>
-                                  <button
-                                    type="button"
-                                    disabled={actionPending || cannotAfford}
-                                    onClick={() =>
-                                      runAction("organize-sector", { sectorId: s.sectorId })
-                                    }
-                                    className="rounded-lg bg-primary px-2.5 py-1 text-xs font-semibold text-white transition-colors hover:bg-primary/90 disabled:opacity-50"
-                                  >
-                                    {s.representingUnionId && s.representingUnionId !== union.id
-                                      ? "Raid"
-                                      : "Organize"}
-                                  </button>
-                                  <div className="mt-0.5 text-[10px] tabular-nums text-muted">
-                                    {organizeSectorActionCost} AP ·{" "}
-                                    {rowCost.toLocaleString("en-US")} · +
-                                    {organizeSectorGain.toFixed(1)}%
-                                  </div>
-                                </>
-                              );
-                            })()}
-                          </td>
-                        )}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              {isLeader && !suspended && <ActionResult result={actionResult} />}
-            </>
-          ))}
+        {tab === "sectors" && (
+          <>
+            <UnionSectorsTable
+              key={sectorStatusFilter}
+              unionId={union.id}
+              sectors={sectors}
+              treasury={union.treasury}
+              myActions={myActions}
+              canOrganize={isLeader && !suspended}
+              organizeActionCost={organizeSectorActionCost}
+              organizeGain={organizeSectorGain}
+              actionPending={actionPending}
+              initialStatus={sectorStatusFilter}
+              onOrganize={(sectorId) => runAction("organize-sector", { sectorId })}
+              onOrganizeBatch={runOrganizeBatch}
+            />
+            {isLeader && !suspended && <ActionResult result={actionResult} />}
+          </>
+        )}
 
         {tab === "bargaining" && <UnionPensionSchemePanel scheme={pensionScheme} />}
 

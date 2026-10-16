@@ -49,7 +49,7 @@ Each turn you receive:
 - **Party bonus**: a variable share of your party's action pool, allocated by Party Influence × platform-alignment closeness.
 - **Starting grant**: a one-time 25 actions at character creation.
 
-Office action pools (ministerial, vice president, justice, gubernatorial) are separate from these actions. Once per turn per pool you can spend 10 actions to buy 1 office action, up to that pool's cap.
+Office action pools (ministerial, vice president, justice, gubernatorial) are separate from these actions and refill through the day: ministerial actions return one every 6 turns up to a cap of 4, and vice president and Supreme Court actions one every 12 turns up to 2. Once per turn per pool you can spend 10 actions to buy 1 office action, up to that pool's cap.
 
 Actions accumulate up to a **cap of 200**. Above 100 you pay a **−4 hoarding penalty per turn** applied before the refresh. For characters with only the base 4 actions, this creates a soft cap around **100-104**; office holders with higher refresh still grow toward the hard cap, just slowed by 4 per turn.
 

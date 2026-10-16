@@ -4,8 +4,10 @@ import {
   FUNDRAISING_INCOME,
   GENERAL_PHASE_UPGRADE_MULTIPLIER,
   getCampaignFamilyScalar,
+  getEffectiveBranchCost,
   getEffectiveUpgradeCost,
   getMaintenanceCost,
+  getTreeMaintenanceCost,
   getUpgradeCost,
 } from "./upgradeCosts";
 import { calculateCampaignIncome } from "./income";
@@ -149,5 +151,27 @@ describe("getMaintenanceCost with scalar", () => {
   it("returns 0 for level 0 regardless of family", () => {
     expect(getMaintenanceCost("groundGame", 0)).toBe(0);
     expect(getMaintenanceCost("groundGame", 0, "stateSenate")).toBe(0);
+  });
+});
+
+describe("ground game and media upkeep scaling", () => {
+  it("doubles tree upkeep for ground game and media only", () => {
+    const maxA = { starter: true, a: 3, b: 0, c: 0 };
+    expect(getTreeMaintenanceCost("groundGame", maxA, "president")).toBe((5_500 + 102_000) * 2);
+    expect(getTreeMaintenanceCost("mediaSpending", maxA, "president")).toBe((6_000 + 118_000) * 2);
+    expect(
+      getTreeMaintenanceCost("fundraising", { starter: true, a: 0, b: 0, c: 3 }, "president")
+    ).toBe(68_000);
+  });
+
+  it("charges 1.5x for the tier-3 purchase on those levers only", () => {
+    expect(getEffectiveBranchCost("groundGame", "a", 2, "president", false)?.funds).toBe(240_000);
+    expect(getEffectiveBranchCost("groundGame", "a", 3, "president", false)?.funds).toBe(750_000);
+    expect(getEffectiveBranchCost("mediaSpending", "a", 3, "president", false)?.funds).toBe(
+      900_000
+    );
+    expect(getEffectiveBranchCost("fundraising", "a", 3, "president", false)?.funds).toBe(
+      1_500_000
+    );
   });
 });

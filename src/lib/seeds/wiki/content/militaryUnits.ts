@@ -215,7 +215,7 @@ Disbanding is **free** and instant. The unit's surviving personnel go back into 
 
 The defence seat publishes tenders through the Cabinet Office's **Government Contracts** tab or the country's contract board. Corporations bid eligible domestic plants and a price; after bidding closes, the government selects a winner with a public reason. The accepted bid becomes an active order. **Military > Arsenal** retains existing orders and their delivery and termination controls.
 
-Publishing a tender reserves its maximum value against the defence appropriation. Award converts that hold to the winning bid's actual price and releases the difference. The server refuses an order that exceeds the **uncommitted** balance. Deliveries draw down that reservation, and terminating or completing an order releases its remaining commitment after any required break fee. Recruiting and upgrading also use the uncommitted balance, so they cannot spend money already promised to a supplier.
+Publishing a tender reserves its maximum value against the defence appropriation. A maximum price per lot below every compatible production line's minimum price is refused before any funds are reserved, and the minimum is shown in national budget units. Award converts that hold to the winning bid's actual price and releases the difference. The server refuses an order that exceeds the **uncommitted** balance. Deliveries draw down that reservation, and terminating or completing an order releases its remaining commitment after any required break fee. Recruiting and upgrading also use the uncommitted balance, so they cannot spend money already promised to a supplier.
 
 The minister publishes:
 

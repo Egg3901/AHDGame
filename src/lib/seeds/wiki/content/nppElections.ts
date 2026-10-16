@@ -58,11 +58,23 @@ In generals, NPPs also face a vote-weight reduction when a player is in the race
 
 NPPs do not automatically drop out of primaries based on an appeal threshold. There is no low-appeal dropout rule.
 
+In worlds on autonomy V6, an NPP-only primary does consolidate late: a candidate who is clearly behind the party's strongest NPP withdraws rather than splitting the vote. It does not endorse anyone, and primaries with a player in them are never affected. See NPP engine 6 below.
+
 ## The political influence floor
 
 NPPs start with a **minimum Political Influence of 10%**. If a value is missing, it defaults to 10. This means even the weakest NPP always has a baseline of influence in their home state. It's by design: NPPs should be a real presence, not paper candidates.
 
-In contrast, player characters can fall below 10% Political Influence if they neglect their political activities. A player who lets their influence decay below 10% is at a disadvantage against NPPs.
+As of 1.16, newly created player characters also start at 10 Political Influence, the same floor as the NPPs they compete with, so a new player no longer begins below every rival. Player influence can still decay below 10 if it is neglected. Existing characters are unchanged.
+
+## NPP engine 6 (autonomy V6)
+
+In worlds set to autonomy **V6**, computer-run politicians follow a newer engine. New singleplayer and simulation worlds start on V6, and the live multiplayer world runs V6. Other existing worlds keep their chosen level. The engine-6 election behaviours are:
+
+- Parties run their strongest NPPs for their most senior races, and where a party is weak across a region it puts its best people in the local races it can still win.
+- Ambitious incumbents with real standing step up to an open, more senior office in their home region instead of holding the same seat forever.
+- NPP candidates hold rallies in their own race at the same cost and with the same effect as a player rally, at most once every four turns.
+- In a country without players, a presidential primary can draw a challenger from the party's strongest NPPs.
+- Late in an NPP-only primary, a candidate who is clearly behind withdraws rather than splitting the vote. It does not endorse anyone, and primaries with a player in them are never touched.
 
 ## Beating NPPs
 

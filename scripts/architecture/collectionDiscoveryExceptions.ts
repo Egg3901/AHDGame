@@ -83,10 +83,9 @@ export const LEGACY_DYNAMIC_COLLECTION_SITES: readonly LegacyDynamicCollectionSi
     file: "src/lib/admin/resetGameWorld.ts",
     owner: "<anonymous-function>",
     argument: "name",
-    scopeHash: "7b7b88a554a739924d1a306ac65482305d7144db962c8dd50b941b557e08d38d",
+    scopeHash: "5bb243b52a536dec4734a3aa778d6eeb25f29fbeb3765bb3e12ddc8e02f4a792",
     count: 1,
-    reason:
-      "Reviewed stock-tax reset addition: reset still iterates only the explicit runtime manifest. New activation state is reset and imperial pending stock receipts are cleared; no collection destination was added or broadened.",
+    reason: "Reset iterates the explicit runtime manifest.",
   },
   {
     file: "src/lib/admin/seed/indexes/helpers.ts",

@@ -117,6 +117,33 @@ describe("PoliticalStanding table", () => {
     );
   });
 
+  it("lists the sources of national and party influence gains in their tooltips", () => {
+    render(
+      <PoliticalStanding
+        {...baseProps}
+        nationalGainPerTurn="1.34"
+        nationalBreakdown={{ fromStateInfluence: 1.5, fromPosition: 0.5, decay: 0.66 }}
+        partyInfluenceNetGain={2.1}
+        partyInfluenceBreakdown={{
+          fromAlignment: 2.4,
+          fromLeadership: 2,
+          infamyPenalty: 0.5,
+          decay: 1.8,
+        }}
+      />
+    );
+
+    fireEvent.click(within(rowFor("National influence")).getByText("+1.34"));
+    expect(screen.getByText("From state influence")).toBeTruthy();
+    expect(screen.getByText("From your highest position")).toBeTruthy();
+    expect(screen.getByText("Decay (1% of current)")).toBeTruthy();
+
+    fireEvent.click(within(rowFor("Party influence")).getByText("+2.1"));
+    expect(screen.getByText("Policy alignment with the party")).toBeTruthy();
+    expect(screen.getByText("Party leadership roles")).toBeTruthy();
+    expect(screen.getByText("Infamy penalty")).toBeTruthy();
+  });
+
   it("shows the national rank and the leader's score instead of a glow", () => {
     const { container } = render(
       <PoliticalStanding {...baseProps} nationalInfluence={12.6} maxNPI={45.2} nationalRank={3} />

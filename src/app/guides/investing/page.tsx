@@ -104,8 +104,8 @@ export default function InvestingGuidePage() {
             <Callout label="Your wallet is multi-currency.">
               Personal wealth can hold any currency. Campaign funds are locked to your home
               currency. Dividends, bond coupons, and CEO salaries all pay out in the source
-              country&apos;s currency. Set your per-holding income preference on the stock market
-              page to either keep foreign currency or auto-convert it home.
+              country&apos;s currency. When the forex system is on, dividend income is automatically
+              converted to your home currency; there is no per-holding preference.
             </Callout>
           </section>
 
@@ -204,8 +204,8 @@ Floor: $0.01 per share (hard minimum)`}</FormulaBlock>
             <SectionHeader id="dividends">4. Dividends & income</SectionHeader>
             <p className="text-sm text-muted leading-relaxed">
               Dividends are paid every turn to all shareholders. The amount depends on the
-              corporation&apos;s after-tax income and the CEO&apos;s chosen payout rate (0-100%).
-              The CEO can change this rate with a 24-hour cooldown between adjustments.
+              corporation&apos;s after-tax income and the CEO&apos;s chosen payout rate (0-25%). The
+              CEO can change this rate with a 24-hour cooldown between adjustments.
             </p>
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="rounded-xl border border-card-border bg-card p-4 space-y-2">

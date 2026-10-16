@@ -8,7 +8,7 @@ If you have not created yet, stop and do [Create a Character](/wiki/create-a-cha
 
 - Home: Pennsylvania. Sliders: Economic -2, Social -1.
 - Open **Parties** → join Democrats (close to those sliders).
-- Kit: 25 actions, ₳250k, Favorability 50, PI 0, Donor 1.
+- Kit: 25 actions, ₳250k, Favorability 50, PI 10 (new characters start at 10 Political Influence), Donor 1.
 - Target: PA State Senate, primary in about 6 real days.
 
 \`\`\`guide-screenshot
@@ -20,7 +20,7 @@ dashboard
 **Day 1 clicks** (starting 25 actions):
 
 1. Confirm party on your profile.
-2. Campaign ×10 → PI about 10.
+2. Campaign ×10 → PI about 20 (they start at 10).
 3. Build Donor Network (spend the listed cost) → Donor 2.
 4. Run Advertisements once → Favorability ticks up a few points.
 5. Fundraise once.

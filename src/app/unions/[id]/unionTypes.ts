@@ -98,6 +98,7 @@ export interface SectorRow {
   wageGap: number | null;
   unionization: number;
   representingUnionId: string | null;
+  representingUnionName?: string | null;
   strikeActive: boolean;
   strikeCooldownUntilTurn: number | null;
   strikeBlockReason:

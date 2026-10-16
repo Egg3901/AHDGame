@@ -27,7 +27,7 @@ import type { Character, Corporation, IndexFund, ShareOrder, User } from "@/lib/
 import type { ImperialCharacter } from "@/lib/db/types/imperialCharacter";
 import {
   emitSellerFundProceedsRow,
-  reconcileTotalSharesAfterFill,
+  checkTotalSharesAfterFill,
   resolveCharName,
   settleBuyOrderFill,
 } from "@/lib/corporations/commands/shareTrading/fillShareOrderSettlement";
@@ -926,9 +926,8 @@ export async function fillShareOrder(request: Request, { params }: RouteParams) 
     // from the pinned plan names so recovery reproduces them exactly.
     void notifyHostileTakeoverThresholdIfEligible(db, corporation._id);
 
-    // Post-fill invariant: recompute totalShares from live positions and
-    // atomically correct any drift (best-effort, non-fatal).
-    await reconcileTotalSharesAfterFill(db, corporation._id);
+    // Post-fill invariant: report totalShares drift (diagnostic, never writes).
+    await checkTotalSharesAfterFill(db, corporation._id);
 
     // Fill fully committed — route the corp filler's FX spread into the CB
     // system (reserve → traded-corp currency CB; revenue → filler-currency CB).

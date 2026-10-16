@@ -109,6 +109,31 @@ beforeEach(() => {
 });
 
 describe("PrimaryBlendView", () => {
+  it("separates the filed candidate name from party details and keeps endorsement reachable", async () => {
+    stubFetch(() => detailFor("1", "First Filer"));
+    const e = election();
+    e.allCandidates = e.byParty.flatMap((party) => party.candidates);
+    const { container } = render(
+      <PrimaryBlendView election={{ ...e, myCharId: "me" }} wire={[]} />
+    );
+    await waitFor(() =>
+      expect(screen.getAllByRole("button", { name: /Iowa/ }).length).toBeGreaterThan(0)
+    );
+    const field = container.querySelector('[data-field-row="1-a"]');
+    expect(field?.querySelector('[data-field-part="identity"]')?.textContent).not.toContain(
+      "Democratic Party"
+    );
+    expect(field?.querySelector('[data-field-part="metadata"]')?.textContent).toContain(
+      "Democratic Party"
+    );
+    expect(screen.getByRole("link", { name: "First Filer" }).getAttribute("href")).toBe(
+      "/character/ch-1-a"
+    );
+    expect(
+      screen.getByRole("button", { name: "Endorse" }).closest('[data-field-part="action"]')
+    ).not.toBeNull();
+  });
+
   it("fetches the selected party's detail and paints the board from it", async () => {
     const urls = stubFetch(() => detailFor("1", "First Filer"));
     render(<PrimaryBlendView election={election()} wire={[]} />);

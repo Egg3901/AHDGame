@@ -8,7 +8,7 @@ import {
 import { stockSaleTaxReceipt } from "@/lib/corporations/rules/stockTaxReceipt";
 import type { Corporation, IndexFund, ShareOrder } from "@/lib/db/types";
 import type { CurrencyCode } from "@/lib/constants/currencies";
-import { settleBuyOrderFill, reconcileTotalSharesAfterFill } from "./fillShareOrderSettlement";
+import { settleBuyOrderFill, checkTotalSharesAfterFill } from "./fillShareOrderSettlement";
 import {
   beginShareFillAttempt,
   buildShareFillFingerprint,
@@ -221,7 +221,7 @@ export async function fillBestBuyOrderForMarketSell(input: {
     });
     if (settlementError) continue;
 
-    await reconcileTotalSharesAfterFill(db, corporation._id);
+    await checkTotalSharesAfterFill(db, corporation._id);
 
     return {
       filled: true,
