@@ -9,7 +9,7 @@
  * spend the treasury or move the union's approval.
  */
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import UnionPage from "./page";
 
 vi.mock("next/navigation", () => ({
@@ -83,6 +83,8 @@ describe("dues and services controls, head-only gating", () => {
     render(<UnionPage params={PARAMS} />);
 
     await waitFor(() => expect(screen.getByText("United Dockworkers")).toBeTruthy());
+    // The four finance panels live on their own tab since the corp-style layout.
+    fireEvent.click(screen.getByRole("button", { name: "Dues & services" }));
 
     // Read-only dues line, no slider and no save button.
     // The figure carries a currency suffix and spans nested text nodes, so
@@ -109,6 +111,8 @@ describe("dues and services controls, head-only gating", () => {
     render(<UnionPage params={PARAMS} />);
 
     await waitFor(() => expect(screen.getByText("United Dockworkers")).toBeTruthy());
+    // The four finance panels live on their own tab since the corp-style layout.
+    fireEvent.click(screen.getByRole("button", { name: "Dues & services" }));
 
     expect(await screen.findByRole("slider", { name: /percent of member wages/i })).toBeTruthy();
     expect(screen.getByRole("button", { name: /set dues/i })).toBeTruthy();
