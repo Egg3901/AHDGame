@@ -115,7 +115,7 @@ export function buildCommodityMarketScope(
     const countryStateIds = Object.keys(stateCountryMap).filter(
       (id) => stateCountry && stateCountryMap[id] === stateCountry
     );
-    const allStateImports = allocateStateImports(data, stateCountry, countryStateIds);
+    const allStateImports = allocateStateImports(data, stateCountry ?? undefined, countryStateIds);
     const activeStateImports = activeState in allStateImports ? allStateImports[activeState] : null;
 
     return {

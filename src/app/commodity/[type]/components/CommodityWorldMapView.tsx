@@ -63,7 +63,13 @@ interface CommodityWorldMapViewProps {
    */
   reachableBooks?: Record<
     string,
-    { supply: number; demand: number; blockedSupply: number; untradedSupply: number }
+    {
+      supply: number;
+      demand: number;
+      blockedSupply: number;
+      untradedSupply: number;
+      imports?: number;
+    }
   >;
   stateCountryMap: Record<string, string>;
   capacityByState?: Record<string, number>;

@@ -120,6 +120,7 @@ export default function CommodityCountryStatCard({
           unit={unit}
           data={data}
           mode={mode}
+          balance={balance}
           balanceLabel={balanceLabel}
           balanceColor={balanceColor}
           hasRegionMap={hasRegionMap}
@@ -162,6 +163,7 @@ export default function CommodityCountryStatCard({
               unit={unit}
               data={data}
               mode={mode}
+              balance={balance}
               balanceLabel={balanceLabel}
               balanceColor={balanceColor}
               hasRegionMap={hasRegionMap}
@@ -187,6 +189,7 @@ function CardContent({
   unit,
   data,
   mode,
+  balance,
   balanceLabel,
   balanceColor,
   hasRegionMap,
@@ -204,6 +207,7 @@ function CardContent({
   unit: string;
   data: CountryCommodityData;
   mode: MapMode;
+  balance: number;
   balanceLabel: string;
   balanceColor: string;
   hasRegionMap: boolean;
