@@ -280,7 +280,7 @@ export async function getRegionGovernmentApproval(
 ): Promise<RegionApprovalData | null> {
   try {
     const db = await getDb();
-    return getRegionalApprovalData(db, countryId, stateId);
+    return await getRegionalApprovalData(db, countryId, stateId);
   } catch {
     return null;
   }

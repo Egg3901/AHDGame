@@ -2,9 +2,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 vi.mock("@/lib/auth", () => ({ getAuthUserWithCharacter: vi.fn() }));
+vi.mock("@/lib/states/approval/getRegionalApprovalData", () => ({
+  getRegionalApprovalData: vi.fn(),
+}));
 
 import { getDb } from "@/lib/mongodb";
-import { getRegionPartyOrg } from "./regionData";
+import { getRegionalApprovalData } from "@/lib/states/approval/getRegionalApprovalData";
+import { getRegionGovernmentApproval, getRegionPartyOrg } from "./regionData";
 
 describe("getRegionPartyOrg", () => {
   beforeEach(() => {
@@ -56,5 +60,28 @@ describe("getRegionPartyOrg", () => {
       isDefunct: { $ne: true },
     });
     expect(result.map((row) => row.partyId)).toEqual(["1"]);
+  });
+});
+
+describe("getRegionGovernmentApproval", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("returns null when optional approval data rejects asynchronously", async () => {
+    vi.mocked(getDb).mockResolvedValue({} as never);
+    vi.mocked(getRegionalApprovalData).mockRejectedValueOnce(new Error("Approval unavailable"));
+
+    await expect(getRegionGovernmentApproval("SCO", "UK")).resolves.toBeNull();
+  });
+
+  it("preserves approval data and forwards the database, country and state", async () => {
+    const db = {};
+    const approvalData = { approval: 55, baseApproval: 50, modifiers: [] };
+    vi.mocked(getDb).mockResolvedValue(db as never);
+    vi.mocked(getRegionalApprovalData).mockResolvedValueOnce(approvalData);
+
+    await expect(getRegionGovernmentApproval("SCO", "UK")).resolves.toBe(approvalData);
+    expect(getRegionalApprovalData).toHaveBeenCalledExactlyOnceWith(db, "UK", "SCO");
   });
 });
