@@ -533,6 +533,8 @@ describe("processForexTurn", () => {
       chairInfamy,
       lastInfamyChargedAtTurn,
       hardPeg,
+      fx = {},
+      bank = {},
     }: {
       rate: number;
       floor: number;
@@ -544,6 +546,8 @@ describe("processForexTurn", () => {
       chairInfamy?: number;
       lastInfamyChargedAtTurn?: number;
       hardPeg?: number;
+      fx?: Record<string, unknown>;
+      bank?: Record<string, unknown>;
     }) {
       const { ObjectId } = await import("mongodb");
       const chairId = chairCharacterId === undefined ? new ObjectId() : chairCharacterId;
@@ -555,6 +559,7 @@ describe("processForexTurn", () => {
           chairCharacterId: chairId,
           chairCharacterName: chairId ? "Test Chair" : null,
           chairInfamy: chairInfamy ?? 0,
+          ...bank,
         }),
         makeCentralBank("UK"),
         makeCentralBank("JP"),
@@ -583,6 +588,7 @@ describe("processForexTurn", () => {
               ...(lastInfamyChargedAtTurn !== undefined ? { lastInfamyChargedAtTurn } : {}),
               recentInterventions: [],
             },
+            ...fx,
           },
           makeExchangeRate("UK", "GBP", 0.75, 0.75),
           makeExchangeRate("JP", "JPY", 106.0, 106.0),
@@ -617,6 +623,213 @@ describe("processForexTurn", () => {
         (call: Array<{ _id: string }>) => call[0]._id === "US"
       );
     }
+
+    it.each([true, false])("defends the declared target with stale policy=%s", async (stale) => {
+      await setupIntervention({
+        rate: 1,
+        floor: 0.9,
+        ceiling: 1.1,
+        forexRevenue: 0,
+        reserveBalance: 0,
+        spreadFeeReserveBalances: { GBP: 750_000 },
+        fx: { fxRegime: "peg", pegTarget: 0.5, ...(stale ? {} : { interventionPolicy: null }) },
+      });
+      await processForexTurn(db as unknown as Db, 50);
+      const policy = usUpdateCall()![1].$set.interventionPolicy;
+      expect(policy).toMatchObject({ floor: 0.5, ceiling: 0.5 });
+      expect(policy.recentInterventions).toHaveLength(1);
+      expect(policy.recentInterventions[0].direction).toBe("buy");
+      if (!stale) expect(policy.setByCharacterId).toBeNull();
+      expect(usBankUpdateCalls().some((call) => call[1].$inc)).toBe(true);
+    });
+
+    it("keeps an exhausted peg and deduplicates an ongoing failure while normalizing stale bounds", async () => {
+      await setupIntervention({
+        rate: 1,
+        floor: 0.9,
+        ceiling: 1.1,
+        forexRevenue: 0,
+        reserveBalance: 0,
+        lastInfamyChargedAtTurn: 49,
+        fx: { fxRegime: "peg", pegTarget: 0.5 },
+      });
+      await processForexTurn(db as unknown as Db, 50);
+      expect(usUpdateCall()![1].$set.interventionPolicy).toMatchObject({
+        floor: 0.5,
+        ceiling: 0.5,
+        lastInfamyChargedAtTurn: 49,
+        recentInterventions: [],
+      });
+      expect(usBankUpdateCalls()).toHaveLength(0);
+    });
+
+    it.each([1, 1_000_000])(
+      "funded sell defence preserves floating guardrails and never adds a second drift (%s reserves)",
+      async (reserves) => {
+        const random = vi.spyOn(Math, "random").mockReturnValue(0.5);
+        try {
+          await setupIntervention({
+            rate: 1.7,
+            floor: 1.6,
+            ceiling: 1.6,
+            forexRevenue: 0,
+            reserveBalance: reserves,
+            bank: { primeRate: 100 },
+            fx: {
+              fxRegime: "peg",
+              pegTarget: 1.6,
+              monetaryRegime: "floating",
+              cyclePressureRegime: "neutral",
+              cyclePressureUntilTurn: 9999,
+            },
+          });
+          await processForexTurn(db as unknown as Db, 50);
+          const defended = usUpdateCall()![1].$set.rate;
+          const record = usUpdateCall()![1].$set.interventionPolicy.recentInterventions[0];
+          expect(record.direction).toBe("sell");
+          expect(defended).toBeGreaterThan(1.5);
+          // Same world without defence: compare against the actual unassisted hourly step.
+          db.collectionMocks.exchangeRates.updateOne.mockClear();
+          await setupIntervention({
+            rate: 1.7,
+            floor: 1.6,
+            ceiling: 1.6,
+            forexRevenue: 0,
+            reserveBalance: 0,
+            bank: { primeRate: 100 },
+            fx: {
+              interventionPolicy: null,
+              monetaryRegime: "floating",
+              cyclePressureRegime: "neutral",
+              cyclePressureUntilTurn: 9999,
+            },
+          });
+          await processForexTurn(db as unknown as Db, 50);
+          expect(defended).toBeGreaterThanOrEqual(usUpdateCall()![1].$set.rate);
+        } finally {
+          random.mockRestore();
+        }
+      }
+    );
+    it.each(["buy", "sell"] as const)(
+      "conserves funded %s peg defence and obeys the existing pressure cap",
+      async (direction) => {
+        const random = vi.spyOn(Math, "random").mockReturnValue(0.5);
+        const rate = direction === "buy" ? 1.15 : 0.9;
+        const target = direction === "buy" ? 1.05 : 0.95;
+        const baseFx = { cyclePressureRegime: "neutral", cyclePressureUntilTurn: 9999 };
+        try {
+          await setupIntervention({
+            rate,
+            floor: target,
+            ceiling: target,
+            forexRevenue: 0,
+            reserveBalance: direction === "sell" ? 50_000 : 0,
+            spreadFeeReserveBalances: direction === "buy" ? { GBP: 750_000 } : {},
+            fx: { ...baseFx, fxRegime: "peg", pegTarget: target, fxRegimeSetAtTurn: 49 },
+          });
+          await processForexTurn(db as unknown as Db, 50);
+          const defended = usUpdateCall()![1].$set.rate;
+          const record = usUpdateCall()![1].$set.interventionPolicy.recentInterventions[0];
+          const inc = usBankUpdateCalls().find((call) => call[1].$inc)![1].$inc;
+          expect(record.direction).toBe(direction);
+          expect(record.turn).toBe(50);
+          expect(usBankUpdateCalls().filter((call) => call[1].$inc)).toHaveLength(1);
+          db.collectionMocks.exchangeRates.updateOne.mockClear();
+          await setupIntervention({
+            rate,
+            floor: target,
+            ceiling: target,
+            forexRevenue: 0,
+            reserveBalance: 0,
+            fx: { ...baseFx, interventionPolicy: null },
+          });
+          await processForexTurn(db as unknown as Db, 50);
+          const unassisted = usUpdateCall()![1].$set.rate;
+          expect(Math.abs(defended / unassisted - 1)).toBeLessThanOrEqual(0.010000001);
+          if (direction === "buy") {
+            expect(defended).toBeLessThan(unassisted);
+            expect(-inc["spreadFeeReserveBalances.GBP"] / 0.75).toBeCloseTo(
+              inc["spreadFeeReserveBalances.USD"] / unassisted
+            );
+            expect(-inc["spreadFeeReserveBalances.GBP"]).toBeLessThanOrEqual(750_000);
+          } else {
+            expect(defended).toBeGreaterThan(unassisted);
+            expect(-inc.reserveBalance / unassisted).toBeCloseTo(
+              inc["spreadFeeReserveBalances.GBP"] / 0.75
+            );
+            expect(-inc.reserveBalance).toBeLessThanOrEqual(50_000);
+          }
+        } finally {
+          random.mockRestore();
+        }
+      }
+    );
+
+    it("keeps an exhausted declared peg across turns and charges infamy only once", async () => {
+      await setupIntervention({
+        rate: 1,
+        floor: 0.9,
+        ceiling: 1.1,
+        forexRevenue: 0,
+        reserveBalance: 0,
+        fx: { fxRegime: "peg", pegTarget: 0.5, interventionPolicy: null },
+      });
+      await processForexTurn(db as unknown as Db, 50);
+      const first = usUpdateCall()![1].$set.interventionPolicy;
+      expect(first.lastInfamyChargedAtTurn).toBe(50);
+      expect(first.recentInterventions).toEqual([]);
+      expect(usBankUpdateCalls()[0][1].$set.chairInfamy).toBe(15);
+      expect(usBankUpdateCalls()[0][1].$inc).toBeUndefined();
+      db.collectionMocks.exchangeRates.updateOne.mockClear();
+      db.collectionMocks.centralBanks.updateOne.mockClear();
+      await setupIntervention({
+        rate: 1,
+        floor: 0.9,
+        ceiling: 1.1,
+        forexRevenue: 0,
+        reserveBalance: 0,
+        fx: { fxRegime: "peg", pegTarget: 0.5, interventionPolicy: first },
+      });
+      await processForexTurn(db as unknown as Db, 51);
+      expect(usUpdateCall()![1].$set.interventionPolicy).toEqual(first);
+      expect(usUpdateCall()![1].$set).not.toHaveProperty("fxRegime");
+      expect(usBankUpdateCalls()).toHaveLength(0);
+    });
+
+    it("tiny funded defence does not reroll the background noise", async () => {
+      const random = vi.spyOn(Math, "random").mockReturnValue(0.25).mockReturnValueOnce(0.75);
+      const fx = { cyclePressureRegime: "neutral", cyclePressureUntilTurn: 9999 };
+      try {
+        await setupIntervention({
+          rate: 1.15,
+          floor: 1,
+          ceiling: 1,
+          forexRevenue: 0,
+          reserveBalance: 0,
+          spreadFeeReserveBalances: { GBP: 0.000001 },
+          fx: { ...fx, fxRegime: "peg", pegTarget: 1 },
+        });
+        await processForexTurn(db as unknown as Db, 50);
+        const defended = usUpdateCall()![1].$set.rate;
+        db.collectionMocks.exchangeRates.updateOne.mockClear();
+        random.mockReturnValue(0.25).mockReturnValueOnce(0.75);
+        await setupIntervention({
+          rate: 1.15,
+          floor: 1,
+          ceiling: 1,
+          forexRevenue: 0,
+          reserveBalance: 0,
+          fx: { ...fx, interventionPolicy: null },
+        });
+        await processForexTurn(db as unknown as Db, 50);
+        const unassisted = usUpdateCall()![1].$set.rate;
+        expect(defended).toBeLessThan(unassisted);
+        expect(unassisted - defended).toBeLessThan(1e-8);
+      } finally {
+        random.mockRestore();
+      }
+    });
 
     it("does not spend when rate is inside band", async () => {
       await setupIntervention({
@@ -827,6 +1040,36 @@ describe("processForexTurn", () => {
       // Reserves still drained
       expect(inc["spreadFeeReserveBalances.GBP"]).toBeLessThan(0);
     });
+  });
+
+  it("leaves a command currency pinned without spending reserves on a declared peg", async () => {
+    db.collection("gameConfig").findOne.mockResolvedValue({ commandEconomyEnabled: true });
+    db.collectionMocks.centralBanks.find.mockReturnValue({
+      toArray: async () => [
+        makeCentralBank("RU", {
+          forexRevenue: 1_000_000,
+          reserveBalance: 1_000_000,
+          spreadFeeReserveBalances: { GBP: 750_000 },
+        }),
+      ],
+    });
+    db.collectionMocks.exchangeRates.find.mockReturnValue({
+      toArray: async () => [
+        {
+          ...makeExchangeRate("RU", "RUB", 1.7, 1),
+          fxRegime: "peg",
+          pegTarget: 0.5,
+        },
+      ],
+    });
+    await processForexTurn(db as unknown as Db, 50, "1953-default", 1953);
+    const set = db.collectionMocks.exchangeRates.updateOne.mock.calls.find(
+      ([f]) => f._id === "RU"
+    )![1].$set;
+    expect(set.rate).toBe(1);
+    expect(set.hardPeg).toBe(1);
+    expect(set.interventionPolicy.recentInterventions).toEqual([]);
+    expect(db.collectionMocks.centralBanks.updateOne).not.toHaveBeenCalled();
   });
 
   it("honors hardPeg and skips macro drift for that currency", async () => {

@@ -77,3 +77,23 @@ describe("computeInterventionPressure", () => {
     expect(r.direction).toBe("none");
   });
 });
+
+it("treats a peg as a funded point band with no spend at the exact target", () => {
+  const peg = band(1, 1);
+  expect(isInBand(1, peg)).toBe(true);
+  expect(computeInterventionPressure(1, peg, 10)).toEqual({
+    direction: "none",
+    reserveCost: 0,
+    syntheticVolume: 0,
+  });
+  expect(computeInterventionPressure(1.1, peg, 10)).toEqual({
+    direction: "buy",
+    reserveCost: 10,
+    syntheticVolume: 10,
+  });
+  expect(computeInterventionPressure(0.9, peg, 10)).toEqual({
+    direction: "sell",
+    reserveCost: 10,
+    syntheticVolume: -10,
+  });
+});

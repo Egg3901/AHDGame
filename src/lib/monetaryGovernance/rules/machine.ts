@@ -753,7 +753,11 @@ function handleSetMotion(
     }
     const execution = committeeRateExecutionRefusal(state, delta, clock.turn);
     if (execution) {
-      return refuse(execution, "The committee cannot move the rate by that much right now.");
+      return refuse(
+        execution,
+        (execution === "fx-committed" ? rateChangeRefusalFor(state.fxCommitment) : null) ??
+          "The committee cannot move the rate by that much right now."
+      );
     }
   }
   if (meeting.motion === command.motion && Math.abs(meeting.proposedDelta - delta) < EPSILON) {
