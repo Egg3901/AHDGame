@@ -15,6 +15,7 @@ import type { buildCorporationLookups } from "./buildLookups";
 import { buildManufacturedSectorOutput } from "@/lib/products/rules/manufacturingRules";
 import { eraScaledBasePrices } from "@/lib/constants/commodities";
 import type { MediaProductProject } from "@/lib/products/mediaProduct";
+import { computeSupplyAgreementBuyerDemand } from "@/lib/corporations/groups/rules/inputDemand";
 
 type Lookups = Awaited<ReturnType<typeof buildCorporationLookups>>;
 
@@ -91,6 +92,108 @@ function makeSectorWorld() {
 }
 
 describe("runClearingPrePass with clearing enabled", () => {
+  it.each([221, 222, 233])(
+    "keeps hardware input relief on its existing basis at turn %s",
+    (turn) => {
+      const { sector, lookups } = makeSectorWorld();
+      Object.assign(sector, {
+        sectorType: "technology",
+        strategyId: "hardware",
+        capitalStock: 100,
+      });
+      Object.assign(lookups, { preset: "1991-default", hardwareInputReliefStartTurn: 221 });
+      const result = runClearingPrePass(
+        makeInput({
+          lookups,
+          turn,
+          market: { clearingEnabled: true, plantsEnabled: true } as MarketContext,
+          supplyAgreementsEnabled: true,
+          settleableAgreements: [],
+        })
+      );
+      const expected = computeSupplyAgreementBuyerDemand({
+        preset: "1991-default",
+        hardwareInputReliefStartTurn: 221,
+        sectors: [
+          {
+            ...sector,
+            sectorType: "technology",
+            revenueAnchor: sector.revenue,
+            capacityUnits: 100,
+          },
+        ],
+        currentTurn: turn,
+        unitScale: 1,
+        plantsEnabled: true,
+      });
+      expect(result.buyerDemandByCorpCommodity).toEqual(expected);
+    }
+  );
+
+  it.each([
+    { sectorType: "manufacturing", industryModel: "vehicles", commodity: "steel" },
+    { sectorType: "media", mediaDiscriminator: "entertainment", commodity: "energy" },
+  ] as const)("reserves the actual $sectorType model's $commodity demand", (identity) => {
+    const { sector, lookups } = makeSectorWorld();
+    Object.assign(sector, identity, { capitalStock: 100 });
+    const result = runClearingPrePass(
+      makeInput({
+        lookups,
+        market: { clearingEnabled: true, plantsEnabled: true } as MarketContext,
+        supplyAgreementsEnabled: true,
+        settleableAgreements: [
+          {
+            supplierCorpId: "supplier1",
+            buyerCorpId: "corp1",
+            commodity: identity.commodity,
+            volumeCap: 1_000_000,
+            pricePremium: 0,
+          },
+        ],
+      })
+    );
+    const expected = computeSupplyAgreementBuyerDemand({
+      sectors: [{ ...sector, ...identity, revenueAnchor: sector.revenue, capacityUnits: 100 }],
+      currentTurn: 12,
+      unitScale: 1,
+      plantsEnabled: true,
+    });
+    expect(result.buyerDemandByCorpCommodity).toEqual(expected);
+    const required = expected.get("corp1")!.get(identity.commodity)!;
+    expect(required).toBeGreaterThan(0);
+    expect(result.contractedByCorpCommodity?.get("supplier1")?.get(identity.commodity)).toBeCloseTo(
+      required
+    );
+  });
+
+  it.each([
+    { sectorType: "manufacturing", industryModel: "vehicles", commodity: "steel" },
+    { sectorType: "media", mediaDiscriminator: "entertainment", commodity: "energy" },
+  ] as const)("delivers own-group $commodity to the actual $sectorType model", (identity) => {
+    const { corp, sector, lookups } = makeSectorWorld();
+    Object.assign(corp, { internalSupplyPolicy: { priority: "own", discount: 0.1 } });
+    Object.assign(sector, identity, { capitalStock: 100, stateId: "NY", countryId: "US" });
+    const supplier = {
+      ...sector,
+      _id: "supplier-sector",
+      sectorType: identity.commodity === "energy" ? "energy" : "manufacturing",
+      industryModel: undefined,
+      mediaDiscriminator: undefined,
+      producedUnits: 100,
+    };
+    Object.assign(lookups, {
+      sectorsByCorp: new Map([["corp1", [sector, supplier]]]),
+      stateInputAvailabilityByState: new Map(),
+      globalCommodityBalances: new Map([[identity.commodity, { supply: 100, demand: 1_000 }]]),
+    });
+    const market = { clearingEnabled: true, plantsEnabled: true } as MarketContext;
+    runClearingPrePass(makeInput({ lookups, market }));
+    const received = market.internalSupplyReceiptsBySectorId?.get("sector1")?.received;
+    expect(received?.[identity.commodity] ?? 0).toBeGreaterThan(0);
+    const reserved = market.internalSupplyReceiptsBySectorId?.get("supplier-sector")?.reserved;
+    expect(reserved?.[identity.commodity]).toBeCloseTo(received![identity.commodity]!);
+  });
+
   it("does not read the new pricing mode while explicit costs are disabled", () => {
     const { sector, lookups } = makeSectorWorld();
     Object.defineProperty(sector, "costPlusCostBasis", {
