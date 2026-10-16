@@ -26,7 +26,7 @@ const PRESET = "1991-default";
 
 const mk = (
   corporationId: string,
-  sectorType: string,
+  sectorType: RealizedLeaderboardSector["sectorType"],
   revenue: number,
   priceLeg: number | null,
   over: Partial<RealizedLeaderboardSector> = {}
