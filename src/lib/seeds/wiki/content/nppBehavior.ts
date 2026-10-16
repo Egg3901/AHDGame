@@ -6,6 +6,8 @@ NPPs make autonomous decisions every turn: how to vote on bills, whether to vote
 
 NPPs vote on all active federal bills. State/regional bills are not currently processed by the NPP system.
 
+In worlds set to autonomy V6 (NPP engine 6), two extra steps run around that vote. Before filing a bill, an NPP counts the likely votes and does not file one that would fail. An NPP-led government also whips its own members on bills that serve its long-term goals; each member still weighs its own views, and the whip never applies to a party a player leads. The opposition only votes as a bloc against a government it could actually defeat; against a large majority, its members vote on each bill's merits.
+
 ### The vote decision
 
 Each turn, NPPs that haven't yet voted on an open bill evaluate it using a deterministic cross-pressure model. Several signed forces are summed:

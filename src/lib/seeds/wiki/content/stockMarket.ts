@@ -85,6 +85,8 @@ From a corporation page, navigate to the Shares tab, or use the **Trade** shortc
 
 Market orders use the quoted bid or ask. The equity pool's base half-spread is 1% on each side of its midpoint, before its cash-balance adjustment. Execution depends on available shares, cash and the applicable market path; liquidity is not unlimited. Review the trade quote before confirming.
 
+Very large sales are paced. The market buys at most **5% of a company's value** each turn from all sellers together, so sales under ₳25,000,000 per company per turn are never limited, while a bigger sell order fills a slice each turn at the market price. Prices are unchanged: a very large block simply settles over more turns.
+
 ### Limit orders
 
 Place a buy or sell order at a target price. The order sits on the book and fills automatically when the market price crosses your limit. You can set an optional expiry (cancel after N turns if unfilled).
@@ -110,7 +112,7 @@ Dividend rate changes have a **24-hour cooldown** before another change can be m
 
 ### Share issuance
 
-- **Public issuance:** Issue up to 50% of outstanding shares to the public float (dilutes existing shareholders). Proceeds go to corporate liquid capital at the current execution price. Limited to once per 24 hours.
+- **Public issuance:** Issue up to 50% of outstanding shares to the public float (dilutes existing shareholders). Proceeds go to corporate liquid capital at the current execution price. Limited to once per 24 hours. The market places at most **10% of the company's shares, or ₳50,000,000 worth**, whichever is larger, in one turn, with the remainder filling over the following turns.
 - **Self-issuance:** Issue up to 20% of outstanding shares to yourself as CEO at a 15% premium; proceeds go to corporate liquid capital. Also limited to once per 24 hours and shares the same issuance cooldown with public issuance.
 
 ### Stock splits and reverse splits
@@ -261,6 +263,8 @@ Each exchange displays values in that country's currency. If you hold shares in 
 **Growth investors:** Low or zero dividend corporations reinvest profits into expansion. Share price appreciation comes from rising tangible book value and earnings power.
 
 **Speculation:** Share prices react to changing cash, bonds, rates, trading and sentiment every 15 minutes via the fundamental formula. Earnings and sector production still update on the hourly turn.
+
+**Computer-run investors:** Computer-run politicians and companies trade on value. They buy where the price sits below their view of what a company is worth, and are more likely to sell shares priced far above it. Overall trading volume stays about the same.
 
 **Influence:** Owning enough shares gives you a voice in CEO elections. A significant stake can swing a contested vote.
 

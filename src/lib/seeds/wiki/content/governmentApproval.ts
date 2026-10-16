@@ -108,10 +108,11 @@ After the population-weighted state score is assembled, a set of **national modi
 | War effort | How your fronts are moving against what the war was expected to do (see below) |
 | War exhaustion | The public's support for a fresh war, turning to cost after about a year of fighting |
 | Alliance contribution | For a treaty ally: what you field against what your co-belligerents field |
-| No cabinet | Country has zero confirmed cabinet members: -7.5 |
+| Higher public expectations | A new head of government starts with none and builds to a drag of up to -5 over their term in office |
+| Empty cabinet seats | Scales with the share of seats left empty, up to -7.5 when no seat is filled |
 | Acting appointments | Each acting cabinet member: -0.5, shown as its own line |
 
-A country without a functioning cabinet is heavily penalised. The acting-appointment penalty stacks per member, so a cabinet with 5 acting members loses an additional 2.5 points.
+An empty cabinet is heavily penalised: the empty-seat penalty scales with the share of seats left empty, reaching the full 7.5 points when no seat is filled, so a partly filled cabinet loses proportionally less. An acting secretary still holds their seat, so they are not counted as empty. The acting penalty is charged separately and stacks per member, so a cabinet with 5 acting members loses an additional 2.5 points.
 
 ### War and approval
 

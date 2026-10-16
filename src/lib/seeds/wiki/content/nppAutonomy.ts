@@ -58,7 +58,7 @@ This rail prevents autonomous NPP governments from overriding player-led countri
 ### v4: widest reach (seeded default)
 
 - Economic actions extend to global scope.
-- Deeper autonomous bill sponsorship. This is the level seeded in production.
+- Deeper autonomous bill sponsorship.
 
 ### v5: persistent goals (beta)
 
@@ -72,7 +72,7 @@ This rail prevents autonomous NPP governments from overriding player-led countri
 
 - Changes how well NPPs pursue the v5 activities and what they cost to run each turn, never what they may do or how much money and action points they receive.
 - Includes better candidate placement and career moves, rallies in their own races, vote counting before sponsoring, government whips on goal bills, an opposition that picks its battles, central banks that answer and defend currency moves, and votes shaped by business interests, which voters can see and mark down.
-- New singleplayer and simulation worlds start on v6. The live multiplayer world keeps its own setting.
+- New singleplayer and simulation worlds start on v6, and the live multiplayer world has also moved to v6. Other existing worlds keep the level they were set to.
 - Every engine version and the planned ones are listed in the [NPP changelog](/changelog/npp).
 
 ## Admin controls

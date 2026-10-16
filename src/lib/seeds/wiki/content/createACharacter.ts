@@ -63,7 +63,7 @@ On submit you receive:
 | Actions | 25 (one-time) |
 | Campaign Funds | ₳250,000 |
 | Cash on Hand | ₳0 |
-| Political Influence | 0 |
+| Political Influence | 10 |
 | NPI | 0 |
 | Favorability | 50 |
 | Infamy | 0 |
@@ -71,7 +71,7 @@ On submit you receive:
 | Party | Independent |
 | Office | none |
 
-You land on your profile. A setup banner asks you to read Getting Started, join a party, and take a first action. Your name appears in the home-state player list.
+You land on your profile. A setup banner asks you to read Getting Started, join a party, and take a first action. For your first three days, a first-days panel lists three goals: campaign at home three times, join a party that takes members from your region, and enter a local race that is still taking candidates. Your name appears in the home-state player list.
 
 ## What to click immediately after
 
