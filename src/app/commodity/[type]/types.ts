@@ -125,11 +125,6 @@ export interface CommodityDetail {
     extractionException: boolean;
     advertisingBudgetSeparate: boolean;
   };
-  /** Marketing-budget demand per corporation. Null unless commodity is advertising. */
-  advertisingBudgetDemand?: {
-    total: number;
-    byCorp: CorpVolume[];
-  } | null;
   demandDriver: DemandDriver | null;
   syntheticDemandSources: SyntheticDemandSource[];
 }

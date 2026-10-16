@@ -70,7 +70,8 @@ export default function TopProducersConsumers({
   const [producerPage, setProducerPage] = useState(1);
   const [consumerPage, setConsumerPage] = useState(1);
 
-  if (topProducers.length === 0 && topConsumers.length === 0) return null;
+  if (topProducers.length === 0 && topConsumers.length === 0 && syntheticDemandSources.length === 0)
+    return null;
 
   const pagedProducers = topProducers.slice(
     (producerPage - 1) * PAGE_SIZE,
@@ -129,12 +130,12 @@ export default function TopProducersConsumers({
         </div>
       )}
 
-      {topConsumers.length > 0 && (
+      {(topConsumers.length > 0 || syntheticDemandSources.length > 0) && (
         <div className="rounded-xl border border-card-border bg-card p-6">
           <h2 className="text-lg font-bold text-foreground mb-1">Top consumers</h2>
           <p className="text-xs text-muted mb-3">
             Largest corporations by input demand
-            {commodity === "advertising" && " (excludes marketing spend, shown separately)"}
+            {commodity === "advertising" && " (plant inputs only; excludes marketing budgets)"}
             {marketLabel ? ` in the ${marketLabel.toLowerCase()}` : ""}
           </p>
           {consumerNote && <p className="text-xs text-muted mb-3">{consumerNote}</p>}
@@ -165,7 +166,7 @@ export default function TopProducersConsumers({
                 </span>
               </Link>
             ))}
-            {consumerPage === Math.ceil(topConsumers.length / PAGE_SIZE) &&
+            {consumerPage === Math.max(1, Math.ceil(topConsumers.length / PAGE_SIZE)) &&
               syntheticDemandSources?.map((source) => (
                 <div
                   key={source.name}

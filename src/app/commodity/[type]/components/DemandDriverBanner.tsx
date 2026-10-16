@@ -23,9 +23,11 @@ export default function DemandDriverBanner({ demandDriver, unit }: DemandDriverB
           <span className="font-bold text-primary">
             {formatUnits(demandDriver.sourceUnits, unit)}/day
           </span>
-          <span className="text-muted">
-            ({demandDriver.sourceShare?.toFixed(1) ?? "0.0"}% of total demand)
-          </span>
+          {demandDriver.sourceShare != null && (
+            <span className="text-muted">
+              ({demandDriver.sourceShare.toFixed(1)}% of total demand)
+            </span>
+          )}
         </div>
       )}
     </div>
