@@ -3,6 +3,8 @@ import type { Character } from "@/lib/db/types";
 import { ObjectId, type Db } from "mongodb";
 import { createInMemoryDb } from "@/lib/test-utils/inMemoryDb";
 import { processPlayerIncomeTax } from "./playerIncomeTax";
+import { deriveLedgerEntry } from "@/lib/ledger/deriveFromTx";
+import type { DerivableTx } from "@/lib/ledger/deriveFromTx";
 import { settlePlayerIncomeTaxAssessments } from "./playerIncomeTaxSettlement";
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 
@@ -75,6 +77,168 @@ async function seedStockTaxCredit(db: Db, id: ObjectId, assessmentTurn: number) 
   );
 }
 describe("player income-tax settlement", () => {
+  it.each(
+    (
+      [
+        {
+          salary: 10,
+          tier: "low",
+          incomeRate: 10,
+          capitalRate: 7,
+          regionalIncomeRate: 3,
+          regionalCapitalRate: 2,
+        },
+        {
+          salary: 25,
+          tier: "middle",
+          incomeRate: 20,
+          capitalRate: 17,
+          regionalIncomeRate: 5,
+          regionalCapitalRate: 4,
+        },
+        {
+          salary: 100,
+          tier: "high",
+          incomeRate: 30,
+          capitalRate: 27,
+          regionalIncomeRate: 9,
+          regionalCapitalRate: 6,
+        },
+      ] as const
+    ).flatMap((row) => [true, false].map((funded) => ({ ...row, funded })))
+  )(
+    "credits collected $tier income (funded=$funded) and capital taxes to the correct cash pots without changing annual projections",
+    async ({
+      salary,
+      tier,
+      incomeRate,
+      capitalRate,
+      regionalIncomeRate,
+      regionalCapitalRate,
+      funded,
+    }) => {
+      const { db, id } = fixture();
+      const nationalProjection = { incomeTax: 48000, capitalGainsTax: 9600, total: 57600 };
+      const regionalProjection = { incomeTax: 4800, total: 4800 };
+      await db
+        .collection("financialTxLog")
+        .updateOne({}, { $set: { amount: salary, anchorAmount: salary } });
+      await db.collection<{ _id: string } & Record<string, unknown>>("federalBudget").updateOne(
+        {},
+        {
+          $set: {
+            revenue: nationalProjection,
+            ["taxRates.capitalGainsTax" + { low: "Low", middle: "Middle", high: "High" }[tier]]:
+              capitalRate,
+          },
+        }
+      );
+      await db.collection<{ _id: string } & Record<string, unknown>>("stateBudgets").updateOne(
+        {},
+        {
+          $set: {
+            revenue: regionalProjection,
+            ["taxRates.incomeTax" + { low: "Low", middle: "Middle", high: "High" }[tier]]:
+              regionalIncomeRate,
+            ["taxRates.capitalGainsTax" + { low: "Low", middle: "Middle", high: "High" }[tier]]:
+              regionalCapitalRate,
+          },
+        }
+      );
+      await db
+        .collection<{ _id: string } & Record<string, unknown>>("federalBudget")
+        .insertOne({ _id: "UK", countryId: "UK", treasuryBalance: 777, treasuryCashLocal: 777 });
+      await db
+        .collection<{ _id: string } & Record<string, unknown>>("stateBudgets")
+        .insertOne({ _id: "US_NY", countryId: "US", balance: 888 });
+      await seedStockTaxCredit(db, id, 1);
+      const nationalTax = Math.floor((salary * incomeRate) / 100) + capitalRate * 10;
+      const regionalTax =
+        Math.floor((salary * regionalIncomeRate) / 100) + regionalCapitalRate * 10;
+      await processPlayerIncomeTax(db, 1, now, state, funded, true);
+      await processPlayerIncomeTax(db, 1, now, state, funded, true);
+      expect(
+        await db
+          .collection<{ _id: string } & Record<string, unknown>>("federalBudget")
+          .findOne({ _id: "federal" })
+      ).toMatchObject({
+        treasuryBalance: 100 + nationalTax,
+        treasuryCashLocal: 100 + (funded ? nationalTax : 0),
+        revenue: nationalProjection,
+      });
+      expect(
+        await db
+          .collection<{ _id: string } & Record<string, unknown>>("stateBudgets")
+          .findOne({ _id: "US_CA" })
+      ).toMatchObject({
+        balance: 10 + regionalTax,
+        revenue: regionalProjection,
+      });
+      expect(
+        await db
+          .collection<{ _id: string } & Record<string, unknown>>("federalBudget")
+          .findOne({ _id: "UK" })
+      ).toMatchObject({
+        treasuryBalance: 777,
+        treasuryCashLocal: 777,
+      });
+      expect(
+        await db
+          .collection<{ _id: string } & Record<string, unknown>>("stateBudgets")
+          .findOne({ _id: "US_NY" })
+      ).toMatchObject({
+        balance: 888,
+      });
+      expect(
+        (await db.collection("characters").findOne({ _id: id }))!.currencyBalances.personal.USD
+      ).toBe(10000 - nationalTax - regionalTax);
+      const receipts = await db
+        .collection("financialTxLog")
+        .find({ type: "gov_tax_revenue" })
+        .toArray();
+      expect(
+        receipts.filter((row) => !row.meta.stateId).reduce((sum, row) => sum + row.amount, 0)
+      ).toBe(nationalTax);
+      expect(
+        receipts.filter((row) => row.meta.stateId).reduce((sum, row) => sum + row.amount, 0)
+      ).toBe(regionalTax);
+      // Settlement already owns the durable ledger witnesses. Replay/backfill must not add another.
+      const rows = await db
+        .collection("financialTxLog")
+        .find({ "meta.ledgerOwnedBySettlement": true })
+        .toArray();
+      for (const row of rows) expect(deriveLedgerEntry(row as unknown as DerivableTx)).toBeNull();
+    }
+  );
+  it("credits both cash pots only when unpaid income and capital taxes are actually collected", async () => {
+    const { db, id } = fixture();
+    await seedStockTaxCredit(db, id, 1);
+    await db
+      .collection("characters")
+      .updateOne({ _id: id }, { $set: { "currencyBalances.personal.USD": 0 } });
+    await processPlayerIncomeTax(db, 1, now, state, true);
+    expect(await db.collection("federalBudget").findOne({})).toMatchObject({
+      treasuryBalance: 100,
+      treasuryCashLocal: 100,
+    });
+    expect((await db.collection("stateBudgets").findOne({}))!.balance).toBe(10);
+    expect(
+      await db.collection("playerIncomeTaxAssessments").countDocuments({ status: "unpaid" })
+    ).toBe(2);
+    await db
+      .collection("characters")
+      .updateOne({ _id: id }, { $set: { "currencyBalances.personal.USD": 10000 } });
+    await processPlayerIncomeTax(db, 2, now, state, true);
+    await processPlayerIncomeTax(db, 2, now, state, true);
+    expect(await db.collection("federalBudget").findOne({})).toMatchObject({
+      treasuryBalance: 430,
+      treasuryCashLocal: 430,
+    });
+    expect((await db.collection("stateBudgets").findOne({}))!.balance).toBe(65);
+    expect(
+      await db.collection("playerIncomeTaxAssessments").countDocuments({ status: "paid" })
+    ).toBe(2);
+  });
   it("retains a frozen stock assessment through a failed publication", async () => {
     const { memory, db, id } = fixture();
     await seedStockTaxCredit(db, id, 1);

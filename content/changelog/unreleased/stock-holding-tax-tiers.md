@@ -17,3 +17,5 @@ areas: [fullstack, engine]
 - Capital gains tax has independent Low Income, Medium Income, and High Income bill provisions.
 - Existing direct shares enter Long Term Holdings. The rollout preserves recorded costs, reconstructs purchase history where possible, and uses a frozen rollout price for unknown cost basis.
 - The migration initializes each capital gains rate from its corresponding current income tax rate.
+
+- Collected personal income and capital gains taxes immediately credit the applicable regional balance and national Treasury, independently of annual budget projections. Ledger replay preserves the original settlement witness.
