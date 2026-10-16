@@ -285,7 +285,7 @@ export async function reconcileTotalSharesAfterFill(
   corporationId: ObjectId
 ): Promise<void> {
   try {
-    const [postFillCorp, postFillListings, postFillCorpSellOrders] = await Promise.all([
+    const [postFillCorp, postFillListings, postFillSellOrders] = await Promise.all([
       db.collection<Corporation>("corporations").findOne({ _id: corporationId }),
       db
         .collection<ShareListing>("shareListings")
@@ -297,16 +297,12 @@ export async function reconcileTotalSharesAfterFill(
           corporationId,
           type: "sell",
           status: "open",
-          placerCorporationId: { $exists: true },
+          $or: [{ placerCorporationId: { $exists: true } }, { sharesDebitedAtCreation: true }],
         })
         .toArray(),
     ]);
     if (postFillCorp) {
-      const accounted = computeAccountedShares(
-        postFillCorp,
-        postFillListings,
-        postFillCorpSellOrders
-      );
+      const accounted = computeAccountedShares(postFillCorp, postFillListings, postFillSellOrders);
       if (accounted !== (postFillCorp.totalShares ?? 0)) {
         await db
           .collection<Corporation>("corporations")

@@ -19,21 +19,19 @@ export async function POST() {
     const corporations = await db.collection<Corporation>("corporations").find({}).toArray();
 
     // Aggregate reserved shares per corporation.
-    // (a) CORPORATION-placed sell orders: debited from the corp's shareholder
-    //     entry at creation time, so those shares are no longer in the
-    //     shareholders array and must be added back to correctTotal.
-    //     Character sell orders only reserve (shares stay in shareholder array),
-    //     so counting them here would double-count.
-    // (b) Open shareListings (both character- and corp-sold): also debit at
-    //     creation. Must be counted for the same reason — omitting them would
-    //     let the heal shrink totalShares below actual issued shares, which
-    //     then produces phantom shares when the listing later fills.
+    // Corporate sell orders and flagged character sell orders debit at creation.
+    // Legacy unflagged character orders retain holdings and must not count twice.
+    // Open listings also debit at creation and belong in the issued-share total.
     const reservedByCorp = new Map<string, number>();
-    const openCorpSellOrders = await db
+    const openSellOrders = await db
       .collection<ShareOrder>("shareOrders")
-      .find({ type: "sell", status: "open", placerCorporationId: { $exists: true } })
+      .find({
+        type: "sell",
+        status: "open",
+        $or: [{ placerCorporationId: { $exists: true } }, { sharesDebitedAtCreation: true }],
+      })
       .toArray();
-    for (const order of openCorpSellOrders) {
+    for (const order of openSellOrders) {
       const key = order.corporationId.toString();
       reservedByCorp.set(key, (reservedByCorp.get(key) ?? 0) + order.sharesRemaining);
     }

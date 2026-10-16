@@ -147,3 +147,69 @@ describe("computeAccountedShares", () => {
     expect(computeAccountedShares(corp, listings, orders)).toBe(10);
   });
 });
+
+describe("debited character reservations", () => {
+  it("counts only the remaining debited shares alongside listings and float", () => {
+    const corporationId = new ObjectId();
+    const corp = makeCorp({
+      _id: corporationId,
+      publicFloat: 10,
+      shareholders: [{ characterId: new ObjectId(), shares: 50 }],
+    });
+    const listings = [makeListing({ corporationId, sharesRemaining: 15 })];
+    const orders = [
+      makeOrder({
+        corporationId,
+        type: "sell",
+        shares: 40,
+        sharesRemaining: 25,
+        sharesDebitedAtCreation: true,
+      }),
+    ];
+    expect(computeAccountedShares(corp, listings, orders)).toBe(100);
+  });
+
+  it.each([undefined, false])(
+    "does not double-count legacy character orders with flag %s",
+    (flag) => {
+      const corporationId = new ObjectId();
+      const corp = makeCorp({
+        _id: corporationId,
+        shareholders: [{ characterId: new ObjectId(), shares: 100 }],
+      });
+      const orders = [
+        makeOrder({
+          corporationId,
+          type: "sell",
+          sharesRemaining: 25,
+          sharesDebitedAtCreation: flag,
+        }),
+      ];
+      expect(computeAccountedShares(corp, [], orders)).toBe(100);
+    }
+  );
+
+  it("excludes flagged buys, closed orders and another corporation's reservations", () => {
+    const corporationId = new ObjectId();
+    const corp = makeCorp({ _id: corporationId, publicFloat: 100 });
+    const orders = [
+      makeOrder({ corporationId, type: "buy", sharesRemaining: 25, sharesDebitedAtCreation: true }),
+      ...(["filled", "cancelled"] as const).map((status) =>
+        makeOrder({
+          corporationId,
+          type: "sell",
+          status,
+          sharesRemaining: 25,
+          sharesDebitedAtCreation: true,
+        })
+      ),
+      makeOrder({
+        corporationId: new ObjectId(),
+        type: "sell",
+        sharesRemaining: 25,
+        sharesDebitedAtCreation: true,
+      }),
+    ];
+    expect(computeAccountedShares(corp, [], orders)).toBe(100);
+  });
+});
