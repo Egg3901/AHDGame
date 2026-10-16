@@ -1,8 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { computeRawSupplyDemand, type CommodityType } from "@/lib/constants/commodities";
+import {
+  COMMODITY_BASE_PRICES,
+  SECTOR_DEMAND,
+  computeRawSupplyDemand,
+  type CommodityType,
+} from "@/lib/constants/commodities";
+import { computeInputsCost } from "@/lib/corporations/physicalPnl";
 import {
   INPUT_DEMAND_PRICE_LEG_MAX,
   INPUT_DEMAND_REAL_PHASE_TURNS,
+  effectiveInputDemandRealPhase,
   inputDemandDeflator,
   inputDemandRealPhaseProgress,
   inputDemandRealPhaseStartTurnFrom,
@@ -75,4 +82,99 @@ describe("computeRawSupplyDemand input demand under the phase", () => {
   it("does not deflate a sector with no recorded price leg", () => {
     expect(demandFor(1, null)).toBeCloseTo(demandFor(0, null), 6);
   });
+});
+
+describe("effectiveInputDemandRealPhase", () => {
+  it("passes legacy progress through, clamped", () => {
+    expect(effectiveInputDemandRealPhase(0.5, false)).toBe(0.5);
+    expect(effectiveInputDemandRealPhase(3, false)).toBe(1);
+    expect(effectiveInputDemandRealPhase(undefined, false)).toBe(0);
+  });
+
+  it("never deflates a plants world", () => {
+    expect(effectiveInputDemandRealPhase(1, true)).toBe(0);
+    expect(effectiveInputDemandRealPhase(0.5, true)).toBe(0);
+  });
+});
+
+describe("plants ledger input demand equals the billed input units", () => {
+  // Invariant: under plants, the units the world ledger books as a sector's
+  // input demand are the units computeInputsCost bills it for (producedUnits x
+  // recipe), whatever its realized price and sold share. Both plants here made
+  // output they did not sell (soldFraction < 1) and both realized above base
+  // (clearing factor over sold fraction > 1). Persisted revenue is the
+  // base-priced capacity nameplate, as sectorTurn writes it.
+  const plants = [
+    {
+      sectorType: "manufacturing",
+      revenue: 1_000_000,
+      stateId: "S1",
+      sectorId: "plant-mfg",
+      priceLeg: sectorPriceLeg(1.5, 0.75),
+      producedUnits: 600,
+      capacityUnits: 1_000,
+    },
+    {
+      sectorType: "energy",
+      revenue: 2_500_000,
+      stateId: "S1",
+      sectorId: "plant-energy",
+      priceLeg: sectorPriceLeg(2.28, 0.95),
+      producedUnits: 1_000,
+      capacityUnits: 1_250,
+    },
+  ] as const;
+
+  const ledgerBySector = (phase: number) => {
+    const sectorUnitsOut = {
+      supplyBySector: new Map<string, Map<CommodityType, number>>(),
+      inputDemandBySector: new Map<string, Map<CommodityType, number>>(),
+    };
+    const args = [
+      plants,
+      ...Array.from({ length: 8 }, () => undefined),
+      true, // plantsEnabled
+      1, // ledgerUnitScale
+      ...Array.from({ length: 5 }, () => undefined),
+      sectorUnitsOut,
+      undefined, // retailGdpParams
+      phase,
+    ] as unknown as Parameters<typeof computeRawSupplyDemand>;
+    computeRawSupplyDemand(...args);
+    return sectorUnitsOut.inputDemandBySector;
+  };
+
+  const billedFor = (plant: (typeof plants)[number]) =>
+    computeInputsCost({
+      nominalDailyRevenue: plant.revenue,
+      rates: Object.fromEntries(
+        (SECTOR_DEMAND[plant.sectorType] ?? []).map((f) => [f.commodity, f.rate])
+      ) as Partial<Record<CommodityType, number>>,
+      basePrices: COMMODITY_BASE_PRICES,
+      priceRatios: new Map(),
+      utilization: plant.producedUnits / plant.capacityUnits,
+      inputMultiplier: 1,
+      turnsPerDay: 1,
+    });
+
+  it("fixtures realize above base with unsold output", () => {
+    for (const plant of plants) {
+      expect(plant.priceLeg ?? 0).toBeGreaterThan(1.5);
+    }
+  });
+
+  for (const phase of [0, 1]) {
+    it(`books exactly the billed input units per sector at phase progress ${phase}`, () => {
+      const ledger = ledgerBySector(phase);
+      for (const plant of plants) {
+        const bill = billedFor(plant);
+        expect(bill.lines.length).toBeGreaterThan(0);
+        const booked = ledger.get(plant.sectorId) ?? new Map<CommodityType, number>();
+        expect([...booked.keys()].sort()).toEqual(bill.lines.map((l) => l.commodity).sort());
+        for (const line of bill.lines) {
+          expect(booked.get(line.commodity) ?? 0).toBeCloseTo(line.units, 6);
+        }
+      }
+    });
+  }
 });

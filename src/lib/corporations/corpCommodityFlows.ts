@@ -53,7 +53,10 @@ import {
   plantUtilizationForInputs,
 } from "@/lib/corporations/rules/energyProductivityRamp";
 import { getInputMultiplier, getOutputMultiplier } from "@/lib/utils/productionPolicy";
-import { inputDemandDeflator } from "@/lib/market/inputDemandRealPhase";
+import {
+  effectiveInputDemandRealPhase,
+  inputDemandDeflator,
+} from "@/lib/market/inputDemandRealPhase";
 
 /** Market context for one commodity, from the latest global flow ledger row. */
 export interface CommodityMarketContext {
@@ -187,10 +190,10 @@ export interface CorpCommodityFlowContext {
   hardwareInputReliefStartTurn?: number;
   /**
    * Progress (0..1) of the input-demand-follows-real-output phase-in
-   * (`inputDemandRealPhaseProgress`). The world ledger divides each sector's
-   * revenue by its price leg as this advances; a surface that omits it reports
-   * corporate demand on the pre-correction basis and its rows can sum past the
-   * ledger's global total. Absent = 0, the legacy basis.
+   * (`inputDemandRealPhaseProgress`). In legacy worlds the ledger divides each
+   * sector's revenue by its price leg as this advances; plants worlds never
+   * deflate (`effectiveInputDemandRealPhase`). Passing it keeps the rows on the
+   * ledger's basis in either mode. Absent = 0, the legacy basis.
    */
   inputDemandRealPhase?: number;
   /** `marketSystemMode >= "plants"` — measured production replaces the nameplate. */
@@ -391,10 +394,14 @@ export function computeSectorCommodityUnits(
     if (!(units > 0)) continue;
     supply.set(commodity, (supply.get(commodity) ?? 0) + units);
   }
-  // Input demand follows real output: the same deflated revenue the ledger
-  // feeds its demand leg (see `computeRawSupplyDemand`).
+  // Input demand follows real output: the same revenue basis the ledger feeds
+  // its demand leg (see `computeRawSupplyDemand`). Plants never deflate.
   const demandRevenue =
-    revenueAnchor / inputDemandDeflator(sector.priceLeg, context.inputDemandRealPhase ?? 0);
+    revenueAnchor /
+    inputDemandDeflator(
+      sector.priceLeg,
+      effectiveInputDemandRealPhase(context.inputDemandRealPhase, plantsEnabled)
+    );
   for (const [commodity, rate] of Object.entries(rates.demand) as [CommodityType, number][]) {
     if (!rate || rate <= 0) continue;
     const basePrice = COMMODITY_BASE_PRICES[commodity];

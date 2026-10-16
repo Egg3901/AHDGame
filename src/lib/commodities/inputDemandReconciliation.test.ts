@@ -1,8 +1,9 @@
 /**
  * Consumer rankings must reconcile with the world ledger's global demand.
  *
- * The ledger (`computeRawSupplyDemand`) divides each sector's revenue by its own
- * realized price leg as the input-demand phase-in advances. The commodity page
+ * In legacy worlds the ledger (`computeRawSupplyDemand`) divides each sector's
+ * revenue by its own realized price leg as the input-demand phase-in advances;
+ * plants worlds never deflate. The commodity page
  * leaderboard and the corporation tab share `computeSectorCommodityUnits`; when
  * that chain skipped the deflator, per-corporation demand stayed on the
  * pre-correction basis and the "Top consumers" rows summed past the global
@@ -57,6 +58,7 @@ const sectors = [
 function ledgerGlobalDemand(
   commodity: CommodityType,
   phase: number,
+  plants: boolean,
   ledgerSectors: typeof sectors = sectors
 ): number {
   const ledger = computeRawSupplyDemand(
@@ -70,7 +72,7 @@ function ledgerGlobalDemand(
     false, // extractionOutputScaleEnabled
     undefined, // sectorDemandModifierPct
     false, // suppressRetailConsumerDemand
-    true, // plantsEnabled
+    plants, // plantsEnabled
     1, // ledgerUnitScale
     undefined, // sectorOutputDemandModifierPct
     1, // retailLegacyDemandFactor
@@ -88,13 +90,15 @@ function ledgerGlobalDemand(
  * Corporate input demand only: the ledger total minus what it books with no
  * sectors at all (the stabilizer floor and the turn-driven unowned drift).
  */
-function ledgerCorporateDemand(commodity: CommodityType, phase: number): number {
-  return ledgerGlobalDemand(commodity, phase) - ledgerGlobalDemand(commodity, phase, []);
+function ledgerCorporateDemand(commodity: CommodityType, phase: number, plants: boolean): number {
+  return (
+    ledgerGlobalDemand(commodity, phase, plants) - ledgerGlobalDemand(commodity, phase, plants, [])
+  );
 }
 
-function leaderboardDemand(commodity: CommodityType, phase: number): number {
+function leaderboardDemand(commodity: CommodityType, phase: number, plants = true): number {
   const context: CorpCommodityFlowContext = {
-    plantsEnabled: true,
+    plantsEnabled: plants,
     eraUnitScale: 1,
     preset: PRESET,
     inputDemandRealPhase: phase,
@@ -110,22 +114,34 @@ describe("commodity consumers reconcile with ledger global demand", () => {
     expect(demanded.length).toBeGreaterThanOrEqual(3);
   });
 
-  for (const progress of [0, 0.5, 1]) {
-    it(`sums consumers to the ledger corporate demand at phase progress ${progress}`, () => {
-      for (const commodity of demanded) {
-        const ledger = ledgerCorporateDemand(commodity, progress);
-        const rows = leaderboardDemand(commodity, progress);
-        expect(Math.abs(rows - ledger)).toBeLessThanOrEqual(
-          Math.max(realizedTotalTolerance(sectors.length), ledger * 1e-9)
-        );
-      }
-    });
+  for (const plants of [true, false]) {
+    for (const progress of [0, 0.5, 1]) {
+      it(`sums consumers to the ledger corporate demand (plants ${plants}, phase ${progress})`, () => {
+        for (const commodity of demanded) {
+          const ledger = ledgerCorporateDemand(commodity, progress, plants);
+          const rows = leaderboardDemand(commodity, progress, plants);
+          expect(Math.abs(rows - ledger)).toBeLessThanOrEqual(
+            Math.max(realizedTotalTolerance(sectors.length), ledger * 1e-9)
+          );
+        }
+      });
+    }
   }
 
-  it("negative control: omitting the phase leaves rows above the corrected total", () => {
-    const withPhase = demanded.reduce((sum, c) => sum + leaderboardDemand(c, 1), 0);
-    const legacy = demanded.reduce((sum, c) => sum + leaderboardDemand(c, 0), 0);
+  it("negative control: a legacy world's rows move with the phase", () => {
+    const withPhase = demanded.reduce((sum, c) => sum + leaderboardDemand(c, 1, false), 0);
+    const legacy = demanded.reduce((sum, c) => sum + leaderboardDemand(c, 0, false), 0);
     expect(legacy).not.toBeCloseTo(withPhase, 3);
+  });
+
+  it("plants worlds book the billed basis at every phase", () => {
+    for (const commodity of demanded) {
+      expect(leaderboardDemand(commodity, 1)).toBeCloseTo(leaderboardDemand(commodity, 0), 6);
+      expect(ledgerCorporateDemand(commodity, 1, true)).toBeCloseTo(
+        ledgerCorporateDemand(commodity, 0, true),
+        6
+      );
+    }
   });
 
   it("is a no-op before the phase starts", () => {
