@@ -13,6 +13,9 @@ import {
   type IsolatedMongod,
 } from "@/lib/test-utils/realMongoFixture";
 import type { Corporation, CorporateSector } from "@/lib/db/types";
+import { capacityRescaleRatio } from "@/lib/constants/capacityEconomy";
+import { resizeMeasuredManufacturedUnits } from "@/lib/products/rules/manufacturingRules";
+import { computeContractProduction } from "@/lib/turn/corporation/contractProduction";
 import { seedPlantLedger } from "@/lib/corporations/plantLedger";
 
 let fixtureDb: Db | null = null;
@@ -147,6 +150,127 @@ describe.runIf(REAL_MONGO_ENABLED)("NPP pickup against isolated mongod", () => {
     expect(pools.map((p) => p.stateId).sort()).toEqual(["S1", "S3"]);
   });
 
+  it("keeps transferred sales available to the next production run", async () => {
+    const { aRow } = await seed(db);
+    await db
+      .collection<CorporateSector>("corporateSectors")
+      .updateOne({ _id: aRow._id }, { $set: { producedUnits: 40, soldUnits: 40 } });
+    const leaving = plantSector(owner._id, "S1", 2000, {
+      producedUnits: 2000,
+      soldUnits: 2000,
+    });
+    await db.collection<CorporateSector>("corporateSectors").insertOne(leaving);
+
+    await disposeLeavingSectors(db, owner, [leaving], new Date());
+    const receiver = await db
+      .collection<CorporateSector>("corporateSectors")
+      .findOne({ _id: aRow._id });
+    const run = computeContractProduction({
+      plantsEnabled: true,
+      actualNameplateUnits: receiver!.capitalStock!,
+      actualProductionFactor: 1,
+      fullPolicyNameplateUnits: receiver!.capitalStock!,
+      involuntaryProductionFactor: 1,
+      priorProducedUnits: receiver!.producedUnits,
+      priorSoldUnits: receiver!.soldUnits,
+      soldFraction: 1,
+    });
+    // The same sold-out plants still have the same buyers after a handoff.
+    expect(run.producedUnits).toBeCloseTo(1540, 6);
+  });
+
+  it("keeps a new pickup row's glut history instead of running it at full output", async () => {
+    await seed(db);
+    const leaving = plantSector(owner._id, "S3", 2000, {
+      producedUnits: 2000,
+      soldUnits: 100,
+    });
+    await db.collection<CorporateSector>("corporateSectors").insertOne(leaving);
+    await disposeLeavingSectors(db, owner, [leaving], new Date());
+    const receiver = await db
+      .collection<CorporateSector>("corporateSectors")
+      .findOne({ stateId: "S3" });
+    expect(receiver?.producedUnits).toBe(1500);
+    expect(receiver?.soldUnits).toBe(75);
+    const run = computeContractProduction({
+      plantsEnabled: true,
+      actualNameplateUnits: receiver!.capitalStock!,
+      actualProductionFactor: 1,
+      fullPolicyNameplateUnits: receiver!.capitalStock!,
+      involuntaryProductionFactor: 1,
+      priorProducedUnits: receiver!.producedUnits,
+      priorSoldUnits: receiver!.soldUnits,
+      soldFraction: 0.05,
+    });
+    expect(run.producedUnits).toBe(150);
+  });
+
+  it("moves the history of a whole small facility, rather than only 75%", async () => {
+    const { aRow } = await seed(db);
+    const leaving = plantSector(owner._id, "S1", 4, { producedUnits: 4, soldUnits: 2 });
+    await db.collection<CorporateSector>("corporateSectors").insertOne(leaving);
+    await disposeLeavingSectors(db, owner, [leaving], new Date());
+    const receiver = await db
+      .collection<CorporateSector>("corporateSectors")
+      .findOne({ _id: aRow._id });
+    expect(receiver?.capitalStock).toBe(44);
+    expect(receiver?.producedUnits).toBe(4);
+    expect(receiver?.soldUnits).toBe(2);
+  });
+
+  it("converts transferred measurements into the receiver strategy's units", async () => {
+    const { aRow } = await seed(db);
+    await db.collection<CorporateSector>("corporateSectors").updateOne(
+      { _id: aRow._id },
+      {
+        $set: {
+          sectorType: "technology",
+          strategyId: "software",
+          producedUnits: 40,
+          soldUnits: 20,
+        },
+      }
+    );
+    const leaving = plantSector(owner._id, "S1", 2000, {
+      sectorType: "technology",
+      strategyId: "standard",
+      producedUnits: 2000,
+      soldUnits: 1000,
+    });
+    await db.collection<CorporateSector>("corporateSectors").insertOne(leaving);
+    await disposeLeavingSectors(db, owner, [leaving], new Date());
+    const receiver = await db
+      .collection<CorporateSector>("corporateSectors")
+      .findOne({ _id: aRow._id });
+    const ratio = capacityRescaleRatio("technology", "standard", "software");
+    expect(ratio).not.toBe(1);
+    expect(receiver?.producedUnits).toBeCloseTo(40 + 1500 * ratio, 6);
+    expect(receiver?.soldUnits).toBeCloseTo(20 + 750 * ratio, 6);
+  });
+
+  it("does not resize a combined product measurement twice", async () => {
+    const { aRow } = await seed(db);
+    await db
+      .collection<CorporateSector>("corporateSectors")
+      .updateOne(
+        { _id: aRow._id },
+        { $set: { producedUnits: 40, soldUnits: 40, productOutputCapacityUnits: 40 } }
+      );
+    const leaving = plantSector(owner._id, "S1", 2000, { producedUnits: 2000, soldUnits: 2000 });
+    await db.collection<CorporateSector>("corporateSectors").insertOne(leaving);
+    await disposeLeavingSectors(db, owner, [leaving], new Date());
+    const receiver = await db
+      .collection<CorporateSector>("corporateSectors")
+      .findOne({ _id: aRow._id });
+    expect(
+      resizeMeasuredManufacturedUnits({
+        producedUnits: receiver!.producedUnits!,
+        currentCapacityUnits: receiver!.capitalStock!,
+        snapshotCapacityUnits: receiver!.productOutputCapacityUnits!,
+      })
+    ).toBe(1540);
+  });
+
   it("does not credit a receiver twice when a disposal is retried", async () => {
     const { aRow } = await seed(db);
     const leaving = plantSector(owner._id, "S1", 2000);
@@ -163,9 +287,17 @@ describe.runIf(REAL_MONGO_ENABLED)("NPP pickup against isolated mongod", () => {
       },
     };
     await db.collection<CorporateSector>("corporateSectors").insertOne(marked);
-    await db
-      .collection<CorporateSector>("corporateSectors")
-      .updateOne({ _id: aRow._id }, { $set: { capitalStock: 1540, nppPickupReceipts: [key] } });
+    await db.collection<CorporateSector>("corporateSectors").updateOne(
+      { _id: aRow._id },
+      {
+        $set: {
+          capitalStock: 1540,
+          producedUnits: 1540,
+          soldUnits: 1000,
+          nppPickupReceipts: [key],
+        },
+      }
+    );
 
     const result = await disposeLeavingSectors(db, owner, [marked], new Date());
 
@@ -173,6 +305,8 @@ describe.runIf(REAL_MONGO_ENABLED)("NPP pickup against isolated mongod", () => {
       .collection<CorporateSector>("corporateSectors")
       .findOne({ _id: aRow._id });
     expect(receiver?.capitalStock).toBe(1540);
+    expect(receiver?.producedUnits).toBe(1540);
+    expect(receiver?.soldUnits).toBe(1000);
     expect(result.unitsPickedUp).toBe(0);
     expect(await db.collection("corporateSectors").countDocuments({ _id: leaving._id })).toBe(0);
   });
