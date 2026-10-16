@@ -57,6 +57,7 @@ import { legacyRevenueShadowTelemetry, marketTelemetry } from "./sectorTelemetry
 import { resolveSectorFreightBillingLegs } from "./freightBillingTurn";
 import { isExtractionStrategyZeroYield } from "@/lib/corporations/extractionStrategyAvailability";
 import { noBuyerPhaseOutProgress } from "@/lib/extraction/capacityHaircut";
+import { energyProductivityMultiplier } from "@/lib/corporations/rules/energyProductivityRamp";
 import { resolveSectorCapacityHaircut } from "./sectorCapacityHaircut";
 
 export { computeSectorOutputUnits } from "./sectorOutputUnits";
@@ -824,6 +825,11 @@ export function processSector(
     policyHeadroomFactor,
     mothballed,
     stateId: sector.stateId,
+    inputProductivityMultiplier: energyProductivityMultiplier(
+      sector.sectorType,
+      currentTurn,
+      lookups.preset
+    ),
     landedPremiumByState: lookups.landedPremiumByState,
     shippingCostMultiplier,
     storedOtherOpexAnchor,

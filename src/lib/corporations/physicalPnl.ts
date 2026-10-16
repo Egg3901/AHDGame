@@ -63,6 +63,7 @@ import {
 import type { CommodityType } from "@/lib/constants/commodities";
 import { DEFAULT_SECTOR_PROFIT_MARGIN_PCT } from "@/lib/corporations/sectorProfitBasis";
 import { priceRealizationFactor } from "@/lib/market/priceRealization";
+import { plantUtilizationForInputs } from "@/lib/corporations/rules/energyProductivityRamp";
 
 /** One commodity's consumption line for a turn. */
 export interface InputLine {
@@ -183,8 +184,10 @@ export function computeInputsCost(args: {
   basePrices: Readonly<Record<CommodityType, number>>;
   /** Commodity → lagged price ÷ base price. Missing ⇒ 1. */
   priceRatios: ReadonlyMap<CommodityType, number>;
-  /** producedUnits ÷ capacity, clamped to [0,1]. 1 when capacity is unknown. */
+  /** producedUnits ÷ capacity. 1 when capacity is unknown. */
   utilization: number;
+  /** Same input-utilization ceiling as the world ledger; defaults to 1. */
+  productivityMultiplier?: number;
   /** Production-policy input multiplier (`getInputMultiplier`). */
   inputMultiplier: number;
   /** Turns per game day — converts the daily basis to this turn's bill. */
@@ -205,6 +208,7 @@ export function computeInputsCost(args: {
     basePrices,
     priceRatios,
     utilization,
+    productivityMultiplier = 1,
     inputMultiplier,
     turnsPerDay,
     mothballed,
@@ -218,7 +222,13 @@ export function computeInputsCost(args: {
   ) {
     return { total: 0, lines: [] };
   }
-  const util = Number.isFinite(utilization) ? Math.max(0, Math.min(1, utilization)) : 1;
+  const util = Number.isFinite(utilization)
+    ? plantUtilizationForInputs(
+        utilization,
+        1,
+        Number.isFinite(productivityMultiplier) ? productivityMultiplier : 1
+      )
+    : 1;
   const inputMult = Number.isFinite(inputMultiplier) ? Math.max(0, inputMultiplier) : 1;
   const lines: InputLine[] = [];
   let total = 0;

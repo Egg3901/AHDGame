@@ -796,3 +796,45 @@ describe("internal supply discounts in the actual sector turn", () => {
     });
   });
 });
+
+describe("energy productivity physical input units", () => {
+  it.each([
+    ["1991-default", 238, 1.3],
+    ["1991-default", 72, 1.15],
+    ["1991-default", 48, 1],
+    ["1953-default", 238, 1],
+  ] as const)("bills the ledger input basis for %s at turn %i", (preset, turn, ceiling) => {
+    const sector = makeSector({
+      sectorType: "energy",
+      strategyId: "standard",
+      capitalStock: 1_000,
+      plantsStartTurn: 0,
+      currentGrowthRate: 0,
+      targetGrowthRate: 0,
+      otherOpexPerUnitAnchor: 0,
+    });
+    const { update } = run("plants", sector, turn, (env) => {
+      env.lookups.preset = preset;
+    });
+    const capacity = update.capitalStock as number;
+    const produced = update.producedUnits as number;
+    if (ceiling > 1) expect(produced).toBeGreaterThan(capacity);
+    const rates = getEffectiveStrategyRates(
+      "energy",
+      "standard",
+      undefined,
+      undefined,
+      turn,
+      undefined,
+      preset
+    );
+    const nominal = update.revenue as number;
+    const utilization = Math.min(ceiling, produced / capacity);
+    const expected = Object.entries(rates.demand ?? {}).reduce(
+      (sum, [, rate]) => sum + nominal * rate! * utilization,
+      0
+    );
+    const pnl = update.plantsPnl as { inputs: number };
+    expect(pnl.inputs).toBeCloseTo(expected, 6);
+  });
+});

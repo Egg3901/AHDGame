@@ -93,3 +93,32 @@ describe("computeInputsCost — buy-sell realization symmetry", () => {
     expect(shocked.lines[0].unitPrice).toBeCloseTo(100 * 1.2);
   });
 });
+
+describe("physical input utilization ceiling", () => {
+  it.each([
+    [undefined, 1.2, 0.5],
+    [1.3, 1.2, 0.6],
+    [1.3, 1.5, 0.65],
+    [1.3, 0.6, 0.3],
+    [1.3, -1, 0],
+    [Number.NaN, 1.2, 0.5],
+    [Number.POSITIVE_INFINITY, 1.2, 0.5],
+  ])(
+    "ceiling %s and utilization %s bill %s units",
+    (productivityMultiplier, utilization, units) => {
+      const result = computeInputsCost({ ...baseArgs(), productivityMultiplier, utilization });
+      expect(result.lines.reduce((sum, line) => sum + line.units, 0)).toBeCloseTo(units, 10);
+    }
+  );
+
+  it("a mothballed productive plant still buys nothing", () => {
+    expect(
+      computeInputsCost({
+        ...baseArgs(),
+        productivityMultiplier: 1.3,
+        utilization: 1.3,
+        mothballed: true,
+      })
+    ).toEqual({ total: 0, lines: [] });
+  });
+});
