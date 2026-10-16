@@ -1,6 +1,7 @@
 /** Native mechanism qualification; fixed buyers do not model a whole economy. */
 import { strict as assert } from "node:assert";
 import { writeFileSync } from "node:fs";
+import { BSON } from "mongodb";
 import type { CorporateSector } from "@/lib/db/types";
 import { TURNS_PER_DAY } from "@/lib/constants/corporations";
 import { assemblePhysicalPnl } from "@/lib/corporations/physicalPnl";
@@ -64,6 +65,8 @@ function trajectory(namedBuyerShock: boolean) {
       payroll: pnl.laborCost / TURNS_PER_DAY,
       upkeep: pnl.upkeep / TURNS_PER_DAY,
       inputs: pnl.inputsCost / TURNS_PER_DAY,
+      writeOperations: current.env.sectorOps.length,
+      writeBytes: BSON.calculateObjectSize({ operations: current.env.sectorOps }),
     });
   }
   return {
@@ -73,6 +76,8 @@ function trajectory(namedBuyerShock: boolean) {
     soldUnits: turns.reduce((sum, row) => sum + row.sold, 0),
     producedUnits: turns.reduce((sum, row) => sum + row.produced, 0),
     payroll: turns.reduce((sum, row) => sum + row.payroll, 0),
+    writeOperations: turns.reduce((sum, row) => sum + row.writeOperations, 0),
+    writeBytes: turns.reduce((sum, row) => sum + row.writeBytes, 0),
   };
 }
 const scenarios = [false, true].map(trajectory);
