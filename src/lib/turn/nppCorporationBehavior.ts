@@ -27,7 +27,7 @@ export {
   type CommodityPriceRatioFn,
 } from "@/lib/turn/npp/marketSignals";
 
-import { glutStaggerEligible } from "@/lib/turn/npp/cohort";
+import { criticalLogisticsStaggerEligible, glutStaggerEligible } from "@/lib/turn/npp/cohort";
 
 export { GLUT_STATE_CHANGE_STAGGER, glutStaggerEligible } from "@/lib/turn/npp/cohort";
 export {
@@ -441,6 +441,7 @@ export async function processNppCorporationDecisions(
     const corpCurrency = resolveCorpLiquidCurrencyCode(corp);
     const corpFxRate = (corpCurrency && fxByCurrency.get(corpCurrency)) || 1;
     const entryCohortEligible = glutStaggerEligible(corp._id.toString(), turn);
+    const criticalLogisticsEligible = criticalLogisticsStaggerEligible(corp._id.toString(), turn);
     const decisionContext: NppCorpDecisionContext = {
       corp,
       groupDirection: groupMembership?.eligibleManagementRoots?.has(
@@ -460,6 +461,8 @@ export async function processNppCorporationDecisions(
       strategy: corp.nppStrategy,
       strategyEligible: entryCohortEligible,
       ordinaryEntryEligible: entryCohortEligible,
+      criticalLogisticsEntryEligible: criticalLogisticsEligible,
+      criticalLogisticsShortageEligible: criticalLogisticsEligible && !autopilot,
       // Autopilot never borrows: shortage entry draws market-entry credit.
       shortageEntryEligible: entryCohortEligible && !autopilot,
       retailExpansionPaused,

@@ -42,6 +42,8 @@ function evaluate(args: {
   entryCapReached?: boolean;
   prices?: () => number;
   entryEligible?: boolean;
+  allowExpansion?: boolean;
+  wideEligible?: boolean;
 }) {
   const byCountry = new Map<string, UnownedSector[]>();
   for (const item of args.pools ?? [pool()]) {
@@ -65,9 +67,11 @@ function evaluate(args: {
     minCash: 0,
     sectorCount: 3,
     logisticsSupportedSectors: 10,
-    allowExpansion: true,
+    allowExpansion: args.allowExpansion ?? true,
     ordinaryEntryEligible: args.entryEligible ?? true,
     shortageEntryEligible: args.entryEligible ?? true,
+    criticalLogisticsEntryEligible: args.wideEligible,
+    criticalLogisticsShortageEligible: args.wideEligible,
     retailExpansionPaused: args.retailExpansionPaused,
     entryCapReached: args.entryCapReached ?? false,
   });
@@ -132,6 +136,98 @@ describe("entryEvaluation seam", () => {
     const entry = evaluate({ corporation: corp(), entryCapReached: true });
     expect(entry.ordinaryEntry).toBe(true);
     expect(entry.diagnostic.reason).toBe("entry_cap");
+  });
+});
+
+describe("critical freight shortage", () => {
+  const logisticsCorp = () => corp({ type: "logistics" });
+  const logisticsPool = () => [pool("logistics")];
+
+  it("admits a logistics candidate that the strategy lever would hold", () => {
+    const held = evaluate({
+      corporation: logisticsCorp(),
+      pools: logisticsPool(),
+      allowExpansion: false,
+      prices: () => 2,
+    });
+    expect(held.entryCandidate?.sectorType).toBe("logistics");
+    expect(held.criticalShortage).toBe(true);
+    expect(held.expansion).not.toBeNull();
+    expect(held.allowExpansion).toBe(true);
+    expect(held.exceptionalShortageEntry).toBe(true);
+    expect(held.diagnostic.reason).toBe("cash_floor");
+  });
+
+  it("uses the widened cohort slot for logistics only", () => {
+    const widened = evaluate({
+      corporation: logisticsCorp(),
+      pools: logisticsPool(),
+      entryEligible: false,
+      wideEligible: true,
+      prices: () => 2,
+    });
+    expect(widened.marketEntryEligible).toBe(true);
+    expect(widened.exceptionalShortageEntry).toBe(true);
+    const outside = evaluate({
+      corporation: logisticsCorp(),
+      pools: logisticsPool(),
+      entryEligible: false,
+      wideEligible: false,
+      prices: () => 2,
+    });
+    expect(outside.marketEntryEligible).toBe(false);
+    expect(outside.diagnostic.reason).toBe("cohort_ineligible");
+  });
+
+  it("keeps the lever and cohort for a non-critical logistics shortage", () => {
+    const entry = evaluate({
+      corporation: logisticsCorp(),
+      pools: logisticsPool(),
+      allowExpansion: false,
+      entryEligible: false,
+      wideEligible: true,
+      prices: () => 1.2,
+    });
+    expect(entry.criticalShortage).toBe(false);
+    expect(entry.allowExpansion).toBe(false);
+    expect(entry.expansion).toBeNull();
+    expect(entry.marketEntryEligible).toBe(false);
+    expect(entry.diagnostic.reason).toBe("strategy_disallowed");
+  });
+
+  it("leaves other sector types under the lever and ordinary cohort", () => {
+    const held = evaluate({
+      corporation: corp(),
+      pools: [pool("manufacturing")],
+      allowExpansion: false,
+      entryEligible: false,
+      wideEligible: true,
+      prices: () => 2,
+    });
+    expect(held.criticalShortage).toBe(true);
+    expect(held.allowExpansion).toBe(false);
+    expect(held.expansion).toBeNull();
+    expect(held.marketEntryEligible).toBe(false);
+    expect(held.diagnostic.reason).toBe("strategy_disallowed");
+  });
+
+  it("does not report profit or margin blocks for a critical candidate", () => {
+    const entry = evaluate({
+      corporation: logisticsCorp(),
+      pools: logisticsPool(),
+      profitable: false,
+      marginPct: -20,
+      prices: () => 2,
+    });
+    expect(entry.diagnostic.reason).toBe("cash_floor");
+    const ordinary = evaluate({
+      corporation: logisticsCorp(),
+      pools: logisticsPool(),
+      profitable: false,
+      marginPct: -20,
+      prices: () => 1.2,
+    });
+    expect(ordinary.diagnostic.reason).toBe("unprofitable");
   });
 });
 

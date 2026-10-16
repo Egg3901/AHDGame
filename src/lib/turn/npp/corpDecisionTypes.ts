@@ -39,6 +39,13 @@ export interface NppCorpDecisionContext {
   strategy?: NppStrategyState;
   strategyEligible?: boolean;
   ordinaryEntryEligible?: boolean;
+  /**
+   * Widened cohort slot used only when the entry target is logistics in a
+   * critical freight shortage. Absent reads as the ordinary slot.
+   */
+  criticalLogisticsEntryEligible?: boolean;
+  /** Same widened slot, minus autopilot corporations, which never borrow. */
+  criticalLogisticsShortageEligible?: boolean;
   strategyLoopEnabled?: boolean;
   /**
    * Capped frontier-entry experiment state (issue #991), supplied by the turn
