@@ -1,3 +1,6 @@
+import { cancelShareOrderAndRefund } from "@/lib/corporations/cancelShareOrder";
+import { creditShares, debitShares } from "@/lib/corporations/shareholderOps";
+import { createInMemoryDb } from "@/lib/test-utils/inMemoryDb";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ObjectId, type Db } from "mongodb";
 import { createMockDb, getAccessedCollections, type MockDb } from "@/lib/test-utils/mockDb";
@@ -18,7 +21,11 @@ vi.mock("@/lib/financialTxLog/emit", () => ({
 }));
 
 import { executeShareFillMoneyFlow } from "./shareFillMoney";
-import { emitSellerFundProceedsRow, settleBuyOrderFill } from "./fillShareOrderSettlement";
+import {
+  reconcileTotalSharesAfterFill,
+  emitSellerFundProceedsRow,
+  settleBuyOrderFill,
+} from "./fillShareOrderSettlement";
 import type { ShareFillAuditPlan } from "./shareFillAudit";
 import type { ShareFillMoneyPlan } from "./shareFillMoney";
 
@@ -374,4 +381,180 @@ describe("settleBuyOrderFill — fund buy order (peer fill) moves no fund cash",
       error: "You no longer have enough shares to fill this order",
     });
   });
+});
+
+describe("reconcileTotalSharesAfterFill reservation accounting", () => {
+  it.each([true, false, undefined])(
+    "preserves issued shares in a world with character flag %s",
+    async (flag) => {
+      const store = createInMemoryDb();
+      const corporationId = new ObjectId();
+      store.seed("corporations", [
+        {
+          _id: corporationId,
+          totalShares: 100,
+          publicFloat: 10,
+          shareholders: [{ characterId: new ObjectId(), shares: flag ? 50 : 75 }],
+        },
+      ]);
+      store.seed("shareListings", [{ corporationId, status: "open", sharesRemaining: 5 }]);
+      store.seed("shareOrders", [
+        {
+          corporationId,
+          type: "sell",
+          status: "open",
+          shares: 40,
+          sharesRemaining: 25,
+          ...(flag === undefined ? {} : { sharesDebitedAtCreation: flag }),
+        },
+        {
+          corporationId,
+          type: "sell",
+          status: "open",
+          placerCorporationId: new ObjectId(),
+          sharesRemaining: 10,
+        },
+        { corporationId, type: "sell", status: "open", sharesRemaining: 3 },
+        {
+          corporationId,
+          type: "sell",
+          status: "open",
+          sharesDebitedAtCreation: false,
+          sharesRemaining: 4,
+        },
+        ...["cancelled", "filled"].map((status) => ({
+          corporationId,
+          type: "sell",
+          status,
+          sharesDebitedAtCreation: true,
+          sharesRemaining: 500,
+        })),
+        {
+          corporationId,
+          type: "buy",
+          status: "open",
+          sharesDebitedAtCreation: true,
+          sharesRemaining: 500,
+        },
+        {
+          corporationId: new ObjectId(),
+          type: "sell",
+          status: "open",
+          sharesDebitedAtCreation: true,
+          sharesRemaining: 500,
+        },
+      ]);
+      await reconcileTotalSharesAfterFill(store as unknown as Db, corporationId);
+      expect(
+        (await store.collection("corporations").findOne({ _id: corporationId }))?.totalShares
+      ).toBe(100);
+      // Also exercise the correction write, not just its no-op branch.
+      await store
+        .collection("corporations")
+        .updateOne({ _id: corporationId }, { $set: { totalShares: 1 } });
+      await reconcileTotalSharesAfterFill(store as unknown as Db, corporationId);
+      expect(
+        (await store.collection("corporations").findOne({ _id: corporationId }))?.totalShares
+      ).toBe(100);
+    }
+  );
+
+  it("keeps a newly founded corporation without reservations unchanged", async () => {
+    const store = createInMemoryDb();
+    const corporationId = new ObjectId();
+    store.seed("corporations", [
+      {
+        _id: corporationId,
+        totalShares: 100,
+        publicFloat: 0,
+        shareholders: [{ characterId: new ObjectId(), shares: 100 }],
+      },
+    ]);
+    await reconcileTotalSharesAfterFill(store as unknown as Db, corporationId);
+    expect(
+      (await store.collection("corporations").findOne({ _id: corporationId }))?.totalShares
+    ).toBe(100);
+  });
+});
+
+describe("reservation transition conservation", () => {
+  it.each(["fill", "cancel"])(
+    "keeps issued shares through mixed legacy/modern fills and final %s",
+    async (outcome) => {
+      const store = createInMemoryDb();
+      const database = store as unknown as Db;
+      const corporationId = new ObjectId();
+      const seller = new ObjectId();
+      const buyer = new ObjectId();
+      const orderId = new ObjectId();
+      const legacyOrderId = new ObjectId();
+      store.seed("corporations", [
+        {
+          _id: corporationId,
+          totalShares: 100,
+          publicFloat: 10,
+          shareholders: [{ characterId: seller, shares: 50 }],
+        },
+      ]);
+      store.seed("shareListings", [{ corporationId, status: "open", sharesRemaining: 5 }]);
+      store.seed("shareOrders", [
+        {
+          _id: orderId,
+          corporationId,
+          characterId: seller,
+          type: "sell",
+          status: "open",
+          sharesDebitedAtCreation: true,
+          sharesRemaining: 25,
+          pricePerShare: 1,
+        },
+        { _id: legacyOrderId, corporationId, type: "sell", status: "open", sharesRemaining: 20 },
+        {
+          corporationId,
+          type: "sell",
+          status: "open",
+          placerCorporationId: new ObjectId(),
+          sharesRemaining: 10,
+        },
+      ]);
+      const expectConserved = async () => {
+        await reconcileTotalSharesAfterFill(database, corporationId);
+        expect(
+          (await store.collection("corporations").findOne({ _id: corporationId }))?.totalShares
+        ).toBe(100);
+      };
+      await expectConserved();
+      // A modern fill transfers already-debited shares; the legacy fill still debits its seller.
+      await creditShares(database, corporationId, buyer, 10);
+      await store
+        .collection("shareOrders")
+        .updateOne({ _id: orderId }, { $inc: { sharesRemaining: -10 } });
+      await expectConserved();
+      await debitShares(database, corporationId, seller, 5);
+      await creditShares(database, corporationId, buyer, 5);
+      await store
+        .collection("shareOrders")
+        .updateOne({ _id: legacyOrderId }, { $inc: { sharesRemaining: -5 } });
+      await expectConserved();
+      if (outcome === "cancel") {
+        const order = await store.collection("shareOrders").findOne({ _id: orderId });
+        expect(await cancelShareOrderAndRefund(database, order as unknown as ShareOrder)).toEqual({
+          ok: true,
+        });
+      } else {
+        await creditShares(database, corporationId, buyer, 15);
+        await store
+          .collection("shareOrders")
+          .updateOne({ _id: orderId }, { $set: { status: "filled", sharesRemaining: 0 } });
+      }
+      await expectConserved();
+      const corp = await store.collection("corporations").findOne({ _id: corporationId });
+      expect(corp?.shareholders).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ characterId: seller, shares: outcome === "cancel" ? 60 : 45 }),
+          expect.objectContaining({ characterId: buyer, shares: outcome === "cancel" ? 15 : 30 }),
+        ])
+      );
+    }
+  );
 });

@@ -1,5 +1,6 @@
 import {
   loadCampaignCurrencyRates,
+  loadCampaignPriceLevel,
   type CampaignCurrencyRates,
 } from "@/lib/campaigns/campaignCurrency";
 import { NextResponse } from "next/server";
@@ -7,11 +8,18 @@ import { getDb } from "@/lib/mongodb";
 import { getAuthUserWithCharacter, type AuthUserWithCharacter } from "@/lib/auth"; // Optional auth — intentionally uses getAuthUserWithCharacter()
 import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { ObjectId } from "mongodb";
-import type { Campaign, Character, ElectionCandidate, NPP, PoliticalParty } from "@/lib/db/types";
+import type {
+  Campaign,
+  CampaignFieldOffice,
+  Character,
+  ElectionCandidate,
+  NPP,
+  PoliticalParty,
+} from "@/lib/db/types";
 import { resolveElectionRouteParam } from "@/lib/elections/electionParamResolution";
-import { getEffectiveUpgradeCost, getMaintenanceCost } from "@/lib/campaigns/upgradeCosts";
-import { calculateCampaignIncome } from "@/lib/campaigns/income";
-import { calculateMaintenanceCosts } from "@/lib/campaigns/maintenance";
+import { getEffectiveUpgradeCost } from "@/lib/campaigns/upgradeCosts";
+import { buildCampaignBudgetPreview } from "@/lib/campaigns/rules/budgetPreview";
+import { getGameStatePresetOrDefault } from "@/lib/db/collections/gameState";
 import { campaignAnchorToLocal, getCampaignCurrency } from "@/lib/campaigns/campaignCurrency";
 import { isCampaignUpgradeGeneralPhase } from "@/lib/elections/phases";
 import { getGameTime } from "@/lib/time/gameTime";
@@ -36,7 +44,6 @@ export async function GET(request: Request, { params }: RouteParams) {
     }
 
     const db = await getDb();
-    const campaignRates = await loadCampaignCurrencyRates(db);
 
     const resolved = await resolveElectionRouteParam(db, electionId);
     if (!resolved.ok) {
@@ -80,16 +87,25 @@ export async function GET(request: Request, { params }: RouteParams) {
     const activeCandidacies = await db
       .collection<ElectionCandidate>("electionCandidates")
       .find({ electionId: electionOid, status: "active" })
-      .project<{ characterId: ObjectId | null; nppId: ObjectId | null }>({
+      .project<{
+        characterId: ObjectId | null;
+        nppId: ObjectId | null;
+        campaignSuspended?: boolean;
+      }>({
         characterId: 1,
         nppId: 1,
+        campaignSuspended: 1,
       })
       .toArray();
     // Campaigns key `candidateId` by character id for players and by NPP id for
     // NPPs, so both identities go into the set.
     const standingCandidateIds = new Set<string>();
+    const suspendedCandidateIds = new Set<string>();
     for (const c of activeCandidacies) {
-      if (c.characterId) standingCandidateIds.add(c.characterId.toString());
+      if (c.characterId) {
+        standingCandidateIds.add(c.characterId.toString());
+        if (c.campaignSuspended) suspendedCandidateIds.add(c.characterId.toString());
+      }
       if (c.nppId) standingCandidateIds.add(c.nppId.toString());
     }
     const campaigns = allCampaigns.filter((c) =>
@@ -107,7 +123,12 @@ export async function GET(request: Request, { params }: RouteParams) {
     // preview localizes at the frozen world-seeded currency basis (campaignAnchorToLocal,
     // inside formatCampaignForViewer) so it matches what campaignTurn and
     // upgradeCampaign actually credit/charge (never the live exchangeRates).
-    const campaignCurrencyCode = getCampaignCurrency(electionCountryId);
+    const [campaignRates, preset, priceLevel] = await Promise.all([
+      loadCampaignCurrencyRates(db),
+      getGameStatePresetOrDefault(db),
+      loadCampaignPriceLevel(db),
+    ]);
+    const campaignCurrencyCode = getCampaignCurrency(electionCountryId, preset);
 
     // General-phase upgrade surcharge + per-race-family scalar are computed once
     // for the whole list (one election → one phase). The cost preview must match
@@ -136,7 +157,14 @@ export async function GET(request: Request, { params }: RouteParams) {
     }
 
     // Batch fetch all required data in parallel
-    const [characters, npps, managers, parties] = await Promise.all([
+    const [offices, characters, npps, managers, parties] = await Promise.all([
+      db
+        .collection<CampaignFieldOffice>("campaignFieldOffices")
+        .find(
+          { campaignId: { $in: campaigns.map((c) => c._id) }, electionId: electionOid },
+          { projection: { campaignId: 1 } }
+        )
+        .toArray(),
       characterIds.length > 0
         ? db
             .collection<Character>("characters")
@@ -166,6 +194,12 @@ export async function GET(request: Request, { params }: RouteParams) {
         : Promise.resolve([]),
     ]);
 
+    const officeCounts = new Map<string, number>();
+    for (const office of offices) {
+      const key = office.campaignId.toString();
+      officeCounts.set(key, (officeCounts.get(key) ?? 0) + 1);
+    }
+
     // Create lookup maps for O(1) access
     const candidateMap = new Map<string, Character | NPP>();
     characters.forEach((c) => candidateMap.set(c._id.toString(), c));
@@ -190,7 +224,12 @@ export async function GET(request: Request, { params }: RouteParams) {
           campaignCurrencyCode,
           electionType,
           isGeneralPhase,
-          campaignRates
+          campaignRates,
+          preset,
+          priceLevel,
+          resolved.election.status,
+          suspendedCandidateIds.has(campaign.candidateId.toString()) && !campaign.candidateIsNPP,
+          officeCounts.get(campaign._id.toString()) ?? 0
         )
       )
       .filter((c) => c !== null); // Filter out campaigns with missing candidates
@@ -211,7 +250,12 @@ function formatCampaignForViewer(
   campaignCurrencyCode: string,
   electionType: string | undefined,
   isGeneralPhase: boolean,
-  campaignRates: CampaignCurrencyRates
+  campaignRates: CampaignCurrencyRates,
+  preset: string,
+  priceLevel: number,
+  electionStatus: string,
+  suspended: boolean,
+  officeCount: number
 ): Record<string, unknown> | null {
   // Look up candidate from map with null safety
   if (!campaign.candidateId) {
@@ -295,27 +339,15 @@ function formatCampaignForViewer(
 
   // Add privileged data for manager/nominee/admin
   if (canSeeExact) {
-    // Per-race-family budget scalar applies to income + maintenance (parity with
-    // getCampaignDetail) so non-presidential budgets aren't shown at presidential scale.
-    const income = calculateCampaignIncome(campaign, electionType);
-    const maintenance = calculateMaintenanceCosts(campaign, electionType);
-
-    // Fix I2: Use getMaintenanceCost helper for consistency
-    const groundGameMaintenance = getMaintenanceCost(
-      "groundGame",
-      campaign.groundGameLevel,
-      electionType
-    );
-    const mediaSpendingMaintenance = getMaintenanceCost(
-      "mediaSpending",
-      campaign.mediaSpendingLevel,
-      electionType
-    );
-
-    // Campaign funds are decoupled from live forex — localize anchor
-    // income/maintenance/upgrade costs at the frozen world-seeded currency basis.
     const toLocal = (anchor: number) =>
-      campaignAnchorToLocal(anchor, electionCountryId, campaignRates);
+      campaignAnchorToLocal(anchor * priceLevel, electionCountryId, campaignRates, preset);
+    const preview = buildCampaignBudgetPreview(
+      campaign,
+      { countryId: electionCountryId, electionType, status: electionStatus },
+      suspended,
+      officeCount,
+      toLocal
+    );
     // activityHistory is deliberately NOT returned here. This is a list
     // endpoint that serves every campaign in the election at once, and no
     // consumer (the presidential tickets and field tables) reads the field. Once a
@@ -325,16 +357,7 @@ function formatCampaignForViewer(
     const privilegedData = {
       ...base,
       budget: {
-        // funds + cumulative totals are already local in storage.
-        income: {
-          total: toLocal(income),
-        },
-        expenses: {
-          groundGameMaintenance: toLocal(groundGameMaintenance),
-          mediaSpendingMaintenance: toLocal(mediaSpendingMaintenance),
-          total: toLocal(maintenance),
-        },
-        netIncome: toLocal(income) - toLocal(maintenance),
+        ...preview,
         cumulative: {
           totalGenerated: campaign.totalFundsGenerated,
           totalSpent: campaign.totalFundsSpent,

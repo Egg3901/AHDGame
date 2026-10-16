@@ -66,7 +66,14 @@ function campaignFixture(over: Partial<CampaignData> = {}): CampaignData {
     },
     budget: {
       income: { total: 61_000 },
-      expenses: { groundGameMaintenance: 6_200, mediaSpendingMaintenance: 2_400, total: 8_600 },
+      expenses: {
+        fundraisingMaintenance: 0,
+        oppositionResearchMaintenance: 0,
+        fieldOfficeMaintenance: 0,
+        groundGameMaintenance: 6_200,
+        mediaSpendingMaintenance: 2_400,
+        total: 8_600,
+      },
       netIncome: 52_400,
       actions: { endorsementCount: 0, perTurn: 9 },
       cumulative: {
