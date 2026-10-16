@@ -78,6 +78,7 @@ function toStoredLeg(plan: PlannedLeg): AcquisitionSettlementLeg {
     collection: plan.collection,
     filter: storedFilter(plan.collection, plan.id),
     inc: { ...plan.inc },
+    ...(plan.stockTaxReceipt ? { stockTaxReceipt: plan.stockTaxReceipt } : {}),
     ...(plan.pull
       ? {
           pull: {
@@ -243,7 +244,10 @@ export async function applyAcquisitionLeg(
   const update = {
     $inc: leg.inc,
     $set: { updatedAt: now },
-    $push: { [SETTLED_KEYS_FIELD]: { $each: [stamp], $slice: -SETTLED_KEYS_CAP } },
+    $push: {
+      [SETTLED_KEYS_FIELD]: { $each: [stamp], $slice: -SETTLED_KEYS_CAP },
+      ...(leg.stockTaxReceipt ? { pendingStockTaxReceipts: leg.stockTaxReceipt } : {}),
+    },
   } as unknown as UpdateFilter<Document>;
   const res = await collection.updateOne(filter, update);
   if (res.matchedCount === 1) {

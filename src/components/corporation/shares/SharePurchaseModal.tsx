@@ -3,6 +3,8 @@
 import { InlineError } from "@/components/ui/InlineError";
 import { apiErrorText } from "@/lib/errors/catalog";
 import { useState } from "react";
+import { availableHoldingShares, type HoldingTerm } from "@/lib/corporations/rules/holdingTerms";
+import { HoldingTermSelector } from "./HoldingTermSelector";
 import { Button, useDialogA11y } from "@/components/ui";
 import type { CorporationDetail, MarketOrder, MyShareOrder } from "../CorporationPageTypes";
 import PrivateSalePanel from "./PrivateSalePanel";
@@ -89,6 +91,19 @@ export default function SharePurchaseModal({
   const corpCurrencyCode = corporation.liquidCurrencyCode as CurrencyCode | undefined;
 
   const [mode, setMode] = useState<PurchaseMode>("float");
+  const myHoldingTerms = corporation.shareholders.find(
+    (holder) => holder.characterId === myCharacterId
+  )?.holdingTerms;
+  const [requestedHoldingTerm, setRequestedHoldingTerm] = useState<HoldingTerm>("long");
+  const holdingTerm =
+    myHoldingTerms && !availableHoldingShares(myHoldingTerms, requestedHoldingTerm)
+      ? requestedHoldingTerm === "long"
+        ? "short"
+        : "long"
+      : requestedHoldingTerm;
+  const personalSellShares = myHoldingTerms
+    ? availableHoldingShares(myHoldingTerms, holdingTerm)
+    : myShares;
   const [quantity, setQuantity] = useState(0);
   // sharePrice is in corp-local currency post-forex; normalize to ₳ before converting to display currency.
   const [limitPrice, setLimitPrice] = useState(() =>
@@ -452,7 +467,7 @@ export default function SharePurchaseModal({
       ? !(corpLimitBuyEstimate?.canAfford ?? false)
       : limitPersonalHomeBalance < buyCostInHome);
 
-  const limitSellSharesAvail = limitAsCorp ? myCorporationShares : myShares;
+  const limitSellSharesAvail = limitAsCorp ? myCorporationShares : personalSellShares;
   const limitSellInsufficient =
     mode === "limit" && orderSide === "sell" && quantity > limitSellSharesAvail;
 
@@ -472,7 +487,7 @@ export default function SharePurchaseModal({
   const sellAtMarketInsufficient =
     atMarketSide === "sell" &&
     !sellAsInvestmentBank &&
-    quantity > (sellAsCorp ? myCorporationShares : myShares);
+    quantity > (sellAsCorp ? myCorporationShares : personalSellShares);
   const marketDepthInsufficient =
     atMarketSide === "sell" && !sellAsInvestmentBank && quantity > marketDepthShares;
 
@@ -707,6 +722,7 @@ export default function SharePurchaseModal({
         body: JSON.stringify({
           shares: quantity,
           sellAsCorporation: sellAsCorp,
+          ...(!sellAsCorp ? { holdingTerm } : {}),
           ...(confirmVacate ? { confirmCeoVacate: true } : {}),
         }),
       });
@@ -753,6 +769,7 @@ export default function SharePurchaseModal({
             ? toLocalOf(limitPrice, corpCurrencyCode)
             : toInternal(limitPrice),
           placeAsCorporation: limitAsCorp,
+          ...(orderSide === "sell" && !limitAsCorp ? { holdingTerm } : {}),
         }),
       });
       const data = (await res.json()) as {
@@ -907,6 +924,22 @@ export default function SharePurchaseModal({
 
           {/* ─── Body ────────────────────────────────────────────────────────── */}
           <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5 space-y-4">
+            {myHoldingTerms &&
+              ((mode === "float" &&
+                atMarketSide === "sell" &&
+                !sellAsCorp &&
+                !sellAsInvestmentBank) ||
+                (mode === "limit" && orderSide === "sell" && !limitAsCorp)) && (
+                <HoldingTermSelector
+                  terms={myHoldingTerms}
+                  term={holdingTerm}
+                  turn={corporation.currentTurn}
+                  onChange={(value) => {
+                    setRequestedHoldingTerm(value);
+                    resetQuantity(0);
+                  }}
+                />
+              )}
             {mode === "float" && (
               <SharePurchaseAtMarketView
                 atMarketSide={atMarketSide}
@@ -928,7 +961,8 @@ export default function SharePurchaseModal({
                 resetQuantity={resetQuantity}
                 parseQtyDigits={parseQtyDigits}
                 myCorporation={myCorporation}
-                myShares={myShares}
+                myShares={personalSellShares}
+                totalPersonalShares={myShares}
                 myCorporationShares={myCorporationShares}
                 isCeo={isCeo}
                 myCurrencyBalances={myCurrencyBalances}
@@ -980,7 +1014,7 @@ export default function SharePurchaseModal({
                 onSwitchToOrders={() => switchMode("orders")}
                 onSuccess={onSuccess}
                 myCorporation={myCorporation}
-                myShares={myShares}
+                myShares={personalSellShares}
                 myCorporationShares={myCorporationShares}
                 corpId={corpId}
                 corpCurrencyCode={corpCurrencyCode}
@@ -1009,6 +1043,8 @@ export default function SharePurchaseModal({
 
             {mode === "orderbook" && (
               <SharePurchaseOrderbookView
+                holdingTerms={myHoldingTerms}
+                currentTurn={corporation.currentTurn}
                 orderbookAsks={orderbookAsks}
                 orderbookBids={orderbookBids}
                 myCorporation={myCorporation}

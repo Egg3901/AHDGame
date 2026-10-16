@@ -160,7 +160,7 @@ export async function executeCorporationBondDefaultDissolution(
   // code credited `shares × issuer.sharePrice` into liquidCapital (no
   // counterparty debit), minting pumpable value straight into the settlement
   // pool — the dominant route the money-laundering ring used.
-  await distributeCrossEquityInKind(db, corporation, now);
+  await distributeCrossEquityInKind(db, corporation, now, currentTurn);
 
   if (assetLiquidationInc > 0) {
     await db

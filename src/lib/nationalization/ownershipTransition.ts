@@ -1,4 +1,6 @@
 import type { Db } from "mongodb";
+import { positionHoldingTerms } from "@/lib/corporations/rules/holdingTerms";
+import { pendingStockTaxReceipt } from "@/lib/corporations/rules/stockTaxReceipt";
 import { heldStakeValueAnchor, transferOwnedSharesToNatCorp } from "./heldEquityTransfer";
 import { ObjectId } from "mongodb";
 import { badRequest } from "@/lib/api/errors";
@@ -1110,6 +1112,10 @@ export async function nationalizeWholeCorp(
         turn: ledger.context?.turn ?? params.consequence.turn,
         kind: "nationalize_whole",
         treasury: ledger,
+        stockTaxActive:
+          corpGameState?.stockHoldingTaxStartTurn !== undefined &&
+          (ledger.context?.turn ?? params.consequence.turn) >=
+            corpGameState.stockHoldingTaxStartTurn,
       });
     }
   }
@@ -1340,6 +1346,16 @@ export async function payShareholders(
   // Ledger legs for every holder credited below. Collected here and flushed once
   // at the end so a throw part-way through does not log money that was reversed.
   const ledgerEntries: PayShareholdersTxInput[] = [];
+  const holdingsByOwner = new Map(
+    (target.shareholders ?? []).flatMap((holder) => {
+      const key = holder.characterId
+        ? "character:" + holder.characterId.toHexString()
+        : holder.imperialCharacterId
+          ? "imperial:" + holder.imperialCharacterId.toHexString()
+          : undefined;
+      return key ? [[key, holder] as const] : [];
+    })
+  );
 
   const anchorToLocal = (amtAnchor: number, currency: string): number => {
     const rate = fxByCurrency.get(currency as CurrencyCode);
@@ -1361,6 +1377,26 @@ export async function payShareholders(
       charRows.map((r) => {
         const currency = currencyById.get(r.characterId) ?? "USD";
         const amt = forexEnabled ? anchorToLocal(r.payout, currency) : r.payout;
+        const holder = holdingsByOwner.get("character:" + r.characterId);
+        const stockTax =
+          ledger?.stockTaxActive && holder
+            ? pendingStockTaxReceipt({
+                id:
+                  target._id.toHexString() +
+                  ":" +
+                  ledger.kind +
+                  ":" +
+                  ledger.turn +
+                  ":character:" +
+                  r.characterId,
+                currencyCode: currency,
+                holdingTerms: positionHoldingTerms(holder, ledger.turn, 0),
+                proceedsAnchor: r.payout,
+                proceedsCredited: amt,
+                saleTurn: ledger.turn,
+                assessmentTurn: ledger.turn + 1,
+              })
+            : undefined;
         if (ledger)
           ledgerEntries.push(
             buyoutPayoutLeg(ledger, target, "character", new ObjectId(r.characterId), amt, currency)
@@ -1371,6 +1407,7 @@ export async function payShareholders(
             update: {
               $inc: buildPersonalBalanceInc(amt, currency, forexEnabled),
               $set: { updatedAt: now },
+              ...(stockTax ? { $push: { pendingStockTaxReceipts: stockTax } } : {}),
             },
           },
         };
@@ -1389,6 +1426,26 @@ export async function payShareholders(
       imperialRows.map((r) => {
         const currency = currencyById.get(r.characterId) ?? "USD";
         const amt = forexEnabled ? anchorToLocal(r.payout, currency) : r.payout;
+        const holder = holdingsByOwner.get("imperial:" + r.characterId);
+        const stockTax =
+          ledger?.stockTaxActive && holder
+            ? pendingStockTaxReceipt({
+                id:
+                  target._id.toHexString() +
+                  ":" +
+                  ledger.kind +
+                  ":" +
+                  ledger.turn +
+                  ":imperial:" +
+                  r.characterId,
+                currencyCode: currency,
+                holdingTerms: positionHoldingTerms(holder, ledger.turn, 0),
+                proceedsAnchor: r.payout,
+                proceedsCredited: amt,
+                saleTurn: ledger.turn,
+                assessmentTurn: ledger.turn + 1,
+              })
+            : undefined;
         if (ledger)
           ledgerEntries.push(
             buyoutPayoutLeg(
@@ -1409,6 +1466,7 @@ export async function payShareholders(
             update: {
               $inc: buildPersonalBalanceInc(amt, currency, forexEnabled),
               $set: { updatedAt: now },
+              ...(stockTax ? { $push: { pendingStockTaxReceipts: stockTax } } : {}),
             },
           },
         };
@@ -1508,6 +1566,7 @@ export async function payShareholders(
 
 /** Ledger context for {@link payShareholders}; omit to skip emission entirely. */
 export interface PayShareholdersLedgerContext {
+  stockTaxActive?: boolean;
   turn: number;
   /** Short marker for what moved the money, e.g. "agreed_acquisition". */
   kind: string;

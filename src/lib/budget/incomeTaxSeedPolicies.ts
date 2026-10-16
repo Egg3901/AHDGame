@@ -2,6 +2,7 @@
 import type { Db } from "mongodb";
 import type { FederalBudget, StateBudget, LegislationType } from "@/lib/db/types";
 import { incomeTierForTaxKey, incomeTaxRate } from "./rules/incomeTaxTiers";
+import { capitalGainsTierForTaxKey, capitalGainsTaxRate } from "./rules/capitalGainsTax";
 
 export async function alignSeedIncomeTaxTierRecords<
   T extends { scope: string; stateId?: string; legislationTypeId: string; policyOptionId?: string },
@@ -21,7 +22,11 @@ export async function alignSeedIncomeTaxTierRecords<
         {
           _id: {
             $in: records
-              .filter((record) => record.legislationTypeId.includes("__income_"))
+              .filter(
+                (record) =>
+                  record.legislationTypeId.includes("__income_") ||
+                  record.legislationTypeId.includes("__capital_")
+              )
               .map((record) => record.legislationTypeId),
           },
         },
@@ -33,7 +38,8 @@ export async function alignSeedIncomeTaxTierRecords<
   return records.map((record) => {
     const type = byType.get(record.legislationTypeId);
     const change = type?.taxSlider ?? type?.taxRateChange;
-    const tier = change && incomeTierForTaxKey(change.taxType);
+    const capitalTier = change && capitalGainsTierForTaxKey(change.taxType);
+    const tier = change && (incomeTierForTaxKey(change.taxType) ?? capitalTier);
     if (!type || !change || !tier) return record;
     const budget =
       change.scope === "federal"
@@ -48,7 +54,9 @@ export async function alignSeedIncomeTaxTierRecords<
         : undefined;
     return {
       ...record,
-      policyOptionId: "rate:" + (pending ?? incomeTaxRate(budget.taxRates, tier)),
+      policyOptionId:
+        "rate:" +
+        (pending ?? (capitalTier ? capitalGainsTaxRate : incomeTaxRate)(budget.taxRates, tier)),
     };
   });
 }

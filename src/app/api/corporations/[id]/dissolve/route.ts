@@ -226,7 +226,7 @@ export async function POST(_request: Request, { params }: RouteParams) {
         // Pre-fix that credited `shares × issuer.sharePrice` into liquidCapital
         // with no counterparty debit, minting money a ring could pump and
         // extract (the money-laundering exploit).
-        await distributeCrossEquityInKind(db, corporation, now);
+        await distributeCrossEquityInKind(db, corporation, now, currentTurn);
 
         // Operating sectors leave the corporation on dissolution (NPP successors
         // take them over, or they return to the unowned market), so a salvage

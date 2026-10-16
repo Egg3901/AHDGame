@@ -83,9 +83,10 @@ export const LEGACY_DYNAMIC_COLLECTION_SITES: readonly LegacyDynamicCollectionSi
     file: "src/lib/admin/resetGameWorld.ts",
     owner: "<anonymous-function>",
     argument: "name",
-    scopeHash: "5bb243b52a536dec4734a3aa778d6eeb25f29fbeb3765bb3e12ddc8e02f4a792",
+    scopeHash: "7b7b88a554a739924d1a306ac65482305d7144db962c8dd50b941b557e08d38d",
     count: 1,
-    reason: "Reset iterates the explicit runtime manifest.",
+    reason:
+      "Reviewed stock-tax reset addition: reset still iterates only the explicit runtime manifest. New activation state is reset and imperial pending stock receipts are cleared; no collection destination was added or broadened.",
   },
   {
     file: "src/lib/admin/seed/indexes/helpers.ts",
@@ -261,9 +262,10 @@ export const LEGACY_DYNAMIC_COLLECTION_SITES: readonly LegacyDynamicCollectionSi
     file: "src/lib/corporations/commands/acquisitions/acquisitionSettlement.ts",
     owner: "applyAcquisitionLeg",
     argument: "leg.collection",
-    scopeHash: "0ca4b586081b2e51766d2a9e5706e693a19a2a20b2616aa7a1915011ac5863af",
+    scopeHash: "865133c464541ed054e5dfdc28be29403872ac66db44655cea9b74c7a91ab90e",
     count: 1,
-    reason: "The persisted transaction or recovery record carries its destination collection.",
+    reason:
+      "Reviewed stock-tax receipt addition: persisted acquisition legs target the existing characters, imperialCharacters or corporations collections; the receipt shares the keyed wallet write and inherits actor reset coverage.",
   },
   {
     file: "src/lib/corporations/commands/acquisitions/acquisitionSettlement.ts",

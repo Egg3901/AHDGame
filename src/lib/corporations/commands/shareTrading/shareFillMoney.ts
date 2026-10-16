@@ -6,7 +6,10 @@ import {
   runMoneyFlowSteps,
   type MoneyFlowStep,
 } from "@/lib/db/nonAtomicMoneyFlow";
-import { markShareFillMoneyCommitted } from "@/lib/corporations/commands/shareTrading/shareFillAudit";
+import {
+  markShareFillMoneyCommitted,
+  restoreFailedShareFillClaim,
+} from "@/lib/corporations/commands/shareTrading/shareFillAudit";
 import {
   isShareFillMoneyPlan,
   buildShareFillMoneyKey,
@@ -92,21 +95,23 @@ export function buildShareFillMoneySteps(
   const now = new Date(plan.nowIso);
   const corpId = new ObjectId(plan.corpIdHex);
   const steps: MoneyFlowStep[] = [];
-  if (plan.direction === "sell-fill") {
+  if (plan.direction === "sell-fill" || plan.direction === "listing-fill") {
     // 1. Filler cash debit. Guard failure with an empty prefix settles
     // `failed` (nothing moved, so that verdict is truthful) and maps to
     // the legacy `Insufficient funds` 400.
-    if (!plan.fillerDebit) throw new Error("share-fill-money:sell-fill-needs-filler-debit");
-    steps.push(
-      makeCashStep(
-        db,
-        "filler-debit",
-        deriveMoneyFlowKey(moneyKey, "filler-debit"),
-        plan.fillerDebit,
-        true,
-        now
-      )
-    );
+    if (plan.direction === "sell-fill" && !plan.fillerDebit)
+      throw new Error("share-fill-money:sell-fill-needs-filler-debit");
+    if (plan.fillerDebit)
+      steps.push(
+        makeCashStep(
+          db,
+          "filler-debit",
+          deriveMoneyFlowKey(moneyKey, "filler-debit"),
+          plan.fillerDebit,
+          true,
+          now
+        )
+      );
     // 2. Seller side: fund inventory dual debit, or the placer cap-table
     // debit (skipped when placement pre-debited the shares).
     if (plan.fundInventoryDebit) {
@@ -144,6 +149,20 @@ export function buildShareFillMoneySteps(
         now
       )
     );
+    // Refund prepaid private-offer escrow before the taxable cash credit.
+    // The seller credit is the final monetary leg, so a later refund failure
+    // cannot reverse income which a closing turn may already have assessed.
+    if (plan.buyerRefund)
+      steps.push(
+        makeCashStep(
+          db,
+          "buyer-refund",
+          deriveMoneyFlowKey(moneyKey, "buyer-refund"),
+          plan.buyerRefund,
+          false,
+          now
+        )
+      );
     // 4. Seller proceeds.
     if (plan.sellerProceeds) {
       steps.push(
@@ -271,6 +290,7 @@ export async function executeShareFillMoneyFlow(
   if (claim === "duplicate") {
     const settled = await receiptsEx(db).findOne({ _id: moneyKey });
     const stored = settled?.shareFillMoneyPlan as ShareFillMoneyPlan | undefined;
+    if (stored) await bridgeAuditFromPlan(db, stored);
     const outcome = stored?.outcome;
     if (outcome && typeof outcome.sharesMoved === "number") return { ...outcome };
     return { sharesMoved: plan.shares };
@@ -336,6 +356,8 @@ export async function recoverShareFillMoneyByFillKey(
   const receipt = await receiptsEx(db).findOne({ _id: moneyKey });
   if (!receipt) return { moneyKey, action: "skipped-missing" };
   if (receipt.status !== "in_progress") {
+    if (receipt.status === "failed" || receipt.status === "compensated")
+      await restoreFailedShareFillClaim(db, fillKey);
     // A crash between money-commit and the audit bridge leaves a completed
     // money receipt with an uncommitted audit receipt: re-bridge from the
     // stored plan (idempotent) instead of leaving audit stuck.
@@ -357,6 +379,9 @@ export async function recoverShareFillMoneyByFillKey(
       mapMoneyError
     );
   } catch {
+    const result = await receiptsEx(db).findOne({ _id: moneyKey });
+    if (result?.status === "failed" || result?.status === "compensated")
+      await restoreFailedShareFillClaim(db, fillKey);
     return { moneyKey, action: "money-incomplete" };
   }
   const outcome: ShareFillMoneyOutcome = { sharesMoved: stored.shares };
@@ -541,6 +566,9 @@ export async function recoverShareFillMoneyOrphans(
         mapMoneyError
       );
     } catch {
+      const failed = await receiptsEx(db).findOne({ _id: receipt._id });
+      if (failed?.status === "failed" || failed?.status === "compensated")
+        await restoreFailedShareFillClaim(db, stored.fillKey);
       results.push({ moneyKey: receipt._id, action: "money-incomplete" });
       continue;
     }

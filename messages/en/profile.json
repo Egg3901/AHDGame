@@ -312,8 +312,22 @@
       "raceDone": "You are in the arena.",
       "skippedTour": "You skipped the tour. The <link>two-minute basics</link> are here whenever you want them."
     },
+    "stockHoldings": {
+      "short": "Short Term Holdings",
+      "long": "Long Term Holdings",
+      "bucket": "Sell from",
+      "shares": "{count, number} shares",
+      "purchaseTurn": "Bought on turn {turn}: {count, number} shares, {remaining, plural, one {# turn} other {# turns}} until long term",
+      "shortTax": "Dividends and positive sale profits are subject to Income Tax. Purchase cost is not taxed.",
+      "longTax": "Dividends and positive sale profits are subject to Capital Gains Tax for your income group. Purchase cost is not taxed.",
+      "maturity": "Purchased shares become long term after 48 turns.",
+      "none": "No shares in this bucket."
+    },
     "incomeTax": {
-      "title": "Income tax",
+      "title": "Personal taxes",
+      "incomeTitle": "Income Tax",
+      "taxType": "Tax type",
+      "capitalGains": "Capital Gains Tax",
       "tiers": {
         "low": "Low Income",
         "middle": "Medium Income",

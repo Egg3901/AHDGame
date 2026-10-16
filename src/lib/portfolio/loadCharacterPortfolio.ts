@@ -1,4 +1,9 @@
 import { loadPlayerIncomeTaxSummary } from "@/lib/budget/playerIncomeTaxSummary";
+import {
+  holdingCostBasis,
+  positionHoldingTerms,
+  type ShareHoldingTerms,
+} from "@/lib/corporations/rules/holdingTerms";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { getCharacterByUserId } from "@/lib/db/characterLookup";
@@ -32,6 +37,8 @@ import type { CurrencyCode } from "@/lib/constants/currencies";
 import type { ExchangeRate } from "@/lib/db/types/exchangeRate";
 
 interface Holding {
+  holdingTerms?: ShareHoldingTerms;
+  holdingTurn?: number;
   corporationId: string;
   corporationName: string;
   sequentialId?: number;
@@ -127,7 +134,11 @@ export async function loadCharacterPortfolio(userId: string) {
     const corpFxRate = fxRateForCorpFromMap(corp, fxByCurrency);
     totalValue += corpLiquidCapitalToAnchor(value, corp, corpFxRate);
 
-    const avgCostPerShare = sh.avgCostPerShare ?? null;
+    const avgCostPerShare = sh.holdingTerms
+      ? (holdingCostBasis(sh.holdingTerms) / sh.shares) * corpFxRate
+      : sh.avgCostPerShare !== undefined
+        ? sh.avgCostPerShare * (sh.avgCostBasisUnit === "anchor" ? corpFxRate : 1)
+        : null;
     const unrealizedPnl =
       avgCostPerShare !== null
         ? Math.round((quote - avgCostPerShare) * sh.shares * 100) / 100
@@ -143,6 +154,17 @@ export async function loadCharacterPortfolio(userId: string) {
         : undefined)) as CurrencyCode | undefined;
 
     holdings.push({
+      ...(gameState?.stockHoldingTaxStartTurn !== undefined &&
+      currentTurn >= gameState.stockHoldingTaxStartTurn
+        ? {
+            holdingTerms: positionHoldingTerms(
+              sh,
+              currentTurn,
+              corpLiquidCapitalToAnchor(quote, corp, corpFxRate)
+            ),
+            holdingTurn: currentTurn,
+          }
+        : {}),
       corporationId: corp._id.toString(),
       corporationName: corp.name,
       sequentialId: corp.sequentialId,

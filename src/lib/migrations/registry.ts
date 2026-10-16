@@ -1,4 +1,5 @@
 import { migration as incomeTaxTiers } from "./entries/2026-10-16-income-tax-tiers";
+import { migration as stockHoldingTaxTiers } from "./entries/2026-10-16-stock-holding-tax-tiers";
 import { migration as incomeTaxPolicyParity } from "./entries/2026-10-15-income-tax-policy-parity";
 import { migration as governmentContractBidding } from "./entries/2026-10-14-government-contract-bidding";
 import { migration as contestAccountHistory } from "./entries/2026-10-14-contest-account-history";
@@ -413,6 +414,8 @@ export const ROLLBACK_MIGRATIONS: Migration[] = [restoreCapitalModeFromShadow];
 //     the per-turn conservation warning is INERT until this is run. Run it as
 //     soon as the write is approved, or the monitoring half of the fix is dead.
 export const HELD_MIGRATIONS: Migration[] = [
+  // #4293: paused-world stock-tax rollout requires an explicit --only selection.
+  stockHoldingTaxTiers,
   equityPoolSeedBackfill,
   // #2159: explicit live-world promotion. The dedicated script targets
   // MONGODB_URI_LIVE, defaults to dry-run, and requires the current world id.

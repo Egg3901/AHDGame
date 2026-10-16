@@ -178,3 +178,16 @@ export function incomeTaxDebtAnchor(
   if (!Number.isFinite(rate) || rate <= 0) throw new Error("Invalid income-tax debt currency");
   return amount / rate;
 }
+
+/** Frozen legacy assessments retain their original debit; new cash wallets use anchor units. */
+export function playerTaxWalletDebit(total: number, sourceFx: number, walletFx?: number): number {
+  if (
+    !Number.isFinite(total) ||
+    total < 0 ||
+    !Number.isFinite(sourceFx) ||
+    sourceFx <= 0 ||
+    (walletFx !== undefined && (!Number.isFinite(walletFx) || walletFx <= 0))
+  )
+    throw new Error("Invalid tax wallet conversion");
+  return walletFx === undefined ? total : (total / sourceFx) * walletFx;
+}

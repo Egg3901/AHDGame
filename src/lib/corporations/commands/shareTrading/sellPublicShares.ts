@@ -1,4 +1,12 @@
 import { NextResponse } from "next/server";
+import {
+  availableHoldingShares,
+  chooseHoldingTerm,
+  positionHoldingTerms,
+  type HoldingTerm,
+} from "@/lib/corporations/rules/holdingTerms";
+import { pendingStockTaxReceipt } from "@/lib/corporations/rules/stockTaxReceipt";
+import type { PersonalHoldingChange } from "@/lib/corporations/personalHoldingOps";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireCorporationActionsEnabled } from "@/lib/api/requireCorporationActions";
@@ -106,7 +114,7 @@ export async function sellPublicShares(request: Request, { params }: RouteParams
       return errorResponse(parsed.status, parsed.error);
     }
 
-    const { shares, sellAsCorporation, confirmCeoVacate } = parsed.data;
+    const { shares, sellAsCorporation, confirmCeoVacate, holdingTerm } = parsed.data;
     const [db, forexEnabled] = await Promise.all([getDb(), isForexEnabled()]);
     const corpGuard = await requireCorporationActionsEnabled(db);
     if (corpGuard) return corpGuard;
@@ -124,6 +132,7 @@ export async function sellPublicShares(request: Request, { params }: RouteParams
     );
 
     const now = new Date();
+    const saleTurn = await getCurrentTurn(db);
     // sharePrice is stored in the target corp's liquidCurrencyCode (v0.2.6).
     // Normalize to ₳ here so every downstream credit — seller corp liquidCapital,
     // imperial/character home wallet — uses the same anchor-denominated base.
@@ -399,6 +408,19 @@ export async function sellPublicShares(request: Request, { params }: RouteParams
         return errorResponse(400, `You only own ${ownedShares} shares`);
       }
 
+      const terms = positionHoldingTerms(shareholderEntry!, saleTurn, proceeds / shares);
+      let selectedTerm: HoldingTerm;
+      try {
+        selectedTerm = chooseHoldingTerm(terms, holdingTerm);
+      } catch {
+        return errorResponse(409, "Choose Short Term Holdings or Long Term Holdings", {
+          extra: { requiresHoldingTerm: true },
+        });
+      }
+      if (availableHoldingShares(terms, selectedTerm) < shares)
+        return errorResponse(400, "Insufficient shares in selected holding bucket");
+      const holdingChange: PersonalHoldingChange = { turn: saleTurn, term: selectedTerm };
+
       const shouldVacateCeo =
         corporation.ceoType === "imperial" &&
         imperial._id.equals(corporation.ceoId) &&
@@ -498,6 +520,7 @@ export async function sellPublicShares(request: Request, { params }: RouteParams
           shares,
           forexEnabled,
           sellerFxRate: imperialFxRate,
+          holdingTerm: selectedTerm,
           now,
           turn: await getCurrentTurn(db),
         });
@@ -521,13 +544,24 @@ export async function sellPublicShares(request: Request, { params }: RouteParams
         imperial._id,
         shares,
         corporationUpdate,
-        { requireSufficient: true }
+        { requireSufficient: true, holdingChange }
       );
       if (remainingAfterSale < 0) {
         await reverseFloatSellDebit(db, corporation, issuerBuyback, { split: issuerBuybackSplit });
         return errorResponse(409, "Shares were already sold or reserved by another action");
       }
 
+      const stockTax = holdingChange.tracked
+        ? pendingStockTaxReceipt({
+            id: new ObjectId().toHexString(),
+            currencyCode: imperialHomeCurrency,
+            holdingTerms: holdingChange.taken!,
+            proceedsAnchor: proceeds,
+            proceedsCredited: proceedsInImperialHome,
+            saleTurn,
+            assessmentTurn: saleTurn + 1,
+          })
+        : undefined;
       const sellerCredit = await db.collection<ImperialCharacter>("imperialCharacters").updateOne(
         { _id: imperial._id },
         {
@@ -535,6 +569,7 @@ export async function sellPublicShares(request: Request, { params }: RouteParams
             ...buildPersonalBalanceInc(proceedsInImperialHome, imperialHomeCurrency, forexEnabled),
           },
           $set: { updatedAt: now },
+          ...(stockTax ? { $push: { pendingStockTaxReceipts: stockTax } } : {}),
         }
       );
       if (sellerCredit.matchedCount === 0) {
@@ -550,7 +585,7 @@ export async function sellPublicShares(request: Request, { params }: RouteParams
             },
             $set: { updatedAt: new Date() },
           },
-          { pricePerShare: shareholderEntry?.avgCostPerShare ?? executionPrice }
+          { holdingChange: { turn: saleTurn, restore: holdingChange.taken } }
         );
         if (shouldVacateCeo) {
           await db
@@ -613,6 +648,8 @@ export async function sellPublicShares(request: Request, { params }: RouteParams
         counterpartyId: corporation._id,
         counterpartyName: corporation.name,
         meta: {
+          ...(stockTax ? { stockTax } : {}),
+          holdingTerm: selectedTerm,
           corporationId: corporation._id.toString(),
           shares,
           pricePerShare: executionPrice,
@@ -685,6 +722,23 @@ export async function sellPublicShares(request: Request, { params }: RouteParams
       0
     );
     const availableShares = ownedShares - reservedInOrders;
+
+    const terms = positionHoldingTerms(
+      shareholderEntry ?? { shares: 0 },
+      saleTurn,
+      proceeds / shares
+    );
+    let selectedTerm: HoldingTerm;
+    try {
+      selectedTerm = chooseHoldingTerm(terms, holdingTerm);
+    } catch {
+      return errorResponse(409, "Choose Short Term Holdings or Long Term Holdings", {
+        extra: { requiresHoldingTerm: true },
+      });
+    }
+    if (availableHoldingShares(terms, selectedTerm) < shares)
+      return errorResponse(400, "Insufficient shares in selected holding bucket");
+    const holdingChange: PersonalHoldingChange = { turn: saleTurn, term: selectedTerm };
 
     if (availableShares < shares) {
       return errorResponse(
@@ -781,6 +835,7 @@ export async function sellPublicShares(request: Request, { params }: RouteParams
         shares,
         forexEnabled,
         sellerFxRate: charFxRate,
+        holdingTerm: selectedTerm,
         now,
         turn: await getCurrentTurn(db),
       });
@@ -804,18 +859,30 @@ export async function sellPublicShares(request: Request, { params }: RouteParams
       charDoc._id,
       shares,
       corporationUpdate,
-      { requireSufficient: true }
+      { requireSufficient: true, holdingChange }
     );
     if (remainingAfterSale < 0) {
       await reverseFloatSellDebit(db, corporation, issuerBuyback, { split: issuerBuybackSplit });
       return errorResponse(409, "Shares were already sold or reserved by another action");
     }
 
+    const stockTax = holdingChange.tracked
+      ? pendingStockTaxReceipt({
+          id: new ObjectId().toHexString(),
+          currencyCode: homeCurrency,
+          holdingTerms: holdingChange.taken!,
+          proceedsAnchor: proceeds,
+          proceedsCredited: proceedsInHome,
+          saleTurn,
+          assessmentTurn: saleTurn + 1,
+        })
+      : undefined;
     const sellerCredit = await db.collection<Character>("characters").updateOne(
       { _id: charDoc._id },
       {
         $inc: { ...buildPersonalBalanceInc(proceedsInHome, homeCurrency, forexEnabled) },
         $set: { updatedAt: now },
+        ...(stockTax ? { $push: { pendingStockTaxReceipts: stockTax } } : {}),
       }
     );
     if (sellerCredit.matchedCount === 0) {
@@ -831,7 +898,7 @@ export async function sellPublicShares(request: Request, { params }: RouteParams
           },
           $set: { updatedAt: new Date() },
         },
-        { pricePerShare: shareholderEntry?.avgCostPerShare ?? executionPrice }
+        { holdingChange: { turn: saleTurn, restore: holdingChange.taken } }
       );
       if (shouldVacateCeo) {
         await db
@@ -894,6 +961,8 @@ export async function sellPublicShares(request: Request, { params }: RouteParams
       counterpartyId: corporation._id,
       counterpartyName: corporation.name,
       meta: {
+        ...(stockTax ? { stockTax } : {}),
+        holdingTerm: selectedTerm,
         corporationId: corporation._id.toString(),
         shares,
         pricePerShare: executionPrice,

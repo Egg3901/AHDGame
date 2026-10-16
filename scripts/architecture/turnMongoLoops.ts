@@ -51,8 +51,52 @@ function isIterationCallback(node: ts.Node): boolean {
   );
 }
 
+/** A documented, constant-bounded CAS retry handles contention on ONE position. */
+function boundedCasRetry(loop: ts.ForStatement): boolean {
+  const prefix = loop.getSourceFile().text.slice(loop.getFullStart(), loop.getStart());
+  const annotation = prefix.match(/bounded-cas-retry\(maxAttempts=(\d+)\):\s*([^\r\n]+)/);
+  if (!annotation || annotation[2].trim().length < 30) return false;
+  const limit = Number(annotation[1]);
+  if (!Number.isSafeInteger(limit) || limit < 1 || limit > 8) return false;
+  const initializer = loop.initializer;
+  if (
+    !initializer ||
+    !ts.isVariableDeclarationList(initializer) ||
+    initializer.declarations.length !== 1
+  )
+    return false;
+  const declaration = initializer.declarations[0];
+  if (
+    !ts.isIdentifier(declaration.name) ||
+    !declaration.initializer ||
+    !ts.isNumericLiteral(declaration.initializer) ||
+    Number(declaration.initializer.text) !== 0
+  )
+    return false;
+  const variable = declaration.name.text;
+  const condition = loop.condition;
+  if (
+    !condition ||
+    !ts.isBinaryExpression(condition) ||
+    condition.operatorToken.kind !== ts.SyntaxKind.LessThanToken ||
+    !ts.isIdentifier(condition.left) ||
+    condition.left.text !== variable ||
+    !ts.isNumericLiteral(condition.right) ||
+    Number(condition.right.text) !== limit
+  )
+    return false;
+  const increment = loop.incrementor;
+  return (
+    !!increment &&
+    (ts.isPostfixUnaryExpression(increment) || ts.isPrefixUnaryExpression(increment)) &&
+    increment.operator === ts.SyntaxKind.PlusPlusToken &&
+    ts.isIdentifier(increment.operand) &&
+    increment.operand.text === variable
+  );
+}
 function repeats(node: ts.Node): boolean {
   for (let parent = node.parent; parent; parent = parent.parent) {
+    if (ts.isForStatement(parent) && boundedCasRetry(parent)) continue;
     if (
       ts.isForStatement(parent) ||
       ts.isForOfStatement(parent) ||

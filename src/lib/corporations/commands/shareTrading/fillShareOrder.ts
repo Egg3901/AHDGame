@@ -5,6 +5,15 @@
 import { loadForexSpreadStrengths } from "@/lib/currency/euro/quotes";
 import { loadEuroMonetaryUnion } from "@/lib/currency/euro/service";
 import { NextResponse } from "next/server";
+import {
+  availableHoldingShares,
+  chooseHoldingTerm,
+  positionHoldingTerms,
+  takeHoldingShares,
+  takeReservedHoldingShares,
+  type ShareHoldingTerms,
+} from "@/lib/corporations/rules/holdingTerms";
+import { stockSaleTaxReceipt } from "@/lib/corporations/rules/stockTaxReceipt";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireCorporationActionsEnabled } from "@/lib/api/requireCorporationActions";
@@ -272,6 +281,41 @@ export async function fillShareOrder(request: Request, { params }: RouteParams) 
       fillerFxRate = fxResult.rate;
     }
     const totalInFillerHome = total * fillerFxRate;
+    let sellerHoldingTerms: ShareHoldingTerms | undefined;
+    let remainingReservedTerms: ShareHoldingTerms | undefined;
+    if (order.type === "buy") {
+      const holder = corporation.shareholders?.find((row) =>
+        isImperialFiller
+          ? row.imperialCharacterId?.equals(fillerId)
+          : row.characterId?.equals(fillerId)
+      );
+      const terms = positionHoldingTerms(holder ?? { shares: 0 }, currentTurn, total / shares);
+      let term;
+      try {
+        term = chooseHoldingTerm(terms, parsed.data.holdingTerm);
+      } catch {
+        return errorResponse(409, "Choose Short Term Holdings or Long Term Holdings", {
+          extra: { requiresHoldingTerm: true },
+        });
+      }
+      if (availableHoldingShares(terms, term) < shares)
+        return errorResponse(400, "Insufficient shares in selected holding bucket");
+      sellerHoldingTerms = takeHoldingShares(terms, shares, term, currentTurn).taken;
+    } else if (!order.placerFundId && !order.placerCorporationId) {
+      const holder = corporation.shareholders?.find((row) =>
+        row.characterId?.equals(orderCharacterId!)
+      );
+      const reserved = order.sharesDebitedAtCreation
+        ? positionHoldingTerms(
+            { shares: order.sharesRemaining, holdingTerms: order.holdingTerms },
+            currentTurn,
+            total / shares
+          )
+        : positionHoldingTerms(holder ?? { shares: 0 }, currentTurn, total / shares);
+      const selected = takeReservedHoldingShares(reserved, shares, currentTurn);
+      sellerHoldingTerms = selected.taken;
+      if (order.sharesDebitedAtCreation) remainingReservedTerms = selected.remaining;
+    }
 
     let buyingCorpForSellFill: Corporation | null = null;
     let buyOrderBuyerCorp: Pick<Corporation, "_id" | "name"> | null = null;
@@ -445,6 +489,24 @@ export async function fillShareOrder(request: Request, { params }: RouteParams) 
           ? order.placerCorporationId!.toHexString()
           : orderCharacterId!.toHexString();
     const fillPlan: ShareFillAuditPlan = {
+      claimSnapshot: {
+        escrowAmount: order.escrowAmount,
+        escrowAnchor: order.escrowAnchor,
+        holdingTerms: order.holdingTerms,
+        previousFillKey: order.lastShareFillKey,
+      },
+      ...(sellerHoldingTerms
+        ? {
+            sellerHoldingTerms,
+            stockTax: stockSaleTaxReceipt({
+              holdingTerms: sellerHoldingTerms,
+              proceedsAnchor: total,
+              proceedsCredited: order.type === "buy" ? totalInFillerHome : pinnedSellerAmount!,
+              saleTurn: currentTurn,
+              assessmentTurn: currentTurn + 1,
+            }),
+          }
+        : {}),
       version: 1,
       orderIdHex: order._id.toHexString(),
       corpIdHex: corporation._id.toHexString(),
@@ -484,13 +546,20 @@ export async function fillShareOrder(request: Request, { params }: RouteParams) 
       })
     );
 
-    const claimedOrder = await db
-      .collection<ShareOrder>("shareOrders")
-      .findOneAndUpdate(
-        buildShareFillClaimFilter(order._id, shares),
-        buildShareFillRouteClaimPipeline({ shares, fillKey, now }),
-        { returnDocument: "after" }
-      );
+    const claimedOrder = await db.collection<ShareOrder>("shareOrders").findOneAndUpdate(
+      {
+        ...buildShareFillClaimFilter(order._id, shares),
+        sharesRemaining: order.sharesRemaining,
+        ...(order.holdingTerms ? { holdingTerms: order.holdingTerms } : {}),
+      },
+      buildShareFillRouteClaimPipeline({
+        shares,
+        fillKey,
+        now,
+        holdingTerms: remainingReservedTerms,
+      }),
+      { returnDocument: "after" }
+    );
 
     if (!claimedOrder) {
       await settleShareFillAttempt(db, fillKey, "failed", "share-fill:claim-never-landed");
@@ -505,17 +574,20 @@ export async function fillShareOrder(request: Request, { params }: RouteParams) 
         updatedAt: new Date(),
       };
       if (order.escrowAnchor !== undefined) restoreFields.escrowAnchor = order.escrowAnchor;
+      if (order.holdingTerms) restoreFields.holdingTerms = order.holdingTerms;
       if (order.lastShareFillKey !== undefined) {
         restoreFields.lastShareFillKey = order.lastShareFillKey;
       }
       const restoreUpdate: {
         $set: Record<string, unknown>;
         $unset?: Record<string, "" | 1 | true>;
-      } = { $set: restoreFields };
+      } = { $set: restoreFields, $unset: { activeShareFillKey: "" } };
       if (order.lastShareFillKey === undefined) {
-        restoreUpdate.$unset = { lastShareFillKey: "" };
+        restoreUpdate.$unset = { ...restoreUpdate.$unset, lastShareFillKey: "" };
       }
-      await db.collection<ShareOrder>("shareOrders").updateOne({ _id: order._id }, restoreUpdate);
+      await db
+        .collection<ShareOrder>("shareOrders")
+        .updateOne({ _id: order._id, activeShareFillKey: fillKey }, restoreUpdate);
     };
 
     const sellerCharacterAvgCost = orderCharacterId
@@ -568,6 +640,8 @@ export async function fillShareOrder(request: Request, { params }: RouteParams) 
             order.sharesDebitedAtCreation !== true
               ? {
                   field: "characterId",
+                  holdingTerms: sellerHoldingTerms,
+                  holdingTurn: currentTurn,
                   idHex: orderCharacterId!.toHexString(),
                   pricePerShare: sellerCharacterAvgCost ?? order.pricePerShare,
                 }
@@ -604,6 +678,18 @@ export async function fillShareOrder(request: Request, { params }: RouteParams) 
               : {
                   collection: "characters",
                   idHex: orderCharacterId!.toHexString(),
+                  ...(fillPlan.stockTax
+                    ? {
+                        stockTaxReceipt: {
+                          ...fillPlan.stockTax,
+                          id: fillKey,
+                          saleTurn: currentTurn,
+                          amount: pinnedSellerAmount,
+                          anchorAmount: total,
+                          currencyCode: pinnedSellerCurrency ?? fillerHomeCurrency,
+                        },
+                      }
+                    : {}),
                   field: personalBalanceField(
                     pinnedSellerCurrency ?? fillerHomeCurrency,
                     forexEnabled
@@ -685,14 +771,17 @@ export async function fillShareOrder(request: Request, { params }: RouteParams) 
             order.sharesDebitedAtCreation !== true
               ? {
                   field: "characterId",
+                  holdingTerms: sellerHoldingTerms,
+                  holdingTurn: currentTurn,
                   idHex: orderCharacterId!.toHexString(),
                   pricePerShare: sellerCharacterAvgCost ?? order.pricePerShare,
                 }
               : null,
           buyerCredit: {
             field: isImperialFiller ? "imperialCharacterId" : "characterId",
+            holdingTurn: currentTurn,
             idHex: fillerId.toHexString(),
-            pricePerShare: order.pricePerShare,
+            pricePerShare: total / shares,
           },
           fundInventoryDebit: order.placerFundId
             ? {
@@ -721,6 +810,18 @@ export async function fillShareOrder(request: Request, { params }: RouteParams) 
               : {
                   collection: "characters",
                   idHex: orderCharacterId!.toHexString(),
+                  ...(fillPlan.stockTax
+                    ? {
+                        stockTaxReceipt: {
+                          ...fillPlan.stockTax,
+                          id: fillKey,
+                          saleTurn: currentTurn,
+                          amount: pinnedSellerAmount,
+                          anchorAmount: total,
+                          currencyCode: pinnedSellerCurrency ?? fillerHomeCurrency,
+                        },
+                      }
+                    : {}),
                   field: personalBalanceField(
                     pinnedSellerCurrency ?? fillerHomeCurrency,
                     forexEnabled

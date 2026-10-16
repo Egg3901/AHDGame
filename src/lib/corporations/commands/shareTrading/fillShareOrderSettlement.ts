@@ -205,12 +205,26 @@ export async function settleBuyOrderFill(args: {
     nowIso: now.toISOString(),
     fillerDebit: null,
     fillerCredit: {
+      ...(plan.stockTax
+        ? {
+            stockTaxReceipt: {
+              ...plan.stockTax,
+              id: fillKey,
+              saleTurn: currentTurn,
+              amount: totalInFillerHome,
+              anchorAmount: total,
+              currencyCode: fillerHomeCurrency,
+            },
+          }
+        : {}),
       collection: fillerCollectionName,
       idHex: fillerId.toHexString(),
       field: personalBalanceField(fillerHomeCurrency, forexEnabled),
       amount: totalInFillerHome,
     },
     sellerDebit: {
+      holdingTerms: plan.sellerHoldingTerms,
+      holdingTurn: plan.sellerHoldingTerms ? currentTurn : undefined,
       field: isImperialFiller ? "imperialCharacterId" : "characterId",
       idHex: fillerId.toHexString(),
       pricePerShare: fillerAvgCost,
@@ -229,8 +243,9 @@ export async function settleBuyOrderFill(args: {
           }
         : {
             field: "characterId",
+            holdingTurn: currentTurn,
             idHex: orderCharacterId!.toHexString(),
-            pricePerShare: order.pricePerShare,
+            pricePerShare: fillPriceAnchor,
           },
     fundInventoryDebit: null,
     buyerHoldingsCredit: order.placerFundId

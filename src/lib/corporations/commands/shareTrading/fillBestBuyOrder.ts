@@ -1,4 +1,11 @@
 import type { Db, ObjectId } from "mongodb";
+import {
+  chooseHoldingTerm,
+  positionHoldingTerms,
+  takeHoldingShares,
+  type HoldingTerm,
+} from "@/lib/corporations/rules/holdingTerms";
+import { stockSaleTaxReceipt } from "@/lib/corporations/rules/stockTaxReceipt";
 import type { Corporation, IndexFund, ShareOrder } from "@/lib/db/types";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import { settleBuyOrderFill, reconcileTotalSharesAfterFill } from "./fillShareOrderSettlement";
@@ -41,6 +48,7 @@ export async function fillBestBuyOrderForMarketSell(input: {
   sellerFxRate: number;
   now: Date;
   turn: number;
+  holdingTerm?: HoldingTerm;
 }): Promise<BestBuyOrderFillResult> {
   const { db, corporation, seller, shares, forexEnabled, sellerFxRate, now, turn } = input;
   if (!Number.isInteger(shares) || shares <= 0) return { filled: false };
@@ -81,7 +89,33 @@ export async function fillBestBuyOrderForMarketSell(input: {
     const remainingEscrowAnchor = escrowAnchor - proceedsAnchor;
     const remainingEscrowLocal = Math.max(0, order.escrowAmount - shares * order.pricePerShare);
     const proceedsInHomeCurrency = forexEnabled ? proceedsAnchor * sellerFxRate : proceedsAnchor;
+    const holder = corporation.shareholders?.find((row) =>
+      seller.isImperial
+        ? row.imperialCharacterId?.equals(seller.id)
+        : row.characterId?.equals(seller.id)
+    );
+    const position = positionHoldingTerms(holder ?? { shares: 0 }, turn, proceedsAnchor / shares);
+    const sellerHoldingTerms = takeHoldingShares(
+      position,
+      shares,
+      chooseHoldingTerm(position, input.holdingTerm),
+      turn
+    ).taken;
     const fillPlan: ShareFillAuditPlan = {
+      claimSnapshot: {
+        escrowAmount: order.escrowAmount,
+        escrowAnchor: order.escrowAnchor,
+        holdingTerms: order.holdingTerms,
+        previousFillKey: order.lastShareFillKey,
+      },
+      sellerHoldingTerms,
+      stockTax: stockSaleTaxReceipt({
+        holdingTerms: sellerHoldingTerms,
+        proceedsAnchor,
+        proceedsCredited: proceedsInHomeCurrency,
+        saleTurn: turn,
+        assessmentTurn: turn + 1,
+      }),
       version: 1,
       orderIdHex: order._id.toHexString(),
       corpIdHex: corporation._id.toHexString(),
@@ -123,6 +157,7 @@ export async function fillBestBuyOrderForMarketSell(input: {
         status: "open",
         sharesRemaining: order.sharesRemaining,
         escrowAnchor: order.escrowAnchor,
+        activeShareFillKey: { $exists: false },
       },
       buildShareFillTurnClaimUpdate({
         remainingShares,
@@ -144,6 +179,7 @@ export async function fillBestBuyOrderForMarketSell(input: {
         $set: Record<string, unknown>;
         $unset?: Record<string, "" | 1 | true>;
       } = {
+        $unset: { activeShareFillKey: "" },
         $set: {
           sharesRemaining: order.sharesRemaining,
           escrowAmount: order.escrowAmount,
@@ -156,9 +192,11 @@ export async function fillBestBuyOrderForMarketSell(input: {
         },
       };
       if (order.lastShareFillKey === undefined) {
-        restoreUpdate.$unset = { lastShareFillKey: "" };
+        restoreUpdate.$unset = { ...restoreUpdate.$unset, lastShareFillKey: "" };
       }
-      await db.collection<ShareOrder>("shareOrders").updateOne({ _id: order._id }, restoreUpdate);
+      await db
+        .collection<ShareOrder>("shareOrders")
+        .updateOne({ _id: order._id, activeShareFillKey: fillKey }, restoreUpdate);
     };
     const settlementError = await settleBuyOrderFill({
       db,

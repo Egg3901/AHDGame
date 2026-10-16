@@ -2,6 +2,12 @@ import { describe, expect, it } from "vitest";
 import { HELD_MIGRATIONS, MIGRATIONS } from "./registry";
 
 describe("MIGRATIONS", () => {
+  it("holds the stock-tax rollout outside automatic migration passes", () => {
+    const id = "2026-10-16-stock-holding-tax-tiers";
+    expect(MIGRATIONS.some((migration) => migration.id === id)).toBe(false);
+    expect(HELD_MIGRATIONS.some((migration) => migration.id === id)).toBe(true);
+  });
+
   it("includes all index-fund bootstrap migrations in order", () => {
     const ids = MIGRATIONS.map((migration) => migration.id);
 

@@ -1,3 +1,4 @@
+import { capitalGainsTierForTaxKey } from "@/lib/budget/rules/capitalGainsTax";
 import {
   INCOME_TIERS,
   INCOME_TAX_KEYS,
@@ -226,7 +227,8 @@ async function applyTaxRateChange(
         (tier) => !needsPhaseIn(incomeTaxRate(normalizedTaxRates, tier), selectedOptionRate)
       ).map((tier) => ["taxRatePhaseIn." + INCOME_TAX_KEYS[tier], ""])
     );
-    newTaxRates.incomeTax = aggregateIncomeTaxRate(newTaxRates, budget.incomeTaxShares);
+    if (!capitalGainsTierForTaxKey(taxType))
+      newTaxRates.incomeTax = aggregateIncomeTaxRate(newTaxRates, budget.incomeTaxShares);
 
     // Money wiring (interstate-logistics plan step 5, phase B): a tax-rate
     // change bill is a rare event, not a per-turn hot loop, so a direct read
@@ -262,7 +264,7 @@ async function applyTaxRateChange(
     const newSurplus = newRevenue.total - budget.spending.total;
 
     const written = await db.collection<FederalBudget>("federalBudget").updateOne(
-      { _id: budgetId, ...(taxType.startsWith("incomeTax") ? { taxRates: budget.taxRates } : {}) },
+      { _id: budgetId, taxRates: budget.taxRates },
       {
         $set: {
           taxRates: newTaxRates,
@@ -284,7 +286,7 @@ async function applyTaxRateChange(
             : { $unset: { [`taxRatePhaseIn.${taxType}`]: "" } }),
       }
     );
-    if (written.matchedCount === 0 && taxType.startsWith("incomeTax")) {
+    if (written.matchedCount === 0) {
       if (retry >= 3) throw new Error("Income-tax budget changed repeatedly during enactment");
       return applyTaxRateChange(db, legislationType, selectedOptionRate, stateId, retry + 1);
     }
@@ -331,7 +333,8 @@ async function applyTaxRateChange(
     const federalGrants = budget.revenue?.federalGrants ?? 0;
     if (taxType === "incomeTax")
       for (const tier of INCOME_TIERS) newTaxRates[INCOME_TAX_KEYS[tier]] = selectedOptionRate;
-    newTaxRates.incomeTax = aggregateIncomeTaxRate(newTaxRates, budget.incomeTaxShares);
+    if (!capitalGainsTierForTaxKey(taxType))
+      newTaxRates.incomeTax = aggregateIncomeTaxRate(newTaxRates, budget.incomeTaxShares);
     const newRevenue = await calculateStateRevenue(
       db,
       stateId,
@@ -345,7 +348,7 @@ async function applyTaxRateChange(
       {
         _id: stateId,
         countryId: stateBudgetCountryId,
-        ...(taxType.startsWith("incomeTax") ? { taxRates: budget.taxRates } : {}),
+        taxRates: budget.taxRates,
       },
       {
         $set: {
@@ -356,7 +359,7 @@ async function applyTaxRateChange(
         },
       }
     );
-    if (written.matchedCount === 0 && taxType.startsWith("incomeTax")) {
+    if (written.matchedCount === 0) {
       if (retry >= 3)
         throw new Error("Regional income-tax budget changed repeatedly during enactment");
       return applyTaxRateChange(db, legislationType, selectedOptionRate, stateId, retry + 1);

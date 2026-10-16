@@ -1,4 +1,8 @@
 import { ObjectId, type Db } from "mongodb";
+import {
+  positionHoldingTerms,
+  type ShareHoldingTerms,
+} from "@/lib/corporations/rules/holdingTerms";
 import type { Character, Corporation, ShareListing, ShareOrder } from "@/lib/db/types";
 import type { IndexFund } from "@/lib/db/types/indexFund";
 import { fetchBordersByUserIds } from "@/lib/db/patreonBorders";
@@ -157,6 +161,7 @@ export async function loadShareholderContext(db: Db, corporation: Corporation) {
     string,
     {
       name: string;
+      userId?: string;
       sequentialId?: number;
       avatarUrl?: string;
       borderKey: string | null;
@@ -168,6 +173,7 @@ export async function loadShareholderContext(db: Db, corporation: Corporation) {
   >();
   for (const c of shareholderChars) {
     shareholderNameMap.set(c._id.toString(), {
+      userId: c.userId?.toString(),
       name: c.name,
       sequentialId: c.sequentialId,
       avatarUrl: c.avatarUrl,
@@ -179,6 +185,7 @@ export async function loadShareholderContext(db: Db, corporation: Corporation) {
   }
   for (const ic of imperialShareholderChars) {
     shareholderNameMap.set(ic._id.toString(), {
+      userId: ic.userId?.toString(),
       name: ic.name,
       sequentialId: ic.sequentialId,
       avatarUrl: ic.avatarUrl,
@@ -229,6 +236,7 @@ export async function loadShareholderContext(db: Db, corporation: Corporation) {
 export type ShareholderContext = Awaited<ReturnType<typeof loadShareholderContext>>;
 
 export interface ShareholderResponse {
+  holdingTerms?: ShareHoldingTerms;
   characterId?: string;
   corporationId?: string;
   shares: number;
@@ -249,6 +257,8 @@ export interface ShareholderResponse {
 }
 
 export interface ShareholderListInputs {
+  viewerUserId?: string | null;
+  currentTurn?: number;
   corporationForControl: Corporation;
   corporation: Corporation;
   shareholderCtx: ShareholderContext;
@@ -336,6 +346,9 @@ export function buildShareholderList(inputs: ShareholderListInputs): Shareholder
       return [
         {
           characterId: id,
+          ...(inputs.viewerUserId && info?.userId === inputs.viewerUserId
+            ? { holdingTerms: positionHoldingTerms(sh, inputs.currentTurn ?? 0, 0) }
+            : {}),
           shares: sh.shares,
           ...(sh.superShares ? { superShares: sh.superShares } : {}),
           name: info?.name ?? "Unknown",

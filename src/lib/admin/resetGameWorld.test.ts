@@ -455,6 +455,7 @@ describe("resetGameWorld", () => {
           "currencyBalances.personal": {},
           incomeTaxBatchReceipt: null,
           incomeTaxStartTurn: 1,
+          pendingStockTaxReceipts: [],
           incomeTier: { $ifNull: ["$initialIncomeTier", "high"] },
         },
       },

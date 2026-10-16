@@ -1,5 +1,12 @@
 import { ObjectId } from "mongodb";
 import { NextResponse } from "next/server";
+import {
+  availableHoldingShares,
+  chooseHoldingTerm,
+  positionHoldingTerms,
+  type HoldingTerm,
+} from "@/lib/corporations/rules/holdingTerms";
+import type { PersonalHoldingChange } from "@/lib/corporations/personalHoldingOps";
 import { getDb } from "@/lib/mongodb";
 import { requireCorporationActionsEnabled } from "@/lib/api/requireCorporationActions";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
@@ -117,34 +124,19 @@ export async function createShareListing(request: Request, { params }: RoutePara
       );
       const ownedShares = shareholderEntry?.shares ?? 0;
 
-      const [openOrders, openListings] = await Promise.all([
-        db
-          .collection<ShareOrder>("shareOrders")
-          .find({
-            corporationId: corporation._id,
-            placerCorporationId: placerCorp._id,
-            type: "sell",
-            status: "open",
-          })
-          .toArray(),
-        db
-          .collection<ShareListing>("shareListings")
-          .find({
-            corporationId: corporation._id,
-            sellerCorporationId: placerCorp._id,
-            status: "open",
-            // Turn-first "still active" filter (matches the turn processor's
-            // expiry) with a wall-clock fallback for legacy listings.
-            $or: [
-              { expiresAtTurn: { $gt: nowTurn } },
-              { expiresAtTurn: { $exists: false }, expiresAt: { $gt: now } },
-            ],
-          })
-          .toArray(),
-      ]);
-      const alreadyReserved =
-        openOrders.reduce((s, o) => s + (o.sharesDebitedAtCreation ? 0 : o.sharesRemaining), 0) +
-        openListings.reduce((s, l) => s + l.sharesRemaining, 0);
+      const openOrders = await db
+        .collection<ShareOrder>("shareOrders")
+        .find({
+          corporationId: corporation._id,
+          placerCorporationId: placerCorp._id,
+          type: "sell",
+          status: "open",
+        })
+        .toArray();
+      const alreadyReserved = openOrders.reduce(
+        (s, o) => s + (o.sharesDebitedAtCreation ? 0 : o.sharesRemaining),
+        0
+      );
       const available = ownedShares - alreadyReserved;
 
       if (available < shares) {
@@ -201,35 +193,33 @@ export async function createShareListing(request: Request, { params }: RoutePara
     );
     const ownedShares = shareholderEntry?.shares ?? 0;
 
-    const [openOrders, openListings] = await Promise.all([
-      db
-        .collection<ShareOrder>("shareOrders")
-        .find({
-          corporationId: corporation._id,
-          characterId: character._id,
-          type: "sell",
-          status: "open",
-        })
-        .toArray(),
-      db
-        .collection<ShareListing>("shareListings")
-        .find({
-          corporationId: corporation._id,
-          sellerCharacterId: character._id,
-          status: "open",
-          // Turn-first "still active" filter (matches the turn processor's
-          // expiry) with a wall-clock fallback for legacy listings.
-          $or: [
-            { expiresAtTurn: { $gt: nowTurn } },
-            { expiresAtTurn: { $exists: false }, expiresAt: { $gt: now } },
-          ],
-        })
-        .toArray(),
-    ]);
-    const alreadyReserved =
-      openOrders.reduce((s, o) => s + (o.sharesDebitedAtCreation ? 0 : o.sharesRemaining), 0) +
-      openListings.reduce((s, l) => s + l.sharesRemaining, 0);
+    const openOrders = await db
+      .collection<ShareOrder>("shareOrders")
+      .find({
+        corporationId: corporation._id,
+        characterId: character._id,
+        type: "sell",
+        status: "open",
+      })
+      .toArray();
+    const alreadyReserved = openOrders.reduce(
+      (s, o) => s + (o.sharesDebitedAtCreation ? 0 : o.sharesRemaining),
+      0
+    );
     const available = ownedShares - alreadyReserved;
+
+    const terms = positionHoldingTerms(shareholderEntry ?? { shares: 0 }, nowTurn, 0);
+    let selectedTerm: HoldingTerm;
+    try {
+      selectedTerm = chooseHoldingTerm(terms, parsed.data.holdingTerm);
+    } catch {
+      return errorResponse(409, "Choose Short Term Holdings or Long Term Holdings", {
+        extra: { requiresHoldingTerm: true },
+      });
+    }
+    if (availableHoldingShares(terms, selectedTerm) < shares)
+      return errorResponse(400, "Insufficient shares in selected holding bucket");
+    const holdingChange: PersonalHoldingChange = { turn: nowTurn, term: selectedTerm };
 
     if (available < shares) {
       return errorResponse(400, `Only ${available.toLocaleString()} shares available`);
@@ -267,7 +257,7 @@ export async function createShareListing(request: Request, { params }: RoutePara
       character._id,
       shares,
       corporationUpdate,
-      { requireSufficient: true }
+      { requireSufficient: true, holdingChange }
     );
     if (remainingAfterReserve < 0) {
       return errorResponse(409, "Shares were already sold or reserved by another action");
@@ -279,6 +269,7 @@ export async function createShareListing(request: Request, { params }: RoutePara
         _id: listingId,
         corporationId: corporation._id,
         sellerCharacterId: character._id,
+        holdingTerms: holdingChange.taken,
         sharesListed: shares,
         sharesRemaining: shares,
         marketPriceAtCreation: corporation.sharePrice,
@@ -312,7 +303,7 @@ export async function createShareListing(request: Request, { params }: RoutePara
         shares,
         { $set: { updatedAt: new Date() } },
         {
-          pricePerShare: shareholderEntry?.avgCostPerShare ?? corporation.sharePrice,
+          holdingChange: { turn: nowTurn, restore: holdingChange.taken },
         }
       );
 

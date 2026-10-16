@@ -1,3 +1,4 @@
+import { rejectDuringTurn } from "@/lib/api/rejectDuringTurn";
 /**
  * Single-invite actions:
  *  POST /api/corporation/[id]/private-invites/[inviteId]
@@ -23,6 +24,7 @@ import {
 } from "@/lib/financialTxLog/atomicCashGuard";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
 import { getHomeCurrency } from "@/lib/currency/characterFunds";
+import { getCorpFxRate, corpLiquidCapitalToAnchor } from "@/lib/currency/corporationCapital";
 import { createNotification } from "@/lib/notifications";
 import { emitTx } from "@/lib/financialTxLog/emit";
 import { getCurrentTurn } from "@/lib/turn/currentTurn";
@@ -55,6 +57,8 @@ export async function POST(request: Request, { params }: RouteParams) {
     const inviteOid = new ObjectId(inviteId);
 
     const db = await getDb();
+    const turnGuard = await rejectDuringTurn(db);
+    if (turnGuard) return turnGuard;
     const resolved = await resolveCorporation(db, id);
     if (!resolved.ok) return resolved.response;
     const { corporation } = resolved;
@@ -182,6 +186,12 @@ export async function POST(request: Request, { params }: RouteParams) {
     }
 
     let sharesCredited = false;
+    const purchaseTurn = await getCurrentTurn(db);
+    const basisAnchor = corpLiquidCapitalToAnchor(
+      invite.totalCost,
+      corporation,
+      await getCorpFxRate(db, corporation)
+    );
     try {
       const credited = await creditShares(
         db,
@@ -192,7 +202,7 @@ export async function POST(request: Request, { params }: RouteParams) {
           $inc: { liquidCapital: invite.totalCost },
           $set: { updatedAt: now },
         },
-        { pricePerShare: invite.pricePerShare }
+        { pricePerShare: basisAnchor / invite.shares, holdingChange: { turn: purchaseTurn } }
       );
       if (!credited) {
         await refundCharacterCash(db, invitee._id, homeCurrency, invite.totalCost, forexEnabled);

@@ -21,6 +21,11 @@ import { TURNS_PER_YEAR } from "@/lib/constants/turnTime";
 import type { PlayerIncomeTaxAssessment, PlayerIncomeTaxTurnPlan } from "@/lib/db/types/incomeTax";
 import { settlePlayerIncomeTaxAssessments } from "./playerIncomeTaxSettlement";
 import {
+  capitalGainsTaxRate,
+  taxableStockAmounts,
+  validatePendingStockTaxReceipt,
+} from "./rules/capitalGainsTax";
+import {
   TAXABLE_PLAYER_INCOME_TYPES,
   earnedIncomeTier,
   incomeTaxRate,
@@ -30,13 +35,20 @@ import {
 
 export const PLAYER_TAX_KIND = "player_income_tax";
 const LOOKBACK_TURNS = 12;
+type TaxIncomeEntry = Pick<
+  FinancialTxLogEntry,
+  "subjectId" | "type" | "turn" | "amount" | "anchorAmount" | "currencyCode" | "meta"
+>;
 
 /** All input collections are loaded once; settlements retain per-taxpayer cash guards. */
 export async function processPlayerIncomeTax(
   db: Db,
   turn: number,
   now: Date,
-  gameState: Pick<GameState, "forexEnabled" | "resetWorldId" | "preset">,
+  gameState: Pick<
+    GameState,
+    "forexEnabled" | "resetWorldId" | "preset" | "stockHoldingTaxStartTurn"
+  >,
   fundedTreasury: boolean,
   ledgerShadow = false,
   turnLengthMinutes = 60
@@ -68,6 +80,7 @@ export async function processPlayerIncomeTax(
             amount: 1,
             anchorAmount: 1,
             currencyCode: 1,
+            meta: 1,
           },
         }
       )
@@ -83,6 +96,7 @@ export async function processPlayerIncomeTax(
             countryId: 1,
             incomeTaxStartTurn: 1,
             incomeTier: 1,
+            pendingStockTaxReceipts: 1,
           },
         }
       )
@@ -126,7 +140,14 @@ export async function processPlayerIncomeTax(
       .find(
         { incomeTaxStartTurn: { $lte: turn } },
         {
-          projection: { name: 1, homeState: 1, countryId: 1, incomeTaxStartTurn: 1, incomeTier: 1 },
+          projection: {
+            name: 1,
+            homeState: 1,
+            countryId: 1,
+            incomeTaxStartTurn: 1,
+            incomeTier: 1,
+            pendingStockTaxReceipts: 1,
+          },
         }
       )
       .toArray(),
@@ -139,13 +160,36 @@ export async function processPlayerIncomeTax(
   const medianByState = new Map(
     metrics.map((metric) => [metric._id, metric.economic?.medianIncome?.value])
   );
-  const byCharacter = new Map<string, FinancialTxLogEntry[]>();
+  const byCharacter = new Map<string, TaxIncomeEntry[]>();
   for (const entry of entries) {
     if (!entry.subjectId || !Number.isFinite(entry.amount)) continue;
     const id = entry.subjectId.toHexString();
     const rows = byCharacter.get(id) ?? [];
     rows.push(entry);
     byCharacter.set(id, rows);
+  }
+  // Sale receipts share the atomic wallet credit. Display/audit-log failures
+  // cannot hide a realized gain, and a compensated sale removes its receipt.
+  // Retain assessed sales for the earnings lookback; exact due-turn filtering
+  // and immutable plans prevent a retained receipt from being taxed twice.
+  for (const character of characters) {
+    const rows = byCharacter.get(character._id.toHexString()) ?? [];
+    const seen = new Set<string>();
+    for (const receipt of character.pendingStockTaxReceipts ?? []) {
+      validatePendingStockTaxReceipt(receipt);
+      if (seen.has(receipt.id)) throw new Error("Duplicate stock tax credit identity");
+      seen.add(receipt.id);
+      rows.push({
+        subjectId: character._id,
+        type: "stock_trade_sell",
+        turn: receipt.saleTurn,
+        amount: receipt.amount,
+        anchorAmount: receipt.anchorAmount,
+        currencyCode: receipt.currencyCode as FinancialTxLogEntry["currencyCode"],
+        meta: { stockTax: receipt },
+      });
+    }
+    byCharacter.set(character._id.toHexString(), rows);
   }
   const conversionByKey = new Map<string, { spent: number; received: number }>();
   for (const conversion of conversions) {
@@ -169,6 +213,31 @@ export async function processPlayerIncomeTax(
     .collection<PlayerIncomeTaxTurnPlan>("playerIncomeTaxAssessments")
     .find({ status: "plan", worldId, turn })
     .toArray();
+  // A request can pass the turn guard just before the turn starts, then
+  // commit its wallet credit after that turn's plan freezes. Recover delayed
+  // credits by identity rather than silently exempting their old due turn.
+  const receiptDueTurns = characters.flatMap((actor) =>
+    (actor.pendingStockTaxReceipts ?? []).map((receipt) => receipt.assessmentTurn)
+  );
+  const earliestDue = receiptDueTurns.reduce((earliest, due) => Math.min(earliest, due), turn);
+  const previousPlans =
+    receiptDueTurns.length && earliestDue < turn
+      ? await db
+          .collection<PlayerIncomeTaxTurnPlan>("playerIncomeTaxAssessments")
+          .find(
+            { status: "plan", worldId, turn: { $gte: earliestDue, $lt: turn } },
+            { projection: { characterId: 1, ownerCollection: 1, stockTaxReceiptIds: 1 } }
+          )
+          .batchSize(1000)
+          .toArray()
+      : [];
+  const assessedStockIds = new Set(
+    previousPlans.flatMap((plan) =>
+      (plan.stockTaxReceiptIds ?? []).map(
+        (id) => plan.ownerCollection + ":" + plan.characterId.toHexString() + ":" + id
+      )
+    )
+  );
   const plannedActors = new Set(
     existingPlans.map((plan) => plan.ownerCollection + ":" + plan.characterId.toHexString())
   );
@@ -187,10 +256,39 @@ export async function processPlayerIncomeTax(
     const country = character.countryId;
     const budget = budgetByCountry.get(country);
     const stateBudget = stateBudgets.get(character.homeState);
-    const rows = (byCharacter.get(character._id.toHexString()) ?? []).filter(
-      (entry) => entry.turn >= character.incomeTaxStartTurn!
+    const amounts = (entry: TaxIncomeEntry) =>
+      gameState.stockHoldingTaxStartTurn !== undefined &&
+      turn >= gameState.stockHoldingTaxStartTurn &&
+      (entry.type === "stock_trade_sell" || entry.type === "corp_dividend")
+        ? taxableStockAmounts(entry.type, entry.amount, entry.meta?.stockTax)
+        : {
+            income: entry.type === "stock_trade_sell" ? 0 : entry.amount,
+            capital: 0,
+            assessmentTurn: undefined,
+          };
+    const eligibleRows = (byCharacter.get(character._id.toHexString()) ?? []).filter((entry) => {
+      const due = amounts(entry).assessmentTurn ?? entry.turn;
+      return due >= character.incomeTaxStartTurn! && due <= turn;
+    });
+    const rows = eligibleRows.filter(
+      (entry) => (amounts(entry).assessmentTurn ?? entry.turn) >= turn - LOOKBACK_TURNS + 1
     );
-    const current = rows.filter((entry) => entry.turn === turn);
+    const current = eligibleRows.filter((entry) => {
+      if (entry.type === "stock_trade_sell") {
+        const receipt = entry.meta?.stockTax as { id?: string } | undefined;
+        return (
+          !!receipt?.id &&
+          !assessedStockIds.has(
+            ownerCollection + ":" + character._id.toHexString() + ":" + receipt.id
+          )
+        );
+      }
+      const taxable = amounts(entry);
+      return (
+        (taxable.assessmentTurn ?? entry.turn) === turn &&
+        (taxable.income > 0 || taxable.capital > 0)
+      );
+    });
     if (!current.length) continue;
     if (!budget?.taxRates) throw new Error("Income-tax budget unavailable for " + country);
     const home = getHomeCurrency(character, gameState.preset);
@@ -198,11 +296,15 @@ export async function processPlayerIncomeTax(
     const median = medianByState.get(character.homeState);
     if (!homeFx || !(homeFx > 0) || !Number.isFinite(homeFx) || !median || !(median > 0))
       throw new Error("Income-tax earnings reference unavailable");
-    const anchor = (entry: FinancialTxLogEntry) => {
+    const anchor = (entry: TaxIncomeEntry) => {
       const rate = fx.get(entry.currencyCode);
       if (!rate || !(rate > 0) || !Number.isFinite(rate))
         throw new Error("Income-tax currency unavailable");
-      const value = entry.anchorAmount ?? entry.amount / rate;
+      const income = amounts(entry).income;
+      const value =
+        entry.amount > 0
+          ? ((entry.anchorAmount ?? entry.amount / rate) * income) / entry.amount
+          : 0;
       if (!Number.isFinite(value) || value < 0) throw new Error("Invalid taxable player receipt");
       return value;
     };
@@ -212,7 +314,10 @@ export async function processPlayerIncomeTax(
       TURNS_PER_YEAR
     );
     const tier = earnedIncomeTier(annual, median);
-    const groups = new Map<string, { currency: string; path: string; gross: number }>();
+    const groups = new Map<
+      string,
+      { currency: string; path: string; gross: number; taxKind: "income" | "capitalGains" }
+    >();
     for (const entry of current) {
       const conversionSource =
         entry.type === "corp_dividend"
@@ -238,15 +343,23 @@ export async function processPlayerIncomeTax(
         Number.isFinite(conversion.spent) &&
         Number.isFinite(conversion.received);
       const currency = converted ? home : entry.currencyCode;
-      const gross = converted
-        ? (entry.amount / conversion.spent) * conversion.received
-        : entry.amount;
       const path =
         gameState.forexEnabled === true ? "currencyBalances.personal." + currency : "cashOnHand";
-      const key = path + ":" + currency;
-      const group = groups.get(key) ?? { currency, path, gross: 0 };
-      group.gross += gross;
-      groups.set(key, group);
+      const taxable = amounts(entry);
+      for (const taxKind of ["income", "capitalGains"] as const) {
+        const amount = taxKind === "income" ? taxable.income : taxable.capital;
+        if (!(amount > 0)) continue;
+        const gross = converted
+          ? (amount / conversion.spent) * conversion.received
+          : entry.type === "stock_trade_sell" && gameState.forexEnabled !== true
+            ? amount * (entry.anchorAmount! / entry.amount) * fx.get(currency)!
+            : amount;
+        // Preserve historical income assessment IDs for replay compatibility.
+        const key = path + ":" + currency + (taxKind === "capitalGains" ? ":capitalGains" : "");
+        const group = groups.get(key) ?? { currency, path, gross: 0, taxKind };
+        group.gross += gross;
+        groups.set(key, group);
+      }
     }
     for (const [groupId, group] of groups) {
       const key =
@@ -259,11 +372,12 @@ export async function processPlayerIncomeTax(
         ":" +
         groupId;
       const rate = fx.get(group.currency)!;
+      const rateFor = group.taxKind === "capitalGains" ? capitalGainsTaxRate : incomeTaxRate;
       const tax = playerIncomeTax(
         group.gross,
-        incomeTaxRate(budget.taxRates, tier),
+        rateFor(budget.taxRates, tier),
         stateBudget?.taxRates && stateBudget.countryId === country
-          ? incomeTaxRate(stateBudget.taxRates, tier)
+          ? rateFor(stateBudget.taxRates, tier)
           : 0
       );
       const total = tax.federal + tax.regional;
@@ -272,6 +386,7 @@ export async function processPlayerIncomeTax(
       if (!federalFx || !(federalFx > 0) || !Number.isFinite(federalFx))
         throw new Error("Income-tax treasury currency unavailable");
       const assessment: PlayerIncomeTaxAssessment = {
+        ...(group.taxKind === "capitalGains" ? { taxKind: group.taxKind } : {}),
         _id: key,
         characterId: character._id,
         ownerCollection,
@@ -282,6 +397,7 @@ export async function processPlayerIncomeTax(
         currency: group.currency,
         sourcePath: group.path,
         sourceFx: rate,
+        walletFx: gameState.forexEnabled === true ? rate : 1,
         countryId: country,
         nationalBudgetId: getNationalBudgetId(country),
         nationalCurrency: federalCurrency,
@@ -305,6 +421,9 @@ export async function processPlayerIncomeTax(
       ownerCollection,
       tier,
       assessments: actorAssessments,
+      stockTaxReceiptIds: current
+        .filter((entry) => entry.type === "stock_trade_sell")
+        .map((entry) => (entry.meta!.stockTax as { id: string }).id),
     };
     planOps.push({
       updateOne: { filter: { _id: plan._id }, update: { $setOnInsert: plan }, upsert: true },
@@ -326,7 +445,15 @@ export async function processPlayerIncomeTax(
         },
       });
     (plan.ownerCollection === "characters" ? tierOps : imperialTierOps).push({
-      updateOne: { filter: { _id: plan.characterId }, update: { $set: { incomeTier: plan.tier } } },
+      updateOne: {
+        filter: { _id: plan.characterId },
+        update: {
+          $set: { incomeTier: plan.tier },
+          $pull: {
+            pendingStockTaxReceipts: { assessmentTurn: { $lt: turn - LOOKBACK_TURNS + 1 } },
+          },
+        },
+      },
     });
   }
   if (tierOps.length) await db.collection<Character>("characters").bulkWrite(tierOps);

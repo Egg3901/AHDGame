@@ -3,6 +3,7 @@ import {
   INCOME_TAX_KEYS,
   INCOME_TIER_LABELS,
 } from "@/lib/budget/rules/incomeTaxTiers";
+import { CAPITAL_GAINS_TAX_KEYS } from "@/lib/budget/rules/capitalGainsTax";
 /**
  * Catalog registry — the read surface every consumer (projection, seeding,
  * cost UI, deleters) uses. Content lives in laws/*Laws.ts (transcribed).
@@ -117,12 +118,24 @@ export function getCatalog(countryId: string, year?: number): PoliticalLaw[] {
   const all = CATALOGS[countryId as LawCountryId] ?? [];
   return (year == null ? all : all.filter((law) => isLawActive(law, year))).flatMap((law) =>
     law.taxPolicy?.taxType === "incomeTax"
-      ? INCOME_TIERS.map((tier) => ({
-          ...law,
-          id: law.id + "__income_" + tier,
-          title: INCOME_TIER_LABELS[tier] + " Tax",
-          taxPolicy: { ...law.taxPolicy!, taxType: INCOME_TAX_KEYS[tier] },
-        }))
+      ? INCOME_TIERS.flatMap((tier) => [
+          {
+            ...law,
+            id: law.id + "__income_" + tier,
+            title: INCOME_TIER_LABELS[tier] + " Tax",
+            taxPolicy: { ...law.taxPolicy!, taxType: INCOME_TAX_KEYS[tier] },
+          },
+          {
+            ...law,
+            id: law.id + "__capital_" + tier,
+            title: INCOME_TIER_LABELS[tier] + " Capital Gains Tax",
+            description:
+              "Tax long-term share dividends and realized profits for the " +
+              INCOME_TIER_LABELS[tier].toLowerCase() +
+              " group.",
+            taxPolicy: { ...law.taxPolicy!, taxType: CAPITAL_GAINS_TAX_KEYS[tier] },
+          },
+        ])
       : [law]
   );
 }

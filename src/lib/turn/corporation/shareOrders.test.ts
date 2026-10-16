@@ -209,7 +209,7 @@ describe("fillPendingShareOrders", () => {
     await fillPendingShareOrders(db as unknown as Db, new Date(), 258);
 
     expect(db.collection("shareOrders").find).toHaveBeenCalledWith(
-      { status: "open" },
+      { status: "open", activeShareFillKey: { $exists: false } },
       expect.objectContaining({
         projection: expect.objectContaining({
           _id: 1,

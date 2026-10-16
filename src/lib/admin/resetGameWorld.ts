@@ -223,7 +223,8 @@ export const GAME_STATE_RESET_PRESERVED_FIELD_REASONS: Readonly<Record<string, s
     resetSystemSelectionsAudit: "Audit provenance for the operator's next-reset selections.",
     isProcessing:
       "Turn-runner lock owned by processTurn and its shutdown recovery; teardown does not release it.",
-    processingKind: "Turn-runner lock kind owned by processTurn and its shutdown recovery.",
+    processingKind:
+      "Runtime lock kind owned by the turn runner or stock-holding migration; interrupted stock maintenance stays blocked until its operator retries successfully.",
     processingStartedAt:
       "Turn-runner lock timestamp owned by processTurn and its shutdown recovery.",
     processingTargetTurn: "Turn-runner lock target owned by processTurn and its shutdown recovery.",
@@ -680,6 +681,7 @@ export async function resetGameWorld(
     resetWorldId: randomUUID(),
     currentTurn: resetDate.currentTurn,
     hardwareInputReliefStartTurn: resetDate.currentTurn,
+    stockHoldingTaxStartTurn: resetDate.currentTurn,
     currentYear: resetDate.currentYear,
     resetStartDate: { year: resetDate.year, week: resetDate.week },
     startingYear,
@@ -788,6 +790,7 @@ export async function resetGameWorld(
         "currencyBalances.personal": {},
         incomeTaxBatchReceipt: null,
         incomeTaxStartTurn: 1,
+        pendingStockTaxReceipts: [],
         incomeTier: { $ifNull: ["$initialIncomeTier", "high"] },
       },
     },

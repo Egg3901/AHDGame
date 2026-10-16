@@ -7,9 +7,17 @@ import {
   playerIncomeTax,
   taxablePlayerIncome,
   incomeTaxDebtAnchor,
+  playerTaxWalletDebit,
 } from "./incomeTaxTiers";
 
 describe("income-tax tiers", () => {
+  it("converts new anchor-wallet debits while preserving frozen legacy debit amounts", () => {
+    expect(playerTaxWalletDebit(200, 2)).toBe(200);
+    expect(playerTaxWalletDebit(200, 2, 1)).toBe(100);
+    expect(playerTaxWalletDebit(200, 2, 2)).toBe(200);
+    for (const rate of [0, -1, NaN, Infinity])
+      expect(() => playerTaxWalletDebit(200, 2, rate)).toThrow();
+  });
   it("values unpaid taxes using valid current FX or their frozen quote", () => {
     expect(incomeTaxDebtAnchor(100, 2, 4)).toBe(25);
     for (const rate of [undefined, 0, -1, NaN, Infinity])

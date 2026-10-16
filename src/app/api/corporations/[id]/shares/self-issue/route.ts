@@ -1,4 +1,6 @@
+import { rejectDuringTurn } from "@/lib/api/rejectDuringTurn";
 import { NextResponse } from "next/server";
+import { creditShares, creditSharesToImperial } from "@/lib/corporations/shareholderOps";
 import * as Sentry from "@sentry/nextjs";
 import { getDb } from "@/lib/mongodb";
 import { ObjectId } from "mongodb";
@@ -99,6 +101,8 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     const { shares } = parsed.data;
     const db = await getDb();
+    const turnGuard = await rejectDuringTurn(db);
+    if (turnGuard) return turnGuard;
     const corpGuard = await requireCorporationActionsEnabled(db);
     if (corpGuard) return corpGuard;
 
@@ -149,8 +153,6 @@ export async function POST(request: Request, { params }: RouteParams) {
     let ceoCharName: string;
     let homeCurrency: import("@/lib/constants/currencies").CurrencyCode;
     let collectionName: "characters" | "imperialCharacters";
-    let shareholderField: "shareholders.characterId" | "shareholders.imperialCharacterId";
-    let shareholderEntry: Record<string, unknown>;
 
     const forexEnabled = await isForexEnabled();
 
@@ -165,8 +167,6 @@ export async function POST(request: Request, { params }: RouteParams) {
       ceoCharId = imperial._id;
       ceoCharName = imperial.name;
       collectionName = "imperialCharacters";
-      shareholderField = "shareholders.imperialCharacterId";
-      shareholderEntry = { imperialCharacterId: imperial._id, shares };
       homeCurrency = getHomeCurrency(imperial);
     } else {
       const characterQuery = userDoc?.activeCharacterId
@@ -179,8 +179,6 @@ export async function POST(request: Request, { params }: RouteParams) {
       ceoCharId = character._id;
       ceoCharName = character.name;
       collectionName = "characters";
-      shareholderField = "shareholders.characterId";
-      shareholderEntry = { characterId: character._id, shares };
       homeCurrency = getHomeCurrency(character);
     }
 
@@ -291,33 +289,24 @@ export async function POST(request: Request, { params }: RouteParams) {
     let issuanceCommitted = false;
     try {
       // Credit shares to CEO's shareholder entry AND increment totalShares in one atomic write.
-      const incResult = await db.collection<Corporation>("corporations").updateOne(
-        { _id: corporation._id, [shareholderField]: ceoCharId },
+      const credit =
+        collectionName === "imperialCharacters" ? creditSharesToImperial : creditShares;
+      const credited = await credit(
+        db,
+        corporation._id,
+        ceoCharId,
+        shares,
         {
           $inc: {
-            "shareholders.$.shares": shares,
             totalShares: shares,
             liquidCapital: totalCostInCorpCapital,
             shareIssuanceProceeds: totalCostInCorpCapital,
           },
           $set: { updatedAt: now },
-        }
+        },
+        { pricePerShare: totalCost / shares, holdingChange: { turn: await getCurrentTurn(db) } }
       );
-
-      if (incResult.matchedCount === 0) {
-        await db.collection<Corporation>("corporations").updateOne(
-          { _id: corporation._id },
-          {
-            $push: { shareholders: shareholderEntry } as never,
-            $inc: {
-              totalShares: shares,
-              liquidCapital: totalCostInCorpCapital,
-              shareIssuanceProceeds: totalCostInCorpCapital,
-            },
-            $set: { updatedAt: now },
-          }
-        );
-      }
+      if (!credited) throw new Error("Share issuance changed before it could be committed");
       issuanceCommitted = true;
     } catch (err) {
       if (collectionName === "imperialCharacters") {

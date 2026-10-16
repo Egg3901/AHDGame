@@ -3,6 +3,7 @@ import type {
   MarketOrder,
   CorporationDetail,
 } from "@/components/corporation/CorporationPageTypes";
+import type { HoldingTerm, ShareHoldingTerms } from "@/lib/corporations/rules/holdingTerms";
 
 export interface UseShareOrdersReturn {
   myOrders: MyShareOrder[];
@@ -29,6 +30,9 @@ export interface UseShareTradingProps {
 }
 
 export interface UseShareTradingReturn {
+  holdingTerm: HoldingTerm;
+  setHoldingTerm: React.Dispatch<React.SetStateAction<HoldingTerm>>;
+  myHoldingTerms?: ShareHoldingTerms;
   // State
   sellSharesAmount: number;
   setSellSharesAmount: React.Dispatch<React.SetStateAction<number>>;

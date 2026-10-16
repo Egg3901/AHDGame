@@ -58,10 +58,7 @@ import {
   fireStrikeResolvedPulse,
 } from "@/lib/corporations/sentimentEvents";
 import { processRdInnovations } from "./rdInnovation";
-import { fillPendingShareOrders } from "./shareOrders";
-import { expireShareListings } from "./shareListings";
 import { processVoteReminders, processVoteAutoResolve } from "./voteReminders";
-import { snapshotMarketCap } from "./marketCapSnapshot";
 import { processImfBailoutPayments } from "@/lib/turn/imfBailoutTurn";
 import { buildPersonalBalanceBulkOp, getHomeCurrency } from "@/lib/currency/characterFunds";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
@@ -75,7 +72,6 @@ import type { CountryId } from "@/lib/constants/countries";
 
 import { loadExchangeRatesMap } from "@/lib/lineOfCredit/netWorth";
 import { toInternalUnits } from "@/lib/lineOfCredit/locMath";
-import { garnishLocFromIncome } from "@/lib/lineOfCredit/garnishment";
 import { loadTxThresholds } from "@/lib/financialTxLog/emit";
 import { runSoeBackingSweep } from "./soeBackingSweep";
 import { processPendingNationalizations } from "@/lib/nationalization/pendingNationalizations";
@@ -97,6 +93,8 @@ import {
   creditCorpDividends,
   updateCorporateTaxBases,
   emitCorporationTurnTx,
+  settleShareMarketTurn,
+  garnishCorporationIncome,
 } from "./corporationTurnPhases";
 import { getGameState } from "@/lib/gameState";
 import { deleteDivestedNppSectors } from "../npp/divestmentPersistence";
@@ -739,6 +737,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
     corpSnapshots,
     ceoSalaryPayments,
     dividendPayments,
+    capitalDividendPayments,
     corpDividendPaymentsAnchorByCorpId,
     corpDividendPaymentsAnchorByCorpCurrency,
     sectorFxSpreadFees,
@@ -1714,11 +1713,15 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
   // borrowers, since their LOC obligation dwarfs one turn of income).
   // Recomputes income totals so dividends already redirected don't double-feed
   // the LOC composite via Phase 6a forex auto-convert.
-  if (charPayments.size > 0 && typeof turn === "number") {
-    await garnishLocFromIncome(db, charPayments, turn, "ceo_dividend", {
-      auxiliaryPayments: [dividendPayments],
-    });
-  }
+  const taxableDividendPayments = await garnishCorporationIncome({
+    db,
+    charPayments,
+    dividendPayments,
+    turn,
+    stockTaxActive:
+      lookups.stockHoldingTaxStartTurn !== undefined &&
+      (turn ?? 0) >= lookups.stockHoldingTaxStartTurn,
+  });
 
   if (charPayments.size > 0) {
     const charOps: AnyBulkWriteOperation<Character>[] = [];
@@ -1827,31 +1830,17 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
   }
 
   mark("marketMakerDividendConv");
-  // Phase 7: Fill pending share orders based on updated share prices.
-  // `turn ?? 0`, turn is optional on this function's signature, but it's always
-  // set by the hourly cron; the fallback keeps ad-hoc callers (tests) working.
-  await fillPendingShareOrders(db, now, turn ?? 0);
-
-  // Phase 7a: Expire share listings and refund pending offers
-  await expireShareListings(db, now, turn ?? 0);
-  mark("fillOrders+expireListings");
-
-  // Phase 8: Snapshot market cap history + per-corp history + credit change notifications
-  if (typeof turn === "number") {
-    await snapshotMarketCap(
-      db,
-      turn,
-      lookups.corporations,
-      corpSnapshots,
-      lookups.corpById,
-      lookups.exchangeRatesByCurrency,
-      now,
-      makeSeededRng(`marketCapCandle:${turn}${CORP_TURN_RNG_SALT}`),
-      dividendIncomeReceivedByCorpId,
-      dividendTaxPaidByCountry
-    );
-  }
-  mark("snapshotMarketCap");
+  await settleShareMarketTurn({
+    db,
+    now,
+    turn,
+    lookups,
+    corpSnapshots,
+    dividendIncomeReceivedByCorpId,
+    dividendTaxPaidByCountry,
+    rng: makeSeededRng(`marketCapCandle:${turn}${CORP_TURN_RNG_SALT}`),
+    mark,
+  });
 
   // Emit corp_revenue / corp_tax_paid (per corp), corp_salary / corp_dividend
   // (per character) and gov_tax_revenue (per country) ledger rows, see
@@ -1861,8 +1850,13 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
     lookups,
     corpSnapshots,
     ceoSalaryPayments,
-    dividendPayments,
+    dividendPayments: taxableDividendPayments,
     dividendTaxPaidByCountry,
+    capitalDividendPayments:
+      lookups.stockHoldingTaxStartTurn !== undefined &&
+      (turn ?? 0) >= lookups.stockHoldingTaxStartTurn
+        ? capitalDividendPayments
+        : undefined,
     turn,
     now,
     thresholds,
@@ -1872,7 +1866,12 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
   // Phase 9: Auto-finalize due/certain shareholder votes, then send closing reminders.
   if (typeof turn === "number") {
     // Await the resolver so vote effects are part of the completed corporation turn.
-    await processVoteAutoResolve(db, turn, forexEnabled);
+    await processVoteAutoResolve(
+      db,
+      turn,
+      forexEnabled,
+      lookups.stockHoldingTaxStartTurn !== undefined && turn >= lookups.stockHoldingTaxStartTurn
+    );
     void processVoteReminders(db, turn);
     mark("voteAutoResolve");
     // Resolve nationalizations whose notice window has elapsed (spec §14): cure-cancel

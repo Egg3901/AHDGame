@@ -496,6 +496,7 @@ describe("route claim filter and pipeline", () => {
       _id: ORDER_ID,
       status: "open",
       sharesRemaining: { $gte: 40 },
+      activeShareFillKey: { $exists: false },
     });
   });
 
@@ -558,6 +559,7 @@ describe("turn claim update", () => {
         escrowAnchor: 294,
         status: "open",
         lastShareFillKey: "turn-key-1",
+        activeShareFillKey: "turn-key-1",
         updatedAt: now,
       },
     });

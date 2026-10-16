@@ -1,11 +1,20 @@
 "use client";
 
 import Link from "next/link";
+import { useTranslations } from "next-intl";
+import {
+  availableHoldingShares,
+  SHORT_TERM_HOLDING_TURNS,
+  type ShareHoldingTerms,
+} from "@/lib/corporations/rules/holdingTerms";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import { CorporationLogo } from "@/components/corporation/CorporationLogo";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 
 export interface Holding {
+  holdingTerms?: ShareHoldingTerms;
+  holdingTurn?: number;
+  purchaseLots?: Array<{ acquiredTurn: number; shares: number; remaining: number }>;
   corporationId: string;
   corporationName: string;
   sequentialId?: number;
@@ -51,9 +60,63 @@ export function StocksTable({
   showCostBasis?: boolean;
 }) {
   const { formatAmount, formatPrice: sp, toInternalFrom } = useCurrency();
+  const t = useTranslations("profile.stockHoldings");
   const norm = (value: number, ccy: CurrencyCode | undefined) =>
     ccy ? toInternalFrom(value, ccy) : value;
   const columnCount = showCostBasis ? 6 : 4;
+  if (holdings.some((holding) => holding.holdingTerms)) {
+    return (
+      <div className="space-y-6">
+        {(["short", "long"] as const).map((term) => {
+          const rows = holdings.flatMap((holding) => {
+            const terms = holding.holdingTerms ?? {
+              longTermShares: holding.shares,
+              longTermCostBasisAnchor: 0,
+              shortTermLots: [],
+            };
+            const shares = availableHoldingShares(terms, term);
+            if (!shares) return [];
+            const basis =
+              term === "long"
+                ? terms.longTermCostBasisAnchor
+                : terms.shortTermLots.reduce((sum, lot) => sum + lot.costBasisAnchor, 0);
+            const avgCostPerShare = basis / shares / norm(1, holding.currencyCode);
+            const pnl = (holding.sharePrice - avgCostPerShare) * shares;
+            return [
+              {
+                ...holding,
+                holdingTerms: undefined,
+                shares,
+                avgCostPerShare,
+                totalValue: shares * holding.sharePrice,
+                unrealizedPnl: pnl,
+                unrealizedPnlPct:
+                  avgCostPerShare > 0 ? (holding.sharePrice / avgCostPerShare - 1) * 100 : null,
+                ...(term === "short"
+                  ? {
+                      purchaseLots: terms.shortTermLots.map((lot) => ({
+                        ...lot,
+                        remaining: Math.max(
+                          0,
+                          SHORT_TERM_HOLDING_TURNS - ((holding.holdingTurn ?? 0) - lot.acquiredTurn)
+                        ),
+                      })),
+                    }
+                  : {}),
+              },
+            ];
+          });
+          return (
+            <section key={term} className="space-y-2">
+              <h3 className="font-medium">{t(term)}</h3>
+              <p className="text-sm text-muted">{t(term === "short" ? "shortTax" : "longTax")}</p>
+              <StocksTable holdings={rows} showCostBasis={showCostBasis} />
+            </section>
+          );
+        })}
+      </div>
+    );
+  }
   return (
     <div className="rounded-xl border border-card-border bg-card overflow-hidden shadow-sm">
       <div className="overflow-x-auto">
@@ -112,6 +175,19 @@ export function StocksTable({
                         {h.corporationName}
                       </span>
                     </Link>
+                    {h.purchaseLots && (
+                      <ul className="mt-2 space-y-1 text-xs text-muted">
+                        {h.purchaseLots.map((lot) => (
+                          <li key={lot.acquiredTurn}>
+                            {t("purchaseTurn", {
+                              turn: lot.acquiredTurn,
+                              count: lot.shares,
+                              remaining: lot.remaining,
+                            })}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
                   </td>
                   <td className="px-4 py-3 text-right font-mono tabular-nums">
                     {h.shares.toLocaleString("en-US")}
