@@ -17,6 +17,7 @@ import {
   type RosterFilter,
   type RosterSort,
 } from "./nppRoster";
+import { sortByRegionLabel } from "@/lib/regionOptions";
 
 export interface NppRosterPanelProps {
   scope: "state" | "national";
@@ -130,7 +131,10 @@ export function NppRosterPanel({
     () => npps.filter((n) => needsAttention(n.stats).length > 0).length,
     [npps]
   );
-  const stateOptions = useMemo(() => [...new Set(npps.map((n) => n.homeState))].sort(), [npps]);
+  const stateOptions = useMemo(
+    () => sortByRegionLabel([...new Set(npps.map((n) => n.homeState))], (s) => s),
+    [npps]
+  );
 
   // Prune the selection to NPPs still present after a background refresh, so a
   // relocated/departed NPP doesn't linger selected and get acted on.

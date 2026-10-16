@@ -6,6 +6,7 @@ import { Skeleton } from "@/components/ui";
 import { US_STATES } from "@/lib/constants";
 import { useDemographicsState } from "./demographics/useDemographicsState";
 import { apiErrorText } from "@/lib/errors/catalog";
+import { sortByRegionLabel } from "@/lib/regionOptions";
 
 /**
  * Reseed targets. Countries are those with a Layer-1 model plus US; eras match
@@ -247,7 +248,7 @@ export function DemographicsManager() {
               className="rounded-lg border border-card-border bg-background px-3 py-2 text-sm w-48"
             >
               <option value="">-- Select state --</option>
-              {US_STATES.map((s) => (
+              {sortByRegionLabel(US_STATES, (s) => s).map((s) => (
                 <option key={s} value={s}>
                   {s}
                 </option>

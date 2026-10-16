@@ -10,6 +10,7 @@ import {
   getEffectivePlayerPayoutCap,
   PAYOUT_CAP_MULTI_OFFICER_MULTIPLIER,
 } from "@/lib/treasury/payoutCapValues";
+import { sortByRegionLabel } from "@/lib/regionOptions";
 
 interface TreasuryTransferControlsProps {
   party: PartyData;
@@ -35,7 +36,11 @@ export function TreasuryTransferControls({
   const countryConfig = getCountryConfig(countryId as CountryId);
 
   const regions = useMemo(
-    () => getNationalPartyTransferTargets(countryId as CountryId),
+    () =>
+      sortByRegionLabel(
+        getNationalPartyTransferTargets(countryId as CountryId),
+        ([, name]) => name
+      ),
     [countryId]
   );
 

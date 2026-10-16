@@ -6,6 +6,7 @@ import { getMessageStyle } from "@/lib/utils/formatters";
 import { US_STATES } from "@/lib/constants";
 import { getOrgLabel, getOrgBarColor } from "@/lib/utils/partyOrg";
 import { apiErrorText } from "@/lib/errors/catalog";
+import { sortByRegionLabel } from "@/lib/regionOptions";
 
 interface Party {
   _id: string;
@@ -150,7 +151,7 @@ export function PartyOrgManager() {
             className="rounded-lg border border-card-border bg-background px-3 py-2 text-sm w-48"
           >
             <option value="">-- Select state --</option>
-            {US_STATES.map((s) => (
+            {sortByRegionLabel(US_STATES, (s) => s).map((s) => (
               <option key={s} value={s}>
                 {s}
               </option>

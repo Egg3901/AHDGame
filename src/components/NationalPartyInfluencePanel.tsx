@@ -35,6 +35,7 @@ import { ELECTION_STATE_NAMES } from "@/app/elections/electionsHelpers";
 import { buildRaceBuckets } from "./influence/raceBuckets";
 import { getRelocationBlockReason } from "./influence/relocationBlockReason";
 import { NppRosterPanel } from "./influence/NppRosterPanel";
+import { sortByRegionLabel } from "@/lib/regionOptions";
 
 /** Stat-management actions the at-a-glance roster handles (the rest stay in Advanced). */
 const ROSTER_ACTION_TYPES: ActionOption["type"][] = [
@@ -351,7 +352,9 @@ export function NationalPartyInfluencePanel({
   );
   const rosterActions = data.actions.filter((a) => ROSTER_ACTION_TYPES.includes(a.type));
 
-  const statesWithNPPs = Object.keys(data.nppsByState).sort();
+  const statesWithNPPs = sortByRegionLabel(Object.keys(data.nppsByState), (state) =>
+    getStateDisplayName(state, data.stateNames)
+  );
   const nppsInSelectedState = selectedRace
     ? (racesInSelectedState.find((r) => r.key === selectedRace)?.npps ?? [])
     : [];
@@ -366,7 +369,10 @@ export function NationalPartyInfluencePanel({
   );
   const targetStateOptions =
     selectedNPPData && selectedState
-      ? data.targetStates.filter((state) => state.id !== selectedState)
+      ? sortByRegionLabel(
+          data.targetStates.filter((state) => state.id !== selectedState),
+          (state) => state.name
+        )
       : [];
   // A refused relocation used to look like a dead button: the picker disabled
   // full targets with no explanation. Name the wall before the click.

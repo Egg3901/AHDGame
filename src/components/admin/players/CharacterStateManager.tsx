@@ -5,6 +5,7 @@ import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { useRegisteredCountries } from "@/contexts/RegisteredCountriesContext";
 import { PlayerSelector } from "@/components/PlayerSelector";
 import { apiErrorText } from "@/lib/errors/catalog";
+import { sortByRegionLabel } from "@/lib/regionOptions";
 
 interface Region {
   id: string;
@@ -38,9 +39,7 @@ function useCountryRegions(countryId: CountryId): { regions: Region[]; loading: 
         if (cancelled) return;
         setLoaded({
           countryId,
-          regions: [...(data.states ?? [])].sort((a, b) =>
-            a.name.localeCompare(b.name, undefined, { sensitivity: "base" })
-          ),
+          regions: sortByRegionLabel(data.states ?? [], (r) => r.name),
         });
       })
       .catch(() => {

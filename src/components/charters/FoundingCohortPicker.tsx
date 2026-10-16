@@ -5,6 +5,7 @@ import { Label, Slider } from "@/components/ui";
 import { adjacentStates } from "@/lib/constants/stateAdjacency";
 import type { CountryId } from "@/lib/constants/countries";
 import type { FoundingCohortPick } from "@/lib/db/types";
+import { sortByRegionLabel } from "@/lib/regionOptions";
 
 /**
  * F4 Founding-Cohort picker for the charter-draft flow.
@@ -78,7 +79,10 @@ export function FoundingCohortPicker({
 
   const dropdownOptions = useMemo(() => {
     const ids = [chairHomeState, ...adjacentStates(countryId, chairHomeState)];
-    return ids.map((id) => ({ id, name: stateNames[id] ?? id }));
+    return sortByRegionLabel(
+      ids.map((id) => ({ id, name: stateNames[id] ?? id })),
+      (opt) => opt.name
+    );
   }, [countryId, chairHomeState, stateNames]);
 
   const updateSlot = (slot: 0 | 1, patch: Partial<FoundingCohortPick>) => {

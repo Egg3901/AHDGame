@@ -4,9 +4,10 @@ import { useState } from "react";
 import { INFRA_ARCHETYPES } from "@/lib/constants/cabinetInfra";
 import { InfraIcon, fmtMoneyM } from "./infraUi";
 import { metricLabel, fmtEffectDelta } from "../metricLabel";
+import { sortByRegionLabel } from "@/lib/regionOptions";
 
 export function StartProjectPanel({
-  regions,
+  regions: unsortedRegions,
   currencySymbol,
   busy,
   onStart,
@@ -18,6 +19,7 @@ export function StartProjectPanel({
   onStart: (archetypeId: string, regionId: string, name: string) => void;
   onCancel: () => void;
 }) {
+  const regions = sortByRegionLabel(unsortedRegions, (rg) => rg.name);
   const [sel, setSel] = useState(INFRA_ARCHETYPES[0].id);
   const [name, setName] = useState("");
   const [regionId, setRegionId] = useState(regions[0]?.id ?? "");

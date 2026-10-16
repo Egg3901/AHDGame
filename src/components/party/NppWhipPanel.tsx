@@ -16,6 +16,7 @@ import { fetchJson } from "@/lib/observability/fetchJson";
 import { WhipTabsLayout } from "./whipTabsLayout";
 import type { WhipEndpointConfig } from "./WhipTabs";
 import { apiErrorText } from "@/lib/errors/catalog";
+import { sortByRegionLabel } from "@/lib/regionOptions";
 
 interface BillWhipItem {
   bill: { id: string; title: string; status: string };
@@ -523,11 +524,13 @@ export function NppWhipPanel({
                       className="w-full max-w-xs rounded-lg border border-card-border bg-card px-3 py-2 text-sm"
                     >
                       <option value="">Select a state...</option>
-                      {eligibleStates?.map((s) => (
-                        <option key={s.id} value={s.id}>
-                          {s.name}
-                        </option>
-                      ))}
+                      {(eligibleStates ? sortByRegionLabel(eligibleStates, (s) => s.name) : []).map(
+                        (s) => (
+                          <option key={s.id} value={s.id}>
+                            {s.name}
+                          </option>
+                        )
+                      )}
                     </select>
                   )}
                 </div>

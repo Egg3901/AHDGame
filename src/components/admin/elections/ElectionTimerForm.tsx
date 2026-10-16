@@ -12,6 +12,7 @@ import type {
   ElectionTypeFilter,
   CountrySelection,
 } from "./electionsAdminTypes";
+import { sortByRegionLabel } from "@/lib/regionOptions";
 
 const JP_REGION_IDS = JP_REGIONS.map((r) => r.id);
 
@@ -165,31 +166,31 @@ export function ElectionTimerForm({
             >
               <option value="">All</option>
               {selectedCountry === "US" &&
-                US_STATES.map((s) => (
+                sortByRegionLabel(US_STATES, (s) => s).map((s) => (
                   <option key={s} value={s}>
                     {s}
                   </option>
                 ))}
               {selectedCountry === "UK" &&
-                UK_REGIONS.map((r) => (
+                sortByRegionLabel(UK_REGIONS, (r) => r.name).map((r) => (
                   <option key={r.id} value={r.id}>
                     {r.name}
                   </option>
                 ))}
               {selectedCountry === "JP" &&
-                JP_REGION_IDS.map((id) => (
+                sortByRegionLabel(JP_REGION_IDS, (id) => id).map((id) => (
                   <option key={id} value={id}>
                     {id}
                   </option>
                 ))}
               {selectedCountry === "DE" &&
-                deRegions.map((r) => (
+                sortByRegionLabel(deRegions, (r) => r.name).map((r) => (
                   <option key={r._id} value={r._id}>
                     {r.name}
                   </option>
                 ))}
               {selectedCountry === "CN" &&
-                cnRegions.map((r) => (
+                sortByRegionLabel(cnRegions, (r) => r.name).map((r) => (
                   <option key={r._id} value={r._id}>
                     {r.name}
                   </option>

@@ -1,6 +1,7 @@
 "use client";
 
 import { US_STATES } from "@/lib/constants";
+import { sortByRegionLabel } from "@/lib/regionOptions";
 
 interface OfficialsFiltersProps {
   selectedState: string;
@@ -33,7 +34,7 @@ export function OfficialsFilters({
         className="rounded-lg border border-card-border bg-background px-3 py-2 text-sm"
       >
         <option value="">All states</option>
-        {US_STATES.map((s) => (
+        {sortByRegionLabel(US_STATES, (s) => s).map((s) => (
           <option key={s} value={s}>
             {s}
           </option>

@@ -9,6 +9,9 @@ import {
   type CurrentNationalLawProgram,
 } from "./rules/programRoster";
 
+const ZERO_BUDGET_OFFICE_EXPLANATION =
+  "This office has no associated laws, so its legislative budget is intentionally zero. Staff actions do not require legislative funding.";
+
 export function buildResetDepartmentFinanceReadModel(input: {
   definition: DepartmentDefinition;
   departmentName: string;
@@ -24,7 +27,12 @@ export function buildResetDepartmentFinanceReadModel(input: {
       departmentName,
       kind: definition.kind,
       accountPolicyId: definition.accountPolicyId,
-      explanation: "This world has no verified v2 account for the department.",
+      // An office with no law portfolio has nothing to fund by design, whether or
+      // not its zero-value account has been written into this world yet.
+      explanation:
+        definition.portfolioIds.length === 0
+          ? ZERO_BUDGET_OFFICE_EXPLANATION
+          : "This world has no verified v2 account for the department.",
       programs: [],
     };
   }
@@ -76,7 +84,7 @@ export function buildResetDepartmentFinanceReadModel(input: {
           account.balance === 0 &&
           account.encumbered === 0 &&
           account.arrears === 0
-        ? "This office has no associated laws, so its legislative budget is intentionally zero. Staff actions do not require legislative funding."
+        ? ZERO_BUDGET_OFFICE_EXPLANATION
         : "This is the department's share of existing national spending, net of regional grants. A Cabinet member may request more or less for each service; actual delivery cannot exceed paid funds and capacity.",
     annualAuthority: account.annualAuthority,
     balance: account.balance,

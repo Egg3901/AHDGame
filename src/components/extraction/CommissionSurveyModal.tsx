@@ -19,6 +19,7 @@ import {
   PROSPECT_YIELD_MAX,
   PROSPECT_GOVT_RD_MULT,
 } from "@/lib/constants/prospecting";
+import { sortByRegionLabel } from "@/lib/regionOptions";
 
 interface StateOption {
   id: string;
@@ -53,7 +54,10 @@ export function CommissionSurveyModal({
 }: CommissionSurveyModalProps) {
   const { formatAmount } = useCurrency();
   const { showToast } = useToast();
-  const [stateId, setStateId] = useState(fixedStateId ?? stateOptions?.[0]?.id ?? "");
+  const sortedStateOptions = stateOptions
+    ? sortByRegionLabel(stateOptions, (s) => s.name)
+    : undefined;
+  const [stateId, setStateId] = useState(fixedStateId ?? sortedStateOptions?.[0]?.id ?? "");
   const [resource, setResource] = useState<ExtractableResource>("oil");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
@@ -111,7 +115,7 @@ export function CommissionSurveyModal({
               onChange={(e) => setStateId(e.target.value)}
               required
             >
-              {stateOptions.map((s) => (
+              {(sortedStateOptions ?? []).map((s) => (
                 <option key={s.id} value={s.id}>
                   {s.name}
                 </option>
