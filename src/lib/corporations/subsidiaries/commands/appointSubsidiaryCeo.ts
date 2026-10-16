@@ -1,8 +1,16 @@
-import type { Db, ObjectId } from "mongodb";
-import type { Character, Corporation } from "@/lib/db/types";
+import { ObjectId, type Db } from "mongodb";
+import type { Character, Corporation, NPP } from "@/lib/db/types";
 import { characterCeoResidencyFailure } from "@/lib/corporations/ceoEligibilityRules";
 import { resolveControllingCorporateParent } from "@/lib/corporations/reservedCorporateHoldings";
-import { appointCaretakerCeo } from "@/lib/corporations/caretakerCeo";
+import {
+  appointCaretakerCeo,
+  caretakerReappointCooldownRemaining,
+  corporationLane,
+  gatherCaretakerAffiliations,
+  installCaretakerForVacantCorp,
+  pickCaretakerNpp,
+} from "@/lib/corporations/caretakerCeo";
+import { nppCeoSelectionLane } from "@/lib/corporations/nppCeoAffiliations";
 import { openCeoTenure, closeCeoTenure } from "@/lib/corporations/ceoHistory";
 import { canActOnCorporationAsParent } from "../authorization";
 import { subsidiaryCeoBlockMessage, subsidiaryCeoBlockReason } from "../helpers";
@@ -21,7 +29,7 @@ export interface AppointSubsidiaryCeoInput {
 
 /**
  * Parent CEO reseats the subsidiary's CEO. NPP path reuses the existing
- * caretaker mechanism (leaves `userId` intact, sets `caretakerCeo`). Character
+ * caretaker mechanisms for sitting humans or vacant seats, preserving ownership. Character
  * path enforces the one-person rule and updates `userId`/`ceoId`/`ceoType`.
  */
 export async function appointSubsidiaryCeo(
@@ -42,6 +50,26 @@ export async function appointSubsidiaryCeo(
   if (!parent) return fail("Parent corporation not found.", 404);
 
   if (ceoType === "npp") {
+    if (sub.ceoVacant && !sub.caretakerCeo) {
+      if (caretakerReappointCooldownRemaining(sub, turn) > 0) {
+        return fail("This subsidiary must wait until its caretaker reappointment cooldown ends.");
+      }
+      const sectorLane = forcedNppId
+        ? undefined
+        : await nppCeoSelectionLane(db, sub.countryId, corporationLane(sub));
+      const affiliations = await gatherCaretakerAffiliations(db, sub.countryId, {
+        withTrackRecords: sectorLane != null,
+      });
+      const nppId = pickCaretakerNpp(affiliations, forcedNppId, sectorLane);
+      if (!nppId) return fail("No eligible NPP is available to caretake this subsidiary.");
+      const npp = await db
+        .collection<NPP>("npps")
+        .findOne({ _id: new ObjectId(nppId) }, { projection: { name: 1 } });
+      if (!npp) return fail("No eligible NPP is available to caretake this subsidiary.");
+
+      await installCaretakerForVacantCorp(db, { corp: sub, nppId, turn, now });
+      return { ok: true, ceoType: "npp", nppName: npp.name };
+    }
     const appoint = await appointCaretakerCeo(db, { corp: sub, forcedNppId, turn, now });
     if (!appoint.ok) {
       const msg =
@@ -49,9 +77,11 @@ export async function appointSubsidiaryCeo(
           ? "This subsidiary is already run by an NPP caretaker."
           : appoint.error === "ceo-not-character"
             ? "The subsidiary must currently have a human CEO before an NPP caretaker can be installed."
-            : appoint.error === "no-eligible-npp" || appoint.error === "npp-not-eligible"
-              ? "No eligible NPP is available to caretake this subsidiary."
-              : "Could not install an NPP caretaker.";
+            : appoint.error === "reclaim-cooldown"
+              ? "This subsidiary must wait until its caretaker reappointment cooldown ends."
+              : appoint.error === "no-eligible-npp" || appoint.error === "npp-not-eligible"
+                ? "No eligible NPP is available to caretake this subsidiary."
+                : "Could not install an NPP caretaker.";
       return fail(msg);
     }
     return { ok: true, ceoType: "npp", nppName: appoint.nppName };
