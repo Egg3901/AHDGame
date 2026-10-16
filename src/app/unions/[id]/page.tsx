@@ -1039,6 +1039,7 @@ function UnionDashboard({ id }: { id: string }) {
             <UnionSectorsTable
               key={sectorStatusFilter}
               unionId={union.id}
+              approval={union.approval}
               sectors={sectors}
               treasury={union.treasury}
               myActions={myActions}

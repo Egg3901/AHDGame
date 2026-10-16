@@ -18,6 +18,16 @@ import {
 } from "./organizeSector";
 
 describe("raidSucceeds (contest rule)", () => {
+  it.each([
+    [55.251, false],
+    [55.25000000000001, false],
+    [55.25, true],
+    [55.24999999999999, true],
+    [55.249, true],
+  ])("compares decimal incumbent approval %s without rounding", (incumbentApproval, expected) => {
+    expect(raidSucceeds({ attackerApproval: 60.25, incumbentApproval })).toBe(expected);
+  });
+
   it("requires the attacker to out-poll the incumbent by RAID_APPROVAL_EDGE_REQUIRED", () => {
     expect(
       raidSucceeds({ attackerApproval: 60, incumbentApproval: 60 - RAID_APPROVAL_EDGE_REQUIRED })
