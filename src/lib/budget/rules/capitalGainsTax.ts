@@ -88,12 +88,55 @@ export function stockTaxReceipt(value: unknown): StockTaxReceipt | undefined {
     throw new Error("Invalid stock tax receipt");
   return receipt;
 }
+/** Keep independently accumulated dividend splits within the credited proceeds. */
+export function dividendStockTaxReceipt(
+  amount: number,
+  capitalAmount: number,
+  assessmentTurn: number
+): StockTaxReceipt {
+  const tolerance = Number.EPSILON * Math.max(amount, capitalAmount) * 8;
+  if (
+    !Number.isFinite(amount) ||
+    amount < 0 ||
+    !Number.isFinite(capitalAmount) ||
+    capitalAmount < 0 ||
+    capitalAmount > amount + tolerance
+  )
+    throw new Error("Invalid dividend tax allocation");
+  const capital = Math.min(amount, capitalAmount);
+  const receipt: StockTaxReceipt = {
+    version: 1,
+    assessmentTurn,
+    capitalAmount: capital,
+    incomeAmount: amount - capital,
+  };
+  stockTaxReceipt(receipt);
+  return receipt;
+}
 export function taxableStockAmounts(
   type: string,
   amount: number,
   metadata: unknown
 ): { income: number; capital: number; assessmentTurn?: number } {
-  const receipt = stockTaxReceipt(metadata);
+  // Older dividend writers subtracted independently accumulated totals. Only
+  // recover the exact subtraction pattern within a few floating-point units.
+  // Sale receipts and materially negative allocations remain fail-closed.
+  let normalized = metadata;
+  if (type === "corp_dividend" && metadata && typeof metadata === "object") {
+    const raw = metadata as StockTaxReceipt;
+    const tolerance = Number.EPSILON * Math.max(amount, raw.capitalAmount) * 8;
+    if (
+      Number.isFinite(amount) &&
+      amount >= 0 &&
+      Number.isFinite(raw.capitalAmount) &&
+      Number.isFinite(raw.incomeAmount) &&
+      raw.incomeAmount < 0 &&
+      raw.incomeAmount === amount - raw.capitalAmount &&
+      raw.incomeAmount >= -tolerance
+    )
+      normalized = { ...raw, incomeAmount: 0, capitalAmount: amount };
+  }
+  const receipt = stockTaxReceipt(normalized);
   if (!receipt) return { income: type === "stock_trade_sell" ? 0 : amount, capital: 0 };
   if (receipt.incomeAmount + receipt.capitalAmount > amount + 1e-7)
     throw new Error("Stock tax exceeds credited proceeds");

@@ -1,3 +1,4 @@
+import { dividendStockTaxReceipt } from "@/lib/budget/rules/capitalGainsTax";
 import { garnishLocFromIncome } from "@/lib/lineOfCredit/garnishment";
 import { fillPendingShareOrders } from "./shareOrders";
 import { expireShareListings } from "./shareListings";
@@ -710,12 +711,11 @@ export async function emitCorporationTurnTx(args: {
             source: metaSource,
             ...(txType === "corp_dividend" && capitalDividendPayments
               ? {
-                  stockTax: {
-                    version: 1,
-                    assessmentTurn: turn ?? 0,
-                    capitalAmount: capitalDividendPayments.get(id)?.get(currency) ?? 0,
-                    incomeAmount: amount - (capitalDividendPayments.get(id)?.get(currency) ?? 0),
-                  },
+                  stockTax: dividendStockTaxReceipt(
+                    amount,
+                    capitalDividendPayments.get(id)?.get(currency) ?? 0,
+                    turn ?? 0
+                  ),
                 }
               : {}),
             ...(isImperial ? { imperial: true } : {}),

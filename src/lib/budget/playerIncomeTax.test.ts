@@ -77,6 +77,41 @@ async function seedStockTaxCredit(db: Db, id: ObjectId, assessmentTurn: number) 
   );
 }
 describe("player income-tax settlement", () => {
+  it("settles and replays a dividend whose capital sum differs by floating-point roundoff", async () => {
+    const { db, id } = fixture();
+    const amount = 0.3;
+    const capitalAmount = 0.1 + 0.2;
+    await db.collection("financialTxLog").deleteMany({});
+    await db.collection("financialTxLog").insertOne({
+      subjectId: id,
+      subjectType: "character",
+      type: "corp_dividend",
+      turn: 1,
+      amount,
+      anchorAmount: amount,
+      currencyCode: "USD",
+      meta: {
+        stockTax: {
+          version: 1,
+          assessmentTurn: 1,
+          incomeAmount: amount - capitalAmount,
+          capitalAmount,
+        },
+      },
+    });
+    const first = await processPlayerIncomeTax(db, 1, now, state, true);
+    expect(first.pending).toBe(0);
+    const plans = await db
+      .collection("playerIncomeTaxAssessments")
+      .find({ status: "plan" })
+      .toArray();
+    expect(plans).toHaveLength(1);
+    await processPlayerIncomeTax(db, 1, now, state, true);
+    expect(
+      await db.collection("playerIncomeTaxAssessments").countDocuments({ status: "plan" })
+    ).toBe(1);
+  });
+
   it.each(
     (
       [
