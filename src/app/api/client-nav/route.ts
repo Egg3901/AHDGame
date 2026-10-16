@@ -15,6 +15,10 @@ import {
 import { AUTH_COOKIE_NAME } from "@/lib/authCookieName";
 import { handleRouteError } from "@/lib/api/errors";
 import { resolveCabinetOfficeNavEntry } from "@/lib/navigation/cabinetOfficeNavEntry";
+import {
+  resolveJusticeOfficeNavEntry,
+  type JusticeOfficeNavEntry,
+} from "@/lib/navigation/justiceOfficeNavEntry";
 import { resolveMySubsidiaryGroupNav } from "@/lib/navigation/resolveMySubsidiaryGroupNav";
 import { resolveMyUnionNav } from "@/lib/navigation/resolveMyUnionNav";
 import { formatElectionTypeLabel } from "@/lib/utils/electionLabels";
@@ -172,6 +176,7 @@ export async function GET() {
           currentParty: null,
           activeElection: null,
           cabinetOffice: null,
+          justiceOffice: null,
           governorOffice: null,
           activePresidentElectionId: presidentElection ? presidentElection._id.toString() : null,
           activePresidentElectionSeatId: presidentElection?.seatId ?? null,
@@ -254,6 +259,7 @@ export async function GET() {
           currentParty: null,
           activeElection: null,
           cabinetOffice: null,
+          justiceOffice: null,
           governorOffice: null,
           activePresidentElectionId: presidentElection ? presidentElection._id.toString() : null,
           activePresidentElectionSeatId: presidentElection?.seatId ?? null,
@@ -306,6 +312,7 @@ export async function GET() {
     let activeElection: { id: string; seatId?: string; label: string } | null = null;
     let cabinetOffice: { positionId: string; positionName: string; countryCode: string } | null =
       null;
+    let justiceOffice: JusticeOfficeNavEntry | null = null;
     let governorOffice: { stateId: string; stateName: string; countryCode: string } | null = null;
     let myCorporationId: number | null = null;
     let myCorporationObjectId: ObjectId | null = null;
@@ -327,63 +334,74 @@ export async function GET() {
     const missingDemographics = character ? !character.demographics : false;
 
     if (character) {
-      const [stateDoc, partyDoc, unread, unreadMail, myCandidate, myCabinetMember, myCorporation] =
-        await Promise.all([
-          character.homeState
-            ? db
-                .collection<State>("states")
-                .findOne({ _id: character.homeState }, { projection: { name: 1 } })
-            : null,
-          character.party && Number.isFinite(Number(character.party))
-            ? db
-                .collection<PoliticalParty>("politicalParties")
-                .findOne(
-                  { sequentialId: Number(character.party), countryId: character.countryId },
-                  { projection: { name: 1, sequentialId: 1, countryId: 1 } }
-                )
-            : null,
-          db.collection<Notification>("notifications").countDocuments({
-            userId: userOid,
-            ...notificationTypeFilter(user?.notificationPreferences, new Date()),
-            read: false,
-          }),
-          db.collection("playerMail").countDocuments({
-            toUserId: userOid,
-            read: false,
-            deletedByRecipient: false,
-            blockedByRecipient: { $ne: true },
-          }),
-          db
-            .collection<ElectionCandidate>("electionCandidates")
-            .findOne(
-              { characterId: character._id, status: "active" },
-              { sort: { enteredAt: -1 }, projection: { electionId: 1 } }
-            ),
-          // Unified cabinetMembers covers every country's cabinet (US Senate-
-          // confirmed and parliamentary/OPS direct-appointment alike).
-          db
-            .collection<{ positionId: string; countryId: string }>("cabinetMembers")
-            .findOne(
-              { characterId: character._id },
-              { projection: { positionId: 1, countryId: 1 } }
-            ),
-          !isImperialMode
-            ? db
-                .collection<{
-                  sequentialId?: number;
-                  type?: string;
-                  countryId?: string;
-                }>("corporations")
-                .findOne(
-                  {
-                    ceoId: character._id,
-                    ceoVacant: { $ne: true },
-                    imfInstitution: { $ne: true },
-                  },
-                  { projection: { sequentialId: 1, type: 1, countryId: 1 } }
-                )
-            : Promise.resolve(null),
-        ]);
+      const [
+        stateDoc,
+        partyDoc,
+        unread,
+        unreadMail,
+        myCandidate,
+        myCabinetMember,
+        myJusticeSeat,
+        myCorporation,
+      ] = await Promise.all([
+        character.homeState
+          ? db
+              .collection<State>("states")
+              .findOne({ _id: character.homeState }, { projection: { name: 1 } })
+          : null,
+        character.party && Number.isFinite(Number(character.party))
+          ? db
+              .collection<PoliticalParty>("politicalParties")
+              .findOne(
+                { sequentialId: Number(character.party), countryId: character.countryId },
+                { projection: { name: 1, sequentialId: 1, countryId: 1 } }
+              )
+          : null,
+        db.collection<Notification>("notifications").countDocuments({
+          userId: userOid,
+          ...notificationTypeFilter(user?.notificationPreferences, new Date()),
+          read: false,
+        }),
+        db.collection("playerMail").countDocuments({
+          toUserId: userOid,
+          read: false,
+          deletedByRecipient: false,
+          blockedByRecipient: { $ne: true },
+        }),
+        db
+          .collection<ElectionCandidate>("electionCandidates")
+          .findOne(
+            { characterId: character._id, status: "active" },
+            { sort: { enteredAt: -1 }, projection: { electionId: 1 } }
+          ),
+        // Unified cabinetMembers covers every country's cabinet (US Senate-
+        // confirmed and parliamentary/OPS direct-appointment alike).
+        db
+          .collection<{ positionId: string; countryId: string }>("cabinetMembers")
+          .findOne({ characterId: character._id }, { projection: { positionId: 1, countryId: 1 } }),
+        db
+          .collection<{ countryId: string; seatNumber: number }>("supremeCourtSeats")
+          .findOne(
+            { justiceCharacterId: character._id },
+            { projection: { countryId: 1, seatNumber: 1 } }
+          ),
+        !isImperialMode
+          ? db
+              .collection<{
+                sequentialId?: number;
+                type?: string;
+                countryId?: string;
+              }>("corporations")
+              .findOne(
+                {
+                  ceoId: character._id,
+                  ceoVacant: { $ne: true },
+                  imfInstitution: { $ne: true },
+                },
+                { projection: { sequentialId: 1, type: 1, countryId: 1 } }
+              )
+          : Promise.resolve(null),
+      ]);
 
       unreadCount = unread;
       unreadMailCount = unreadMail;
@@ -414,6 +432,7 @@ export async function GET() {
       }
 
       cabinetOffice = resolveCabinetOfficeNavEntry(myCabinetMember);
+      justiceOffice = resolveJusticeOfficeNavEntry(myJusticeSeat);
 
       // Governor / Minister-President office lookup (strictly office-holder).
       if (character.countryId) {
@@ -748,6 +767,7 @@ export async function GET() {
         currentParty,
         activeElection,
         cabinetOffice,
+        justiceOffice,
         governorOffice,
         activePresidentElectionId: presidentElection ? presidentElection._id.toString() : null,
         activePresidentElectionSeatId: presidentElection?.seatId ?? null,

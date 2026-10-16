@@ -23,6 +23,7 @@ import {
 import { getGameState } from "@/lib/gameState";
 import { officePoolTopUpStatus } from "@/lib/actions/officePoolTopUpRules";
 import { divergentDeathChance } from "@/lib/scotus/tenure";
+import { getScotusUpcomingCases } from "@/lib/scotus/queries";
 
 export async function GET(_request: Request, { params }: { params: Promise<{ code: string }> }) {
   try {
@@ -43,6 +44,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ cod
         resetHint: JUSTICE_ACTION_RESET_HINT,
         actions: JUSTICE_ACTIONS,
         topUp: null,
+        upcomingCases: [],
       });
     }
 
@@ -54,7 +56,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ cod
           .findOne({ userId: new ObjectId(authUser.userId) })
       : null;
 
-    const [seat, gameState] = await Promise.all([
+    const [seat, gameState, upcomingCases] = await Promise.all([
       myCharacter
         ? db.collection<SupremeCourtSeat>("supremeCourtSeats").findOne({
             countryId,
@@ -62,6 +64,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ cod
           })
         : Promise.resolve(null),
       getGameState(db),
+      getScotusUpcomingCases(db, countryId),
     ]);
     const currentTurn = gameState?.currentTurn;
     const deathChance =
@@ -91,6 +94,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ cod
       topUp: seat
         ? officePoolTopUpStatus(seat.lastJusticeActionTopUpTurn, currentTurn, myCharacter?.actions)
         : null,
+      upcomingCases,
     });
   } catch (error) {
     return handleRouteError(error);

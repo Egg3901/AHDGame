@@ -72,6 +72,7 @@ interface NavbarWrapperState {
   currentParty: { id: string; name: string; countryId: string } | null;
   activeElection: { id: string; seatId?: string; label: string } | null;
   cabinetOffice: { positionId: string; positionName: string; countryCode: string } | null;
+  justiceOffice: { countryCode: string; seatNumber: number } | null;
   governorOffice: { stateId: string; stateName: string; countryCode: string } | null;
   activePresidentElectionId: string | null;
   activePresidentElectionSeatId: string | null;
@@ -106,6 +107,7 @@ type NavbarWrapperAction =
     }
   | { type: "SET_ACTIVE_ELECTION"; activeElection: NavbarWrapperState["activeElection"] }
   | { type: "SET_CABINET_OFFICE"; cabinetOffice: NavbarWrapperState["cabinetOffice"] }
+  | { type: "SET_JUSTICE_OFFICE"; justiceOffice: NavbarWrapperState["justiceOffice"] }
   | { type: "SET_GOVERNOR_OFFICE"; governorOffice: NavbarWrapperState["governorOffice"] }
   | { type: "SET_ACTIVE_PRESIDENT_ELECTION_ID"; id: string | null; seatId: string | null }
   | { type: "SET_WIKI_DISABLED"; wikiDisabled: boolean }
@@ -130,6 +132,7 @@ const initialState: NavbarWrapperState = {
   currentParty: null,
   activeElection: null,
   cabinetOffice: null,
+  justiceOffice: null,
   governorOffice: null,
   activePresidentElectionId: null,
   activePresidentElectionSeatId: null,
@@ -171,6 +174,8 @@ function navbarWrapperReducer(
       return { ...state, activeElection: action.activeElection };
     case "SET_CABINET_OFFICE":
       return { ...state, cabinetOffice: action.cabinetOffice };
+    case "SET_JUSTICE_OFFICE":
+      return { ...state, justiceOffice: action.justiceOffice };
     case "SET_GOVERNOR_OFFICE":
       return { ...state, governorOffice: action.governorOffice };
     case "SET_ACTIVE_PRESIDENT_ELECTION_ID":
@@ -196,6 +201,7 @@ function navbarWrapperReducer(
         currentParty: null,
         activeElection: null,
         cabinetOffice: null,
+        justiceOffice: null,
         governorOffice: null,
         activePresidentElectionId: null,
         activePresidentElectionSeatId: null,
@@ -432,6 +438,7 @@ export function NavbarWrapper({
       });
       dispatch({ type: "SET_ACTIVE_ELECTION", activeElection: navData.activeElection ?? null });
       dispatch({ type: "SET_CABINET_OFFICE", cabinetOffice: navData.cabinetOffice ?? null });
+      dispatch({ type: "SET_JUSTICE_OFFICE", justiceOffice: navData.justiceOffice ?? null });
       dispatch({
         type: "SET_GOVERNOR_OFFICE",
         governorOffice: (navData.governorOffice as NavbarWrapperState["governorOffice"]) ?? null,
@@ -628,6 +635,7 @@ export function NavbarWrapper({
               homeState={state.homeState ?? undefined}
               activeElection={state.activeElection ?? undefined}
               cabinetOffice={state.cabinetOffice ?? undefined}
+              justiceOffice={state.justiceOffice ?? undefined}
               governorOffice={state.governorOffice ?? undefined}
               isImperialMode={state.isImperialMode}
               wikiDisabled={state.wikiDisabled}
@@ -657,6 +665,7 @@ export function NavbarWrapper({
               currentParty={useLightweightNav ? undefined : (state.currentParty ?? undefined)}
               activeElection={useLightweightNav ? undefined : (state.activeElection ?? undefined)}
               cabinetOffice={useLightweightNav ? undefined : (state.cabinetOffice ?? undefined)}
+              justiceOffice={useLightweightNav ? undefined : (state.justiceOffice ?? undefined)}
               governorOffice={useLightweightNav ? undefined : (state.governorOffice ?? undefined)}
               activePresidentElectionId={
                 useLightweightNav ? undefined : (state.activePresidentElectionId ?? undefined)
