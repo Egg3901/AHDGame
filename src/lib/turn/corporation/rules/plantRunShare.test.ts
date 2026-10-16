@@ -37,4 +37,30 @@ describe("plantCrewShare", () => {
       10
     );
   });
+
+  it("drops by at most maxDropPerTurn a turn toward the target", () => {
+    expect(
+      plantCrewShare({ ...base, demandThrottleFactor: 0.1, previous: 1, maxDropPerTurn: 0.02 })
+    ).toBeCloseTo(0.98, 10);
+    expect(
+      plantCrewShare({ ...base, demandThrottleFactor: 0.1, previous: 0.26, maxDropPerTurn: 0.02 })
+    ).toBe(0.25);
+  });
+
+  it("rehires to the target at once when demand returns", () => {
+    expect(
+      plantCrewShare({ ...base, demandThrottleFactor: 0.9, previous: 0.3, maxDropPerTurn: 0.02 })
+    ).toBeCloseTo(0.9, 10);
+  });
+
+  it("treats a missing previous share as a full crew", () => {
+    expect(
+      plantCrewShare({
+        ...base,
+        demandThrottleFactor: 0.1,
+        previous: undefined,
+        maxDropPerTurn: 0.02,
+      })
+    ).toBeCloseTo(0.98, 10);
+  });
 });

@@ -17,6 +17,7 @@ import { buildMarketContext } from "@/lib/market/marketContext";
 import { getEffectiveStrategyRates } from "@/lib/constants/sectorStrategies";
 import {
   PLANT_CREW_FLOOR_SHARE,
+  PLANT_CREW_MAX_DROP_PER_TURN,
   revenuePerCapacityUnitForStrategy,
 } from "@/lib/constants/capacityEconomy";
 import { retoolRescaleFields } from "@/lib/corporations/retoolRescale";
@@ -914,7 +915,10 @@ describe("plants mode: 1991 energy productivity ramp", () => {
 describe("plants mode — wages and upkeep follow the scheduled run", () => {
   const stock = IMPLIED_UNITS * CAPITAL_SEED_HEADROOM;
 
-  function runCosts(history: { producedUnits?: number; soldUnits?: number }, npp = false) {
+  function runCosts(
+    history: { producedUnits?: number; soldUnits?: number; plantCrewShare?: number },
+    npp = false
+  ) {
     const env = makeEnv("plants", 1000);
     env.market.explicitPlantCostsEnabled = true;
     const corp = npp ? ({ ...makeCorp(), ceoType: "npp" } as unknown as Corporation) : makeCorp();
@@ -932,6 +936,7 @@ describe("plants mode — wages and upkeep follow the scheduled run", () => {
       workers: update.workers as number,
       workersDesired: update.workersDesired as number,
       throttle: update.demandThrottleFactor as number,
+      crew: update.plantCrewShare as number,
       upkeep: result.plantsUpkeepCost,
     };
   }
@@ -944,9 +949,16 @@ describe("plants mode — wages and upkeep follow the scheduled run", () => {
   // Sold almost nothing last turn: the throttle sits on its floor.
   const glutted = { producedUnits: unthrottledProduced, soldUnits: 0 };
 
-  it("staffs and pays a throttled plant at the crew floor, not full nameplate", () => {
+  it("lays off gradually: the first throttled turn drops the crew by one step", () => {
     const full = runCosts({});
-    const throttled = runCosts(glutted);
+    const first = runCosts(glutted);
+    expect(first.crew).toBeCloseTo(1 - PLANT_CREW_MAX_DROP_PER_TURN, 10);
+    expect(first.laborCost / full.laborCost).toBeCloseTo(1 - PLANT_CREW_MAX_DROP_PER_TURN, 2);
+  });
+
+  it("staffs and pays a throttled plant at the crew floor once settled, not full nameplate", () => {
+    const full = runCosts({});
+    const throttled = runCosts({ ...glutted, plantCrewShare: PLANT_CREW_FLOOR_SHARE });
     expect(throttled.throttle).toBeCloseTo(DEMAND_THROTTLE_FLOOR, 3);
     expect(throttled.workersDesired).toBeCloseTo(full.workersDesired * PLANT_CREW_FLOOR_SHARE, -1);
     expect(throttled.laborCost / full.laborCost).toBeCloseTo(PLANT_CREW_FLOOR_SHARE, 2);
@@ -958,6 +970,7 @@ describe("plants mode — wages and upkeep follow the scheduled run", () => {
     const half = runCosts({
       producedUnits: unthrottledProduced,
       soldUnits: unthrottledProduced / 3,
+      plantCrewShare: PLANT_CREW_FLOOR_SHARE,
     });
     const share = half.throttle;
     expect(share).toBeGreaterThan(PLANT_CREW_FLOOR_SHARE);

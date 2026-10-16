@@ -32,11 +32,23 @@ export function plantCrewShare(args: {
   demandThrottleFactor: number;
   ramp: number;
   floor: number;
+  /** Last turn's crew share (undefined on the first turn under this rule = 1). */
+  previous?: number | null;
+  /** Largest drop in crew share allowed in one turn (gradual layoffs). */
+  maxDropPerTurn?: number;
 }): number {
   const floor = Math.max(0, Math.min(1, args.floor));
   const run = plantRunShare(args);
   const settled = Math.max(floor, run);
   if (settled >= 1) return 1;
   const ramp = Number.isFinite(args.ramp) ? Math.max(0, Math.min(1, args.ramp)) : 1;
-  return 1 - ramp * (1 - settled);
+  const target = 1 - ramp * (1 - settled);
+  // Owner, 2026-10-16: no overnight layoffs. The crew shrinks by at most
+  // maxDropPerTurn of nameplate a turn toward the target; it grows back at once.
+  const previous = Number.isFinite(args.previous)
+    ? Math.max(0, Math.min(1, args.previous as number))
+    : 1;
+  const step = args.maxDropPerTurn;
+  if (step === undefined || !Number.isFinite(step) || step <= 0) return target;
+  return target >= previous ? target : Math.max(target, previous - step);
 }

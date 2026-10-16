@@ -583,6 +583,14 @@ export const IDLE_UPKEEP_FRACTION = 0.3;
 export const PLANT_CREW_FLOOR_SHARE = 0.25;
 
 /**
+ * Largest drop in a plant's crew share in one turn, as a share of nameplate.
+ * Owner, 2026-10-16: applied at once the rule would cut about 11% of plant jobs
+ * in a single turn; at 0.02 a turn the cut lands over several turns, so the
+ * labour market and household demand can absorb it. Rehiring is immediate.
+ */
+export const PLANT_CREW_MAX_DROP_PER_TURN = 0.02;
+
+/**
  * Share of today's idle upkeep still charged on capacity the demand throttle
  * idled (as opposed to capacity the owner idled with the production slider).
  * Not zero, so overbuilding still costs something. Tunable alongside

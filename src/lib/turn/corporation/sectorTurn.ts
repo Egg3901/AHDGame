@@ -72,7 +72,10 @@ import { isStateScopedCommodity } from "@/lib/market/commodityMarketScope";
 import { withLatentDemand } from "./demandThrottle";
 import { idleCapacityRetirement } from "./rules/idleCapacityRetirement";
 import { plantCrewShare } from "./rules/plantRunShare";
-import { PLANT_CREW_FLOOR_SHARE } from "@/lib/constants/capacityEconomy";
+import {
+  PLANT_CREW_FLOOR_SHARE,
+  PLANT_CREW_MAX_DROP_PER_TURN,
+} from "@/lib/constants/capacityEconomy";
 import { seedPlantLedger } from "@/lib/corporations/plantLedger";
 import {
   inputBasketCostIndex,
@@ -636,6 +639,8 @@ export function processSector(
         demandThrottleFactor,
         ramp: plantsRampLambda,
         floor: PLANT_CREW_FLOOR_SHARE,
+        previous: sector.plantCrewShare,
+        maxDropPerTurn: PLANT_CREW_MAX_DROP_PER_TURN,
       })
     : 1;
   const { desiredWorkers, workers: computedWorkers } = resolveSectorHeadcount({
@@ -1072,6 +1077,7 @@ export function processSector(
   if (plantsEnabled) {
     sectorUpdate.plantsStartTurn = plantsStartTurn ?? null;
     sectorUpdate.demandIdleTurns = idleRetirement.streak;
+    sectorUpdate.plantCrewShare = plantCrew;
     sectorUpdate.idleCapacityRetiredUnits = idleCapacityRetiredUnits;
     // Stamp the idle-upkeep margin basis ONCE, from the live margin, and then
     // hold it — the anti-spiral half of the upkeep fix above. Written on the
