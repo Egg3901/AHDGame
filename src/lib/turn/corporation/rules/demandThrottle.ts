@@ -107,7 +107,7 @@ export function throttleSoldUnits(args: {
 }
 
 /** Fill at or above this counts as a leg that sold everything it offered. */
-export const SOLD_OUT_FILL = 0.999;
+export const SOLD_OUT_FILL = 0.99;
 
 /**
  * Extra units a sold-out plant can put into a market that left buyers unserved
@@ -261,6 +261,42 @@ export function withLatentDemand(
   }
   return { supply: balance.supply, demand: balance.demand * factor };
 }
+
+/**
+ * Book balance plus foreign buyers nobody serves.
+ *
+ * An exporter's clearing book pins demand to supply (its surplus is cleared
+ * abroad), so `demand - supply` reads zero however short its foreign buyers
+ * are, and a sold-out exporter could only creep up by the probe margin. The
+ * trade snapshot's `unmetForeignDemand` is this country's gravity share of the
+ * deficits no one is serving, so adding it restores the room the exporter can
+ * actually win. Other exporters claim their own shares, not this one.
+ */
+export function withForeignDemand(
+  balance: { supply: number; demand: number } | null | undefined,
+  unmetForeignDemand: number | null | undefined
+): { supply: number; demand: number } | null | undefined {
+  if (
+    !balance ||
+    !(typeof unmetForeignDemand === "number" && Number.isFinite(unmetForeignDemand)) ||
+    unmetForeignDemand <= 0
+  ) {
+    return balance;
+  }
+  return {
+    supply: balance.supply,
+    demand: balance.demand + unmetForeignDemand * FOREIGN_DEMAND_CLAIM_PER_TURN,
+  };
+}
+
+/**
+ * Share of the unserved foreign deficit an exporter may claim as room in one
+ * turn. The gravity share ignores route caps and tariff budgets, so claiming it
+ * whole could send a plant straight to capacity into routes that cannot carry
+ * it. A quarter a turn ramps over a few turns, and each turn re-reads what the
+ * last one actually shipped.
+ */
+export const FOREIGN_DEMAND_CLAIM_PER_TURN = 0.25;
 
 /**
  * Per-output fill for production feedback, with units a media ownership law

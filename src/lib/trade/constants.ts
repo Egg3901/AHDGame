@@ -51,6 +51,19 @@ export const TRADE_EMBARGO_TARGET_COOLDOWN_TURNS = 168;
 export const TRADE_PRICE_CONVERGENCE_K = 0.5;
 
 /**
+ * Convergence factor once trade fully registers. At 0.5 only half of the trade
+ * that actually shipped reached the national balances that price, margins and
+ * the demand throttle read: on live turn 251 Japan shipped its whole
+ * advertising surplus (its plants sold 99%) yet still read a glut, and the US
+ * read short by half its imports on top of its real deficit. Trade is real, so
+ * it counts in full. See tradeConvergenceK for the ramp.
+ */
+export const TRADE_PRICE_CONVERGENCE_K_FULL = 1;
+
+/** Turns over which k ramps from TRADE_PRICE_CONVERGENCE_K to _FULL. */
+export const TRADE_CONVERGENCE_RAMP_TURNS = 24;
+
+/**
  * Export reward. A sector earns a margin premium for producing a commodity its
  * country actually exports into foreign deficits:
  *   premium = Σ_commodity (supplyRate × exportIntensity) × TRADE_EXPORT_PREMIUM_RATE

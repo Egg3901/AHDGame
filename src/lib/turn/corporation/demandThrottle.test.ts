@@ -5,6 +5,8 @@ import {
   demandThrottleFactor,
   soldOutMarketHeadroomUnits,
   throttleSoldUnits,
+  FOREIGN_DEMAND_CLAIM_PER_TURN,
+  withForeignDemand,
   withLatentDemand,
   withRegulationBlockedFill,
 } from "./demandThrottle";
@@ -301,5 +303,34 @@ describe("withRegulationBlockedFill", () => {
     const fill = { advertising: 0.5 };
     expect(withRegulationBlockedFill(fill, undefined)).toBe(fill);
     expect(withRegulationBlockedFill(undefined, { advertising: 0.2 })).toBeUndefined();
+  });
+});
+
+describe("withForeignDemand", () => {
+  it("adds unserved foreign buyers to an exporter's pinned book", () => {
+    expect(withForeignDemand({ supply: 100, demand: 100 }, 40)).toEqual({
+      supply: 100,
+      demand: 100 + 40 * FOREIGN_DEMAND_CLAIM_PER_TURN,
+    });
+  });
+  it("leaves the book alone without foreign room", () => {
+    const book = { supply: 100, demand: 100 };
+    expect(withForeignDemand(book, 0)).toBe(book);
+    expect(withForeignDemand(book, null)).toBe(book);
+    expect(withForeignDemand(null, 40)).toBeNull();
+  });
+  it("gives a sold-out exporter real headroom instead of zero", () => {
+    const headroom = (balance: { supply: number; demand: number }) =>
+      soldOutMarketHeadroomUnits({
+        soldByCommodity: { advertising: 0.99 },
+        supplyRates: { advertising: 1 },
+        mixWeightFor: () => 1,
+        marketShareFor: () => 0.5,
+        balanceFor: () => balance,
+        priceRatioFor: () => 1,
+      });
+    expect(headroom({ supply: 1000, demand: 1000 })).toBe(0);
+    // A quarter of the 400 unserved, times this seller's half of the book.
+    expect(headroom(withForeignDemand({ supply: 1000, demand: 1000 }, 400)!)).toBeCloseTo(50, 6);
   });
 });
