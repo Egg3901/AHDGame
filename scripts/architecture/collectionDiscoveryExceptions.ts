@@ -219,11 +219,12 @@ export const LEGACY_DYNAMIC_COLLECTION_SITES: readonly LegacyDynamicCollectionSi
   },
   {
     file: "src/lib/banking/moneyMove.ts",
-    owner: "deliverCreditLegsInBatch",
+    owner: "deliverCashLegsInBatch",
     argument: "collection",
-    scopeHash: "32ba68d550b9c584eaddef67c9efd67356c448d00d3ab1ac719f6cc0c6320a93",
+    scopeHash: "3464a6e1fb10ada555552e3bc136b2310d22a4a34389eb4cf6709a31987c894b",
     count: 1,
-    reason: "The persisted transaction or recovery record carries its destination collection.",
+    reason:
+      "Reviewed cash batching uses the immutable leg's existing destination collection. Independent debits retain balance sufficiency, target revision CAS, protected receipts and debit-before-credit ordering; collection lifecycle is unchanged.",
   },
   {
     file: "src/lib/banking/projectionSettlement.ts",

@@ -164,6 +164,7 @@ interface MoneyMoveRecord {
   /** Added by the settlement journal in the original claim, never a second record. */
   projections?: { applied?: boolean; appliedAt?: Date | null }[];
   retryCreditLegOnGuardFailure?: boolean;
+  batchIndependentDebits?: boolean;
   createdAt: Date;
   completedAt?: Date;
   error?: string;
@@ -686,7 +687,7 @@ async function applyLeg(
 export const BATCHED_CREDIT_MIN_LEGS = 4;
 
 /**
- * Deliver a move's credit legs in a fixed number of round trips instead of
+ * Deliver a run of independent cash legs in fixed round trips instead of
  * five per leg. Every write is the one {@link applyLeg} would make: the same
  * revision CAS, the same pending receipt and settled-key stamp, acknowledged
  * the same way. Only the round trips are shared. Targets are read before the
@@ -695,11 +696,12 @@ export const BATCHED_CREDIT_MIN_LEGS = 4;
  * per-leg path, which finishes it from the receipts exactly as it would after
  * a crash. Returns the indices it delivered.
  */
-async function deliverCreditLegsInBatch(
+async function deliverCashLegsInBatch(
   db: Db,
   key: string,
   indices: number[],
-  legs: MoneyMoveRecordLeg[]
+  legs: MoneyMoveRecordLeg[],
+  kind: "debit" | "credit"
 ): Promise<Set<number>> {
   const delivered = new Set<number>();
   // Only batch the next collection run. Finish its fallback legs before
@@ -711,13 +713,13 @@ async function deliverCreditLegsInBatch(
   const seen = new Set(
     legs
       .slice(0, indices[0])
-      .filter((leg) => leg.kind === "credit")
+      .filter((leg) => leg.kind === kind)
       .map(targetKey)
   );
   for (const i of indices) {
     const leg = legs[i];
     if (
-      leg.kind !== "credit" ||
+      leg.kind !== kind ||
       !leg.collection ||
       leg.collection !== collection ||
       !leg.path ||
@@ -776,10 +778,15 @@ async function deliverCreditLegsInBatch(
               [LEG_REVISION]: target.moneyMoveRevision ?? { $exists: false },
               [PENDING_LEG]: { $exists: false },
             },
+            ...(kind === "debit" ? [{ [leg.path!]: { $gte: Math.max(0, leg.amount) } }] : []),
           ],
         } as Filter<LegTarget>,
         update: {
-          $inc: { [leg.path!]: Math.max(0, leg.amount), ...leg.inc, [LEG_REVISION]: 1 },
+          $inc: {
+            [leg.path!]: (kind === "debit" ? -1 : 1) * Math.max(0, leg.amount),
+            ...leg.inc,
+            [LEG_REVISION]: 1,
+          },
           $set: { updatedAt: new Date(), ...leg.set, [PENDING_LEG]: receipt },
           $push: { settledKeys: { $each: [legStamp(key, i)], $slice: -SETTLED_KEYS_CAP } },
         },
@@ -836,6 +843,32 @@ async function deliverCreditLegsInBatch(
   return delivered;
 }
 
+/** Net participant cash has no same-document or non-cash leg dependencies. */
+function independentDebitTargets(record: MoneyMoveRecord): boolean {
+  if (record.batchIndependentDebits !== true) return false;
+  const seen = new Set<string>();
+  for (const leg of record.legs) {
+    if (
+      (leg.kind !== "debit" && leg.kind !== "credit") ||
+      !leg.collection ||
+      !leg.path ||
+      leg.filter?._id === undefined
+    )
+      return false;
+    const id = leg.filter._id;
+    if (!(
+      typeof id === "string" ||
+      (typeof id === "number" && Number.isFinite(id)) ||
+      id instanceof ObjectId
+    ))
+      return false;
+    const key = `${leg.collection}\u0000${String(id)}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+  }
+  return true;
+}
+
 /** Finish from the original journal, without reinterpreting terminal outcomes. */
 export async function resumeMoneyMove(db: Db, key: string): Promise<MoneyMoveResult> {
   return executeMoneyMove(db, key, true);
@@ -877,8 +910,9 @@ async function executeMoneyMove(
   }
   let failure: string | undefined;
   const order = legOrder(record.legs);
-  // Credits sort last. Batch each collection run only when the loop reaches
-  // it, after all earlier fallback legs have succeeded.
+  // Credits remain last. Debits batch only for an explicit, independently
+  // validated net-cash move; a failed debit still stops every credit.
+  const independentDebits = independentDebitTargets(record);
   let batched = new Set<number>();
   let batchThrough = -1;
   const bookkeeping = new Set<number>();
@@ -888,7 +922,7 @@ async function executeMoneyMove(
     if (record.genericMoneyMoveVersion !== 2 && leg.applied) continue;
     if (record.status === "rejected" && !leg.applied && !leg.refusal) continue;
     if (
-      leg.kind === "credit" &&
+      (leg.kind === "credit" || (leg.kind === "debit" && independentDebits)) &&
       n > batchThrough &&
       !leg.applied &&
       !leg.refusal &&
@@ -896,10 +930,11 @@ async function executeMoneyMove(
       record.genericMoneyMoveVersion === 2
     ) {
       const rest = order.slice(n);
-      batched = await deliverCreditLegsInBatch(db, key, rest, record.legs);
+      batched = await deliverCashLegsInBatch(db, key, rest, record.legs, leg.kind);
       batchThrough = n;
       while (
         batchThrough + 1 < order.length &&
+        record.legs[order[batchThrough + 1]].kind === leg.kind &&
         record.legs[order[batchThrough + 1]].collection === leg.collection
       )
         batchThrough++;

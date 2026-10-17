@@ -124,6 +124,7 @@ export function producerCashTransition(input: {
     turn: input.turn,
     currency: "ANCHOR",
     legs,
+    batchIndependentDebits: true,
     projections: [],
     event: {
       kind: "monetary.executed",
