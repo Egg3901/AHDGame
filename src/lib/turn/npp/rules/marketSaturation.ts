@@ -22,17 +22,19 @@
  */
 
 import { bucketKey } from "@/lib/nationalization/stateControlledBuckets";
-import { NPP_GROWTH_MIN_THROTTLE } from "@/lib/turn/npp/nppCorporationTuning";
 
 /**
- * A cell whose plants run, capacity-weighted, below this share of their
- * capacity has no room for another plant. It is the bar an incumbent NPP plant
- * must clear to grow (NPP_GROWTH_MIN_THROTTLE), so entrants and incumbents face
- * one rule. A lower bar churned: idle retirement shrinks glutted NPP plants to
- * about 0.8 of capacity (IDLE_RETIRE_HEADROOM), which a 0.5 bar read as room,
- * so a fresh entrant refilled the glut the retirement had just cleared.
+ * A cell has room for another plant only when its plants run, capacity-weighted,
+ * at essentially their full capacity: the demand throttle is below 1 exactly
+ * when a plant cannot sell all it could make, so any cell under this bar is
+ * already demand-limited and a new plant only splits sales that are spoken for.
+ * Stricter than the bar an incumbent must clear to grow (NPP_GROWTH_MIN_THROTTLE,
+ * 0.9): growing a plant that sells 90% adds a little capacity to a market it
+ * already serves, founding adds a whole new plant. Live turn 255, with a 0.9
+ * bar: 78 of 90 AI foundings entered cells at 0.9 or above, and 357 of the 569
+ * AI plants founded since turn 246 ran below half capacity.
  */
-export const NPP_SATURATED_MARKET_THROTTLE = NPP_GROWTH_MIN_THROTTLE;
+export const NPP_SATURATED_MARKET_THROTTLE = 0.98;
 
 export interface SaturationSectorLike {
   stateId: string;
