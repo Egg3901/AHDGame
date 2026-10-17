@@ -19,11 +19,14 @@ export interface PlantIdleCause {
     | "strike"
     | "disaster"
     | "policy"
+    | "bank"
     | "deposits"
     | "mothballed"
     | "other";
   /** Capacity units that did not run for this reason, units/day. */
   units: number;
+  /** Configured branch share, before idle and mothball caps. Only for bank. */
+  capacityShare?: number;
 }
 
 /** One outstanding capacity build order, already turned into countdown form. */

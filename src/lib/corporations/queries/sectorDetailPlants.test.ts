@@ -3,6 +3,8 @@ import { NET_MARGIN_FLOOR_PCT } from "@/lib/corporations/rules/netMargin";
 import { ObjectId } from "mongodb";
 import { buildSectorPlantsSection } from "./sectorDetailSections";
 import type { CorporateSector } from "@/lib/db/types";
+import { commodityProductionCapacityScale } from "@/lib/banking/capacityAllocation";
+import type { BankCharter } from "@/lib/db/types/bank";
 import { NEUTRAL_STAT } from "@/lib/stats/statsConstants";
 
 function sectorFixture(patch: Partial<CorporateSector> = {}): CorporateSector {
@@ -588,5 +590,126 @@ describe("buildSectorPlantsSection: room to build agrees with the engine (ticket
       sector: sectorFixture(),
     });
     expect(unknown.unclaimedSharePct).toBeUndefined();
+  });
+});
+
+describe("bank branch capacity attribution", () => {
+  const charter: BankCharter = {
+    type: "retail",
+    status: "active",
+    currency: "USD",
+    charteredTurn: 1,
+    postedCapital: 1,
+    depositOffset: 0,
+    lendingOffset: 0,
+    branchCapacityShare: 0.6,
+  };
+  const args = {
+    ...BASE_ARGS,
+    eraUnitScale: 1,
+    sectorType: "financial" as const,
+    sector: sectorFixture({
+      sectorType: "financial",
+      operatingCapacityUnits: 1978.1,
+      producedUnits: 773.44,
+      soldUnits: 773.44,
+      throughputFactor: 0.85,
+      productionPolicyLevel: 25,
+    }),
+  };
+
+  it("names the reserved 60% before fitting input losses to the remaining idle capacity", () => {
+    const result = buildSectorPlantsSection({
+      ...args,
+      bankingCommodityScale: commodityProductionCapacityScale(charter, true),
+    });
+    expect(result.idleCauses[0]).toEqual({ cause: "bank", units: 1186.86, capacityShare: 0.6 });
+    expect(result.idleCauses.find((c) => c.cause === "inputs")?.units).toBeCloseTo(17.8, 6);
+    expect(result.idleCauses.find((c) => c.cause === "other")?.units ?? 0).toBeLessThan(0.001);
+    expect(result.idleCauses.reduce((sum, c) => sum + c.units, 0)).toBeCloseTo(
+      result.idleUnits!,
+      8
+    );
+  });
+
+  it("fits multiple named causes into capacity left after the bank reservation", () => {
+    const result = buildSectorPlantsSection({
+      ...args,
+      bankingCommodityScale: commodityProductionCapacityScale(charter, true),
+      sector: { ...args.sector, throughputFactor: 0.8, demandThrottleFactor: 0.8, soldUnits: 0 },
+    });
+    expect(result.idleCauses.map((cause) => cause.cause)).toEqual(["bank", "inputs", "demand"]);
+    expect(result.idleCauses.find((cause) => cause.cause === "inputs")?.units).toBeCloseTo(8.9, 6);
+    expect(result.idleCauses.find((cause) => cause.cause === "demand")?.units).toBeCloseTo(8.9, 6);
+    expect(result.idleCauses.reduce((sum, cause) => sum + cause.units, 0)).toBeCloseTo(
+      result.idleUnits!,
+      8
+    );
+  });
+
+  it("keeps unmeasured idle capacity under other limits after the bank reservation", () => {
+    const result = buildSectorPlantsSection({
+      ...args,
+      bankingCommodityScale: commodityProductionCapacityScale(charter, true),
+      sector: {
+        ...args.sector,
+        operatingCapacityUnits: 200,
+        producedUnits: 60,
+        throughputFactor: 1,
+      },
+    });
+    expect(result.idleCauses).toEqual([
+      { cause: "bank", units: 120, capacityShare: 0.6 },
+      { cause: "other", units: 20 },
+    ]);
+    expect(result.idleCauses.reduce((sum, cause) => sum + cause.units, 0)).toBe(result.idleUnits);
+  });
+
+  it.each([
+    ["investment-only charter", { ...charter, type: "investment" as const }, true],
+    ["no charter", undefined, true],
+    ["banking disabled", charter, false],
+    ["revoked charter", { ...charter, status: "revoked" as const }, true],
+  ])("preserves existing attribution for %s", (_label, bankCharter, enabled) => {
+    const before = buildSectorPlantsSection(args);
+    const after = buildSectorPlantsSection({
+      ...args,
+      bankingCommodityScale: commodityProductionCapacityScale(bankCharter, enabled),
+    });
+    expect(after.idleCauses).toEqual(before.idleCauses);
+    expect(after.idleCauses).toEqual([
+      { cause: "inputs", units: expect.closeTo(296.715, 6) },
+      { cause: "other", units: expect.closeTo(907.945, 6) },
+    ]);
+  });
+
+  it("leaves non-financial sectors unchanged", () => {
+    const ordinary = {
+      ...args,
+      sectorType: "manufacturing" as const,
+      sector: { ...args.sector, sectorType: "manufacturing" as const },
+    };
+    expect(
+      buildSectorPlantsSection({ ...ordinary, bankingCommodityScale: 0.4 }).idleCauses
+    ).toEqual(buildSectorPlantsSection(ordinary).idleCauses);
+  });
+
+  it.each([
+    ["partial mothball", { activeCapacityPercent: 25, producedUnits: 40 }, ["mothballed", "bank"]],
+    ["full mothball", { mothballed: true, producedUnits: 0 }, ["mothballed"]],
+    ["less idle than reserved", { producedUnits: 1900 }, ["bank"]],
+  ])("caps bank attribution after %s and reconciles the idle total", (_label, patch, causes) => {
+    const result = buildSectorPlantsSection({
+      ...args,
+      bankingCommodityScale: 0.4,
+      sector: { ...args.sector, ...patch },
+    });
+    expect(result.idleCauses.map((c) => c.cause)).toEqual(causes);
+    expect(result.idleCauses.reduce((sum, c) => sum + c.units, 0)).toBeCloseTo(
+      result.idleUnits!,
+      8
+    );
+    const bank = result.idleCauses.find((c) => c.cause === "bank");
+    if (bank) expect(bank.capacityShare).toBe(0.6);
   });
 });

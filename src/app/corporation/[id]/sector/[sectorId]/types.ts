@@ -577,6 +577,7 @@ export type PlantIdleCauseKey =
   | "strike"
   | "disaster"
   | "policy"
+  | "bank"
   | "deposits"
   | "mothballed"
   | "other";
@@ -584,6 +585,8 @@ export type PlantIdleCauseKey =
 export interface PlantIdleCause {
   cause: PlantIdleCauseKey;
   units: number;
+  /** Configured branch share, before idle and mothball caps. Only for bank. */
+  capacityShare?: number;
 }
 
 export interface PlantBuildOrderView {
