@@ -9,7 +9,10 @@ import {
   rescaleBuildQueueForStrategyChange,
 } from "@/lib/constants/capacityEconomy";
 import type { SectorBuildOrder } from "@/lib/db/types";
-import { mergeSectorPlantFields } from "@/lib/corporations/sectorTransferCapex";
+import {
+  mergeSectorPlantFields,
+  readSectorPlantFields,
+} from "@/lib/corporations/sectorTransferCapex";
 import {
   hasProtectedConstructionProperty,
   unprotectedConstructionPropertyFilter,
@@ -104,35 +107,14 @@ export async function moveSectorToCorp(
       // not rescaled by the strategy ratio (same rule as the retool path) — CIP
       // and the cancellation refund must keep reporting what was actually paid,
       // which is why the rescale above touches units only.
-      const merged = mergeSectorPlantFields(
-        {
-          sectorType: existing.sectorType,
-          industryModel: existing.industryModel,
-          mediaDiscriminator: existing.mediaDiscriminator,
-          capitalStock: existing.capitalStock,
-          buildQueue: existing.buildQueue,
-          mothballed: existing.mothballed,
-          activeCapacityPercent: existing.activeCapacityPercent,
-          plantsStartTurn: existing.plantsStartTurn,
-          legacyRevenueShadow: existing.legacyRevenueShadow,
-          inventoryUnits: existing.inventoryUnits,
-          inventoryValueAnchor: existing.inventoryValueAnchor,
-        },
-        {
-          sectorType: sector.sectorType,
-          industryModel: sector.industryModel,
-          mediaDiscriminator: sector.mediaDiscriminator,
-          capitalStock: Math.round(donorStock * ratio * 100) / 100,
-          buildQueue: donorQueue,
-          mothballed: sector.mothballed,
-          activeCapacityPercent: sector.activeCapacityPercent,
-          plantsStartTurn: sector.plantsStartTurn,
-          legacyRevenueShadow: sector.legacyRevenueShadow,
-          // Goods, not capacity: the strategy ratio does not rescale a pile.
-          inventoryUnits: sector.inventoryUnits,
-          inventoryValueAnchor: sector.inventoryValueAnchor,
-        }
-      );
+      const merged = mergeSectorPlantFields(readSectorPlantFields(existing), {
+        ...readSectorPlantFields(sector),
+        capitalStock: Math.round(donorStock * ratio * 100) / 100,
+        ...(sector.operatingCapacityUnits != null
+          ? { operatingCapacityUnits: sector.operatingCapacityUnits * ratio }
+          : {}),
+        buildQueue: donorQueue,
+      });
       const mergedSurvivor = await sectors.updateOne(
         { _id: existing._id, ...unprotectedConstructionPropertyFilter() },
         {
