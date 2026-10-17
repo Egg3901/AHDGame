@@ -194,7 +194,14 @@ export default function PlantPanel({
 
       {isCeo && !mothballed && idleRetirement && (
         <div className="mt-4 rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-body-sm text-foreground">
-          {idleRetirement.retiredUnits > 0 ? (
+          {idleRetirement.retiredUnits > 0 && idleRetirement.oversized ? (
+            <p>
+              {fmtUnits(idleRetirement.retiredUnits)} units of capacity retired last turn because
+              this plant&apos;s buyers take only about {idleRetirement.runPct}% of what it could
+              make. Retirement continues a little each turn until the plant is closer to its market.
+              Parked capacity is not retired{onResize ? ", so park any you want to keep" : ""}.
+            </p>
+          ) : idleRetirement.retiredUnits > 0 ? (
             <p>
               {fmtUnits(idleRetirement.retiredUnits)} units of capacity retired last turn because
               buyers here have not taken this plant&apos;s output for {idleRetirement.turns} turns.

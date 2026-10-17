@@ -1078,6 +1078,13 @@ export interface CorporateSector {
    */
   demandIdleTurns?: number;
   /**
+   * Plants tier, player plants: consecutive turns this sector sold what it made
+   * while held deep under its size and not recovering. Its own counter so a
+   * glutted spell never uses up the oversized warning. See
+   * `rules/idleCapacityRetirement`.
+   */
+  oversizedTurns?: number;
+  /**
    * Plants tier: share of active nameplate staffed and paid last turn (1 = full
    * crew). Carried so layoffs are gradual; see `rules/plantRunShare`.
    */

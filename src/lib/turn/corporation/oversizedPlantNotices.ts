@@ -1,11 +1,7 @@
 import type { Db } from "mongodb";
 import type { Corporation, CorporateSector } from "@/lib/db/types";
 import { createNotifications, type NotificationInput } from "@/lib/notifications";
-import {
-  IDLE_RETIRE_GLUT_FILL,
-  IDLE_RETIRE_STRUCTURAL_GRACE_TURNS,
-  IDLE_RETIRE_STRUCTURAL_THROTTLE,
-} from "./rules/idleCapacityRetirement";
+import { IDLE_RETIRE_STRUCTURAL_GRACE_TURNS } from "./rules/idleCapacityRetirement";
 
 /**
  * Warn a player CEO the first turn one of their plants counts as oversized:
@@ -21,12 +17,9 @@ export async function notifyOversizedPlants(db: Db, turn: number): Promise<void>
   const sectors = await db
     .collection<CorporateSector>("corporateSectors")
     .find(
-      {
-        mothballed: { $ne: true },
-        demandIdleTurns: 1,
-        demandThrottleFactor: { $gt: 0, $lt: IDLE_RETIRE_STRUCTURAL_THROTTLE },
-        soldFraction: { $gte: IDLE_RETIRE_GLUT_FILL },
-      },
+      // The counter the retirement rule itself wrote this turn: 1 means the
+      // plant just became oversized, so the owner gets the whole warning.
+      { mothballed: { $ne: true }, oversizedTurns: 1 },
       {
         projection: {
           _id: 1,
@@ -44,10 +37,10 @@ export async function notifyOversizedPlants(db: Db, turn: number): Promise<void>
     .collection<Corporation>("corporations")
     .find(
       {
-        _id: { $in: [...new Set(sectors.map((s) => s.corporationId))] },
+        _id: { $in: sectors.map((s) => s.corporationId) },
         ceoType: { $ne: "npp" },
         countryOwnerId: { $exists: false },
-        userId: { $exists: true, $ne: null },
+        ownershipState: { $ne: "stateOwned" },
       },
       { projection: { _id: 1, userId: 1, name: 1, sequentialId: 1 } }
     )

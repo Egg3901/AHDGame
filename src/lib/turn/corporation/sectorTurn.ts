@@ -592,7 +592,10 @@ export function processSector(
     nppRun: corp.ceoType === "npp",
     nppStructural:
       corp.ceoType === "npp" && lookups.engineSixCountries?.has(corp.countryId) === true,
-    playerStructural: corp.ceoType !== "npp" && !corp.countryOwnerId,
+    playerStructural: corp.ceoType !== "npp" && !isStateOwned(corp),
+    priorOversizedTurns: sector.oversizedTurns,
+    priorThrottle: sector.demandThrottleFactor,
+    capacityLanded: landedOrderCount > 0,
   });
   const retainedCapacityShare = 1 - idleRetirement.retireFraction;
   const persistedOwnedCapacity = plantsOwnedCapacity * retainedCapacityShare;
@@ -1096,6 +1099,7 @@ export function processSector(
   if (plantsEnabled) {
     sectorUpdate.plantsStartTurn = plantsStartTurn ?? null;
     sectorUpdate.demandIdleTurns = idleRetirement.streak;
+    sectorUpdate.oversizedTurns = idleRetirement.oversizedTurns;
     sectorUpdate.plantCrewShare = plantCrew;
     sectorUpdate.idleCapacityRetiredUnits = idleCapacityRetiredUnits;
     // Stamp the idle-upkeep margin basis ONCE, from the live margin, and then

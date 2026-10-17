@@ -1,10 +1,8 @@
 import type { PlantIdleCause, PlantBuildOrderView, SectorPlantsSection } from "./sectorPlantsTypes";
 export type { PlantIdleCause, PlantBuildOrderView, SectorPlantsSection } from "./sectorPlantsTypes";
 import {
-  IDLE_RETIRE_GLUT_FILL,
   IDLE_RETIRE_GRACE_TURNS,
   IDLE_RETIRE_STRUCTURAL_GRACE_TURNS,
-  IDLE_RETIRE_STRUCTURAL_THROTTLE,
 } from "@/lib/turn/corporation/rules/idleCapacityRetirement";
 import { hasProtectedConstructionProperty } from "@/lib/corporations/securedConstructionProperty";
 import { getCorporateSectorLaneQuery } from "@/lib/corporations/sectorLocation";
@@ -1732,21 +1730,22 @@ export function buildSectorPlantsSection(args: {
     demandGapUnits: roomHeldByOwnIdle ? 0 : nonNeg(demandGapUnits),
     measuredDemandGapUnits: roomHeldByOwnIdle ? 0 : (args.measuredDemandGapUnits ?? null),
     roomHeldByOwnIdle,
-    ...(!mothballed && (num(sector.demandIdleTurns) ?? 0) > 0
+    ...(!mothballed &&
+    ((num(sector.demandIdleTurns) ?? 0) > 0 || (num(sector.oversizedTurns) ?? 0) > 0)
       ? {
           idleRetirement: (() => {
-            // Oversized: the plant sells what it makes, but buyers take far less
-            // than it could make (rules/idleCapacityRetirement structural case).
+            // Oversized: sells what it makes, but buyers take far less than the
+            // plant could make (rules/idleCapacityRetirement, own counter).
+            const oversizedTurns = num(sector.oversizedTurns) ?? 0;
+            const oversized = oversizedTurns > 0;
             const throttle = num(sector.demandThrottleFactor);
-            const oversized =
-              throttle != null &&
-              throttle < IDLE_RETIRE_STRUCTURAL_THROTTLE &&
-              (num(sector.soldFraction) ?? 0) >= IDLE_RETIRE_GLUT_FILL;
             return {
-              turns: num(sector.demandIdleTurns) ?? 0,
+              turns: oversized ? oversizedTurns : (num(sector.demandIdleTurns) ?? 0),
               graceTurns: oversized ? IDLE_RETIRE_STRUCTURAL_GRACE_TURNS : IDLE_RETIRE_GRACE_TURNS,
               retiredUnits: nonNeg(num(sector.idleCapacityRetiredUnits) ?? 0),
-              ...(oversized ? { oversized: true, runPct: Math.round(100 * throttle!) } : {}),
+              ...(oversized
+                ? { oversized: true, runPct: Math.round(100 * Math.max(0, throttle ?? 0)) }
+                : {}),
             };
           })(),
         }

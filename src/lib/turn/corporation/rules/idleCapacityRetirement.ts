@@ -122,10 +122,16 @@ export interface IdleCapacityRetirementInput {
    */
   nppStructural?: boolean;
   /**
-   * Player-run corp (not state-owned): the structural case with the player
-   * grace and rate. The owner sees the countdown and can park capacity first.
+   * Player-run corp (not state-owned): the oversized case, on its own counter
+   * (`priorOversizedTurns`) so a glutted spell can never use up the warning.
    */
   playerStructural?: boolean;
+  /** Persisted consecutive oversized turns before this one (player plants). */
+  priorOversizedTurns?: number | null;
+  /** Last turn's demand throttle; a climbing throttle is a recovery, not oversizing. */
+  priorThrottle?: number | null;
+  /** New capacity landed this turn: the warning restarts for the new plant. */
+  capacityLanded?: boolean;
   /**
    * NPP-run corp: glutted plants use the shorter NPP grace and faster NPP rate.
    * Player and autopilot plants leave this unset.
@@ -136,6 +142,8 @@ export interface IdleCapacityRetirementInput {
 export interface IdleCapacityRetirementResult {
   /** Consecutive glutted turns including this one; 0 resets the streak. */
   streak: number;
+  /** Consecutive oversized turns including this one (player plants); 0 resets. */
+  oversizedTurns: number;
   /** Share of owned capacity to retire this turn, in [0, NPP_IDLE_RETIRE_RATE]. */
   retireFraction: number;
 }
@@ -157,14 +165,49 @@ export function idleCapacityRetirement(
     fill < IDLE_RETIRE_GLUT_FILL;
   const structural =
     !glutted &&
-    (input.nppStructural === true || input.playerStructural === true) &&
+    input.nppStructural === true &&
     input.plantsEnabled &&
     !input.mothballed &&
     input.activeFraction >= 1 &&
     Number.isFinite(throttle) &&
     throttle > 0 &&
     throttle < IDLE_RETIRE_STRUCTURAL_THROTTLE;
-  if (!glutted && !structural) return { streak: 0, retireFraction: 0 };
+  // Player oversized: sells what it makes, held deep under its size, and not
+  // climbing back. A throttle that rose this turn is a recovery in progress (it
+  // climbs only by the probe margin from the floor, about 13 turns to pass 0.6),
+  // and freshly landed capacity always reads oversized at first; both restart
+  // the warning instead of counting toward it.
+  const priorThrottle = input.priorThrottle;
+  const climbing =
+    typeof priorThrottle === "number" &&
+    Number.isFinite(priorThrottle) &&
+    throttle > priorThrottle * 1.01;
+  const oversized =
+    !glutted &&
+    input.playerStructural === true &&
+    input.nppStructural !== true &&
+    input.plantsEnabled &&
+    !input.mothballed &&
+    input.activeFraction >= 1 &&
+    Number.isFinite(throttle) &&
+    throttle > 0 &&
+    throttle < IDLE_RETIRE_STRUCTURAL_THROTTLE &&
+    !climbing &&
+    input.capacityLanded !== true;
+  if (oversized) {
+    const priorOver =
+      typeof input.priorOversizedTurns === "number" && Number.isFinite(input.priorOversizedTurns)
+        ? Math.max(0, Math.floor(input.priorOversizedTurns))
+        : 0;
+    const oversizedTurns = priorOver + 1;
+    if (oversizedTurns <= IDLE_RETIRE_STRUCTURAL_GRACE_TURNS) {
+      return { streak: 0, oversizedTurns, retireFraction: 0 };
+    }
+    const excessShare = Math.max(0, 1 - throttle * (1 + IDLE_RETIRE_STRUCTURAL_HEADROOM));
+    const ramp = Number.isFinite(input.rampLambda) ? Math.max(0, Math.min(1, input.rampLambda)) : 0;
+    return { streak: 0, oversizedTurns, retireFraction: IDLE_RETIRE_RATE * excessShare * ramp };
+  }
+  if (!glutted && !structural) return { streak: 0, oversizedTurns: 0, retireFraction: 0 };
 
   const prior =
     typeof input.priorStreak === "number" && Number.isFinite(input.priorStreak)
@@ -177,11 +220,11 @@ export function idleCapacityRetirement(
       ? NPP_IDLE_RETIRE_GRACE_TURNS
       : IDLE_RETIRE_GRACE_TURNS
     : IDLE_RETIRE_STRUCTURAL_GRACE_TURNS;
-  if (streak <= grace) return { streak, retireFraction: 0 };
+  if (streak <= grace) return { streak, oversizedTurns: 0, retireFraction: 0 };
 
   const headroom = glutted ? IDLE_RETIRE_HEADROOM : IDLE_RETIRE_STRUCTURAL_HEADROOM;
   const excessShare = Math.max(0, 1 - throttle * (1 + headroom));
   const rate = nppRun ? NPP_IDLE_RETIRE_RATE : IDLE_RETIRE_RATE;
   const ramp = Number.isFinite(input.rampLambda) ? Math.max(0, Math.min(1, input.rampLambda)) : 0;
-  return { streak, retireFraction: rate * excessShare * ramp };
+  return { streak, oversizedTurns: 0, retireFraction: rate * excessShare * ramp };
 }

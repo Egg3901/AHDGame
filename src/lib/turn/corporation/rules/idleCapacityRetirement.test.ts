@@ -25,9 +25,9 @@ const glut = (over: Partial<IdleCapacityRetirementInput> = {}): IdleCapacityReti
 describe("idleCapacityRetirement", () => {
   it("retires nothing during the grace period, but counts the streak", () => {
     const r = idleCapacityRetirement(glut({ priorStreak: 0 }));
-    expect(r).toEqual({ streak: 1, retireFraction: 0 });
+    expect(r).toEqual({ streak: 1, oversizedTurns: 0, retireFraction: 0 });
     const last = idleCapacityRetirement(glut({ priorStreak: IDLE_RETIRE_GRACE_TURNS - 1 }));
-    expect(last).toEqual({ streak: IDLE_RETIRE_GRACE_TURNS, retireFraction: 0 });
+    expect(last).toEqual({ streak: IDLE_RETIRE_GRACE_TURNS, oversizedTurns: 0, retireFraction: 0 });
   });
 
   it("retires a share of the unjustified capacity once the grace has run", () => {
@@ -57,22 +57,27 @@ describe("idleCapacityRetirement", () => {
   it("resets on a sold-out plant, an unthrottled plant, parked or mothballed capacity", () => {
     expect(idleCapacityRetirement(glut({ demandFill: 1 }))).toEqual({
       streak: 0,
+      oversizedTurns: 0,
       retireFraction: 0,
     });
     expect(idleCapacityRetirement(glut({ demandThrottleFactor: 1 }))).toEqual({
       streak: 0,
+      oversizedTurns: 0,
       retireFraction: 0,
     });
     expect(idleCapacityRetirement(glut({ activeFraction: 0.5 }))).toEqual({
       streak: 0,
+      oversizedTurns: 0,
       retireFraction: 0,
     });
     expect(idleCapacityRetirement(glut({ mothballed: true }))).toEqual({
       streak: 0,
+      oversizedTurns: 0,
       retireFraction: 0,
     });
     expect(idleCapacityRetirement(glut({ plantsEnabled: false }))).toEqual({
       streak: 0,
+      oversizedTurns: 0,
       retireFraction: 0,
     });
   });
@@ -80,6 +85,7 @@ describe("idleCapacityRetirement", () => {
   it("does nothing without a clearing signal", () => {
     expect(idleCapacityRetirement(glut({ demandFill: null }))).toEqual({
       streak: 0,
+      oversizedTurns: 0,
       retireFraction: 0,
     });
   });
@@ -102,6 +108,7 @@ describe("idleCapacityRetirement: NPP engine 6 structural overcapacity", () => {
   it("leaves a sold-out plant alone without the NPP engine 6 flag", () => {
     expect(idleCapacityRetirement(soldOut({ priorStreak: 100 }))).toEqual({
       streak: 0,
+      oversizedTurns: 0,
       retireFraction: 0,
     });
   });
@@ -110,7 +117,11 @@ describe("idleCapacityRetirement: NPP engine 6 structural overcapacity", () => {
     const r = idleCapacityRetirement(
       soldOut({ nppStructural: true, priorStreak: IDLE_RETIRE_STRUCTURAL_GRACE_TURNS - 1 })
     );
-    expect(r).toEqual({ streak: IDLE_RETIRE_STRUCTURAL_GRACE_TURNS, retireFraction: 0 });
+    expect(r).toEqual({
+      streak: IDLE_RETIRE_STRUCTURAL_GRACE_TURNS,
+      oversizedTurns: 0,
+      retireFraction: 0,
+    });
   });
 
   it("retires toward the run with the wider headroom once the grace has run", () => {
@@ -127,7 +138,7 @@ describe("idleCapacityRetirement: NPP engine 6 structural overcapacity", () => {
     const r = idleCapacityRetirement(
       soldOut({ nppStructural: true, demandThrottleFactor: 0.8, priorStreak: 100 })
     );
-    expect(r).toEqual({ streak: 0, retireFraction: 0 });
+    expect(r).toEqual({ streak: 0, oversizedTurns: 0, retireFraction: 0 });
   });
 
   describe("NPP-run plants shed idle capacity faster", () => {
@@ -135,7 +146,11 @@ describe("idleCapacityRetirement: NPP engine 6 structural overcapacity", () => {
       const early = idleCapacityRetirement(
         glut({ nppRun: true, priorStreak: NPP_IDLE_RETIRE_GRACE_TURNS - 1 })
       );
-      expect(early).toEqual({ streak: NPP_IDLE_RETIRE_GRACE_TURNS, retireFraction: 0 });
+      expect(early).toEqual({
+        streak: NPP_IDLE_RETIRE_GRACE_TURNS,
+        oversizedTurns: 0,
+        retireFraction: 0,
+      });
       const r = idleCapacityRetirement(
         glut({ nppRun: true, priorStreak: NPP_IDLE_RETIRE_GRACE_TURNS })
       );
@@ -180,7 +195,7 @@ describe("idleCapacityRetirement: NPP engine 6 structural overcapacity", () => {
   });
 });
 
-describe("player structural retirement (owner, 2026-10-17)", () => {
+describe("player oversized retirement (owner, 2026-10-17)", () => {
   const base = {
     plantsEnabled: true,
     mothballed: false,
@@ -188,19 +203,23 @@ describe("player structural retirement (owner, 2026-10-17)", () => {
     demandThrottleFactor: 0.2,
     demandFill: 1,
     rampLambda: 1,
+    priorStreak: 0,
+    priorThrottle: 0.2,
+    playerStructural: true,
   };
 
-  it("counts a sold-out player plant held far below its size as oversized", () => {
-    expect(idleCapacityRetirement({ ...base, priorStreak: 0, playerStructural: true })).toEqual({
-      streak: 1,
+  it("starts its own counter the first oversized turn, retiring nothing", () => {
+    expect(idleCapacityRetirement({ ...base, priorOversizedTurns: 0 })).toEqual({
+      streak: 0,
+      oversizedTurns: 1,
       retireFraction: 0,
     });
   });
 
-  it("warns for the structural grace before retiring anything", () => {
+  it("warns for the whole grace even after a long glutted spell", () => {
     for (let prior = 0; prior < IDLE_RETIRE_STRUCTURAL_GRACE_TURNS; prior += 1) {
       expect(
-        idleCapacityRetirement({ ...base, priorStreak: prior, playerStructural: true })
+        idleCapacityRetirement({ ...base, priorStreak: 40, priorOversizedTurns: prior })
           .retireFraction
       ).toBe(0);
     }
@@ -209,36 +228,39 @@ describe("player structural retirement (owner, 2026-10-17)", () => {
   it("then retires gently toward its run with structural headroom", () => {
     const out = idleCapacityRetirement({
       ...base,
-      priorStreak: IDLE_RETIRE_STRUCTURAL_GRACE_TURNS,
-      playerStructural: true,
+      priorOversizedTurns: IDLE_RETIRE_STRUCTURAL_GRACE_TURNS,
     });
     const excess = 1 - 0.2 * (1 + IDLE_RETIRE_STRUCTURAL_HEADROOM);
     expect(out.retireFraction).toBeCloseTo(IDLE_RETIRE_RATE * excess, 10);
   });
 
-  it("leaves parked and moderately throttled player plants alone", () => {
+  it("restarts the warning while the throttle is climbing back", () => {
     expect(
-      idleCapacityRetirement({
-        ...base,
-        activeFraction: 0.5,
-        priorStreak: 10,
-        playerStructural: true,
-      })
-    ).toEqual({ streak: 0, retireFraction: 0 });
+      idleCapacityRetirement({ ...base, priorThrottle: 0.17, priorOversizedTurns: 20 })
+    ).toEqual({ streak: 0, oversizedTurns: 0, retireFraction: 0 });
+  });
+
+  it("restarts the warning when new capacity lands", () => {
+    expect(
+      idleCapacityRetirement({ ...base, capacityLanded: true, priorOversizedTurns: 20 })
+    ).toEqual({ streak: 0, oversizedTurns: 0, retireFraction: 0 });
+  });
+
+  it("leaves parked and moderately throttled plants, and plants without the flag, alone", () => {
+    const none = { streak: 0, oversizedTurns: 0, retireFraction: 0 };
+    expect(
+      idleCapacityRetirement({ ...base, activeFraction: 0.5, priorOversizedTurns: 10 })
+    ).toEqual(none);
     expect(
       idleCapacityRetirement({
         ...base,
         demandThrottleFactor: 0.7,
-        priorStreak: 10,
-        playerStructural: true,
+        priorThrottle: 0.7,
+        priorOversizedTurns: 10,
       })
-    ).toEqual({ streak: 0, retireFraction: 0 });
-  });
-
-  it("does nothing without the flag", () => {
-    expect(idleCapacityRetirement({ ...base, priorStreak: 10 })).toEqual({
-      streak: 0,
-      retireFraction: 0,
-    });
+    ).toEqual(none);
+    expect(
+      idleCapacityRetirement({ ...base, playerStructural: false, priorOversizedTurns: 10 })
+    ).toEqual(none);
   });
 });
