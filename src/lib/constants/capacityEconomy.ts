@@ -592,6 +592,23 @@ export const PLANT_CREW_FLOOR_SHARE = 0.25;
 export const PLANT_CREW_MAX_DROP_PER_TURN = 0.02;
 
 /**
+ * Faster crew drop for a plant stuck at the bottom of the demand throttle.
+ * Applies only while the throttle is under {@link PLANT_CREW_SUSTAINED_GLUT_THROTTLE}
+ * and the plant has been demand-limited into a glut for at least the idle
+ * retirement grace (`demandIdleTurns`). The 0.02 cap exists to stop an
+ * economy-wide one-turn layoff (11% of plant jobs, 1.6M, across every throttled
+ * plant). This lane is far narrower: on live turn 250 it covered 398 plants
+ * with 131k workers, 98k of them above the run, so its worst turn sheds about
+ * 10k of 14.4M plant jobs. At 0.02 those plants paid 1.4-2.3x their revenue in
+ * wages for 35+ turns, which is what pushed NPP-founded sectors to -200% to
+ * -1000% margins.
+ */
+export const PLANT_CREW_SUSTAINED_GLUT_MAX_DROP_PER_TURN = 0.08;
+
+/** Throttle below which the sustained-glut crew drop applies. */
+export const PLANT_CREW_SUSTAINED_GLUT_THROTTLE = 0.25;
+
+/**
  * Share of today's idle upkeep still charged on capacity the demand throttle
  * idled (as opposed to capacity the owner idled with the production slider).
  * Not zero, so overbuilding still costs something. Tunable alongside

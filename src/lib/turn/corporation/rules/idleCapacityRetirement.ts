@@ -81,7 +81,13 @@ export const IDLE_RETIRE_GLUT_FILL = 0.95;
 export const IDLE_RETIRE_STRUCTURAL_THROTTLE = 0.6;
 
 /** Consecutive deeply-throttled turns an NPP-run plant may run before retiring. */
-export const IDLE_RETIRE_STRUCTURAL_GRACE_TURNS = 24;
+export const IDLE_RETIRE_STRUCTURAL_GRACE_TURNS = 6;
+
+/** Glutted-turn grace for NPP-run plants; they shed idle capacity faster. */
+export const NPP_IDLE_RETIRE_GRACE_TURNS = 2;
+
+/** Share of the unjustified capacity an NPP-run plant retires each turn. */
+export const NPP_IDLE_RETIRE_RATE = 0.15;
 
 /** Headroom kept above the run for a structural retirement (room to grow back). */
 export const IDLE_RETIRE_STRUCTURAL_HEADROOM = 0.5;
@@ -107,12 +113,17 @@ export interface IdleCapacityRetirementInput {
    * the throttle for the structural grace also retires toward its run.
    */
   nppStructural?: boolean;
+  /**
+   * NPP-run corp: glutted plants use the shorter NPP grace and faster NPP rate.
+   * Player and autopilot plants leave this unset.
+   */
+  nppRun?: boolean;
 }
 
 export interface IdleCapacityRetirementResult {
   /** Consecutive glutted turns including this one; 0 resets the streak. */
   streak: number;
-  /** Share of owned capacity to retire this turn, in [0, IDLE_RETIRE_RATE]. */
+  /** Share of owned capacity to retire this turn, in [0, NPP_IDLE_RETIRE_RATE]. */
   retireFraction: number;
 }
 
@@ -147,11 +158,17 @@ export function idleCapacityRetirement(
       ? Math.max(0, Math.floor(input.priorStreak))
       : 0;
   const streak = prior + 1;
-  const grace = glutted ? IDLE_RETIRE_GRACE_TURNS : IDLE_RETIRE_STRUCTURAL_GRACE_TURNS;
+  const nppRun = input.nppRun === true || input.nppStructural === true;
+  const grace = glutted
+    ? nppRun
+      ? NPP_IDLE_RETIRE_GRACE_TURNS
+      : IDLE_RETIRE_GRACE_TURNS
+    : IDLE_RETIRE_STRUCTURAL_GRACE_TURNS;
   if (streak <= grace) return { streak, retireFraction: 0 };
 
   const headroom = glutted ? IDLE_RETIRE_HEADROOM : IDLE_RETIRE_STRUCTURAL_HEADROOM;
   const excessShare = Math.max(0, 1 - throttle * (1 + headroom));
+  const rate = nppRun ? NPP_IDLE_RETIRE_RATE : IDLE_RETIRE_RATE;
   const ramp = Number.isFinite(input.rampLambda) ? Math.max(0, Math.min(1, input.rampLambda)) : 0;
-  return { streak, retireFraction: IDLE_RETIRE_RATE * excessShare * ramp };
+  return { streak, retireFraction: rate * excessShare * ramp };
 }

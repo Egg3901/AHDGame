@@ -67,6 +67,7 @@ import {
   resolveCapacityCohort,
 } from "@/lib/turn/npp/capacityDecisionTelemetry";
 import { glutStaggerEligible } from "@/lib/turn/npp/cohort";
+import { isMarketSaturated } from "@/lib/turn/npp/rules/marketSaturation";
 import type {
   NppCorpDecision,
   NppCorpDecisionContext,
@@ -125,6 +126,7 @@ import {
   NPP_GROWTH_DEPLOY_FRACTION,
   NPP_GROWTH_MAX_STEP_OF_RUN,
   NPP_GROWTH_MIN_SHORTAGE,
+  NPP_GROWTH_MIN_THROTTLE,
   NPP_GROWTH_MIN_UTILIZATION,
   NPP_REINVEST_AGGRESSION,
   NPP_REINVEST_MAINTENANCE_CASH_SHARE,
@@ -623,6 +625,7 @@ export function makeNppCorpDecision(
     sectorProfits,
     divestedSectorIds,
     priceRatioOf,
+    marketSaturationOf: placementSignals?.marketSaturationOf,
   });
   sectorUpdates.push(...mothballUpdates);
   const newlyMothballedIds = new Set(
@@ -1409,7 +1412,11 @@ export function makeNppCorpDecision(
         // Utilization is measured on throttled output. In a critical shortage
         // the throttle, not demand, is what holds the run rate down, so the
         // gate would lock out exactly the capacity the market is missing.
-        (utilization >= NPP_GROWTH_MIN_UTILIZATION || criticalShortage) &&
+        // A price-read shortage cannot override a cell whose incumbents the
+        // throttle already holds deep under capacity (rules/marketSaturation).
+        (utilization >= NPP_GROWTH_MIN_UTILIZATION ||
+          (criticalShortage &&
+            !isMarketSaturated(placementSignals?.marketSaturationOf?.(sector)))) &&
         (sector.sectorType !== "extraction" || extractionHeadroom > 0);
       // Existing plants pay the same dominance-tolled list price as players.
       const growthShare =
@@ -1488,6 +1495,26 @@ export function makeNppCorpDecision(
             )
           : 0;
       let growthUnits = existingPlantGrowthUnits(affordableGrowthUnits, growthCapUnits);
+      // NPP-run plants do not add growth where the market already throttles
+      // them; replacement of worn capacity still goes through below.
+      const throttledMarket =
+        !autopilot &&
+        typeof sector.demandThrottleFactor === "number" &&
+        Number.isFinite(sector.demandThrottleFactor) &&
+        sector.demandThrottleFactor < NPP_GROWTH_MIN_THROTTLE;
+      let throttleGate = false;
+      if (throttledMarket && growthUnits > 0) {
+        growthUnits = 0;
+        throttleGate = true;
+        observeReinvestCandidate(
+          "growth_throttled_market",
+          sector,
+          capitalStock,
+          headroomUnits,
+          replacementUnits,
+          null
+        );
+      }
       // Autopilot builds only where the plant already earns, the market has
       // room and the order repays itself; a refused growth leg still lets the
       // replacement leg through.
@@ -1518,7 +1545,7 @@ export function makeNppCorpDecision(
       }
       const units = replacementUnits + growthUnits;
       if (!(units > 0)) {
-        if (!autopilotGate) {
+        if (!autopilotGate && !throttleGate) {
           observeReinvestCandidate(
             "below_minimum_order",
             sector,
