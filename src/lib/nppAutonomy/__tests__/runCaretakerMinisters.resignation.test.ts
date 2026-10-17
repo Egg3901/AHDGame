@@ -65,13 +65,13 @@ describe("runCaretakerMinisters NPP resignation hook (issue #859)", () => {
   });
 
   // The mock Db creates collection mocks lazily: asserting "no gauge write"
-  // must materialise the mock first, otherwise the lookup itself throws.
+  // must materialise the canonical government-formation mock first.
   function expectNoGaugeWrite() {
-    db.collection("ukGovernment");
-    expect(db.collectionMocks.ukGovernment.updateOne).not.toHaveBeenCalled();
+    db.collection("governmentFormations");
+    expect(db.collectionMocks.governmentFormations.updateOne).not.toHaveBeenCalled();
   }
 
-  it("a UK caretaker resigns on a failed roll: guarded vacate plus flat gauge hit", async () => {
+  it("a UK caretaker resigns on a failed roll: guarded vacate plus recorded gauge hit", async () => {
     const { doc } = caretakerDoc({ countryId: "UK", positionId: "chancellor" });
     seedCaretaker(db, doc as unknown as Record<string, unknown>);
 
@@ -88,9 +88,14 @@ describe("runCaretakerMinisters NPP resignation hook (issue #859)", () => {
       isNPP: true,
     });
     // Chancellor is a Great Office: the flat ministerResigned hit doubles
-    // (100 -> 76), matching the player-resignation flow.
-    const gaugeWrite = db.collectionMocks.ukGovernment.updateOne.mock.calls[0][1].$set;
-    expect(gaugeWrite.confidenceGauge).toBe(76);
+    // (100 -> 76), matching the player-resignation flow. It is written to the
+    // canonical formation record with a history point.
+    const gaugeWrite = db.collectionMocks.governmentFormations.updateOne.mock.calls[0][1];
+    expect(gaugeWrite.$set.confidenceGauge).toBe(76);
+    expect(gaugeWrite.$push.confidenceGaugeHistory.$each[0]).toMatchObject({
+      value: 76,
+      reason: "ministerResigned",
+    });
   });
 
   it("resignation is deterministic in the injected rng (pass keeps the seat)", async () => {
