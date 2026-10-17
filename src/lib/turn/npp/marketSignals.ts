@@ -241,6 +241,12 @@ export interface PlacementSignals {
     },
     options?: { strategyId?: string | null; aggregate?: "mean" | "max" }
   ) => number | null;
+  /**
+   * Whether an NPP corp whose primary or secondary type is `sectorType`
+   * operates in `countryId`. Gates the essential-shortage valve: it crosses a
+   * corp's own field only when no same-type builder exists there.
+   */
+  hasSameTypeNppIn?: (countryId: string, sectorType: string) => boolean;
 }
 
 export function buildActiveMarketBuckets(sectors: readonly CorporateSector[]): Set<string> {
@@ -573,53 +579,56 @@ export function findBestUnownedSector(
       signals!.unmetDemandUnitsOf!(c, { aggregate: "max" })
     );
 
-  // The treatment reallocates an existing eligible entry slot. It does not
-  // create another slot, waive entry costs, cross the geographic frontier, or
-  // bypass extraction headroom. Once the target price falls below the shared
-  // shortage bar this branch returns no candidates and normal ranking resumes.
+  const isPrimary = (c: UnownedSector) =>
+    c.sectorType === primaryType && (c.industryModel ?? null) === (primaryIndustryModel ?? null);
+  const inType = (c: UnownedSector) =>
+    isPrimary(c) || (secondaryType != null && c.sectorType === secondaryType);
+
+  // The governed fragile-market treatment keeps its priority (it reallocates an
+  // existing eligible slot; no extra slot, cost waiver, frontier or headroom
+  // bypass), but crossing types needs a physical shortage.
   if (signals?.preferFragileMarketSupply) {
     const fragileCandidates = entryCandidates.filter(
-      (candidate) =>
-        fragileScore(candidate) > 0 &&
-        // Crossing types needs a physical shortage, like the critical tier.
-        (candidate.sectorType === primaryType ||
-          candidate.sectorType === secondaryType ||
-          physicallyShort(candidate))
+      (c) => fragileScore(c) > 0 && (inType(c) || physicallyShort(c))
     );
     if (fragileCandidates.length > 0) {
       return fragileCandidates.sort((a, b) => fragileScore(b) - fragileScore(a))[0];
     }
   }
 
-  // Tier 0 — essential-shortage override: a commodity whose producer sector is
-  // critically short jumps the type cascade, so a single-source input like
-  // freight (produced only by logistics) actually gets built by whichever
-  // cash-healthy NPP can, instead of waiting for a same-type corp that may not
-  // exist. Highest size×shortage wins; disarms once capacity pulls the ratio
-  // back under ESSENTIAL_SHORTAGE_SCORE. See the constant for the full rationale.
-  // A high price alone is not a critical shortage: price memory held most
-  // prices well above ESSENTIAL_SHORTAGE_SCORE, so on live turn 262 this tier
-  // fired almost everywhere and AI corps founded 3,458 sectors outside their
-  // own type (-15pp mismatch each; 51% losing, against 20% in-type). When the
-  // cell's measured unmet demand can be read, the override needs some on its
-  // deepest leg too (rules/marketSaturation cellUnmetDemandUnits).
+  // Essential-shortage valve, ahead of the corp's own field only where no NPP
+  // of the producing type operates in that country: then a same-type builder
+  // does not exist, so whichever cash-healthy NPP can enter builds (the freight
+  // case this valve was made for). Needs a physical shortage; a high price
+  // alone is not one (price memory held most prices above the bar). Without
+  // the signal (isolated callers) the valve keeps its old reach.
+  const noSameTypeBuilder = (c: UnownedSector) =>
+    signals?.hasSameTypeNppIn ? !signals.hasSameTypeNppIn(c.countryId, c.sectorType) : true;
   const critical = entryCandidates.filter(
-    (c) => peakShortageOf(c) >= ESSENTIAL_SHORTAGE_SCORE && physicallyShort(c)
+    (c) =>
+      physicallyShort(c) && peakShortageOf(c) >= ESSENTIAL_SHORTAGE_SCORE && noSameTypeBuilder(c)
   );
   if (critical.length > 0) return critical.sort((a, b) => score(b) - score(a))[0];
 
-  // Tier 1: primary type match
-  const primaryMatch = rankedCandidates.filter(
-    (c) =>
-      c.sectorType === primaryType && (c.industryModel ?? null) === (primaryIndustryModel ?? null)
-  );
+  // Then the corp's own field. A sector outside the primary or secondary type
+  // carries SECTOR_TYPE_MISMATCH_PENALTY (-15pp) for as long as it runs: on
+  // live turn 262 AI corps ran 3,826 such sectors, 51% losing against 20%
+  // in-type, and with every shortage ahead of the type tiers 37 of 41
+  // foundings on turn 264 still crossed types into shortages a same-type
+  // corp could fill.
+  const primaryMatch = rankedCandidates.filter(isPrimary);
   if (primaryMatch.length > 0) return best(preferUncovered(primaryMatch));
-
-  // Tier 2: secondary type match
   if (secondaryType) {
     const secondaryMatch = rankedCandidates.filter((c) => c.sectorType === secondaryType);
     if (secondaryMatch.length > 0) return best(preferUncovered(secondaryMatch));
   }
+
+  // A corp with no market in its own field may still fill another essential
+  // shortage, physically confirmed.
+  const otherCritical = entryCandidates.filter(
+    (c) => physicallyShort(c) && peakShortageOf(c) >= ESSENTIAL_SHORTAGE_SCORE
+  );
+  if (otherCritical.length > 0) return otherCritical.sort((a, b) => score(b) - score(a))[0];
 
   // No open-market tier for founding: a sector outside the corp's primary or
   // secondary type carries SECTOR_TYPE_MISMATCH_PENALTY (-15pp) for as long as
