@@ -15,6 +15,8 @@
 
 import { MongoClient, type Db } from "mongodb";
 import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
+import type { GameState } from "@/lib/db/types";
+import { emptyProducerPayables } from "@/lib/market/producerMarket/openingState";
 
 /**
  * Era preset for this one-off script. Previously each seeder's `preset`
@@ -142,6 +144,13 @@ async function runDESovereignCorp(db: Db) {
     log("DE sovereign corp already exists — skipping");
     return;
   }
+  const gameState = await db
+    .collection<GameState>("gameState")
+    .findOne({ _id: "current" }, { projection: { worldEpochId: 1, currentTurn: 1 } });
+  if (!gameState?.worldEpochId)
+    throw new Error(
+      "Sandbox world needs an active producer generation before seeding the sovereign corporation"
+    );
   const now = new Date();
   await db.collection("corporations").insertOne({
     _id: DE_CORP_ID as any,
@@ -150,6 +159,7 @@ async function runDESovereignCorp(db: Db) {
     description: "Country-owned sovereign issuer identity for German government debt.",
     type: "financial",
     countryId: "DE",
+    producerPayables: emptyProducerPayables(gameState.worldEpochId, gameState.currentTurn ?? 0),
     ceoId: "700000000000000000000032",
     userId: "700000000000000000000033",
     headquartersState: "BE",
