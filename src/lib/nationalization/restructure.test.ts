@@ -28,9 +28,30 @@ beforeEach(() => {
   db = createMockDb();
   db.collection("corporations");
   db.collection("corporateSectors");
+  db.collection("gameState");
+  db.collectionMocks.gameState.findOne.mockResolvedValue({
+    worldEpochId: "world",
+    currentTurn: 10,
+  });
 });
 
 describe("splitOffSectorType", () => {
+  it("refuses to create a split-off without a world generation", async () => {
+    db.collectionMocks.corporations.findOne.mockResolvedValue(null);
+    db.collectionMocks.gameState.findOne.mockResolvedValue({ currentTurn: 10 });
+    const { splitOffSectorType } = await import("./restructure");
+
+    await expect(
+      splitOffSectorType(db as unknown as Db, {
+        countryId: "CN",
+        sectorType: "energy",
+        newCorpName: "China Energy Corporation",
+      })
+    ).rejects.toThrow("world economy is not ready");
+    expect(db.collectionMocks.corporations.insertOne).not.toHaveBeenCalled();
+    expect(db.collectionMocks.corporateSectors.updateOne).not.toHaveBeenCalled();
+  });
+
   it("creates a secondary NatCorp and moves all sectors of the type into it", async () => {
     const primaryId = new ObjectId();
     const newId = new ObjectId();
@@ -66,6 +87,7 @@ describe("splitOffSectorType", () => {
     expect(insertedDoc.name).toBe("China Energy Corporation");
     expect(insertedDoc.isPrimaryNationalCorporation).toBe(false);
     expect(insertedDoc.assignedSectorTypes).toEqual(["energy"]);
+    expect(insertedDoc.producerPayables).toEqual({ worldEpoch: "world", turn: 10, claims: [] });
 
     // Sectors moved from the OTHER natcorps (not the new one) and filtered by type.
     const moves = db.collectionMocks.corporateSectors.updateOne.mock.calls.filter(

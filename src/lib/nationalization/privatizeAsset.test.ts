@@ -100,7 +100,12 @@ describe("privatizeAsset", () => {
       "gameState",
     ])
       db.collection(n);
-    db.collectionMocks.gameState.findOne.mockResolvedValue({ _id: "current", currentYear: 2026 });
+    db.collectionMocks.gameState.findOne.mockResolvedValue({
+      _id: "current",
+      currentYear: 2026,
+      currentTurn: 10,
+      worldEpochId: "world",
+    });
     db.collectionMocks.federalBudget.find.mockReturnValue(cursor([]));
     db.collectionMocks.corporations.findOne.mockImplementation(
       async (q: Record<string, unknown>) => {
@@ -183,6 +188,7 @@ describe("privatizeAsset", () => {
     expect(doc.countryOwnerId).toBeUndefined();
     expect(doc.isPrivate).toBe(false);
     expect(doc.legalStructure).toBe("us_c_corp");
+    expect(doc.producerPayables).toEqual({ worldEpoch: "world", turn: 10, claims: [] });
     // IPO spin-out gets an NPP caretaker CEO (not vacant) so it is NOT bled
     // 10%/turn back to the nat corp by the vacant-CEO sector shed (#2926).
     expect(doc.ceoVacant).toBe(false);
@@ -240,6 +246,29 @@ describe("privatizeAsset", () => {
       "US",
       expect.objectContaining({ type: "corp_privatization_offered" })
     );
+  });
+
+  it("refuses to create a privatized corporation without a world generation", async () => {
+    db.collectionMocks.gameState.findOne.mockResolvedValue({
+      _id: "current",
+      currentYear: 2026,
+      currentTurn: 10,
+    });
+    const { privatizeAsset } = await import("./privatizeAsset");
+
+    await expect(
+      privatizeAsset(db as unknown as Db, {
+        countryId: "US",
+        sourceNationalCorporationId: natCorpId,
+        selections: [{ sectorId, carveFraction: 0.3 }],
+        newCorpName: "Pacific Power Co",
+        goldenSharePercent: 0.2,
+        method: "ipo",
+        turn: 10,
+      })
+    ).rejects.toThrow("world economy is not ready");
+    expect(db.collectionMocks.corporations.insertOne).not.toHaveBeenCalled();
+    expect(db.collectionMocks.corporateSectors.updateOne).not.toHaveBeenCalled();
   });
 
   it("defaults the IPO headquarters to the first carved sector's region", async () => {
