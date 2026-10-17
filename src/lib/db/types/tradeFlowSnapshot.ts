@@ -2,6 +2,7 @@ import type { ObjectId } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
 import type { CommodityType } from "@/lib/constants/commodities";
 import type { ReachableBooksDoc } from "@/lib/trade/reachableBook";
+import type { ArbitrageShadowEntry } from "@/lib/trade/rules/arbitrageShadow";
 
 /**
  * Per-turn snapshot of cleared inter-country trade. One document per turn,
@@ -26,6 +27,12 @@ export interface TradeFlowSnapshot {
    * carry it, and callers fall back to the global figures.
    */
   books?: ReachableBooksDoc;
+  /**
+   * Shadow measurement for price-gap routing (#4379): per commodity, uncleared
+   * surplus that could reach a higher-priced unmet deficit, and shipped units
+   * that went to a lower-priced market. Telemetry only; nothing reads it back.
+   */
+  arbitrageShadow?: Partial<Record<CommodityType, ArbitrageShadowEntry>>;
 }
 
 export interface CommodityTradeFlows {

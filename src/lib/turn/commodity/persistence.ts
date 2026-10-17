@@ -6,6 +6,7 @@ import { marketAtLeast } from "@/lib/market/featureFlag";
 import { buildCommodityFlowDocs, COMMODITY_FLOW_RETENTION_TURNS } from "@/lib/market/flowLedger";
 import { clearAllCommodities } from "@/lib/trade/snapshot";
 import { valueTradeSnapshot } from "@/lib/trade/snapshot";
+import { computeArbitrageShadow } from "@/lib/trade/rules/arbitrageShadow";
 import { serializeReachableBooks } from "@/lib/trade/reachableBook";
 import type { buildReachableBooks } from "@/lib/trade/reachableBook";
 import type { PlantsUnits } from "./ledgerTypes";
@@ -32,6 +33,15 @@ export interface TurnPersistenceInputs {
   tradeClearing: ReturnType<typeof clearAllCommodities>;
   reachableBooks: ReturnType<typeof buildReachableBooks>;
   countries: CountryId[];
+  /** Lane rules for the price-gap routing shadow (#4379); absent skips it. */
+  tradeLanes?: {
+    affinityFor: (commodity: CommodityType, exporter: CountryId, importer: CountryId) => number;
+    importCostMultiplierFor?: (
+      commodity: CommodityType,
+      exporter: CountryId,
+      importer: CountryId
+    ) => number | undefined;
+  };
 }
 
 export function serializeCorporationCommodityOutput(
@@ -202,13 +212,29 @@ export async function persistTurnOutputs(
     .collection("tradeFlowSnapshots")
     .createIndex({ turn: -1 })
     .catch(() => {});
-  await db
-    .collection("tradeFlowSnapshots")
-    .updateOne(
-      { turn },
-      { $set: { ...tradeSnapshot, books: serializeReachableBooks(reachableBooks) } },
-      { upsert: true }
-    );
+  await db.collection("tradeFlowSnapshots").updateOne(
+    { turn },
+    {
+      $set: {
+        ...tradeSnapshot,
+        books: serializeReachableBooks(reachableBooks),
+        ...(inputs.tradeLanes
+          ? {
+              arbitrageShadow: computeArbitrageShadow({
+                countries,
+                clearing: tradeClearing,
+                priceOf: (commodity, country) =>
+                  appliedNationalPrices.get(commodity)?.[country] ??
+                  appliedGlobalPrices.get(commodity),
+                laneOpen: (commodity, e, i) => inputs.tradeLanes!.affinityFor(commodity, e, i) > 0,
+                importCostMultiplier: inputs.tradeLanes.importCostMultiplierFor,
+              }),
+            }
+          : {}),
+      },
+    },
+    { upsert: true }
+  );
 
   // The ledger is the sole authority for corporation commodity output. It has
   // now applied real plant production, extraction realization/capacity, output
