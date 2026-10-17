@@ -25,9 +25,14 @@ export default async function GovernmentContractsPage({
   return (
     <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6">
       <GovernmentContractsBoard
-        key={[countryId, tab, type, query.page].join(":")}
+        key={[countryId, tab, type, query.page, query.tender].join(":")}
         countryId={countryId}
         countryName={country.name}
+        focusTenderId={
+          typeof query.tender === "string" && /^[a-f0-9]{24}$/.test(query.tender)
+            ? query.tender
+            : undefined
+        }
         tab={tab}
         type={type}
         page={normalizePage(typeof query.page === "string" ? query.page : null)}

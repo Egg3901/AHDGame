@@ -12,6 +12,7 @@ import { captureClientExceptionWithId } from "@/lib/observability/sentryClientLa
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useParams, useRouter, useSearchParams, usePathname } from "next/navigation";
 import Link from "next/link";
+import { ContractOpportunityBanner } from "@/components/governmentContracts/ContractOpportunityBanner";
 import { Skeleton } from "@/components/ui";
 import { ErrorRef } from "@/components/ui/ErrorRef";
 import BackButton from "@/components/BackButton";
@@ -968,6 +969,23 @@ export default function CorporationDetailPage() {
           onTrade={canTrade ? openTrade : undefined}
           showBanner={activeTab === "overview"}
         />
+
+        {isCeo &&
+          activeTab === "overview" &&
+          corporation.countryId &&
+          (isDefenceCorp ||
+            (corporation.type === "extraction" && corporation.contractIssuanceEnabled)) && (
+            <ContractOpportunityBanner
+              countryId={corporation.countryId}
+              type={
+                isDefenceCorp && corporation.type === "extraction"
+                  ? "all"
+                  : isDefenceCorp
+                    ? "defence"
+                    : "extraction"
+              }
+            />
+          )}
 
         <NationalizationStatusCard
           corpId={id}

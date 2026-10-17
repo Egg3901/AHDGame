@@ -64,6 +64,48 @@ function show(
   );
 }
 describe("country government contracts board", () => {
+  it("opens a notification's tender even outside the visible results page", async () => {
+    const focus = "d".repeat(24);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async (url: string) =>
+          new Response(
+            JSON.stringify(
+              url.endsWith("/access")
+                ? {}
+                : url.endsWith(focus)
+                  ? {
+                      tender: {
+                        ...row,
+                        _id: focus,
+                        title: "Linked concession",
+                        tab: "closed",
+                        status: "open",
+                        canManage: false,
+                        bids: [],
+                        bidHistory: [],
+                      },
+                      currentTurn: 8,
+                    }
+                  : { tenders: [row], total: 23, page: 2, totalPages: 3, currentTurn: 8 }
+            )
+          )
+      )
+    );
+    render(
+      <NextIntlClientProvider locale="en" messages={messages}>
+        <GovernmentContractsBoard
+          countryId="JP"
+          countryName="Japan"
+          focusTenderId={focus}
+          page={2}
+        />
+      </NextIntlClientProvider>
+    );
+    expect(await screen.findByRole("heading", { name: /Linked concession/ })).toBeTruthy();
+    expect(screen.getByText("No bids are available to display.")).toBeTruthy();
+  });
   it("shows the four requested tabs and preserves country and type while resetting their page", async () => {
     show("active", "defence");
     await screen.findByText("Naval equipment tender");
