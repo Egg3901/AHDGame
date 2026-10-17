@@ -226,6 +226,81 @@ describe("sold-out plants in a short market (ticket 1393)", () => {
     expect(factor * 990).toBeCloseTo(336 * (1 + DEMAND_PROBE_MARGIN), 6);
   });
 
+  const extraction = {
+    soldByCommodity: { iron: 0.83 },
+    supplyRates: { iron: 1 },
+    mixWeightFor: () => 1,
+    marketShareFor: () => 0.1,
+    balanceFor: () => ({ supply: 1000, demand: 900 }),
+    priceRatioFor: () => 1,
+  };
+
+  it("gives partially sold output its share of a wider shortage", () => {
+    expect(
+      soldOutMarketHeadroomUnits({
+        ...extraction,
+        wideBalanceFor: () => ({ supply: 1000, demand: 2000 }),
+      })
+    ).toBe(100);
+  });
+
+  it.each([900, 1000, NaN, Infinity])(
+    "keeps the full-fill gate without a finite wider shortage (demand %s)",
+    (demand) => {
+      expect(
+        soldOutMarketHeadroomUnits({
+          ...extraction,
+          balanceFor: () => ({ supply: 100, demand: 200 }),
+          wideBalanceFor: () => ({ supply: 1000, demand }),
+        })
+      ).toBe(0);
+    }
+  );
+
+  it.each([undefined, () => undefined])(
+    "keeps the full-fill gate when the wider balance is missing (%s)",
+    (wideBalanceFor) => {
+      expect(
+        soldOutMarketHeadroomUnits({
+          ...extraction,
+          balanceFor: () => ({ supply: 100, demand: 200 }),
+          wideBalanceFor,
+        })
+      ).toBe(0);
+    }
+  );
+
+  it.each([0.99, 1])("preserves scoped headroom for a full fill of %s", (fill) => {
+    const args = {
+      ...extraction,
+      soldByCommodity: { iron: fill },
+      balanceFor: () => ({ supply: 100, demand: 200 }),
+    };
+    expect(
+      soldOutMarketHeadroomUnits({
+        ...args,
+        wideBalanceFor: () => ({ supply: 1000, demand: 2000 }),
+      })
+    ).toBe(soldOutMarketHeadroomUnits(args));
+    expect(soldOutMarketHeadroomUnits(args)).toBe(10);
+  });
+
+  it.each([
+    [0.5, 100],
+    [0.499, 0],
+  ])(
+    "requires at least half of output to sell during a wider shortage (fill %s)",
+    (fill, expected) => {
+      expect(
+        soldOutMarketHeadroomUnits({
+          ...extraction,
+          soldByCommodity: { iron: fill },
+          wideBalanceFor: () => ({ supply: 1000, demand: 2000 }),
+        })
+      ).toBe(expected);
+    }
+  );
+
   it("weights short legs by value so a glutted co-product dilutes the step", () => {
     const glutted = {
       ...base,
