@@ -213,7 +213,7 @@ describe("state-resolution placement signals (supply dislocation, t202)", () => 
 describe("empty-market coverage treatment", () => {
   it("routes an existing entry slot to a facility-ready uncovered frontier cell", () => {
     const pool = new Map([
-      ["US", [us("manufacturing", "TX", 10_000_000), us("logistics", "AZ", 100_000)]],
+      ["US", [us("manufacturing", "TX", 10_000_000), us("manufacturing", "AZ", 100_000)]],
     ]);
     const activeMarketBuckets = new Set(["TX:manufacturing"]);
     const pick = findBestUnownedSector(
@@ -231,7 +231,7 @@ describe("empty-market coverage treatment", () => {
       new Set(["AZ", "TX"])
     );
 
-    expect(pick).toMatchObject({ stateId: "AZ", sectorType: "logistics" });
+    expect(pick).toMatchObject({ stateId: "AZ", sectorType: "manufacturing" });
   });
 
   it("does not redirect into an uncovered cell smaller than one facility", () => {
@@ -397,5 +397,37 @@ describe("physical saturation gate (live turn 250 incident)", () => {
       { marketSaturationOf: () => 0.2 }
     );
     expect(pick).toBeNull();
+  });
+});
+
+describe("founding type discipline (live turn 262)", () => {
+  const find = (
+    pool: Map<string, UnownedSector[]>,
+    signals?: Parameters<typeof findBestUnownedSector>[10],
+    healthcarePrice = 3
+  ) =>
+    findBestUnownedSector(
+      "US",
+      "NY",
+      "manufacturing",
+      null,
+      new Set(),
+      pool,
+      new Set(),
+      ratios({ healthcare_services: healthcarePrice }),
+      false,
+      1,
+      signals
+    );
+
+  it("does not found outside the corp's types on an ordinary slot", () => {
+    // Price at base: no critical shortage, so no cross-type founding.
+    expect(find(new Map([["US", [us("healthcare", "NY")]]]), undefined, 1)).toBeNull();
+  });
+
+  it("crosses types for a critical shortage only with measured unmet demand", () => {
+    const pool = new Map([["US", [us("healthcare", "NY")]]]);
+    expect(find(pool, { unmetDemandUnitsOf: () => 0 })).toBeNull();
+    expect(find(pool, { unmetDemandUnitsOf: () => 500 })?.sectorType).toBe("healthcare");
   });
 });

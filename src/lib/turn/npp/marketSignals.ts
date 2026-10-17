@@ -351,7 +351,8 @@ export function hasEnterableHeadroom(
 
 /**
  * Find the best unowned sector for expansion, prioritizing sectors that
- * match the corp's primary type, then secondary type, then the open market.
+ * match the corp's primary type, then secondary type; only a physically
+ * confirmed critical shortage crosses types.
  *
  * Within each tier candidates are ranked by revenue × shortage score
  * (smarter-NPP, t879): revenue alone routed every expansion to the biggest
@@ -577,7 +578,19 @@ export function findBestUnownedSector(
   // cash-healthy NPP can, instead of waiting for a same-type corp that may not
   // exist. Highest size×shortage wins; disarms once capacity pulls the ratio
   // back under ESSENTIAL_SHORTAGE_SCORE. See the constant for the full rationale.
-  const critical = entryCandidates.filter((c) => peakShortageOf(c) >= ESSENTIAL_SHORTAGE_SCORE);
+  // A high price alone is not a critical shortage: price memory held most
+  // prices well above ESSENTIAL_SHORTAGE_SCORE, so on live turn 262 this tier
+  // fired almost everywhere and AI corps founded 3,458 sectors outside their
+  // own type (-15pp mismatch each; 51% losing, against 20% in-type). When the
+  // cell's measured unmet demand can be read, the override needs some on its
+  // deepest leg too (rules/marketSaturation cellUnmetDemandUnits).
+  const physicallyShort = (c: UnownedSector) => {
+    const unmet = signals?.unmetDemandUnitsOf?.(c, { aggregate: "max" });
+    return unmet == null || unmet > 0;
+  };
+  const critical = entryCandidates.filter(
+    (c) => peakShortageOf(c) >= ESSENTIAL_SHORTAGE_SCORE && physicallyShort(c)
+  );
   if (critical.length > 0) return critical.sort((a, b) => score(b) - score(a))[0];
 
   // Tier 1: primary type match
@@ -593,8 +606,11 @@ export function findBestUnownedSector(
     if (secondaryMatch.length > 0) return best(secondaryMatch);
   }
 
-  // Tier 3: open market — market-weighted score across all types
-  return best(entryCandidates);
+  // No open-market tier: a sector outside the corp's primary or secondary type
+  // carries SECTOR_TYPE_MISMATCH_PENALTY (-15pp) for as long as it runs, so
+  // ordinary diversification founded structural losers. Only the critical
+  // tier above crosses types; otherwise the corp grows what it has.
+  return null;
 }
 
 /**
