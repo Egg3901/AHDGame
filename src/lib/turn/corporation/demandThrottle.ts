@@ -5,6 +5,7 @@ export {
   SOLD_OUT_FILL,
   DEMAND_PROBE_MARGIN,
   DEMAND_THROTTLE_FLOOR,
+  RESTART_RUN_SHARE,
   demandThrottleFactor,
   withLatentDemand,
   withForeignDemand,

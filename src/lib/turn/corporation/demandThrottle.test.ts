@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   DEMAND_PROBE_MARGIN,
   DEMAND_THROTTLE_FLOOR,
+  RESTART_RUN_SHARE,
   demandThrottleFactor,
   soldOutMarketHeadroomUnits,
   throttleSoldUnits,
@@ -26,10 +27,15 @@ describe("demandThrottleFactor — flip identity", () => {
   });
 
   it("does not throttle a sector with no production history", () => {
-    // Newly founded, or a world that has never run the clearing pre-pass.
+    // A world that has never run the clearing pre-pass.
     expect(demandThrottleFactor(1_000, null, null)).toBe(1);
-    expect(demandThrottleFactor(1_000, 0, 0)).toBe(1);
     expect(demandThrottleFactor(1_000, 500, undefined)).toBe(1);
+  });
+
+  it("restarts a plant that made nothing last turn at the restart share", () => {
+    // Newly landed capacity or a plant back from mothball: clearing offers last
+    // turn's output, so it has nothing on the market this turn.
+    expect(demandThrottleFactor(1_000, 0, 0)).toBe(RESTART_RUN_SHARE);
   });
 
   it("does not throttle when last turn's sales already cover this turn's plan", () => {
@@ -332,5 +338,19 @@ describe("withForeignDemand", () => {
     expect(headroom({ supply: 1000, demand: 1000 })).toBe(0);
     // A quarter of the 400 unserved, times this seller's half of the book.
     expect(headroom(withForeignDemand({ supply: 1000, demand: 1000 }, 400)!)).toBeCloseTo(50, 6);
+  });
+});
+
+describe("restart after a turn with no output", () => {
+  it("starts at the restart share instead of running flat out", () => {
+    expect(demandThrottleFactor(1000, 0, 0)).toBe(RESTART_RUN_SHARE);
+  });
+  it("still covers contracted volume on restart", () => {
+    expect(demandThrottleFactor(1000, 0, 0, 600)).toBeCloseTo(0.6, 10);
+    expect(demandThrottleFactor(1000, 0, 0, 5000)).toBe(1);
+  });
+  it("keeps running unthrottled with no history at all", () => {
+    expect(demandThrottleFactor(1000, null, null)).toBe(1);
+    expect(demandThrottleFactor(1000, undefined, undefined)).toBe(1);
   });
 });

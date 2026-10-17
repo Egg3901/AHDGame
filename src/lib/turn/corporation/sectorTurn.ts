@@ -650,7 +650,10 @@ export function processSector(
         demandThrottleFactor,
         ramp: plantsRampLambda,
         floor: PLANT_CREW_FLOOR_SHARE,
-        previous: sector.plantCrewShare,
+        // A plant that made nothing last turn has no crew on site to lay off:
+        // it hires straight to its run instead of inheriting a full crew under
+        // the gradual-layoff cap.
+        previous: sector.producedUnits === 0 ? 0 : sector.plantCrewShare,
         maxDropPerTurn: plantCrewMaxDropPerTurn({
           demandThrottleFactor,
           priorDemandIdleTurns: sector.demandIdleTurns,
