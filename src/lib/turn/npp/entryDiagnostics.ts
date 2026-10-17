@@ -41,6 +41,7 @@ export interface NppCandidateExclusions {
   emptyPoolExcluded: number;
   stateControlledExcluded: number;
   depositExcluded: number;
+  saturatedExcluded: number;
 }
 
 export function blankNppCandidateExclusions(): NppCandidateExclusions {
@@ -49,6 +50,7 @@ export function blankNppCandidateExclusions(): NppCandidateExclusions {
     emptyPoolExcluded: 0,
     stateControlledExcluded: 0,
     depositExcluded: 0,
+    saturatedExcluded: 0,
   };
 }
 
@@ -95,6 +97,13 @@ export function initialNppMarketEntryReason(args: {
       (exclusions?.depositExcluded ?? 0);
     if ((exclusions?.stateControlledExcluded ?? 0) > 0 && otherExcluded === 0) {
       return "state_controlled";
+    }
+    if (
+      (exclusions?.saturatedExcluded ?? 0) > 0 &&
+      otherExcluded === 0 &&
+      (exclusions?.stateControlledExcluded ?? 0) === 0
+    ) {
+      return "glutted_market";
     }
     return "no_enterable_market";
   }

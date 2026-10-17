@@ -5,6 +5,8 @@ import {
   IDLE_RETIRE_RATE,
   IDLE_RETIRE_STRUCTURAL_GRACE_TURNS,
   IDLE_RETIRE_STRUCTURAL_HEADROOM,
+  NPP_IDLE_RETIRE_GRACE_TURNS,
+  NPP_IDLE_RETIRE_RATE,
   idleCapacityRetirement,
   type IdleCapacityRetirementInput,
 } from "./idleCapacityRetirement";
@@ -116,7 +118,7 @@ describe("idleCapacityRetirement: NPP engine 6 structural overcapacity", () => {
       soldOut({ nppStructural: true, priorStreak: IDLE_RETIRE_STRUCTURAL_GRACE_TURNS })
     );
     expect(r.retireFraction).toBeCloseTo(
-      IDLE_RETIRE_RATE * (1 - 0.4 * (1 + IDLE_RETIRE_STRUCTURAL_HEADROOM)),
+      NPP_IDLE_RETIRE_RATE * (1 - 0.4 * (1 + IDLE_RETIRE_STRUCTURAL_HEADROOM)),
       12
     );
   });
@@ -126,5 +128,54 @@ describe("idleCapacityRetirement: NPP engine 6 structural overcapacity", () => {
       soldOut({ nppStructural: true, demandThrottleFactor: 0.8, priorStreak: 100 })
     );
     expect(r).toEqual({ streak: 0, retireFraction: 0 });
+  });
+
+  describe("NPP-run plants shed idle capacity faster", () => {
+    it("retires 0.15 of the excess after a 2 turn grace when glutted", () => {
+      const early = idleCapacityRetirement(
+        glut({ nppRun: true, priorStreak: NPP_IDLE_RETIRE_GRACE_TURNS - 1 })
+      );
+      expect(early).toEqual({ streak: NPP_IDLE_RETIRE_GRACE_TURNS, retireFraction: 0 });
+      const r = idleCapacityRetirement(
+        glut({ nppRun: true, priorStreak: NPP_IDLE_RETIRE_GRACE_TURNS })
+      );
+      expect(r.streak).toBe(NPP_IDLE_RETIRE_GRACE_TURNS + 1);
+      expect(r.retireFraction).toBeCloseTo(
+        NPP_IDLE_RETIRE_RATE * (1 - 0.15 * (1 + IDLE_RETIRE_HEADROOM)),
+        12
+      );
+    });
+
+    it("leaves player plants on the 6 turn grace and 0.04 rate", () => {
+      const waiting = idleCapacityRetirement(glut({ priorStreak: NPP_IDLE_RETIRE_GRACE_TURNS }));
+      expect(waiting.retireFraction).toBe(0);
+      const r = idleCapacityRetirement(glut({ priorStreak: IDLE_RETIRE_GRACE_TURNS }));
+      expect(r.retireFraction).toBeCloseTo(
+        IDLE_RETIRE_RATE * (1 - 0.15 * (1 + IDLE_RETIRE_HEADROOM)),
+        12
+      );
+    });
+
+    it("retires a sold-out structurally throttled NPP plant after 6 turns at 0.15", () => {
+      const base = glut({
+        nppRun: true,
+        nppStructural: true,
+        demandFill: 1,
+        demandThrottleFactor: 0.3,
+      });
+      expect(
+        idleCapacityRetirement({ ...base, priorStreak: IDLE_RETIRE_STRUCTURAL_GRACE_TURNS - 1 })
+          .retireFraction
+      ).toBe(0);
+      const r = idleCapacityRetirement({
+        ...base,
+        priorStreak: IDLE_RETIRE_STRUCTURAL_GRACE_TURNS,
+      });
+      expect(IDLE_RETIRE_STRUCTURAL_GRACE_TURNS).toBe(6);
+      expect(r.retireFraction).toBeCloseTo(
+        NPP_IDLE_RETIRE_RATE * (1 - 0.3 * (1 + IDLE_RETIRE_STRUCTURAL_HEADROOM)),
+        12
+      );
+    });
   });
 });

@@ -21,6 +21,10 @@ import { unownedHeadroomUnitsOf } from "@/lib/corporations/marketShare";
 import { foundingStarterUnits } from "@/lib/corporations/foundingPlant";
 import { bucketKey } from "@/lib/nationalization/stateControlledBuckets";
 import {
+  isMarketSaturated,
+  type SaturationSectorLike,
+} from "@/lib/turn/npp/rules/marketSaturation";
+import {
   EXTRACTABLE_RESOURCES,
   SECTOR_SUPPLY,
   type CommodityType,
@@ -207,6 +211,21 @@ export interface PlacementSignals {
   fragileMarketCountryEligible?: (countryId: string) => boolean;
   /** Active state-sector cells, updated as this cohort founds new sectors. */
   activeMarketBuckets?: Set<string>;
+  /**
+   * Capacity-weighted demand throttle of the plants already serving a cell, in
+   * [0, 1]; null without evidence. See rules/marketSaturation: a cell below
+   * NPP_SATURATED_MARKET_THROTTLE is never founded into or grown on a price
+   * signal alone.
+   */
+  marketSaturationOf?: (
+    cell: {
+      stateId: string;
+      sectorType: string;
+      industryModel?: string | null;
+      mediaDiscriminator?: string | null;
+    },
+    excluding?: SaturationSectorLike
+  ) => number | null;
 }
 
 export function buildActiveMarketBuckets(sectors: readonly CorporateSector[]): Set<string> {
@@ -337,6 +356,7 @@ export interface CandidateExclusionStats {
   emptyPoolExcluded?: number;
   stateControlledExcluded?: number;
   depositExcluded?: number;
+  saturatedExcluded?: number;
 }
 
 export function findBestUnownedSector(
@@ -395,6 +415,7 @@ export function findBestUnownedSector(
     stats.emptyPoolExcluded = 0;
     stats.stateControlledExcluded = 0;
     stats.depositExcluded = 0;
+    stats.saturatedExcluded = 0;
   }
   for (const us of countryUnowned) {
     if (
@@ -418,6 +439,12 @@ export function findBestUnownedSector(
       )
     ) {
       if (stats) stats.stateControlledExcluded! += 1;
+      continue;
+    }
+    // Incumbents held deep under capacity by the demand throttle: the cell has
+    // no buyers for another plant whatever the price ratio says.
+    if (isMarketSaturated(signals?.marketSaturationOf?.(us))) {
+      if (stats) stats.saturatedExcluded! += 1;
       continue;
     }
     candidates.push(us);
