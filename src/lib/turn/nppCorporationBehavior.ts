@@ -318,6 +318,9 @@ export async function processNppCorporationDecisions(
     const primeByCountry = bankSnapshot.primeByCountry;
     const colByState = await loadNppCostOfLivingByState(db);
     const nationalShareOf = buildNppNationalShareResolver(globalSectors);
+    const nppGameConfig = await db
+      .collection<{ commandEconomyEnabled?: boolean }>("gameConfig")
+      .findOne({ _id: "default" as never }, { projection: { commandEconomyEnabled: 1 } });
     plants = {
       enabled: true,
       year: plantsYear,
@@ -325,6 +328,8 @@ export async function processNppCorporationDecisions(
       preset: resolvePresetIdFromGameState(gsPlants),
       primeRateOf: (cid) => primeByCountry.get(cid) ?? 0,
       costOfLivingOf: (sid) => colByState.get(sid) ?? null,
+      commodityDemandOf: (commodity) => priceByCommodity.get(commodity)?.globalDemand ?? null,
+      commandEconomyEnabled: nppGameConfig?.commandEconomyEnabled === true,
       nationalShareOf,
     };
   }

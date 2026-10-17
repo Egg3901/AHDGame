@@ -40,7 +40,7 @@ export interface CommodityDominanceContext {
   commandEconomyEnabled: boolean;
 }
 
-type FirmSectorRow = Pick<
+export type FirmSectorRow = Pick<
   CorporateSector,
   | "_id"
   | "sectorType"
@@ -63,7 +63,7 @@ type FirmSectorRow = Pick<
  * can be restarted, so it still counts toward what the firm could put on the
  * market. Queued units count in full (the whole point of looking at orders).
  */
-function toDominanceSector(row: FirmSectorRow, turn: number): CommodityDominanceSector {
+export function toDominanceSector(row: FirmSectorRow, turn: number): CommodityDominanceSector {
   const queued = (row.buildQueue ?? []).reduce((sum, o) => sum + undeliveredUnits(o, turn), 0);
   return {
     _id: row._id,

@@ -14,10 +14,6 @@
  */
 import type { CommodityType } from "@/lib/constants/commodities";
 import {
-  DUMPING_GUARD_SOLD_SHARE,
-  commodityDominanceMultiplier,
-} from "@/lib/corporations/rules/commodityDominanceRamp";
-import {
   computeSupplierCommodityCapacityUnits,
   type SupplyAgreementCapacitySector,
 } from "@/lib/corporations/supplyAgreementCapacity";
@@ -79,15 +75,4 @@ export function commodityDominanceRatio(args: {
     if (ratio > worst.ratio) worst = { ratio, commodity };
   }
   return worst;
-}
-
-/** True when `soldUnits` is above {@link DUMPING_GUARD_SOLD_SHARE} of `worldSupply`. */
-export function isDumpingGuarded(soldUnits: number, worldSupply: number): boolean {
-  if (!(worldSupply > 0) || !Number.isFinite(soldUnits) || !(soldUnits > 0)) return false;
-  return soldUnits / worldSupply > DUMPING_GUARD_SOLD_SHARE;
-}
-
-/** Posture after the dumping guard: a guarded firm cannot undercut the market. */
-export function guardedPricingPosture(posture: number, guarded: boolean): number {
-  return guarded ? Math.max(0, posture) : posture;
 }
