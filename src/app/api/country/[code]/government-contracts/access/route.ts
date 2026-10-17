@@ -9,12 +9,20 @@ import { contractContext, contractRouteError, privateJson } from "@/lib/governme
 import { managementAuthority } from "@/lib/governmentContracts/authority";
 import { getResourceContractAuthority } from "@/lib/extraction/contractAuthority";
 import { loadContractIssuanceSettings } from "@/lib/extraction/featureFlag";
+import { contractCurrencyQuotes } from "@/lib/governmentContracts/presentation";
+import { resolveCorpLiquidCurrencyCode } from "@/lib/currency/corporationCapital";
+import { extractionCapacityQuote } from "@/lib/governmentContracts/rules/presentation";
 import { defenceContractWindow } from "@/lib/military/defenceContractLimits";
 export async function GET(request: Request, { params }: { params: Promise<{ code: string }> }) {
   try {
     const { code } = await params;
     const { db, countryId, turn, game } = await contractContext(code);
     const user = await getAuthUserWithCharacter();
+    const currency = await contractCurrencyQuotes(
+      db,
+      countryId,
+      game?.preset ?? DEFAULT_SEED_PRESET
+    );
     const states = await db
       .collection("stateResourceCapacity")
       .find({ countryId }, { projection: { stateId: 1, resources: 1 } })
@@ -88,7 +96,15 @@ export async function GET(request: Request, { params }: { params: Promise<{ code
           .collection<Corporation>("corporations")
           .find(
             { userId: new ObjectId(user.userId), ceoVacant: { $ne: true } },
-            { projection: { name: 1, countryId: 1, type: 1, sequentialId: 1 } }
+            {
+              projection: {
+                name: 1,
+                countryId: 1,
+                type: 1,
+                sequentialId: 1,
+                liquidCurrencyCode: 1,
+              },
+            }
           )
           .toArray()
       : [];
@@ -103,6 +119,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ code
       : [];
     return privateJson({
       currentTurn: turn,
+      currencyQuote: currency.government,
       defence,
       defenceAnchorPrice,
       maximumGrade: maxTechTierForPreset(game?.preset ?? DEFAULT_SEED_PRESET),
@@ -122,12 +139,19 @@ export async function GET(request: Request, { params }: { params: Promise<{ code
         .map((s) => ({
           stateId: s.stateId,
           resources: Object.keys(s.resources ?? {}).filter((r) => s.resources[r] > 0),
+          capacity: Object.fromEntries(
+            Object.entries(s.resources ?? {}).map(([r, units]) => [
+              r,
+              extractionCapacityQuote(units as number, 1)?.totalDailyUnits ?? null,
+            ])
+          ),
         })),
       corporations: corps.map((c) => ({
         _id: c._id.toHexString(),
         name: c.name,
         countryId: c.countryId,
         type: c.type,
+        currencyQuote: currency.quote(resolveCorpLiquidCurrencyCode(c)),
         sectors: sectors
           .filter((s) => s.corporationId.equals(c._id))
           .map((s) => ({

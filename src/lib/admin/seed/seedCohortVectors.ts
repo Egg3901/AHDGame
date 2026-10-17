@@ -39,6 +39,7 @@ const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(ma
 
 export interface CohortSeedStats {
   covered: number;
+  alreadySeeded: number;
   skipped: string[];
   totalPeople: number;
   totalTargetPop: number;
@@ -61,9 +62,13 @@ export async function seedCohortVectors(
   db: Db,
   preset: string,
   log: (msg: string) => void,
-  opts: { apply?: boolean; replace?: boolean } = {}
+  opts: { apply?: boolean; replace?: boolean; onlyMissing?: boolean } = {}
 ): Promise<CohortSeedStats> {
   const apply = opts.apply !== false;
+  const onlyMissing = opts.onlyMissing === true;
+  if (onlyMissing && opts.replace) {
+    throw new Error("onlyMissing cannot be combined with replace");
+  }
 
   const [states, metricsDocs] = await Promise.all([
     db
@@ -88,8 +93,27 @@ export async function seedCohortVectors(
 
   const metricsById = new Map(metricsDocs.map((m) => [String(m._id), m]));
   const realStates = states.filter((s) => !NATIONAL_SCOPE_IDS.has(String(s._id)));
+  const existingDemographicIds = onlyMissing
+    ? new Set(
+        (
+          await db
+            .collection<Pick<RegionDemographics, "_id">>("regionDemographics")
+            .find(
+              { _id: { $in: realStates.map((state) => String(state._id)) } },
+              { projection: { _id: 1 } }
+            )
+            .toArray()
+        ).map((row) => String(row._id))
+      )
+    : new Set<string>();
 
-  const stats: CohortSeedStats = { covered: 0, skipped: [], totalPeople: 0, totalTargetPop: 0 };
+  const stats: CohortSeedStats = {
+    covered: 0,
+    alreadySeeded: 0,
+    skipped: [],
+    totalPeople: 0,
+    totalTargetPop: 0,
+  };
   const now = new Date();
   const demoOps: AnyBulkWriteOperation<RegionDemographics>[] = [];
   const coveredIds: string[] = [];
@@ -97,6 +121,11 @@ export async function seedCohortVectors(
 
   for (const state of realStates) {
     const id = String(state._id);
+    if (existingDemographicIds.has(id)) {
+      stats.alreadySeeded++;
+      continue;
+    }
+
     const population = state.population ?? 0;
     // Age-only national proxies are sufficient for stocks. Do not invent the
     // other census dimensions or relabel 1979 census data as 1991 observations.
@@ -143,7 +172,9 @@ export async function seedCohortVectors(
       demoOps.push({
         updateOne: {
           filter: { _id: id },
-          update: { $set: { countryId: state.countryId, ages, lastUpdated: now } },
+          update: onlyMissing
+            ? { $setOnInsert: { countryId: state.countryId, ages, lastUpdated: now } }
+            : { $set: { countryId: state.countryId, ages, lastUpdated: now } },
           upsert: true,
         },
       });
@@ -152,24 +183,26 @@ export async function seedCohortVectors(
       // configured migrationRate as the turn-0 readout.
       // Dotted paths, deliberately: this must touch only these three metric
       // leaves and leave the rest of the `population` subtree alone.
-      metricOps.push({
-        updateOne: {
-          filter: { _id: id },
-          update: {
-            $set: {
-              "population.sexRatio.value": clamp(sexRatioFromVector(ages), ...SEX_RATIO_BOUNDS),
-              "population.dependencyRatio.value": clamp(
-                dependencyRatio(ages),
-                ...DEPENDENCY_BOUNDS
-              ),
-              "population.realizedMigrationRate.value": clamp(
-                migrationRate,
-                ...REALIZED_MIGRATION_BOUNDS
-              ),
+      if (!onlyMissing) {
+        metricOps.push({
+          updateOne: {
+            filter: { _id: id },
+            update: {
+              $set: {
+                "population.sexRatio.value": clamp(sexRatioFromVector(ages), ...SEX_RATIO_BOUNDS),
+                "population.dependencyRatio.value": clamp(
+                  dependencyRatio(ages),
+                  ...DEPENDENCY_BOUNDS
+                ),
+                "population.realizedMigrationRate.value": clamp(
+                  migrationRate,
+                  ...REALIZED_MIGRATION_BOUNDS
+                ),
+              },
             },
           },
-        },
-      });
+        });
+      }
     }
   }
 
@@ -203,6 +236,8 @@ export async function seedCohortVectors(
     await db.collection<StateMetrics>("macroMetrics").bulkWrite(metricOps, { ordered: true });
   }
 
-  log(`Seeded ${stats.covered} region cohort vectors (${preset}; ${stats.skipped.length} skipped)`);
+  log(
+    `Seeded ${stats.covered} region cohort vectors (${preset}; ${stats.alreadySeeded} already present; ${stats.skipped.length} skipped)`
+  );
   return stats;
 }

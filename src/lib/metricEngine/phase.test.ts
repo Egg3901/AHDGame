@@ -631,6 +631,82 @@ describe("runMetricEngine — v2-2/v2-3a labour wage-index Δ → medianIncome +
     expect(set["economic.laborForce.value"]).toBeCloseTo(36.15, 6);
   });
 
+  it("recomputes current tightness from this turn's demand and labor force", async () => {
+    const currentDemand = createMockDb();
+    seed(
+      currentDemand,
+      [
+        {
+          _id: "s1",
+          economic: {
+            laborParticipation: { value: 60 },
+            laborForce: { value: 36 },
+            labourDemand: { value: 72.3 },
+            labourDemandTurn: 10,
+            labourTightness: { value: 4.8 },
+            labourParticipationDemandBonus: { value: 0 },
+          },
+        },
+      ],
+      "macro"
+    );
+    const ops: Array<{
+      updateOne: { filter: { _id: string }; update: { $set: Record<string, number> } };
+    }> = [];
+    currentDemand.collectionMocks.macroMetrics!.bulkWrite = vi
+      .fn()
+      .mockImplementation((writes: typeof ops) => {
+        ops.push(...writes);
+        return Promise.resolve({ ok: 1 });
+      });
+
+    const processed = await runMetricEngine(currentDemand as unknown as Db, 10);
+
+    expect(processed).toBe(1);
+    expect(ops).toHaveLength(1);
+    const set = ops[0].updateOne.update.$set;
+    expect(set["economic.laborForce.value"]).toBeCloseTo(36.15, 6);
+    expect(set["economic.labourTightness.value"]).toBe(2);
+  });
+
+  it("retains the previous tightness when corporation demand was not refreshed this turn", async () => {
+    const pausedCorporations = createMockDb();
+    seed(
+      pausedCorporations,
+      [
+        {
+          _id: "s1",
+          economic: {
+            laborParticipation: { value: 60 },
+            laborForce: { value: 36 },
+            labourDemand: { value: 72.3 },
+            labourDemandTurn: 9,
+            labourTightness: { value: 4.8 },
+            labourParticipationDemandBonus: { value: 0 },
+          },
+        },
+      ],
+      "macro"
+    );
+    const ops: Array<{
+      updateOne: { filter: { _id: string }; update: { $set: Record<string, number> } };
+    }> = [];
+    pausedCorporations.collectionMocks.macroMetrics!.bulkWrite = vi
+      .fn()
+      .mockImplementation((writes: typeof ops) => {
+        ops.push(...writes);
+        return Promise.resolve({ ok: 1 });
+      });
+
+    const processed = await runMetricEngine(pausedCorporations as unknown as Db, 10);
+
+    expect(processed).toBe(1);
+    expect(ops).toHaveLength(1);
+    const set = ops[0].updateOne.update.$set;
+    expect(set["economic.laborForce.value"]).toBeCloseTo(36.15, 6);
+    expect(set["economic.labourTightness.value"]).toBeUndefined();
+  });
+
   it("at 'macro', a positive wage-index Δ raises medianIncome above the no-Δ baseline", async () => {
     const withDelta = createMockDb();
     seed(

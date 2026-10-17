@@ -21,6 +21,7 @@ it.each([
     const done = vi.fn();
     const access = {
       currentTurn: 12,
+      currencyQuote: { code: "USD", rate: 1 },
       defence: true,
       nationalExtraction: true,
       regionalExtraction: false,
@@ -56,3 +57,48 @@ it.each([
     expect(done).toHaveBeenCalledWith(type);
   }
 );
+
+it("previews total daily capacity and converts a local government minimum into canonical units", async () => {
+  const fetcher = vi.fn(async (_url: string, _init?: RequestInit) => new Response("{}"));
+  vi.stubGlobal("fetch", fetcher);
+  const access = {
+    currentTurn: 5,
+    defence: true,
+    nationalExtraction: true,
+    regionalExtraction: false,
+    extractionEnabled: true,
+    currencyQuote: { code: "JPY", rate: 100 },
+    window: { endTurn: 12 },
+    states: [{ stateId: "MN", resources: ["iron"], capacity: { iron: 10000 } }],
+    corporations: [],
+  } as ContractAccess;
+  render(
+    <NextIntlClientProvider locale="en" messages={messages}>
+      <PublishTenderForm
+        countryId="JP"
+        access={access}
+        initialType="extraction"
+        onDone={() => {}}
+      />
+    </NextIntlClientProvider>
+  );
+  expect(screen.getByText(/1,000 iron units\/day out of 10,000/)).toBeTruthy();
+  fireEvent.change(screen.getByLabelText("Share of total state resource capacity (%)"), {
+    target: { value: "20" },
+  });
+  expect(screen.getByText(/2,000 iron units\/day out of 10,000/)).toBeTruthy();
+  fireEvent.change(screen.getByLabelText("Contract type"), { target: { value: "defence" } });
+  fireEvent.change(screen.getByLabelText("Contract type"), { target: { value: "extraction" } });
+  expect(
+    (screen.getByLabelText("Share of total state resource capacity (%)") as HTMLInputElement).value
+  ).toBe("20");
+  expect(screen.getByText(/2,000 iron units\/day out of 10,000/)).toBeTruthy();
+  const fee = screen.getByLabelText("Minimum signing fee (JPY, current equivalent)");
+  fireEvent.change(fee, { target: { value: "50000" } });
+  fireEvent.submit(fee.closest("form")!);
+  await waitFor(() => expect(fetcher).toHaveBeenCalledOnce());
+  expect(JSON.parse(fetcher.mock.calls[0][1]!.body as string).terms).toMatchObject({
+    share: 0.2,
+    minimumSigningFeeAnchor: 500,
+  });
+});

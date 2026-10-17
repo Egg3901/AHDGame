@@ -12,6 +12,10 @@ import {
   buttonClass,
   type ContractAccess,
 } from "./ContractForms";
+import {
+  contractLocalAmount,
+  validContractQuote,
+} from "@/lib/governmentContracts/rules/presentation";
 import { apiErrorText } from "@/lib/errors/catalog";
 interface Listing {
   total: number;
@@ -35,6 +39,7 @@ export function GovernmentContractsBoard({
   page = 1,
   embedded = false,
   focusTenderId,
+  supplier = "all",
 }: {
   countryId: string;
   countryName: string;
@@ -43,6 +48,7 @@ export function GovernmentContractsBoard({
   page?: number;
   embedded?: boolean;
   focusTenderId?: string;
+  supplier?: string;
 }) {
   const t = useTranslations("corporations.governmentContracts");
   const router = useRouter();
@@ -57,7 +63,10 @@ export function GovernmentContractsBoard({
   const api = `/api/country/${countryId}/government-contracts`;
   useEffect(() => {
     const controller = new AbortController();
-    readJson<Listing>(`${api}?tab=${tab}&type=${type}&page=${page}`, controller.signal)
+    readJson<Listing>(
+      `${api}?tab=${tab}&type=${type}&page=${page}&supplier=${supplier}`,
+      controller.signal
+    )
       .then((data) => {
         if (!controller.signal.aborted) {
           setListing(data);
@@ -68,7 +77,7 @@ export function GovernmentContractsBoard({
         if (!controller.signal.aborted) setError(e.message);
       });
     return () => controller.abort();
-  }, [api, tab, type, page, refresh]);
+  }, [api, tab, type, page, supplier, refresh]);
   useEffect(() => {
     const controller = new AbortController();
     readJson<ContractAccess>(`${api}/access`, controller.signal)
@@ -86,8 +95,8 @@ export function GovernmentContractsBoard({
       });
     return () => controller.abort();
   }, [api, refresh]);
-  const href = (nextTab: TenderTab, nextType: string, nextPage: number) =>
-    `${base}?tab=${nextTab}&type=${nextType}&page=${nextPage}`;
+  const href = (nextTab: TenderTab, nextType: string, nextPage: number, nextSupplier = supplier) =>
+    `${base}?tab=${nextTab}&type=${nextType}&page=${nextPage}${nextSupplier !== "all" ? `&supplier=${nextSupplier}` : ""}`;
   const reload = () => {
     setRefresh((n) => n + 1);
     setPublishing(false);
@@ -113,7 +122,7 @@ export function GovernmentContractsBoard({
           )}
         </div>
       </header>
-      {focusTenderId && (
+      {focusTenderId && supplier === "all" && (
         <TenderDetails
           countryId={countryId}
           tenderId={focusTenderId}
@@ -173,8 +182,27 @@ export function GovernmentContractsBoard({
             ))}
           </select>
         </label>
+        <label className="flex min-w-0 max-w-full flex-wrap items-center gap-3 text-sm">
+          <span>{t("viewerFilter")}</span>
+          <select
+            className={`${inputClass} min-w-0 max-w-full sm:w-auto`}
+            value={supplier}
+            onChange={(e) => router.push(href(tab, type, 1, e.target.value))}
+          >
+            <option value="all">{t("viewerAll")}</option>
+            <option value="mine" disabled={!access?.corporations?.length}>
+              {t("viewerMine")}
+            </option>
+            {access?.corporations?.map((corp) => (
+              <option key={corp._id} value={corp._id}>
+                {corp.name}
+              </option>
+            ))}
+          </select>
+        </label>
         {listing && <p className="text-sm text-muted">{t("results", { count: listing.total })}</p>}
       </div>
+      {supplier !== "all" && <p className="text-sm text-muted">{t("viewerFilterHint")}</p>}
       {error ? (
         <div role="alert" className="rounded-xl border border-error/30 bg-card p-5">
           <p>{error}</p>
@@ -196,7 +224,7 @@ export function GovernmentContractsBoard({
       ) : (
         <div className="space-y-3">
           {listing.tenders
-            .filter((row) => row._id !== focusTenderId)
+            .filter((row) => supplier !== "all" || row._id !== focusTenderId)
             .map((row) => (
               <article key={row._id} className="rounded-xl border border-card-border bg-card p-5">
                 <div className="flex flex-wrap justify-between gap-3">
@@ -229,10 +257,15 @@ export function GovernmentContractsBoard({
                             component: t(`domains.${row.terms.component}`),
                             grade: row.terms.grade,
                           })
-                        : `${row.terms.stateId} / ${row.terms.resource} / ${(row.terms.share * 100).toFixed(2)}%`}
+                        : t("extractionSummary", {
+                            state: row.terms.stateId,
+                            resource: row.terms.resource,
+                            share: row.terms.share * 100,
+                          })}
                     </dd>
                   </div>
                 </dl>
+                {row.terms.type === "extraction" && <ExtractionScope row={row} />}
                 {row.awardReason && (
                   <p className="mt-3 text-sm">
                     {t("awardReason")}: {row.awardReason}
@@ -285,6 +318,29 @@ export function GovernmentContractsBoard({
         </nav>
       )}
     </section>
+  );
+}
+function extractionMoney(amount: number, row: TenderView): string | null {
+  return validContractQuote(row.currencyQuote)
+    ? `${contractLocalAmount(amount, row.currencyQuote).toLocaleString(undefined, { maximumSignificantDigits: 12 })} ${row.currencyQuote.code}`
+    : null;
+}
+function ExtractionScope({ row }: { row: Pick<TenderView, "terms" | "capacityQuote"> }) {
+  const t = useTranslations("corporations.governmentContracts");
+  if (row.terms.type !== "extraction") return null;
+  return (
+    <div className="mt-3 space-y-2 text-sm text-muted">
+      <p>
+        {row.capacityQuote
+          ? t("capacityQuantity", {
+              allocated: row.capacityQuote.allocatedDailyUnits,
+              total: row.capacityQuote.totalDailyUnits,
+              resource: row.terms.resource,
+            })
+          : t("capacityUnavailable")}
+      </p>
+      <p>{t("capacityBasis")}</p>
+    </div>
   );
 }
 function TenderDetails({
@@ -366,13 +422,31 @@ function TenderDetails({
           {t("defenceTerms", { amount: terms.maximumPricePerLot, country: countryId })}
         </p>
       ) : (
-        <p className="text-sm">
-          {t("extractionTerms", {
-            fee: terms.minimumSigningFeeAnchor,
-            royalty: terms.royaltyRatePerTurn * 100,
-            term: terms.termTurns,
-          })}
-        </p>
+        <div className="space-y-2 text-sm">
+          <p className="font-semibold">{t("extractionPayment")}</p>
+          {showTitle && (
+            <>
+              <p>
+                {t("extractionSummary", {
+                  state: terms.stateId,
+                  resource: terms.resource,
+                  share: terms.share * 100,
+                })}
+              </p>
+              <ExtractionScope row={row} />
+            </>
+          )}
+          <p>
+            {t("extractionTermsLocal", {
+              fee: extractionMoney(terms.minimumSigningFeeAnchor, row) ?? t("currencyUnavailable"),
+              royalty: terms.royaltyRatePerTurn * 100,
+              term: terms.termTurns,
+            })}
+          </p>
+          <p className="text-muted">{t("royaltyBasis")}</p>
+          <p className="text-muted">{t("extractionAfterAward")}</p>
+          <p className="text-muted">{t("exchangeNote")}</p>
+        </div>
       )}
       {row.tab === "active" && <p className="text-sm text-muted">{t("sealed")}</p>}
       <h3 className="font-semibold">{row.tab === "active" ? t("yourBid") : t("submittedBids")}</h3>
@@ -390,10 +464,9 @@ function TenderDetails({
                 {b.withdrawn && <span className="ml-2 text-xs text-muted">{t("withdrawn")}</span>}
               </span>
               <span className="text-sm">
-                {b.amount.toLocaleString()}{" "}
                 {terms.type === "defence"
-                  ? t("localPerLot", { country: countryId })
-                  : t("anchorUnits")}
+                  ? `${b.amount.toLocaleString()} ${t("localPerLot", { country: countryId })}`
+                  : (extractionMoney(b.amount, row) ?? t("currencyUnavailable"))}
               </span>
               {row.canManage && row.tab === "closed" && !b.withdrawn && (
                 <label className="flex gap-2 text-sm">
@@ -425,7 +498,10 @@ function TenderDetails({
                   corporation: b.corporationName,
                   revision: b.revision,
                   turn: b.submittedTurn,
-                  amount: b.amount,
+                  amount:
+                    terms.type === "extraction"
+                      ? (extractionMoney(b.amount, row) ?? t("currencyUnavailable"))
+                      : `${b.amount.toLocaleString()} ${t("localPerLot", { country: countryId })}`,
                   status: b.withdrawn ? t("withdrawn") : t("recordedBid"),
                 })}
               </li>

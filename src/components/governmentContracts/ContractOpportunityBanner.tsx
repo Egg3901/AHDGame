@@ -5,9 +5,11 @@ import { useTranslations } from "next-intl";
 /** A quiet entry point for CEOs, without another corporation tab or a background poll. */
 export function ContractOpportunityBanner({
   countryId,
+  corporationId,
   type,
 }: {
   countryId: string;
+  corporationId: string;
   type: "defence" | "extraction" | "all";
 }) {
   const t = useTranslations("corporations.governmentContracts");
@@ -16,7 +18,7 @@ export function ContractOpportunityBanner({
       <span className="text-muted">{t("corporationOpportunities")}</span>
       <Link
         className="font-semibold text-primary"
-        href={`/country/${countryId.toLowerCase()}/government-contracts?tab=active&type=${type}`}
+        href={`/country/${countryId.toLowerCase()}/government-contracts?tab=active&type=${type}&supplier=${corporationId}`}
       >
         {t("viewOpenBids")} &rarr;
       </Link>

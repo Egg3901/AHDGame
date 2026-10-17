@@ -134,4 +134,42 @@ describe("seedCohortVectors", () => {
     await seedCohortVectors(db as unknown as Db, "1991-default", () => {});
     expect(db.collectionMocks.regionDemographics!.deleteMany).not.toHaveBeenCalled();
   });
+
+  it("backfills only missing cohort stocks without rewriting existing stocks or metrics", async () => {
+    withStatesAndMetrics(
+      db,
+      [
+        { _id: "DUB", countryId: "IE", population: 1_400_000 },
+        { _id: "CEN", countryId: "RU", population: 30_279_000 },
+      ],
+      []
+    );
+    db.collectionMocks.regionDemographics!.find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([{ _id: "DUB" }]),
+    } as never);
+
+    const stats = await seedCohortVectors(db as unknown as Db, "1991-default", () => {}, {
+      onlyMissing: true,
+    });
+
+    expect(stats.covered).toBe(1);
+    expect(stats.alreadySeeded).toBe(1);
+    const [demoFilter, demoUpdate] = bulkOps(db.collectionMocks.regionDemographics!.bulkWrite)[0]!;
+    expect(demoFilter._id).toBe("CEN");
+    expect((demoUpdate.$setOnInsert as { ages?: unknown }).ages).toBeDefined();
+    expect(db.collectionMocks.macroMetrics!.bulkWrite).not.toHaveBeenCalled();
+    expect(db.collectionMocks.regionDemographics!.deleteMany).not.toHaveBeenCalled();
+  });
+
+  it("rejects a missing-only backfill combined with destructive replacement", async () => {
+    withStatesAndMetrics(db, [{ _id: "CEN", countryId: "RU", population: 30_279_000 }], []);
+
+    await expect(
+      seedCohortVectors(db as unknown as Db, "1991-default", () => {}, {
+        onlyMissing: true,
+        replace: true,
+      })
+    ).rejects.toThrow("onlyMissing cannot be combined with replace");
+    expect(db.collectionMocks.regionDemographics!.deleteMany).not.toHaveBeenCalled();
+  });
 });
