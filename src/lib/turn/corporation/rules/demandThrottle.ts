@@ -106,13 +106,6 @@ export function throttleSoldUnits(args: {
   return producedUnits * (soldWeight / weightSum);
 }
 
-/**
- * Run share a plant restarts at after a turn with no output. A quarter of the
- * plant goes on the market the next turn and grows from there; the throttle
- * floor (DEMAND_THROTTLE_FLOOR) would make a recovering market wait longer.
- */
-export const RESTART_RUN_SHARE = 0.25;
-
 /** Fill at or above this counts as a leg that sold everything it offered. */
 export const SOLD_OUT_FILL = 0.99;
 
@@ -215,27 +208,13 @@ export function demandThrottleFactor(
   marketHeadroomUnits?: number | null
 ): number {
   if (!Number.isFinite(plannedUnits) || plannedUnits <= 0) return 1;
-  const contractShare =
-    typeof guaranteedDemandUnits === "number" && Number.isFinite(guaranteedDemandUnits)
-      ? Math.max(0, guaranteedDemandUnits) / plannedUnits
-      : 0;
-  // Restart: the plant ran before and made nothing last turn (mothballed,
-  // idle, or its first capacity just landed). Clearing offers last turn's
-  // output, so this turn it has nothing on the market and sells nothing
-  // whatever it makes. Running it flat out paid full inputs for unsold output
-  // (live turn 253: 49 restarted media plants sold 0 of 6M units). It starts
-  // at RESTART_RUN_SHARE, plus any contracted volume, and the probe and
-  // sold-out headroom ramp it from real sales from the next turn.
+  // No usable history: nothing to infer demand from, so do not throttle. This
+  // is the newly-founded sector and the pre-clearing world.
   if (
-    typeof priorProducedUnits === "number" &&
-    Number.isFinite(priorProducedUnits) &&
+    typeof priorProducedUnits !== "number" ||
+    !Number.isFinite(priorProducedUnits) ||
     priorProducedUnits <= 0
   ) {
-    return Math.min(1, Math.max(RESTART_RUN_SHARE, contractShare));
-  }
-  // No history at all (pre-clearing world, never run): nothing to infer demand
-  // from, so do not throttle.
-  if (typeof priorProducedUnits !== "number" || !Number.isFinite(priorProducedUnits)) {
     return 1;
   }
   if (typeof priorSoldUnits !== "number" || !Number.isFinite(priorSoldUnits)) return 1;

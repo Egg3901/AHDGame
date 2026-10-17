@@ -75,6 +75,7 @@ import { plantCrewMaxDropPerTurn, plantCrewShare } from "./rules/plantRunShare";
 import {
   PLANT_CREW_FLOOR_SHARE,
   PLANT_CREW_MAX_DROP_PER_TURN,
+  RESTART_RUN_SHARE,
   PLANT_CREW_SUSTAINED_GLUT_MAX_DROP_PER_TURN,
   PLANT_CREW_SUSTAINED_GLUT_THROTTLE,
 } from "@/lib/constants/capacityEconomy";
@@ -479,6 +480,15 @@ export function processSector(
   // ─── P3b extraction capacity + realized revenue ───────────────────────────
   // Pure computation in `sectorTurn/plantsRevenue.ts`; the orchestrator only
   // threads its inputs and consumes the legs. Names are unchanged.
+  // Restart turn: the plant made nothing last turn (back from mothball, first
+  // capacity just landed, or a full outage), so clearing has nothing of it on
+  // the market this turn. It runs only RESTART_RUN_SHARE until real sales exist.
+  const restarting =
+    plantsEnabled && !mothballed && plantsCapacity > 0 && sector.producedUnits === 0;
+  const restartRunShare = restarting ? RESTART_RUN_SHARE : 1;
+  // A cold plant (no crew on site last turn) hires straight to its run; one
+  // whose crew stayed through an outage keeps the gradual-layoff path.
+  const coldRestart = restarting && (sector.workers ?? 0) <= 1;
   const {
     plantsExtractionHardMin,
     producedUnits,
@@ -490,6 +500,7 @@ export function processSector(
     hourlyRevenue: realizedHourlyRevenue,
     capacityBindingEvent,
   } = resolvePlantsRevenue({
+    restartRunShare,
     sector,
     corp,
     strategySupply: strategyRates.supply,
@@ -647,13 +658,10 @@ export function processSector(
   // a plant is never staffed at zero. A plant at a full run gets exactly 1.
   const plantCrew = explicitPlantCostsEnabled
     ? plantCrewShare({
-        demandThrottleFactor,
+        demandThrottleFactor: Math.min(demandThrottleFactor, restartRunShare),
         ramp: plantsRampLambda,
         floor: PLANT_CREW_FLOOR_SHARE,
-        // A plant that made nothing last turn has no crew on site to lay off:
-        // it hires straight to its run instead of inheriting a full crew under
-        // the gradual-layoff cap.
-        previous: sector.producedUnits === 0 ? 0 : sector.plantCrewShare,
+        previous: coldRestart ? 0 : sector.plantCrewShare,
         maxDropPerTurn: plantCrewMaxDropPerTurn({
           demandThrottleFactor,
           priorDemandIdleTurns: sector.demandIdleTurns,

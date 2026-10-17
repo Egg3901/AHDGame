@@ -34,6 +34,7 @@ import type { CommodityType } from "@/lib/constants/commodities";
 import type { ExtractableResource } from "@/lib/constants/commodities";
 import type { CorporationLookups } from "../types";
 import { computeContractProduction } from "../contractProduction";
+import { restartProductionFactor } from "../rules/restartRun";
 import {
   soldOutMarketHeadroomUnits,
   throttleSoldUnits,
@@ -117,6 +118,13 @@ export interface PlantsRevenueInput {
   privateBankingEnabled?: boolean;
   marketPlantsEnabled: boolean;
   contractProductionTargetBySectorId: MarketContext["contractProductionTargetBySectorId"];
+  /**
+   * Share of the plant that runs this turn because it is restarting (back from
+   * mothball, or its first capacity just landed): clearing offers last turn's
+   * output, so a restarting plant has nothing on the market yet. 1 otherwise.
+   * Production only; the demand throttle and every demand read are untouched.
+   */
+  restartRunShare?: number;
   /**
    * Lagged price over base for one output in this sector's own market (state
    * book for state-scoped outputs, else its reachable country book, else the
@@ -221,6 +229,7 @@ export function resolvePlantsRevenue(input: PlantsRevenueInput): PlantsRevenueRe
     privateBankingEnabled,
     marketPlantsEnabled,
     contractProductionTargetBySectorId,
+    restartRunShare = 1,
     throttleLegPriceRatio,
     throttleLegBalance,
     throttleLegMixWeight,
@@ -449,10 +458,23 @@ export function resolvePlantsRevenue(input: PlantsRevenueInput): PlantsRevenueRe
     priorThrottleProducedUnits > 0
       ? Math.max(0, Math.min(1, priorThrottleSoldUnits / priorThrottleProducedUnits))
       : null;
+  // Restart: run only the restart share, or what a supply contract needs if
+  // more. A factor on production, not on the demand throttle, so no demand
+  // read (saturation, retirement, idle upkeep) mistakes a restart for low demand.
+  const guaranteedUnits = marketPlantsEnabled
+    ? contractProductionTargetBySectorId?.get(sector._id.toString())
+    : undefined;
+  const restartFactor = plantsEnabled
+    ? restartProductionFactor({
+        restartRunShare,
+        guaranteedUnits,
+        plannedUnits: productionNameplateUnits * productionFactor,
+      })
+    : 1;
   const production = computeContractProduction({
     plantsEnabled,
     actualNameplateUnits: productionNameplateUnits,
-    actualProductionFactor: productionFactor,
+    actualProductionFactor: productionFactor * restartFactor,
     fullPolicyNameplateUnits: plantsCapacity * bankingCommodityScale,
     involuntaryProductionFactor:
       disasterOutputFactor *
