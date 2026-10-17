@@ -1,0 +1,34 @@
+{
+  "ukGovernment": {
+    "confidence": {
+      "title": "Government confidence",
+      "description": "Falls with lost votes, budget defeats, broken pledges and cabinet resignations; recovers while the government stays popular.",
+      "unknownTurn": "Turn unavailable",
+      "bands": {
+        "secure": "Secure",
+        "shaky": "Shaky",
+        "crisis": "Crisis",
+        "collapsed": "Collapsed"
+      },
+      "history": {
+        "title": "Confidence history",
+        "points": "{count, plural, one {# recorded change} other {# recorded changes}}",
+        "notEnoughData": "History starts with this update. Earlier values were not stored, so there is not enough data to draw a trend yet.",
+        "retention": "Shows up to the 500 most recent changes. Older values were not stored and cannot be reconstructed.",
+        "unknownTurn": "Turn unavailable",
+        "turn": "Turn {turn}",
+        "value": "Confidence"
+      },
+      "reasons": {
+        "turn": "Turn update",
+        "budgetPass": "Budget passed",
+        "budgetDefeat": "Budget defeated",
+        "lostVonc": "Confidence vote lost",
+        "lostKeyVote": "Key vote lost",
+        "ministerFired": "Minister dismissed",
+        "ministerResigned": "Minister resigned",
+        "governmentFormed": "New government formed"
+      }
+    }
+  }
+}

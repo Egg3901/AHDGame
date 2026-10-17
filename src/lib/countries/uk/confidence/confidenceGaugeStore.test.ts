@@ -4,6 +4,7 @@ import {
   applyConfidenceEventToGov,
   tickConfidenceForGov,
   resetConfidenceGauge,
+  getConfidenceGaugeHistory,
   isConfidenceDissolutionEnabled,
 } from "@/lib/countries/uk/confidence/confidenceGaugeStore";
 import { CONFIDENCE_START, CONFIDENCE_HITS } from "@/lib/countries/uk/confidence/confidenceGauge";
@@ -15,11 +16,39 @@ afterEach(() => {
 });
 
 function fakeDb(initial?: number) {
-  const doc: { confidenceGauge?: number } = {};
+  const doc: {
+    confidenceGauge?: number;
+    confidenceGaugeHistory?: Array<{
+      turn: number | null;
+      value: number;
+      at: Date;
+      reason: string;
+    }>;
+    currentTurn?: number;
+  } = {};
   if (initial !== undefined) doc.confidenceGauge = initial;
-  const updateOne = vi.fn(async (_f: unknown, update: { $set: Record<string, unknown> }) => {
-    Object.assign(doc, update.$set);
-  });
+  const updateOne = vi.fn(
+    async (
+      _f: unknown,
+      update: {
+        $set: Record<string, unknown>;
+        $push?: {
+          confidenceGaugeHistory: {
+            $each: NonNullable<typeof doc.confidenceGaugeHistory>[number][];
+            $slice: number;
+          };
+        };
+      }
+    ) => {
+      Object.assign(doc, update.$set);
+      if (update.$push) {
+        doc.confidenceGaugeHistory = [
+          ...(doc.confidenceGaugeHistory ?? []),
+          ...update.$push.confidenceGaugeHistory.$each,
+        ].slice(update.$push.confidenceGaugeHistory.$slice);
+      }
+    }
+  );
   const findOne = vi.fn(async () => doc);
   return { db: { collection: () => ({ findOne, updateOne }) } as never, doc, updateOne };
 }
@@ -82,9 +111,31 @@ describe("tickConfidenceForGov", () => {
 });
 
 describe("resetConfidenceGauge", () => {
-  it("restores to full", async () => {
+  it("carries the prior value forward with a modest formation boost", async () => {
     const { db, doc } = fakeDb(10);
-    await resetConfidenceGauge(db, new Date());
-    expect(doc.confidenceGauge).toBe(CONFIDENCE_START);
+    doc.currentTurn = 81;
+    const formedAt = new Date("1994-01-01T00:00:00.000Z");
+    await resetConfidenceGauge(db, formedAt, 81);
+    expect(doc.confidenceGauge).toBe(19);
+    expect(doc.confidenceGaugeHistory).toEqual([
+      { turn: 81, value: 19, at: formedAt, reason: "governmentFormed" },
+    ]);
+  });
+
+  it("preserves strong predecessor confidence without resetting below full", async () => {
+    const { db, doc } = fakeDb(CONFIDENCE_START - 1);
+    expect(await resetConfidenceGauge(db, new Date(), 82)).toBeLessThan(CONFIDENCE_START);
+    expect(doc.confidenceGauge).toBeLessThan(CONFIDENCE_START);
+  });
+
+  it("retains a bounded chronological history", async () => {
+    const { db } = fakeDb(50);
+    for (let turn = 1; turn <= 510; turn += 1) {
+      await tickConfidenceForGov(db, { approval: 50, now: new Date(turn), turn });
+    }
+    const history = await getConfidenceGaugeHistory(db);
+    expect(history).toHaveLength(500);
+    expect(history[0]?.turn).toBe(11);
+    expect(history.at(-1)?.turn).toBe(510);
   });
 });
