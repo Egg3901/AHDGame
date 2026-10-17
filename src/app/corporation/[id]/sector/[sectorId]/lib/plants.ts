@@ -44,7 +44,8 @@ export interface IdleCauseMeta {
  * this stays one source of copy instead of seventeen.
  */
 export function idleCauseMeta(
-  sectorType: OperatingSectorType | string | null | undefined
+  sectorType: OperatingSectorType | string | null | undefined,
+  bankCapacityShare?: number
 ): Record<PlantIdleCauseKey, IdleCauseMeta> {
   const v = facilityVocabulary(sectorType);
   const sites = v.plural;
@@ -79,6 +80,11 @@ export function idleCauseMeta(
       label: "Held back on purpose",
       tone: "info",
       help: "You set output below full. Raise the output target to run more of your capacity.",
+    },
+    bank: {
+      label: "Reserved for your bank network",
+      tone: "info",
+      help: `Your active bank charter allocates ${fmtPct(bankCapacityShare)} of financial capacity to deposit-taking branches, set by its branch capacity share. This capacity is not lost: it backs your bank's deposit ceiling.`,
     },
     deposits: {
       label: "Deposits ran short",
