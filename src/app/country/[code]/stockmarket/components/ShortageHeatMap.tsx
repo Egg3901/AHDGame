@@ -104,6 +104,8 @@ function HeatRow({ row, scopeLevel }: { row: ShortageRow; scopeLevel: ShortageSc
     narrowed && row.dsRatio != null
       ? `\nMeasured inside ${narrowed} only. Demand elsewhere is not counted, so output shipped out of ${narrowed} can still be selling.`
       : "";
+  const supplyLabel =
+    scopeLevel === "country" || scopeLevel === "state" ? "Supply after imports" : "Supply";
   const title = row.noSupply
     ? `${row.label}
 Demand ${fmt(row.demand)} ${row.unit}
@@ -113,7 +115,7 @@ Price ${premiumText}${walledOffText}`
       ? `${row.label}: no supply/demand signal at this scope${walledOffText}`
       : `${row.label}
 Demand ${fmt(row.demand)} ${row.unit}
-Supply ${fmt(row.supply)} ${row.unit}
+${supplyLabel} ${fmt(row.supply)} ${row.unit}
 D/S ratio ${row.dsRatio.toFixed(2)}
 Price ${premiumText}${walledOffText}${scopeNote}`;
 
@@ -169,9 +171,13 @@ const LEVELS: { key: ScopeLevel; label: string; hint: string }[] = [
   {
     key: "country",
     label: "Country",
-    hint: "Production against consumption inside the borders. Ignores imports, so a country that buys what it needs abroad still reads short here.",
+    hint: "Production plus imports against consumption inside the borders. A gap that imports already fill does not read as a shortage.",
   },
-  { key: "state", label: "State", hint: "One state's own production against its own consumption." },
+  {
+    key: "state",
+    label: "State",
+    hint: "One state's production, plus its share of the country's imports, against its own consumption.",
+  },
 ];
 
 const selectClass =
@@ -244,7 +250,8 @@ export function ShortageHeatMap({ commodities }: { commodities: CommodityData[] 
       return { level: "reachable", countryId: effectiveCountryId };
     if (level === "country" && effectiveCountryId)
       return { level: "country", countryId: effectiveCountryId };
-    if (level === "state" && effectiveStateId) return { level: "state", stateId: effectiveStateId };
+    if (level === "state" && effectiveStateId)
+      return { level: "state", stateId: effectiveStateId, countryId: effectiveCountryId };
     return { level: "global" };
   }, [level, effectiveCountryId, effectiveStateId, reachableReady]);
 

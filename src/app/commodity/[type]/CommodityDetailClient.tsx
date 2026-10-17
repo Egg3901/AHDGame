@@ -224,6 +224,7 @@ export default function CommodityDetailClient({ initialData }: CommodityDetailCl
               demand={marketScope.demand}
               unit={data.unit}
               marketLabel={marketScope.marketLabel}
+              imports={marketScope.imports}
             />
             {data.flows && <FlowLedgerStrip flows={data.flows} unit={data.unit} />}
             {heavyLoaded && (
@@ -234,6 +235,7 @@ export default function CommodityDetailClient({ initialData }: CommodityDetailCl
                 stateCountryMap={marketScope.stateCountryMap}
                 basePrice={data.basePrice}
                 capacityByState={marketScope.capacityByState}
+                stateImports={marketScope.stateImports}
                 unit={data.unit}
               />
             )}
@@ -272,6 +274,7 @@ export default function CommodityDetailClient({ initialData }: CommodityDetailCl
                 statePrices={marketScope.statePrices}
                 stateCountryMap={marketScope.stateCountryMap}
                 capacityByState={marketScope.capacityByState}
+                stateImports={marketScope.stateImports}
                 forexEnabled={forexEnabled}
                 exchangeRates={exchangeRates}
                 onBack={() => handleSelectCountry(null)}

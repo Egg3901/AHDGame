@@ -14,6 +14,7 @@
 import type { CommodityData } from "../types";
 import { priceRealizationFactor } from "@/lib/market/priceRealization";
 import { reachableSellableDemand } from "@/lib/trade/reachableBook";
+import { importCoverage, stateImportsShare } from "@/lib/trade/postImportGap";
 
 export type ShortageTone = "short-strong" | "short-mild" | "balanced" | "oversupplied";
 
@@ -21,7 +22,7 @@ export type ShortageScope =
   | { level: "global" }
   | { level: "reachable"; countryId: string }
   | { level: "country"; countryId: string }
-  | { level: "state"; stateId: string };
+  | { level: "state"; stateId: string; countryId?: string };
 
 export interface ShortageRow {
   commodity: string;
@@ -100,15 +101,16 @@ function resolveScope(
     };
   }
   if (scope.level === "country") {
-    // PRODUCTION versus CONSUMPTION inside the borders. It deliberately ignores
-    // imports, so it answers "does this country feed itself" and NOT "can I
-    // sell here" — the US ran 2.88 here on food while importing 1.13M units a
-    // day and clearing its deficit in full (ticket #1077). The stored balance
-    // is also only half-relieved of trade (TRADE_PRICE_CONVERGENCE_K = 0.5), so
-    // it is a price-formation input, not physical unmet demand. Use Reachable
-    // for a build decision.
+    // Production plus imports against consumption inside the borders. Imports
+    // fill demand that home output leaves open, so counting only home output
+    // reported shortages the market had already cleared: the US ran 2.88 here
+    // on food while importing 1.13M units a day and clearing its deficit in
+    // full (ticket #1077). Worlds without reachable books keep the raw figure.
+    // Display only: clearing and pricing are untouched. Use Reachable for a
+    // build decision.
+    const imports = c.reachableBooks?.[scope.countryId]?.imports ?? 0;
     return {
-      supply: c.nationalSupply?.[scope.countryId] ?? 0,
+      supply: (c.nationalSupply?.[scope.countryId] ?? 0) + Math.max(0, imports),
       demand: c.nationalDemand?.[scope.countryId] ?? 0,
       price: c.nationalPrices?.[scope.countryId] ?? c.basePrice,
       blocked: 0,
@@ -116,9 +118,22 @@ function resolveScope(
     };
   }
   if (scope.level === "state") {
+    const stateSupply = c.stateSupply?.[scope.stateId] ?? 0;
+    const stateDemand = c.stateDemand?.[scope.stateId] ?? 0;
+    // Imports are booked nationally; credit the state with its share of the
+    // national deficit they closed, so an import-covered state is not "short".
+    const book = scope.countryId ? c.reachableBooks?.[scope.countryId] : undefined;
+    const coverage =
+      scope.countryId && book
+        ? importCoverage(
+            c.nationalSupply?.[scope.countryId] ?? 0,
+            c.nationalDemand?.[scope.countryId] ?? 0,
+            book.imports
+          )
+        : 0;
     return {
-      supply: c.stateSupply?.[scope.stateId] ?? 0,
-      demand: c.stateDemand?.[scope.stateId] ?? 0,
+      supply: stateSupply + stateImportsShare(stateSupply, stateDemand, coverage),
+      demand: stateDemand,
       price: c.statePrices?.[scope.stateId] ?? c.basePrice,
       blocked: 0,
       untraded: 0,

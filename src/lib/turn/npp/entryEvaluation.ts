@@ -59,6 +59,12 @@ export interface NppEntryEvaluationInput {
   allowExpansion: boolean;
   ordinaryEntryEligible?: boolean;
   shortageEntryEligible?: boolean;
+  /**
+   * Widened cohort slots that apply only to a logistics target in a critical
+   * shortage. Absent falls back to the ordinary slots.
+   */
+  criticalLogisticsEntryEligible?: boolean;
+  criticalLogisticsShortageEligible?: boolean;
   retailExpansionPaused?: boolean;
   /** Per-turn founding cap already reached before this decision. */
   entryCapReached: boolean;
@@ -69,6 +75,10 @@ export interface NppEntryEvaluation {
   expansion: UnownedSector | null;
   hasLogisticsCapacity: boolean;
   marketEntryEligible: boolean;
+  /** The candidate's shortage is critical, so the profit and margin screens are bypassed. */
+  criticalShortage: boolean;
+  /** Strategy lever as applied: relaxed for a critical logistics target. */
+  allowExpansion: boolean;
   exceptionalShortageEntry: boolean;
   ordinaryEntryTargetGlutted: boolean;
   ordinaryEntry: boolean;
@@ -128,18 +138,29 @@ export function evaluateNppEntry(input: NppEntryEvaluationInput): NppEntryEvalua
   // entry rails below: cohort, logistics, cash, build sizing and queue pacing
   // remain authoritative. This is deliberately limited to the same threshold
   // used by the exceptional-shortage credit path.
+  //
+  // Freight cannot be traded between countries, so a critical logistics
+  // shortage additionally ignores the strategy expansion lever and uses a
+  // widened cohort slot. No other sector type gets either relaxation.
+  const criticalLogistics = criticalShortage && entryCandidate?.sectorType === "logistics";
+  const allowExpansion = input.allowExpansion || criticalLogistics;
   const expansion =
-    input.allowExpansion &&
+    allowExpansion &&
     ((input.profitable && input.marginPct >= input.marginFloorPct) || criticalShortage) &&
     !(input.retailExpansionPaused && entryCandidate?.sectorType === "retail")
       ? entryCandidate
       : null;
   const hasLogisticsCapacity = input.sectorCount < input.logisticsSupportedSectors;
-  const marketEntryEligible = input.ordinaryEntryEligible !== false;
+  const marketEntryEligible =
+    input.ordinaryEntryEligible !== false ||
+    (criticalLogistics && input.criticalLogisticsEntryEligible === true);
+  const shortageEntryEligible =
+    input.shortageEntryEligible === true ||
+    (criticalLogistics && input.criticalLogisticsShortageEligible === true);
   const exceptionalShortageEntry =
     expansion !== null &&
     criticalShortage &&
-    input.shortageEntryEligible === true &&
+    shortageEntryEligible &&
     marketEntryEligible &&
     hasLogisticsCapacity;
   // Demand audit step 5: never found an ordinary plant into a glutted
@@ -167,7 +188,8 @@ export function evaluateNppEntry(input: NppEntryEvaluationInput): NppEntryEvalua
     marginPct: input.marginPct,
     marginFloorPct: input.marginFloorPct,
     cohortEligible: marketEntryEligible,
-    strategyAllowsExpansion: input.allowExpansion,
+    strategyAllowsExpansion: allowExpansion,
+    criticalShortage,
     hasLogisticsCapacity,
     target: entryCandidate,
     shortageScore: entryCandidateShortageScore,
@@ -185,6 +207,8 @@ export function evaluateNppEntry(input: NppEntryEvaluationInput): NppEntryEvalua
     expansion,
     hasLogisticsCapacity,
     marketEntryEligible,
+    criticalShortage,
+    allowExpansion,
     exceptionalShortageEntry,
     ordinaryEntryTargetGlutted,
     ordinaryEntry,

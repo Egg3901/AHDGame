@@ -777,6 +777,8 @@ export function makeNppCorpDecision(
     allowExpansion: levers.allowExpansion,
     ordinaryEntryEligible: ctx.ordinaryEntryEligible,
     shortageEntryEligible: ctx.shortageEntryEligible,
+    criticalLogisticsEntryEligible: ctx.criticalLogisticsEntryEligible,
+    criticalLogisticsShortageEligible: ctx.criticalLogisticsShortageEligible,
     retailExpansionPaused: ctx.retailExpansionPaused,
     entryCapReached: newSectors.length >= NPP_SHORTAGE_ENTRIES_PER_TURN,
   });
@@ -785,6 +787,8 @@ export function makeNppCorpDecision(
     expansion,
     hasLogisticsCapacity,
     marketEntryEligible,
+    criticalShortage: entryCriticalShortage,
+    allowExpansion: entryAllowsExpansion,
     exceptionalShortageEntry,
     ordinaryEntryTargetGlutted,
     ordinaryEntry,
@@ -807,7 +811,7 @@ export function makeNppCorpDecision(
     diagnostic: entryDiagnostic,
     placementSignals,
     gates: {
-      allowExpansion: levers.allowExpansion,
+      allowExpansion: entryAllowsExpansion,
       hasLogisticsCapacity,
       marketEntryEligible,
       retailBlocked: ctx.retailExpansionPaused === true && entryCandidate?.sectorType === "retail",
@@ -1094,10 +1098,10 @@ export function makeNppCorpDecision(
     outcome: foundingOutcome,
     fallbackCashHeadroomAnchor: cashToAnchor(cashLocal - effectiveCashFloor),
     gates: {
-      allowExpansion: levers.allowExpansion,
-      isProfitable,
+      allowExpansion: entryAllowsExpansion,
+      isProfitable: isProfitable || entryCriticalShortage,
       corpMargin,
-      minMargin: effectiveExpansionMinMargin,
+      minMargin: entryCriticalShortage ? Number.NEGATIVE_INFINITY : effectiveExpansionMinMargin,
       entryCandidate: entryCandidate
         ? { stateId: entryCandidate.stateId, sectorType: entryCandidate.sectorType }
         : null,
