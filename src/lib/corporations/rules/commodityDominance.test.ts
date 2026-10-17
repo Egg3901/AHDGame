@@ -119,7 +119,7 @@ describe("computeBuildCost with the commodity toll", () => {
 });
 
 describe("commodityDominanceRatio", () => {
-  const commodity = SECTOR_SUPPLY.retail[0].commodity;
+  const commodity = SECTOR_SUPPLY.retail?.[0]?.commodity ?? "retail";
   const sector = (id: string, capitalStock: number, queuedUnits = 0): CommodityDominanceSector => ({
     _id: id,
     sectorType: "retail",
