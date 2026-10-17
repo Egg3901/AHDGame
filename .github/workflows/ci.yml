@@ -2,12 +2,16 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    # development pushes save the typecheck, lint and build caches that every
+    # pull request into development restores. PR caches are not shared across PRs.
+    branches: [main, development]
   pull_request:
 
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  # Only superseded pull request runs are cancelled; branch runs finish so their
+  # caches are saved.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   # Keep the stable `verify` check for every pull request, but avoid spending
@@ -258,7 +262,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4, 5, 6]
+        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
