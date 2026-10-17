@@ -22,6 +22,7 @@ import { foundingStarterUnits } from "@/lib/corporations/foundingPlant";
 import { bucketKey } from "@/lib/nationalization/stateControlledBuckets";
 import {
   isMarketSaturated,
+  isPhysicallyShort,
   type SaturationSectorLike,
 } from "@/lib/turn/npp/rules/marketSaturation";
 import {
@@ -344,14 +345,16 @@ export function hasEnterableHeadroom(
       undefined,
       frontier,
       undefined,
-      corp.industryModel
+      corp.industryModel,
+      true
     ) !== null
   );
 }
 
 /**
  * Find the best unowned sector for expansion, prioritizing sectors that
- * match the corp's primary type, then secondary type, then the open market.
+ * match the corp's primary type, then secondary type; only a physically
+ * confirmed critical shortage crosses types.
  *
  * Within each tier candidates are ranked by revenue × shortage score
  * (smarter-NPP, t879): revenue alone routed every expansion to the biggest
@@ -387,7 +390,8 @@ export function findBestUnownedSector(
   signals?: PlacementSignals,
   preferredStateIds?: ReadonlySet<string>,
   stats?: CandidateExclusionStats,
-  primaryIndustryModel?: string | null
+  primaryIndustryModel?: string | null,
+  openMarketFallback: boolean = false
 ): UnownedSector | null {
   const countryUnowned = unownedByCountry.get(countryId);
   if (!countryUnowned || countryUnowned.length === 0) return null;
@@ -476,30 +480,34 @@ export function findBestUnownedSector(
       : [];
   const rankedCandidates = frontierCandidates.length > 0 ? frontierCandidates : candidates;
   const activeMarketBuckets = signals?.activeMarketBuckets;
-  const uncoveredCandidates =
-    signals?.preferEmptyMarkets && activeMarketBuckets
-      ? rankedCandidates.filter(
-          (candidate) =>
-            !activeMarketBuckets.has(
-              bucketKey(
-                candidate.stateId,
-                candidate.sectorType,
-                candidate.industryModel,
-                candidate.mediaDiscriminator
-              )
-            ) &&
-            // Extraction is deposit-gated (candidacy above), not unit-sized, so
-            // it bypasses the demand-headroom facility-size floor.
-            (candidate.sectorType === "extraction" ||
-              !plantsEnabled ||
-              sizeOf(candidate) >=
-                foundingStarterUnits(
-                  candidate.sectorType as CorporationType,
-                  candidate.industryModel as ManufacturingIndustryModel | null | undefined
-                ))
-        )
-      : [];
-  const entryCandidates = uncoveredCandidates.length > 0 ? uncoveredCandidates : rankedCandidates;
+  // Coverage treatment: within a list, prefer markets no active firm serves yet.
+  // Applied per type tier below, so an uncovered market of the wrong type never
+  // hides an enterable market of the corp's own type.
+  const preferUncovered = (list: UnownedSector[]): UnownedSector[] => {
+    if (!signals?.preferEmptyMarkets || !activeMarketBuckets) return list;
+    const uncovered = list.filter(
+      (candidate) =>
+        !activeMarketBuckets.has(
+          bucketKey(
+            candidate.stateId,
+            candidate.sectorType,
+            candidate.industryModel,
+            candidate.mediaDiscriminator
+          )
+        ) &&
+        // Extraction is deposit-gated (candidacy above), not unit-sized, so
+        // it bypasses the demand-headroom facility-size floor.
+        (candidate.sectorType === "extraction" ||
+          !plantsEnabled ||
+          sizeOf(candidate) >=
+            foundingStarterUnits(
+              candidate.sectorType as CorporationType,
+              candidate.industryModel as ManufacturingIndustryModel | null | undefined
+            ))
+    );
+    return uncovered.length > 0 ? uncovered : list;
+  };
+  const entryCandidates = preferUncovered(rankedCandidates);
 
   // Shortage at the candidate's own state when a state price exists, country
   // otherwise. This is what routes a founding to the state that is actually
@@ -560,12 +568,24 @@ export function findBestUnownedSector(
   // the old unconditional first pick (see HQ_STATE_SCORE_BONUS).
   const best = (list: UnownedSector[]) => list.sort((a, b) => score(b) - score(a))[0];
 
+  const physicallyShort = (c: UnownedSector) =>
+    isPhysicallyShort(signals?.unmetDemandUnitsOf, () =>
+      signals!.unmetDemandUnitsOf!(c, { aggregate: "max" })
+    );
+
   // The treatment reallocates an existing eligible entry slot. It does not
   // create another slot, waive entry costs, cross the geographic frontier, or
   // bypass extraction headroom. Once the target price falls below the shared
   // shortage bar this branch returns no candidates and normal ranking resumes.
   if (signals?.preferFragileMarketSupply) {
-    const fragileCandidates = entryCandidates.filter((candidate) => fragileScore(candidate) > 0);
+    const fragileCandidates = entryCandidates.filter(
+      (candidate) =>
+        fragileScore(candidate) > 0 &&
+        // Crossing types needs a physical shortage, like the critical tier.
+        (candidate.sectorType === primaryType ||
+          candidate.sectorType === secondaryType ||
+          physicallyShort(candidate))
+    );
     if (fragileCandidates.length > 0) {
       return fragileCandidates.sort((a, b) => fragileScore(b) - fragileScore(a))[0];
     }
@@ -577,24 +597,38 @@ export function findBestUnownedSector(
   // cash-healthy NPP can, instead of waiting for a same-type corp that may not
   // exist. Highest size×shortage wins; disarms once capacity pulls the ratio
   // back under ESSENTIAL_SHORTAGE_SCORE. See the constant for the full rationale.
-  const critical = entryCandidates.filter((c) => peakShortageOf(c) >= ESSENTIAL_SHORTAGE_SCORE);
+  // A high price alone is not a critical shortage: price memory held most
+  // prices well above ESSENTIAL_SHORTAGE_SCORE, so on live turn 262 this tier
+  // fired almost everywhere and AI corps founded 3,458 sectors outside their
+  // own type (-15pp mismatch each; 51% losing, against 20% in-type). When the
+  // cell's measured unmet demand can be read, the override needs some on its
+  // deepest leg too (rules/marketSaturation cellUnmetDemandUnits).
+  const critical = entryCandidates.filter(
+    (c) => peakShortageOf(c) >= ESSENTIAL_SHORTAGE_SCORE && physicallyShort(c)
+  );
   if (critical.length > 0) return critical.sort((a, b) => score(b) - score(a))[0];
 
   // Tier 1: primary type match
-  const primaryMatch = entryCandidates.filter(
+  const primaryMatch = rankedCandidates.filter(
     (c) =>
       c.sectorType === primaryType && (c.industryModel ?? null) === (primaryIndustryModel ?? null)
   );
-  if (primaryMatch.length > 0) return best(primaryMatch);
+  if (primaryMatch.length > 0) return best(preferUncovered(primaryMatch));
 
   // Tier 2: secondary type match
   if (secondaryType) {
-    const secondaryMatch = entryCandidates.filter((c) => c.sectorType === secondaryType);
-    if (secondaryMatch.length > 0) return best(secondaryMatch);
+    const secondaryMatch = rankedCandidates.filter((c) => c.sectorType === secondaryType);
+    if (secondaryMatch.length > 0) return best(preferUncovered(secondaryMatch));
   }
 
-  // Tier 3: open market — market-weighted score across all types
-  return best(entryCandidates);
+  // No open-market tier for founding: a sector outside the corp's primary or
+  // secondary type carries SECTOR_TYPE_MISMATCH_PENALTY (-15pp) for as long as
+  // it runs, so ordinary diversification founded structural losers. Only the
+  // critical tier above crosses types; otherwise the corp grows what it has.
+  // `openMarketFallback` keeps the old answer for callers asking whether ANY
+  // market is open (the strategy's room-to-invest signal), so a healthy corp
+  // is not reclassified as boxed in and denied growth capex on its own plants.
+  return openMarketFallback ? best(entryCandidates) : null;
 }
 
 /**

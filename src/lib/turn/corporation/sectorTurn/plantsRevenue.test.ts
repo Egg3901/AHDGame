@@ -349,6 +349,63 @@ describe("absolute cost-plus quotes", () => {
     );
     expect(result.producedUnits).toBeCloseTo(200);
   });
+  it.each(["extraction", "manufacturing"] as const)(
+    "relaxes the shortage fill gate only for extraction (%s)",
+    (sectorType) => {
+      const original = input();
+      const result = resolvePlantsRevenue(
+        input({
+          sector: {
+            ...original.sector,
+            sectorType,
+            producedUnits: 100,
+            soldUnits: 20,
+            soldByCommodity: { iron: 0.2 },
+          },
+          strategySupply: { iron: 1 },
+          clearingEnabled: true,
+          clearing: {
+            factor: 1,
+            soldFraction: 0.83,
+            soldByCommodity: { iron: 0.83 },
+            marketSupplyShareByCommodity: { iron: 0.1 },
+            effectivePosture: 0,
+          },
+          throttleLegBalance: () => ({ supply: 1000, demand: 900 }),
+          throttleWideBalance: () => ({ supply: 1000, demand: 2000 }),
+          throttleLegMixWeight: () => 1,
+        })
+      );
+      expect(result.producedUnits).toBeCloseTo(sectorType === "extraction" ? 183 : 100);
+    }
+  );
+
+  it.each([undefined, 0, 100])(
+    "keeps extraction history and capacity safeguards (prior production %s)",
+    (producedUnits) => {
+      const original = input();
+      const result = resolvePlantsRevenue(
+        input({
+          sector: { ...original.sector, sectorType: "extraction", producedUnits, soldUnits: 83 },
+          strategySupply: { iron: 1 },
+          capacityUtil: { utilization: 0.15, bindingResource: "iron" },
+          clearingEnabled: true,
+          clearing: {
+            factor: 1,
+            soldFraction: 0.83,
+            soldByCommodity: { iron: 0.83 },
+            marketSupplyShareByCommodity: { iron: 0.1 },
+            effectivePosture: 0,
+          },
+          throttleLegBalance: () => ({ supply: 1000, demand: 900 }),
+          throttleWideBalance: () => ({ supply: 1000, demand: 2000 }),
+          throttleLegMixWeight: () => 1,
+        })
+      );
+      expect(result.producedUnits).toBeCloseTo(150);
+    }
+  );
+
   it("settles the offered price during the ramp and adds the tech price bonus on top", () => {
     const base = {
       costPlusPricingEnabled: true,

@@ -213,7 +213,7 @@ describe("state-resolution placement signals (supply dislocation, t202)", () => 
 describe("empty-market coverage treatment", () => {
   it("routes an existing entry slot to a facility-ready uncovered frontier cell", () => {
     const pool = new Map([
-      ["US", [us("manufacturing", "TX", 10_000_000), us("logistics", "AZ", 100_000)]],
+      ["US", [us("manufacturing", "TX", 10_000_000), us("manufacturing", "AZ", 100_000)]],
     ]);
     const activeMarketBuckets = new Set(["TX:manufacturing"]);
     const pick = findBestUnownedSector(
@@ -231,7 +231,7 @@ describe("empty-market coverage treatment", () => {
       new Set(["AZ", "TX"])
     );
 
-    expect(pick).toMatchObject({ stateId: "AZ", sectorType: "logistics" });
+    expect(pick).toMatchObject({ stateId: "AZ", sectorType: "manufacturing" });
   });
 
   it("does not redirect into an uncovered cell smaller than one facility", () => {
@@ -395,6 +395,102 @@ describe("physical saturation gate (live turn 250 incident)", () => {
       false,
       1,
       { marketSaturationOf: () => 0.2 }
+    );
+    expect(pick).toBeNull();
+  });
+});
+
+describe("founding type discipline (live turn 262)", () => {
+  const find = (
+    pool: Map<string, UnownedSector[]>,
+    signals?: Parameters<typeof findBestUnownedSector>[10],
+    healthcarePrice = 3
+  ) =>
+    findBestUnownedSector(
+      "US",
+      "NY",
+      "manufacturing",
+      null,
+      new Set(),
+      pool,
+      new Set(),
+      ratios({ healthcare_services: healthcarePrice }),
+      false,
+      1,
+      signals
+    );
+
+  it("does not found outside the corp's types on an ordinary slot", () => {
+    // Price at base: no critical shortage, so no cross-type founding.
+    expect(find(new Map([["US", [us("healthcare", "NY")]]]), undefined, 1)).toBeNull();
+  });
+
+  it("crosses types for a critical shortage only with measured unmet demand", () => {
+    const pool = new Map([["US", [us("healthcare", "NY")]]]);
+    expect(find(pool, { unmetDemandUnitsOf: () => 0 })).toBeNull();
+    expect(find(pool, { unmetDemandUnitsOf: () => 500 })?.sectorType).toBe("healthcare");
+  });
+});
+
+describe("type discipline with the coverage treatment", () => {
+  it("an uncovered wrong-type market never hides a covered in-type one", () => {
+    const pool = new Map([
+      ["US", [us("manufacturing", "TX", 100_000), us("media", "AZ", 100_000)]],
+    ]);
+    const pick = findBestUnownedSector(
+      "US",
+      "TX",
+      "manufacturing",
+      null,
+      new Set(),
+      pool,
+      new Set(),
+      ratios({}),
+      false,
+      1,
+      { preferEmptyMarkets: true, activeMarketBuckets: new Set(["TX:manufacturing"]) }
+    );
+    expect(pick?.sectorType).toBe("manufacturing");
+  });
+
+  it("the room-to-invest check still sees open markets of any type", () => {
+    const pool = new Map([["US", [us("media", "AZ", 100_000)]]]);
+    const args = [
+      "US",
+      "TX",
+      "manufacturing",
+      null,
+      new Set<string>(),
+      pool,
+      new Set<string>(),
+      ratios({}),
+      false,
+      1,
+      undefined,
+      undefined,
+      undefined,
+      null,
+    ] as const;
+    expect(findBestUnownedSector(...args)).toBeNull();
+    expect(findBestUnownedSector(...args, true)?.sectorType).toBe("media");
+  });
+});
+
+describe("cross-type founding needs a readable shortage", () => {
+  it("an unreadable gap is not a shortage once the signal is wired", () => {
+    const pool = new Map([["US", [us("healthcare", "NY")]]]);
+    const pick = findBestUnownedSector(
+      "US",
+      "NY",
+      "manufacturing",
+      null,
+      new Set(),
+      pool,
+      new Set(),
+      ratios({ healthcare_services: 3 }),
+      false,
+      1,
+      { unmetDemandUnitsOf: () => null }
     );
     expect(pick).toBeNull();
   });

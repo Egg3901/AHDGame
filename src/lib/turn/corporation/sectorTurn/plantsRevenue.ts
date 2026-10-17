@@ -140,6 +140,10 @@ export interface PlantsRevenueInput {
   throttleLegBalance?: (
     commodity: CommodityType
   ) => { supply: number; demand: number } | null | undefined;
+  /** Reachable country or global balance for the extraction shortage fill gate. */
+  throttleWideBalance?: (
+    commodity: CommodityType
+  ) => { supply: number; demand: number } | null | undefined;
   /** Share of one sector output unit that is this commodity, as clearing splits offers. */
   throttleLegMixWeight?: (commodity: CommodityType) => number;
 }
@@ -232,6 +236,7 @@ export function resolvePlantsRevenue(input: PlantsRevenueInput): PlantsRevenueRe
     restartRunShare = 1,
     throttleLegPriceRatio,
     throttleLegBalance,
+    throttleWideBalance,
     throttleLegMixWeight,
   } = input;
 
@@ -502,6 +507,10 @@ export function resolvePlantsRevenue(input: PlantsRevenueInput): PlantsRevenueRe
               clearing?.marketSupplyShareByCommodity?.[commodity as CommodityType],
             mixWeightFor: (commodity) => throttleLegMixWeight(commodity as CommodityType),
             balanceFor: (commodity) => throttleLegBalance(commodity as CommodityType),
+            wideBalanceFor:
+              sector.sectorType === "extraction" && throttleWideBalance
+                ? (commodity) => throttleWideBalance(commodity as CommodityType)
+                : undefined,
             priceRatioFor: (commodity) =>
               throttleLegPriceRatio?.(commodity as CommodityType) ??
               priceRatioByCommodity.get(commodity as CommodityType),
