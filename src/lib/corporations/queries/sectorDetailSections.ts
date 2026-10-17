@@ -1,6 +1,11 @@
 import type { PlantIdleCause, PlantBuildOrderView, SectorPlantsSection } from "./sectorPlantsTypes";
 export type { PlantIdleCause, PlantBuildOrderView, SectorPlantsSection } from "./sectorPlantsTypes";
-import { IDLE_RETIRE_GRACE_TURNS } from "@/lib/turn/corporation/rules/idleCapacityRetirement";
+import {
+  IDLE_RETIRE_GLUT_FILL,
+  IDLE_RETIRE_GRACE_TURNS,
+  IDLE_RETIRE_STRUCTURAL_GRACE_TURNS,
+  IDLE_RETIRE_STRUCTURAL_THROTTLE,
+} from "@/lib/turn/corporation/rules/idleCapacityRetirement";
 import { hasProtectedConstructionProperty } from "@/lib/corporations/securedConstructionProperty";
 import { getCorporateSectorLaneQuery } from "@/lib/corporations/sectorLocation";
 /**
@@ -1729,11 +1734,21 @@ export function buildSectorPlantsSection(args: {
     roomHeldByOwnIdle,
     ...(!mothballed && (num(sector.demandIdleTurns) ?? 0) > 0
       ? {
-          idleRetirement: {
-            turns: num(sector.demandIdleTurns) ?? 0,
-            graceTurns: IDLE_RETIRE_GRACE_TURNS,
-            retiredUnits: nonNeg(num(sector.idleCapacityRetiredUnits) ?? 0),
-          },
+          idleRetirement: (() => {
+            // Oversized: the plant sells what it makes, but buyers take far less
+            // than it could make (rules/idleCapacityRetirement structural case).
+            const throttle = num(sector.demandThrottleFactor);
+            const oversized =
+              throttle != null &&
+              throttle < IDLE_RETIRE_STRUCTURAL_THROTTLE &&
+              (num(sector.soldFraction) ?? 0) >= IDLE_RETIRE_GLUT_FILL;
+            return {
+              turns: num(sector.demandIdleTurns) ?? 0,
+              graceTurns: oversized ? IDLE_RETIRE_STRUCTURAL_GRACE_TURNS : IDLE_RETIRE_GRACE_TURNS,
+              retiredUnits: nonNeg(num(sector.idleCapacityRetiredUnits) ?? 0),
+              ...(oversized ? { oversized: true, runPct: Math.round(100 * throttle!) } : {}),
+            };
+          })(),
         }
       : {}),
     ...(unclaimedSharePct != null ? { unclaimedSharePct } : {}),

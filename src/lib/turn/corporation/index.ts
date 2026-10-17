@@ -87,6 +87,7 @@ import { processNppCorpTreasury } from "@/lib/turn/npp/nppCorpTreasury";
 import { createNotifications } from "@/lib/notifications";
 import { COMMODITY_LABELS, eraScaledBasePrices } from "@/lib/constants/commodities";
 import { trackFinancialDistress } from "./financialDistressTracking";
+import { notifyOversizedPlants } from "./oversizedPlantNotices";
 import {
   persistLabourIndices,
   persistLabourMarketTelemetry,
@@ -1890,6 +1891,12 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
       await trackFinancialDistress(db, turn);
     } catch (err) {
       logger.error("corporationTurn", "financial-distress tracking failed", err);
+    }
+    // Oversized-plant warnings, independent of the distress clock above.
+    try {
+      await notifyOversizedPlants(db, turn);
+    } catch (err) {
+      logger.error("corporationTurn", "oversized-plant notices failed", err);
     }
     mark("financialDistress");
 

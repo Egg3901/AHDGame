@@ -201,6 +201,14 @@ export default function PlantPanel({
               Retirement continues a little each turn until the plant is close to what it sells.
               Parked capacity is not retired{onResize ? ", so park any you want to keep" : ""}.
             </p>
+          ) : idleRetirement.oversized ? (
+            <p>
+              This plant&apos;s buyers take about {idleRetirement.runPct}% of what it could make. If
+              that lasts {Math.max(1, idleRetirement.graceTurns - idleRetirement.turns + 1)} more
+              turn{idleRetirement.graceTurns - idleRetirement.turns === 0 ? "" : "s"}, unused
+              capacity starts to retire a little each turn until the plant is closer to its market.
+              {onResize ? " Park capacity below to keep it." : ""}
+            </p>
           ) : (
             <p>
               Sales here are below this plant&apos;s run. If that lasts{" "}

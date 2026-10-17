@@ -57,6 +57,7 @@ export const NOTIFICATION_TYPES = [
   "corp_nationalization_notice",
   "corp_nationalization_cancelled",
   "corp_nationalization_risk",
+  "corp_plant_oversized",
   "corp_privatization_offered",
   "corp_privatization_resolved",
   "corp_credit_rating_change",

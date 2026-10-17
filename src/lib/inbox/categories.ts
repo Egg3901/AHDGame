@@ -26,6 +26,7 @@ export const CATEGORY_OF: Record<NotificationType, InboxCategory> = {
   corp_sector_attacked: "crisis",
   corp_nationalization_notice: "crisis",
   corp_nationalization_risk: "crisis",
+  corp_plant_oversized: "treasury",
   corp_hostile_takeover_available: "crisis",
   // A war you did not choose is a crisis, not a standing-office notice.
   treaty_defence_invoked: "crisis",

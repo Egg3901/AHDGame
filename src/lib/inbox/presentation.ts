@@ -39,6 +39,7 @@ const TYPE_LABELS: Partial<Record<NotificationType, string>> = {
   corp_bond_due_soon: "Maturity warning",
   corp_credit_rating_change: "Credit update",
   corp_nationalization_risk: "Nationalization risk",
+  corp_plant_oversized: "Oversized plant",
   corp_hostile_takeover_available: "Takeover opportunity",
   corp_privatization_offered: "Privatization offer",
   corp_vote_opened: "Corporate vote",

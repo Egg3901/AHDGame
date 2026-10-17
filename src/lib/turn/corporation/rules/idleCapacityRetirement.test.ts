@@ -179,3 +179,66 @@ describe("idleCapacityRetirement: NPP engine 6 structural overcapacity", () => {
     });
   });
 });
+
+describe("player structural retirement (owner, 2026-10-17)", () => {
+  const base = {
+    plantsEnabled: true,
+    mothballed: false,
+    activeFraction: 1,
+    demandThrottleFactor: 0.2,
+    demandFill: 1,
+    rampLambda: 1,
+  };
+
+  it("counts a sold-out player plant held far below its size as oversized", () => {
+    expect(idleCapacityRetirement({ ...base, priorStreak: 0, playerStructural: true })).toEqual({
+      streak: 1,
+      retireFraction: 0,
+    });
+  });
+
+  it("warns for the structural grace before retiring anything", () => {
+    for (let prior = 0; prior < IDLE_RETIRE_STRUCTURAL_GRACE_TURNS; prior += 1) {
+      expect(
+        idleCapacityRetirement({ ...base, priorStreak: prior, playerStructural: true })
+          .retireFraction
+      ).toBe(0);
+    }
+  });
+
+  it("then retires gently toward its run with structural headroom", () => {
+    const out = idleCapacityRetirement({
+      ...base,
+      priorStreak: IDLE_RETIRE_STRUCTURAL_GRACE_TURNS,
+      playerStructural: true,
+    });
+    const excess = 1 - 0.2 * (1 + IDLE_RETIRE_STRUCTURAL_HEADROOM);
+    expect(out.retireFraction).toBeCloseTo(IDLE_RETIRE_RATE * excess, 10);
+  });
+
+  it("leaves parked and moderately throttled player plants alone", () => {
+    expect(
+      idleCapacityRetirement({
+        ...base,
+        activeFraction: 0.5,
+        priorStreak: 10,
+        playerStructural: true,
+      })
+    ).toEqual({ streak: 0, retireFraction: 0 });
+    expect(
+      idleCapacityRetirement({
+        ...base,
+        demandThrottleFactor: 0.7,
+        priorStreak: 10,
+        playerStructural: true,
+      })
+    ).toEqual({ streak: 0, retireFraction: 0 });
+  });
+
+  it("does nothing without the flag", () => {
+    expect(idleCapacityRetirement({ ...base, priorStreak: 10 })).toEqual({
+      streak: 0,
+      retireFraction: 0,
+    });
+  });
+});

@@ -592,6 +592,7 @@ export function processSector(
     nppRun: corp.ceoType === "npp",
     nppStructural:
       corp.ceoType === "npp" && lookups.engineSixCountries?.has(corp.countryId) === true,
+    playerStructural: corp.ceoType !== "npp" && !corp.countryOwnerId,
   });
   const retainedCapacityShare = 1 - idleRetirement.retireFraction;
   const persistedOwnedCapacity = plantsOwnedCapacity * retainedCapacityShare;

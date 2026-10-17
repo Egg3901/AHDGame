@@ -53,7 +53,15 @@
  * toward its run with IDLE_RETIRE_STRUCTURAL_HEADROOM of room to grow back.
  * On live turn 202, loss-making NPP sectors ran at 38-46% utilization under
  * the throttle while selling 92-100% of output, paying payroll and upkeep on
- * the idle rest. Player plants are unchanged.
+ * the idle rest.
+ *
+ * Player plants (owner, 2026-10-17) get the same structural case with the
+ * player settings: IDLE_RETIRE_STRUCTURAL_GRACE_TURNS of warning, then
+ * IDLE_RETIRE_RATE a turn of the capacity beyond the run plus
+ * IDLE_RETIRE_STRUCTURAL_HEADROOM. Without it a player plant the throttle holds
+ * at a tenth of its size "sells out" every turn and never shrinks: on live turn
+ * 260 player plants held 7.7M units beyond what their markets take, retiring at
+ * 0.2% a turn against 15.5% for AI plants.
  */
 
 /** Consecutive glutted turns a plant may run before any capacity retires. */
@@ -114,6 +122,11 @@ export interface IdleCapacityRetirementInput {
    */
   nppStructural?: boolean;
   /**
+   * Player-run corp (not state-owned): the structural case with the player
+   * grace and rate. The owner sees the countdown and can park capacity first.
+   */
+  playerStructural?: boolean;
+  /**
    * NPP-run corp: glutted plants use the shorter NPP grace and faster NPP rate.
    * Player and autopilot plants leave this unset.
    */
@@ -144,7 +157,7 @@ export function idleCapacityRetirement(
     fill < IDLE_RETIRE_GLUT_FILL;
   const structural =
     !glutted &&
-    input.nppStructural === true &&
+    (input.nppStructural === true || input.playerStructural === true) &&
     input.plantsEnabled &&
     !input.mothballed &&
     input.activeFraction >= 1 &&
