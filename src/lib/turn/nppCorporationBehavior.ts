@@ -122,8 +122,7 @@ import {
   cellUnmetDemandUnits,
   marketSaturationOf,
 } from "@/lib/turn/npp/rules/marketSaturation";
-import { SECTOR_SUPPLY, type CommodityType } from "@/lib/constants/commodities";
-import { getOperatingSectorType } from "@/lib/constants/sectorStrategies";
+import { getOperatingSectorType, getStrategy } from "@/lib/constants/sectorStrategies";
 import { isStateScopedCommodity } from "@/lib/market/rules/commodityMarketScope";
 import {
   resolveNppMarketEntryCredit,
@@ -295,15 +294,16 @@ export async function processNppCorporationDecisions(
   placementSignals.marketSaturationOf = (cell, excluding) =>
     marketSaturationOf(saturationIndex, cell, excluding);
   // Last turn's state and national books, already loaded as price docs.
-  placementSignals.unmetDemandUnitsOf = (cell) => {
-    const flows =
-      SECTOR_SUPPLY[
-        getOperatingSectorType(cell.sectorType, cell.industryModel, cell.mediaDiscriminator)
-      ] ?? [];
-    const supplyMix: Partial<Record<CommodityType, number>> = {};
-    for (const { commodity, rate } of flows) supplyMix[commodity] = rate;
+  placementSignals.unmetDemandUnitsOf = (cell, options) => {
+    // The mix the new plant would actually run: its founding strategy, else the
+    // sector default (getStrategy falls back to it).
+    const supplyMix = getStrategy(
+      getOperatingSectorType(cell.sectorType, cell.industryModel, cell.mediaDiscriminator),
+      options?.strategyId ?? ""
+    ).supply;
     return cellUnmetDemandUnits({
       supplyMix,
+      aggregate: options?.aggregate,
       gapFor: (commodity) => {
         const doc = priceByCommodity.get(commodity);
         if (!doc) return null;

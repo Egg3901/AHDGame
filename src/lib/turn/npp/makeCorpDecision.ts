@@ -67,7 +67,7 @@ import {
   resolveCapacityCohort,
 } from "@/lib/turn/npp/capacityDecisionTelemetry";
 import { glutStaggerEligible } from "@/lib/turn/npp/cohort";
-import { isMarketSaturated, NPP_FOUNDING_UNMET_SHARE } from "@/lib/turn/npp/rules/marketSaturation";
+import { foundingUnmetSizing, isMarketSaturated } from "@/lib/turn/npp/rules/marketSaturation";
 import type {
   NppCorpDecision,
   NppCorpDecisionContext,
@@ -936,19 +936,23 @@ export function makeNppCorpDecision(
       // construction). Cash and a per-mine facility ceiling bound it instead;
       // the state deposit haircut caps real output and the reinvestment growth
       // leg deepens it over turns. Demand-side sectors keep the headroom cap.
-      // Demand-side entrants are also capped by what the cell still wants:
-      // the unowned pool's headroom overstates it (rules/marketSaturation).
-      const unmetUnits = isExtraction
-        ? null
-        : (placementSignals?.unmetDemandUnitsOf?.(foundingTarget) ?? null);
+      // Demand-side entrants are also capped by what the cell still wants, for
+      // the mix they would run; the unowned pool's headroom overstates it. A
+      // critical-shortage entry reads its deepest leg so a balanced co-product
+      // cannot dilute the shortage (rules/marketSaturation).
+      const unmetSizing = foundingUnmetSizing({
+        unmetUnits: isExtraction
+          ? null
+          : (placementSignals?.unmetDemandUnitsOf?.(foundingTarget, {
+              strategyId: foundingStrategyId,
+              aggregate: exceptionalShortageEntry ? "max" : "mean",
+            }) ?? null),
+        starterUnits,
+      });
       const sizeCap = isExtraction
         ? starterUnits * NPP_EXTRACTION_FOUNDING_MAX_FACILITIES
-        : Math.min(
-            headroomUnits * NPP_FOUNDING_HEADROOM_SHARE,
-            unmetUnits == null ? Number.POSITIVE_INFINITY : unmetUnits * NPP_FOUNDING_UNMET_SHARE
-          );
-      // A cell whose unmet demand cannot fill one facility gets no new plant.
-      const unmetBlocksEntry = unmetUnits != null && unmetUnits < starterUnits;
+        : Math.min(headroomUnits * NPP_FOUNDING_HEADROOM_SHARE, unmetSizing.sizeCap);
+      const unmetBlocksEntry = unmetSizing.blocksEntry;
       const buildUnits =
         starterUnits > 0
           ? Math.max(

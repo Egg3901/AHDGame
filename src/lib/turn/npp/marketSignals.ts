@@ -230,13 +230,16 @@ export interface PlacementSignals {
    * Unmet demand in a cell, in sector output units (rules/marketSaturation
    * cellUnmetDemandUnits); null when unreadable. Caps an AI founding's size.
    */
-  unmetDemandUnitsOf?: (cell: {
-    stateId: string;
-    countryId: string;
-    sectorType: string;
-    industryModel?: string | null;
-    mediaDiscriminator?: string | null;
-  }) => number | null;
+  unmetDemandUnitsOf?: (
+    cell: {
+      stateId: string;
+      countryId: string;
+      sectorType: string;
+      industryModel?: string | null;
+      mediaDiscriminator?: string | null;
+    },
+    options?: { strategyId?: string | null; aggregate?: "mean" | "max" }
+  ) => number | null;
 }
 
 export function buildActiveMarketBuckets(sectors: readonly CorporateSector[]): Set<string> {

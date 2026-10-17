@@ -7,6 +7,7 @@ import {
   NPP_FLOOR_MOTHBALL_TURNS,
   NPP_SATURATED_MARKET_THROTTLE,
   cellUnmetDemandUnits,
+  foundingUnmetSizing,
   NPP_FOUNDING_UNMET_SHARE,
 } from "./marketSaturation";
 import { NPP_GROWTH_MIN_THROTTLE } from "../nppCorporationTuning";
@@ -133,5 +134,32 @@ describe("cellUnmetDemandUnits", () => {
 
   it("founding share leaves room for a second entrant", () => {
     expect(NPP_FOUNDING_UNMET_SHARE).toBeLessThan(1);
+  });
+});
+
+describe("cellUnmetDemandUnits max aggregate", () => {
+  it("reads the deepest leg so a balanced co-product cannot dilute it", () => {
+    const gapFor = (c: string) => (c === "freight" ? 1000 : 0);
+    const mix = { freight: 1, consulting_services: 1 };
+    const mean = cellUnmetDemandUnits({ supplyMix: mix, gapFor })!;
+    const max = cellUnmetDemandUnits({ supplyMix: mix, gapFor, aggregate: "max" })!;
+    expect(max).toBeGreaterThan(mean);
+  });
+});
+
+describe("foundingUnmetSizing", () => {
+  it("caps at half the gap and enters only when that covers a starter", () => {
+    expect(foundingUnmetSizing({ unmetUnits: 300, starterUnits: 100 })).toEqual({
+      sizeCap: 300 * NPP_FOUNDING_UNMET_SHARE,
+      blocksEntry: false,
+    });
+    // 150 unmet: half is 75, under one 100-unit starter, so no entry (no floor-up).
+    expect(foundingUnmetSizing({ unmetUnits: 150, starterUnits: 100 }).blocksEntry).toBe(true);
+  });
+  it("never caps or blocks without a reading", () => {
+    expect(foundingUnmetSizing({ unmetUnits: null, starterUnits: 100 })).toEqual({
+      sizeCap: Number.POSITIVE_INFINITY,
+      blocksEntry: false,
+    });
   });
 });
