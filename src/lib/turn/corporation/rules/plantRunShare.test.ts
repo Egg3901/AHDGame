@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { plantCrewShare, plantRunShare } from "./plantRunShare";
+import { plantCrewMaxDropPerTurn, plantCrewShare, plantRunShare } from "./plantRunShare";
 
 describe("plantRunShare", () => {
   it("is the demand throttle, capped at 1", () => {
@@ -62,5 +62,45 @@ describe("plantCrewShare", () => {
         maxDropPerTurn: 0.02,
       })
     ).toBeCloseTo(0.98, 10);
+  });
+});
+
+describe("plantCrewMaxDropPerTurn", () => {
+  const args = {
+    demandThrottleFactor: 0.1,
+    priorDemandIdleTurns: 6,
+    graceTurns: 6,
+    normalMaxDrop: 0.02,
+    sustainedMaxDrop: 0.08,
+    sustainedThrottle: 0.25,
+  };
+
+  it("sheds faster only at a sustained deep throttle", () => {
+    expect(plantCrewMaxDropPerTurn(args)).toBe(0.08);
+  });
+
+  it("keeps the gradual cap before the grace has run", () => {
+    expect(plantCrewMaxDropPerTurn({ ...args, priorDemandIdleTurns: 5 })).toBe(0.02);
+    expect(plantCrewMaxDropPerTurn({ ...args, priorDemandIdleTurns: null })).toBe(0.02);
+  });
+
+  it("keeps the gradual cap for a moderately throttled plant", () => {
+    expect(plantCrewMaxDropPerTurn({ ...args, demandThrottleFactor: 0.4 })).toBe(0.02);
+  });
+
+  it("lands a floor-stuck crew in about ten turns instead of forty", () => {
+    let crew = 1;
+    let turns = 0;
+    while (crew > 0.25 && turns < 100) {
+      crew = plantCrewShare({
+        demandThrottleFactor: 0.1,
+        ramp: 1,
+        floor: 0.25,
+        previous: crew,
+        maxDropPerTurn: plantCrewMaxDropPerTurn(args),
+      });
+      turns += 1;
+    }
+    expect(turns).toBe(10);
   });
 });

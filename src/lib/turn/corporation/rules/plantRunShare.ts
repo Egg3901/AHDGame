@@ -52,3 +52,29 @@ export function plantCrewShare(args: {
   if (step === undefined || !Number.isFinite(step) || step <= 0) return target;
   return target >= previous ? target : Math.max(target, previous - step);
 }
+
+/**
+ * Largest crew-share drop allowed this turn. The normal gradual-layoff cap,
+ * except for a plant the throttle has held near its floor for at least
+ * `graceTurns` glutted turns, which may shed faster (see
+ * PLANT_CREW_SUSTAINED_GLUT_MAX_DROP_PER_TURN for the sizing and why it does
+ * not reopen the economy-wide layoff the normal cap prevents).
+ */
+export function plantCrewMaxDropPerTurn(args: {
+  demandThrottleFactor: number;
+  /** Persisted glutted-turn streak before this turn (`demandIdleTurns`). */
+  priorDemandIdleTurns: number | null | undefined;
+  graceTurns: number;
+  normalMaxDrop: number;
+  sustainedMaxDrop: number;
+  sustainedThrottle: number;
+}): number {
+  const streak = args.priorDemandIdleTurns;
+  const sustained =
+    Number.isFinite(args.demandThrottleFactor) &&
+    args.demandThrottleFactor < args.sustainedThrottle &&
+    typeof streak === "number" &&
+    Number.isFinite(streak) &&
+    streak >= args.graceTurns;
+  return sustained ? Math.max(args.normalMaxDrop, args.sustainedMaxDrop) : args.normalMaxDrop;
+}

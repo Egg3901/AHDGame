@@ -67,6 +67,7 @@ import {
   resolveCapacityCohort,
 } from "@/lib/turn/npp/capacityDecisionTelemetry";
 import { glutStaggerEligible } from "@/lib/turn/npp/cohort";
+import { isMarketSaturated } from "@/lib/turn/npp/rules/marketSaturation";
 import type {
   NppCorpDecision,
   NppCorpDecisionContext,
@@ -623,6 +624,7 @@ export function makeNppCorpDecision(
     sectorProfits,
     divestedSectorIds,
     priceRatioOf,
+    marketSaturationOf: placementSignals?.marketSaturationOf,
   });
   sectorUpdates.push(...mothballUpdates);
   const newlyMothballedIds = new Set(
@@ -1409,7 +1411,11 @@ export function makeNppCorpDecision(
         // Utilization is measured on throttled output. In a critical shortage
         // the throttle, not demand, is what holds the run rate down, so the
         // gate would lock out exactly the capacity the market is missing.
-        (utilization >= NPP_GROWTH_MIN_UTILIZATION || criticalShortage) &&
+        // A price-read shortage cannot override a cell whose incumbents the
+        // throttle already holds deep under capacity (rules/marketSaturation).
+        (utilization >= NPP_GROWTH_MIN_UTILIZATION ||
+          (criticalShortage &&
+            !isMarketSaturated(placementSignals?.marketSaturationOf?.(sector)))) &&
         (sector.sectorType !== "extraction" || extractionHeadroom > 0);
       // Existing plants pay the same dominance-tolled list price as players.
       const growthShare =
