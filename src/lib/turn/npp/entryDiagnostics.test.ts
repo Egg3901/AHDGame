@@ -131,6 +131,19 @@ describe("initialNppMarketEntryReason", () => {
     ).toBe("state_controlled");
   });
 
+  it("reports glutted_market when saturated cells are the only block", () => {
+    expect(
+      initialNppMarketEntryReason({
+        ...open,
+        hasCandidate: false,
+        candidateExclusions: {
+          ...blankNppCandidateExclusions(),
+          saturatedExcluded: 4,
+        },
+      })
+    ).toBe("glutted_market");
+  });
+
   it("keeps no_enterable_market when other filters also bound", () => {
     expect(
       initialNppMarketEntryReason({

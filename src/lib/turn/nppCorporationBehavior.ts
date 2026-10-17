@@ -118,6 +118,10 @@ import {
 import type { TechUnlockLedgerInput } from "@/lib/corporations/techTree/techUnlockLedger";
 import { loadNppPlacementSignals } from "@/lib/turn/npp/fragileMarketSupply";
 import {
+  buildMarketSaturationIndex,
+  marketSaturationOf,
+} from "@/lib/turn/npp/rules/marketSaturation";
+import {
   resolveNppMarketEntryCredit,
   type NppMarketEntryDiagnostic,
 } from "@/lib/turn/npp/entryDiagnostics";
@@ -274,6 +278,8 @@ export async function processNppCorporationDecisions(
             nationalizedAtTurn: 1,
             mothballed: 1,
             capitalStock: 1,
+            // Physical saturation per cell: see rules/marketSaturation.
+            demandThrottleFactor: 1,
           },
         }
       )
@@ -281,6 +287,9 @@ export async function processNppCorporationDecisions(
   ]);
   const stateControlled = computeStateControlledBuckets(globalSectors, nationalCorpIds);
   placementSignals.activeMarketBuckets = buildActiveMarketBuckets(globalSectors);
+  const saturationIndex = buildMarketSaturationIndex(globalSectors);
+  placementSignals.marketSaturationOf = (cell, excluding) =>
+    marketSaturationOf(saturationIndex, cell, excluding);
 
   // Rival index for capacity-decision telemetry, off the already-loaded
   // `globalSectors` snapshot: no turn-path reads. See capacityDecisionTelemetry.

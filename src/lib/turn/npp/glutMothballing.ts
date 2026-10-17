@@ -11,7 +11,12 @@ import {
   COST_MOTHBALL_LOSS_TURNS,
 } from "@/lib/turn/npp/nppCorporationTuning";
 import { glutStaggerEligible } from "@/lib/turn/npp/cohort";
-import { sectorShortageScore, type CommodityPriceRatioFn } from "@/lib/turn/npp/marketSignals";
+import {
+  sectorShortageScore,
+  type CommodityPriceRatioFn,
+  type PlacementSignals,
+} from "@/lib/turn/npp/marketSignals";
+import { isMarketSaturated, isStuckAtThrottleFloor } from "@/lib/turn/npp/rules/marketSaturation";
 import { chooseCostMothballSector } from "@/lib/turn/npp/costMothball";
 import type { SectorProfitInfo } from "@/lib/turn/npp/sectorProfitability";
 import type { NppCorpDecision } from "./corpDecisionTypes";
@@ -25,6 +30,8 @@ export function buildNppGlutMothballUpdates(args: {
   sectorProfits: SectorProfitInfo[];
   divestedSectorIds: ObjectId[];
   priceRatioOf: CommodityPriceRatioFn;
+  /** Physical cell saturation (PlacementSignals.marketSaturationOf). */
+  marketSaturationOf?: PlacementSignals["marketSaturationOf"];
 }): NppCorpDecision["sectorUpdates"] {
   const {
     corporation: corp,
@@ -34,6 +41,7 @@ export function buildNppGlutMothballUpdates(args: {
     sectorProfits,
     divestedSectorIds,
     priceRatioOf,
+    marketSaturationOf,
   } = args;
   const sectorUpdates: NppCorpDecision["sectorUpdates"] = [];
 
@@ -80,6 +88,11 @@ export function buildNppGlutMothballUpdates(args: {
         sp.sector.countryId ?? corp.countryId,
         priceRatioOf
       );
+      // A high price is no reason to reopen into a cell whose running plants
+      // the throttle holds deep under capacity: that restart is the next
+      // floor-stuck plant. Judged on the rivals, not on this plant's own
+      // cold capacity.
+      if (isMarketSaturated(marketSaturationOf?.(sp.sector, sp.sector))) continue;
       if (ratio >= GLUT_RESTART_PRICE_RATIO) {
         sectorUpdates.push({
           filter: { _id: sp.sector._id },
@@ -111,6 +124,27 @@ export function buildNppGlutMothballUpdates(args: {
         );
         if (ratio > GLUT_MOTHBALL_PRICE_RATIO) continue;
         if (worst == null || fill < worst.fill) worst = { sp, fill };
+      }
+      // Floor-stuck plants (rules/marketSaturation): the throttle has held the
+      // plant under a quarter of its capacity for a sustained stretch. Its fill
+      // looks fine because the throttle already cut output to what sells, and
+      // the price ratio reads shortage world-wide, so neither gate above sees
+      // it. Fill-based sheds keep priority; this takes the deepest-throttled.
+      if (worst == null) {
+        let floorStuck: SectorProfitInfo | null = null;
+        for (const sp of sectorProfits) {
+          if (sp.sector.mothballed === true) continue;
+          if (divestedSectorIds.includes(sp.sector._id)) continue;
+          if (sp.sector.sectorType === "extraction") continue;
+          if (!isStuckAtThrottleFloor(sp.sector)) continue;
+          if (
+            floorStuck == null ||
+            (sp.sector.demandThrottleFactor ?? 1) < (floorStuck.sector.demandThrottleFactor ?? 1)
+          ) {
+            floorStuck = sp;
+          }
+        }
+        if (floorStuck) worst = { sp: floorStuck, fill: floorStuck.sector.soldFraction ?? 0 };
       }
       if (worst) {
         sectorUpdates.push({
