@@ -355,3 +355,47 @@ describe("empty-market coverage treatment", () => {
     });
   });
 });
+
+describe("physical saturation gate (live turn 250 incident)", () => {
+  it("skips a cell whose incumbents the throttle holds at the floor, whatever the price", () => {
+    const pool = new Map([
+      ["US", [us("logistics", "TN", 10_000_000), us("logistics", "KY", 100_000)]],
+    ]);
+    const stats = {};
+    const pick = findBestUnownedSector(
+      "US",
+      "TN",
+      "logistics",
+      null,
+      new Set(),
+      pool,
+      new Set(),
+      ratios({}),
+      false,
+      1,
+      { marketSaturationOf: (cell) => (cell.stateId === "TN" ? 0.1 : null) },
+      undefined,
+      stats
+    );
+    expect(pick?.stateId).toBe("KY");
+    expect(stats).toMatchObject({ saturatedExcluded: 1 });
+  });
+
+  it("finds nothing when every cell is saturated", () => {
+    const pool = new Map([["US", [us("logistics", "TN")]]]);
+    const pick = findBestUnownedSector(
+      "US",
+      "TN",
+      "logistics",
+      null,
+      new Set(),
+      pool,
+      new Set(),
+      ratios({}),
+      false,
+      1,
+      { marketSaturationOf: () => 0.2 }
+    );
+    expect(pick).toBeNull();
+  });
+});

@@ -70,11 +70,13 @@ import {
 } from "@/lib/corporations/rules/marketBoost";
 import { isStateScopedCommodity } from "@/lib/market/commodityMarketScope";
 import { withLatentDemand } from "./demandThrottle";
-import { idleCapacityRetirement } from "./rules/idleCapacityRetirement";
-import { plantCrewShare } from "./rules/plantRunShare";
+import { idleCapacityRetirement, IDLE_RETIRE_GRACE_TURNS } from "./rules/idleCapacityRetirement";
+import { plantCrewMaxDropPerTurn, plantCrewShare } from "./rules/plantRunShare";
 import {
   PLANT_CREW_FLOOR_SHARE,
   PLANT_CREW_MAX_DROP_PER_TURN,
+  PLANT_CREW_SUSTAINED_GLUT_MAX_DROP_PER_TURN,
+  PLANT_CREW_SUSTAINED_GLUT_THROTTLE,
 } from "@/lib/constants/capacityEconomy";
 import { seedPlantLedger } from "@/lib/corporations/plantLedger";
 import {
@@ -640,7 +642,14 @@ export function processSector(
         ramp: plantsRampLambda,
         floor: PLANT_CREW_FLOOR_SHARE,
         previous: sector.plantCrewShare,
-        maxDropPerTurn: PLANT_CREW_MAX_DROP_PER_TURN,
+        maxDropPerTurn: plantCrewMaxDropPerTurn({
+          demandThrottleFactor,
+          priorDemandIdleTurns: sector.demandIdleTurns,
+          graceTurns: IDLE_RETIRE_GRACE_TURNS,
+          normalMaxDrop: PLANT_CREW_MAX_DROP_PER_TURN,
+          sustainedMaxDrop: PLANT_CREW_SUSTAINED_GLUT_MAX_DROP_PER_TURN,
+          sustainedThrottle: PLANT_CREW_SUSTAINED_GLUT_THROTTLE,
+        }),
       })
     : 1;
   const { desiredWorkers, workers: computedWorkers } = resolveSectorHeadcount({
