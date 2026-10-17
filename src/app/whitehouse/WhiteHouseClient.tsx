@@ -28,6 +28,7 @@ import { usePresidentialCabinet } from "@/app/country/[code]/executive/cabinet/u
 import { ExecutiveActivitySection } from "@/app/country/[code]/executive/components/ExecutiveActivitySection";
 import { approvalApiUrl, approvalUrl, scotusUrl } from "@/lib/urls";
 import { ApprovalTooltip } from "@/components/ApprovalTooltip";
+import { ApprovalChart } from "@/components/charts/ApprovalChart";
 import type { ActiveModifier } from "@/lib/utils/approvalModifiers";
 import { useSearchParams } from "next/navigation";
 import { useGameClock } from "@/contexts/useGameClock";
@@ -110,6 +111,9 @@ export default function WhiteHouseClient({ countryId = "US" }: { countryId?: Cou
   const conflictsEnabled = useConflictsEnabled();
   const clock = useGameClock();
   const [approval, setApproval] = useState<number | null>(null);
+  const [approvalHistory, setApprovalHistory] = useState<
+    { turn: number; approval: number; net: number }[]
+  >([]);
   const [approvalModifiers, setApprovalModifiers] = useState<ActiveModifier[]>([]);
   const [vpNominateModal, setVpNominateModal] = useState(false);
   const [vpNomineeCharId, setVpNomineeCharId] = useState("");
@@ -118,15 +122,17 @@ export default function WhiteHouseClient({ countryId = "US" }: { countryId?: Cou
 
   useEffect(() => {
     let cancelled = false;
-    fetchJson<{ governmentApproval?: number; modifiers?: ActiveModifier[] }>(
-      approvalApiUrl(countryId),
-      { feature: "whitehouse-approval" }
-    )
+    fetchJson<{
+      governmentApproval?: number;
+      modifiers?: ActiveModifier[];
+      history?: { turn: number; approval: number; net: number }[];
+    }>(approvalApiUrl(countryId), { feature: "whitehouse-approval" })
       .catch(() => null)
       .then((json) => {
         if (cancelled) return;
         if (typeof json?.governmentApproval === "number") setApproval(json.governmentApproval);
         if (Array.isArray(json?.modifiers)) setApprovalModifiers(json.modifiers);
+        if (Array.isArray(json?.history)) setApprovalHistory(json.history);
       });
     return () => {
       cancelled = true;
@@ -601,6 +607,18 @@ export default function WhiteHouseClient({ countryId = "US" }: { countryId?: Cou
 
         {activeTab === "overview" && (
           <>
+            <section className="rounded-xl border border-card-border bg-card p-4 sm:p-5">
+              <div className="mb-3">
+                <h2 className="text-sm font-semibold text-foreground">
+                  Government approval history
+                </h2>
+                <p className="mt-1 text-xs text-muted">
+                  National approval snapshots by turn. This is a public approval measure, not the
+                  parliamentary government-confidence gauge.
+                </p>
+              </div>
+              <ApprovalChart history={approvalHistory} />
+            </section>
             {/* Instruments, then the whole administration as one table, then
                 the desk and the acts ledger. Tables, not cards: every office is
                 one row with its holder, party, status and the President's

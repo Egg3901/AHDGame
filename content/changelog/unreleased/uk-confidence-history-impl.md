@@ -1,10 +1,10 @@
 ---
 date: 2026-10-16
-title: Carry parliamentary government confidence through government changes and add history
+title: Preserve government confidence and show history across government types
 summary: >-
-  Government confidence now carries forward with a small formation boost rather
-  than resetting to full. A new history chart shows recorded changes without
-  inventing values from before the update.
+  Parliamentary government confidence now carries forward with a small formation
+  boost rather than resetting to full. Executive pages also show recorded
+  government-confidence or approval history using each system's existing measure.
 # Free text. What the change was about: economy, elections, balance, corporations.
 tags: [government confidence, elections, balance]
 # How big this change is, which sets how it is grouped in the release post.
@@ -22,3 +22,6 @@ areas: [backend, frontend]
 - Parliamentary executive pages now show recorded turn and event history.
   Older values were not stored and are not reconstructed; history is bounded
   to 500 points.
+- Presidential executive pages now chart the existing national government
+  approval snapshots. One-party states continue to show ruling-party confidence
+  history, which is distinct from parliamentary government confidence.
