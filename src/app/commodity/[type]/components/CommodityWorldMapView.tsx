@@ -63,7 +63,13 @@ interface CommodityWorldMapViewProps {
    */
   reachableBooks?: Record<
     string,
-    { supply: number; demand: number; blockedSupply: number; untradedSupply: number }
+    {
+      supply: number;
+      demand: number;
+      blockedSupply: number;
+      untradedSupply: number;
+      imports?: number;
+    }
   >;
   stateCountryMap: Record<string, string>;
   capacityByState?: Record<string, number>;
@@ -980,6 +986,7 @@ export default function CommodityWorldMapView({
             commodityLabel={commodityLabel}
             unit={unit}
             data={selectedCountry.data}
+            imports={reachableBooks?.[selectedCountry.countryId]?.imports ?? null}
             mode={mode}
             onModeChange={onModeChange}
             forexEnabled={forexEnabled}

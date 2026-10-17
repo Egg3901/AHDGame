@@ -4,6 +4,7 @@ import { CountryFlag } from "@/components/CountryFlag";
 import type { CountryId } from "@/lib/constants/countries";
 import { getStateDisplayName } from "@/lib/commodity-map";
 import { formatUnits } from "../lib/helpers";
+import { postImportBalance } from "@/lib/trade/postImportGap";
 
 /** Price/base at or above this reads as a local shortage. */
 const SHORT_RATIO = 1.25;
@@ -19,6 +20,8 @@ interface DislocationPanelProps {
   basePrice: number;
   /** Per-state extraction ceiling; only present for extractable resources. */
   capacityByState?: Record<string, number>;
+  /** Imports attributed to each state; empty or absent when imports are unknown. */
+  stateImports?: Record<string, number>;
   unit: string;
 }
 
@@ -43,6 +46,7 @@ export default function DislocationPanel({
   stateCountryMap,
   basePrice,
   capacityByState,
+  stateImports,
   unit,
 }: DislocationPanelProps) {
   if (!(basePrice > 0)) return null;
@@ -74,6 +78,18 @@ export default function DislocationPanel({
 
   if (short.length === 0 && stranded.length === 0 && room.length === 0) return null;
 
+  // A premium row also says what is left of the physical gap once imports reach
+  // the state, so an import-covered state is not read as an open shortage.
+  const shortDetail = (id: string): string => {
+    const imports = stateImports?.[id];
+    if (imports === undefined) return "";
+    const after = postImportBalance(stateSupply[id] ?? 0, stateDemand[id] ?? 0, imports);
+    if (after.remainingShortfall > 0) {
+      return `, ${formatUnits(after.remainingShortfall, unit)} short after imports`;
+    }
+    return after.coveredByImports ? ", gap covered by imports" : "";
+  };
+
   const stateRow = (id: string, right: string) => {
     const countryId = stateCountryMap[id] as CountryId;
     return (
@@ -99,7 +115,9 @@ export default function DislocationPanel({
           <div>
             <p className="text-xs font-medium text-foreground">Short: paying a premium</p>
             <ul className="mt-1 divide-y divide-card-border/60">
-              {short.map((s) => stateRow(s.id, `${s.ratio.toFixed(2)}x base price`))}
+              {short.map((s) =>
+                stateRow(s.id, `${s.ratio.toFixed(2)}x base price${shortDetail(s.id)}`)
+              )}
             </ul>
           </div>
         )}
