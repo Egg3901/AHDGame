@@ -1,5 +1,10 @@
 "use client";
 
+import {
+  commodityDominanceMultiplier,
+  dominanceMultiplierForOrder,
+  worstTollRatioForOrder,
+} from "@/lib/corporations/rules/commodityDominanceRamp";
 import { useTranslations } from "next-intl";
 import InvestmentForecast from "./InvestmentForecast";
 import { investmentForecastInput } from "../lib/investment";
@@ -127,7 +132,35 @@ export default function BuildCapacityDialog({
     // fee (`corpToSectorCountrySpread`). Quoting only `perUnitAnchor × units`
     // under-quoted every foreign build, and the affordability gate let the
     // player submit an order the server then refused for insufficient capital.
-    const construction = q.perUnitAnchor * safeUnits;
+    // The commodity toll depends on the order size (it reads what the firm
+    // could make AFTER the build), so the per-unit quote is re-priced here with
+    // the same ramp the server uses rather than scaled linearly.
+    const orderDominance = q.commodityToll
+      ? dominanceMultiplierForOrder({
+          localMultiplier: q.localDominanceMultiplier ?? 1,
+          models: q.commodityToll.models,
+          units: safeUnits,
+        })
+      : q.dominanceMultiplier;
+    const construction =
+      q.perUnitAnchor *
+      safeUnits *
+      (q.dominanceMultiplier > 0 ? orderDominance / q.dominanceMultiplier : 1);
+    const tollRatio = q.commodityToll
+      ? worstTollRatioForOrder(q.commodityToll.models, safeUnits)
+      : 0;
+    const tollModel = q.commodityToll
+      ? q.commodityToll.models.reduce<(typeof q.commodityToll.models)[number] | null>(
+          (worst, m) => {
+            const r = (m.potentialUnits + m.yieldPerUnit * safeUnits) / m.demandUnits;
+            const w = worst
+              ? (worst.potentialUnits + worst.yieldPerUnit * safeUnits) / worst.demandUnits
+              : -1;
+            return r > w ? m : worst;
+          },
+          null
+        )
+      : null;
     const transferFee = construction * (q.fxSpreadRate ?? 0);
     const total = construction + transferFee;
     const workersNeeded = plants.laborIntensity * safeUnits;
@@ -139,6 +172,9 @@ export default function BuildCapacityDialog({
       construction,
       transferFee,
       total,
+      orderDominance,
+      tollRatio,
+      tollLabel: tollModel?.label ?? null,
       workersNeeded,
       overHeadroom,
       affordable: total <= q.corpCapitalAnchor,
@@ -480,10 +516,18 @@ export default function BuildCapacityDialog({
               />
               <CostLeg
                 label="Your market share"
-                value={fmtMult(q.dominanceMultiplier)}
+                value={fmtMult(q.localDominanceMultiplier ?? q.dominanceMultiplier)}
                 help="Growing a sector you already dominate costs more. Sites, staff and permits get harder to come by."
-                muted={q.dominanceMultiplier === 1}
+                muted={(q.localDominanceMultiplier ?? q.dominanceMultiplier) === 1}
               />
+              {q.commodityToll && (
+                <CostLeg
+                  label="Share of world demand"
+                  value={fmtMult(commodityDominanceMultiplier(preview.tollRatio))}
+                  help={`With this order your companies could make about ${Math.round(preview.tollRatio * 100)}% of everything the world wants of ${preview.tollLabel ?? "this good"}. Building past half of world demand costs sharply more, and far more again past 100%.`}
+                  muted={commodityDominanceMultiplier(preview.tollRatio) === 1}
+                />
+              )}
               <CostLeg
                 label="Borrowing rates"
                 value={fmtMult(q.rateMultiplier)}
