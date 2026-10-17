@@ -344,7 +344,8 @@ export function hasEnterableHeadroom(
       undefined,
       frontier,
       undefined,
-      corp.industryModel
+      corp.industryModel,
+      true
     ) !== null
   );
 }
@@ -388,7 +389,8 @@ export function findBestUnownedSector(
   signals?: PlacementSignals,
   preferredStateIds?: ReadonlySet<string>,
   stats?: CandidateExclusionStats,
-  primaryIndustryModel?: string | null
+  primaryIndustryModel?: string | null,
+  openMarketFallback: boolean = false
 ): UnownedSector | null {
   const countryUnowned = unownedByCountry.get(countryId);
   if (!countryUnowned || countryUnowned.length === 0) return null;
@@ -477,30 +479,34 @@ export function findBestUnownedSector(
       : [];
   const rankedCandidates = frontierCandidates.length > 0 ? frontierCandidates : candidates;
   const activeMarketBuckets = signals?.activeMarketBuckets;
-  const uncoveredCandidates =
-    signals?.preferEmptyMarkets && activeMarketBuckets
-      ? rankedCandidates.filter(
-          (candidate) =>
-            !activeMarketBuckets.has(
-              bucketKey(
-                candidate.stateId,
-                candidate.sectorType,
-                candidate.industryModel,
-                candidate.mediaDiscriminator
-              )
-            ) &&
-            // Extraction is deposit-gated (candidacy above), not unit-sized, so
-            // it bypasses the demand-headroom facility-size floor.
-            (candidate.sectorType === "extraction" ||
-              !plantsEnabled ||
-              sizeOf(candidate) >=
-                foundingStarterUnits(
-                  candidate.sectorType as CorporationType,
-                  candidate.industryModel as ManufacturingIndustryModel | null | undefined
-                ))
-        )
-      : [];
-  const entryCandidates = uncoveredCandidates.length > 0 ? uncoveredCandidates : rankedCandidates;
+  // Coverage treatment: within a list, prefer markets no active firm serves yet.
+  // Applied per type tier below, so an uncovered market of the wrong type never
+  // hides an enterable market of the corp's own type.
+  const preferUncovered = (list: UnownedSector[]): UnownedSector[] => {
+    if (!signals?.preferEmptyMarkets || !activeMarketBuckets) return list;
+    const uncovered = list.filter(
+      (candidate) =>
+        !activeMarketBuckets.has(
+          bucketKey(
+            candidate.stateId,
+            candidate.sectorType,
+            candidate.industryModel,
+            candidate.mediaDiscriminator
+          )
+        ) &&
+        // Extraction is deposit-gated (candidacy above), not unit-sized, so
+        // it bypasses the demand-headroom facility-size floor.
+        (candidate.sectorType === "extraction" ||
+          !plantsEnabled ||
+          sizeOf(candidate) >=
+            foundingStarterUnits(
+              candidate.sectorType as CorporationType,
+              candidate.industryModel as ManufacturingIndustryModel | null | undefined
+            ))
+    );
+    return uncovered.length > 0 ? uncovered : list;
+  };
+  const entryCandidates = preferUncovered(rankedCandidates);
 
   // Shortage at the candidate's own state when a state price exists, country
   // otherwise. This is what routes a founding to the state that is actually
@@ -594,23 +600,26 @@ export function findBestUnownedSector(
   if (critical.length > 0) return critical.sort((a, b) => score(b) - score(a))[0];
 
   // Tier 1: primary type match
-  const primaryMatch = entryCandidates.filter(
+  const primaryMatch = rankedCandidates.filter(
     (c) =>
       c.sectorType === primaryType && (c.industryModel ?? null) === (primaryIndustryModel ?? null)
   );
-  if (primaryMatch.length > 0) return best(primaryMatch);
+  if (primaryMatch.length > 0) return best(preferUncovered(primaryMatch));
 
   // Tier 2: secondary type match
   if (secondaryType) {
-    const secondaryMatch = entryCandidates.filter((c) => c.sectorType === secondaryType);
-    if (secondaryMatch.length > 0) return best(secondaryMatch);
+    const secondaryMatch = rankedCandidates.filter((c) => c.sectorType === secondaryType);
+    if (secondaryMatch.length > 0) return best(preferUncovered(secondaryMatch));
   }
 
-  // No open-market tier: a sector outside the corp's primary or secondary type
-  // carries SECTOR_TYPE_MISMATCH_PENALTY (-15pp) for as long as it runs, so
-  // ordinary diversification founded structural losers. Only the critical
-  // tier above crosses types; otherwise the corp grows what it has.
-  return null;
+  // No open-market tier for founding: a sector outside the corp's primary or
+  // secondary type carries SECTOR_TYPE_MISMATCH_PENALTY (-15pp) for as long as
+  // it runs, so ordinary diversification founded structural losers. Only the
+  // critical tier above crosses types; otherwise the corp grows what it has.
+  // `openMarketFallback` keeps the old answer for callers asking whether ANY
+  // market is open (the strategy's room-to-invest signal), so a healthy corp
+  // is not reclassified as boxed in and denied growth capex on its own plants.
+  return openMarketFallback ? best(entryCandidates) : null;
 }
 
 /**

@@ -431,3 +431,47 @@ describe("founding type discipline (live turn 262)", () => {
     expect(find(pool, { unmetDemandUnitsOf: () => 500 })?.sectorType).toBe("healthcare");
   });
 });
+
+describe("type discipline with the coverage treatment", () => {
+  it("an uncovered wrong-type market never hides a covered in-type one", () => {
+    const pool = new Map([
+      ["US", [us("manufacturing", "TX", 100_000), us("media", "AZ", 100_000)]],
+    ]);
+    const pick = findBestUnownedSector(
+      "US",
+      "TX",
+      "manufacturing",
+      null,
+      new Set(),
+      pool,
+      new Set(),
+      ratios({}),
+      false,
+      1,
+      { preferEmptyMarkets: true, activeMarketBuckets: new Set(["TX:manufacturing"]) }
+    );
+    expect(pick?.sectorType).toBe("manufacturing");
+  });
+
+  it("the room-to-invest check still sees open markets of any type", () => {
+    const pool = new Map([["US", [us("media", "AZ", 100_000)]]]);
+    const args = [
+      "US",
+      "TX",
+      "manufacturing",
+      null,
+      new Set<string>(),
+      pool,
+      new Set<string>(),
+      ratios({}),
+      false,
+      1,
+      undefined,
+      undefined,
+      undefined,
+      null,
+    ] as const;
+    expect(findBestUnownedSector(...args)).toBeNull();
+    expect(findBestUnownedSector(...args, true)?.sectorType).toBe("media");
+  });
+});
