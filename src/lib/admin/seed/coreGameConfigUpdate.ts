@@ -55,6 +55,8 @@ export const STALE_PER_WORLD_GAME_CONFIG_UNSET: Readonly<Record<string, "">> = O
   stateGdpAnchorPhaseStartTurn: "",
   // Input-demand-follows-real-output phase-in start (operator-set turn on the old world).
   inputDemandRealPhaseStartTurn: "",
+  // Trade-registers-in-full ramp start (operator-set turn on the old world).
+  tradeConvergenceFullStartTurn: "",
   marketGuardReferenceFundamentalMcap: "",
   marketGuardReferenceTurn: "",
   marketGuardTrippedAt: "",

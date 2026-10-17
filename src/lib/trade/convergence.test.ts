@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { applyTradeConvergence } from "./convergence";
+import { applyTradeConvergence, tradeConvergenceK } from "./convergence";
 import { clearAllCommodities, type ByCountryBalances } from "./snapshot";
 import { getBaseAffinity } from "./affinity";
 import type { CommodityType } from "@/lib/constants/commodities";
@@ -82,5 +82,17 @@ describe("applyTradeConvergence", () => {
     const clearing = clearAllCommodities(countries, byCountry, affinityFor);
     applyTradeConvergence(countries, byCountry, clearing, 0.5);
     expect(byCountry.get("US")!.get("steel")).toEqual({ supply: 50, demand: 50 });
+  });
+});
+
+describe("tradeConvergenceK", () => {
+  it("is the legacy half before a start turn is stamped or reached", () => {
+    expect(tradeConvergenceK(undefined, 300)).toBe(0.5);
+    expect(tradeConvergenceK(300, 290)).toBe(0.5);
+  });
+  it("ramps linearly to full over the ramp turns", () => {
+    expect(tradeConvergenceK(300, 312)).toBeCloseTo(0.75, 10);
+    expect(tradeConvergenceK(300, 324)).toBe(1);
+    expect(tradeConvergenceK(300, 400)).toBe(1);
   });
 });

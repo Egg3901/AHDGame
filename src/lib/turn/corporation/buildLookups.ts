@@ -1108,6 +1108,17 @@ export async function buildCorporationLookups(
     // reachable books are the pre-trade clearing the books are meant to be.
     overlayReachableClearingBooks(countryClearingBooks, tradeSnapshotDoc?.books);
   }
+  const unmetForeignDemandByCountry = new Map<string, Map<CommodityType, number>>();
+  for (const [countryId, byCommodity] of Object.entries(tradeSnapshotDoc?.books ?? {})) {
+    const row = new Map<CommodityType, number>();
+    for (const [commodity, entry] of Object.entries(byCommodity ?? {})) {
+      const unmet = entry?.unmetForeignDemand;
+      if (typeof unmet === "number" && Number.isFinite(unmet) && unmet > 0) {
+        row.set(commodity as CommodityType, unmet);
+      }
+    }
+    if (row.size > 0) unmetForeignDemandByCountry.set(countryId, row);
+  }
   const marketShareBySectorId = buildMarketShareBySectorId({
     sectors: allSectors,
     corpById,
@@ -1578,6 +1589,7 @@ export async function buildCorporationLookups(
     freightHaulRevenueByOriginState,
     nationalCommodityBalancesByCountry,
     countryClearingBooks,
+    unmetForeignDemandByCountry,
     exportIntensityByCountry,
     rawStateBalances,
     statePriceRatioByState,
