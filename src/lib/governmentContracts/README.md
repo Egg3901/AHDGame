@@ -46,11 +46,12 @@ and default mechanisms apply after award.
    open or abandoned publishing tenders expire into Canceled. Interrupted
    awards remain in Bidding Closed for recovery, without losing committed money.
 
-The bidding interval and award interval must both contain a turn. Defence's
-award deadline is at or before the next quarterly window begins. All unawarded
-tenders have at most the existing 24-turn offer lifetime, so a published opportunity
-cannot hold capacity indefinitely. No money is
-charged merely for bidding. No bid deposit, automatic late-bid extension,
+New tenders allow 6 to 48 bidding turns (default 24), followed by a separate
+24-turn award window. Existing tenders retain their stored deadlines. Defence
+tenders may cross quarter boundaries; their appropriation hold and quota remain
+in the original publication window until award, cancellation or expiry. An open
+tender therefore holds resources for at most 72 turns. No money is charged
+merely for bidding. No bid deposit, automatic late-bid extension,
 foreign arms purchase, performance guarantee or new delivery penalty is added.
 
 Existing active contracts retain their signed price, delivery, royalty,
@@ -78,6 +79,20 @@ pauses are checked again at mutation time.
 State-owned and true NPP defence suppliers submit an initial suggested-price bid
 through the tender pipeline. Player corporations with NPP caretaker CEOs are not
 automatically committed.
+
+## Discovery
+
+Publishing sends one idempotent inbox alert per eligible player CEO, grouping
+multiple matching corporations. Eligibility uses the existing industry,
+operations, domestic supplier, grade, price band and supplier concentration
+rules. Reads are projected and batched; notification delivery is a non-fatal
+side effect after publication. Inbox preferences can mute the new notification
+type. No hourly scanning is added.
+
+CEO corporation overviews include a compact link to active tenders. An inbox
+link carries the tender id so the shared board opens its details even if the
+tender is not on the selected list page. Bidding and award eligibility are still
+checked again when players act.
 
 ## Board and UI
 

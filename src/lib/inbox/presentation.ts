@@ -48,6 +48,7 @@ const TYPE_LABELS: Partial<Record<NotificationType, string>> = {
   prospect_failed: "Survey result",
   contract_offered: "Contract offer",
   government_contract_awarded: "Government contract award",
+  government_contract_opened: "Government contract bidding",
   defence_contract_offered: "Defence contract",
   union_leader_offer: "Union offer",
   bargaining_ratification_open: "Ratification vote",

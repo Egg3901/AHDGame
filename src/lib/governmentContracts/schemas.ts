@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { BIDDING_TURNS_MIN, BIDDING_TURNS_MAX } from "./rules";
 import { EXTRACTABLE_RESOURCES } from "@/lib/constants/commodities";
 import {
   CONTRACT_TERM_TURNS_MIN,
@@ -33,11 +34,23 @@ export const publishTenderSchema = z
   .object({
     title: z.string().trim().min(5).max(120),
     description: z.string().trim().min(10).max(2000),
-    closesTurn: z.number().int(),
-    awardDeadlineTurn: z.number().int(),
+    biddingTurns: z.number().int().min(BIDDING_TURNS_MIN).max(BIDDING_TURNS_MAX).optional(),
+    closesTurn: z.number().int().optional(),
+    awardDeadlineTurn: z.number().int().optional(),
     terms,
   })
-  .strict();
+  .strict()
+  .superRefine((input, ctx) => {
+    const explicit = input.closesTurn != null || input.awardDeadlineTurn != null;
+    if (
+      (explicit && input.biddingTurns != null) ||
+      (explicit && (input.closesTurn == null || input.awardDeadlineTurn == null))
+    )
+      ctx.addIssue({
+        code: "custom",
+        message: "Choose a bidding duration or a complete pair of deadlines, not both.",
+      });
+  });
 export const bidSchema = z
   .object({
     corporationId: z.string().regex(/^[a-f0-9]{24}$/),

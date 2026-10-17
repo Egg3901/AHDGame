@@ -59,14 +59,22 @@ describe("government tender rules", () => {
     expect(compareBids("extraction", bid("a", 10), bid("b", 20))).toBeGreaterThan(0);
     expect(compareBids("defence", bid("a", 10), bid("b", 10))).toBeLessThan(0);
   });
-  it("requires a real bidding period and an award period within the defence window", () => {
-    expect(validDeadlines(1, 3, 5, 12)).toBe(true);
-    expect(validDeadlines(1, 1, 5)).toBe(false);
-    expect(validDeadlines(1, 3, 3)).toBe(false);
-    expect(validDeadlines(1, 3, 14, 12)).toBe(false);
-    expect(validDeadlines(1, 3, 13, 12)).toBe(true);
-    expect(validDeadlines(1, 3, 25)).toBe(true);
-    expect(validDeadlines(1, 3, 26)).toBe(false);
+  it("allows 6 to 48 bidding turns and a separate 24-turn award window across quarters", () => {
+    expect(validDeadlines(1, 7, 31)).toBe(true);
+    expect(validDeadlines(1, 25, 49)).toBe(true);
+    expect(validDeadlines(12, 60, 84)).toBe(true);
+    expect(validDeadlines(1, 6, 30)).toBe(false);
+    expect(validDeadlines(1, 50, 74)).toBe(false);
+    expect(validDeadlines(1, 25, 48)).toBe(false);
+    expect(validDeadlines(1, 25.5, 49.5)).toBe(false);
+    expect(validDeadlines(Infinity, Infinity, Infinity)).toBe(false);
+    expect(
+      validDeadlines(
+        Number.MAX_SAFE_INTEGER,
+        Number.MAX_SAFE_INTEGER + 6,
+        Number.MAX_SAFE_INTEGER + 30
+      )
+    ).toBe(false);
   });
   it("requires both research and era eligibility for the equipment grade", () => {
     const input = {
