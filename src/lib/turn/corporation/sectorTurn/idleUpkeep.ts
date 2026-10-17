@@ -4,7 +4,11 @@
  */
 import { activeCapacityFraction, capacityUpkeepUnits } from "@/lib/corporations/investment/rules";
 import type { CorporateSector } from "@/lib/db/types";
-import { IDLE_UPKEEP_FRACTION, MOTHBALL_UPKEEP_FRACTION } from "@/lib/constants/capacityEconomy";
+import {
+  IDLE_UPKEEP_FRACTION,
+  MOTHBALL_UPKEEP_FRACTION,
+  THROTTLE_IDLE_UPKEEP_SHARE,
+} from "@/lib/constants/capacityEconomy";
 import { TURNS_PER_DAY } from "@/lib/constants/corporations";
 import { idleUpkeepUnitPrice, ownerIdleUnits } from "@/lib/corporations/physicalPnl";
 
@@ -39,6 +43,12 @@ import { idleUpkeepUnitPrice, ownerIdleUnits } from "@/lib/corporations/physical
  * the flip changes nothing. It is faded in over the same governor ramp every
  * other plants leg uses. A MOTHBALLED sector is not ramped: mothballing is a
  * deliberate action taken after the flip, so there is no continuity to protect.
+ *
+ * Capacity idled by the DEMAND THROTTLE pays only THROTTLE_IDLE_UPKEEP_SHARE of
+ * the idle charge. The market, not the owner, decided that run, and charging
+ * full upkeep on top of a glutted plant's lost revenue made overbuilt sectors
+ * unrecoverable. Capacity the owner idled with the production slider, and
+ * mothballed capacity, keep their existing rules.
  */
 export interface IdleUpkeepInput {
   sector: Pick<CorporateSector, "plantsUpkeepMarginBasisAnchor" | "activeCapacityPercent">;
@@ -61,6 +71,8 @@ export interface IdleUpkeepInput {
   plantsExtractionHardMin: number;
   throughputFactor: number;
   labourOutputFactor: number;
+  /** The demand throttle already inside `producedUnits`. Absent or 1 means none. */
+  demandThrottleFactor?: number;
 }
 
 export interface IdleUpkeepResult {
@@ -97,13 +109,38 @@ export function computeIdleUpkeep(input: IdleUpkeepInput): IdleUpkeepResult {
     input.labourOutputFactor;
 
   const activeFraction = activeCapacityFraction({ ...input.sector, mothballed: input.mothballed });
-  const plantsOwnerIdleUnits = input.plantsEnabled
+  const activeCapacity = input.plantsCapacity * activeFraction;
+  const ownerIdleAtRun = input.plantsEnabled
     ? ownerIdleUnits({
-        capacity: input.plantsCapacity * activeFraction,
+        capacity: activeCapacity,
         producedUnits: input.producedUnits,
         involuntaryThrottle,
       })
     : 0;
+  // Split the idle units into those the demand throttle created and those that
+  // would stand idle without it. Only a binding throttle takes this path, so an
+  // unthrottled plant is billed exactly as before.
+  const demandThrottle = input.demandThrottleFactor ?? 1;
+  const plantsOwnerIdleUnits =
+    input.plantsEnabled &&
+    Number.isFinite(demandThrottle) &&
+    demandThrottle > 0 &&
+    demandThrottle < 1
+      ? (() => {
+          const idleWithoutThrottle = Math.min(
+            ownerIdleAtRun,
+            ownerIdleUnits({
+              capacity: activeCapacity,
+              producedUnits: input.producedUnits / demandThrottle,
+              involuntaryThrottle,
+            })
+          );
+          return (
+            idleWithoutThrottle +
+            (ownerIdleAtRun - idleWithoutThrottle) * THROTTLE_IDLE_UPKEEP_SHARE
+          );
+        })()
+      : ownerIdleAtRun;
 
   const plantsUpkeepCost = input.plantsEnabled
     ? plantsUnitUpkeepHourly *
