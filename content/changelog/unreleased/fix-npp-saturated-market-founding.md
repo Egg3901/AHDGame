@@ -7,7 +7,7 @@ badges: [minor]
 areas: [engine]
 ---
 
-- AI-run companies now check how hard the plants already in a market are running before opening a new plant there. If those plants are, on average, running below 90% of their capacity (the same bar an existing AI plant must clear to grow), the market is skipped, however high the price looks.
+- AI-run companies now check how hard the plants already in a market are running before opening a new plant there. AI companies only open a new plant where the plants already there are selling essentially everything they can make. If they are held back by demand at all, the market is skipped, however high the price looks.
 - A high price no longer lets an AI-run plant grow past the usual "run your current plant first" rule when the plants around it sit mostly idle.
 - AI-run plants that have been held under a quarter of their capacity for 12 turns in a row are mothballed. A mothballed AI plant only restarts when the plants still running in that market have room to grow.
 - Any plant, player or AI, that demand has held under a quarter of its capacity for 6 turns in a row now lets surplus crew go at up to 8% of the plant a turn, instead of 2%. Every other plant keeps the 2% limit.
