@@ -6,6 +6,7 @@ import {
   marketSaturationOf,
   NPP_FLOOR_MOTHBALL_TURNS,
 } from "./marketSaturation";
+import { NPP_GROWTH_MIN_THROTTLE } from "../nppCorporationTuning";
 
 const plant = (over: Record<string, unknown> = {}) => ({
   stateId: "TN",
@@ -78,9 +79,11 @@ describe("marketSaturationOf", () => {
 });
 
 describe("isMarketSaturated", () => {
-  it("blocks below half and never on missing evidence", () => {
+  it("blocks below the incumbent growth bar and never on missing evidence", () => {
     expect(isMarketSaturated(0.3)).toBe(true);
-    expect(isMarketSaturated(0.5)).toBe(false);
+    // A cell idle retirement has settled at 1 / (1 + 0.25) is full, not open.
+    expect(isMarketSaturated(0.8)).toBe(true);
+    expect(isMarketSaturated(NPP_GROWTH_MIN_THROTTLE)).toBe(false);
     expect(isMarketSaturated(null)).toBe(false);
     expect(isMarketSaturated(Number.NaN)).toBe(false);
   });

@@ -155,7 +155,7 @@ describe("resignCabinetMemberHandler", () => {
     expect(db.collectionMocks.cabinetMembers.deleteOne).toHaveBeenCalled();
     expect(db.collectionMocks.characters.updateOne).toHaveBeenCalled();
     // Flat ministerResigned hit (12) from a full gauge of 100.
-    const gaugeWrite = db.collectionMocks.ukGovernment.updateOne.mock.calls[0][1].$set;
+    const gaugeWrite = db.collectionMocks.governmentFormations.updateOne.mock.calls[0][1].$set;
     expect(gaugeWrite.confidenceGauge).toBe(88);
   });
 
@@ -166,7 +166,7 @@ describe("resignCabinetMemberHandler", () => {
       "UK" as never
     );
     expect(res.status).toBe(200);
-    const gaugeWrite = db.collectionMocks.ukGovernment.updateOne.mock.calls[0][1].$set;
+    const gaugeWrite = db.collectionMocks.governmentFormations.updateOne.mock.calls[0][1].$set;
     expect(gaugeWrite.confidenceGauge).toBe(76);
   });
 
@@ -586,9 +586,9 @@ describe("resignNppCaretakerMinister", () => {
     expect(db.collectionMocks.cabinetMembers.deleteOne).toHaveBeenCalledWith(
       expect.objectContaining({ _id: memberId, isNPP: true })
     );
-    expect(db.collectionMocks.ukGovernment.updateOne.mock.calls[0][1].$set.confidenceGauge).toBe(
-      88
-    );
+    expect(
+      db.collectionMocks.governmentFormations.updateOne.mock.calls[0][1].$set.confidenceGauge
+    ).toBe(88);
   });
 
   it("does nothing when the NPP stays", async () => {

@@ -21,7 +21,6 @@ import { getTotalUkCommonsSeats } from "@/lib/constants/states";
 import { getGameStatePreset } from "@/lib/db/collections/gameState";
 import { lowerChamberMajorityThreshold } from "@/lib/legislature/lowerChamberSeats";
 import {
-  resetConfidenceGauge,
   getUkConfidenceErosionScale,
   tickConfidenceForGov,
 } from "@/lib/uk/confidence/confidenceGaugeStore";
@@ -91,8 +90,8 @@ export async function updateGovernmentSeats(): Promise<void> {
  * turn test can drive it directly. When the gauge bottoms out AND
  * `UK_CONFIDENCE_GAUGE_DISSOLUTION=1`, Parliament is dissolved through the
  * shared snap-election path (bypassing the PM's allowance: this is the House
- * withdrawing confidence, not the PM spending a snap) and the gauge resets for
- * the incoming government. Off by default; the gauge still accrues and is
+ * withdrawing confidence, not the PM spending a snap). The gauge carries
+ * through the election and changes when the incoming government forms. Off by default; the gauge still accrues and is
  * observable.
  */
 export async function tickUkGovernmentGauges(db: Db, now: Date): Promise<void> {
@@ -110,6 +109,7 @@ export async function tickUkGovernmentGauges(db: Db, now: Date): Promise<void> {
       approval: approvalDoc.approvalRating,
       erosionScale,
       now,
+      turn: nhsGameState?.currentTurn,
     });
     if (gauge.dissolutionEnabled) {
       try {
@@ -118,7 +118,6 @@ export async function tickUkGovernmentGauges(db: Db, now: Date): Promise<void> {
           bypassLimits: true,
           actorName: "House of Commons",
         });
-        await resetConfidenceGauge(db, now);
       } catch (err) {
         // A snap already in flight (or no sitting government) is not fatal to
         // the turn; the gauge stays at the floor and re-tries next turn.
@@ -253,8 +252,6 @@ async function seedGovernmentFormation(db: Db): Promise<void> {
 export async function resetGovernmentAfterElection(now: Date): Promise<void> {
   const db = await getDb();
   await resetParliamentaryGovernmentAfterElection(db, "UK", now);
-  // Confidence gauge (epic #856): a fresh parliament starts with full
-  // confidence. Reset regardless of the dissolution flag — this is the value,
-  // not the consequence.
-  await resetConfidenceGauge(db, now);
+  // Confidence persists through the election and caretaker interval. A modest
+  // formation bonus is applied only after the new Prime Minister is confirmed.
 }

@@ -365,6 +365,11 @@ export interface GameConfig {
    * Turn the input-demand-follows-real-output phase-in starts, set by an
    * operator (never stamped automatically). See src/lib/market/inputDemandRealPhase.ts.
    */
+  /**
+   * Turn trade convergence starts ramping from 0.5 to 1 (see
+   * tradeConvergenceK). Stamped by an operator, announced ahead. Absent = 0.5.
+   */
+  tradeConvergenceFullStartTurn?: number;
   inputDemandRealPhaseStartTurn?: number;
   /**
    * Geographic freight rollout. Shadow records routes for calibration; active
