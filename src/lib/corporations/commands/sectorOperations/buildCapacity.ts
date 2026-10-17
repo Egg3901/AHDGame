@@ -50,6 +50,10 @@ import {
   undeliveredCost,
   undeliveredUnits,
 } from "@/lib/corporations/buildDelivery";
+import {
+  commodityDominanceFor,
+  loadCommodityDominanceContext,
+} from "@/lib/corporations/commodityDominanceContext";
 import { resolveCountryPrimeRate } from "@/lib/corporations/sectorGrowthCost";
 import { NEUTRAL_STAT } from "@/lib/stats/statsConstants";
 import { logEconomicAction } from "@/lib/corporations/economicActionLog";
@@ -605,6 +609,18 @@ export async function buildCapacity(request: Request, { params }: RouteParams) {
       : null;
     const techBuildCostMultiplier = techBuildEffects?.growthCostMultiplier ?? 1;
 
+    // Commodity-level toll: what this firm could make of each commodity the
+    // sector produces (owned plus queued plus THIS order) over world demand.
+    const commodityDominanceCtx = await loadCommodityDominanceContext(db, {
+      corporation,
+      sector,
+      turn: currentTurn,
+      currentYear,
+    });
+    const commodityDominance = commodityDominanceCtx
+      ? commodityDominanceFor(commodityDominanceCtx, units)
+      : null;
+
     const cost = computeBuildCost({
       sectorType: sector.sectorType,
       industryModel: sector.industryModel,
@@ -620,6 +636,7 @@ export async function buildCapacity(request: Request, { params }: RouteParams) {
       marketSharePercent: marketSharePct,
       nationalMarketSharePercent: nationalMarketSharePct,
       competitorCount: competitorCount ?? undefined,
+      commodityDominanceRatio: commodityDominance?.ratio ?? 0,
       primeRate,
       acumen: ceoAcumen,
       hostCostOfLivingIndex,
@@ -682,6 +699,8 @@ export async function buildCapacity(request: Request, { params }: RouteParams) {
         currency: corpCurrencyCode,
         unitPriceAnchor: Math.round(cost.unitPriceAnchor * 100) / 100,
         dominanceMultiplier: Math.round(cost.dominanceMultiplier * 1000) / 1000,
+        commodityDominanceMultiplier: Math.round(cost.commodityDominanceMultiplier * 1000) / 1000,
+        commodityDominanceRatio: Math.round((commodityDominance?.ratio ?? 0) * 1000) / 1000,
         rateMultiplier: Math.round(cost.rateMultiplier * 1000) / 1000,
         acumenMultiplier: Math.round(cost.acumenMultiplier * 1000) / 1000,
         techMultiplier: Math.round(cost.techMultiplier * 1000) / 1000,

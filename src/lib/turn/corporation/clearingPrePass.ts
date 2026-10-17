@@ -536,6 +536,7 @@ export function runClearingPrePass(input: ClearingPrePassInput): ClearingPrePass
                   : {};
               })()
             : {}),
+          corporationId: corpId,
           posture: typeof sector.pricingPosture === "number" ? sector.pricingPosture : null,
           ...(market.plantsEnabled &&
           market.explicitPlantCostsEnabled === true &&

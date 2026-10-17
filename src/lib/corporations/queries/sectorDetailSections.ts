@@ -113,6 +113,10 @@ import type { CommodityType, ExtractableResource } from "@/lib/constants/commodi
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import { projectStrategyRevenuePerTurn } from "@/lib/corporations/strategyRevenuePreview";
 import type { SectorBuildOrder } from "@/lib/db/types";
+import {
+  worstTollRatioForOrder,
+  type CommodityTollModel,
+} from "@/lib/corporations/rules/commodityDominanceRamp";
 import { STRIKE_REVENUE_THROTTLE } from "@/lib/labour/strikes";
 import { calculatePlantSectorSplit } from "@/lib/corporations/plantSectorSplit";
 import {
@@ -1205,6 +1209,12 @@ export function buildSectorPlantsSection(args: {
   techGrowthCostMultiplier: number;
   /** Tech dominance shield (cuts the dominance build toll). Optional for older fixtures. */
   techDominanceShield?: number;
+  /**
+   * Commodity-level toll inputs (see `commodityTollModels`): the firm's potential
+   * output of each commodity this sector makes against world demand. Empty or
+   * absent when nothing is measurable.
+   */
+  commodityTollModels?: CommodityTollModel[];
   /** The world's era unit-basis scale (`getEraUnitScale(preset)`). */
   eraUnitScale: number;
   preset?: string;
@@ -1436,7 +1446,8 @@ export function buildSectorPlantsSection(args: {
       : ownTurnsRemaining;
 
   // ─── Build quote ──────────────────────────────────────────────────────────
-  const oneUnit = computeBuildCost({
+  const tollModels = args.commodityTollModels ?? [];
+  const oneUnitInputs = {
     sectorType,
     industryModel: sector.industryModel,
     units: 1,
@@ -1454,6 +1465,15 @@ export function buildSectorPlantsSection(args: {
     hostCostOfLivingIndex,
     techGrowthCostMultiplier,
     techDominanceShield,
+  };
+  // The local/national toll alone, then the full quote for one unit. The
+  // commodity toll reads the ratio after the order lands, so the dialog
+  // re-prices quantities from `commodityToll` instead of scaling this linearly.
+  const localQuote = computeBuildCost({ ...oneUnitInputs, strategyId: oneUnitInputs.strategyId });
+  const oneUnit = computeBuildCost({
+    ...oneUnitInputs,
+    strategyId: oneUnitInputs.strategyId,
+    commodityDominanceRatio: worstTollRatioForOrder(tollModels, 1),
   });
   const perUnitAnchor = oneUnit.totalAnchor;
   // C9: the server charges construction cost PLUS the cross-currency spread
@@ -1723,6 +1743,10 @@ export function buildSectorPlantsSection(args: {
       unitPriceAnchor: oneUnit.unitPriceAnchor,
       expansionMultiplier: oneUnit.expansionMultiplier,
       dominanceMultiplier: oneUnit.dominanceMultiplier,
+      localDominanceMultiplier: localQuote.dominanceMultiplier,
+      ...(tollModels.length > 0
+        ? { commodityToll: { models: tollModels, ratioNow: worstTollRatioForOrder(tollModels, 0) } }
+        : {}),
       rateMultiplier: oneUnit.rateMultiplier,
       acumenMultiplier: oneUnit.acumenMultiplier,
       techMultiplier: oneUnit.techMultiplier,

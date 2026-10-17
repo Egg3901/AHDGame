@@ -107,4 +107,88 @@ describe("existing autonomous plant top-ups", () => {
       expect(corp.liquidCapital + decision.liquidCapitalDelta).toBeGreaterThanOrEqual(floor);
     }
   );
+
+  it("prices commodity dominance into NPP top-ups like a player build", () => {
+    const modifiers = ceoArchetypeModifiers("cautious");
+    const quote = computeBuildCost({
+      sectorType: "retail",
+      units: 1,
+      strategyId: null,
+      year: CAPACITY_ANCHOR_YEAR,
+      preset: "2019-default",
+      eraUnitScale: 1,
+      marketSharePercent: (100 * 80) / 1080,
+      primeRate: 0,
+      acumen: NEUTRAL_STAT,
+      hostCostOfLivingIndex: null,
+      founding: false,
+    });
+    const floor = getNppCashFloorAnchor("2019-default", modifiers.cashFloorMult);
+    const corp = {
+      _id: new ObjectId(),
+      type: "retail",
+      countryId: "US",
+      headquartersState: "NY",
+      liquidCurrencyCode: "USD",
+      liquidCapital: floor + quote.totalAnchor * 60,
+      ceoType: "npp",
+      ceoId: new ObjectId(),
+      logisticsStrength: 1000,
+    } as Corporation;
+    const sector = {
+      _id: new ObjectId(),
+      corporationId: corp._id,
+      sectorType: "retail",
+      countryId: "US",
+      stateId: "NY",
+      revenue: 100000,
+      profitMargin: 10,
+      plantsPnl: { revenue: 100000, costs: 90000, profit: 10000 },
+      capitalStock: 80,
+      operatingCapacityUnits: 80,
+      producedUnits: 80,
+      soldUnits: 80,
+      buildQueue: [],
+    } as unknown as CorporateSector;
+    const pool = {
+      _id: new ObjectId(),
+      countryId: "US",
+      stateId: "NY",
+      sectorType: "retail",
+      revenue: 100000,
+      headroomUnits: 1000,
+    } as UnownedSector;
+    const decide = (commodityDemandOf?: () => number) =>
+      makeNppCorpDecision(
+        {
+          corp: { ...corp } as Corporation,
+          groupRootId: "root",
+          sectors: [{ ...sector } as CorporateSector],
+          turn: 70,
+          now: new Date("2026-01-01"),
+          modifiers,
+          strategyLoopEnabled: false,
+        },
+        new Map([["US", [pool]]]),
+        new Set(),
+        () => 2,
+        {
+          enabled: true,
+          eraUnitScale: 1,
+          year: CAPACITY_ANCHOR_YEAR,
+          preset: "2019-default",
+          primeRateOf: () => 0,
+          costOfLivingOf: () => null,
+          ...(commodityDemandOf ? { commodityDemandOf } : {}),
+        }
+      );
+    const built = (d: ReturnType<typeof decide>) =>
+      (d.reinvestments ?? []).reduce((sum, build) => sum + build.units, 0);
+    const unconstrained = decide(() => 1e12);
+    const crowded = decide(() => 1);
+    expect(built(unconstrained)).toBeGreaterThan(1);
+    // The firm already out-produces a demand of 1 many times over, so every
+    // unit carries a steep toll and the same cash buys far less.
+    expect(built(crowded)).toBeLessThan(built(unconstrained));
+  });
 });
