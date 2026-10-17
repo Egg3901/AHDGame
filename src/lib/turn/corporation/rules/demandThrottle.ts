@@ -109,6 +109,9 @@ export function throttleSoldUnits(args: {
 /** Fill at or above this counts as a leg that sold everything it offered. */
 export const SOLD_OUT_FILL = 0.99;
 
+/** Minimum fill for extraction to claim headroom in a wider shortage. */
+export const SHORTAGE_RELAXED_FILL = 0.5;
+
 /**
  * Extra units a sold-out plant can put into a market that left buyers unserved
  * (ticket 1393).
@@ -127,6 +130,8 @@ export const SOLD_OUT_FILL = 0.99;
  * Each seller receives only its share of the normalized clearing book. The
  * allocations sum to at most the book's unmet demand. Capacity caps remain
  * in the throttle; unused allocations are not promised to another seller.
+ * Extraction may also claim its share of a wider shortage after selling at
+ * least half its output. Full fills retain their existing scoped-book headroom.
  */
 export function soldOutMarketHeadroomUnits(args: {
   /** Fill per output commodity for the prior output in this scoped book. */
@@ -139,6 +144,8 @@ export function soldOutMarketHeadroomUnits(args: {
   marketShareFor?: (commodity: string) => number | null | undefined;
   /** Lagged balance of the book this output clears in. */
   balanceFor: (commodity: string) => { supply: number; demand: number } | null | undefined;
+  /** Optional reachable country or global book for partially sold extraction output. */
+  wideBalanceFor?: (commodity: string) => { supply: number; demand: number } | null | undefined;
   /** Lagged price over base for one output, in the sector's own market. */
   priceRatioFor: (commodity: string) => number | null | undefined;
 }): number {
@@ -154,9 +161,14 @@ export function soldOutMarketHeadroomUnits(args: {
     const weight =
       rate * (typeof ratio === "number" && Number.isFinite(ratio) && ratio > 0 ? ratio : 1);
     weightSum += weight;
-    if (fill < SOLD_OUT_FILL) continue;
+    let balance;
+    if (fill < SOLD_OUT_FILL) {
+      if (fill < SHORTAGE_RELAXED_FILL) continue;
+      balance = args.wideBalanceFor?.(commodity);
+    } else {
+      balance = args.balanceFor(commodity);
+    }
     const share = args.mixWeightFor(commodity);
-    const balance = args.balanceFor(commodity);
     if (!(share > 0) || !balance) continue;
     const unmet = balance.demand - balance.supply;
     if (!(Number.isFinite(unmet) && unmet > 0)) continue;
