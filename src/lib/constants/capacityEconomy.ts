@@ -589,6 +589,15 @@ export const PLANT_CREW_FLOOR_SHARE = 0.25;
  * in a single turn; at 0.02 a turn the cut lands over several turns, so the
  * labour market and household demand can absorb it. Rehiring is immediate.
  */
+/**
+ * Share of a plant that runs on its restart turn: back from mothball, or its
+ * first capacity just landed. Clearing offers last turn's output, so such a
+ * plant has nothing on the market that turn; running it flat out paid full
+ * inputs and wages for zero sales (live turn 253: 49 restarted media plants
+ * sold 0 of 6.0M units). It is a production factor, not a demand reading.
+ */
+export const RESTART_RUN_SHARE = 0.25;
+
 export const PLANT_CREW_MAX_DROP_PER_TURN = 0.02;
 
 /**
