@@ -55,7 +55,11 @@ import {
 } from "./macroGrowthInputs";
 import { loadValuationFxRates } from "@/lib/currency/corporationCapital";
 import { getEraMonetaryBaseline } from "@/lib/constants/monetaryEra";
-import { nextLabourParticipationBonus } from "@/lib/labour/labourMarket";
+import {
+  computeLabourTightness,
+  nextLabourParticipationBonus,
+  roundTightness,
+} from "@/lib/labour/labourMarket";
 import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
 import type { CountryId } from "@/lib/constants/countries";
 import {
@@ -234,6 +238,8 @@ interface PrevMetricsDoc {
     unemploymentRate?: { value?: number };
     laborParticipation?: { value?: number };
     laborForce?: { value?: number };
+    labourDemand?: { value?: number };
+    labourDemandTurn?: number;
   };
 }
 
@@ -309,8 +315,10 @@ export async function runMetricEngine(db: Db, turn: number): Promise<number> {
     "economic.unemploymentRate.value": 1,
     "economic.laborParticipation.value": 1,
     "economic.laborForce.value": 1,
+    "economic.labourDemand.value": 1,
     "economic.labourTightness.value": 1,
     "economic.labourParticipationDemandBonus.value": 1,
+    "economic.labourDemandTurn": 1,
     // Generic nodes (P2+): prev value/simBaseline + external seed/lagged reads,
     // derived from the registry at module load.
     ...GENERIC_PROJECTION,
@@ -502,7 +510,10 @@ export async function runMetricEngine(db: Db, turn: number): Promise<number> {
 
   const now = new Date();
   const macroOps: Array<{
-    updateOne: { filter: { _id: string }; update: { $set: Record<string, number | Date> } };
+    updateOne: {
+      filter: { _id: string };
+      update: { $set: Record<string, number | Date>; $unset?: Record<string, ""> };
+    };
   }> = [];
   // GDP-level stock writes to the `states` collection (SSOT — design §5.4). The
   // engine compounds state.gdp each turn by the region's freshly-computed
@@ -779,6 +790,16 @@ export async function runMetricEngine(db: Db, turn: number): Promise<number> {
       state.militaryServicePopulation ?? 0,
       effectiveLaborParticipation
     );
+    // The corporation phase has already written this turn's desired demand,
+    // while leaving the previous tightness untouched for staffing decisions.
+    // Reconcile the ratio here against the labor force just computed from this
+    // turn's metric inputs, avoiding a current-demand / prior-supply mismatch.
+    const hasCurrentLabourDemand = priorMetricDoc?.economic?.labourDemandTurn === turn;
+    const currentDemand = readMetricPath(priorMetricDoc, "economic.labourDemand", "value");
+    const currentLabourTightness =
+      hasCurrentLabourDemand && currentDemand !== undefined
+        ? computeLabourTightness(currentDemand, laborForce)
+        : undefined;
     const gL = annualizedGrowthRate(
       laborForce,
       prevLaborForce.get(state._id) ?? laborForce,
@@ -929,11 +950,14 @@ export async function runMetricEngine(db: Db, turn: number): Promise<number> {
       if (automationDelta !== undefined) {
         seedCurrent["economic.automationIndexDelta"] = automationDelta;
       }
-      // #791: measured labour-market tightness — the corp turn's demand-over-
-      // supply reading from the PRIOR turn (same lag as the Δ signals above).
-      // Seeded, not a declared node input, so the topo order is untouched.
-      // Absent (cold start) ⇒ the node reads 0 pressure — today's behaviour.
-      const tightness = readMetricPath(prevDoc, "economic.labourTightness", "value");
+      // #791: use a same-turn demand-over-supply reading when the corporation
+      // phase produced a fresh demand snapshot. If corporations were paused,
+      // retain the last measured tightness rather than pairing stale demand
+      // with today's labor force. Corporate staffing itself continues to use
+      // the previous turn's ratio, so no same-turn feedback loop is introduced.
+      const tightness = hasCurrentLabourDemand
+        ? currentLabourTightness
+        : readMetricPath(prevDoc, "economic.labourTightness", "value");
       if (tightness !== undefined) seedCurrent["economic.labourTightness"] = tightness;
     }
 
@@ -1048,6 +1072,9 @@ export async function runMetricEngine(db: Db, turn: number): Promise<number> {
       "economic.potentialGrowth.value": potential,
       "economic.laborForce.value": laborForce,
       "economic.labourParticipationDemandBonus.value": participationDemandBonus,
+      ...(hasCurrentLabourDemand && currentLabourTightness !== undefined
+        ? { "economic.labourTightness.value": roundTightness(currentLabourTightness) }
+        : {}),
       lastUpdated: now,
     };
     const persistCrisisExposure =
@@ -1101,7 +1128,17 @@ export async function runMetricEngine(db: Db, turn: number): Promise<number> {
           macroSet[`livingConflictExposure.${key}`] = value;
       }
       macroSet.lastUpdated = now;
-      macroOps.push({ updateOne: { filter: { _id: state._id }, update: { $set: macroSet } } });
+      macroOps.push({
+        updateOne: {
+          filter: { _id: state._id },
+          update: {
+            $set: macroSet,
+            ...(hasCurrentLabourDemand && currentLabourTightness === undefined
+              ? { $unset: { "economic.labourTightness.value": "" as const } }
+              : {}),
+          },
+        },
+      });
     }
 
     // Compound the region's GDP LEVEL by the INTEGRATED gdpGrowth this turn (exact

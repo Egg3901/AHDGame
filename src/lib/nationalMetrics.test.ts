@@ -1,5 +1,10 @@
 import { describe, it, expect, vi } from "vitest";
 import { computeNationalMetrics } from "./nationalMetrics";
+import {
+  aggregateNationalLabourDemand,
+  aggregateNationalLabourTightness,
+  aggregateNationalMetricValue,
+} from "./nationalMetrics/rules";
 import type { Db } from "mongodb";
 
 function makeDb(states: unknown[], regionMetrics: unknown[], federalBudgets: unknown[] = []) {
@@ -15,6 +20,14 @@ function makeDb(states: unknown[], regionMetrics: unknown[], federalBudgets: unk
         return {
           find: () => ({ toArray: async () => regionMetrics }),
           updateOne,
+          bulkWrite: async (
+            ops: Array<{ updateOne: { filter: unknown; update: unknown; upsert?: boolean } }>
+          ) => {
+            for (const { updateOne: operation } of ops) {
+              updateOne(operation.filter, operation.update, { upsert: operation.upsert });
+            }
+            return { ok: 1 };
+          },
         };
       }
       if (name === "corporateSectors") {
@@ -505,7 +518,7 @@ describe("multi-country in one pass", () => {
 // ── Population-weighted vs GDP-weighted distinction ──────────────────────────
 
 describe("population vs GDP weighting distinction", () => {
-  it("unemploymentRate uses population weight, not GDP", async () => {
+  it("uses labor-force weights for unemployment when regional labor force is available", async () => {
     // CA: big GDP, small population, high unemployment
     // TX: small GDP, big population, low unemployment
     // Population-weighted → TX dominates → result near 2%
@@ -515,8 +528,14 @@ describe("population vs GDP weighting distinction", () => {
       { _id: "TX", countryId: "US", population: 9_000_000, gdp: 1_000_000 },
     ];
     const metrics = [
-      { _id: "CA", economic: { unemploymentRate: { value: 8.0 } } },
-      { _id: "TX", economic: { unemploymentRate: { value: 2.0 } } },
+      {
+        _id: "CA",
+        economic: { unemploymentRate: { value: 8.0 }, laborForce: { value: 900_000 } },
+      },
+      {
+        _id: "TX",
+        economic: { unemploymentRate: { value: 2.0 }, laborForce: { value: 100_000 } },
+      },
     ];
 
     const db = makeDb(states, metrics);
@@ -525,9 +544,160 @@ describe("population vs GDP weighting distinction", () => {
     const call = db._updateOne.mock.calls[0];
     const setOps = call[1].$set as Record<string, { value: number }>;
 
-    // Population-weighted: (8*1M + 2*9M) / 10M = (8M + 18M) / 10M = 2.6
-    // GDP-weighted would give: (8*9M + 2*1M) / 10M = 7.4
-    expect(setOps["economic.unemploymentRate"].value).toBeCloseTo(2.6, 2);
+    // Labor-force-weighted: (8*900k + 2*100k) / 1M = 7.4
+    expect(setOps["economic.unemploymentRate"].value).toBeCloseTo(7.4, 2);
+  });
+
+  it("sums regional labor-force headcounts instead of averaging them", async () => {
+    const states = [
+      { _id: "CA", countryId: "US", population: 1_000_000 },
+      { _id: "TX", countryId: "US", population: 9_000_000 },
+    ];
+    const metrics = [
+      { _id: "CA", economic: { laborForce: { value: 700_000 } } },
+      { _id: "TX", economic: { laborForce: { value: 5_300_000 } } },
+    ];
+    const db = makeDb(states, metrics);
+    await computeNationalMetrics(db as unknown as Db);
+    const setOps = db._updateOne.mock.calls[0][1].$set as Record<string, { value: number }>;
+    expect(setOps["economic.laborForce"].value).toBe(6_000_000);
+  });
+
+  it("sums current-turn corporate demand and derives tightness from national counts", async () => {
+    const states = [
+      { _id: "CA", countryId: "US", population: 1_000_000 },
+      { _id: "TX", countryId: "US", population: 9_000_000 },
+    ];
+    const metrics = [
+      {
+        _id: "CA",
+        economic: {
+          labourDemandTurn: 22,
+          labourDemand: { value: 100 },
+          labourTightness: { value: 0.1 },
+          laborForce: { value: 1_000 },
+        },
+      },
+      {
+        _id: "TX",
+        economic: {
+          labourDemandTurn: 22,
+          labourDemand: { value: 500 },
+          labourTightness: { value: 0.05 },
+          laborForce: { value: 9_000 },
+        },
+      },
+    ];
+    const db = makeDb(states, metrics);
+    await computeNationalMetrics(db as unknown as Db, 22);
+    const setOps = db._updateOne.mock.calls[0][1].$set as Record<string, { value: number }>;
+
+    expect(setOps["economic.labourDemand"].value).toBe(600);
+    expect(setOps["economic.labourTightness"].value).toBe(0.06);
+    expect(db._updateOne.mock.calls[0][1].$set["economic.labourDemandTurn"]).toBe(22);
+  });
+
+  it("clears national labor telemetry when any region lacks a current-turn demand snapshot", async () => {
+    const states = [
+      { _id: "CA", countryId: "US", population: 1_000_000 },
+      { _id: "TX", countryId: "US", population: 9_000_000 },
+    ];
+    const metrics = [
+      {
+        _id: "CA",
+        economic: {
+          labourDemandTurn: 22,
+          labourDemand: { value: 100 },
+          labourTightness: { value: 0.1 },
+          laborForce: { value: 1_000 },
+        },
+      },
+      {
+        _id: "TX",
+        economic: {
+          labourDemandTurn: 21,
+          labourDemand: { value: 500 },
+          labourTightness: { value: 0.05 },
+          laborForce: { value: 9_000 },
+        },
+      },
+    ];
+    const db = makeDb(states, metrics);
+    await computeNationalMetrics(db as unknown as Db, 22);
+    const update = db._updateOne.mock.calls[0][1];
+
+    expect(update.$unset).toEqual({
+      "economic.labourDemand": "",
+      "economic.labourDemandTurn": "",
+      "economic.labourTightness": "",
+    });
+    expect(update.$set["economic.labourDemand"]).toBeUndefined();
+    expect(update.$set["economic.labourTightness"]).toBeUndefined();
+  });
+
+  it("clears stale national labor telemetry even when no other metric can be rolled up", async () => {
+    const states = [{ _id: "CA", countryId: "US", population: 1_000_000 }];
+    const db = makeDb(states, []);
+
+    await computeNationalMetrics(db as unknown as Db, 22);
+
+    expect(db._updateOne).toHaveBeenCalledWith(
+      { _id: "federal" },
+      expect.objectContaining({
+        $unset: {
+          "economic.labourDemand": "",
+          "economic.labourDemandTurn": "",
+          "economic.labourTightness": "",
+        },
+      }),
+      { upsert: true }
+    );
+  });
+
+  it("falls back to population weights for legacy unemployment data with no labor-force values", () => {
+    expect(
+      aggregateNationalMetricValue("economic", "unemploymentRate", [
+        { value: 8, population: 1, gdp: 9 },
+        { value: 2, population: 9, gdp: 1 },
+      ])
+    ).toBe(2.6);
+  });
+
+  it("falls back to population weighting when any unemployment labor-force weight is missing or zero", () => {
+    expect(
+      aggregateNationalMetricValue("economic", "unemploymentRate", [
+        { value: 8, population: 1, gdp: 9, laborForce: 900 },
+        { value: 2, population: 9, gdp: 1, laborForce: 100 },
+        { value: 99, population: 100, gdp: 100, laborForce: 0 },
+        { value: 77, population: 100, gdp: 100 },
+      ])
+    ).toBeCloseTo(83.933, 3);
+  });
+
+  it("does not write a partial national labor-force sum", async () => {
+    const states = [
+      { _id: "CA", countryId: "US", population: 1_000_000 },
+      { _id: "TX", countryId: "US", population: 9_000_000 },
+    ];
+    const metrics = [
+      {
+        _id: "CA",
+        economic: { laborForce: { value: 700_000 }, unemploymentRate: { value: 5 } },
+      },
+      { _id: "TX", economic: { unemploymentRate: { value: 4 } } },
+    ];
+    const db = makeDb(states, metrics);
+    await computeNationalMetrics(db as unknown as Db);
+    const setOps = db._updateOne.mock.calls[0][1].$set as Record<string, { value: number }>;
+    expect(setOps["economic.laborForce"]).toBeUndefined();
+  });
+
+  it("omits unemployment if no population fallback weight is usable", () => {
+    expect(
+      aggregateNationalMetricValue("economic", "unemploymentRate", [
+        { value: 8, population: 0, gdp: 1, laborForce: 0 },
+      ])
+    ).toBeUndefined();
   });
 
   it("gdpGrowth uses GDP weight — heavier-economy state dominates", async () => {
@@ -553,5 +723,49 @@ describe("population vs GDP weighting distinction", () => {
     // GDP-weighted: (5*9M + 1*1M) / 10M = 46M/10M = 4.6
     // Population-weighted would be: (5*1M + 1*9M) / 10M = 1.4
     expect(setOps["economic.gdpGrowth"].value).toBeCloseTo(4.6, 2);
+  });
+});
+
+describe("national corporate labour aggregation rules", () => {
+  it("sums only complete current-turn demand", () => {
+    expect(
+      aggregateNationalLabourDemand(
+        [
+          { demand: 100, laborForce: 1_000, demandTurn: 4 },
+          { demand: 500, laborForce: 9_000, demandTurn: 4 },
+        ],
+        4
+      )
+    ).toBe(600);
+    expect(
+      aggregateNationalLabourDemand(
+        [
+          { demand: 100, demandTurn: 4 },
+          { demand: 500, demandTurn: 3 },
+        ],
+        4
+      )
+    ).toBeUndefined();
+  });
+
+  it("computes national tightness as total demand over total labor force", () => {
+    expect(
+      aggregateNationalLabourTightness(
+        [
+          { demand: 100, laborForce: 1_000, demandTurn: 4 },
+          { demand: 500, laborForce: 9_000, demandTurn: 4 },
+        ],
+        4
+      )
+    ).toBe(0.06);
+    expect(
+      aggregateNationalLabourTightness(
+        [
+          { demand: 100, laborForce: 1_000, demandTurn: 4 },
+          { demand: 500, demandTurn: 4 },
+        ],
+        4
+      )
+    ).toBeUndefined();
   });
 });

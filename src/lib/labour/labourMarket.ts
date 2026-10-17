@@ -1,24 +1,20 @@
 /**
- * Labour market telemetry (phase 1 of the labour market build).
+ * Corporate labor-demand and labor-market tightness rules.
  *
  * The corporate engine has always sized a sector's headcount from its revenue
  * (`calculateWorkers`) and never once checked that headcount against the number
- * of people who actually live in the state. Supply and demand were computed by
- * two systems that had no edge between them: `economic.laborForce` comes out of
- * the metric engine, sector `workers` comes out of the corporation turn, and
- * nothing ever compared them.
+ * of people who actually live in the state. Corporate desired headcount is now
+ * compared with civilian labor force; the corporation turn writes demand, and
+ * the metric engine combines it with the labor force it computes that turn.
  *
  * The result is measurable and large. On the live world a single Arizona
  * extraction sector carried 47,996,752 workers against a state labour force of
  * 314,613, and state unemployment sat unmoved at 15% the whole time.
  *
- * This module is deliberately INERT. It computes the comparison and nothing
- * else: no rationing, no wage response, no unemployment coupling. Phase 1 exists
- * to put a real number on how tight each labour market is before any mechanic is
- * priced off it, because the tuning question ("how many markets are actually
- * oversubscribed, and by how much") cannot be answered from a codebase that has
- * never measured it. Phases 2 and 3 add rationing and the scarcity wage premium
- * on top of these fields.
+ * The tightness reading is used by unemployment and corporate staffing. The
+ * corporation turn consumes the prior reading for staffing; after that turn's
+ * demand and current labor force are both available, the metric engine writes
+ * a same-turn reading for unemployment and the next corporate turn.
  */
 
 /**
@@ -112,7 +108,7 @@ export const LABOUR_UNEMPLOYMENT_TIGHTNESS_K = 0.5;
 export const LABOUR_UNEMPLOYMENT_TIGHTNESS_CAP_PP = 0.5;
 
 /**
- * One-turn unemployment-target pressure from the measured labour market (#791).
+ * One-turn unemployment-target pressure from the measured labor market (#791).
  *
  * Tight market (tightness > 1, firms want more workers than exist) pushes the
  * target DOWN; slack (tightness < 1) pushes it UP. Log form so a doubling and

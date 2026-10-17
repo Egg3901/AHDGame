@@ -21,7 +21,7 @@ import {
   fxRateForCorpFromMap,
   resolveCorpLiquidCurrencyCode,
 } from "@/lib/currency/corporationCapital";
-import { computeLabourTightness, roundTightness } from "@/lib/labour/labourMarket";
+import { NATIONAL_SCOPE_IDS } from "@/lib/constants/nationalScope";
 import { emitTxBulk } from "@/lib/financialTxLog/emit";
 import type { FinancialTxLogEntry, TxThresholds } from "@/lib/db/types/financialTxLog";
 import { distributeConversionSpreadsBatch } from "@/lib/currency/marketMaker";
@@ -101,58 +101,43 @@ export async function persistLabourIndices(args: {
 }
 
 /**
- * Phase 1 labour market telemetry: persist per-state corporate labour DEMAND and
- * the resulting tightness ratio against the metric engine's civilian labour
- * force.
- *
- * These two systems have never been compared. `economic.laborForce` is written
- * by the metric-engine phase from working-age population and participation;
- * sector `workers` is written by this turn from revenue. Nothing has ever
- * checked one against the other, which is how the live world reached a single
- * Arizona extraction sector holding 47,996,752 workers against a 314,613-person
- * state labour force while unemployment sat unmoved at 15%.
- *
- * Deliberately INERT. Nothing reads these fields back into the economy. Phase 1
- * exists so the rationing and scarcity-wage mechanics in phases 2 and 3 can be
- * tuned against a real distribution of tightness readings rather than a guess.
- *
- * Written whenever the corporation turn ran at all, NOT gated on
- * `wagesEnabled`, because desired headcount is a fact about the sectors and
- * would otherwise be blank in exactly the worlds most likely to need it. States
- * with no `laborForce` reading get their demand recorded but no tightness, since
- * unknown supply means unknown tightness rather than infinite tightness.
+ * Persist the corporation turn's desired headcount for every region. The metric
+ * engine combines this current-turn snapshot with the labor force it computes
+ * later in the same turn. Writing zeroes for regions without sectors clears
+ * stale readings and gives national aggregation complete coverage.
  */
-export async function persistLabourMarketTelemetry(args: {
+export async function persistLabourDemand(args: {
   db: Db;
   labourDemandByState: Map<string, number>;
   labourDemandWageIndexByState?: Map<string, number>;
   turn: number | undefined;
 }): Promise<void> {
   const { db, labourDemandByState, labourDemandWageIndexByState, turn } = args;
-  if (labourDemandByState.size === 0) return;
+  if (typeof turn !== "number") return;
 
-  const stateIds = Array.from(labourDemandByState.keys());
-  const supplyDocs = await db
+  // Write every region, including zero-demand regions, so rollups can
+  // distinguish a real zero from missing or stale telemetry. Tightness is
+  // calculated later by the metric engine, after it computes this turn's
+  // labour force. Do not overwrite the prior tightness here: corporate staffing
+  // intentionally consumes that prior-turn signal to avoid a feedback loop.
+  const regions = await db
     .collection<StateMetrics>("macroMetrics")
-    .find({ _id: { $in: stateIds } })
-    .project<{ _id: string; economic?: { laborForce?: { value?: number } } }>({
-      "economic.laborForce.value": 1,
-    })
+    .find({ _id: { $nin: Array.from(NATIONAL_SCOPE_IDS) } })
+    .project<{ _id: string }>({ _id: 1 })
     .toArray();
-  const supplyByState = new Map(supplyDocs.map((d) => [d._id, d.economic?.laborForce?.value]));
 
-  const ops = Array.from(labourDemandByState, ([stateId, demand]) => {
-    const set: Record<string, number> = {
-      "economic.labourDemand.value": Math.round(demand),
-      "economic.labourDemandWageIndex.value": labourDemandWageIndexByState?.get(stateId) ?? 1,
-    };
-    const tightness = computeLabourTightness(demand, supplyByState.get(stateId));
-    if (tightness !== undefined) {
-      set["economic.labourTightness.value"] = roundTightness(tightness);
-    }
-    if (typeof turn === "number") set["economic.labourDemandTurn"] = turn;
-    return { updateOne: { filter: { _id: stateId }, update: { $set: set } } };
-  });
+  const ops = regions.map(({ _id: stateId }) => ({
+    updateOne: {
+      filter: { _id: stateId },
+      update: {
+        $set: {
+          "economic.labourDemand.value": Math.round(labourDemandByState.get(stateId) ?? 0),
+          "economic.labourDemandWageIndex.value": labourDemandWageIndexByState?.get(stateId) ?? 1,
+          "economic.labourDemandTurn": turn,
+        },
+      },
+    },
+  }));
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   await db.collection("macroMetrics").bulkWrite(ops as any[]);
