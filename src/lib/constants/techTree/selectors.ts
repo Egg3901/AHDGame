@@ -240,7 +240,12 @@ export function canUnlock(
   if ((corp.unlockedTechNodeIds ?? []).includes(nodeId)) {
     return { ok: false, reason: "already-owned", node };
   }
-  const committed = getCommittedLane(corp, node.decadeId);
+  // Past decades are auto-granted in BOTH lanes at founding (see
+  // autoGrantedNodeIds), so no lane commitment applies there. The inference
+  // fallback in getCommittedLane must not be read as a commitment — mirrors the
+  // tech read model and the abandon guard.
+  const isPastDecade = getPassedDecadeIds(currentYear).includes(node.decadeId);
+  const committed = isPastDecade ? undefined : getCommittedLane(corp, node.decadeId);
   if (committed && committed !== node.lane) {
     return { ok: false, reason: "lane-locked", node };
   }
