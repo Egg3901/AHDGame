@@ -123,7 +123,7 @@ describe("entryEvaluation seam", () => {
 
   it("names the retail pause on the candidate instead of the cash floor", () => {
     const entry = evaluate({
-      corporation: corp(),
+      corporation: corp({ type: "retail" }),
       pools: [pool("retail")],
       retailExpansionPaused: true,
     });
