@@ -47,7 +47,7 @@ describe("producer property during agreed acquisitions", () => {
     });
     const source = sector(owner, 200, 150, 20),
       destination = sector(buyer, 400, 350, 30);
-    memory.seed("corporateSectors", [source, destination]);
+    memory.seed("corporateSectors", [{ ...source }, { ...destination }]);
     await moveSectorToCorp(
       memory as unknown as Db,
       source,

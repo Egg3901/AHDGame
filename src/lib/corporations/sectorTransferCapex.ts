@@ -353,7 +353,8 @@ export function carveSectorPlantFields(
     legacyRevenueShadow: sourceShadow === null ? null : sourceShadow * f,
     // The pile follows the capacity, so the two halves still sum to the original.
     ...inventoryFragment([sector], stockFraction),
-    ...carveProducerTransferState(sector, stockFraction),
+    // Goods are divisible even when the facility count rounds to zero.
+    ...carveProducerTransferState(sector, f),
   };
 }
 
