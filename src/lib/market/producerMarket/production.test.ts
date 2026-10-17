@@ -36,6 +36,161 @@ const accounts = [
 ];
 
 describe("receipt-backed production", () => {
+  it("sells retained goods after a recipe change without producing or expensing them again", () => {
+    const result = advanceProducerEconomy({
+      turn: 1,
+      accounts,
+      carryLossByCommodity: { steel: 0 },
+      producers: [
+        plant({
+          capacityUnits: 0,
+          labourCost: 0,
+          otherOperatingCost: 0,
+          outputs: [
+            {
+              commodity: "steel",
+              book: "world",
+              unitsPerOutput: 0,
+              referenceUnitPrice: 9,
+              retainedUnitCost: 2,
+              policy: { kind: "costPlus", markup: 0.5 },
+              storable: true,
+            },
+          ],
+          outputStock: [{ commodity: "steel", book: "world", units: 5, quoteUnitCost: 2 }],
+        }),
+      ],
+      externalOrders: [
+        {
+          id: "customer",
+          accountId: "households",
+          commodity: "steel",
+          book: "world",
+          units: 3,
+          maximumUnitPrice: 3,
+        },
+      ],
+    });
+    expect(result.producers[0]).toMatchObject({
+      producedUnits: 0,
+      revenue: 9,
+      inputsConsumed: 0,
+      profit: 9,
+      outputStock: [{ commodity: "steel", book: "world", units: 2, quoteUnitCost: 2 }],
+    });
+    expect(result.producers[0].products[0]).toMatchObject({
+      producedUnits: 0,
+      deliveredUnits: 3,
+      askingUnitPrice: 3,
+    });
+    expect(result.accounts.find((account) => account.id === "corp")?.cash).toBe(1009);
+    expect(result.accounts.find((account) => account.id === "households")?.cash).toBe(991);
+  });
+
+  it("does not invent a retained unit cost for cost-plus pricing", () => {
+    const producer = plant({
+      capacityUnits: 0,
+      outputs: [
+        {
+          commodity: "steel",
+          book: "world",
+          unitsPerOutput: 0,
+          referenceUnitPrice: 9,
+          policy: { kind: "costPlus", markup: 0.5 },
+          storable: true,
+        },
+      ],
+      outputStock: [{ commodity: "steel", book: "world", units: 5 }],
+    });
+    expect(() => advanceProducerEconomy({ turn: 1, accounts, producers: [producer] })).toThrow(
+      "recorded unit cost"
+    );
+    const manual = {
+      ...producer,
+      outputs: producer.outputs.map((output) => ({
+        ...output,
+        policy: { kind: "manual" as const, unitPrice: 3 },
+      })),
+    };
+    expect(
+      advanceProducerEconomy({ turn: 1, accounts, producers: [manual] }).producers[0].outputStock[0]
+    ).not.toHaveProperty("quoteUnitCost");
+  });
+
+  it("records actual production expense as a quote memo without recognizing another stock asset", () => {
+    const result = advanceProducerEconomy({
+      turn: 1,
+      accounts,
+      carryLossByCommodity: { steel: 0 },
+      producers: [
+        plant({
+          capacityUnits: 10,
+          inputs: [],
+          labourCost: 20,
+          otherOperatingCost: 10,
+          outputs: [
+            {
+              commodity: "steel",
+              book: "world",
+              unitsPerOutput: 1,
+              referenceUnitPrice: 9,
+              policy: { kind: "manual", unitPrice: 3 },
+              storable: true,
+            },
+          ],
+        }),
+      ],
+    });
+    expect(result.producers[0]).toMatchObject({
+      producedUnits: 10,
+      profit: -30,
+      cashFlow: -30,
+      outputStock: [{ commodity: "steel", book: "world", units: 10, quoteUnitCost: 3 }],
+    });
+  });
+
+  it.each([true, false])(
+    "does not invent or re-expense the older stock cost, known=%s",
+    (known) => {
+      const result = advanceProducerEconomy({
+        turn: 1,
+        accounts,
+        carryLossByCommodity: { steel: 0 },
+        producers: [
+          plant({
+            capacityUnits: 10,
+            inputs: [],
+            labourCost: 20,
+            otherOperatingCost: 10,
+            outputs: [
+              {
+                commodity: "steel",
+                book: "world",
+                unitsPerOutput: 1,
+                referenceUnitPrice: 9,
+                policy: { kind: "manual", unitPrice: 3 },
+                storable: true,
+              },
+            ],
+            outputStock: [
+              {
+                commodity: "steel",
+                book: "world",
+                units: 5,
+                ...(known ? { quoteUnitCost: 2 } : {}),
+              },
+            ],
+          }),
+        ],
+      });
+      const receipt = result.producers[0];
+      expect(receipt.profit).toBe(-30);
+      expect(receipt.outputStock[0].units).toBe(15);
+      if (known) expect(receipt.outputStock[0].quoteUnitCost).toBeCloseTo(40 / 15);
+      else expect(receipt.outputStock[0]).not.toHaveProperty("quoteUnitCost");
+    }
+  );
+
   it.each([0, 6])(
     "consumes reserved and fallback inputs once, reserved supplier stock=%s",
     (contractedStock) => {

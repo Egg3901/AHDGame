@@ -94,6 +94,71 @@ function fixture() {
 }
 
 describe("corporation producer market phase", () => {
+  it.each([false, true])(
+    "replays a retained-stock sale and its historical quote memo after a crash, afterWrite=%s",
+    async (afterWrite) => {
+      const { memory, corp, input, db, sector, household } = fixture();
+      const stock = { commodity: "steel", book: "world", units: 5, quoteUnitCost: 2 };
+      memory.collection("corporateSectors").docs[0].producerInventory = {
+        ...sector.producerInventory,
+        outputStock: [stock],
+      };
+      const prepared = input.prepare();
+      prepared[0].plan.outputStock = [stock];
+      prepared[0].plan.outputs = [
+        ...prepared[0].plan.outputs,
+        {
+          commodity: "steel",
+          book: "world",
+          unitsPerOutput: 0,
+          referenceUnitPrice: 9,
+          retainedUnitCost: 2,
+          policy: { kind: "costPlus", markup: 0.5 },
+          storable: true,
+        },
+      ];
+      input.prepare = () => prepared;
+      input.demand = {
+        externalOrders: [
+          {
+            id: "old-goods-customer",
+            accountId: household,
+            commodity: "steel",
+            book: "world",
+            units: 2,
+            maximumUnitPrice: 3,
+          },
+        ],
+      };
+      const faulty = withInjectedCrash(memory, {
+        collection: "corporateSectors",
+        op: "bulkWrite",
+        onCall: 1,
+        afterWrite,
+      });
+      await expect(runCorporationProducerMarket(faulty.db, input)).rejects.toThrow("crash");
+      input.prepare = () => {
+        throw new Error("Must replay the original stock and quote");
+      };
+      input.rates = new Map([["USD", 7]]);
+      const result = await runCorporationProducerMarket(db, input);
+      expect(corp.liquidCapital).toBe(982);
+      expect(result.operatingByCorporation.get(corp._id.toHexString())).toMatchObject({
+        revenue: 6,
+        expenses: 15,
+        profit: -9,
+        cashFlow: -9,
+      });
+      const closingStock = result.closingSectors[0].producerInventory?.outputStock.find(
+        (row) => row.commodity === "steel"
+      );
+      expect(closingStock).toMatchObject({ units: expect.closeTo(2.994, 10), quoteUnitCost: 2 });
+      await runCorporationProducerMarket(db, input);
+      expect(corp.liquidCapital).toBe(982);
+      expect(memory.collection("ledgerEntries").docs).toHaveLength(1);
+    }
+  );
+
   it("funds purchases with paid wages and refreshes actual native cash without creating buyer money", async () => {
     const { memory, corp, input, db } = fixture();
     const settled = await runCorporationProducerMarket(db, input);

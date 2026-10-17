@@ -2,6 +2,7 @@ import type { ProducerPayable } from "@/lib/market/producerMarket/payablesRules"
 import type {
   ProducerOperatingResult,
   PurchasedStock,
+  ProducedStock,
 } from "@/lib/market/producerMarket/production";
 
 /** Cash-backed counterparties to producer sales and operating payments. */
@@ -38,5 +39,5 @@ export interface ProducerInventoryState {
   worldEpoch: string;
   turn: number;
   inputStock: PurchasedStock[];
-  outputStock: Array<{ commodity: string; book: string; units: number }>;
+  outputStock: ProducedStock[];
 }

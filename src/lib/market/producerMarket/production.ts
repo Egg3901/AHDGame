@@ -28,6 +28,14 @@ export interface PurchasedStock {
   value: number;
 }
 
+export interface ProducedStock {
+  commodity: string;
+  units: number;
+  book: string;
+  /** Historical quote memo only. Production expenses were already recognized. */
+  quoteUnitCost?: number;
+}
+
 export interface ProductionPlan {
   id: string;
   accountId: string;
@@ -48,6 +56,8 @@ export interface ProductionPlan {
     policy: ProducerQuotePolicy;
     referenceUnitPrice: number;
     storable: boolean;
+    /** Required for cost-plus sales of stock no longer made by this recipe. */
+    retainedUnitCost?: number;
   }[];
   /** Cash payment for the active workforce, independent of realized sales. */
   labourCost: number;
@@ -57,7 +67,7 @@ export interface ProductionPlan {
   operatingRecipientAccountId: string;
   inputStock: readonly PurchasedStock[];
   /** Previously produced, unsold stock available beside current production. */
-  outputStock: readonly { commodity: string; units: number; book: string }[];
+  outputStock: readonly ProducedStock[];
 }
 
 export interface ProducerInputReservation {
@@ -95,7 +105,7 @@ export interface ProducerOperatingResult {
   profit: number;
   cashFlow: number;
   inputStock: PurchasedStock[];
-  outputStock: Array<{ commodity: string; units: number; book: string }>;
+  outputStock: ProducedStock[];
   /** Receipts on the same per-turn physical basis as purchases and inventory. */
   products: Array<{
     commodity: string;
@@ -278,9 +288,17 @@ export function advanceProducerEconomy(input: {
       outputCommodities.add(output.commodity);
       finite(output.unitsPerOutput, "output recipe");
       finite(output.referenceUnitPrice, "reference price");
+      if (output.retainedUnitCost != null) finite(output.retainedUnitCost, "retained quote cost");
+      if (
+        output.unitsPerOutput === 0 &&
+        output.policy.kind === "costPlus" &&
+        output.retainedUnitCost == null
+      )
+        throw new Error("Retained cost-plus stock requires a recorded unit cost");
     }
     for (const stock of p.outputStock) {
       finite(stock.units, "output stock");
+      if (stock.quoteUnitCost != null) finite(stock.quoteUnitCost, "stock quote cost");
       if (
         !outputCommodities.has(stock.commodity) ||
         !p.outputs.some(
@@ -552,7 +570,9 @@ export function advanceProducerEconomy(input: {
         policy: output.policy,
         referenceUnitPrice: output.referenceUnitPrice,
         variableUnitCost:
-          output.unitsPerOutput > 0 ? (variablePerOutput * weight) / output.unitsPerOutput : 0,
+          output.unitsPerOutput > 0
+            ? (variablePerOutput * weight) / output.unitsPerOutput
+            : (output.retainedUnitCost ?? 0),
         fixedCost: fixed * weight,
         offeredUnits: units,
         demand: quoteVolumesExcept(demandBooks, output.commodity, output.book, p.accountId).map(
@@ -735,6 +755,29 @@ export function advanceProducerEconomy(input: {
         .filter((s) => s.commodity === output.commodity && s.book === output.book)
         .reduce((n, s) => n + s.units, 0);
       const available = opening + produced * output.unitsPerOutput;
+      const openingRows = p.outputStock.filter(
+        (stock) =>
+          stock.commodity === output.commodity && stock.book === output.book && stock.units > 0
+      );
+      const outputValue = p.outputs.reduce(
+        (sum, row) => sum + row.unitsPerOutput * row.referenceUnitPrice,
+        0
+      );
+      const weight =
+        outputValue > 0 ? (output.unitsPerOutput * output.referenceUnitPrice) / outputValue : 0;
+      const made = produced * output.unitsPerOutput;
+      // Preserve an unknown historical cost as unknown. A reference price or
+      // this turn's fixed bill cannot manufacture the old stock's cost basis.
+      const knownOpeningCost = openingRows.every((stock) => stock.quoteUnitCost != null);
+      const quoteUnitCost =
+        available > 0 && knownOpeningCost && (made === 0 || outputValue > 0)
+          ? finite(
+              (openingRows.reduce((sum, stock) => sum + stock.units * stock.quoteUnitCost!, 0) +
+                (made > 0 ? (consumed + p.labourCost + p.otherOperatingCost) * weight : 0)) /
+                available,
+              "closing stock quote cost"
+            )
+          : undefined;
       if (sold.deliveredUnits - available > Math.max(1e-8, available * 1e-12))
         throw new Error("Sold output exceeded input-backed production");
       const unsold = Math.max(0, available - sold.deliveredUnits);
@@ -761,6 +804,7 @@ export function advanceProducerEconomy(input: {
         commodity: output.commodity,
         book: output.book,
         units: kept,
+        ...(quoteUnitCost != null && kept > 0 ? { quoteUnitCost } : {}),
       };
     });
     const paid = payments.get(p.id)!;

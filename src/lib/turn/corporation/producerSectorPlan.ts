@@ -1,5 +1,5 @@
 /** Map a reconciled sector and explicit physical/cost facts into the one funded market. */
-import type { CommodityType } from "@/lib/constants/commodities";
+import { COMMODITY_TYPES, type CommodityType } from "@/lib/constants/commodities";
 import type { CorporateSector } from "@/lib/db/types";
 import { activeCapacityFraction } from "@/lib/corporations/investment/rules";
 import { isStorable } from "@/lib/market/inventory";
@@ -109,6 +109,48 @@ export function prepareProducerSector(input: {
       throw new Error("Missing valued producer market");
     return market;
   };
+  const outputs: ProductionPlan["outputs"][number][] = recipe.outputs.map(
+    ({ commodity, unitsPerOutput }) => {
+      const market = marketFor(commodity);
+      return {
+        commodity,
+        unitsPerOutput,
+        book: market.book,
+        policy: sector.producerQuotes?.[commodity] ?? { kind: "automatic", targetMarkup: 0 },
+        referenceUnitPrice: market.referenceUnitPrice,
+        storable: isStorable(commodity),
+      };
+    }
+  );
+  const currentOutputs = new Set(outputs.map((output) => output.commodity));
+  const retained = new Map<string, typeof inventory.outputStock>();
+  for (const stock of inventory.outputStock) {
+    if (stock.units === 0 || currentOutputs.has(stock.commodity)) continue;
+    const rows = retained.get(stock.commodity) ?? [];
+    rows.push(stock);
+    retained.set(stock.commodity, rows);
+  }
+  for (const [name, rows] of [...retained].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) {
+    const commodity = COMMODITY_TYPES.find((item) => item === name);
+    if (!commodity || !isStorable(commodity))
+      throw new Error("Unrecognized retained producer goods");
+    const market = marketFor(commodity);
+    if (rows.some((stock) => stock.book !== market.book))
+      throw new Error("Retained stock requires market-scope reconciliation");
+    const units = rows.reduce((sum, stock) => sum + stock.units, 0);
+    const retainedUnitCost = rows.every((stock) => stock.quoteUnitCost != null)
+      ? rows.reduce((sum, stock) => sum + stock.units * stock.quoteUnitCost!, 0) / units
+      : undefined;
+    outputs.push({
+      commodity,
+      unitsPerOutput: 0,
+      book: market.book,
+      policy: sector.producerQuotes?.[commodity] ?? { kind: "automatic", targetMarkup: 0 },
+      referenceUnitPrice: market.referenceUnitPrice,
+      storable: true,
+      ...(retainedUnitCost != null ? { retainedUnitCost } : {}),
+    });
+  }
   return {
     target,
     plan: {
@@ -123,17 +165,7 @@ export function prepareProducerSector(input: {
         book: marketFor(commodity).book,
         maximumUnitPrice: marketFor(commodity).maximumInputUnitPrice,
       })),
-      outputs: recipe.outputs.map(({ commodity, unitsPerOutput }) => {
-        const market = marketFor(commodity);
-        return {
-          commodity,
-          unitsPerOutput,
-          book: market.book,
-          policy: sector.producerQuotes?.[commodity] ?? { kind: "automatic", targetMarkup: 0 },
-          referenceUnitPrice: market.referenceUnitPrice,
-          storable: isStorable(commodity),
-        };
-      }),
+      outputs,
       labourCost: input.labourCost,
       otherOperatingCost: input.otherOperatingCost,
       labourRecipientAccountId: input.labourRecipientAccountId,

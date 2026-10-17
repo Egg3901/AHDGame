@@ -2,6 +2,7 @@
 import type { Corporation, CorporateSector } from "@/lib/db/types";
 import {
   COMMODITY_BASE_PRICES,
+  COMMODITY_TYPES,
   eraScaledBasePrices,
   type CommodityType,
 } from "@/lib/constants/commodities";
@@ -178,9 +179,14 @@ export function prepareProducerPhysicalSector(input: {
     getInputMultiplier(policyLevel) / policyOutput
   );
   const prices = eraScaledBasePrices(lookups.eraUnitScale);
+  const commodities = new Set(Object.keys({ ...recipe.supply, ...recipe.demand }));
+  for (const stock of sector.producerInventory?.outputStock ?? []) {
+    if (stock.units > 0) commodities.add(stock.commodity);
+  }
   const markets = new Map(
-    Object.keys({ ...recipe.supply, ...recipe.demand }).map((key) => {
-      const commodity = key as CommodityType;
+    [...commodities].map((key) => {
+      const commodity = COMMODITY_TYPES.find((item) => item === key);
+      if (!commodity) throw new Error("Unrecognized producer commodity");
       const ratio = isStateScopedCommodity(commodity)
         ? lookups.statePriceRatioByState?.get(sector.stateId)?.get(commodity)
         : lookups.reachablePriceRatioByCountry?.get(countryId)?.get(commodity);

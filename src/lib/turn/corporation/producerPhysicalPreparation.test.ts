@@ -54,6 +54,34 @@ function fixture() {
 }
 
 describe("physical producer preparation", () => {
+  it("retains sale-only quotes for stored goods outside the current production recipe", () => {
+    const { input, sector } = fixture();
+    sector.producerInventory!.outputStock = [
+      { commodity: "steel", book: "world", units: 5, quoteUnitCost: 2 },
+    ];
+    sector.producerQuotes = { steel: { kind: "costPlus", markup: 0.5 } };
+    const prepared = prepareProducerPhysicalSector(input).prepared.plan;
+    expect(prepared.outputs.find((output) => output.commodity === "steel")).toMatchObject({
+      unitsPerOutput: 0,
+      retainedUnitCost: 2,
+      policy: { kind: "costPlus", markup: 0.5 },
+    });
+    expect(prepared.outputStock).toEqual(sector.producerInventory!.outputStock);
+    expect(
+      prepared.outputs.some(
+        (output) => output.commodity === "financial_services" && output.unitsPerOutput > 0
+      )
+    ).toBe(true);
+  });
+
+  it("does not relocate retained goods into another market book", () => {
+    const { input, sector } = fixture();
+    sector.producerInventory!.outputStock = [
+      { commodity: "steel", book: "different-book", units: 5 },
+    ];
+    expect(() => prepareProducerPhysicalSector(input)).toThrow("market-scope reconciliation");
+  });
+
   it("keeps staff and capacity independent of quotes, recorded revenue and last turn's fill", () => {
     const { input, sector } = fixture();
     const first = prepareProducerPhysicalSector(input);
