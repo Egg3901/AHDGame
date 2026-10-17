@@ -1,5 +1,11 @@
 "use client";
-import { CONTRACT_OFFER_EXPIRY_TURNS } from "@/lib/constants/prospecting";
+import {
+  BIDDING_TURNS_MIN,
+  BIDDING_TURNS_MAX,
+  BIDDING_TURNS_DEFAULT,
+  AWARD_WINDOW_TURNS,
+  tenderDeadlines,
+} from "@/lib/governmentContracts/rules";
 import { GRADE_PRICE_SCALE } from "@/lib/military/defenceLotEconomics";
 import { useState } from "react";
 import { useTranslations } from "next-intl";
@@ -63,7 +69,8 @@ export function PublishTenderForm({
           : "extraction"
   );
   const [grade, setGrade] = useState(0);
-  const defenceWindowAvailable = access.currentTurn + 2 <= access.window.endTurn + 1;
+  const [biddingTurns, setBiddingTurns] = useState(BIDDING_TURNS_DEFAULT);
+  const deadlines = tenderDeadlines(access.currentTurn, biddingTurns);
   const sortedStates = sortByRegionLabel(access.states, (s) => s.stateId);
   const [stateId, setStateId] = useState(sortedStates[0]?.stateId ?? "");
   const [busy, setBusy] = useState(false),
@@ -91,8 +98,7 @@ export function PublishTenderForm({
           await contractPost(`/api/country/${countryId}/government-contracts`, {
             title: form.get("title"),
             description: form.get("description"),
-            closesTurn: n("closesTurn"),
-            awardDeadlineTurn: n("awardDeadlineTurn"),
+            biddingTurns: n("biddingTurns"),
             terms:
               type === "defence"
                 ? {
@@ -149,49 +155,27 @@ export function PublishTenderForm({
           className={inputClass}
         />
       </label>
-      <div className="grid gap-4 sm:grid-cols-2">
-        <label className="text-sm">
-          {t("closesTurn")}
-          <input
-            required
-            type="number"
-            name="closesTurn"
-            min={access.currentTurn + 1}
-            max={access.currentTurn + CONTRACT_OFFER_EXPIRY_TURNS - 1}
-            key={type}
-            defaultValue={
-              type === "defence"
-                ? Math.min(access.currentTurn + 2, access.window.endTurn)
-                : access.currentTurn + 2
-            }
-            className={inputClass}
-          />
-        </label>
-        <label className="text-sm">
-          {t("awardDeadline")}
-          <input
-            required
-            type="number"
-            key={type}
-            name="awardDeadlineTurn"
-            min={access.currentTurn + 2}
-            max={
-              type === "defence"
-                ? Math.min(
-                    access.window.endTurn + 1,
-                    access.currentTurn + CONTRACT_OFFER_EXPIRY_TURNS
-                  )
-                : access.currentTurn + CONTRACT_OFFER_EXPIRY_TURNS
-            }
-            defaultValue={
-              type === "defence"
-                ? Math.min(access.currentTurn + 4, access.window.endTurn + 1)
-                : access.currentTurn + 4
-            }
-            className={inputClass}
-          />
-        </label>
-      </div>
+      <label className="block text-sm">
+        {t("biddingLength")}
+        <input
+          required
+          type="number"
+          name="biddingTurns"
+          min={BIDDING_TURNS_MIN}
+          max={BIDDING_TURNS_MAX}
+          step={1}
+          value={biddingTurns}
+          onChange={(e) => setBiddingTurns(Number(e.target.value))}
+          className={inputClass}
+        />
+      </label>
+      <p className="text-sm text-muted">
+        {t("deadlineSummary", {
+          close: deadlines.closesTurn,
+          deadline: deadlines.awardDeadlineTurn,
+          turns: AWARD_WINDOW_TURNS,
+        })}
+      </p>
       {type === "defence" ? (
         <fieldset className="grid gap-4 sm:grid-cols-2">
           <label className="text-sm">
@@ -254,11 +238,6 @@ export function PublishTenderForm({
           {access.uncommittedAppropriation != null && (
             <p className="text-sm text-muted sm:col-span-2">
               {t("fundingReference", { amount: access.uncommittedAppropriation })}
-            </p>
-          )}
-          {!defenceWindowAvailable && (
-            <p role="status" className="text-sm text-warning sm:col-span-2">
-              {t("windowTooLate", { turn: access.window.endTurn + 1 })}
             </p>
           )}
         </fieldset>
@@ -343,10 +322,7 @@ export function PublishTenderForm({
           {error}
         </p>
       )}
-      <button
-        className={buttonClass}
-        disabled={busy || (type === "defence" && !defenceWindowAvailable)}
-      >
+      <button className={buttonClass} disabled={busy}>
         {t("publish")}
       </button>
     </form>

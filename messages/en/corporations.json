@@ -789,7 +789,7 @@
     },
     "governmentContracts": {
       "heading": "Government Contracts",
-      "intro": "Public opportunities to supply the government or operate resource concessions. Corporations compete on price, and the government publishes its award decision.",
+      "intro": "Choose an open tender, review its requirements, and submit a sealed corporate bid before the closing turn. Defence bids are prices paid by the government; extraction bids are signing fees paid to the government. After bidding closes, the authorized official selects a qualifying bid and publishes a reason. New tenders allow 24 turns for that decision. No winner is chosen automatically.",
       "tabsLabel": "Contract status",
       "tabs": {
         "active": "Active Bidding",
@@ -813,7 +813,11 @@
       "allTypes": "All types",
       "results": "{count, plural, one {# result} other {# results}}",
       "publish": "Publish tender",
-      "publishExplanation": "Set the requirements before inviting bids. No corporation is selected when you publish.",
+      "publishExplanation": "Set the requirements and invite sealed bids. Eligible CEOs are notified. Corporations must submit a bid; publishing does not select a supplier. After bidding closes, the authorized official chooses a qualifying bid and gives a public reason.",
+      "biddingLength": "Bidding period (6 to 48 turns)",
+      "deadlineSummary": "Bids close on turn {close}. The government then has {turns} turns to choose a winner, before turn {deadline}.",
+      "corporationOpportunities": "Government contracts: browse opportunities for your corporation.",
+      "viewOpenBids": "View open bids",
       "titleLabel": "Contract title",
       "descriptionLabel": "Requirements and purpose",
       "closesTurn": "Bidding closes on turn",

@@ -3,6 +3,7 @@ import { ObjectId, type Db } from "mongodb";
 import type { AuthUserWithCharacter } from "@/lib/auth";
 import { createInMemoryDb } from "@/lib/test-utils/inMemoryDb";
 import { publishTender } from "./commands";
+import * as bidderAlerts from "./opportunityNotifications";
 import { tenders } from "./persistence";
 import { lotPrice } from "@/lib/military/arsenal";
 import { militaryPriceAnchor } from "@/lib/military/procurement";
@@ -34,6 +35,25 @@ beforeEach(async () => {
   });
 });
 describe("defence tender publication price floor", () => {
+  it("keeps a published tender open when notification delivery fails", async () => {
+    const alerts = vi
+      .spyOn(bidderAlerts, "notifyTenderBidders")
+      .mockRejectedValueOnce(new Error("Synthetic notification outage"));
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const id = await publish(await floor("standard"));
+      expect((await tenders(db).findOne({ _id: id }))?.status).toBe("open");
+      expect(alerts).toHaveBeenCalledWith(
+        db,
+        expect.objectContaining({ _id: id, status: "open" }),
+        1,
+        now
+      );
+    } finally {
+      alerts.mockRestore();
+      log.mockRestore();
+    }
+  });
   async function floor(strategy: string, grade = 0) {
     const budget = (await db.collection("federalBudget").findOne({ countryId: "US" }))!;
     const anchor = lotPrice(
@@ -57,8 +77,8 @@ describe("defence tender publication price floor", () => {
       {
         title: "Equipment procurement",
         description: "Synthetic equipment procurement",
-        closesTurn: 3,
-        awardDeadlineTurn: 6,
+        closesTurn: 7,
+        awardDeadlineTurn: 31,
         terms: { type: "defence", component, lots: 1, grade, maximumPricePerLot },
       },
       government,

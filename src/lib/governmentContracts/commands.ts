@@ -3,6 +3,7 @@
  * Publishing holds budget or capacity; award and cancellation preserve the existing contracts' accounting.
  */
 import { automatedDefenceBids } from "./automatedBids";
+import { notifyTenderBidders } from "./opportunityNotifications";
 import { requireCeo } from "@/lib/api/corporations/resolveQuery";
 import { ObjectId, type Db } from "mongodb";
 import type { AuthUserWithCharacter } from "@/lib/auth";
@@ -38,6 +39,7 @@ import {
   tenderTab,
   canAward,
   validDeadlines,
+  tenderDeadlines,
   tenderReservationValue,
   validContractCopy,
 } from "./rules";
@@ -62,9 +64,14 @@ export async function publishTender(
   let defenseLine = 0;
   const window =
     input.terms.type === "defence" ? defenceContractWindow(countryId, turn) : undefined;
-  if (!validDeadlines(turn, input.closesTurn, input.awardDeadlineTurn, window?.endTurn))
+  const { biddingTurns, ...tenderInput } = input;
+  const deadlines =
+    input.closesTurn == null
+      ? tenderDeadlines(turn, biddingTurns)
+      : { closesTurn: input.closesTurn, awardDeadlineTurn: input.awardDeadlineTurn! };
+  if (!validDeadlines(turn, deadlines.closesTurn, deadlines.awardDeadlineTurn))
     throw new ContractError(
-      "Bidding must close after this turn, with a later award deadline within 24 turns of publishing. Defence awards must also fit the current contracting window.",
+      "Bidding must last 6 to 48 turns, followed by a 24-turn award window.",
       400
     );
   if (input.terms.type === "defence") {
@@ -118,7 +125,8 @@ export async function publishTender(
   const t: GovernmentTender = {
     _id: new ObjectId().toHexString(),
     countryId,
-    ...input,
+    ...tenderInput,
+    ...deadlines,
     issuerLevel: level,
     ...(input.terms.type === "defence"
       ? { issuerPositionId: DEFENSE_POSITION_BY_COUNTRY[countryId] ?? undefined }
@@ -152,6 +160,15 @@ export async function publishTender(
     );
     if (!opened.modifiedCount)
       throw new ContractError("The tender was canceled or expired before publishing finished.");
+    try {
+      await notifyTenderBidders(db, { ...t, status: "open" }, turn, now);
+    } catch (notificationError) {
+      // Discovery is a non-fatal side effect after the tender is durably open.
+      console.error(
+        "[government-contract-opportunities] Notification delivery failed:",
+        notificationError
+      );
+    }
     return t._id;
   } catch (error) {
     await tenders(db).updateOne(

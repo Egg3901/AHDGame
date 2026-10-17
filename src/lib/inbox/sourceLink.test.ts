@@ -2,6 +2,15 @@ import { describe, it, expect } from "vitest";
 import { resolveSourceLink } from "./sourceLink";
 
 describe("resolveSourceLink", () => {
+  it("links new tender alerts to the specific opportunity", () => {
+    expect(
+      resolveSourceLink("government_contract_opened", {
+        countryId: "JP",
+        tenderId: "abc",
+        contractType: "defence",
+      })?.href
+    ).toBe("/country/jp/government-contracts?tab=active&type=defence&tender=abc");
+  });
   it("links government awards to the buying country board", () => {
     expect(
       resolveSourceLink("government_contract_awarded", { countryId: "JP", tenderId: "t" })

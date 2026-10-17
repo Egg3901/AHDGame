@@ -34,6 +34,7 @@ export function GovernmentContractsBoard({
   type = "all",
   page = 1,
   embedded = false,
+  focusTenderId,
 }: {
   countryId: string;
   countryName: string;
@@ -41,6 +42,7 @@ export function GovernmentContractsBoard({
   type?: ContractType | "all";
   page?: number;
   embedded?: boolean;
+  focusTenderId?: string;
 }) {
   const t = useTranslations("corporations.governmentContracts");
   const router = useRouter();
@@ -111,6 +113,15 @@ export function GovernmentContractsBoard({
           )}
         </div>
       </header>
+      {focusTenderId && (
+        <TenderDetails
+          countryId={countryId}
+          tenderId={focusTenderId}
+          access={access}
+          onChange={reload}
+          showTitle
+        />
+      )}
       {accessError && !error && (
         <div role="alert" className="rounded-xl border border-card-border bg-card p-4">
           <p className="text-sm text-muted">{t("actionsLoadFailed")}</p>
@@ -184,67 +195,69 @@ export function GovernmentContractsBoard({
         </div>
       ) : (
         <div className="space-y-3">
-          {listing.tenders.map((row) => (
-            <article key={row._id} className="rounded-xl border border-card-border bg-card p-5">
-              <div className="flex flex-wrap justify-between gap-3">
-                <div>
-                  <span className="text-xs font-semibold uppercase tracking-wide text-muted">
-                    {t(`types.${row.terms.type}`)}
+          {listing.tenders
+            .filter((row) => row._id !== focusTenderId)
+            .map((row) => (
+              <article key={row._id} className="rounded-xl border border-card-border bg-card p-5">
+                <div className="flex flex-wrap justify-between gap-3">
+                  <div>
+                    <span className="text-xs font-semibold uppercase tracking-wide text-muted">
+                      {t(`types.${row.terms.type}`)}
+                    </span>
+                    <h2 className="mt-1 text-lg font-semibold">{row.title}</h2>
+                  </div>
+                  <span className="self-start rounded-full border border-card-border px-3 py-1 text-xs">
+                    {t(`tabs.${row.tab}`)}
                   </span>
-                  <h2 className="mt-1 text-lg font-semibold">{row.title}</h2>
                 </div>
-                <span className="self-start rounded-full border border-card-border px-3 py-1 text-xs">
-                  {t(`tabs.${row.tab}`)}
-                </span>
-              </div>
-              <p className="mt-2 whitespace-pre-wrap text-sm text-muted">{row.description}</p>
-              <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-3">
-                <div>
-                  <dt className="text-muted">{t("closesTurn")}</dt>
-                  <dd>{row.closesTurn}</dd>
-                </div>
-                <div>
-                  <dt className="text-muted">{t("awardDeadline")}</dt>
-                  <dd>{row.awardDeadlineTurn}</dd>
-                </div>
-                <div>
-                  <dt className="text-muted">{t("scope")}</dt>
-                  <dd>
-                    {row.terms.type === "defence"
-                      ? t("defenceSummary", {
-                          lots: row.terms.lots,
-                          component: t(`domains.${row.terms.component}`),
-                          grade: row.terms.grade,
-                        })
-                      : `${row.terms.stateId} / ${row.terms.resource} / ${(row.terms.share * 100).toFixed(2)}%`}
-                  </dd>
-                </div>
-              </dl>
-              {row.awardReason && (
-                <p className="mt-3 text-sm">
-                  {t("awardReason")}: {row.awardReason}
-                </p>
-              )}
-              {row.cancellationReason && (
-                <p className="mt-3 text-sm text-muted">{row.cancellationReason}</p>
-              )}
-              <button
-                className="mt-4 text-sm font-semibold text-primary"
-                aria-expanded={selected === row._id}
-                onClick={() => setSelected(selected === row._id ? null : row._id)}
-              >
-                {selected === row._id ? t("hideDetails") : t("viewDetails")}
-              </button>
-              {selected === row._id && (
-                <TenderDetails
-                  countryId={countryId}
-                  tenderId={row._id}
-                  access={access}
-                  onChange={reload}
-                />
-              )}
-            </article>
-          ))}
+                <p className="mt-2 whitespace-pre-wrap text-sm text-muted">{row.description}</p>
+                <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-3">
+                  <div>
+                    <dt className="text-muted">{t("closesTurn")}</dt>
+                    <dd>{row.closesTurn}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-muted">{t("awardDeadline")}</dt>
+                    <dd>{row.awardDeadlineTurn}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-muted">{t("scope")}</dt>
+                    <dd>
+                      {row.terms.type === "defence"
+                        ? t("defenceSummary", {
+                            lots: row.terms.lots,
+                            component: t(`domains.${row.terms.component}`),
+                            grade: row.terms.grade,
+                          })
+                        : `${row.terms.stateId} / ${row.terms.resource} / ${(row.terms.share * 100).toFixed(2)}%`}
+                    </dd>
+                  </div>
+                </dl>
+                {row.awardReason && (
+                  <p className="mt-3 text-sm">
+                    {t("awardReason")}: {row.awardReason}
+                  </p>
+                )}
+                {row.cancellationReason && (
+                  <p className="mt-3 text-sm text-muted">{row.cancellationReason}</p>
+                )}
+                <button
+                  className="mt-4 text-sm font-semibold text-primary"
+                  aria-expanded={selected === row._id}
+                  onClick={() => setSelected(selected === row._id ? null : row._id)}
+                >
+                  {selected === row._id ? t("hideDetails") : t("viewDetails")}
+                </button>
+                {selected === row._id && (
+                  <TenderDetails
+                    countryId={countryId}
+                    tenderId={row._id}
+                    access={access}
+                    onChange={reload}
+                  />
+                )}
+              </article>
+            ))}
         </div>
       )}
       {listing && (
@@ -279,11 +292,13 @@ function TenderDetails({
   tenderId,
   access,
   onChange,
+  showTitle = false,
 }: {
   countryId: string;
   tenderId: string;
   access: ContractAccess | null;
   onChange: () => void;
+  showTitle?: boolean;
 }) {
   const t = useTranslations("corporations.governmentContracts");
   const [detail, setDetail] = useState<{ tender: TenderView; currentTurn: number } | null>(null),
@@ -341,6 +356,11 @@ function TenderDetails({
   const warning = row.awardWarnings?.[row.winningCorporationId || selected];
   return (
     <div className="mt-4 space-y-4 border-t border-card-border pt-4">
+      {showTitle && (
+        <h2 className="text-lg font-semibold">
+          {row.title} <span className="text-sm text-muted">({t(`tabs.${row.tab}`)})</span>
+        </h2>
+      )}
       {terms.type === "defence" ? (
         <p className="text-sm">
           {t("defenceTerms", { amount: terms.maximumPricePerLot, country: countryId })}

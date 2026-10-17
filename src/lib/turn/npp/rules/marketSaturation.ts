@@ -226,3 +226,25 @@ export function isPhysicallyShort(
   const unmet = read();
   return unmet != null && unmet > 0;
 }
+
+/**
+ * Whether a corp counts as a same-type builder for the essential-shortage
+ * valve: it runs the NPP brain (NPP CEO or player autopilot), is not
+ * suspended, holds positive cash and its strategy allows founding (expand or
+ * pivot). A corp that cannot enter must not stop another from filling a
+ * shortage.
+ */
+export function canFoundAsBuilder(corp: {
+  ceoType?: string | null;
+  autopilotRun: boolean;
+  suspended?: boolean | null;
+  liquidCapital?: number | null;
+  strategyId?: string | null;
+}): boolean {
+  if (corp.suspended === true) return false;
+  if (corp.ceoType !== "npp" && !corp.autopilotRun) return false;
+  if (!(typeof corp.liquidCapital === "number" && corp.liquidCapital > 0)) return false;
+  // No recorded strategy yet: the default posture expands.
+  const strategy = corp.strategyId ?? "expand";
+  return strategy === "expand" || strategy === "pivot";
+}
