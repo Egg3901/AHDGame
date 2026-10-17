@@ -1,4 +1,5 @@
 import type { ObjectId } from "mongodb";
+import type { GovernmentConfidencePoint } from "@/lib/db/types/governmentFormation";
 
 /**
  * UK Government document - tracks current PM and ruling party.
@@ -19,13 +20,18 @@ export interface UKGovernment {
   /**
    * Government confidence gauge, 0..100 (epic #856, ticket #858). Running
    * stability value fed by lost votes / budget defeat / broken promises /
-   * cabinet churn; dissolution fires only when it bottoms out. Reset to
-   * CONFIDENCE_START on government formation. Undefined ⇒ treated as full.
+   * cabinet churn; dissolution fires only when it bottoms out. A new government
+   * inherits the prior value with a modest formation bonus. Undefined means full.
    */
   confidenceGauge?: number;
   confidenceGaugeUpdatedAt?: Date;
+  /** Bounded snapshots for the public government-confidence trend chart. */
+  confidenceGaugeHistory?: UKGovernmentConfidencePoint[];
   updatedAt: Date;
 }
+
+/** Backward-compatible alias for the legacy UK singleton snapshot shape. */
+export type UKGovernmentConfidencePoint = GovernmentConfidencePoint;
 
 /**
  * PM No-Confidence Vote - ruling party/coalition MPs vote to remove PM

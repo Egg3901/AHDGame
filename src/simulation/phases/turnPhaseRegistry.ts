@@ -124,6 +124,7 @@ import { processBankingTurn } from "@/lib/turn/bankingTurn";
 import { processSavingsShadowTurn } from "@/lib/savings/shadow";
 import { runPensionTurn } from "@/lib/pensions/pensionTurn";
 import { processBankSolvencyTurn } from "@/lib/turn/bankSolvencyTurn";
+import { runParliamentaryGovernmentConfidencePhase } from "./parliamentaryGovernmentConfidencePhase";
 import { processBankSupervision } from "@/lib/banking/supervision";
 import { processLineOfCreditTurn } from "@/lib/turn/lineOfCreditTurn";
 import { processNppFundGeneration } from "@/lib/turn/nppFundGeneration";
@@ -1421,6 +1422,9 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
 
         await runtime.runPhase("parliamentaryGovernmentPhases", () =>
           runParliamentaryGovernmentPhases(gameNow, newTurn)
+        );
+        await runtime.runPhase("parliamentaryGovernmentConfidence", () =>
+          runParliamentaryGovernmentConfidencePhase(db, gameNow, newTurn)
         );
         await runtime.runPhase("parliamentaryVacancyWatcher", () =>
           runParliamentaryVacancyWatcher(gameNow, newTurn)

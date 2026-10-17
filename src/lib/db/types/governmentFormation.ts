@@ -72,6 +72,12 @@ export interface GovernmentFormation {
   createdAt: Date;
   updatedAt: Date;
 
+  /** Shared government-confidence gauge for parliamentary executive systems. */
+  confidenceGauge?: number;
+  confidenceGaugeUpdatedAt?: Date;
+  /** Bounded history for the executive confidence trend chart. */
+  confidenceGaugeHistory?: GovernmentConfidencePoint[];
+
   // Cabinet reshuffle log (epic #856, ticket #859). Additive record of used
   // once-per-parliament-per-government reshuffle tokens, read by
   // `canReshuffle` in `src/lib/uk/cabinet/reshuffleLimit.ts`. Election-reset
@@ -165,6 +171,13 @@ export interface GovernmentFormation {
    * Never consulted by caretaker or player-controlled paths.
    */
   ministerialReshuffle?: PersistedReshuffleGuardState | null;
+}
+
+export interface GovernmentConfidencePoint {
+  turn: number | null;
+  value: number;
+  at: Date;
+  reason: string;
 }
 
 // --- PMAppointmentVote ---
