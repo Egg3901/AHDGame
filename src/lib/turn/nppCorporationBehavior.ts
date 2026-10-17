@@ -119,8 +119,11 @@ import type { TechUnlockLedgerInput } from "@/lib/corporations/techTree/techUnlo
 import { loadNppPlacementSignals } from "@/lib/turn/npp/fragileMarketSupply";
 import {
   buildMarketSaturationIndex,
+  cellUnmetDemandUnits,
   marketSaturationOf,
 } from "@/lib/turn/npp/rules/marketSaturation";
+import { getOperatingSectorType, getStrategy } from "@/lib/constants/sectorStrategies";
+import { isStateScopedCommodity } from "@/lib/market/rules/commodityMarketScope";
 import {
   resolveNppMarketEntryCredit,
   type NppMarketEntryDiagnostic,
@@ -290,6 +293,28 @@ export async function processNppCorporationDecisions(
   const saturationIndex = buildMarketSaturationIndex(globalSectors);
   placementSignals.marketSaturationOf = (cell, excluding) =>
     marketSaturationOf(saturationIndex, cell, excluding);
+  // Last turn's state and national books, already loaded as price docs.
+  placementSignals.unmetDemandUnitsOf = (cell, options) => {
+    // The mix the new plant would actually run: its founding strategy, else the
+    // sector default (getStrategy falls back to it).
+    const supplyMix = getStrategy(
+      getOperatingSectorType(cell.sectorType, cell.industryModel, cell.mediaDiscriminator),
+      options?.strategyId ?? ""
+    ).supply;
+    return cellUnmetDemandUnits({
+      supplyMix,
+      aggregate: options?.aggregate,
+      gapFor: (commodity) => {
+        const doc = priceByCommodity.get(commodity);
+        if (!doc) return null;
+        const [supply, demand] = isStateScopedCommodity(commodity)
+          ? [doc.stateSupply?.[cell.stateId], doc.stateDemand?.[cell.stateId]]
+          : [doc.nationalSupply?.[cell.countryId], doc.nationalDemand?.[cell.countryId]];
+        if (typeof supply !== "number" || typeof demand !== "number") return null;
+        return Math.max(0, demand - supply);
+      },
+    });
+  };
 
   // Rival index for capacity-decision telemetry, off the already-loaded
   // `globalSectors` snapshot: no turn-path reads. See capacityDecisionTelemetry.
