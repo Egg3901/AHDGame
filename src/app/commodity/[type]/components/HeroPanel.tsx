@@ -16,6 +16,7 @@ import {
   formatCommodityPrice,
   getCommodityDisplayCurrency,
 } from "@/lib/commodity-map/commodityPriceDisplay";
+import { postImportBalance } from "@/lib/trade/postImportGap";
 import type { CommodityMarketScope } from "../lib/marketScope";
 import { useMemo } from "react";
 
@@ -63,8 +64,19 @@ export default function HeroPanel({
     ? formatCommodityPrice(data.basePrice, selectedCurrency, forexEnabled, exchangeRates)
     : formatCurrencyPrecise(data.basePrice);
 
-  const balance = marketScope.balance;
-  const balanceLabel = balance > 0 ? "Surplus" : balance < 0 ? "Shortage" : "Balanced";
+  // National and state figures count imports that reach the market, so a gap
+  // imports already fill is not reported as a shortage.
+  const importsKnown = marketScope.imports !== null;
+  const balance = importsKnown
+    ? postImportBalance(marketScope.supply, marketScope.demand, marketScope.imports).balance
+    : marketScope.balance;
+  const afterImports = importsKnown ? " after imports" : "";
+  const balanceLabel =
+    balance > 0
+      ? "Surplus" + afterImports
+      : balance < 0
+        ? "Shortage" + afterImports
+        : "Balanced" + afterImports;
   const balanceColor = balance > 0 ? "text-success" : balance < 0 ? "text-error" : "text-muted";
 
   return (

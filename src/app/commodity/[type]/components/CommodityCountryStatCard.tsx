@@ -13,12 +13,15 @@ import {
 } from "@/lib/commodity-map/commodityPriceDisplay";
 import type { MapMode } from "./CommodityMapModeToggle";
 import { formatUnits } from "../lib/helpers";
+import { postImportBalance } from "@/lib/trade/postImportGap";
 
 interface CommodityCountryStatCardProps {
   countryId: CountryId;
   commodityLabel: string;
   unit: string;
   data: CountryCommodityData;
+  /** Units imported into this country; null/undefined when unknown. */
+  imports?: number | null;
   mode: MapMode;
   onModeChange: (mode: MapMode) => void;
   forexEnabled: boolean;
@@ -34,6 +37,7 @@ export default function CommodityCountryStatCard({
   commodityLabel,
   unit,
   data,
+  imports,
   mode,
   onModeChange,
   forexEnabled,
@@ -48,9 +52,20 @@ export default function CommodityCountryStatCard({
   const config = COUNTRY_CONFIGS[countryId];
   const currencyCode = getCommodityDisplayCurrency(countryId);
   const hasRegionMap = COUNTRIES_WITH_REGION_MAPS.has(countryId);
-  const balanceLabel = data.balance > 0 ? "Surplus" : data.balance < 0 ? "Shortage" : "Balanced";
-  const balanceColor =
-    data.balance > 0 ? "text-success" : data.balance < 0 ? "text-error" : "text-muted";
+  // Imports fill demand that home production leaves open, so a gap they close
+  // is not reported as a shortage.
+  const importsKnown = typeof imports === "number";
+  const balance = importsKnown
+    ? postImportBalance(data.supply, data.demand, imports).balance
+    : data.balance;
+  const afterImports = importsKnown ? " after imports" : "";
+  const balanceLabel =
+    balance > 0
+      ? "Surplus" + afterImports
+      : balance < 0
+        ? "Shortage" + afterImports
+        : "Balanced" + afterImports;
+  const balanceColor = balance > 0 ? "text-success" : balance < 0 ? "text-error" : "text-muted";
 
   // Close on click outside — check both desktop overlay and mobile sheet refs
   useEffect(() => {
@@ -105,6 +120,7 @@ export default function CommodityCountryStatCard({
           unit={unit}
           data={data}
           mode={mode}
+          balance={balance}
           balanceLabel={balanceLabel}
           balanceColor={balanceColor}
           hasRegionMap={hasRegionMap}
@@ -147,6 +163,7 @@ export default function CommodityCountryStatCard({
               unit={unit}
               data={data}
               mode={mode}
+              balance={balance}
               balanceLabel={balanceLabel}
               balanceColor={balanceColor}
               hasRegionMap={hasRegionMap}
@@ -172,6 +189,7 @@ function CardContent({
   unit,
   data,
   mode,
+  balance,
   balanceLabel,
   balanceColor,
   hasRegionMap,
@@ -189,6 +207,7 @@ function CardContent({
   unit: string;
   data: CountryCommodityData;
   mode: MapMode;
+  balance: number;
   balanceLabel: string;
   balanceColor: string;
   hasRegionMap: boolean;
@@ -253,7 +272,7 @@ function CardContent({
         />
         <StatRow
           label="Balance"
-          value={`${data.balance > 0 ? "+" : ""}${formatUnits(Math.abs(data.balance), unit)}`}
+          value={`${balance > 0 ? "+" : ""}${formatUnits(Math.abs(balance), unit)}`}
           color={balanceColor}
           sub={balanceLabel}
         />

@@ -296,3 +296,58 @@ describe("buildShortageRows reachable lens (ticket #1077)", () => {
     expect(row.untradedSupply).toBe(0);
   });
 });
+
+describe("buildShortageRows after imports", () => {
+  const book = (imports: number) => ({
+    supply: 0,
+    demand: 0,
+    domesticDemand: 0,
+    imports,
+    exports: 0,
+    blockedSupply: 0,
+    untradedSupply: 0,
+  });
+
+  it("country scope counts imports, so a covered gap is not a shortage", () => {
+    const c = make({
+      commodity: "pharma",
+      nationalSupply: { US: 25 },
+      nationalDemand: { US: 100 },
+      nationalPrices: { US: 100 },
+      reachableBooks: { US: book(75) },
+    });
+    const [row] = buildShortageRows([c], { level: "country", countryId: "US" });
+    expect(row.supply).toBe(100);
+    expect(row.dsRatio).toBeCloseTo(1, 5);
+    expect(row.tone).toBe("balanced");
+  });
+
+  it("country scope keeps the remaining gap when imports only partly cover it", () => {
+    const c = make({
+      commodity: "pharma",
+      nationalSupply: { US: 25 },
+      nationalDemand: { US: 100 },
+      reachableBooks: { US: book(25) },
+    });
+    const [row] = buildShortageRows([c], { level: "country", countryId: "US" });
+    expect(row.dsRatio).toBeCloseTo(2, 5);
+    expect(row.tone).toBe("short-strong");
+  });
+
+  it("state scope credits a deficit state with its share of national imports", () => {
+    const c = make({
+      commodity: "pharma",
+      nationalSupply: { US: 100 },
+      nationalDemand: { US: 200 },
+      stateSupply: { TX: 20, CA: 80 },
+      stateDemand: { TX: 120, CA: 80 },
+      reachableBooks: { US: book(100) },
+    });
+    const [tx] = buildShortageRows([c], { level: "state", stateId: "TX", countryId: "US" });
+    expect(tx.supply).toBe(120);
+    expect(tx.tone).toBe("balanced");
+    // Without a country the state figure is the raw own-production one.
+    const [raw] = buildShortageRows([c], { level: "state", stateId: "TX" });
+    expect(raw.supply).toBe(20);
+  });
+});
