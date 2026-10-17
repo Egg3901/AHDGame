@@ -1119,6 +1119,7 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
       tradeClearing,
       reachableBooks,
       countries,
+      tradeLanes: { affinityFor, importCostMultiplierFor },
     },
     turn,
     now
