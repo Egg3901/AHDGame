@@ -468,7 +468,7 @@ export const stateEffectsAndNationalAggregationPhase: TurnPhaseAdapter = {
     };
 
     const metricsResult = await runtime.runPhase("nationalMetrics", () =>
-      computeNationalMetrics(db)
+      computeNationalMetrics(db, newTurn)
     );
     phaseResults.nationalMetrics = { countriesProcessed: metricsResult ?? 0 };
 

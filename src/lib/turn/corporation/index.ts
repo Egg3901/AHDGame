@@ -89,7 +89,7 @@ import { COMMODITY_LABELS, eraScaledBasePrices } from "@/lib/constants/commoditi
 import { trackFinancialDistress } from "./financialDistressTracking";
 import {
   persistLabourIndices,
-  persistLabourMarketTelemetry,
+  persistLabourDemand,
   creditCorpDividends,
   updateCorporateTaxBases,
   emitCorporationTurnTx,
@@ -872,10 +872,10 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
     automationIndexByState,
   });
 
-  // Phase 1 labour market telemetry: record how many jobs the corporate sector
-  // wants per state and how that compares to the civilian labour force. Inert
-  // measurement, deliberately not gated on the labour system being on.
-  await persistLabourMarketTelemetry({
+  // Record current-turn corporate labour demand for every region. The metric
+  // engine combines it with this turn's labour force after computing supply.
+  // Deliberately not gated on the labour system being on.
+  await persistLabourDemand({
     db,
     labourDemandByState,
     labourDemandWageIndexByState,
