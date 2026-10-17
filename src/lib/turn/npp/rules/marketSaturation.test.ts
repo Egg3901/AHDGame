@@ -6,6 +6,7 @@ import {
   marketSaturationOf,
   NPP_FLOOR_MOTHBALL_TURNS,
   NPP_SATURATED_MARKET_THROTTLE,
+  canFoundAsBuilder,
   cellUnmetDemandUnits,
   foundingUnmetSizing,
   NPP_FOUNDING_UNMET_SHARE,
@@ -161,5 +162,23 @@ describe("foundingUnmetSizing", () => {
       sizeCap: Number.POSITIVE_INFINITY,
       blocksEntry: false,
     });
+  });
+});
+
+describe("canFoundAsBuilder", () => {
+  const base = { ceoType: "npp", autopilotRun: false, liquidCapital: 100, strategyId: "expand" };
+  it("counts a cash-positive NPP whose strategy founds", () => {
+    expect(canFoundAsBuilder(base)).toBe(true);
+    expect(canFoundAsBuilder({ ...base, strategyId: "pivot" })).toBe(true);
+    expect(canFoundAsBuilder({ ...base, strategyId: null })).toBe(true);
+  });
+  it("counts a player autopilot corp", () => {
+    expect(canFoundAsBuilder({ ...base, ceoType: "character", autopilotRun: true })).toBe(true);
+  });
+  it("skips corps that cannot enter", () => {
+    expect(canFoundAsBuilder({ ...base, liquidCapital: 0 })).toBe(false);
+    expect(canFoundAsBuilder({ ...base, strategyId: "defend" })).toBe(false);
+    expect(canFoundAsBuilder({ ...base, suspended: true })).toBe(false);
+    expect(canFoundAsBuilder({ ...base, ceoType: "character" })).toBe(false);
   });
 });
