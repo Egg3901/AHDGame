@@ -211,3 +211,18 @@ export function foundingUnmetSizing(args: { unmetUnits: number | null; starterUn
   const sizeCap = Math.max(0, args.unmetUnits) * NPP_FOUNDING_UNMET_SHARE;
   return { sizeCap, blocksEntry: sizeCap < args.starterUnits };
 }
+
+/**
+ * Whether a cell shows a physical shortage that can justify founding outside a
+ * corp's own type. With a demand signal wired, it must read a positive unmet
+ * gap; an unreadable gap is not evidence. With no signal at all (legacy callers
+ * and isolated tests) the price-based test stands alone, as before.
+ */
+export function isPhysicallyShort(
+  unmetUnitsOf: ((cell: never) => number | null) | undefined,
+  read: () => number | null
+): boolean {
+  if (unmetUnitsOf === undefined) return true;
+  const unmet = read();
+  return unmet != null && unmet > 0;
+}

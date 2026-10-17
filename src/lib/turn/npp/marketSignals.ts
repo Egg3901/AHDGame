@@ -22,6 +22,7 @@ import { foundingStarterUnits } from "@/lib/corporations/foundingPlant";
 import { bucketKey } from "@/lib/nationalization/stateControlledBuckets";
 import {
   isMarketSaturated,
+  isPhysicallyShort,
   type SaturationSectorLike,
 } from "@/lib/turn/npp/rules/marketSaturation";
 import {
@@ -567,12 +568,24 @@ export function findBestUnownedSector(
   // the old unconditional first pick (see HQ_STATE_SCORE_BONUS).
   const best = (list: UnownedSector[]) => list.sort((a, b) => score(b) - score(a))[0];
 
+  const physicallyShort = (c: UnownedSector) =>
+    isPhysicallyShort(signals?.unmetDemandUnitsOf, () =>
+      signals!.unmetDemandUnitsOf!(c, { aggregate: "max" })
+    );
+
   // The treatment reallocates an existing eligible entry slot. It does not
   // create another slot, waive entry costs, cross the geographic frontier, or
   // bypass extraction headroom. Once the target price falls below the shared
   // shortage bar this branch returns no candidates and normal ranking resumes.
   if (signals?.preferFragileMarketSupply) {
-    const fragileCandidates = entryCandidates.filter((candidate) => fragileScore(candidate) > 0);
+    const fragileCandidates = entryCandidates.filter(
+      (candidate) =>
+        fragileScore(candidate) > 0 &&
+        // Crossing types needs a physical shortage, like the critical tier.
+        (candidate.sectorType === primaryType ||
+          candidate.sectorType === secondaryType ||
+          physicallyShort(candidate))
+    );
     if (fragileCandidates.length > 0) {
       return fragileCandidates.sort((a, b) => fragileScore(b) - fragileScore(a))[0];
     }
@@ -590,10 +603,6 @@ export function findBestUnownedSector(
   // own type (-15pp mismatch each; 51% losing, against 20% in-type). When the
   // cell's measured unmet demand can be read, the override needs some on its
   // deepest leg too (rules/marketSaturation cellUnmetDemandUnits).
-  const physicallyShort = (c: UnownedSector) => {
-    const unmet = signals?.unmetDemandUnitsOf?.(c, { aggregate: "max" });
-    return unmet == null || unmet > 0;
-  };
   const critical = entryCandidates.filter(
     (c) => peakShortageOf(c) >= ESSENTIAL_SHORTAGE_SCORE && physicallyShort(c)
   );

@@ -475,3 +475,23 @@ describe("type discipline with the coverage treatment", () => {
     expect(findBestUnownedSector(...args, true)?.sectorType).toBe("media");
   });
 });
+
+describe("cross-type founding needs a readable shortage", () => {
+  it("an unreadable gap is not a shortage once the signal is wired", () => {
+    const pool = new Map([["US", [us("healthcare", "NY")]]]);
+    const pick = findBestUnownedSector(
+      "US",
+      "NY",
+      "manufacturing",
+      null,
+      new Set(),
+      pool,
+      new Set(),
+      ratios({ healthcare_services: 3 }),
+      false,
+      1,
+      { unmetDemandUnitsOf: () => null }
+    );
+    expect(pick).toBeNull();
+  });
+});
