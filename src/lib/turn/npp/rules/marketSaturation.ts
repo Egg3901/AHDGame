@@ -22,13 +22,17 @@
  */
 
 import { bucketKey } from "@/lib/nationalization/stateControlledBuckets";
+import { NPP_GROWTH_MIN_THROTTLE } from "@/lib/turn/npp/nppCorporationTuning";
 
 /**
  * A cell whose plants run, capacity-weighted, below this share of their
- * capacity has no room for another plant. Half: the incumbents could double
- * their output before the market would need a new entrant.
+ * capacity has no room for another plant. It is the bar an incumbent NPP plant
+ * must clear to grow (NPP_GROWTH_MIN_THROTTLE), so entrants and incumbents face
+ * one rule. A lower bar churned: idle retirement shrinks glutted NPP plants to
+ * about 0.8 of capacity (IDLE_RETIRE_HEADROOM), which a 0.5 bar read as room,
+ * so a fresh entrant refilled the glut the retirement had just cleared.
  */
-export const NPP_SATURATED_MARKET_THROTTLE = 0.5;
+export const NPP_SATURATED_MARKET_THROTTLE = NPP_GROWTH_MIN_THROTTLE;
 
 export interface SaturationSectorLike {
   stateId: string;
