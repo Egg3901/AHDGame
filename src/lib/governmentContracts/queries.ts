@@ -17,6 +17,8 @@ import {
   compareBids,
 } from "./rules";
 import { tenders } from "./persistence";
+import { contractCurrencyQuotes, contractCapacityQuotes } from "./presentation";
+import { viewerTenderIds } from "./viewerOpportunities";
 import type { GovernmentTender, TenderTab, ContractType, TenderView } from "./types";
 
 export function boardFilter(
@@ -53,6 +55,19 @@ export async function tenderView(
   turn: number,
   user?: AuthUserWithCharacter | null
 ): Promise<TenderView> {
+  const presentation =
+    t.terms.type === "extraction"
+      ? {
+          currencyQuote: (
+            await contractCurrencyQuotes(
+              db,
+              t.countryId,
+              (await getGameState(db))?.preset ?? DEFAULT_SEED_PRESET
+            )
+          ).government,
+          capacityQuote: (await contractCapacityQuotes(db, t.countryId, [t])).get(t._id) ?? null,
+        }
+      : {};
   const ownedCorporationIds = new Set<string>();
   if (user && ObjectId.isValid(user.userId)) {
     const owned = await db
@@ -119,6 +134,7 @@ export async function tenderView(
   } = t;
   return {
     ...rest,
+    ...presentation,
     tab: tenderTab(t, turn),
     bidCount: Object.values(bids ?? {}).filter((b) => !b.withdrawn).length,
     bids: visibleBids({ ...t, bids: bids ?? {} }, turn, user?.userId, ownedCorporationIds)
@@ -149,9 +165,25 @@ export async function listGovernmentTenders(
   tab: TenderTab,
   type: ContractType | undefined,
   page: number,
-  turn: number
+  turn: number,
+  viewer?: { userId: string; corporationId?: string }
 ) {
   const filter = boardFilter(countryId, tab, turn, type);
+  if (viewer) {
+    const candidates = await tenders(db)
+      .find(filter, { projection: { _id: 1, terms: 1, publishedTurn: 1 } })
+      .toArray();
+    filter._id = {
+      $in: await viewerTenderIds(
+        db,
+        countryId as GovernmentTender["countryId"],
+        candidates,
+        turn,
+        viewer.userId,
+        viewer.corporationId
+      ),
+    };
+  }
   const [total, rows] = await Promise.all([
     tenders(db).countDocuments(filter),
     tenders(db)
@@ -174,6 +206,16 @@ export async function listGovernmentTenders(
       .limit(CONTRACTS_PAGE_SIZE)
       .toArray(),
   ]);
+  const capacity = await contractCapacityQuotes(db, countryId, rows);
+  const currencyQuote = rows.some((r) => r.terms.type === "extraction")
+    ? (
+        await contractCurrencyQuotes(
+          db,
+          countryId as GovernmentTender["countryId"],
+          (await getGameState(db))?.preset ?? DEFAULT_SEED_PRESET
+        )
+      ).government
+    : null;
   return {
     total,
     page,
@@ -181,6 +223,9 @@ export async function listGovernmentTenders(
     totalPages: Math.max(1, Math.ceil(total / CONTRACTS_PAGE_SIZE)),
     tenders: rows.map(({ publishedBy: _publisher, updatedAt: _updated, ...t }) => ({
       ...t,
+      ...(t.terms.type === "extraction"
+        ? { currencyQuote, capacityQuote: capacity.get(t._id) ?? null }
+        : {}),
       tab: tenderTab(t, turn),
     })),
     currentTurn: turn,

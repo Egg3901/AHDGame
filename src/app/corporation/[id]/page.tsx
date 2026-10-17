@@ -976,6 +976,7 @@ export default function CorporationDetailPage() {
           (isDefenceCorp ||
             (corporation.type === "extraction" && corporation.contractIssuanceEnabled)) && (
             <ContractOpportunityBanner
+              corporationId={corporation._id}
               countryId={corporation.countryId}
               type={
                 isDefenceCorp && corporation.type === "extraction"

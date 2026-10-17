@@ -788,6 +788,23 @@
       "ownHaulCost": "{commodity}: {origin} to {destination}, {units} units; freight ₳{cost} per unit (anchor currency)."
     },
     "governmentContracts": {
+      "extractionSummary": "{state}: {resource}, {share, number}% of total state resource capacity",
+      "capacityQuantity": "Current nominal allocation: {allocated, number} {resource} units/day out of {total, number} units/day total state capacity.",
+      "capacityBasis": "The percentage applies to the state's total capacity for this resource, not the amount currently mined. It is a daily production ceiling, not a purchase order or guaranteed output. Your operations can produce less, and depletion can reduce the available ceiling.",
+      "capacityUnavailable": "Current resource capacity is unavailable. No unit estimate can be shown.",
+      "minimumFeeLocal": "Minimum signing fee ({currency}, current equivalent)",
+      "signingFeeLocal": "Signing fee your corporation offers to pay ({currency}, current equivalent)",
+      "extractionTermsLocal": "Minimum signing fee: {fee}. Royalty: {royalty, number}% each turn. Contract term: {term} turns.",
+      "extractionPayment": "Your corporation pays the government for extraction rights. The government is not buying resource units from you.",
+      "defencePayment": "The government pays your corporation for the equipment lots it delivers.",
+      "royaltyBasis": "Each turn, the royalty is the published rate multiplied by your capacity share, the state's total resource capacity, and the current resource price. It is charged on that capacity value, even if actual production or sales are lower.",
+      "extractionAfterAward": "If selected, your corporation pays the signing fee once at award. Once payment completes, the extraction rights activate for the published term. Existing royalty and default rules apply during the contract.",
+      "exchangeNote": "Local currency amounts use current exchange rates. The bid's accounting value stays fixed; its local currency cost can change before award. Historical bids are shown at today's rates.",
+      "currencyUnavailable": "Currency conversion unavailable. Refresh before publishing or bidding. Existing bids can still be withdrawn.",
+      "viewerFilter": "Corporation capability",
+      "viewerAll": "All contracts",
+      "viewerMine": "Matches any of my corporations",
+      "viewerFilterHint": "Uses the corporations you currently manage. Defence matches require the component, grade, price band, supplier quota, current output and free production lines. Extraction matches require an extraction corporation operating in the tender's state. This does not check available cash or guarantee an award or delivery time. Closed and historical tenders use your capabilities today.",
       "heading": "Government Contracts",
       "intro": "Choose an open tender, review its requirements, and submit a sealed corporate bid before the closing turn. Defence bids are prices paid by the government; extraction bids are signing fees paid to the government. After bidding closes, the authorized official selects a qualifying bid and publishes a reason. New tenders allow 24 turns for that decision. No winner is chosen automatically.",
       "tabsLabel": "Contract status",
@@ -799,7 +816,7 @@
       },
       "types": {
         "defence": "Defence Procurement",
-        "extraction": "Resource Extraction"
+        "extraction": "Resource Extraction Concession"
       },
       "domains": {
         "ground": "Ground",
@@ -828,12 +845,12 @@
       "maximumPrice": "Maximum price per lot (local currency)",
       "state": "State or region",
       "resource": "Resource",
-      "share": "Capacity share (%)",
+      "share": "Share of total state resource capacity (%)",
       "term": "Contract term (turns)",
       "royalty": "Royalty per turn (%)",
       "minimumFee": "Minimum signing fee (anchor units)",
       "defenceReservation": "The maximum contract value reserves defence appropriation and quarterly contracting capacity. The winner must also fit the supplier concentration limit.",
-      "extractionReservation": "The concession reserves capacity under the existing 75% cap. The winner pays the signing fee and the published royalty.",
+      "extractionReservation": "Reserve a share of the state's total capacity for this resource, subject to the existing 75% cap across concessions. The winner pays the government a one-time signing fee and recurring royalties.",
       "closeForm": "Close publishing form",
       "openBoard": "Open country contract board",
       "retry": "Try again",
@@ -893,7 +910,7 @@
       "windowTooLate": "There is not enough time to bid and award in this quarter. The next contracting window begins on turn {turn}.",
       "bidHistory": "Bid revision history",
       "recordedBid": "Bid recorded",
-      "historyEntry": "{corporation}: revision {revision}, turn {turn}, amount {amount, number}. {status}.",
+      "historyEntry": "{corporation}: revision {revision}, turn {turn}, amount {amount}. {status}.",
       "notAuthorized": "You no longer hold authority to publish this type of tender. Open the country board to review current opportunities.",
       "actionsLoadFailed": "Contract actions could not be loaded. Try again before publishing or bidding."
     },
