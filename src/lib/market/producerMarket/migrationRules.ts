@@ -9,6 +9,9 @@ export interface ExistingWorldProducerOpening {
   worldEpoch: string;
   completedTurn: number;
   processing: boolean;
+  /** One-time opening decision, never a runtime economy mode. */
+  modeledLossPolicy:
+    { kind: "unresolved" } | { kind: "openingAdjustment"; approvalReference: string };
   corporations: readonly {
     id: string;
     currency: string;
@@ -18,7 +21,7 @@ export interface ExistingWorldProducerOpening {
     /** Audited outstanding operating bills, excluding separately preserved tax arrears. */
     operatingArrearsAnchor: number;
     /** Historical modeled loss carry is not evidence of a debt to a supplier. */
-    modeledLossCarryAnchor: number;
+    modeledLossCarry: readonly { currency: string; amountLocal: number; localPerAnchor: number }[];
     /** Reconciled named creditors; an unresolved balance cannot be discarded. */
     payables: readonly ProducerPayable[];
   }[];
@@ -45,6 +48,7 @@ export interface ExistingWorldProducerOpening {
 
 export interface ProducerOpeningPlan {
   version: 2;
+  modeledLossPolicy: ExistingWorldProducerOpening["modeledLossPolicy"];
   worldEpoch: string;
   completedTurn: number;
   firstSettlementTurn: number;
@@ -72,6 +76,23 @@ export interface ProducerOpeningPlan {
   requiredCreditorAccountIds: string[];
   /** An apply host must resolve these explicitly, never invent creditors or forgive them silently. */
   unresolvedModeledLossCarry: Array<{ accountId: string; amountAnchor: number }>;
+  nonCashOpeningAdjustments: Array<{
+    kind: "modeledOperatingLossReconciliation";
+    accountId: string;
+    originalModeledLossCarry: Array<{
+      currency: string;
+      amountLocal: number;
+      localPerAnchor: number;
+    }>;
+    originalModeledLossCarryAnchor: number;
+    recognizedLiabilityAnchor: number;
+    liabilityDeltaAnchor: number;
+    equityDeltaAnchor: number;
+    cashDeltaLocal: 0;
+    operatingIncomeDeltaAnchor: 0;
+    taxableProfitDeltaAnchor: 0;
+    approvalReference: string;
+  }>;
   reconciliation: {
     cashByCurrency: Array<{ currency: string; before: number; after: number }>;
     signedCashAnchor: number;
@@ -85,6 +106,9 @@ export interface ProducerOpeningPlan {
     operatingArrearsAnchor: number;
     operatingArrearsCreated: 0;
     operatingArrearsForgiven: 0;
+    modeledLossCarryRemovedAnchor: number;
+    openingLiabilityDeltaAnchor: number;
+    openingEquityDeltaAnchor: number;
     cashCreated: 0;
     inputStockCreated: 0;
     ownedDailyUnits: number;
@@ -110,6 +134,13 @@ const compare = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
 
 export function planProducerOpening(source: ExistingWorldProducerOpening): ProducerOpeningPlan {
   if (!source.worldEpoch || source.processing) throw new Error("Migration requires an idle world");
+  const policy = source.modeledLossPolicy;
+  if (
+    !policy ||
+    (policy.kind !== "unresolved" && policy.kind !== "openingAdjustment") ||
+    (policy.kind === "openingAdjustment" && !policy.approvalReference?.trim())
+  )
+    throw new Error("Opening modeled loss policy requires an explicit audited decision");
   if (
     !Number.isSafeInteger(source.completedTurn) ||
     source.completedTurn < 0 ||
@@ -131,7 +162,21 @@ export function planProducerOpening(source: ExistingWorldProducerOpening): Produ
     .map((corp) => {
       valid(corp.cash, "cash", true);
       valid(corp.operatingArrearsAnchor, "opening operating arrears");
-      valid(corp.modeledLossCarryAnchor, "historical modeled loss carry");
+      if (!Array.isArray(corp.modeledLossCarry))
+        throw new Error("Missing modeled loss reconciliation");
+      uniqueIds(
+        corp.modeledLossCarry.map((row) => ({ id: row.currency })),
+        "modeled carry currency"
+      );
+      for (const row of corp.modeledLossCarry) {
+        valid(row.amountLocal, "historical modeled loss carry", true);
+        if (!(valid(row.localPerAnchor, "modeled carry currency rate") > 0))
+          throw new Error("Missing modeled carry currency valuation");
+        const prior = currencyRates.get(row.currency);
+        if (prior != null && prior !== row.localPerAnchor)
+          throw new Error("Inconsistent frozen currency rate");
+        currencyRates.set(row.currency, row.localPerAnchor);
+      }
       if (!Array.isArray(corp.payables))
         throw new Error("Opening creditors require reconciliation");
       uniqueIds(corp.payables, "opening payable");
@@ -255,8 +300,56 @@ export function planProducerOpening(source: ExistingWorldProducerOpening): Produ
       field,
       true
     );
+  const modeledCarry = [...source.corporations]
+    .sort((a, b) => compare(a.id, b.id))
+    .filter((corp) => corp.modeledLossCarry.some((row) => row.amountLocal !== 0))
+    .map((corp) => ({
+      ...corp,
+      modeledLossCarryAnchor: valid(
+        corp.modeledLossCarry.reduce((sum, row) => sum + row.amountLocal / row.localPerAnchor, 0),
+        "modeled carry valuation",
+        true
+      ),
+      // Current liability accounting excludes negative rounding residue per currency.
+      recognizedLiabilityAnchor: valid(
+        corp.modeledLossCarry.reduce(
+          (sum, row) => sum + Math.max(0, row.amountLocal) / row.localPerAnchor,
+          0
+        ),
+        "recognized modeled liability"
+      ),
+    }));
+  const nonCashOpeningAdjustments: ProducerOpeningPlan["nonCashOpeningAdjustments"] =
+    policy.kind === "openingAdjustment"
+      ? modeledCarry.map((corp) => ({
+          kind: "modeledOperatingLossReconciliation",
+          accountId: corp.id,
+          originalModeledLossCarry: [...corp.modeledLossCarry]
+            .sort((a, b) => compare(a.currency, b.currency))
+            .map((row) => ({ ...row })),
+          originalModeledLossCarryAnchor: corp.modeledLossCarryAnchor,
+          recognizedLiabilityAnchor: corp.recognizedLiabilityAnchor,
+          liabilityDeltaAnchor:
+            corp.recognizedLiabilityAnchor > 0 ? -corp.recognizedLiabilityAnchor : 0,
+          equityDeltaAnchor: corp.recognizedLiabilityAnchor,
+          cashDeltaLocal: 0,
+          operatingIncomeDeltaAnchor: 0,
+          taxableProfitDeltaAnchor: 0,
+          approvalReference: policy.approvalReference,
+        }))
+      : [];
+  const modeledLossCarryRemovedAnchor = valid(
+    nonCashOpeningAdjustments.reduce((sum, row) => sum + row.originalModeledLossCarryAnchor, 0),
+    "modeled loss opening adjustment total",
+    true
+  );
+  const recognizedLiabilityRemovedAnchor = valid(
+    nonCashOpeningAdjustments.reduce((sum, row) => sum + row.recognizedLiabilityAnchor, 0),
+    "removed modeled liabilities"
+  );
   return {
     version: 2,
+    modeledLossPolicy: { ...policy },
     worldEpoch: source.worldEpoch,
     completedTurn: source.completedTurn,
     firstSettlementTurn: source.completedTurn + 1,
@@ -264,14 +357,22 @@ export function planProducerOpening(source: ExistingWorldProducerOpening): Produ
     sectors,
     protectedImages: [...source.protectedImages].sort((a, b) => compare(a.key, b.key)),
     requiredCreditorAccountIds: [...creditorIds].sort(compare),
-    unresolvedModeledLossCarry: [...source.corporations]
-      .sort((a, b) => compare(a.id, b.id))
-      .filter((corp) => corp.modeledLossCarryAnchor > 0)
-      .map((corp) => ({ accountId: corp.id, amountAnchor: corp.modeledLossCarryAnchor })),
+    unresolvedModeledLossCarry:
+      policy.kind === "unresolved"
+        ? modeledCarry.map((corp) => ({
+            accountId: corp.id,
+            amountAnchor: corp.modeledLossCarryAnchor,
+          }))
+        : [],
+    nonCashOpeningAdjustments,
     reconciliation: {
       operatingArrearsAnchor,
       operatingArrearsCreated: 0,
       operatingArrearsForgiven: 0,
+      modeledLossCarryRemovedAnchor,
+      openingLiabilityDeltaAnchor:
+        recognizedLiabilityRemovedAnchor > 0 ? -recognizedLiabilityRemovedAnchor : 0,
+      openingEquityDeltaAnchor: recognizedLiabilityRemovedAnchor,
       cashByCurrency: [...cashByCurrency]
         .sort(([a], [b]) => compare(a, b))
         .map(([currency, before]) => ({ currency, before, after: before })),

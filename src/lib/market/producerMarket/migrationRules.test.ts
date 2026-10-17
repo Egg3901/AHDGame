@@ -1,4 +1,5 @@
 import { producerPayableId } from "./payablesRules";
+import { corporateCashArrearsAnchor } from "@/lib/bonds/rules/cashArrears";
 import { describe, expect, it } from "vitest";
 import { planProducerOpening, type ExistingWorldProducerOpening } from "./migrationRules";
 
@@ -6,6 +7,7 @@ const opening = (): ExistingWorldProducerOpening => ({
   worldEpoch: "example-world",
   completedTurn: 10,
   processing: false,
+  modeledLossPolicy: { kind: "unresolved" },
   corporations: [
     {
       id: "a",
@@ -13,7 +15,7 @@ const opening = (): ExistingWorldProducerOpening => ({
       localPerAnchor: 2,
       cash: 100,
       operatingArrearsAnchor: 0,
-      modeledLossCarryAnchor: 0,
+      modeledLossCarry: [],
       payables: [],
     },
     {
@@ -22,7 +24,7 @@ const opening = (): ExistingWorldProducerOpening => ({
       localPerAnchor: 100,
       cash: -200,
       operatingArrearsAnchor: 0,
-      modeledLossCarryAnchor: 0,
+      modeledLossCarry: [],
       payables: [],
     },
   ],
@@ -96,15 +98,20 @@ describe("existing-world producer opening", () => {
     expect(plan.protectedImages).toEqual(opening().protectedImages);
   });
 
-  it("keeps unallocated historical modeled losses out of supplier claims and flags them for explicit reconciliation", () => {
-    const source = opening();
-    source.corporations[0].modeledLossCarryAnchor = 25;
-    const plan = planProducerOpening(source);
-    expect(plan.unresolvedModeledLossCarry).toEqual([{ accountId: "a", amountAnchor: 25 }]);
-    expect(plan.accounts[0].producerPayables.claims).toEqual([]);
-    expect(plan.requiredCreditorAccountIds).toEqual([]);
-    expect(plan.accounts[0].openingCashLocal).toBe(100);
-  });
+  it.each([25, -0.0025])(
+    "keeps signed historical modeled carry out of supplier claims: %s",
+    (amountAnchor) => {
+      const source = opening();
+      source.corporations[0].modeledLossCarry = [
+        { currency: "USD", amountLocal: amountAnchor * 2, localPerAnchor: 2 },
+      ];
+      const plan = planProducerOpening(source);
+      expect(plan.unresolvedModeledLossCarry).toEqual([{ accountId: "a", amountAnchor }]);
+      expect(plan.accounts[0].producerPayables.claims).toEqual([]);
+      expect(plan.requiredCreditorAccountIds).toEqual([]);
+      expect(plan.accounts[0].openingCashLocal).toBe(100);
+    }
+  );
 
   it("carries all named opening creditors without paying, expensing or forgiving their claims", () => {
     const source = opening();
@@ -135,6 +142,131 @@ describe("existing-world producer opening", () => {
     expect(() => planProducerOpening(source)).toThrow("complete creditor reconciliation");
     source.corporations[0].operatingArrearsAnchor = 0;
     expect(() => planProducerOpening(source)).toThrow("complete creditor reconciliation");
+  });
+
+  it.each([25, -0.0025])("audits the non-cash removal of signed modeled carry: %s", (carry) => {
+    const source = opening();
+    source.modeledLossPolicy = { kind: "openingAdjustment", approvalReference: "opening-review-1" };
+    source.corporations[0].modeledLossCarry = [
+      { currency: "USD", amountLocal: carry * 2, localPerAnchor: 2 },
+    ];
+    const claim = {
+      debtorAccountId: "a",
+      creditorAccountId: "workers",
+      producerId: "closed-site",
+      kind: "labour" as const,
+      amount: 15,
+    };
+    source.corporations[0].operatingArrearsAnchor = 15;
+    source.corporations[0].payables = [{ ...claim, id: producerPayableId(claim) }];
+    source.protectedImages = [
+      { key: "loans", digest: "loan-before-image" },
+      { key: "recorded-tax-debts", digest: "tax-before-image" },
+    ];
+    const before = structuredClone(source);
+    const plan = planProducerOpening(source);
+    expect(source).toEqual(before);
+    expect(plan.unresolvedModeledLossCarry).toEqual([]);
+    expect(plan.nonCashOpeningAdjustments).toEqual([
+      {
+        kind: "modeledOperatingLossReconciliation",
+        accountId: "a",
+        originalModeledLossCarry: source.corporations[0].modeledLossCarry,
+        originalModeledLossCarryAnchor: carry,
+        recognizedLiabilityAnchor: Math.max(0, carry),
+        liabilityDeltaAnchor: carry > 0 ? -carry : 0,
+        equityDeltaAnchor: Math.max(0, carry),
+        cashDeltaLocal: 0,
+        operatingIncomeDeltaAnchor: 0,
+        taxableProfitDeltaAnchor: 0,
+        approvalReference: "opening-review-1",
+      },
+    ]);
+    expect(plan.accounts.map((account) => account.openingCashLocal)).toEqual([100, -200]);
+    expect(plan.accounts[0].producerPayables.claims).toEqual(source.corporations[0].payables);
+    expect(plan.requiredCreditorAccountIds).toEqual(["workers"]);
+    expect(plan.protectedImages).toEqual(source.protectedImages);
+    expect(plan.reconciliation).toMatchObject({
+      modeledLossCarryRemovedAnchor: carry,
+      openingLiabilityDeltaAnchor: carry > 0 ? -carry : 0,
+      openingEquityDeltaAnchor: Math.max(0, carry),
+      cashCreated: 0,
+      operatingArrearsForgiven: 0,
+      operatingArrearsAnchor: 15,
+    });
+  });
+
+  it("requires a recorded approval and reconciles every signed adjustment independently", () => {
+    const source = opening();
+    source.modeledLossPolicy = { kind: "openingAdjustment", approvalReference: "  " };
+    expect(() => planProducerOpening(source)).toThrow("explicit audited decision");
+    source.modeledLossPolicy = { kind: "openingAdjustment", approvalReference: "opening-review-1" };
+    source.corporations[0].modeledLossCarry = [
+      { currency: "USD", amountLocal: 50, localPerAnchor: 2 },
+    ];
+    source.corporations[1].modeledLossCarry = [
+      { currency: "JPY", amountLocal: -0.25, localPerAnchor: 100 },
+    ];
+    const plan = planProducerOpening(source);
+    expect(plan.nonCashOpeningAdjustments).toHaveLength(2);
+    expect(plan.reconciliation.modeledLossCarryRemovedAnchor).toBeCloseTo(24.9975);
+    expect(plan.reconciliation.openingEquityDeltaAnchor).toBe(25);
+    expect(
+      plan.nonCashOpeningAdjustments.every(
+        (row) => row.liabilityDeltaAnchor + row.equityDeltaAnchor === 0
+      )
+    ).toBe(true);
+    expect(
+      planProducerOpening({ ...source, corporations: [...source.corporations].reverse() })
+    ).toEqual(plan);
+  });
+
+  it("does not net a negative currency residue against a recognized positive liability", () => {
+    const source = opening();
+    source.modeledLossPolicy = { kind: "openingAdjustment", approvalReference: "opening-review-1" };
+    source.corporations[0].modeledLossCarry = [
+      { currency: "USD", amountLocal: 50, localPerAnchor: 2 },
+      { currency: "JPY", amountLocal: -2500, localPerAnchor: 100 },
+    ];
+    const recognized = corporateCashArrearsAnchor({
+      operatingByCurrency: { USD: 50, JPY: -2500 },
+      fxByCurrency: new Map([
+        ["USD", 2],
+        ["JPY", 100],
+      ]),
+    });
+    const plan = planProducerOpening(source);
+    expect(plan.nonCashOpeningAdjustments).toHaveLength(1);
+    expect(plan.reconciliation.modeledLossCarryRemovedAnchor).toBe(0);
+    expect(plan.reconciliation.openingLiabilityDeltaAnchor).toBe(-recognized);
+    expect(plan.reconciliation.openingEquityDeltaAnchor).toBe(recognized);
+    expect(recognized).toBe(25);
+    source.modeledLossPolicy = { kind: "unresolved" };
+    expect(planProducerOpening(source).unresolvedModeledLossCarry).toEqual([
+      { accountId: "a", amountAnchor: 0 },
+    ]);
+  });
+
+  it.each([0, -1, NaN, Infinity])("refuses an unvalued carry currency: %s", (rate) => {
+    const source = opening();
+    source.corporations[0].modeledLossCarry = [
+      { currency: "JPY", amountLocal: 50, localPerAnchor: rate },
+    ];
+    expect(() => planProducerOpening(source)).toThrow();
+  });
+
+  it("refuses inconsistent FX or duplicate carry entries before granting an adjustment", () => {
+    const source = opening();
+    source.modeledLossPolicy = { kind: "openingAdjustment", approvalReference: "opening-review-1" };
+    source.corporations[0].modeledLossCarry = [
+      { currency: "USD", amountLocal: 50, localPerAnchor: 1 },
+    ];
+    expect(() => planProducerOpening(source)).toThrow("Inconsistent frozen currency rate");
+    source.corporations[0].modeledLossCarry = [
+      { currency: "USD", amountLocal: 25, localPerAnchor: 2 },
+      { currency: "USD", amountLocal: 25, localPerAnchor: 2 },
+    ];
+    expect(() => planProducerOpening(source)).toThrow("Duplicate");
   });
 
   it("converts only retained inventory, never last turn's production or memo value into fresh wealth", () => {

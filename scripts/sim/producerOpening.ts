@@ -15,6 +15,15 @@ const openingSchema = z
       .min(0)
       .max(Number.MAX_SAFE_INTEGER - 1),
     processing: z.literal(false),
+    modeledLossPolicy: z.discriminatedUnion("kind", [
+      z.object({ kind: z.literal("unresolved") }).strict(),
+      z
+        .object({
+          kind: z.literal("openingAdjustment"),
+          approvalReference: z.string().trim().min(1),
+        })
+        .strict(),
+    ]),
     corporations: z.array(
       z
         .object({
@@ -23,7 +32,15 @@ const openingSchema = z
           localPerAnchor: z.number().finite().positive(),
           cash: z.number().finite(),
           operatingArrearsAnchor: amount,
-          modeledLossCarryAnchor: amount,
+          modeledLossCarry: z.array(
+            z
+              .object({
+                currency: identity,
+                amountLocal: z.number().finite(),
+                localPerAnchor: z.number().finite().positive(),
+              })
+              .strict()
+          ),
           payables: z.array(
             z
               .object({
@@ -114,5 +131,7 @@ console.log(
     operatingArrearsForgiven: plan.reconciliation.operatingArrearsForgiven,
     requiredCreditors: plan.requiredCreditorAccountIds.length,
     unresolvedModeledLossCorporations: plan.unresolvedModeledLossCarry.length,
+    nonCashOpeningAdjustments: plan.nonCashOpeningAdjustments.length,
+    modeledLossCarryRemovedAnchor: plan.reconciliation.modeledLossCarryRemovedAnchor,
   })
 );
