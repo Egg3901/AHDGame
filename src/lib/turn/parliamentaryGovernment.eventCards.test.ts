@@ -125,14 +125,15 @@ function appointmentVote(isConfidenceMotion: boolean) {
 describe("parliamentary public event card contract", () => {
   it("publishes the appointment notice and exact government-formation tally card", async () => {
     const { sendCountryGameEvent, DISCORD_COLORS } = await import("@/lib/discordWebhooks");
-    const { resetConfidenceGauge } = await import("@/lib/uk/confidence/confidenceGaugeStore");
+    const { resetConfidenceGauge } =
+      await import("@/lib/countries/uk/confidence/resetConfidenceGauge");
     setVote(appointmentVote(false), true);
     await setTally(200, 100);
 
     await resolveParliamentaryAppointmentVote(db as unknown as Db, "UK", voteId, now, offices);
 
     expect(resetConfidenceGauge).toHaveBeenCalledOnce();
-    expect(resetConfidenceGauge).toHaveBeenCalledWith(db, now);
+    expect(resetConfidenceGauge).toHaveBeenCalledWith(db, now, 100, "UK");
     expect(sendCountryGameEvent).toHaveBeenCalledTimes(2);
     expect(sendCountryGameEvent).toHaveBeenNthCalledWith(1, "UK", {
       title: "New Prime Minister Appointed",
@@ -162,7 +163,8 @@ describe("parliamentary public event card contract", () => {
   });
 
   it("does not reset confidence when the incumbent survives a confidence motion", async () => {
-    const { resetConfidenceGauge } = await import("@/lib/uk/confidence/confidenceGaugeStore");
+    const { resetConfidenceGauge } =
+      await import("@/lib/countries/uk/confidence/resetConfidenceGauge");
     setVote(appointmentVote(true), true);
     await setTally(200, 100);
 
@@ -240,7 +242,8 @@ describe("parliamentary public event card contract", () => {
     { confidence: true, votesAgainst: 300, status: "failed" },
   ])("does no publication or government write after losing the $status claim", async (scenario) => {
     const { sendCountryGameEvent } = await import("@/lib/discordWebhooks");
-    const { resetConfidenceGauge } = await import("@/lib/uk/confidence/confidenceGaugeStore");
+    const { resetConfidenceGauge } =
+      await import("@/lib/countries/uk/confidence/resetConfidenceGauge");
     setVote(
       {
         ...appointmentVote(scenario.confidence),

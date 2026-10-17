@@ -14,6 +14,8 @@
 export const CONFIDENCE_MIN = 0;
 export const CONFIDENCE_MAX = 100;
 export const CONFIDENCE_START = 100;
+/** Share of the remaining distance to full confidence restored on formation. */
+export const CONFIDENCE_FORMATION_RECOVERY = 0.1;
 
 /** One-off downward shocks. */
 export const CONFIDENCE_HITS = {
@@ -54,6 +56,12 @@ export type ConfidenceEvent =
 
 function clamp(v: number): number {
   return Math.max(CONFIDENCE_MIN, Math.min(CONFIDENCE_MAX, v));
+}
+
+/** Carry confidence into a newly formed government instead of restarting at full strength. */
+export function confidenceAfterGovernmentFormation(previousGauge: number): number {
+  const previous = Number.isFinite(previousGauge) ? clamp(previousGauge) : CONFIDENCE_START;
+  return clamp(previous + (CONFIDENCE_START - previous) * CONFIDENCE_FORMATION_RECOVERY);
 }
 
 /** Apply a one-off confidence event, returning the new clamped gauge value. */

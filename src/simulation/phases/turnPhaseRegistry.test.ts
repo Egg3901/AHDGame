@@ -360,6 +360,12 @@ describe("turn phase registry", () => {
     expect(called.indexOf("russianAssemblyCampaigns")).toBeLessThan(
       called.indexOf("parliamentaryGovernmentPhases")
     );
+    expect(called.indexOf("parliamentaryGovernmentConfidence")).toBeGreaterThan(
+      called.indexOf("parliamentaryGovernmentPhases")
+    );
+    expect(called.indexOf("parliamentaryGovernmentConfidence")).toBeLessThan(
+      called.indexOf("parliamentaryVacancyWatcher")
+    );
     expect(TURN_PHASE_NAMES).toContain("russianAssemblyCampaigns");
     expect(TURN_PHASE_NAMES.indexOf("russianAssemblyCampaigns")).toBeLessThan(
       TURN_PHASE_NAMES.indexOf("perpetualElections")
