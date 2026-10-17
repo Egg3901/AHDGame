@@ -119,6 +119,7 @@ import type { TechUnlockLedgerInput } from "@/lib/corporations/techTree/techUnlo
 import { loadNppPlacementSignals } from "@/lib/turn/npp/fragileMarketSupply";
 import {
   buildMarketSaturationIndex,
+  canFoundAsBuilder,
   cellUnmetDemandUnits,
   marketSaturationOf,
 } from "@/lib/turn/npp/rules/marketSaturation";
@@ -297,7 +298,17 @@ export async function processNppCorporationDecisions(
   // Same-type NPP builders per country, for the essential-shortage valve.
   const sameTypeNpp = new Set<string>();
   for (const corp of nppCorps) {
-    if (corp.ceoType !== "npp") continue;
+    if (
+      !canFoundAsBuilder({
+        ceoType: corp.ceoType,
+        autopilotRun: isAutopilotRun(corp),
+        suspended: corp.suspended,
+        liquidCapital: corp.liquidCapital,
+        strategyId: corp.nppStrategy?.id,
+      })
+    ) {
+      continue;
+    }
     sameTypeNpp.add(`${corp.countryId}|${corp.type}`);
     if (corp.secondaryType) sameTypeNpp.add(`${corp.countryId}|${corp.secondaryType}`);
   }
