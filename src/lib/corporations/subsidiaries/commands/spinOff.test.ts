@@ -61,6 +61,11 @@ beforeEach(() => {
   db.collection("corporateSectors").find = vi.fn().mockReturnValue({
     toArray: async () => [sector(sectorA, 5_000_000), sector(sectorB, 2_000_000)],
   });
+  db.collection("gameState").findOne = vi.fn().mockResolvedValue({
+    _id: "current",
+    currentTurn: 1000,
+    worldEpochId: "world",
+  });
   // characters.findOne resolves candidate vs parent CEO by _id.
   db.collection("characters").findOne = vi.fn().mockImplementation(async (q: { _id: ObjectId }) => {
     if (q._id.equals(candidateCharId)) return { _id: candidateCharId, userId: candidateUserId };
@@ -110,12 +115,16 @@ describe("spinOff", () => {
     // CEO is the appointed human, userId is that human (not the parent).
     expect(doc.ceoType).toBe("character");
     expect(doc.userId.equals(candidateUserId)).toBe(true);
+    expect(doc.producerPayables).toEqual({ worldEpoch: "world", turn: 1000, claims: [] });
   });
 
   it("grants the passed-decade baseline tech a newly founded corp gets (S#363)", async () => {
-    db.collection("gameState").findOne = vi
-      .fn()
-      .mockResolvedValue({ _id: "current", sectorTechTreesEnabled: true, currentYear: 1991 });
+    db.collection("gameState").findOne = vi.fn().mockResolvedValue({
+      _id: "current",
+      sectorTechTreesEnabled: true,
+      currentYear: 1991,
+      worldEpochId: "world",
+    });
     const result = await spinOff(db as unknown as Db, { parent: parentCorp(), ...baseInput });
     expect(result.ok).toBe(true);
     const doc = (db.collection("corporations").insertOne as ReturnType<typeof vi.fn>).mock

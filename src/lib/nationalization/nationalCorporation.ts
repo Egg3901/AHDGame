@@ -1,12 +1,13 @@
 import type { Db } from "mongodb";
 import { ObjectId } from "mongodb";
-import type { Corporation } from "@/lib/db/types";
+import type { Corporation, GameState } from "@/lib/db/types";
 import type { CountryId } from "@/lib/constants/countries";
 import type { CorporationType } from "@/lib/constants/corporations";
 import { COUNTRY_CURRENCY_MAP, getSeedCurrencyCode } from "@/lib/constants/currencies";
 import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
 import { getNationalIdentity } from "@/lib/constants/nationalIdentity";
 import { getOperatingSectorType } from "@/lib/constants/sectorStrategies";
+import { emptyProducerPayables } from "@/lib/market/producerMarket/openingState";
 
 /** Canonical "is this a state-owned National Corporation" reader. */
 export function isStateOwned(
@@ -22,7 +23,9 @@ export function isStateOwned(
  */
 export function buildNationalCorporationDoc(
   countryId: CountryId,
-  overrides: Partial<Corporation> = {}
+  overrides: Omit<Partial<Corporation>, "producerPayables"> & {
+    producerPayables: NonNullable<Corporation["producerPayables"]>;
+  }
 ): Omit<Corporation, "_id"> {
   const identity = getNationalIdentity(countryId);
   const now = new Date();
@@ -101,8 +104,10 @@ export async function ensurePrimaryNationalCorporation(
   // preset is read inline (not via loadWorldPreset) to keep this
   // widely-imported module off the heavy readiness-contract import chain.
   const gameState = await db
-    .collection<{ _id: string; preset?: string | null }>("gameState")
-    .findOne({ _id: "current" }, { projection: { preset: 1 } });
+    .collection<GameState>("gameState")
+    .findOne({ _id: "current" }, { projection: { preset: 1, worldEpochId: 1, currentTurn: 1 } });
+  if (!gameState?.worldEpochId)
+    throw new Error("The world economy is not ready to create a National Corporation");
   const preset =
     gameState?.preset && gameState.preset.trim().length > 0
       ? gameState.preset
@@ -111,6 +116,7 @@ export async function ensurePrimaryNationalCorporation(
     isPrimaryNationalCorporation: true,
     assignedSectorTypes: [],
     liquidCurrencyCode: getSeedCurrencyCode(countryId, preset),
+    producerPayables: emptyProducerPayables(gameState.worldEpochId, gameState.currentTurn ?? 0),
   });
   const result = await corps.insertOne(doc as Corporation);
   return { ...(doc as Corporation), _id: result.insertedId };

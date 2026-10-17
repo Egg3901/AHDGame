@@ -1,9 +1,8 @@
 /** @vitest-environment happy-dom */
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import AttackPanel from "./AttackPanel";
 import ForSalePanel from "./ForSalePanel";
-import PricingPanel from "./PricingPanel";
 import SectorWorkspaceTabs from "../components/SectorWorkspaceTabs";
 import type { AttackInfo, CorporationRef, SectorData } from "../types";
 
@@ -73,74 +72,7 @@ const saleProps = {
   onBuy: vi.fn(),
 };
 
-const pricing = {
-  posture: 0.1,
-  effectivePosture: 0.1,
-  soldFraction: 0.8,
-  clearingFactor: 1,
-  costPlusEnabled: true,
-  costPlusReady: false,
-};
-
 describe("sector action visibility", () => {
-  it("shows a published pricing sentence without controls or warnings to a non-CEO", () => {
-    render(<PricingPanel corporationId="corp" sectorId="sector" isCeo={false} pricing={pricing} />);
-    expect(
-      screen.getByText("This sector prices its output at +10% relative to the market.")
-    ).toBeTruthy();
-    expect(screen.queryByRole("button")).toBeNull();
-    expect(screen.queryByRole("status")).toBeNull();
-    expect(screen.queryByText("Pricing posture")).toBeNull();
-  });
-
-  it("hides cost-plus mode until a producing turn provides its basis", () => {
-    render(<PricingPanel corporationId="corp" sectorId="sector" isCeo pricing={pricing} />);
-    expect(screen.queryByRole("button", { name: "costPlusMode" })).toBeNull();
-    expect(screen.getByRole("button", { name: "Market" })).toBeTruthy();
-  });
-
-  it("offers a market reset but no unusable markup controls when the cost-plus basis is lost", async () => {
-    const fetchMock = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({ pricingPosture: 0.1, pricingMode: "market" }),
-    });
-    vi.stubGlobal("fetch", fetchMock);
-    try {
-      render(
-        <PricingPanel
-          corporationId="corp"
-          sectorId="sector"
-          isCeo
-          pricing={{ ...pricing, pricingMode: "costPlus" }}
-        />
-      );
-      expect(screen.queryByRole("button", { name: "costPlusMode" })).toBeNull();
-      expect(screen.queryByRole("button", { name: "+10%" })).toBeNull();
-      fireEvent.click(screen.getByRole("button", { name: "marketMode" }));
-      expect(fetchMock).toHaveBeenCalledWith(
-        "/api/corporations/corp/sectors/sector/pricing",
-        expect.objectContaining({
-          body: JSON.stringify({ pricingPosture: 0.1, pricingMode: "market" }),
-        })
-      );
-      await waitFor(() => expect(screen.getByRole("button", { name: "+10%" })).toBeTruthy());
-    } finally {
-      vi.unstubAllGlobals();
-    }
-  });
-
-  it("omits an automatic-pricing action when pricing is already automatic", () => {
-    render(
-      <PricingPanel
-        corporationId="corp"
-        sectorId="sector"
-        isCeo
-        pricing={{ ...pricing, posture: null }}
-      />
-    );
-    expect(screen.queryByRole("button", { name: "Auto" })).toBeNull();
-  });
-
   it.each([
     { userLiquidCapital: 0 },
     { userMarketingStrength: 0 },

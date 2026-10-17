@@ -325,6 +325,7 @@ export function previewDissolveSettlement(
 ): DissolveSettlementPreview {
   const liabilitiesAnchor = corporateCashArrearsAnchor({
     operatingByCurrency: corp.operatingCashArrearsByCurrency,
+    producerPayables: corp.producerPayables?.claims,
     federalTaxByCountryAnchor: corp.federalTaxArrearsAnchorByCountry,
     fxByCurrency,
   });

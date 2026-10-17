@@ -1,0 +1,23 @@
+{
+  "status": "passed",
+  "fixture": "1991 synthetic recipe portfolio",
+  "producerCount": 7755,
+  "logicalTradeCount": 8894535,
+  "cashSettlementLegCount": 7757,
+  "clearingFillCount": 30690,
+  "producedUnits": 89677.52177909928,
+  "cashDrift": -0.0001087188720703125,
+  "clearingMilliseconds": 10182.577443,
+  "receiptEncodingMilliseconds": 854.6916340000007,
+  "receiptDocumentBytes": 3368,
+  "receiptChunkCount": 36,
+  "maxChunkDocumentBytes": 129296,
+  "totalEncodedBytes": 3271624,
+  "heapUsedBytes": 268448248,
+  "liveRolloutQualified": false,
+  "limitations": [
+    "Synthetic capacities, wages and cash; no actual-world balance qualification.",
+    "One turn, not a full turn-engine, database, migration or route qualification.",
+    "Timing and heap measurements depend on host load and runtime."
+  ]
+}

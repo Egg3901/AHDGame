@@ -154,4 +154,31 @@ describe("NPP strategy choice respects the plant's operating lane", () => {
     expect(decide(item, { advertising: 4 })).toBeNull();
     expect(item).toEqual(before);
   });
+
+  it("does not choose a recipe that strands unknown-cost cost-plus stock", () => {
+    const item = sector({
+      producerQuotes: { steel: { kind: "costPlus", markup: 0.1 } },
+      producerInventory: {
+        worldEpoch: "epoch",
+        turn: 99,
+        inputStock: [],
+        outputStock: [{ commodity: "steel", units: 5, book: "world" }],
+      },
+    });
+    expect(decide(item, { advertising: 4 })).toBeNull();
+  });
+
+  it("does not apply obsolete-recipe repair when it strands unknown-cost cost-plus stock", () => {
+    const item = sector({
+      strategyId: "legacy_broadcast",
+      producerQuotes: { steel: { kind: "costPlus", markup: 0.1 } },
+      producerInventory: {
+        worldEpoch: "epoch",
+        turn: 99,
+        inputStock: [],
+        outputStock: [{ commodity: "steel", units: 5, book: "world" }],
+      },
+    });
+    expect(decide(item)).toBeNull();
+  });
 });

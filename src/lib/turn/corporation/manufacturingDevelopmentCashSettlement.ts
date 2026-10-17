@@ -170,6 +170,7 @@ export async function settleManufacturingDevelopmentCash(
       ),
       otherLiabilitiesAnchor: corporateCashArrearsAnchor({
         operatingByCurrency: corp.operatingCashArrearsByCurrency,
+        producerPayables: corp.producerPayables?.claims,
         federalTaxByCountryAnchor: corp.federalTaxArrearsAnchorByCountry,
         fxByCurrency: args.exchangeRatesByCurrency,
       }),

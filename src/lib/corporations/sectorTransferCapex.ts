@@ -31,9 +31,15 @@ import type { CorporateSector, SectorBuildOrder } from "@/lib/db/types/corporati
 import type { CorporationType } from "@/lib/constants/corporations";
 import type { MediaDiscriminator } from "@/lib/constants/corporations";
 import { seedPlantLedger, splitWholePlantCount } from "@/lib/corporations/plantLedger";
+import {
+  carveProducerTransferState,
+  copyProducerTransferState,
+  mergeProducerTransferState,
+  type ProducerTransferState,
+} from "@/lib/market/producerMarket/inventoryTransferRules";
 
 /** The plant-state subset of a sector doc. Structural so projections fit. */
-export interface SectorPlantFields {
+export interface SectorPlantFields extends ProducerTransferState {
   sectorType?: CorporationType | null;
   industryModel?: string | null;
   mediaDiscriminator?: MediaDiscriminator | null;
@@ -71,7 +77,7 @@ export interface SectorPlantFields {
 }
 
 /** The `$set` fragment a merge/carve produces. Keys match the sector doc. */
-export interface SectorPlantFieldsUpdate {
+export interface SectorPlantFieldsUpdate extends ProducerTransferState {
   capitalStock: number;
   operatingCapacityUnits?: number;
   operatingCapacityTurn?: number | null;
@@ -235,6 +241,7 @@ export function mergeSectorPlantFields(
     // The incoming doc is deleted next, so its pile is summed per commodity
     // into the survivor or it disappears with the row.
     ...inventoryFragment([survivor, incoming]),
+    ...mergeProducerTransferState([survivor, incoming]),
   };
 }
 
@@ -271,6 +278,7 @@ export function identitySectorPlantFields(sector: SectorPlantFields): SectorPlan
     plantsStartTurn: typeof sector.plantsStartTurn === "number" ? sector.plantsStartTurn : null,
     legacyRevenueShadow: shadow(sector),
     ...inventoryFragment([sector]),
+    ...copyProducerTransferState(sector),
   };
 }
 
@@ -345,12 +353,16 @@ export function carveSectorPlantFields(
     legacyRevenueShadow: sourceShadow === null ? null : sourceShadow * f,
     // The pile follows the capacity, so the two halves still sum to the original.
     ...inventoryFragment([sector], stockFraction),
+    // Goods are divisible even when the facility count rounds to zero.
+    ...carveProducerTransferState(sector, f),
   };
 }
 
 /** Narrowing helper: does this doc carry any plant state worth moving? */
 export function hasPlantState(sector: SectorPlantFields): boolean {
   return (
+    sector.producerCapacity != null ||
+    sector.producerInventory != null ||
     num(sector.capitalStock) > 0 ||
     count(sector) > 0 ||
     queue(sector).length > 0 ||
@@ -365,6 +377,7 @@ export function readSectorPlantFields(sector: Partial<CorporateSector>): SectorP
   return {
     sectorType: sector.sectorType,
     industryModel: sector.industryModel,
+    mediaDiscriminator: sector.mediaDiscriminator,
     capitalStock: sector.capitalStock,
     operatingCapacityUnits: sector.operatingCapacityUnits,
     operatingCapacityTurn: sector.operatingCapacityTurn,
@@ -378,5 +391,7 @@ export function readSectorPlantFields(sector: Partial<CorporateSector>): SectorP
     legacyRevenueShadow: sector.legacyRevenueShadow,
     inventoryUnits: sector.inventoryUnits,
     inventoryValueAnchor: sector.inventoryValueAnchor,
+    producerCapacity: sector.producerCapacity,
+    producerInventory: sector.producerInventory,
   };
 }

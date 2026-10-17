@@ -1,3 +1,4 @@
+import { uniformProducerQuotes } from "@/lib/market/producerMarket/quotePolicyRules";
 import { describe, expect, it } from "vitest";
 import { bulkSectorOperationsSchema } from "./corporations";
 
@@ -26,13 +27,19 @@ describe("bulkSectorOperationsSchema", () => {
     expect(r.success).toBe(false);
   });
 
-  it("accepts a pricing-posture-only Corporate-Wide request", () => {
-    const r = bulkSectorOperationsSchema.safeParse({ countryId: "US", pricingPosture: -0.1 });
+  it("accepts a product-quotes-only Corporate-Wide request", () => {
+    const r = bulkSectorOperationsSchema.safeParse({
+      countryId: "US",
+      quotes: uniformProducerQuotes(-0.1),
+    });
     expect(r.success).toBe(true);
   });
 
-  it("accepts pricingPosture null (Auto)", () => {
-    const r = bulkSectorOperationsSchema.safeParse({ countryId: "US", pricingPosture: null });
+  it("accepts empty quotes for automatic pricing", () => {
+    const r = bulkSectorOperationsSchema.safeParse({
+      countryId: "US",
+      quotes: uniformProducerQuotes(null),
+    });
     expect(r.success).toBe(true);
   });
 
@@ -41,7 +48,7 @@ describe("bulkSectorOperationsSchema", () => {
     expect(r.success).toBe(false);
   });
 
-  it("rejects an out-of-range pricing posture", () => {
+  it("rejects obsolete pricing posture requests", () => {
     const r = bulkSectorOperationsSchema.safeParse({ countryId: "US", pricingPosture: 0.5 });
     expect(r.success).toBe(false);
   });

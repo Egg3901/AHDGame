@@ -25,6 +25,32 @@ const midBuild = (over: Partial<SectorPlantFields> = {}): SectorPlantFields => (
 });
 
 describe("mergeSectorPlantFields", () => {
+  it("conserves producer inventory when a facility split leaves a side with no whole plant", () => {
+    const sector: SectorPlantFields = {
+      sectorType: "energy",
+      capitalStock: 0,
+      capacityBookAnchor: 0,
+      buildQueue: [],
+      producerCapacity: { worldEpoch: "world", turn: 4 },
+      producerInventory: {
+        worldEpoch: "world",
+        turn: 4,
+        inputStock: [{ commodity: "fuel", units: 20, value: 60 }],
+        outputStock: [{ commodity: "steel", book: "world", units: 40, quoteUnitCost: 2 }],
+      },
+    };
+    const a = carveSectorPlantFields(sector, 0.25, 0);
+    const b = carveSectorPlantFields(sector, 0.75, 0);
+    expect(a.capitalStock + b.capitalStock).toBe(0);
+    expect(
+      a.producerInventory!.inputStock[0].value + b.producerInventory!.inputStock[0].value
+    ).toBe(60);
+    expect(
+      a.producerInventory!.outputStock[0].units + b.producerInventory!.outputStock[0].units
+    ).toBe(40);
+    expect(a.producerInventory!.outputStock[0].units).toBe(10);
+  });
+
   it("refuses to merge generic manufacturing capacity with vehicles capacity", () => {
     expect(() =>
       mergeSectorPlantFields(

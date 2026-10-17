@@ -6,14 +6,9 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 import type { Db } from "mongodb";
 import { ObjectId } from "mongodb";
-import { softCapEffectiveMargin } from "@/lib/constants/corporations";
 import { makeCorporation } from "@/lib/test-utils/factories";
 import { MANUFACTURING_PRODUCT_PROJECTS_V2 } from "@/lib/products/manufacturingProject";
 import { processCorporationTurn } from "./corporationTurn";
-// profitMargin:100 (a "zero maintenance" shortcut in these fixtures) now realizes
-// at the soft-capped ~95.2%, so income/tax expectations scale by this factor.
-// An off-type corp's -15 mismatch is only partly offset by the home-state bonus.
-const EFF_MARGIN_MISMATCH = softCapEffectiveMargin(90) / 100;
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 vi.mock("@/lib/notifications", () => ({
@@ -527,12 +522,10 @@ describe("processCorporationTurn", () => {
     // treated as JPY), which rounds to the floor at this scale — the 100× floor below
     // catches it.
     const gdpFloor = 100_000_000_000 * 0.08 * 0.75;
-    // Contribution is ~180k JPY at full margin. The high side is soft-capped and
-    // the realized value depends on the sector's live modifier stack, so bound it:
-    // at least the off-type soft-capped level, at most the full-margin level.
-    // (The >1200×100 guard is what actually proves FX conversion ran, not raw ₳.)
+    // Full operating expenses reduce the contribution below a margin-only
+    // estimate. The native contribution stays below the gross-profit ceiling;
+    // the >1200×100 guard proves FX conversion rather than treating raw anchor as JPY.
     const contribution = blended - gdpFloor;
-    expect(contribution).toBeGreaterThan(180_000 * EFF_MARGIN_MISMATCH * 0.99);
     expect(contribution).toBeLessThan(180_000 * 1.01);
     expect(contribution).toBeGreaterThan(1200 * 100);
   });
@@ -626,12 +619,10 @@ describe("processCorporationTurn", () => {
     // gdpBase = 10B × 0.08 = 800M JPY; 75% floor = 600M JPY.
     // annualized anchor = 4800 ₳ → 720_000 JPY after fx; 25% contribution = 180_000 JPY.
     const gdpFloor = 10_000_000_000 * 0.08 * 0.75;
-    // Contribution is ~180k JPY at full margin. The high side is soft-capped and
-    // the realized value depends on the sector's live modifier stack, so bound it:
-    // at least the off-type soft-capped level, at most the full-margin level.
-    // (The >1200×100 guard is what actually proves FX conversion ran, not raw ₳.)
+    // Full operating expenses reduce the contribution below a margin-only
+    // estimate. The native contribution stays below the gross-profit ceiling;
+    // the >1200×100 guard proves FX conversion rather than treating raw anchor as JPY.
     const contribution = blended - gdpFloor;
-    expect(contribution).toBeGreaterThan(180_000 * EFF_MARGIN_MISMATCH * 0.99);
     expect(contribution).toBeLessThan(180_000 * 1.01);
     expect(contribution).toBeGreaterThan(1200 * 100);
   });

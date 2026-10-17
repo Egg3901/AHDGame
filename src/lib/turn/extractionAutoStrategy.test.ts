@@ -532,6 +532,32 @@ describe("processExtractionAutoStrategy", () => {
     expect(db.collectionMocks.gameState.updateOne).toHaveBeenCalled();
   });
 
+  it("does not convert a mine that would strand unknown-cost cost-plus stock", async () => {
+    seed({
+      rareEarthSD: 0.2,
+      stateCap: 1000,
+      stateSupply: 50,
+      sectors: [
+        {
+          _id: new ObjectId(),
+          stateId: "HB",
+          revenue: 100,
+          strategyId: "standard",
+          producerQuotes: { financial_services: { kind: "costPlus", markup: 0.1 } },
+          producerInventory: {
+            worldEpoch: "epoch",
+            turn: 9,
+            inputStock: [],
+            outputStock: [{ commodity: "financial_services", units: 4, book: "world" }],
+          },
+        },
+      ],
+    });
+    const res = await processExtractionAutoStrategy(db as unknown as Db, 10, ENABLED);
+    expect(res.converted).toBe(0);
+    expect(db.collectionMocks.corporateSectors.bulkWrite).not.toHaveBeenCalled();
+  });
+
   it("does not convert when the state deposit is already maxed (no per-state headroom)", async () => {
     seed({
       rareEarthSD: 0.2,
@@ -649,6 +675,27 @@ describe("processExtractionAutoStrategy", () => {
     expect(op.filter._id).toEqual(sectorId);
     expect(op.update.$set.strategyId).toBe("rare_earth_mining");
     expect(op.update.$set.transitionFromStrategyId).toBe("iron_mining");
+  });
+
+  it("does not re-strategize a mine that would strand unknown-cost cost-plus stock", async () => {
+    seedNppRestrategize({
+      sector: {
+        _id: new ObjectId(),
+        stateId: "HB",
+        strategyId: "iron_mining",
+        soldFraction: 0.2,
+        producerQuotes: { financial_services: { kind: "costPlus", markup: 0.1 } },
+        producerInventory: {
+          worldEpoch: "epoch",
+          turn: 9,
+          inputStock: [],
+          outputStock: [{ commodity: "financial_services", units: 4, book: "world" }],
+        },
+      },
+    });
+    const res = await processExtractionAutoStrategy(db as unknown as Db, 10, ENABLED);
+    expect(res.restrategized).toBe(0);
+    expect(db.collectionMocks.corporateSectors.bulkWrite).not.toHaveBeenCalled();
   });
 
   it("respects the strategy cooldown in the NPP pass", async () => {

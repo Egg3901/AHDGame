@@ -730,11 +730,8 @@ export interface SectorDetail {
   productionPolicy?: number;
   /** Currently active production level (-25 to +25) */
   productionPolicyLevel?: number;
-  /**
-   * CEO-only: posted price relative to market (-0.2 … 0.2), null = auto.
-   * Absent for every other viewer.
-   */
-  pricingPosture?: number | null;
+  /** CEO-only next-turn product quote policies. */
+  producerQuotes?: import("@/lib/market/producerMarket/quotePolicyRules").ProducerQuotes;
   /** CEO-only: wage-level multiplier (1 = baseline). Absent for other viewers. */
   wageLevel?: number;
   /** Active for-sale listing — null when not on the secondary market */

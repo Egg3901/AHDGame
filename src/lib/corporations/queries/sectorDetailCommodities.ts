@@ -3,13 +3,14 @@
  * sector detail query. Extracted verbatim from sectorDetail.ts (pure code
  * motion; no behavior change).
  */
+import { producerSectorView } from "@/lib/market/producerMarket/sectorViewRules";
 import { buildMarketContext } from "@/lib/market/marketContext";
 import { getMarketSystemMode } from "@/lib/market/featureFlag";
 import { computeThroughput, inputAvailability, THROUGHPUT_MIN } from "@/lib/market/throughput";
 import { isStateScopedCommodity } from "@/lib/market/rules/commodityMarketScope";
 import { CAPITAL_DEPRECIATION_PER_TURN, impliedOutputUnits } from "@/lib/market/capital";
 import { computePriceRealization, priceRealizationFactor } from "@/lib/market/priceRealization";
-import type { CommodityPrice, CorporateSector, Corporation } from "@/lib/db/types";
+import type { CommodityPrice, CorporateSector } from "@/lib/db/types";
 import type { OperatingSectorType } from "@/lib/constants/corporations";
 import {
   COMMODITY_LABELS,
@@ -94,7 +95,6 @@ export async function buildSectorCommoditySections(args: {
   sectorCountryId: string;
   /** The world's era unit-basis scale (`getEraUnitScale(preset)`). */
   eraUnitScale: number;
-  corporation: Corporation;
   isCeo: boolean;
   commodityPrices: CommodityPrice[];
   globalBalances: Map<CommodityType, CommodityBalance>;
@@ -114,7 +114,6 @@ export async function buildSectorCommoditySections(args: {
     sectorType,
     sectorCountryId,
     eraUnitScale,
-    corporation,
     isCeo,
     commodityPrices,
     globalBalances,
@@ -305,36 +304,14 @@ export async function buildSectorCommoditySections(args: {
     };
   }
 
-  // Posted-price clearing (marketSystemMode >= "clearing"): CEO posture +
-  // last turn's clearing telemetry for the Pricing panel.
-  let pricing:
-    | {
-        posture: number | null;
-        effectivePosture: number | null;
-        soldFraction: number | null;
-        clearingFactor: number | null;
-        brandPostureNorm?: number | null;
-        costPlusEnabled?: boolean;
-        costPlusReady?: boolean;
-        pricingMode?: "market" | "costPlus";
-      }
-    | undefined;
-  if (market.clearingEnabled) {
-    pricing = {
-      posture: typeof sector.pricingPosture === "number" ? sector.pricingPosture : null,
-      effectivePosture:
-        typeof sector.effectivePosture === "number" ? sector.effectivePosture : null,
-      soldFraction: typeof sector.soldFraction === "number" ? sector.soldFraction : null,
-      clearingFactor: typeof sector.clearingFactor === "number" ? sector.clearingFactor : null,
-      // Brand loyalty (Package A): the corp's established price-identity norm,
-      // exposed only to the CEO so the Pricing panel can warn about gouging
-      // jumps. Corp-level (not sector-level); never sent to non-owners.
-      brandPostureNorm:
-        isCeo && typeof corporation.brandPostureNorm === "number"
-          ? corporation.brandPostureNorm
-          : undefined,
-    };
-  }
+  const pricing = market.clearingEnabled
+    ? producerSectorView({
+        receipt: sector.producerSettlement,
+        commodities: supplyFlows.map((flow) => flow.commodity),
+        policies: sector.producerQuotes ?? {},
+        canManage: isCeo,
+      })
+    : undefined;
 
   // Capital tier (marketSystemMode >= "capital"): capacity + per-unit
   // economics, computed from live data — margin is emergent, never stored.

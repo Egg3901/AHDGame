@@ -173,6 +173,7 @@ export function corpExitEquityAnchor(input: CorpExitEquityInput): CorpExitEquity
     input.liquidCapitalAnchor -
     corporateCashArrearsAnchor({
       operatingByCurrency: corpArrears?.operatingCashArrearsByCurrency,
+      producerPayables: corpArrears?.producerPayables?.claims,
       federalTaxByCountryAnchor: corpArrears?.federalTaxArrearsAnchorByCountry,
       fxByCurrency: input.fxByCurrency,
     });

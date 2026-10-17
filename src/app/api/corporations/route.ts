@@ -71,6 +71,7 @@ import { CURRENCY_SYMBOLS, getSeedCurrencyCode } from "@/lib/constants/currencie
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import type { CountryId } from "@/lib/constants/countries";
 import { isPrivateEnterpriseBlocked } from "@/lib/economy/queries/privateEnterpriseGate";
+import { emptyProducerPayables } from "@/lib/market/producerMarket/openingState";
 import {
   planEquityPrimaryPlacement,
   prepareEquityPrimaryPlacement,
@@ -366,6 +367,9 @@ export async function POST(request: Request) {
     // Bug #0728: per-user refounding cooldown, anchored when the previous
     // corporation ends. currentTurnAtFounding is reused below for founding records.
     const foundingGameState = await getGameState();
+    if (!foundingGameState?.worldEpochId) {
+      return errorResponse(503, "The world economy is not ready to found a corporation.");
+    }
     const currentTurnAtFounding = foundingGameState?.currentTurn ?? 0;
     const founderUser = await db
       .collection<User>("users")
@@ -721,6 +725,10 @@ export async function POST(request: Request) {
       userId: new ObjectId(auth.user.userId),
       headquartersState,
       liquidCapital: liquidCapitalAtFounding,
+      producerPayables: emptyProducerPayables(
+        foundingGameState.worldEpochId,
+        currentTurnAtFounding
+      ),
       ...(forexEnabled && corpHomeCurrency ? { liquidCurrencyCode: corpHomeCurrency } : {}),
       marketingBudget: 0,
       marketingStrength: 10,

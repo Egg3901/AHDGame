@@ -286,6 +286,7 @@ export async function recomputeSharePricesAfterBondTurn(
         (lookups.issuedBondDebtByCorpId.get(id) ?? 0) +
         corporateCashArrearsAnchor({
           operatingByCurrency: corp.operatingCashArrearsByCurrency,
+          producerPayables: corp.producerPayables?.claims,
           federalTaxByCountryAnchor: corp.federalTaxArrearsAnchorByCountry,
           fxByCurrency: lookups.exchangeRatesByCurrency,
         }),

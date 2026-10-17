@@ -1,5 +1,6 @@
 "use client";
 
+import { uniformProducerQuotes } from "@/lib/market/producerMarket/quotePolicyRules";
 import { useState } from "react";
 import type { CorporationType } from "@/lib/constants/corporations";
 import { facilityPlural } from "@/lib/constants/facilityVocabulary";
@@ -418,11 +419,10 @@ export function CeoOperationsPanel({
   );
 }
 
-const POSTURE_STEPS = [-0.2, -0.1, -0.05, 0, 0.05, 0.1, 0.2] as const;
+const MARKUP_STEPS = [-0.2, -0.1, -0.05, 0, 0.05, 0.1, 0.2] as const;
 
-function postureLabel(p: number): string {
-  if (p === 0) return "Market";
-  return `${p > 0 ? "+" : ""}${Math.round(p * 100)}%`;
+function markupLabel(p: number): string {
+  return `Cost ${p >= 0 ? "+" : ""}${Math.round(p * 100)}%`;
 }
 
 /**
@@ -586,14 +586,14 @@ function NatBulkGroupCard({
         </div>
       </div>
 
-      {/* Pricing posture (direct apply; requires market clearing) */}
+      {/* Product pricing (direct apply; requires market clearing) */}
       <div>
-        <div className="text-body-xs font-medium text-foreground">Pricing posture</div>
+        <div className="text-body-xs font-medium text-foreground">Product pricing</div>
         <p className="mt-1 text-body-sm text-muted">
-          Posted price vs market for every holding in this group.
+          Markup over operating cost for every holding in this group.
         </p>
         <div className="mt-2 flex flex-wrap gap-1.5">
-          {POSTURE_STEPS.map((p) => (
+          {MARKUP_STEPS.map((p) => (
             <button
               key={p}
               type="button"
@@ -604,14 +604,14 @@ function NatBulkGroupCard({
                   {
                     countryId,
                     ...(sectorType ? { sectorType } : {}),
-                    pricingPosture: p,
+                    quotes: uniformProducerQuotes(p),
                   },
-                  `Pricing set to ${postureLabel(p)} across holdings.`
+                  `Pricing set to ${markupLabel(p)} across holdings.`
                 )
               }
               className="rounded-lg border border-card-border bg-background px-3 py-1.5 text-body-xs font-medium tabular-nums text-foreground transition-colors hover:bg-card disabled:opacity-50"
             >
-              {postureLabel(p)}
+              {markupLabel(p)}
             </button>
           ))}
           <button
@@ -623,7 +623,7 @@ function NatBulkGroupCard({
                 {
                   countryId,
                   ...(sectorType ? { sectorType } : {}),
-                  pricingPosture: null,
+                  quotes: uniformProducerQuotes(null),
                 },
                 "Pricing set to Auto across holdings."
               )

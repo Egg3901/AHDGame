@@ -38,6 +38,11 @@ describe("ensurePrimaryNationalCorporation", () => {
     vi.clearAllMocks();
     db = createMockDb();
     db.collection("corporations");
+    db.collection("gameState");
+    db.collectionMocks.gameState.findOne.mockResolvedValue({
+      worldEpochId: "world",
+      currentTurn: 10,
+    });
   });
 
   it("returns the flagged primary when one exists, without creating another", async () => {
@@ -96,16 +101,30 @@ describe("ensurePrimaryNationalCorporation", () => {
     expect(insertedDoc.sharePrice).toBe(1);
     expect(insertedDoc.isPrimaryNationalCorporation).toBe(true);
     expect(insertedDoc.assignedSectorTypes).toEqual([]);
+    expect(insertedDoc.producerPayables).toEqual({ worldEpoch: "world", turn: 10, claims: [] });
     expect(corp._id.toString()).toBe(insertedId.toString());
     expect(corp.countryOwnerId).toBe("CN");
+  });
+
+  it("refuses to create a primary without a world generation", async () => {
+    db.collectionMocks.corporations.find.mockReturnValue(cursorOf([]));
+    db.collectionMocks.gameState.findOne.mockResolvedValue({ preset: "1991-default" });
+
+    await expect(ensurePrimaryNationalCorporation(db as unknown as Db, "CN")).rejects.toThrow(
+      "world economy is not ready"
+    );
+    expect(db.collectionMocks.corporations.insertOne).not.toHaveBeenCalled();
   });
 
   it("stamps EUR when creating a 2027 euro-member primary", async () => {
     const insertedId = new ObjectId();
     db.collectionMocks.corporations.find.mockReturnValue(cursorOf([]));
     db.collectionMocks.corporations.insertOne.mockResolvedValue({ insertedId });
-    db.collection("gameState");
-    db.collectionMocks.gameState.findOne.mockResolvedValue({ preset: "2027-default" });
+    db.collectionMocks.gameState.findOne.mockResolvedValue({
+      preset: "2027-default",
+      worldEpochId: "world",
+      currentTurn: 10,
+    });
 
     await ensurePrimaryNationalCorporation(db as unknown as Db, "FR");
 
@@ -117,8 +136,11 @@ describe("ensurePrimaryNationalCorporation", () => {
     const insertedId = new ObjectId();
     db.collectionMocks.corporations.find.mockReturnValue(cursorOf([]));
     db.collectionMocks.corporations.insertOne.mockResolvedValue({ insertedId });
-    db.collection("gameState");
-    db.collectionMocks.gameState.findOne.mockResolvedValue({ preset: "1991-default" });
+    db.collectionMocks.gameState.findOne.mockResolvedValue({
+      preset: "1991-default",
+      worldEpochId: "world",
+      currentTurn: 10,
+    });
 
     await ensurePrimaryNationalCorporation(db as unknown as Db, "FR");
 

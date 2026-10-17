@@ -224,6 +224,8 @@ export interface BankingTransition {
   legs: TransitionLeg[];
   /** Retry a guarded credit leg from this frozen receipt after its target becomes eligible. */
   retryCreditLegOnGuardFailure?: boolean;
+  /** Opt in to batch net cash debits only when all cash targets are independent. */
+  batchIndependentDebits?: boolean;
   projections: TransitionProjection[];
   event: TransitionEvent;
 }

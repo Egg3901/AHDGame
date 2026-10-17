@@ -11,6 +11,23 @@ import { getStrategyAvailability } from "@/lib/constants/techTree/strategyAvaila
 import { retoolRescaleFields } from "@/lib/corporations/retoolRescale";
 import type { CommodityPriceRatioFn } from "@/lib/turn/npp/marketSignals";
 import { isObsoleteNppParentStrategy } from "./rules/obsoleteStrategyRepair";
+import { unknownRetainedCostPlusCommodities } from "@/lib/market/producerMarket/retainedQuoteRules";
+
+function hasUnsupportedRetainedCostPlusStock(
+  sector: CorporateSector,
+  strategy: { supply: Partial<Record<CommodityType, number>> }
+): boolean {
+  const finalOutputCommodities = Object.entries(strategy.supply)
+    .filter(([, units]) => typeof units === "number" && units > 0)
+    .map(([commodity]) => commodity);
+  return (
+    unknownRetainedCostPlusCommodities({
+      outputStock: sector.producerInventory?.outputStock ?? [],
+      finalOutputCommodities,
+      quotes: sector.producerQuotes,
+    }).length > 0
+  );
+}
 
 /** Effective profit margin at or below which a sector is a shift candidate. */
 export const STRATEGY_SHIFT_MARGIN_TRIGGER = -3;
@@ -110,7 +127,9 @@ export function chooseNppStrategyRetool(ctx: StrategyRetoolContext): StrategyRet
         const standard = strategies.find((strategy) => strategy.id === "standard");
         if (
           standard &&
-          !getStrategyAvailability(ctx.corp, standard, ctx.currentYear, ctx.techTreesEnabled).locked
+          !getStrategyAvailability(ctx.corp, standard, ctx.currentYear, ctx.techTreesEnabled)
+            .locked &&
+          !hasUnsupportedRetainedCostPlusStock(sector, standard)
         ) {
           // Keep the obsolete source id throughout the normal blend. Replacing
           // its fallback immediately would change paid capacity's unit basis.
@@ -133,6 +152,7 @@ export function chooseNppStrategyRetool(ctx: StrategyRetoolContext): StrategyRet
         ctx.techTreesEnabled
       );
       if (availability.locked) continue;
+      if (hasUnsupportedRetainedCostPlusStock(sector, candidate)) continue;
       const score = strategyPriceScore(candidate, countryId, ctx.priceRatioOf);
       if (score == null) continue;
       const advantage = score - currentScore;

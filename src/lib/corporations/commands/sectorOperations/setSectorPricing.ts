@@ -1,28 +1,26 @@
 import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
+import { requireCorporationActionsEnabled } from "@/lib/api/requireCorporationActions";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
 import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { resolveCorporation, requireCeo } from "@/lib/api/corporations/resolveQuery";
-import { clampPricingPosture } from "@/lib/market/clearing";
 import { isMarketSystemMode, marketAtLeast, getMarketSystemMode } from "@/lib/market/featureFlag";
-import type { CorporateSector, GameConfig } from "@/lib/db/types";
-import { supportsCostPlusPricing, validCostPlusBasis } from "@/lib/market/costPlusPricing/rules";
+import type { CorporateSector } from "@/lib/db/types";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { setSectorPricingSchema } from "@/lib/api/schemas/corporations";
+import { getStrategyForOperatingModel } from "@/lib/constants/sectorStrategies";
+import {
+  retainedCostPlusBlockMessage,
+  unknownRetainedCostPlusCommodities,
+} from "@/lib/market/producerMarket/retainedQuoteRules";
 
 interface RouteParams {
   params: Promise<{ id: string; sectorId: string }>;
 }
 
-/**
- * POST /api/corporations/[id]/sectors/[sectorId]/pricing
- * Set the CEO's pricing posture for a sector (marketSystemMode >= "clearing").
- * Posture is the posted price relative to market, −20%…+20%; null reverts to
- * automatic positioning. CEO only. No cooldown — repricing is a market move,
- * not a construction project.
- */
+/** Save the owner's next-turn per-product quote policies. */
 export async function setSectorPricing(request: Request, { params }: RouteParams) {
   try {
     const auth = await requireBasicAuth();
@@ -42,8 +40,10 @@ export async function setSectorPricing(request: Request, { params }: RouteParams
       return errorResponse(parsed.status, parsed.error);
     }
 
-    const { pricingPosture, pricingMode } = parsed.data;
+    const { quotes } = parsed.data;
     const db = await getDb();
+    const guard = await requireCorporationActionsEnabled(db);
+    if (guard) return guard;
 
     const resolved = await resolveCorporation(db, id);
     if (!resolved.ok) return resolved.response;
@@ -56,20 +56,18 @@ export async function setSectorPricing(request: Request, { params }: RouteParams
       return errorResponse(400, "Invalid sector ID");
     }
 
-    const config =
-      pricingMode === "costPlus"
-        ? await db
-            .collection<GameConfig>("gameConfig")
-            .findOne({ _id: "default" }, { projection: { explicitPlantCostsEnabled: 1 } })
-        : null;
-
     const sector = await db.collection<CorporateSector>("corporateSectors").findOne(
       { _id: new ObjectId(sectorId), corporationId: corporation._id },
       {
-        projection:
-          config?.explicitPlantCostsEnabled === true
-            ? {}
-            : { pricingMode: 0, costPlusCostBasis: 0 },
+        projection: {
+          _id: 1,
+          sectorType: 1,
+          industryModel: 1,
+          mediaDiscriminator: 1,
+          strategyId: 1,
+          producerQuotes: 1,
+          producerInventory: 1,
+        },
       }
     );
 
@@ -77,43 +75,35 @@ export async function setSectorPricing(request: Request, { params }: RouteParams
       return errorResponse(404, "Sector not found");
     }
 
-    if (pricingMode === "costPlus") {
-      if (
-        config?.explicitPlantCostsEnabled !== true ||
-        !marketAtLeast(mode, "plants") ||
-        !supportsCostPlusPricing(sector.sectorType)
-      ) {
-        return errorResponse(400, "Cost-plus pricing is not available for this sector");
-      }
-      if (!validCostPlusBasis(sector.costPlusCostBasis)) {
-        return errorResponse(
-          400,
-          "Cost-plus pricing needs a producing turn with recorded operating costs"
-        );
-      }
-      if (pricingPosture === null) {
-        return errorResponse(400, "Choose a markup for cost-plus pricing");
-      }
+    const finalStrategy = getStrategyForOperatingModel(
+      sector.sectorType,
+      sector.strategyId ?? "standard",
+      sector.industryModel,
+      sector.mediaDiscriminator
+    );
+    const finalOutputCommodities = Object.entries(finalStrategy.supply)
+      .filter(([, units]) => typeof units === "number" && units > 0)
+      .map(([commodity]) => commodity);
+    const blocked = unknownRetainedCostPlusCommodities({
+      outputStock: sector.producerInventory?.outputStock ?? [],
+      finalOutputCommodities,
+      quotes,
+    });
+    if (blocked.length > 0) {
+      return errorResponse(400, retainedCostPlusBlockMessage(blocked, "pricing"));
     }
 
-    const clamped = pricingPosture == null ? null : clampPricingPosture(pricingPosture);
+    const written = await db
+      .collection<CorporateSector>("corporateSectors")
+      .updateOne(
+        { _id: sector._id, corporationId: corporation._id },
+        { $set: { producerQuotes: quotes, updatedAt: new Date() } }
+      );
+    if (written.matchedCount !== 1) {
+      return errorResponse(409, "Sector ownership changed. Refresh before changing prices.");
+    }
 
-    await db.collection<CorporateSector>("corporateSectors").updateOne(
-      { _id: sector._id, corporationId: corporation._id },
-      {
-        $set: {
-          pricingPosture: clamped,
-          ...(pricingMode !== undefined ? { pricingMode } : {}),
-          updatedAt: new Date(),
-        },
-      }
-    );
-
-    return NextResponse.json({
-      success: true,
-      pricingPosture: clamped,
-      ...(pricingMode !== undefined ? { pricingMode } : {}),
-    });
+    return NextResponse.json({ success: true, quotes });
   } catch (error) {
     return handleRouteError(error);
   }

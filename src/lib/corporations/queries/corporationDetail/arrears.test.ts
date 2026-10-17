@@ -26,6 +26,28 @@ describe("CEO arrears disclosure", () => {
     ).toEqual({ turn: 12, paidLastTurn: 22.34, remaining: 85 });
   });
 
+  it("includes producer bills and their exact native payment without repricing old cash", () => {
+    const id = "aaaaaaaaaaaaaaaaaaaaaaaa";
+    expect(
+      summarizeArrears({
+        turn: 12,
+        currency: "USD",
+        rates: new Map([["USD", 3]]),
+        producerCorporationId: id,
+        producerPayables: [{ amount: 7 }],
+        receipts: [
+          {
+            status: "applied",
+            currency: "ANCHOR",
+            event: {
+              meta: { [`producerPayablePaid_${id}`]: 40, [`producerPayableCurrency_${id}`]: "USD" },
+            },
+          },
+        ],
+      })
+    ).toEqual({ turn: 12, paidLastTurn: 40, remaining: 21 });
+  });
+
   it("handles legacy missing balances, invalid amounts and absent FX safely", () => {
     expect(summarizeArrears({ turn: 1, currency: "USD", rates: new Map(), receipts: [] })).toEqual({
       turn: 1,

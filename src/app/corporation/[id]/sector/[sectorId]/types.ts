@@ -221,24 +221,7 @@ export interface CapitalData {
   };
 }
 
-export interface PricingData {
-  costPlusEnabled?: boolean;
-  costPlusReady?: boolean;
-  pricingMode?: "market" | "costPlus";
-  /** CEO-posted posture (−0.2…0.2) or null = automatic. */
-  posture: number | null;
-  /** Posture actually used last turn (auto sectors included). */
-  effectivePosture: number | null;
-  /** Share of output that found a buyer last turn. */
-  soldFraction: number | null;
-  /** Ramped clearing multiplier applied to realized revenue last turn. */
-  clearingFactor: number | null;
-  /**
-   * Corp's established price-identity norm (brand loyalty, Package A). Owner/CEO
-   * only, drives the gouging warning. Absent ⇒ feature off or non-owner viewer.
-   */
-  brandPostureNorm?: number | null;
-}
+export type PricingData = import("@/lib/market/producerMarket/sectorViewRules").ProducerSectorView;
 
 export interface AvailableStrategy {
   id: string;

@@ -61,6 +61,7 @@ function plantSector(
 async function seed(db: Db) {
   await db.collection("gameState").insertOne({
     _id: "current" as unknown as ObjectId,
+    worldEpochId: "test-world-epoch",
     currentTurn: 50,
     currentYear: 1991,
   });
@@ -321,6 +322,11 @@ describe.runIf(REAL_MONGO_ENABLED)("NPP pickup against isolated mongod", () => {
       .collection<Corporation>("corporations")
       .findOne({ _id: result.recipientIds[0] });
     expect(spawned?.ceoType).toBe("npp");
+    expect(spawned?.producerPayables).toEqual({
+      worldEpoch: "test-world-epoch",
+      turn: 50,
+      claims: [],
+    });
   });
 
   it("returns everything to the pool for unbuilt sectors", async () => {

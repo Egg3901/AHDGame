@@ -25,7 +25,7 @@ import MarketPositionPanel from "./sections/MarketPositionPanel";
 import AttackPanel from "./sections/AttackPanel";
 import ProductionPolicyPanel from "./sections/ProductionPolicyPanel";
 import WageLevelPanel from "./sections/WageLevelPanel";
-import PricingPanel from "./sections/PricingPanel";
+import ProducerMarketPanel from "./sections/ProducerMarketPanel";
 import CapitalPanel from "./sections/CapitalPanel";
 import MarketRewardBanner from "./sections/MarketRewardBanner";
 import StrandedPlantBanner from "./sections/StrandedPlantBanner";
@@ -39,7 +39,6 @@ import AbandonPanel from "./sections/AbandonPanel";
 import ForSalePanel from "./sections/ForSalePanel";
 import ResourceCapacityPanel from "./sections/ResourceCapacityPanel";
 import PlantPanel from "./sections/PlantPanel";
-import MarketMoneyPanel from "./sections/MarketMoneyPanel";
 import InputsOutputsPanel from "./sections/InputsOutputsPanel";
 import BuildCapacityDialog from "./components/BuildCapacityDialog";
 import { useGameTurnStatus } from "@/hooks/useGameEvents";
@@ -750,13 +749,14 @@ export default function SectorDetailPage() {
                       runCapacityAction({ action: "resize", activePercent })
                     }
                   />
-                  <MarketMoneyPanel
-                    plants={plants}
-                    sectorType={sector.sectorType}
-                    financials={financials}
-                    corporation={corporation}
-                    outputCount={commodities?.supplies.length}
-                  />
+                  {pricing && (
+                    <ProducerMarketPanel
+                      corporationId={corpId}
+                      sectorId={sectorId}
+                      isCeo={isCeo}
+                      market={pricing}
+                    />
+                  )}
                 </>
               )}
               {!plantsEnabled && margins && financials && (
@@ -912,15 +912,6 @@ export default function SectorDetailPage() {
                 sectorId={sectorId}
                 isCeo={isCeo}
                 inventory={plants.truth.inventory}
-              />
-            )}
-
-            {pricing && (
-              <PricingPanel
-                corporationId={corpId}
-                sectorId={sectorId}
-                isCeo={isCeo}
-                pricing={pricing}
               />
             )}
 

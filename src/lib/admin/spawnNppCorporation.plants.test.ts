@@ -110,6 +110,7 @@ describe("spawnNppCorporation — plants", () => {
       sectorTechTreesEnabled: true,
       currentYear: 1953,
       currentTurn: 1,
+      worldEpochId: "world",
       startingYear: 1953,
     });
   });
@@ -149,9 +150,17 @@ describe("spawnNppCorporation — plants", () => {
   it("grants capacity directly into capitalStock, in UNITS", async () => {
     const { sector } = await spawn(true);
     expect(sector.capitalStock).toBeCloseTo(CAPTURE_UNITS, 6);
+    expect(sector.capacityBookAnchor).toBe(0);
+    expect(sector.producerCapacity).toEqual({ worldEpoch: "world", turn: 1 });
+    expect(sector.producerInventory).toEqual({
+      worldEpoch: "world",
+      turn: 1,
+      inputStock: [],
+      outputStock: [],
+    });
     // Seed context: instant, so nothing is queued.
     expect(sector.buildQueue).toBeUndefined();
-    expect(sector.plantsStartTurn).toBe(0);
+    expect(sector.plantsStartTurn).toBe(1);
   });
 
   it("grants passed-decade tech prerequisites to a new NPP corporation", async () => {
@@ -162,6 +171,7 @@ describe("spawnNppCorporation — plants", () => {
     >;
 
     expect(corporation.unlockedTechNodeIds).toEqual(autoGrantedNodeIds("manufacturing", 1953));
+    expect(corporation.producerPayables).toEqual({ worldEpoch: "world", turn: 1, claims: [] });
   });
 
   it("leaves tech state absent while the tech-tree feature is disabled", async () => {
@@ -169,6 +179,7 @@ describe("spawnNppCorporation — plants", () => {
       _id: "current",
       sectorTechTreesEnabled: false,
       currentYear: 1953,
+      worldEpochId: "world",
     });
 
     await spawn(true);

@@ -134,25 +134,8 @@ export const PLANTS_HOUSEHOLD_SUPPLY_CAP = 1.5;
  * than a household purchase. Weights are relative and are renormalised per
  * state after the wealth-tier (Engel) shift, so they need not sum to exactly 1.
  */
-export const HOUSEHOLD_CONSUMER_BASKET: Partial<Record<CommodityType, number>> = {
-  food: 0.2,
-  energy: 0.08,
-  retail: 0.1,
-  vehicles: 0.06,
-  electronics: 0.05,
-  pharmaceuticals: 0.03,
-  healthcare_services: 0.09,
-  real_estate_services: 0.1,
-  financial_services: 0.05,
-  network_services: 0.05,
-  entertainment_services: 0.05,
-  software: 0.03,
-  freight: 0.03,
-  consulting_services: 0.02,
-  building_materials: 0.02,
-  plastics: 0.01,
-  chemicals: 0.01,
-};
+export { HOUSEHOLD_CONSUMER_BASKET } from "@/lib/market/producerMarket/householdRules";
+import { HOUSEHOLD_CONSUMER_BASKET } from "@/lib/market/producerMarket/householdRules";
 
 /**
  * Engel's-law tier slopes: how each basket weight shifts as a state gets richer

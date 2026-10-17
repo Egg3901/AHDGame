@@ -1,5 +1,5 @@
 import { MongoServerError, ObjectId, type Db } from "mongodb";
-import type { Corporation, CorporateSector } from "@/lib/db/types";
+import type { Corporation, CorporateSector, GameState } from "@/lib/db/types";
 import type { DefenceContract } from "@/lib/db/types/defenceContract";
 import type { CountryId } from "@/lib/constants/countries";
 import { COUNTRY_CURRENCY_MAP, getSeedCurrencyCode } from "@/lib/constants/currencies";
@@ -24,7 +24,6 @@ import {
   activeExtractionContractFilter,
   getExtractionContractsCollection,
 } from "@/lib/db/collections/extractionContracts";
-import { getCurrentTurn } from "@/lib/turn/currentTurn";
 
 /**
  * Share of a leaving plant's built capacity an NPP operator takes over. The
@@ -137,6 +136,11 @@ export async function chooseNppPickupReceiver(
       .project<{ name: string }>({ name: 1 })
       .toArray()
   ).map((c) => c.name);
+  const producerWorld = await db
+    .collection<GameState>("gameState")
+    .findOne({ _id: "current" }, { projection: { worldEpochId: 1, currentTurn: 1 } });
+  if (!producerWorld?.worldEpochId) return null;
+  const producerOpeningTurn = producerWorld.currentTurn ?? 0;
   const shell = await createNppCorporationShell(db, {
     name: chooseNppCorporationName(hostCountry, lane, existingNames, Math.random),
     type: sector.sectorType as CorporationType,
@@ -147,7 +151,9 @@ export async function chooseNppPickupReceiver(
     headquartersState: sector.stateId,
     currencyCode,
     preset,
-    foundedAtTurn: await getCurrentTurn(db),
+    foundedAtTurn: producerOpeningTurn,
+    worldEpoch: producerWorld.worldEpochId,
+    producerOpeningTurn,
     now,
   });
   nppCorpIds.push(shell.corpId);

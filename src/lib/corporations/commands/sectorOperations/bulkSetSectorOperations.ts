@@ -16,7 +16,6 @@ import { resolveCorporation, requireCeo } from "@/lib/api/corporations/resolveQu
 import type { Character, CorporateSector } from "@/lib/db/types";
 import { OPERATING_SECTOR_TYPE_LABELS } from "@/lib/constants/corporations";
 import { clampProductionPolicy } from "@/lib/utils/productionPolicy";
-import { clampPricingPosture } from "@/lib/market/clearing";
 import { getMarketSystemMode, isMarketSystemMode, marketAtLeast } from "@/lib/market/featureFlag";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { fetchSectorMarketSharePercent } from "@/lib/corporations/marketShare";
@@ -26,6 +25,11 @@ import { isSectorTechTreesEnabled } from "@/lib/corporations/techTree/featureFla
 import { NEUTRAL_STAT } from "@/lib/stats/statsConstants";
 import { logEconomicAction } from "@/lib/corporations/economicActionLog";
 import { getCurrentTurn } from "@/lib/turn/currentTurn";
+import { getStrategyForOperatingModel } from "@/lib/constants/sectorStrategies";
+import {
+  retainedCostPlusBlockMessage,
+  unknownRetainedCostPlusCommodities,
+} from "@/lib/market/producerMarket/retainedQuoteRules";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -33,9 +37,9 @@ interface RouteParams {
 
 /**
  * POST /api/corporations/[id]/sectors/bulk
- * Set growth, production policy, and/or pricing posture across every // pragma: allowlist secret
+ * Set growth, production policy, and/or product quotes across every // pragma: allowlist secret
  * holding of a sector type (or all types, Corporate-Wide) in one country,
- * atomically. CEO only. Pricing posture requires marketSystemMode >= "clearing".
+ * atomically. CEO only. Product quotes require marketSystemMode >= "clearing".
  *
  * Growth cost mirrors the single-sector path: the persisted currentGrowthCost is
  * recomputed from each holding's *active* rate (so it doesn't jump and snap back
@@ -58,7 +62,7 @@ export async function bulkSetSectorOperations(request: Request, { params }: Rout
     const body = parsed.data;
     const { countryId, sectorType, targetGrowthRate, preview } = body;
     const productionPolicy = body.productionPolicy; // pragma: allowlist secret
-    const { pricingPosture, wageLevel } = body;
+    const { quotes, wageLevel } = body;
 
     const db = await getDb();
     const corpGuard = await requireCorporationActionsEnabled(db);
@@ -76,10 +80,10 @@ export async function bulkSetSectorOperations(request: Request, { params }: Rout
     }
 
     const bulkMode =
-      pricingPosture !== undefined || targetGrowthRate !== undefined
+      quotes !== undefined || targetGrowthRate !== undefined
         ? await getMarketSystemMode()
         : undefined;
-    if (pricingPosture !== undefined) {
+    if (quotes !== undefined) {
       if (!isMarketSystemMode(bulkMode) || !marketAtLeast(bulkMode, "clearing")) {
         return errorResponse(400, "Market clearing is not enabled on this world");
       }
@@ -108,15 +112,30 @@ export async function bulkSetSectorOperations(request: Request, { params }: Rout
       return NextResponse.json({ success: true, preview, matchedCount: 0, stateIds: [] });
     }
 
+    if (quotes !== undefined) {
+      for (const sector of sectors) {
+        const finalStrategy = getStrategyForOperatingModel(
+          sector.sectorType,
+          sector.strategyId ?? "standard",
+          sector.industryModel,
+          sector.mediaDiscriminator
+        );
+        const finalOutputCommodities = Object.entries(finalStrategy.supply)
+          .filter(([, units]) => typeof units === "number" && units > 0)
+          .map(([commodity]) => commodity);
+        const blocked = unknownRetainedCostPlusCommodities({
+          outputStock: sector.producerInventory?.outputStock ?? [],
+          finalOutputCommodities,
+          quotes,
+        });
+        if (blocked.length > 0) {
+          return errorResponse(400, retainedCostPlusBlockMessage(blocked, "pricing"));
+        }
+      }
+    }
+
     const clampedPolicy =
       productionPolicy !== undefined ? clampProductionPolicy(productionPolicy) : undefined;
-    const clampedPosture =
-      pricingPosture === undefined
-        ? undefined
-        : pricingPosture == null
-          ? null
-          : clampPricingPosture(pricingPosture);
-
     // Growth: resolve prime rate once, then per-holding persisted + projected cost.
     let growthBlock:
       | {
@@ -239,7 +258,7 @@ export async function bulkSetSectorOperations(request: Request, { params }: Rout
         ...(growthBlock ? { growth: growthBlock } : {}),
         ...(wages ? { wages } : {}),
         ...(clampedPolicy !== undefined ? { production: { productionPolicy: clampedPolicy } } : {}),
-        ...(clampedPosture !== undefined ? { pricing: { pricingPosture: clampedPosture } } : {}),
+        ...(quotes !== undefined ? { pricing: { quotes } } : {}),
       });
     }
 
@@ -252,8 +271,13 @@ export async function bulkSetSectorOperations(request: Request, { params }: Rout
       }
       if (wageLevel !== undefined) set.wageLevel = wageLevel;
       if (clampedPolicy !== undefined) set.productionPolicy = clampedPolicy;
-      if (clampedPosture !== undefined) set.pricingPosture = clampedPosture;
-      return { updateOne: { filter: { _id: s._id }, update: { $set: set } } };
+      if (quotes !== undefined) set.producerQuotes = quotes;
+      return {
+        updateOne: {
+          filter: { _id: s._id, corporationId: corporation._id },
+          update: { $set: set },
+        },
+      };
     });
     await db.collection<CorporateSector>("corporateSectors").bulkWrite(ops);
 
@@ -262,13 +286,7 @@ export async function bulkSetSectorOperations(request: Request, { params }: Rout
     if (wageLevel !== undefined) parts.push(`wages ${wageLevel}x`);
     if (targetGrowthRate !== undefined) parts.push(`growth ${targetGrowthRate}%`);
     if (clampedPolicy !== undefined) parts.push(`production ${clampedPolicy}`);
-    if (clampedPosture !== undefined) {
-      parts.push(
-        clampedPosture == null
-          ? "pricing auto"
-          : `pricing ${clampedPosture > 0 ? "+" : ""}${Math.round(clampedPosture * 100)}%`
-      );
-    }
+    if (quotes !== undefined) parts.push("product pricing");
     void logEconomicAction(db, {
       characterId: corporation.ceoId,
       userId: auth.user.userId,
@@ -291,7 +309,7 @@ export async function bulkSetSectorOperations(request: Request, { params }: Rout
       ...(growthBlock ? { growth: growthBlock } : {}),
       ...(wages ? { wages } : {}),
       ...(clampedPolicy !== undefined ? { production: { productionPolicy: clampedPolicy } } : {}),
-      ...(clampedPosture !== undefined ? { pricing: { pricingPosture: clampedPosture } } : {}),
+      ...(quotes !== undefined ? { pricing: { quotes } } : {}),
     });
   } catch (error) {
     return handleRouteError(error);

@@ -121,6 +121,7 @@ interface JournalExtension {
   event?: BankingTransition["event"];
   currency?: string;
   retryCreditLegOnGuardFailure?: boolean;
+  batchIndependentDebits?: boolean;
   projections?: JournalProjectionRecord[];
   projectionsCompletedAt?: Date;
 }
@@ -308,6 +309,7 @@ export async function settleTransition(
     transitionKind: transition.kind,
     currency: transition.currency,
     ...(transition.retryCreditLegOnGuardFailure ? { retryCreditLegOnGuardFailure: true } : {}),
+    ...(transition.batchIndependentDebits ? { batchIndependentDebits: true } : {}),
     projections: records,
     event: transition.event,
   };

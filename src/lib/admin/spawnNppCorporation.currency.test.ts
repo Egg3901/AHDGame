@@ -80,6 +80,7 @@ describe("spawnNppCorporation — sector revenue denomination", () => {
       "unownedSectors",
       "politicalParties",
       "exchangeRates",
+      "gameState",
     ]) {
       db.collection(name);
       const cursor = {
@@ -103,6 +104,11 @@ describe("spawnNppCorporation — sector revenue denomination", () => {
       sectorType: "manufacturing",
       revenue: POOL_REVENUE,
       headroomUnits: computeUnownedHeadroomUnits("manufacturing", POOL_REVENUE, 1),
+    });
+    db.collectionMocks.gameState!.findOne.mockResolvedValue({
+      _id: "current",
+      worldEpochId: "world",
+      currentTurn: 5,
     });
     db.collectionMocks.exchangeRates!.findOne.mockResolvedValue(
       fxRate == null ? null : { currencyCode: "X", rate: fxRate }

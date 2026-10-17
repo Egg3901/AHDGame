@@ -17,6 +17,7 @@ import { COUNTRY_CONFIGS } from "@/lib/constants/countries";
 import { fetchBordersByUserIds } from "@/lib/db/patreonBorders";
 import type { ImperialCharacter } from "@/lib/db/types/imperialCharacter";
 import type { Corporation } from "@/lib/db/types/corporation";
+import { emptyProducerPayables } from "@/lib/market/producerMarket/openingState";
 import type { User } from "@/lib/db/types/user";
 import type { CountryId } from "@/lib/constants/countries";
 
@@ -77,8 +78,14 @@ export async function POST(request: Request) {
     }
 
     const world = await db
-      .collection<{ _id: string; currentTurn?: number }>("gameState")
-      .findOne({ _id: "current" }, { projection: { currentTurn: 1 } });
+      .collection<{ _id: string; currentTurn?: number; worldEpochId?: string }>("gameState")
+      .findOne({ _id: "current" }, { projection: { currentTurn: 1, worldEpochId: 1 } });
+    if (!world?.worldEpochId) {
+      return errorResponse(
+        503,
+        "The world economy is not ready to create an imperial corporation."
+      );
+    }
     const now = new Date();
     const adminUserId = new ObjectId(auth.admin.userId);
     const imperialId = new ObjectId();
@@ -115,6 +122,7 @@ export async function POST(request: Request) {
       userId: adminUserId,
       headquartersState: homeState,
       liquidCapital: IMPERIAL_STARTING_CAPITAL,
+      producerPayables: emptyProducerPayables(world.worldEpochId, world.currentTurn ?? 0),
       marketingBudget: 0,
       marketingStrength: 10,
       logisticsBudget: 0,
