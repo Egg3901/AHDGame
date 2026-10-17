@@ -6,6 +6,11 @@ import { NATIONAL_SCOPE, NATIONAL_SCOPE_IDS } from "@/lib/constants/nationalScop
 import { isMacroMetricPath } from "@/lib/macroMetrics/paths";
 import { aggregateNationalGdp } from "@/lib/utils/nationalGdp";
 import { getIncomeStartVintage, getStartingIncomeAnchor } from "@/lib/era/metricCatalog";
+import {
+  aggregateNationalLabourDemand,
+  aggregateNationalLabourTightness,
+  aggregateNationalMetricValue,
+} from "./nationalMetrics/rules";
 
 /**
  * Plausible range for the back-solved income-band index at world start. A seed
@@ -34,11 +39,16 @@ interface NationalMetricsDoc {
   [key: string]: unknown;
 }
 
+type LabourDemandMetrics = StateMetrics & {
+  economic?: StateMetrics["economic"] & { labourDemandTurn?: number };
+};
+
 /**
  * Compute weighted national metric averages for each country and upsert them
  * as derived stateMetrics documents ("federal" for US, "uk_national" for UK).
  *
- * Most metrics are population-weighted. GDP growth is GDP-weighted so that
+ * Most rates are population-weighted. Unemployment is labor-force-weighted,
+ * labor force is summed as a headcount, and GDP growth is GDP-weighted so that
  * larger economies (e.g. California) contribute more to the national average.
  * All states contribute to GDP growth aggregation regardless of owned sector
  * presence — every state has unowned sectors providing baseline economic activity.
@@ -47,7 +57,7 @@ interface NationalMetricsDoc {
  * gdpGrowth/unemployment phase), before snapshotMetricHistory. These national
  * docs are derived-only — policy effects never write to them directly.
  */
-export async function computeNationalMetrics(db: Db): Promise<void> {
+export async function computeNationalMetrics(db: Db, turn?: number): Promise<void> {
   // Regional values that roll up to a national doc are macro (economic /
   // population). The political half of this aggregation is not missing — it is
   // computed nationally by the political pipeline, from the board, rather than
@@ -72,8 +82,16 @@ export async function computeNationalMetrics(db: Db): Promise<void> {
   ]);
   // Era income-band index: only computed while the era system is on.
   const eraOn = eraGameState?.eraSystemEnabled === true;
+  const labourDemandTurn = turn ?? eraGameState?.currentTurn;
   const eraStartingYear = eraGameState?.startingYear ?? null;
   const incomeVintages = eraGameState?.incomeStartVintages ?? null;
+  const macroRollupOps: Array<{
+    updateOne: {
+      filter: { _id: string };
+      update: { $set: Record<string, unknown>; $unset?: Record<string, ""> };
+      upsert: true;
+    };
+  }> = [];
   const gdpPcBaselines: Record<string, number> = {};
   for (const [k, v] of Object.entries(eraGameState?.eraGdpPerCapitaBaseline ?? {})) {
     if (typeof v === "number" && Number.isFinite(v)) gdpPcBaselines[k] = v;
@@ -82,10 +100,10 @@ export async function computeNationalMetrics(db: Db): Promise<void> {
   let baselinesChanged = false;
 
   // Exclude existing national-scope docs to avoid circular contamination
-  const metricsMap = new Map<string, StateMetrics>();
+  const metricsMap = new Map<string, LabourDemandMetrics>();
   for (const m of regionMetrics) {
     if (NATIONAL_SCOPE_IDS.has(String(m._id))) continue;
-    metricsMap.set(String(m._id), m);
+    metricsMap.set(String(m._id), m as LabourDemandMetrics);
   }
   const budgetByCountry = new Map<string, FederalBudget>();
   for (const budget of federalBudgets) {
@@ -93,9 +111,6 @@ export async function computeNationalMetrics(db: Db): Promise<void> {
       budget.countryId || (String(budget._id) === "federal" ? "US" : String(budget._id));
     budgetByCountry.set(countryId, budget);
   }
-
-  // Metrics that should be weighted by GDP instead of population
-  const GDP_WEIGHTED_METRICS = new Set(["gdpGrowth"]);
 
   const countryRollups: Array<[string | null, string]> = Object.entries(NATIONAL_SCOPE);
   const nationalCountries = new Set(Object.values(NATIONAL_SCOPE));
@@ -120,6 +135,7 @@ export async function computeNationalMetrics(db: Db): Promise<void> {
     if (totalPop === 0) continue;
 
     const setOps: Record<string, { value: number }> = {};
+    const unsetOps: Record<string, ""> = {};
 
     for (const cat of METRIC_CATEGORIES) {
       // Discover metric keys from the first state that has this category
@@ -129,30 +145,68 @@ export async function computeNationalMetrics(db: Db): Promise<void> {
       if (!sampleCat) continue;
 
       for (const key of Object.keys(sampleCat)) {
-        const useGdpWeight = cat === "economic" && GDP_WEIGHTED_METRICS.has(key);
-        let weightedSum = 0;
-        let totalWeight = 0;
-
+        // These are headcounts and ratios, not population-weighted rates. They
+        // are handled below with complete, current-turn regional coverage.
+        if (cat === "economic" && (key === "labourDemand" || key === "labourTightness")) {
+          continue;
+        }
+        const rows: Array<{
+          value: number;
+          population: number;
+          gdp: number;
+          laborForce?: number;
+        }> = [];
         for (const state of countryStates) {
           const m = metricsMap.get(state._id);
           const catData = m?.[cat] as Record<string, { value: number }> | undefined;
           const val = catData?.[key]?.value;
-          const weight = useGdpWeight ? (state.gdp ?? 0) : (state.population ?? 0);
-          if (typeof val === "number" && weight > 0) {
-            weightedSum += val * weight;
-            totalWeight += weight;
-          }
+          if (typeof val !== "number" || !Number.isFinite(val)) continue;
+          const laborForce =
+            cat === "economic"
+              ? (m?.economic as Record<string, { value: number }> | undefined)?.laborForce?.value
+              : undefined;
+          rows.push({
+            value: val,
+            population: state.population ?? 0,
+            gdp: state.gdp ?? 0,
+            ...(typeof laborForce === "number" ? { laborForce } : {}),
+          });
         }
-
-        if (totalWeight > 0) {
-          setOps[`${cat}.${key}`] = {
-            value: Math.round((weightedSum / totalWeight) * 1000) / 1000,
-          };
+        // A partial sum of regional headcounts is not a national labor-force
+        // total. Leave the metric untouched until every region has a valid row.
+        if (cat === "economic" && key === "laborForce" && rows.length !== countryStates.length) {
+          continue;
         }
+        const value = aggregateNationalMetricValue(cat, key, rows);
+        if (value !== undefined) setOps[`${cat}.${key}`] = { value };
       }
     }
 
-    if (Object.keys(setOps).length === 0) continue;
+    if (labourDemandTurn !== undefined) {
+      const labourReadings = countryStates.map((state) => {
+        const metrics = metricsMap.get(state._id);
+        return {
+          demand: metrics?.economic?.labourDemand?.value,
+          laborForce: metrics?.economic?.laborForce?.value,
+          demandTurn: metrics?.economic?.labourDemandTurn,
+        };
+      });
+      const nationalDemand = aggregateNationalLabourDemand(labourReadings, labourDemandTurn);
+      const nationalTightness = aggregateNationalLabourTightness(labourReadings, labourDemandTurn);
+      if (nationalDemand !== undefined) {
+        setOps["economic.labourDemand"] = { value: nationalDemand };
+      } else {
+        unsetOps["economic.labourDemand"] = "";
+        unsetOps["economic.labourDemandTurn"] = "";
+      }
+      if (nationalTightness !== undefined) {
+        setOps["economic.labourTightness"] = { value: nationalTightness };
+      } else {
+        unsetOps["economic.labourTightness"] = "";
+      }
+    }
+
+    if (Object.keys(setOps).length === 0 && Object.keys(unsetOps).length === 0) continue;
 
     const budget = budgetByCountry.get(countryId);
     if (budget?.gdp && budget.gdp > 0) {
@@ -180,14 +234,24 @@ export async function computeNationalMetrics(db: Db): Promise<void> {
     for (const [key, value] of Object.entries(setOps)) {
       (isMacroMetricPath(key) ? macroSetOps : politicalSetOps)[key] = value;
     }
-    if (nationalId !== null && Object.keys(macroSetOps).length > 0) {
-      await db
-        .collection<NationalMetricsDoc>("macroMetrics")
-        .updateOne(
-          { _id: nationalId },
-          { $set: { ...macroSetOps, countryId } as never },
-          { upsert: true }
-        );
+    if (
+      nationalId !== null &&
+      (Object.keys(macroSetOps).length > 0 || Object.keys(unsetOps).length > 0)
+    ) {
+      const macroSetFields: Record<string, unknown> = { ...macroSetOps };
+      if (labourDemandTurn !== undefined && !unsetOps["economic.labourDemandTurn"]) {
+        macroSetFields["economic.labourDemandTurn"] = labourDemandTurn;
+      }
+      macroRollupOps.push({
+        updateOne: {
+          filter: { _id: nationalId },
+          update: {
+            $set: { ...macroSetFields, countryId },
+            ...(Object.keys(unsetOps).length > 0 ? { $unset: unsetOps } : {}),
+          },
+          upsert: true,
+        },
+      });
     }
     // The national POLITICAL aggregate is not written here any more: every
     // country's political metrics live on the board, whose national view is the
@@ -243,6 +307,10 @@ export async function computeNationalMetrics(db: Db): Promise<void> {
         }
       }
     }
+  }
+
+  if (macroRollupOps.length > 0) {
+    await db.collection<NationalMetricsDoc>("macroMetrics").bulkWrite(macroRollupOps);
   }
 
   // Persist the era income-band state in one write (flag off ⇒ untouched).
