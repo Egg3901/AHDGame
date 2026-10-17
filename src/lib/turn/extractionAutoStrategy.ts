@@ -46,6 +46,7 @@ import {
 } from "@/lib/admin/spawnNppCorporation";
 import { loadPrivateEnterpriseBlockedCountries } from "@/lib/economy/queries/privateEnterpriseGate";
 import { ESSENTIAL_SHORTAGE_SCORE } from "@/lib/turn/npp/marketSignals";
+import { unknownRetainedCostPlusCommodities } from "@/lib/market/producerMarket/retainedQuoteRules";
 
 const NPC_CORPORATION_USER_ID = new ObjectId("000000000000000000000000");
 
@@ -102,6 +103,22 @@ function capacityRescaleUpdate(
     buildQueue: sector.buildQueue,
     otherOpexPerUnitAnchor: sector.otherOpexPerUnitAnchor,
   });
+}
+
+function hasUnsupportedRetainedCostPlusStock(
+  sector: Pick<CorporateSector, "producerInventory" | "producerQuotes">,
+  strategy: { supply: Partial<Record<CommodityType, number>> }
+): boolean {
+  const finalOutputCommodities = Object.entries(strategy.supply)
+    .filter(([, units]) => typeof units === "number" && units > 0)
+    .map(([commodity]) => commodity);
+  return (
+    unknownRetainedCostPlusCommodities({
+      outputStock: sector.producerInventory?.outputStock ?? [],
+      finalOutputCommodities,
+      quotes: sector.producerQuotes,
+    }).length > 0
+  );
 }
 
 /**
@@ -466,6 +483,8 @@ export async function processExtractionAutoStrategy(
     | "capitalStock"
     | "buildQueue"
     | "otherOpexPerUnitAnchor"
+    | "producerInventory"
+    | "producerQuotes"
   >;
   const candidates = await db
     .collection<CorporateSector>("corporateSectors")
@@ -481,6 +500,8 @@ export async function processExtractionAutoStrategy(
       capitalStock: 1,
       buildQueue: 1,
       otherOpexPerUnitAnchor: 1,
+      producerInventory: 1,
+      producerQuotes: 1,
     })
     .toArray();
 
@@ -525,6 +546,7 @@ export async function processExtractionAutoStrategy(
       if (!focus) continue;
       const strat = (SECTOR_STRATEGIES.extraction ?? []).find((x) => x.id === focus.id);
       if (!strat || isExtractionStrategyZeroYield(strat, stateRes)) continue;
+      if (hasUnsupportedRetainedCostPlusStock(s, strat)) continue;
       // Prioritise scarcest resource × most idle local deposit, by value.
       const score = info.weight * extractionHeadroomValue(cap - stateSupplied, info.basePrice);
       if (!best || score > best.score) best = { sector: s, resource, strategyId: focus.id, score };
@@ -602,6 +624,8 @@ export async function processExtractionAutoStrategy(
       | "otherOpexPerUnitAnchor"
       | "clearingStartTurn"
       | "throughputStartTurn"
+      | "producerInventory"
+      | "producerQuotes"
     >;
     const nppSectors = await db
       .collection<CorporateSector>("corporateSectors")
@@ -624,6 +648,8 @@ export async function processExtractionAutoStrategy(
         otherOpexPerUnitAnchor: 1,
         clearingStartTurn: 1,
         throughputStartTurn: 1,
+        producerInventory: 1,
+        producerQuotes: 1,
       })
       .toArray();
 
@@ -728,12 +754,15 @@ export async function processExtractionAutoStrategy(
         currentZeroYield,
       });
       if (decision) {
-        switches.push({
-          sector: s,
-          strategyId: decision.strategyId,
-          improvement: decision.bestScore - decision.currentScore,
-          deadDeposit: currentZeroYield,
-        });
+        const targetStrategy = strategies.find((strategy) => strategy.id === decision.strategyId);
+        if (targetStrategy && !hasUnsupportedRetainedCostPlusStock(s, targetStrategy)) {
+          switches.push({
+            sector: s,
+            strategyId: decision.strategyId,
+            improvement: decision.bestScore - decision.currentScore,
+            deadDeposit: currentZeroYield,
+          });
+        }
       } else if (currentZeroYield) {
         deadDepositMothballs.push(s);
       }

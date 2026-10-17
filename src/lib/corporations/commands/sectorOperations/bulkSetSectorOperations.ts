@@ -25,6 +25,11 @@ import { isSectorTechTreesEnabled } from "@/lib/corporations/techTree/featureFla
 import { NEUTRAL_STAT } from "@/lib/stats/statsConstants";
 import { logEconomicAction } from "@/lib/corporations/economicActionLog";
 import { getCurrentTurn } from "@/lib/turn/currentTurn";
+import { getStrategyForOperatingModel } from "@/lib/constants/sectorStrategies";
+import {
+  retainedCostPlusBlockMessage,
+  unknownRetainedCostPlusCommodities,
+} from "@/lib/market/producerMarket/retainedQuoteRules";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -105,6 +110,28 @@ export async function bulkSetSectorOperations(request: Request, { params }: Rout
 
     if (sectors.length === 0) {
       return NextResponse.json({ success: true, preview, matchedCount: 0, stateIds: [] });
+    }
+
+    if (quotes !== undefined) {
+      for (const sector of sectors) {
+        const finalStrategy = getStrategyForOperatingModel(
+          sector.sectorType,
+          sector.strategyId ?? "standard",
+          sector.industryModel,
+          sector.mediaDiscriminator
+        );
+        const finalOutputCommodities = Object.entries(finalStrategy.supply)
+          .filter(([, units]) => typeof units === "number" && units > 0)
+          .map(([commodity]) => commodity);
+        const blocked = unknownRetainedCostPlusCommodities({
+          outputStock: sector.producerInventory?.outputStock ?? [],
+          finalOutputCommodities,
+          quotes,
+        });
+        if (blocked.length > 0) {
+          return errorResponse(400, retainedCostPlusBlockMessage(blocked, "pricing"));
+        }
+      }
     }
 
     const clampedPolicy =

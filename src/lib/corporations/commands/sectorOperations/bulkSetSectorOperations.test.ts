@@ -209,6 +209,27 @@ describe("bulkSetSectorOperations", () => {
     expect(ops[1].updateOne.update.$set.producerQuotes).toEqual(uniformProducerQuotes(-0.1));
   });
 
+  it("rejects bulk cost-plus when it strands unknown-cost retained stock", async () => {
+    await wire([
+      {
+        ...energySector("CA"),
+        producerInventory: {
+          worldEpoch: "epoch",
+          turn: 4,
+          inputStock: [],
+          outputStock: [{ commodity: "financial_services", units: 4, book: "world" }],
+        },
+      },
+    ]);
+    const response = await bulkSetSectorOperations(
+      req({ countryId: "US", quotes: uniformProducerQuotes(0) }),
+      { params }
+    );
+    expect(response.status).toBe(400);
+    expect(await response.text()).toContain("no recorded unit cost");
+    expect(db.collectionMocks.corporateSectors.bulkWrite).not.toHaveBeenCalled();
+  });
+
   it("pricing-only leaves growth and output policy untouched", async () => {
     await wire([energySector("CA")]);
     await bulkSetSectorOperations(req({ countryId: "US", quotes: uniformProducerQuotes(0.05) }), {

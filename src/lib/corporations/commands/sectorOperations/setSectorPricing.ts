@@ -10,6 +10,11 @@ import { isMarketSystemMode, marketAtLeast, getMarketSystemMode } from "@/lib/ma
 import type { CorporateSector } from "@/lib/db/types";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { setSectorPricingSchema } from "@/lib/api/schemas/corporations";
+import { getStrategyForOperatingModel } from "@/lib/constants/sectorStrategies";
+import {
+  retainedCostPlusBlockMessage,
+  unknownRetainedCostPlusCommodities,
+} from "@/lib/market/producerMarket/retainedQuoteRules";
 
 interface RouteParams {
   params: Promise<{ id: string; sectorId: string }>;
@@ -51,15 +56,41 @@ export async function setSectorPricing(request: Request, { params }: RouteParams
       return errorResponse(400, "Invalid sector ID");
     }
 
-    const sector = await db
-      .collection<CorporateSector>("corporateSectors")
-      .findOne(
-        { _id: new ObjectId(sectorId), corporationId: corporation._id },
-        { projection: { _id: 1 } }
-      );
+    const sector = await db.collection<CorporateSector>("corporateSectors").findOne(
+      { _id: new ObjectId(sectorId), corporationId: corporation._id },
+      {
+        projection: {
+          _id: 1,
+          sectorType: 1,
+          industryModel: 1,
+          mediaDiscriminator: 1,
+          strategyId: 1,
+          producerQuotes: 1,
+          producerInventory: 1,
+        },
+      }
+    );
 
     if (!sector) {
       return errorResponse(404, "Sector not found");
+    }
+
+    const finalStrategy = getStrategyForOperatingModel(
+      sector.sectorType,
+      sector.strategyId ?? "standard",
+      sector.industryModel,
+      sector.mediaDiscriminator
+    );
+    const finalOutputCommodities = Object.entries(finalStrategy.supply)
+      .filter(([, units]) => typeof units === "number" && units > 0)
+      .map(([commodity]) => commodity);
+    const blocked = unknownRetainedCostPlusCommodities({
+      outputStock: sector.producerInventory?.outputStock ?? [],
+      finalOutputCommodities,
+      quotes,
+    });
+    if (blocked.length > 0) {
+      return errorResponse(400, retainedCostPlusBlockMessage(blocked, "pricing"));
     }
 
     const written = await db

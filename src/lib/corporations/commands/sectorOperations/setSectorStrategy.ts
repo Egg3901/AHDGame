@@ -49,6 +49,10 @@ import { getStrategyAvailability } from "@/lib/constants/techTree";
 import { retoolRescaleFields } from "@/lib/corporations/retoolRescale";
 import { getMarketSystemModeForDb, marketAtLeast } from "@/lib/market/featureFlag";
 import { STARTING_YEAR, TURNS_PER_YEAR } from "@/lib/constants/turnTime";
+import {
+  retainedCostPlusBlockMessage,
+  unknownRetainedCostPlusCommodities,
+} from "@/lib/market/producerMarket/retainedQuoteRules";
 
 interface RouteParams {
   params: Promise<{ id: string; sectorId: string }>;
@@ -175,6 +179,18 @@ export async function setSectorStrategy(request: Request, { params }: RouteParam
           ? "This production method is not available in this era yet."
           : "Unlock this production method in the Tech tree first."
       );
+    }
+
+    const finalOutputCommodities = Object.entries(targetStrategy.supply)
+      .filter(([, units]) => typeof units === "number" && units > 0)
+      .map(([commodity]) => commodity);
+    const blockedRetainedStock = unknownRetainedCostPlusCommodities({
+      outputStock: sector.producerInventory?.outputStock ?? [],
+      finalOutputCommodities,
+      quotes: sector.producerQuotes,
+    });
+    if (blockedRetainedStock.length > 0) {
+      return errorResponse(400, retainedCostPlusBlockMessage(blockedRetainedStock));
     }
 
     // Check cooldown

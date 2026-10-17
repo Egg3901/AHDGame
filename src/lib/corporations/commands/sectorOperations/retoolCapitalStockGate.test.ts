@@ -161,6 +161,30 @@ describe("retool capital-stock rescale is plants-gated", () => {
     );
   });
 
+  it("refuses a strategy that strands unknown-cost cost-plus stock", async () => {
+    await wireMocks(
+      sectorDoc({
+        strategyId: FROM_STRATEGY,
+        producerQuotes: { financial_services: { kind: "costPlus", markup: 0.1 } },
+        producerInventory: {
+          worldEpoch: "epoch",
+          turn: CURRENT_TURN - 1,
+          inputStock: [],
+          outputStock: [{ commodity: "financial_services", units: 4, book: "world" }],
+        },
+      }),
+      true
+    );
+    const { setSectorStrategy } = await import("./setSectorStrategy");
+
+    const response = await setSectorStrategy(request({ strategyId: TO_STRATEGY }), { params });
+
+    expect(response.status).toBe(400);
+    expect(await response.text()).toContain("no recorded unit cost");
+    expect(db.collectionMocks.corporateSectors.updateOne).not.toHaveBeenCalled();
+    expect(db.collectionMocks.corporations.updateOne).not.toHaveBeenCalled();
+  });
+
   it("does not allow model selection while its gate is off", async () => {
     await wireMocks(sectorDoc({ sectorType: "media", strategyId: "standard" }), false);
     const { resolveCorporation } = await import("@/lib/api/corporations/resolveQuery");
@@ -249,6 +273,33 @@ describe("retool capital-stock rescale is plants-gated", () => {
     // it with the forward retool returns the sector to its original stock.
     const set = sectorSet();
     expect(set.capitalStock).toBeCloseTo(CAPITAL_STOCK / RATIO, 6);
+  });
+
+  it("refuses a cancellation that strands unknown-cost cost-plus stock", async () => {
+    await wireMocks(
+      sectorDoc({
+        strategyId: TO_STRATEGY,
+        transitionFromStrategyId: FROM_STRATEGY,
+        transitionStartTurn: CURRENT_TURN - 3,
+        retoolRescaleApplied: true,
+        producerQuotes: { financial_services: { kind: "costPlus", markup: 0.1 } },
+        producerInventory: {
+          worldEpoch: "epoch",
+          turn: CURRENT_TURN - 1,
+          inputStock: [],
+          outputStock: [{ commodity: "financial_services", units: 4, book: "world" }],
+        },
+      }),
+      true
+    );
+    const { cancelSectorStrategy } = await import("./cancelSectorStrategy");
+
+    const response = await cancelSectorStrategy(request({}), { params });
+
+    expect(response.status).toBe(400);
+    expect(await response.text()).toContain("no recorded unit cost");
+    expect(db.collectionMocks.corporateSectors.updateOne).not.toHaveBeenCalled();
+    expect(db.collectionMocks.corporations.updateOne).not.toHaveBeenCalled();
   });
 
   // ── The mode can FLIP between the set and the cancel ──

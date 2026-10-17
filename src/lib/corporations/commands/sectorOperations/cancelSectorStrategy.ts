@@ -25,6 +25,11 @@ import {
 import { readCorpEconomicAnchor } from "@/lib/currency/corpEconomyFields";
 import { insufficientCapitalMessage } from "@/lib/currency/insufficientCapitalMessage";
 import { getMarketSystemModeForDb, marketAtLeast } from "@/lib/market/featureFlag";
+import { getStrategyForOperatingModel } from "@/lib/constants/sectorStrategies";
+import {
+  retainedCostPlusBlockMessage,
+  unknownRetainedCostPlusCommodities,
+} from "@/lib/market/producerMarket/retainedQuoteRules";
 
 interface RouteParams {
   params: Promise<{ id: string; sectorId: string }>;
@@ -136,6 +141,23 @@ export async function cancelSectorStrategy(request: Request, { params }: RoutePa
 
     const newStrategyId = sector.transitionFromStrategyId; // the original strategy (destination of reversal)
     const newTransitionFromStrategyId = sector.strategyId; // what we were transitioning toward
+    const finalStrategy = getStrategyForOperatingModel(
+      sector.sectorType,
+      newStrategyId,
+      sector.industryModel,
+      sector.mediaDiscriminator
+    );
+    const finalOutputCommodities = Object.entries(finalStrategy.supply)
+      .filter(([, units]) => typeof units === "number" && units > 0)
+      .map(([commodity]) => commodity);
+    const blockedRetainedStock = unknownRetainedCostPlusCommodities({
+      outputStock: sector.producerInventory?.outputStock ?? [],
+      finalOutputCommodities,
+      quotes: sector.producerQuotes,
+    });
+    if (blockedRetainedStock.length > 0) {
+      return errorResponse(400, retainedCostPlusBlockMessage(blockedRetainedStock));
+    }
 
     // D9: the same RPU normalization `setSectorStrategy` applies, run in the
     // opposite direction. The stock was rescaled to the DESTINATION's mix when

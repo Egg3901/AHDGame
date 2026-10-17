@@ -86,6 +86,44 @@ describe("producer pricing command", () => {
     expect(update.$set).not.toHaveProperty("producerSettlement");
   });
 
+  it("rejects cost-plus for unknown-cost stock outside the final recipe", async () => {
+    db.collectionMocks.corporateSectors.findOne.mockResolvedValue({
+      ...sector,
+      producerInventory: {
+        worldEpoch: "epoch",
+        turn: 12,
+        inputStock: [],
+        outputStock: [{ commodity: "financial_services", units: 4, book: "world" }],
+      },
+    });
+    const response = await setSectorPricing(
+      request({ quotes: { financial_services: { kind: "costPlus", markup: 0.1 } } }),
+      { params }
+    );
+    expect(response.status).toBe(400);
+    expect(await response.text()).toContain("no recorded unit cost");
+    expect(db.collectionMocks.corporateSectors.updateOne).not.toHaveBeenCalled();
+  });
+
+  it("allows manual pricing for retained stock with no recorded cost", async () => {
+    db.collectionMocks.corporateSectors.findOne.mockResolvedValue({
+      ...sector,
+      producerInventory: {
+        worldEpoch: "epoch",
+        turn: 12,
+        inputStock: [],
+        outputStock: [{ commodity: "financial_services", units: 4, book: "world" }],
+      },
+    });
+    const quotes = { financial_services: { kind: "manual", unitPrice: 4 } } as const;
+    const response = await setSectorPricing(request({ quotes }), { params });
+    expect(response.status).toBe(200);
+    expect(db.collectionMocks.corporateSectors.updateOne).toHaveBeenCalledWith(
+      { _id: sectorId, corporationId: corpId },
+      { $set: { producerQuotes: quotes, updatedAt: expect.any(Date) } }
+    );
+  });
+
   it.each([
     { pricingPosture: 0.1, pricingMode: "costPlus" },
     { quotes: { invented: { kind: "manual", unitPrice: 1 } } },
@@ -108,7 +146,17 @@ describe("producer pricing command", () => {
     expect((await setSectorPricing(request({ quotes: {} }), { params })).status).toBe(404);
     expect(db.collectionMocks.corporateSectors.findOne).toHaveBeenCalledWith(
       { _id: sectorId, corporationId: corpId },
-      { projection: { _id: 1 } }
+      {
+        projection: {
+          _id: 1,
+          sectorType: 1,
+          industryModel: 1,
+          mediaDiscriminator: 1,
+          strategyId: 1,
+          producerQuotes: 1,
+          producerInventory: 1,
+        },
+      }
     );
     expect(db.collectionMocks.corporateSectors.updateOne).not.toHaveBeenCalled();
   });
