@@ -579,6 +579,7 @@ export function processSector(
     demandFill,
     priorStreak: sector.demandIdleTurns,
     rampLambda: plantsRampLambda,
+    nppRun: corp.ceoType === "npp",
     nppStructural:
       corp.ceoType === "npp" && lookups.engineSixCountries?.has(corp.countryId) === true,
   });

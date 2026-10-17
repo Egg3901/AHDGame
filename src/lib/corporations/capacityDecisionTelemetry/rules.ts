@@ -77,7 +77,8 @@ export type CapacityDecisionOutcome =
   | "autopilot_unprofitable"
   | "autopilot_no_payback"
   | "autopilot_demand_headroom"
-  | "autopilot_capex_cap";
+  | "autopilot_capex_cap"
+  | "growth_throttled_market";
 
 /** Gates evaluated on the NPP founding path, earliest first. */
 export type FoundingCapacityGate = Extract<
@@ -112,6 +113,7 @@ export type ReinvestCapacityGate = Extract<
   | "autopilot_no_payback"
   | "autopilot_demand_headroom"
   | "autopilot_capex_cap"
+  | "growth_throttled_market"
   | "insufficient_cash"
 >;
 

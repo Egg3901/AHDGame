@@ -53,6 +53,13 @@ export const NPP_GROWTH_MIN_SHORTAGE = 0.85;
  */
 export const NPP_GROWTH_MIN_UTILIZATION = 0.85;
 /**
+ * NPP-run plants add no growth capacity in a sector whose demand throttle is
+ * below this share of capacity: the market is not buying what the plant already
+ * makes, so more capacity only adds payroll and upkeep on idle units.
+ * Replacement of worn capacity is unaffected.
+ */
+export const NPP_GROWTH_MIN_THROTTLE = 0.9;
+/**
  * Per-turn growth ceiling as a fraction of the capacity the plant actually RUNS.
  * The demand anchor that replaces the phantom unowned pool: a plant's proven
  * throughput is the honest read on how much more it can sell, so it grows by up
