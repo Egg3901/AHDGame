@@ -267,6 +267,15 @@ export interface CorporationLookups {
     CountryId,
     Map<CommodityType, { supply: number; demand: number }>
   > | null;
+  /**
+   * Foreign demand nobody serves that each country's producers could win, per
+   * commodity, from the latest trade snapshot's reachable books
+   * (`unmetForeignDemand`, ticket #1162). An exporter's clearing book pins
+   * demand to supply, so without this term the demand throttle reads no room
+   * for an exporter whose foreign buyers are still short. Empty before the
+   * first trade turn.
+   */
+  unmetForeignDemandByCountry?: Map<string, Map<CommodityType, number>>;
   rawStateBalances: Map<string, Map<CommodityType, { supply: number; demand: number }>>;
   /** Per-country export intensity ∈ [0,1] per commodity (from the latest trade
    *  snapshot) — fraction of the country's surplus that cleared abroad. Feeds
