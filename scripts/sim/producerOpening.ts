@@ -3,9 +3,25 @@ import { createHash } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
 import { z } from "zod";
 import { planProducerOpening } from "../../src/lib/market/producerMarket/migrationRules";
+import { COMMODITY_TYPES } from "../../src/lib/constants/commodities";
 
 const amount = z.number().finite().nonnegative();
 const identity = z.string().min(1);
+const quotePolicy = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("manual"), unitPrice: amount.max(Number.MAX_SAFE_INTEGER) }).strict(),
+  z
+    .object({
+      kind: z.literal("automatic"),
+      targetMarkup: z.number().finite().min(-1).max(Number.MAX_SAFE_INTEGER),
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal("costPlus"),
+      markup: z.number().finite().min(-1).max(Number.MAX_SAFE_INTEGER),
+    })
+    .strict(),
+]);
 const openingSchema = z
   .object({
     worldEpoch: identity,
@@ -84,6 +100,8 @@ const openingSchema = z
             .strict(),
           inventoryDailyUnits: z.record(z.string(), amount),
           inventoryValueAnchor: amount,
+          finalRecipeCommodities: z.array(identity),
+          producerQuotes: z.partialRecord(z.enum(COMMODITY_TYPES), quotePolicy).optional(),
           outputs: z.array(
             z
               .object({
@@ -125,6 +143,10 @@ console.log(
     corporations: plan.accounts.length,
     sectors: plan.sectors.length,
     protectedBooks: plan.protectedImages.length,
+    openingQuoteAdjustments: plan.openingQuoteAdjustments.length,
+    retainedCostPlusQuotesAdjusted: plan.openingQuoteAdjustments.filter(
+      (adjustment) => adjustment.reason === "retainedStockHasNoRecordedUnitCost"
+    ).length,
     cashCreated: plan.reconciliation.cashCreated,
     inputStockCreated: plan.reconciliation.inputStockCreated,
     operatingArrearsAnchor: plan.reconciliation.operatingArrearsAnchor,

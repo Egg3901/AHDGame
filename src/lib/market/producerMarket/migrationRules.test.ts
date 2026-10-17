@@ -41,6 +41,7 @@ const opening = (): ExistingWorldProducerOpening => ({
       },
       inventoryDailyUnits: { steel: 240 },
       inventoryValueAnchor: 480,
+      finalRecipeCommodities: ["steel"],
       pricingMode: "market",
       pricingPosture: 0.2,
       outputs: [{ commodity: "steel", book: "world", referenceUnitPrice: 2, storable: true }],
@@ -282,6 +283,90 @@ describe("existing-world producer opening", () => {
     expect(plan.sectors[0].quotes[0].policy).toEqual({ kind: "manual", unitPrice: 2.4 });
   });
 
+  it("opens old cost-plus goods at automatic quotes when historical unit cost is unknown", () => {
+    const original = opening();
+    const source = {
+      ...original,
+      sectors: [
+        {
+          ...original.sectors[0],
+          inventoryDailyUnits: { steel: 240, timber: 120 },
+          finalRecipeCommodities: ["steel"],
+          outputs: [
+            { commodity: "steel", book: "world", referenceUnitPrice: 2, storable: true },
+            { commodity: "timber", book: "world", referenceUnitPrice: 3, storable: true },
+          ],
+          pricingMode: "costPlus" as const,
+          pricingPosture: 0.15,
+        },
+      ],
+    };
+
+    const plan = planProducerOpening(source);
+
+    expect(plan.version).toBe(3);
+    expect(plan.sectors[0].outputStock).toEqual([
+      { commodity: "steel", book: "world", units: 10 },
+      { commodity: "timber", book: "world", units: 5 },
+    ]);
+    expect(plan.sectors[0].quotes).toEqual([
+      { commodity: "steel", book: "world", policy: { kind: "costPlus", markup: 0.15 } },
+      {
+        commodity: "timber",
+        book: "world",
+        policy: { kind: "automatic", targetMarkup: 0 },
+      },
+    ]);
+    expect(plan.openingQuoteAdjustments).toEqual([
+      {
+        sectorId: "plant",
+        commodity: "timber",
+        reason: "retainedStockHasNoRecordedUnitCost",
+        priorPolicy: { kind: "costPlus", markup: 0.15 },
+        openingPolicy: { kind: "automatic", targetMarkup: 0 },
+      },
+    ]);
+    expect(plan.reconciliation).toMatchObject({ cashCreated: 0, inputStockCreated: 0 });
+  });
+
+  it("preserves saved per-product quote policies over the old sector-wide setting", () => {
+    const original = opening();
+    const source = {
+      ...original,
+      sectors: [
+        {
+          ...original.sectors[0],
+          outputs: [
+            { commodity: "steel", book: "world", referenceUnitPrice: 2, storable: true },
+            {
+              commodity: "financial_services",
+              book: "world",
+              referenceUnitPrice: 4,
+              storable: false,
+            },
+          ],
+          producerQuotes: {
+            steel: { kind: "manual", unitPrice: 1.75 },
+            financial_services: { kind: "automatic", targetMarkup: 0.2 },
+          } as const,
+          pricingMode: "costPlus" as const,
+          pricingPosture: 0.3,
+        },
+      ],
+    };
+
+    const plan = planProducerOpening(source);
+
+    expect(plan.sectors[0].quotes).toEqual([
+      {
+        commodity: "financial_services",
+        book: "world",
+        policy: { kind: "automatic", targetMarkup: 0.2 },
+      },
+      { commodity: "steel", book: "world", policy: { kind: "manual", unitPrice: 1.75 } },
+    ]);
+  });
+
   it("preserves quote intent for automatic and cost-plus pricing across all commodities", () => {
     const source = opening();
     const sector = source.sectors[0];
@@ -290,7 +375,15 @@ describe("existing-world producer opening", () => {
     ];
     const automatic = planProducerOpening({
       ...source,
-      sectors: [{ ...sector, inventoryDailyUnits: {}, outputs, pricingPosture: null }],
+      sectors: [
+        {
+          ...sector,
+          inventoryDailyUnits: {},
+          finalRecipeCommodities: ["financial_services"],
+          outputs,
+          pricingPosture: null,
+        },
+      ],
     });
     expect(automatic.sectors[0].quotes[0].policy).toEqual({ kind: "automatic", targetMarkup: 0 });
     const cost = planProducerOpening({
@@ -299,6 +392,7 @@ describe("existing-world producer opening", () => {
         {
           ...sector,
           inventoryDailyUnits: {},
+          finalRecipeCommodities: ["financial_services"],
           outputs,
           pricingMode: "costPlus",
           pricingPosture: -0.1,

@@ -2,6 +2,7 @@
 import { producerPayableId, type ProducerPayable } from "./payablesRules";
 import { TURNS_PER_DAY } from "@/lib/constants/turnTime";
 import type { ProducerQuotePolicy } from "./rules";
+import type { CommodityType } from "@/lib/constants/commodities";
 import { validateProducerCapacityState, type ProducerCapacityState } from "./capacityRules";
 import { queueUndeliveredCost } from "@/lib/corporations/buildDelivery";
 
@@ -33,12 +34,16 @@ export interface ExistingWorldProducerOpening {
     inventoryDailyUnits: Readonly<Record<string, number>>;
     /** Existing telemetry, retained as a memo, never converted into cash or acquisition cost. */
     inventoryValueAnchor: number;
+    /** Final target recipe outputs, distinct from transition and retained finished goods. */
+    finalRecipeCommodities: readonly string[];
     outputs: readonly {
       commodity: string;
       book: string;
       referenceUnitPrice: number;
       storable: boolean;
     }[];
+    /** Existing per-product settings take priority over the former sector-wide posture. */
+    producerQuotes?: Readonly<Partial<Record<CommodityType, ProducerQuotePolicy>>>;
     pricingMode?: "market" | "costPlus";
     pricingPosture?: number | null;
   }[];
@@ -47,7 +52,7 @@ export interface ExistingWorldProducerOpening {
 }
 
 export interface ProducerOpeningPlan {
-  version: 2;
+  version: 3;
   modeledLossPolicy: ExistingWorldProducerOpening["modeledLossPolicy"];
   worldEpoch: string;
   completedTurn: number;
@@ -70,6 +75,14 @@ export interface ProducerOpeningPlan {
     outputStock: Array<{ commodity: string; book: string; units: number }>;
     quotes: Array<{ commodity: string; book: string; policy: ProducerQuotePolicy }>;
     openingInventoryMemoValueAnchor: number;
+  }>;
+  /** Cost-plus intent cannot price old retained goods without a historical unit cost. */
+  openingQuoteAdjustments: Array<{
+    sectorId: string;
+    commodity: string;
+    reason: "retainedStockHasNoRecordedUnitCost";
+    priorPolicy: { kind: "costPlus"; markup: number };
+    openingPolicy: { kind: "automatic"; targetMarkup: 0 };
   }>;
   protectedImages: Array<{ key: string; digest: string }>;
   /** The apply host must bind these exact creditors before enabling the new economy. */
@@ -120,6 +133,29 @@ export interface ProducerOpeningPlan {
 function valid(value: number, label: string, signed = false): number {
   if (!Number.isFinite(value) || (!signed && value < 0)) throw new Error(`Invalid ${label}`);
   return value;
+}
+
+function validateQuotePolicy(policy: ProducerQuotePolicy): ProducerQuotePolicy {
+  switch (policy.kind) {
+    case "manual":
+      if (valid(policy.unitPrice, "opening manual quote") > Number.MAX_SAFE_INTEGER)
+        throw new Error("Invalid opening manual quote");
+      return { ...policy };
+    case "automatic":
+      if (
+        valid(policy.targetMarkup, "opening automatic markup", true) < -1 ||
+        policy.targetMarkup > Number.MAX_SAFE_INTEGER
+      )
+        throw new Error("Invalid opening automatic markup");
+      return { ...policy };
+    case "costPlus":
+      if (
+        valid(policy.markup, "opening cost-plus markup", true) < -1 ||
+        policy.markup > Number.MAX_SAFE_INTEGER
+      )
+        throw new Error("Invalid opening cost-plus markup");
+      return { ...policy };
+  }
 }
 
 function uniqueIds(rows: readonly { id: string }[], label: string): void {
@@ -234,6 +270,7 @@ export function planProducerOpening(source: ExistingWorldProducerOpening): Produ
     });
   const accountIds = new Set(accounts.map((account) => account.id));
   const quantities = new Map<string, { beforeDailyUnits: number; afterTurnUnits: number }>();
+  const openingQuoteAdjustments: ProducerOpeningPlan["openingQuoteAdjustments"] = [];
   const sectors: ProducerOpeningPlan["sectors"] = [...source.sectors]
     .sort((a, b) => compare(a.id, b.id))
     .map((sector) => {
@@ -246,6 +283,15 @@ export function planProducerOpening(source: ExistingWorldProducerOpening): Produ
         "output commodity"
       );
       const outputs = new Map(sector.outputs.map((output) => [output.commodity, output]));
+      if (Object.keys(sector.producerQuotes ?? {}).some((commodity) => !outputs.has(commodity)))
+        throw new Error("Saved product quote requires output market reconciliation");
+      uniqueIds(
+        sector.finalRecipeCommodities.map((commodity) => ({ id: commodity })),
+        "final recipe commodity"
+      );
+      const finalRecipeCommodities = new Set(sector.finalRecipeCommodities);
+      if ([...finalRecipeCommodities].some((commodity) => !outputs.has(commodity)))
+        throw new Error("Current recipe requires output market reconciliation");
       const outputStock = Object.entries(sector.inventoryDailyUnits)
         .sort(([a], [b]) => compare(a, b))
         .flatMap(([commodity, daily]) => {
@@ -264,28 +310,48 @@ export function planProducerOpening(source: ExistingWorldProducerOpening): Produ
       const posture = sector.pricingPosture;
       if (posture != null && (!Number.isFinite(posture) || posture < -1))
         throw new Error("Invalid opening pricing posture");
-      return {
-        id: sector.id,
-        accountId: sector.accountId,
-        capacity,
-        inputStock: [],
-        outputStock,
-        quotes: [...sector.outputs]
-          .sort((a, b) => compare(a.commodity, b.commodity))
-          .map((output) => {
-            if (!output.book) throw new Error("Missing output market");
-            valid(output.referenceUnitPrice, "reference price");
-            const policy: ProducerQuotePolicy =
-              sector.pricingMode === "costPlus"
+      const quotes = [...sector.outputs]
+        .sort((a, b) => compare(a.commodity, b.commodity))
+        .map((output) => {
+          if (!output.book) throw new Error("Missing output market");
+          valid(output.referenceUnitPrice, "reference price");
+          const policy = validateQuotePolicy(
+            sector.producerQuotes?.[output.commodity as CommodityType] ??
+              (sector.pricingMode === "costPlus"
                 ? { kind: "costPlus", markup: posture ?? 0 }
                 : posture == null
                   ? { kind: "automatic", targetMarkup: 0 }
                   : {
                       kind: "manual",
                       unitPrice: valid(output.referenceUnitPrice * (1 + posture), "opening quote"),
-                    };
-            return { commodity: output.commodity, book: output.book, policy };
-          }),
+                    })
+          );
+          const retainedWithoutCost =
+            (sector.inventoryDailyUnits[output.commodity] ?? 0) > 0 &&
+            !finalRecipeCommodities.has(output.commodity);
+          if (retainedWithoutCost && policy.kind === "costPlus") {
+            openingQuoteAdjustments.push({
+              sectorId: sector.id,
+              commodity: output.commodity,
+              reason: "retainedStockHasNoRecordedUnitCost",
+              priorPolicy: policy,
+              openingPolicy: { kind: "automatic", targetMarkup: 0 },
+            });
+            return {
+              commodity: output.commodity,
+              book: output.book,
+              policy: { kind: "automatic", targetMarkup: 0 } as const,
+            };
+          }
+          return { commodity: output.commodity, book: output.book, policy };
+        });
+      return {
+        id: sector.id,
+        accountId: sector.accountId,
+        capacity,
+        inputStock: [],
+        outputStock,
+        quotes,
         // The opening inventory memo used daily-rate units. Preserve its per-turn equivalent
         // for comparison only; historical production costs were already expensed.
         openingInventoryMemoValueAnchor:
@@ -348,13 +414,14 @@ export function planProducerOpening(source: ExistingWorldProducerOpening): Produ
     "removed modeled liabilities"
   );
   return {
-    version: 2,
+    version: 3,
     modeledLossPolicy: { ...policy },
     worldEpoch: source.worldEpoch,
     completedTurn: source.completedTurn,
     firstSettlementTurn: source.completedTurn + 1,
     accounts,
     sectors,
+    openingQuoteAdjustments,
     protectedImages: [...source.protectedImages].sort((a, b) => compare(a.key, b.key)),
     requiredCreditorAccountIds: [...creditorIds].sort(compare),
     unresolvedModeledLossCarry:
