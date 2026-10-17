@@ -21,7 +21,10 @@
  * returns null, which never blocks.
  */
 
+import type { CommodityType } from "@/lib/constants/commodities";
 import { bucketKey } from "@/lib/nationalization/stateControlledBuckets";
+import { sectorDemandGapUnits } from "@/lib/market/sectorDemandGap";
+import { COMMODITY_BASE_PRICES, commodityMixWeight } from "@/lib/constants/commodities";
 
 /**
  * A cell has room for another plant only when its plants run, capacity-weighted,
@@ -145,4 +148,66 @@ export function isMarketSaturated(level: number | null | undefined): boolean {
   return (
     typeof level === "number" && Number.isFinite(level) && level < NPP_SATURATED_MARKET_THROTTLE
   );
+}
+
+/**
+ * Share of a cell's measured unmet demand one AI founding may build for. The
+ * entrant was sized off the unowned pool's headroom, which overstates what a
+ * market still wants: on live turn 257, 47 of 54 AI foundings entered cells
+ * whose plants sold out, and the young AI plants then made up 141 of the 263
+ * plants running under a fifth of capacity, because a sold-out market that is
+ * only slightly short cannot absorb a full-size new plant. Half leaves room for
+ * a second entrant and for the incumbents' own probe.
+ */
+export const NPP_FOUNDING_UNMET_SHARE = 0.5;
+
+/**
+ * Unmet demand for one cell in sector output units, for the output mix the new
+ * plant would actually run. "mean" is the rate-weighted mean gap
+ * (sectorDemandGapUnits, the same helper the player build preview uses); "max"
+ * is the deepest single leg, for critical-shortage entries whose shortage leg a
+ * balanced co-product would otherwise dilute (logistics averages freight with
+ * consulting). Null when no leg can be read, which never caps.
+ */
+export function cellUnmetDemandUnits(args: {
+  supplyMix: Partial<Record<CommodityType, number>>;
+  gapFor: (commodity: CommodityType) => number | null;
+  aggregate?: "mean" | "max";
+}): number | null {
+  let readable = false;
+  const gapOf = (commodity: CommodityType) => {
+    const gap = args.gapFor(commodity);
+    if (gap == null) return 0;
+    readable = true;
+    return Math.max(0, gap);
+  };
+  if (args.aggregate === "max") {
+    let best = 0;
+    for (const [commodity, rate] of Object.entries(args.supplyMix) as [CommodityType, number][]) {
+      if (!(rate > 0)) continue;
+      const weight = commodityMixWeight(args.supplyMix, COMMODITY_BASE_PRICES, commodity);
+      if (!(weight > 0)) continue;
+      best = Math.max(best, gapOf(commodity) / weight);
+    }
+    return readable ? best : null;
+  }
+  const units = sectorDemandGapUnits(args.supplyMix, gapOf);
+  return readable ? units : null;
+}
+
+/**
+ * Founding size and eligibility from a cell's unmet demand. The plant builds
+ * for at most NPP_FOUNDING_UNMET_SHARE of it, and enters only when that share
+ * covers one starter facility: flooring a smaller share up to a whole facility
+ * would build more than the share. No reading never caps or blocks.
+ */
+export function foundingUnmetSizing(args: { unmetUnits: number | null; starterUnits: number }): {
+  sizeCap: number;
+  blocksEntry: boolean;
+} {
+  if (args.unmetUnits == null || !Number.isFinite(args.unmetUnits)) {
+    return { sizeCap: Number.POSITIVE_INFINITY, blocksEntry: false };
+  }
+  const sizeCap = Math.max(0, args.unmetUnits) * NPP_FOUNDING_UNMET_SHARE;
+  return { sizeCap, blocksEntry: sizeCap < args.starterUnits };
 }
