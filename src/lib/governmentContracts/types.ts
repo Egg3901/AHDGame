@@ -84,6 +84,8 @@ export interface TenderView extends Omit<
   | "awardLeaseUntil"
   | "awardAttemptId"
 > {
+  currencyQuote?: import("./rules/presentation").ContractCurrencyQuote | null;
+  capacityQuote?: import("./rules/presentation").ExtractionCapacityQuote | null;
   tab: TenderTab;
   bidCount: number;
   bids: Omit<ContractBid, "userId">[];
