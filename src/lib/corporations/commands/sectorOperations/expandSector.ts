@@ -63,6 +63,7 @@ import {
   retailCapacityExpansionPaused,
   retailDemandTransitionTurnsRemaining,
 } from "@/lib/market/retailDemandTransition";
+import { emptyProducerSectorOpening } from "@/lib/market/producerMarket/openingState";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -228,6 +229,9 @@ export async function expandSector(request: Request, { params }: RouteParams) {
     // pool writer below only runs under plants, where the block has run.
     let eraUnitScale = 1;
     if (plantsEnabled) {
+      if (!gameState?.worldEpochId) {
+        return errorResponse(503, "The world economy is not ready to open a new producer site.");
+      }
       currentTurn = gameState?.currentTurn ?? 0;
       const currentYear =
         gameState?.currentYear ??
@@ -396,6 +400,7 @@ export async function expandSector(request: Request, { params }: RouteParams) {
       // basis.
       newSector.capacityBookAnchor = 0;
       newSector.buildQueue = [starterOrder];
+      Object.assign(newSector, emptyProducerSectorOpening(gameState.worldEpochId, currentTurn));
       // Born under plants, so it never needs the flip-turn migration — stamping
       // this now keeps `sectorTurn`'s `isFlipTurn` (plantsStartTurn == null) from
       // treating a zero-capacity newborn as a legacy sector to convert.

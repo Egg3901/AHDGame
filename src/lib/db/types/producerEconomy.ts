@@ -34,6 +34,12 @@ export interface ProducerPayablesState {
   claims: ProducerPayable[];
 }
 
+/** Generation marker shared by the sector's physical capacity and inventory. */
+export interface ProducerGenerationStamp {
+  worldEpoch: string;
+  turn: number;
+}
+
 /** Current physical goods; the operating receipt preserves their historical movement. */
 export interface ProducerInventoryState {
   worldEpoch: string;

@@ -35,7 +35,9 @@ function makeDb(countryId: string, baseRate?: number) {
       // CLOSED, so a db that does not serve them refuses every founding with a
       // 403 - including in market economies like JP/US/UK.
       if (name === "gameState") {
-        return { findOne: async () => ({ _id: "current", currentYear: 1970 }) };
+        return {
+          findOne: async () => ({ _id: "current", currentYear: 1970, worldEpochId: "world" }),
+        };
       }
       if (name === "federalBudget") {
         // `find` serves the gate's marketization read; `findOne` serves
@@ -137,6 +139,7 @@ describe("POST /api/corporations — forex enabled", () => {
     expect(inserted.liquidCurrencyCode).toBe("JPY");
     // INITIAL_RATES.JP = 106 ; exact assertion, not sanity check
     expect(inserted.liquidCapital).toBe(CORPORATION_STARTING_CAPITAL * 106);
+    expect(inserted.producerPayables).toEqual({ worldEpoch: "world", turn: 0, claims: [] });
   });
 
   it("uses the world base rate for both founding charge and corporate capital", async () => {
@@ -214,7 +217,9 @@ describe("POST /api/corporations — forex enabled", () => {
       // command-economy gate's two reads as well; the gate fails CLOSED and
       // would otherwise refuse UK founding with a 403.
       if (name === "gameState") {
-        return { findOne: async () => ({ _id: "current", currentYear: 1970 }) };
+        return {
+          findOne: async () => ({ _id: "current", currentYear: 1970, worldEpochId: "world" }),
+        };
       }
       if (name === "federalBudget") {
         return {

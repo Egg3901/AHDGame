@@ -1002,7 +1002,7 @@ export interface CorporateSector {
   /** Authoritative quantities and operating accounts from the funded producer market. */
   producerSettlement?: import("./producerEconomy").ProducerSectorSettlement;
   /** Physical opening generation, advanced atomically with the operating receipt. */
-  producerCapacity?: { worldEpoch: string; turn: number };
+  producerCapacity?: import("./producerEconomy").ProducerGenerationStamp;
   producerInventory?: import("./producerEconomy").ProducerInventoryState;
   /** Per-product asking policies. Fixed unit prices are anchor money, never revenue multipliers. */
   producerQuotes?: Partial<

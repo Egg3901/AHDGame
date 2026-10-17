@@ -126,6 +126,7 @@ async function wireMocks(plants: boolean) {
     _id: "current",
     currentTurn: CURRENT_TURN,
     currentYear: CAPACITY_ANCHOR_YEAR,
+    worldEpochId: "world",
   });
 }
 
@@ -230,6 +231,16 @@ describe("expandSector — founding build (plants)", () => {
 
     expect(res.status).toBe(201);
     expect(insertedSector().sectorType).toBe("agriculture");
+    expect(insertedSector().producerCapacity).toEqual({
+      worldEpoch: "world",
+      turn: CURRENT_TURN,
+    });
+    expect(insertedSector().producerInventory).toEqual({
+      worldEpoch: "world",
+      turn: CURRENT_TURN,
+      inputStock: [],
+      outputStock: [],
+    });
     const queue = insertedSector().buildQueue as Array<Record<string, number>>;
     expect(queue[0].unitsOrdered).toBe(foundingStarterUnits("agriculture"));
     expect(db.collectionMocks.unownedSectors.updateOne.mock.calls[0][0]).toEqual({
@@ -279,6 +290,7 @@ describe("expandSector — founding build (plants)", () => {
       currentTurn: CURRENT_TURN,
       currentYear: CAPACITY_ANCHOR_YEAR,
       preset: "1953-default",
+      worldEpochId: "world",
     });
     const { resolveCorporation } = await import("@/lib/api/corporations/resolveQuery");
     vi.mocked(resolveCorporation).mockResolvedValue({
