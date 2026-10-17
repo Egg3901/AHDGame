@@ -139,4 +139,65 @@ describe("processSector banking capacity split", () => {
     // producedUnits is persisted rounded to 2dp
     expect(charteredOn).toBeCloseTo(charteredOff * 0.6, 1);
   });
+
+  function runLabour(
+    enabled: boolean,
+    bankCharter?: BankCharter,
+    sectorType: CorporateSector["sectorType"] = "financial"
+  ) {
+    const env = makeEnv(enabled);
+    env.labour = { wagesEnabled: true };
+    env.market.explicitPlantCostsEnabled = true;
+    processSector(
+      env,
+      makeCorp(bankCharter),
+      { ...makeSector(), sectorType, wageLevel: 1, unionization: 0 },
+      1,
+      undefined,
+      1
+    );
+    const op = env.sectorOps[0] as {
+      updateOne: { update: { $set: Partial<CorporateSector> } };
+    };
+    return op.updateOne.update.$set;
+  }
+
+  it("charges only commodity labour for an active retail charter without reducing headcount", () => {
+    const baseline = runLabour(true);
+    const chartered = runLabour(true, charter);
+
+    expect(baseline.plantsPnl?.costModel).toBe("explicit");
+    expect(baseline.plantsPnl!.labour).toBeGreaterThan(0);
+    expect(chartered.plantsPnl!.labour).toBeCloseTo(baseline.plantsPnl!.labour * 0.6, 2);
+    expect(chartered.laborCost).toBeCloseTo(baseline.laborCost! * 0.6, 2);
+    expect(chartered.workers).toBeGreaterThan(0);
+    expect(chartered.workers).toBe(baseline.workers);
+    expect(chartered.wagePerWorker).toBeCloseTo(baseline.wagePerWorker! * 0.6, 6);
+  });
+
+  it("keeps full labour costs without a charter", () => {
+    const baseline = runLabour(false);
+    const unchartered = runLabour(true);
+
+    expect(baseline.plantsPnl!.labour).toBeGreaterThan(0);
+    expect(unchartered.plantsPnl!.labour).toBe(baseline.plantsPnl!.labour);
+  });
+
+  it("keeps full labour costs when private banking is disabled", () => {
+    expect(runLabour(false, charter).plantsPnl!.labour).toBe(runLabour(false).plantsPnl!.labour);
+  });
+
+  it("keeps full labour costs for a revoked charter", () => {
+    expect(runLabour(true, { ...charter, status: "revoked" }).plantsPnl!.labour).toBe(
+      runLabour(true).plantsPnl!.labour
+    );
+  });
+
+  it("keeps full labour costs for a non-financial sector", () => {
+    const baseline = runLabour(true, undefined, "manufacturing");
+    const chartered = runLabour(true, charter, "manufacturing");
+
+    expect(baseline.plantsPnl!.labour).toBeGreaterThan(0);
+    expect(chartered.plantsPnl!.labour).toBe(baseline.plantsPnl!.labour);
+  });
 });

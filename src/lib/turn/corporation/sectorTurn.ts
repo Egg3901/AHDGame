@@ -497,6 +497,7 @@ export function processSector(
     demandThrottleFactor,
     demandFill,
     embargoExportExposure,
+    bankingCommodityScale,
     hourlyRevenue: realizedHourlyRevenue,
     capacityBindingEvent,
   } = resolvePlantsRevenue({
@@ -717,14 +718,19 @@ export function processSector(
     sectorCountryId,
     currentTurn,
     currentYear,
+    // Decision 18 diverts branch capacity from production; apply the same scale
+    // to the commodity labour-cost basis, with deposit income covering branches.
+    // Keep branch headcount, so wagePerWorker reflects the smaller commodity bill.
     hourlyRevenue: explicitPlantCostsEnabled
-      ? (plantsNameplateRevenue * activeFraction * plantCrew) / TURNS_PER_DAY
+      ? (plantsNameplateRevenue * activeFraction * plantCrew * bankingCommodityScale) /
+        TURNS_PER_DAY
       : hourlyRevenue,
     // Staff are paid for the scheduled run of active capacity (crew floor
     // applies), even when its output cannot sell. This neutral basis also
     // removes the legacy margin cap on payroll.
     grossMaintenance: explicitPlantCostsEnabled
-      ? (plantsNameplateRevenue * activeFraction * plantCrew) / TURNS_PER_DAY
+      ? (plantsNameplateRevenue * activeFraction * plantCrew * bankingCommodityScale) /
+        TURNS_PER_DAY
       : payrollBasis,
     computedWorkers,
     techLaborCostMultiplier: techEffects.laborCostMultiplier,
