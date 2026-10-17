@@ -1149,8 +1149,8 @@ export async function resolveParliamentaryAppointmentVote(
       }
     );
 
-    if (countryId === COUNTRY_CONFIGS.UK.id && !vote.isConfidenceMotion) {
-      await resetConfidenceGauge(db, now, gameState?.currentTurn);
+    if (!vote.isConfidenceMotion) {
+      await resetConfidenceGauge(db, now, gameState?.currentTurn, countryId);
     }
 
     // Cancel all other active appointment votes — this country now has a government

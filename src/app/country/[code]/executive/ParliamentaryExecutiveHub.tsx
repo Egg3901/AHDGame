@@ -87,13 +87,13 @@ export async function ParliamentaryExecutiveHub({ countryId }: { countryId: Coun
   const executiveGameTime = await getGameTime();
   await processParliamentaryGovernmentVotes(db, countryId, executiveGameTime.effectiveNow);
 
-  // Confidence gauge readout — UK only (the gauge lives on the UK government
-  // singleton). eslint-disable justified: this is a UK-specific structure.
-  // eslint-disable-next-line local/no-country-literals
+  // Confidence is stored with each country's canonical government record.
+  const [confidenceGauge, confidenceHistory] = await Promise.all([
+    getConfidenceGauge(db, countryId),
+    getConfidenceGaugeHistory(db, countryId),
+  ]);
+  // eslint-disable-next-line local/no-country-literals -- the NHS quality tile remains UK-specific.
   const isUK = countryId === "UK";
-  const [confidenceGauge, confidenceHistory] = isUK
-    ? await Promise.all([getConfidenceGauge(db), getConfidenceGaugeHistory(db)])
-    : [null, []];
   const nhsState = isUK ? await getNhsState(db) : null;
 
   const [parlGov, govFormation, imperialPossessive, chamberSeats] = await Promise.all([

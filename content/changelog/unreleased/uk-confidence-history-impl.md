@@ -1,6 +1,6 @@
 ---
 date: 2026-10-16
-title: Carry UK government confidence through government changes and add history
+title: Carry parliamentary government confidence through government changes and add history
 summary: >-
   Government confidence now carries forward with a small formation boost rather
   than resetting to full. A new history chart shows recorded changes without
@@ -19,5 +19,6 @@ areas: [backend, frontend]
 - Successor governments inherit the outgoing confidence value and recover 10%
   of the remaining distance to 100. Confidence remains unchanged through the
   election and caretaker period.
-- The UK executive page now shows recorded turn and event history. Older values
-  were not stored and are not reconstructed; history is bounded to 500 points.
+- Parliamentary executive pages now show recorded turn and event history.
+  Older values were not stored and are not reconstructed; history is bounded
+  to 500 points.

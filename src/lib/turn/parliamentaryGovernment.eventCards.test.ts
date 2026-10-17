@@ -133,7 +133,7 @@ describe("parliamentary public event card contract", () => {
     await resolveParliamentaryAppointmentVote(db as unknown as Db, "UK", voteId, now, offices);
 
     expect(resetConfidenceGauge).toHaveBeenCalledOnce();
-    expect(resetConfidenceGauge).toHaveBeenCalledWith(db, now, 100);
+    expect(resetConfidenceGauge).toHaveBeenCalledWith(db, now, 100, "UK");
     expect(sendCountryGameEvent).toHaveBeenCalledTimes(2);
     expect(sendCountryGameEvent).toHaveBeenNthCalledWith(1, "UK", {
       title: "New Prime Minister Appointed",

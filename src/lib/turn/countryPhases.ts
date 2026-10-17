@@ -119,6 +119,7 @@ import { appointNppPrimeMinister } from "@/lib/nppAutonomy/appointNppPrimeMinist
 import { updateGovernmentSeats as updateUKGovernmentSeats } from "@/lib/turn/ukGovernmentFormation";
 import { getDb } from "@/lib/mongodb";
 import { getGameStatePreset } from "@/lib/db/collections/gameState";
+import { tickParliamentaryGovernmentConfidence } from "@/lib/uk/confidence/confidenceGaugeStore";
 import { JP_ELECTIONS } from "@/lib/countries/jp/elections";
 import { JP_BILL_PHASE_SHAPE } from "@/lib/countries/jp/elections/billLifecycle";
 
@@ -572,6 +573,19 @@ export async function runParliamentaryGovernmentPhases(
         }`
       );
     }
+  }
+
+  // Shared confidence drift for every parliamentary executive. The helper
+  // batches approval/government reads and writes so this does not add an N+1.
+  try {
+    await tickParliamentaryGovernmentConfidence(db, {
+      countryIds: parliamentaryCountries.filter((id) => id !== "UK"),
+      now: gameNow,
+      turn: currentTurn,
+      preset,
+    });
+  } catch (error) {
+    console.error("[countryPhases] parliamentary confidence tick failed:", error);
   }
 }
 

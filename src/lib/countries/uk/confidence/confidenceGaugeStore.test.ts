@@ -6,6 +6,7 @@ import {
   resetConfidenceGauge,
   getConfidenceGaugeHistory,
   isConfidenceDissolutionEnabled,
+  tickParliamentaryGovernmentConfidence,
 } from "@/lib/countries/uk/confidence/confidenceGaugeStore";
 import { CONFIDENCE_START, CONFIDENCE_HITS } from "@/lib/countries/uk/confidence/confidenceGauge";
 
@@ -137,5 +138,54 @@ describe("resetConfidenceGauge", () => {
     expect(history).toHaveLength(500);
     expect(history[0]?.turn).toBe(11);
     expect(history.at(-1)?.turn).toBe(510);
+  });
+});
+
+describe("tickParliamentaryGovernmentConfidence", () => {
+  it("updates each country's formed government and appends a bounded history point in one batch", async () => {
+    const bulkWrite = vi.fn().mockResolvedValue({ modifiedCount: 1 });
+    const governments = [
+      {
+        _id: "IE",
+        countryId: "IE",
+        status: "formed",
+        confidenceGauge: 50,
+        confidenceGaugeHistory: [],
+        formedTurn: 1,
+      },
+    ];
+    const approvals = [{ _id: "IE", approvalRating: 0 }];
+    const db = {
+      collection(name: string) {
+        if (name === "governmentFormations") {
+          return {
+            find: () => ({ toArray: async () => governments }),
+            bulkWrite,
+          };
+        }
+        if (name === "governmentApprovals") {
+          return { find: () => ({ toArray: async () => approvals }) };
+        }
+        throw new Error(`Unexpected collection: ${name}`);
+      },
+    } as never;
+
+    const now = new Date("1994-01-01T00:00:00.000Z");
+    const updates = await tickParliamentaryGovernmentConfidence(db, {
+      countryIds: ["IE"],
+      now,
+      turn: 40,
+    });
+
+    expect(updates).toHaveLength(1);
+    expect(updates[0]?.countryId).toBe("IE");
+    expect(updates[0]?.value).toBeLessThan(50);
+    expect(bulkWrite).toHaveBeenCalledOnce();
+    const [operations] = bulkWrite.mock.calls[0] as [
+      Array<{ updateOne: { update: { $set: Record<string, unknown> } } }>,
+    ];
+    expect(operations[0]?.updateOne.update.$set.confidenceGaugeHistory).toEqual([
+      { turn: 40, value: updates[0]?.value, at: now, reason: "turn" },
+    ]);
   });
 });

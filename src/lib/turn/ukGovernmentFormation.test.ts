@@ -275,12 +275,12 @@ describe("updateGovernmentSeats per-turn gauges (ticket #858)", () => {
     existingGovernment();
     await updateGovernmentSeats();
 
-    const gaugeWrite = db.collectionMocks["ukGovernment"]!.updateOne.mock.calls[0];
+    const gaugeWrite = db.collectionMocks["governmentFormations"]!.updateOne.mock.calls.at(-1);
     expect(gaugeWrite).toBeDefined();
     expect((gaugeWrite![1] as { $set: Record<string, unknown> }).$set.confidenceGauge).toBeTypeOf(
       "number"
     );
-    expect(gaugeWrite![2]).toEqual({ upsert: true });
+    expect(gaugeWrite![2]).toEqual({ upsert: false });
 
     const nhsWrite = db.collectionMocks["ukNhsState"]!.updateOne.mock.calls[0];
     expect(nhsWrite).toBeDefined();

@@ -1,4 +1,5 @@
 import type { ObjectId } from "mongodb";
+import type { GovernmentConfidencePoint } from "@/lib/db/types/governmentFormation";
 
 /**
  * UK Government document - tracks current PM and ruling party.
@@ -29,12 +30,8 @@ export interface UKGovernment {
   updatedAt: Date;
 }
 
-export interface UKGovernmentConfidencePoint {
-  turn: number | null;
-  value: number;
-  at: Date;
-  reason: string;
-}
+/** Backward-compatible alias for the legacy UK singleton snapshot shape. */
+export type UKGovernmentConfidencePoint = GovernmentConfidencePoint;
 
 /**
  * PM No-Confidence Vote - ruling party/coalition MPs vote to remove PM

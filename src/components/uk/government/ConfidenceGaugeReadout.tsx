@@ -33,7 +33,7 @@ export const ConfidenceGaugeReadout = memo(function ConfidenceGaugeReadout({
   value: number;
   history: ConfidenceGaugeHistoryEntry[];
 }) {
-  const t = useTranslations("ukGovernment.confidence");
+  const t = useTranslations("governmentConfidence");
   const clamped = Math.max(0, Math.min(100, value));
   const band = confidenceBand(clamped);
   const chartData = history.map((point, index) => ({
