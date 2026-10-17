@@ -30,7 +30,7 @@ export function fmtMult(n: number | null | undefined): string {
 export interface IdleCauseMeta {
   label: string;
   /** Semantic token slice used for the meter segment and legend dot. */
-  tone: "warning" | "error" | "muted" | "info";
+  tone: "warningStrong" | "warning" | "warningSoft" | "error" | "muted" | "info";
   help: string;
 }
 
@@ -53,7 +53,7 @@ export function idleCauseMeta(
   return {
     inputs: {
       label: "Waiting on inputs",
-      tone: "warning",
+      tone: "warningStrong",
       help: `Your ${sites} could not buy enough of what they consume, so part of ${run} stopped. Check the Inputs list below for the item in short supply.`,
     },
     demand: {
@@ -88,7 +88,7 @@ export function idleCauseMeta(
     },
     deposits: {
       label: "Deposits ran short",
-      tone: "warning",
+      tone: "warningSoft",
       help: "This region does not hold enough of the resource to feed all your capacity. Build in a region with more left in the ground.",
     },
     mothballed: {
@@ -108,7 +108,9 @@ export function idleCauseMeta(
 export const TONE_FILL: Record<IdleCauseMeta["tone"] | "sold" | "unsold", string> = {
   sold: "bg-success",
   unsold: "bg-warning",
+  warningSoft: "bg-warning/25",
   warning: "bg-warning/50",
+  warningStrong: "bg-warning/75",
   error: "bg-error/60",
   info: "bg-info/50",
   muted: "bg-muted/40",
