@@ -126,6 +126,7 @@ import {
   NPP_GROWTH_DEPLOY_FRACTION,
   NPP_GROWTH_MAX_STEP_OF_RUN,
   NPP_GROWTH_MIN_SHORTAGE,
+  NPP_GROWTH_MIN_THROTTLE,
   NPP_GROWTH_MIN_UTILIZATION,
   NPP_REINVEST_AGGRESSION,
   NPP_REINVEST_MAINTENANCE_CASH_SHARE,
@@ -1494,6 +1495,26 @@ export function makeNppCorpDecision(
             )
           : 0;
       let growthUnits = existingPlantGrowthUnits(affordableGrowthUnits, growthCapUnits);
+      // NPP-run plants do not add growth where the market already throttles
+      // them; replacement of worn capacity still goes through below.
+      const throttledMarket =
+        !autopilot &&
+        typeof sector.demandThrottleFactor === "number" &&
+        Number.isFinite(sector.demandThrottleFactor) &&
+        sector.demandThrottleFactor < NPP_GROWTH_MIN_THROTTLE;
+      let throttleGate = false;
+      if (throttledMarket && growthUnits > 0) {
+        growthUnits = 0;
+        throttleGate = true;
+        observeReinvestCandidate(
+          "growth_throttled_market",
+          sector,
+          capitalStock,
+          headroomUnits,
+          replacementUnits,
+          null
+        );
+      }
       // Autopilot builds only where the plant already earns, the market has
       // room and the order repays itself; a refused growth leg still lets the
       // replacement leg through.
@@ -1524,7 +1545,7 @@ export function makeNppCorpDecision(
       }
       const units = replacementUnits + growthUnits;
       if (!(units > 0)) {
-        if (!autopilotGate) {
+        if (!autopilotGate && !throttleGate) {
           observeReinvestCandidate(
             "below_minimum_order",
             sector,
