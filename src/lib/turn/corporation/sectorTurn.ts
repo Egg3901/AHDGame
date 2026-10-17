@@ -577,6 +577,7 @@ export function processSector(
           ? 0
           : lookups.unmetForeignDemandByCountry?.get(sectorCountryId)?.get(commodity)
       ),
+    throttleWideBalance: (commodity) => wideCommodityBalances.get(commodity),
     throttleLegMixWeight: (commodity) =>
       commodityMixWeight(
         strategyRates.supply,

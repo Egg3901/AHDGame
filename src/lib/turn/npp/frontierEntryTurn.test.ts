@@ -473,7 +473,7 @@ describe("frontier entry experiment turn path", () => {
     expect(glutDecision.entryDiagnostic?.reason).toBe("glutted_market");
     expect(glutDecision.newSectors).toBeUndefined();
 
-    const retail = corp();
+    const retail = corp(undefined, { type: "retail" });
     const retailDecision = decide({
       corporation: retail,
       sectors: profitableSectors(retail._id),
