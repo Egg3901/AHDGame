@@ -495,3 +495,29 @@ describe("cross-type founding needs a readable shortage", () => {
     expect(pick).toBeNull();
   });
 });
+
+describe("essential-shortage valve only where no same-type builder exists", () => {
+  const pool = new Map([["US", [us("manufacturing", "PA"), us("logistics", "NY")]]]);
+  const pick = (hasSameType: boolean) =>
+    findBestUnownedSector(
+      "US",
+      "PA",
+      "manufacturing",
+      null,
+      new Set(),
+      pool,
+      new Set(),
+      ratios({ freight: 2 }),
+      false,
+      1,
+      { unmetDemandUnitsOf: () => 500, hasSameTypeNppIn: () => hasSameType }
+    );
+
+  it("a manufacturing corp stays in its field when logistics builders exist", () => {
+    expect(pick(true)?.sectorType).toBe("manufacturing");
+  });
+
+  it("crosses into logistics when no logistics builder exists in the country", () => {
+    expect(pick(false)?.sectorType).toBe("logistics");
+  });
+});

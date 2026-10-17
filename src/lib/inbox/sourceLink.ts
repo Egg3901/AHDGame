@@ -23,6 +23,17 @@ export function resolveSourceLink(
   metadata: Record<string, unknown> | undefined
 ): InboxSource | null {
   const m = metadata ?? {};
+  if (type === "government_contract_opened" && asString(m.countryId) && asString(m.tenderId))
+    return {
+      label: "View contract and bid",
+      href:
+        "/country/" +
+        encodeURIComponent(String(m.countryId).toLowerCase()) +
+        "/government-contracts?tab=active&type=" +
+        (m.contractType === "defence" ? "defence" : "extraction") +
+        "&tender=" +
+        encodeURIComponent(String(m.tenderId)),
+    };
   if (type === "government_contract_awarded" && asString(m.countryId))
     return {
       label: "View government contract",

@@ -91,6 +91,38 @@ describe.skipIf(!REAL_MONGO_ENABLED)(
         revenue: 1e9,
       });
     });
+
+    it.each([6, 24, 48])(
+      "starts a %s-turn bidding duration at the server's actual publication turn",
+      async (biddingTurns) => {
+        const id = await publishTender(
+          f.db,
+          "US",
+          {
+            title: "Server timed concession",
+            description: "Synthetic server timed concession",
+            biddingTurns,
+            terms: {
+              type: "extraction",
+              stateId: "TX",
+              resource: "oil",
+              share: 0.1,
+              termTurns: 48,
+              royaltyRatePerTurn: 0.01,
+              minimumSigningFeeAnchor: 0,
+            },
+          },
+          government,
+          20,
+          now
+        );
+        const tender = (await tenders(f.db).findOne({ _id: id }))!;
+        expect(tender.closesTurn).toBe(20 + biddingTurns);
+        expect(tender.awardDeadlineTurn).toBe(20 + biddingTurns + 24);
+        expect(tender).not.toHaveProperty("biddingTurns");
+      }
+    );
+
     async function extraction() {
       const id = await publishTender(
         f.db,
@@ -98,8 +130,8 @@ describe.skipIf(!REAL_MONGO_ENABLED)(
         {
           title: "Oil concession",
           description: "Synthetic resource concession",
-          closesTurn: 3,
-          awardDeadlineTurn: 6,
+          closesTurn: 7,
+          awardDeadlineTurn: 31,
           terms: {
             type: "extraction",
             stateId: "TX",
@@ -129,7 +161,7 @@ describe.skipIf(!REAL_MONGO_ENABLED)(
       const row = await extraction();
       expect((await tenderView(f.db, row, 1, government)).bids).toEqual([]);
       expect((await tenderView(f.db, row, 1, ceo)).bids[0].amount).toBe(200);
-      expect(JSON.stringify(await tenderView(f.db, row, 3, government))).not.toContain(
+      expect(JSON.stringify(await tenderView(f.db, row, 7, government))).not.toContain(
         owner.toHexString()
       );
       await awardTender(
@@ -138,7 +170,7 @@ describe.skipIf(!REAL_MONGO_ENABLED)(
         corpId.toHexString(),
         "Highest qualifying signing fee.",
         government,
-        3,
+        7,
         now
       );
       await awardTender(
@@ -147,7 +179,7 @@ describe.skipIf(!REAL_MONGO_ENABLED)(
         corpId.toHexString(),
         "Highest qualifying signing fee.",
         government,
-        3,
+        7,
         now
       );
       expect(
@@ -189,10 +221,10 @@ describe.skipIf(!REAL_MONGO_ENABLED)(
         );
         row = (await tenders(f.db).findOne({ _id: row._id }))!;
         expect(
-          (await tenderView(f.db, row, 3, official)).awardWarnings?.[corpId.toHexString()]
+          (await tenderView(f.db, row, 7, official)).awardWarnings?.[corpId.toHexString()]
         ).toMatchObject({ basis, favorabilityPenalty: 4.1 });
         expect((await tenderView(f.db, row, 1, official)).awardWarnings).toEqual({});
-        expect((await tenderView(f.db, row, 3, ceo)).awardWarnings).toBeUndefined();
+        expect((await tenderView(f.db, row, 7, ceo)).awardWarnings).toBeUndefined();
         await expect(
           awardTender(
             f.db,
@@ -200,7 +232,7 @@ describe.skipIf(!REAL_MONGO_ENABLED)(
             corpId.toHexString(),
             "Synthetic concession award.",
             official,
-            3,
+            7,
             now
           )
         ).rejects.toThrow("Acknowledge the conflict");
@@ -214,7 +246,7 @@ describe.skipIf(!REAL_MONGO_ENABLED)(
           corpId.toHexString(),
           "Synthetic concession award.",
           official,
-          3,
+          7,
           now,
           true
         );
@@ -229,7 +261,7 @@ describe.skipIf(!REAL_MONGO_ENABLED)(
           corpId.toHexString(),
           "Synthetic concession award.",
           government,
-          3,
+          7,
           now
         );
         expect(
@@ -242,7 +274,7 @@ describe.skipIf(!REAL_MONGO_ENABLED)(
         );
         expect(post?.content).toContain("30.0% of oil");
         const awarded = (await tenders(f.db).findOne({ _id: row._id }))!;
-        expect((await tenderView(f.db, awarded, 3)).selfDealing).toEqual({
+        expect((await tenderView(f.db, awarded, 7)).selfDealing).toEqual({
           ministerName: "Synthetic official",
           favorabilityPenalty: 4.1,
         });
@@ -260,7 +292,7 @@ describe.skipIf(!REAL_MONGO_ENABLED)(
       await f.db
         .collection("corporations")
         .updateOne({ _id: corpId }, { $set: { shareholders: [{ characterId, shares: 4.99 }] } });
-      expect((await tenderView(f.db, row, 3, official)).awardWarnings).toEqual({});
+      expect((await tenderView(f.db, row, 7, official)).awardWarnings).toEqual({});
       // The server rechecks ownership if it changes after the official reads the preview.
       await f.db
         .collection("corporations")
@@ -272,7 +304,7 @@ describe.skipIf(!REAL_MONGO_ENABLED)(
           corpId.toHexString(),
           "Synthetic concession award.",
           official,
-          3,
+          7,
           now
         )
       ).rejects.toThrow("Acknowledge the conflict");
@@ -285,7 +317,7 @@ describe.skipIf(!REAL_MONGO_ENABLED)(
         corpId.toHexString(),
         "Synthetic concession award.",
         official,
-        3,
+        7,
         now
       );
       expect(await f.db.collection("newsPosts").countDocuments()).toBe(0);
@@ -314,7 +346,7 @@ describe.skipIf(!REAL_MONGO_ENABLED)(
           corpId.toHexString(),
           "Synthetic concession award.",
           official,
-          3,
+          7,
           now,
           true
         )
@@ -358,7 +390,7 @@ describe.skipIf(!REAL_MONGO_ENABLED)(
       ]);
       expect((await tenderView(f.db, row, 2, government)).bidHistory).toEqual([]);
       expect((await tenderView(f.db, row, 2, ceo)).bidHistory).toHaveLength(3);
-      expect(JSON.stringify(await tenderView(f.db, row, 3, government))).not.toContain(
+      expect(JSON.stringify(await tenderView(f.db, row, 7, government))).not.toContain(
         owner.toHexString()
       );
     });
@@ -379,7 +411,7 @@ describe.skipIf(!REAL_MONGO_ENABLED)(
         corpId.toHexString(),
         "Highest qualifying signing fee.",
         government,
-        3,
+        7,
         now
       );
       const budget = await f.db.collection("federalBudget").findOne({ countryId: "US" });
@@ -407,7 +439,7 @@ describe.skipIf(!REAL_MONGO_ENABLED)(
         corpId.toHexString(),
         "Highest qualifying signing fee.",
         government,
-        3,
+        7,
         now
       );
       expect(
@@ -429,7 +461,7 @@ describe.skipIf(!REAL_MONGO_ENABLED)(
         corpId.toHexString(),
         "Highest qualifying signing fee.",
         government,
-        3,
+        7,
         now
       );
       expect((await f.db.collection("corporations").findOne({ _id: corpId }))?.liquidCapital).toBe(
@@ -476,7 +508,7 @@ describe.skipIf(!REAL_MONGO_ENABLED)(
           corpId.toHexString(),
           "Highest qualifying signing fee.",
           government,
-          3,
+          7,
           now
         );
       } catch {}
@@ -490,7 +522,7 @@ describe.skipIf(!REAL_MONGO_ENABLED)(
         corpId.toHexString(),
         "Highest qualifying signing fee.",
         government,
-        3,
+        7,
         now
       );
       expect((await f.db.collection("corporations").findOne({ _id: corpId }))?.liquidCapital).toBe(
@@ -574,7 +606,7 @@ describe.skipIf(!REAL_MONGO_ENABLED)(
           row,
           { corporationId: corpId.toHexString(), amount: 300, expectedRevision: 1 },
           ceo,
-          3,
+          7,
           now
         )
       ).rejects.toThrow(/closed/);
@@ -591,7 +623,7 @@ describe.skipIf(!REAL_MONGO_ENABLED)(
           corpId.toHexString(),
           "Highest qualifying signing fee.",
           government,
-          3,
+          7,
           now
         )
       ).rejects.toThrow();
@@ -639,7 +671,7 @@ describe.skipIf(!REAL_MONGO_ENABLED)(
           corpId.toHexString(),
           "Highest qualifying signing fee.",
           government,
-          3,
+          7,
           now
         )
       ).rejects.toThrow(/Synthetic/);
@@ -649,7 +681,7 @@ describe.skipIf(!REAL_MONGO_ENABLED)(
         corpId.toHexString(),
         "Highest qualifying signing fee.",
         government,
-        3,
+        7,
         now
       );
       expect((await f.db.collection("corporations").findOne({ _id: corpId }))?.liquidCapital).toBe(
@@ -666,7 +698,7 @@ describe.skipIf(!REAL_MONGO_ENABLED)(
           corpId.toHexString(),
           "Highest qualifying signing fee.",
           government,
-          3,
+          7,
           now
         ),
         awardTender(
@@ -675,7 +707,7 @@ describe.skipIf(!REAL_MONGO_ENABLED)(
           corpId.toHexString(),
           "Highest qualifying signing fee.",
           government,
-          3,
+          7,
           now
         ),
       ]);
@@ -705,8 +737,8 @@ describe.skipIf(!REAL_MONGO_ENABLED)(
         {
           title: "Ground equipment",
           description: "Synthetic equipment procurement",
-          closesTurn: 3,
-          awardDeadlineTurn: 6,
+          closesTurn: 49,
+          awardDeadlineTurn: 73,
           terms: {
             type: "defence",
             component: "ground",
@@ -742,7 +774,7 @@ describe.skipIf(!REAL_MONGO_ENABLED)(
           corpId.toHexString(),
           "Lowest qualifying equipment price.",
           official,
-          3,
+          49,
           now
         )
       ).rejects.toThrow("Acknowledge the conflict");
@@ -752,7 +784,7 @@ describe.skipIf(!REAL_MONGO_ENABLED)(
         corpId.toHexString(),
         "Lowest qualifying equipment price.",
         official,
-        3,
+        49,
         now,
         true
       );
@@ -763,6 +795,10 @@ describe.skipIf(!REAL_MONGO_ENABLED)(
         pricePerLot: band.suggested,
         lotsOrdered: 1,
       });
+      expect(contract?.allocationWindowId).toBe("US:0");
+      expect(
+        await f.db.collection("defenceProcurementAllocations").findOne({ _id: "US:4" as never })
+      ).toBeNull();
       expect(
         (await f.db.collection("federalBudget").findOne({ countryId: "US" }))?.defenseAppropriation
           .encumbered

@@ -119,6 +119,7 @@ import type { TechUnlockLedgerInput } from "@/lib/corporations/techTree/techUnlo
 import { loadNppPlacementSignals } from "@/lib/turn/npp/fragileMarketSupply";
 import {
   buildMarketSaturationIndex,
+  canFoundAsBuilder,
   cellUnmetDemandUnits,
   marketSaturationOf,
 } from "@/lib/turn/npp/rules/marketSaturation";
@@ -294,6 +295,25 @@ export async function processNppCorporationDecisions(
   placementSignals.marketSaturationOf = (cell, excluding) =>
     marketSaturationOf(saturationIndex, cell, excluding);
   // Last turn's state and national books, already loaded as price docs.
+  // Same-type NPP builders per country, for the essential-shortage valve.
+  const sameTypeNpp = new Set<string>();
+  for (const corp of nppCorps) {
+    if (
+      !canFoundAsBuilder({
+        ceoType: corp.ceoType,
+        autopilotRun: isAutopilotRun(corp),
+        suspended: corp.suspended,
+        liquidCapital: corp.liquidCapital,
+        strategyId: corp.nppStrategy?.id,
+      })
+    ) {
+      continue;
+    }
+    sameTypeNpp.add(`${corp.countryId}|${corp.type}`);
+    if (corp.secondaryType) sameTypeNpp.add(`${corp.countryId}|${corp.secondaryType}`);
+  }
+  placementSignals.hasSameTypeNppIn = (countryId, sectorType) =>
+    sameTypeNpp.has(`${countryId}|${sectorType}`);
   placementSignals.unmetDemandUnitsOf = (cell, options) => {
     // The mix the new plant would actually run: its founding strategy, else the
     // sector default (getStrategy falls back to it).

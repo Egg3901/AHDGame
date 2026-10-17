@@ -3,8 +3,17 @@
  * tenderTab and canBid enforce turn deadlines; compareBids orders fixed-term bids
  * by price without choosing a winner for the government.
  */
-import { CONTRACT_OFFER_EXPIRY_TURNS } from "@/lib/constants/prospecting";
 import type { ContractBid, GovernmentTender, TenderTab } from "./types";
+
+export const BIDDING_TURNS_MIN = 6;
+export const BIDDING_TURNS_MAX = 48;
+export const BIDDING_TURNS_DEFAULT = 24;
+export const AWARD_WINDOW_TURNS = 24;
+
+export function tenderDeadlines(turn: number, biddingTurns = BIDDING_TURNS_DEFAULT) {
+  const closesTurn = turn + biddingTurns;
+  return { closesTurn, awardDeadlineTurn: closesTurn + AWARD_WINDOW_TURNS };
+}
 
 export const CONTRACTS_PAGE_SIZE = 10;
 export function visibleBidHistory(
@@ -136,16 +145,16 @@ export function compareBids(
 export function validDeadlines(
   turn: number,
   closesTurn: number,
-  awardDeadlineTurn: number,
-  windowEndTurn?: number
+  awardDeadlineTurn: number
 ): boolean {
   return (
+    Number.isSafeInteger(turn) &&
+    turn >= 1 &&
     Number.isSafeInteger(closesTurn) &&
     Number.isSafeInteger(awardDeadlineTurn) &&
-    closesTurn > turn &&
-    awardDeadlineTurn > closesTurn &&
-    awardDeadlineTurn <= turn + CONTRACT_OFFER_EXPIRY_TURNS &&
-    (windowEndTurn == null || awardDeadlineTurn <= windowEndTurn + 1)
+    closesTurn - turn >= BIDDING_TURNS_MIN &&
+    closesTurn - turn <= BIDDING_TURNS_MAX &&
+    awardDeadlineTurn - closesTurn === AWARD_WINDOW_TURNS
   );
 }
 export function normalizePage(raw: string | null): number {
