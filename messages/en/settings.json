@@ -597,6 +597,7 @@
         "corp_nationalization_notice": "Corporation nationalization notice",
         "corp_nationalization_cancelled": "Corporation nationalization cancelled",
         "corp_nationalization_risk": "Corporation nationalization risk",
+        "corp_plant_oversized": "Oversized plant warnings",
         "corp_privatization_offered": "Corporation privatization offered",
         "corp_privatization_resolved": "Corporation privatization resolved",
         "corp_credit_rating_change": "Corporation credit rating change",
