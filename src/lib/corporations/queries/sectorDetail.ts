@@ -7,6 +7,7 @@ import {
   commodityTollModels,
   loadCommodityDominanceContext,
 } from "@/lib/corporations/commodityDominanceContext";
+import { commodityProductionCapacityScale } from "@/lib/banking/capacityAllocation";
 import { deliveredFraction } from "@/lib/corporations/buildDelivery";
 import { loadInvestmentBondReference } from "@/lib/corporations/investment/bondReference";
 import { NextResponse } from "next/server";
@@ -1247,6 +1248,10 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
       });
 
       plants = buildSectorPlantsSection({
+        bankingCommodityScale: commodityProductionCapacityScale(
+          corporation.bankCharter,
+          governorConfig?.privateBankingEnabled === true
+        ),
         sector,
         sectorType,
         commodityTollModels: commodityDominanceCtx
