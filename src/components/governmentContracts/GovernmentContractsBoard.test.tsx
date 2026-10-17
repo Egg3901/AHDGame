@@ -49,7 +49,8 @@ beforeEach(() => {
 function show(
   tab: "active" | "closed" | "awarded" | "canceled" = "active",
   type: "all" | "defence" | "extraction" = "all",
-  page = 2
+  page = 2,
+  supplier = "all"
 ) {
   return render(
     <NextIntlClientProvider locale="en" messages={messages}>
@@ -59,6 +60,7 @@ function show(
         tab={tab}
         type={type}
         page={page}
+        supplier={supplier}
       />
     </NextIntlClientProvider>
   );
@@ -240,4 +242,85 @@ describe("country government contracts board", () => {
     expect(await screen.findByText("No tenders have been awarded")).toBeTruthy();
     expect(screen.getByText("This page has no results. Return to an earlier page.")).toBeTruthy();
   });
+});
+
+it("explains extraction as a total-capacity concession with daily units and local fee estimates", async () => {
+  const focus = "f".repeat(24);
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(
+      async (url: string) =>
+        new Response(
+          JSON.stringify(
+            url.endsWith("/access")
+              ? { corporations: [], states: [] }
+              : url.endsWith(focus)
+                ? {
+                    tender: {
+                      ...row,
+                      _id: focus,
+                      title: "Synthetic iron concession",
+                      terms: {
+                        type: "extraction",
+                        stateId: "MN",
+                        resource: "iron",
+                        share: 0.1,
+                        minimumSigningFeeAnchor: 500,
+                        royaltyRatePerTurn: 0.02,
+                        termTurns: 48,
+                      },
+                      currencyQuote: { code: "USD", rate: 1.25 },
+                      capacityQuote: { totalDailyUnits: 10000, allocatedDailyUnits: 1000 },
+                      tab: "closed",
+                      status: "open",
+                      canManage: false,
+                      bids: [
+                        { corporationId: "a", corporationName: "Synthetic supplier", amount: 1000 },
+                      ],
+                      bidHistory: [
+                        {
+                          corporationId: "a",
+                          corporationName: "Synthetic supplier",
+                          amount: 1000,
+                          revision: 1,
+                          submittedTurn: 5,
+                        },
+                      ],
+                    },
+                    currentTurn: 8,
+                  }
+                : { tenders: [], total: 0, page: 1, totalPages: 1, currentTurn: 8 }
+          )
+        )
+    )
+  );
+  render(
+    <NextIntlClientProvider locale="en" messages={messages}>
+      <GovernmentContractsBoard countryId="US" countryName="United States" focusTenderId={focus} />
+    </NextIntlClientProvider>
+  );
+  expect(await screen.findByText(/1,000 iron units\/day out of 10,000/)).toBeTruthy();
+  expect(screen.getByText(/MN: iron, 10% of total state resource capacity/)).toBeTruthy();
+  expect(screen.getByText(/corporation pays the government/)).toBeTruthy();
+  expect(screen.getByText(/Minimum signing fee: 625 USD/)).toBeTruthy();
+  expect(screen.getByText("1,250 USD")).toBeTruthy();
+  expect(screen.getByText(/revision 1, turn 5, amount 1,250 USD/)).toBeTruthy();
+  expect(screen.getByText(/not the amount currently mined/)).toBeTruthy();
+  expect(screen.getByText(/even if actual production or sales are lower/)).toBeTruthy();
+  expect(screen.queryByText(/anchor units/)).toBeNull();
+});
+
+it("preserves the viewer filter in tabs and pagination and resets its page when changed", async () => {
+  show("closed", "extraction", 2, "mine");
+  await screen.findByText("Naval equipment tender");
+  expect(screen.getByRole("link", { name: "Next" }).getAttribute("href")).toBe(
+    "/country/jp/government-contracts?tab=closed&type=extraction&page=3&supplier=mine"
+  );
+  expect(screen.getByRole("link", { name: "Awarded" }).getAttribute("href")).toBe(
+    "/country/jp/government-contracts?tab=awarded&type=extraction&page=1&supplier=mine"
+  );
+  fireEvent.change(screen.getByLabelText("Corporation capability"), { target: { value: "all" } });
+  expect(push).toHaveBeenLastCalledWith(
+    "/country/jp/government-contracts?tab=closed&type=extraction&page=1"
+  );
 });

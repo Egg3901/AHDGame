@@ -1,3 +1,4 @@
+import { getAuthUserWithCharacter } from "@/lib/auth";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { requireAuth } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
@@ -16,6 +17,12 @@ export async function GET(request: Request, { params }: Context) {
     const q = new URL(request.url).searchParams;
     const tab = q.get("tab") ?? "active",
       type = q.get("type") ?? "all";
+    const supplier = q.get("supplier") ?? "all";
+    if (supplier !== "all" && supplier !== "mine" && !/^[a-f0-9]{24}$/.test(supplier))
+      return errorResponse(400, "Invalid corporation filter.");
+    const viewer = supplier !== "all" ? await getAuthUserWithCharacter() : null;
+    if (supplier !== "all" && !viewer)
+      return errorResponse(401, "Sign in to filter contracts for your corporations.");
     if (
       !["active", "closed", "awarded", "canceled"].includes(tab) ||
       !["all", "defence", "extraction"].includes(type)
@@ -28,7 +35,10 @@ export async function GET(request: Request, { params }: Context) {
         tab as TenderTab,
         type === "all" ? undefined : (type as ContractType),
         normalizePage(q.get("page")),
-        turn
+        turn,
+        viewer
+          ? { userId: viewer.userId, ...(supplier !== "mine" ? { corporationId: supplier } : {}) }
+          : undefined
       )
     );
   } catch (e) {
