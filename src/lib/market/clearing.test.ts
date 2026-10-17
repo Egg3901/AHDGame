@@ -1170,3 +1170,64 @@ describe("computeClearingFactors — plants and legacy sellers in the same book"
     expect(results.get("real")!.soldFraction).toBeCloseTo(2 / 3, 10);
   });
 });
+
+describe("dumping guard", () => {
+  const basePrices = { steel: 800 } as Record<CommodityType, number>;
+  const run = (
+    plantsEnabled: boolean,
+    dominantPosture: number | null,
+    balance = { supply: 100, demand: 100 }
+  ) =>
+    computeClearingFactors({
+      sectors: [
+        {
+          sectorId: "dominant",
+          corporationId: "big",
+          revenue: 80_000,
+          supplyRates: { steel: 1 },
+          producedUnits: 70,
+          lastSoldFraction: 1,
+          posture: dominantPosture,
+        },
+        {
+          sectorId: "rival",
+          corporationId: "small",
+          revenue: 80_000,
+          supplyRates: { steel: 1 },
+          producedUnits: 30,
+          lastSoldFraction: 1,
+          posture: -0.2,
+        },
+      ],
+      balances: bals([["steel", balance]]),
+      priceRatioByCommodity: new Map([["steel", 1]]),
+      basePrices,
+      plantsEnabled,
+    });
+
+  it("floors a negative posture at zero for a firm above half of world supply", () => {
+    const result = run(true, -0.2);
+    expect(result.get("dominant")?.effectivePosture).toBe(0);
+  });
+
+  it("leaves a firm at or below half of world supply undercutting freely", () => {
+    const result = run(true, -0.2);
+    expect(result.get("rival")?.effectivePosture).toBe(-0.2);
+  });
+
+  it("does not touch a positive posture", () => {
+    expect(run(true, 0.1).get("dominant")?.effectivePosture).toBeCloseTo(0.1, 10);
+  });
+
+  it("floors an automated (NPP) posture in a glut the same way", () => {
+    const glut = { supply: 100, demand: 40 };
+    const guarded = run(true, null, glut);
+    const unguarded = run(false, null, glut);
+    expect(unguarded.get("dominant")?.effectivePosture).toBeLessThan(0);
+    expect(guarded.get("dominant")?.effectivePosture).toBe(0);
+  });
+
+  it("only applies on measured plants offers", () => {
+    expect(run(false, -0.2).get("dominant")?.effectivePosture).toBe(-0.2);
+  });
+});

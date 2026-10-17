@@ -72,7 +72,7 @@ const REGISTRY: Record<string, { count: number; expect: Expectation; why: string
     why: "Founds a new sector; expandSector never sets a strategyId, so it runs the sector-type default.",
   },
   "src/lib/corporations/queries/sectorDetailSections.ts": {
-    count: 1,
+    count: 2,
     expect: "sector",
     why: "The build quote a player is shown. Must equal what buildCapacity charges.",
   },

@@ -2,6 +2,7 @@ import { aggregateByCountry } from "@/lib/commodity-map/commodityAggregation";
 import { getStateDisplayName } from "@/lib/commodity-map";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { isStateRegister } from "@/lib/constants/exchangeRegistry";
+import { importCoverage, stateImportsShare } from "@/lib/trade/postImportGap";
 import type { CommodityDetail, CorpVolume, SyntheticDemandSource } from "../types";
 
 export interface CommodityMarketScope {
@@ -14,6 +15,14 @@ export interface CommodityMarketScope {
   supply: number;
   demand: number;
   balance: number;
+  /**
+   * Units imported into this market, or null when imports are unknown (global
+   * view, or a world without reachable books). Display-only: `balance` stays
+   * the own-production figure and callers net this out via `postImportBalance`.
+   */
+  imports: number | null;
+  /** Imports attributed to each state in scope (deficit-weighted); empty when unknown. */
+  stateImports: Record<string, number>;
   regionCount: number;
   stateSupply: Record<string, number>;
   stateDemand: Record<string, number>;
@@ -49,6 +58,35 @@ function sumValues(map: Record<string, number> | undefined): number {
   return Object.values(map).reduce((sum, value) => sum + value, 0);
 }
 
+/** Imports booked for a country, or null when this world has no reachable books. */
+function countryImports(data: CommodityDetail, countryId: string | undefined): number | null {
+  if (!countryId) return null;
+  const book = data.reachableBooks?.[countryId];
+  return book ? Math.max(0, book.imports) : null;
+}
+
+function allocateStateImports(
+  data: CommodityDetail,
+  countryId: string | undefined,
+  stateIds: string[]
+): Record<string, number> {
+  const imports = countryImports(data, countryId);
+  if (imports === null || !countryId) return {};
+  const supply =
+    data.nationalSupply?.[countryId] ??
+    stateIds.reduce((sum, id) => sum + (data.stateSupply?.[id] ?? 0), 0);
+  const demand =
+    data.nationalDemand?.[countryId] ??
+    stateIds.reduce((sum, id) => sum + (data.stateDemand?.[id] ?? 0), 0);
+  const coverage = importCoverage(supply, demand, imports);
+  return Object.fromEntries(
+    stateIds.map((id) => [
+      id,
+      stateImportsShare(data.stateSupply?.[id] ?? 0, data.stateDemand?.[id] ?? 0, coverage),
+    ])
+  );
+}
+
 export function buildCommodityMarketScope(
   data: CommodityDetail,
   activeCountry: CountryId | null,
@@ -74,6 +112,11 @@ export function buildCommodityMarketScope(
     const singleStateMap: Record<string, string> = stateCountry
       ? { [activeState]: stateCountry }
       : {};
+    const countryStateIds = Object.keys(stateCountryMap).filter(
+      (id) => stateCountry && stateCountryMap[id] === stateCountry
+    );
+    const allStateImports = allocateStateImports(data, stateCountry ?? undefined, countryStateIds);
+    const activeStateImports = activeState in allStateImports ? allStateImports[activeState] : null;
 
     return {
       activeCountry: stateCountry ?? null,
@@ -87,6 +130,8 @@ export function buildCommodityMarketScope(
       supply: stateSupply,
       demand: stateDemand,
       balance: stateSupply - stateDemand,
+      imports: activeStateImports,
+      stateImports: activeStateImports === null ? {} : { [activeState]: activeStateImports },
       regionCount: 1,
       stateSupply: { [activeState]: stateSupply },
       stateDemand: { [activeState]: stateDemand },
@@ -117,6 +162,8 @@ export function buildCommodityMarketScope(
       supply: data.globalSupply,
       demand: data.globalDemand,
       balance: data.globalSupply - data.globalDemand,
+      imports: null,
+      stateImports: {},
       regionCount: Object.keys(stateCountryMap).length,
       stateSupply: data.stateSupply,
       stateDemand: data.stateDemand,
@@ -181,6 +228,8 @@ export function buildCommodityMarketScope(
     supply,
     demand,
     balance: supply - demand,
+    imports: countryImports(data, activeCountry),
+    stateImports: allocateStateImports(data, activeCountry, Object.keys(countryStateCountryMap)),
     regionCount: Object.keys(countryStateCountryMap).length,
     stateSupply: countryStateSupply,
     stateDemand: countryStateDemand,

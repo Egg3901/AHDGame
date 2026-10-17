@@ -27,7 +27,7 @@ export {
   type CommodityPriceRatioFn,
 } from "@/lib/turn/npp/marketSignals";
 
-import { glutStaggerEligible } from "@/lib/turn/npp/cohort";
+import { criticalLogisticsStaggerEligible, glutStaggerEligible } from "@/lib/turn/npp/cohort";
 
 export { GLUT_STATE_CHANGE_STAGGER, glutStaggerEligible } from "@/lib/turn/npp/cohort";
 export {
@@ -318,6 +318,9 @@ export async function processNppCorporationDecisions(
     const primeByCountry = bankSnapshot.primeByCountry;
     const colByState = await loadNppCostOfLivingByState(db);
     const nationalShareOf = buildNppNationalShareResolver(globalSectors);
+    const nppGameConfig = await db
+      .collection<{ commandEconomyEnabled?: boolean }>("gameConfig")
+      .findOne({ _id: "default" as never }, { projection: { commandEconomyEnabled: 1 } });
     plants = {
       enabled: true,
       year: plantsYear,
@@ -325,6 +328,8 @@ export async function processNppCorporationDecisions(
       preset: resolvePresetIdFromGameState(gsPlants),
       primeRateOf: (cid) => primeByCountry.get(cid) ?? 0,
       costOfLivingOf: (sid) => colByState.get(sid) ?? null,
+      commodityDemandOf: (commodity) => priceByCommodity.get(commodity)?.globalDemand ?? null,
+      commandEconomyEnabled: nppGameConfig?.commandEconomyEnabled === true,
       nationalShareOf,
     };
   }
@@ -441,6 +446,7 @@ export async function processNppCorporationDecisions(
     const corpCurrency = resolveCorpLiquidCurrencyCode(corp);
     const corpFxRate = (corpCurrency && fxByCurrency.get(corpCurrency)) || 1;
     const entryCohortEligible = glutStaggerEligible(corp._id.toString(), turn);
+    const criticalLogisticsEligible = criticalLogisticsStaggerEligible(corp._id.toString(), turn);
     const decisionContext: NppCorpDecisionContext = {
       corp,
       groupDirection: groupMembership?.eligibleManagementRoots?.has(
@@ -460,6 +466,8 @@ export async function processNppCorporationDecisions(
       strategy: corp.nppStrategy,
       strategyEligible: entryCohortEligible,
       ordinaryEntryEligible: entryCohortEligible,
+      criticalLogisticsEntryEligible: criticalLogisticsEligible,
+      criticalLogisticsShortageEligible: criticalLogisticsEligible && !autopilot,
       // Autopilot never borrows: shortage entry draws market-entry credit.
       shortageEntryEligible: entryCohortEligible && !autopilot,
       retailExpansionPaused,

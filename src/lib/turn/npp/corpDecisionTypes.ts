@@ -5,6 +5,7 @@ import type {
   ManufacturingIndustryModel,
 } from "@/lib/constants/corporations";
 import type { MediaDiscriminator } from "@/lib/constants/corporations";
+import type { CommodityType } from "@/lib/constants/commodities";
 import type { Corporation, CorporateSector, SectorBuildOrder } from "@/lib/db/types";
 import type { CeoArchetypeModifiers } from "@/lib/turn/ceoArchetype";
 import type { NppStrategyState } from "./corpStrategy";
@@ -39,6 +40,13 @@ export interface NppCorpDecisionContext {
   strategy?: NppStrategyState;
   strategyEligible?: boolean;
   ordinaryEntryEligible?: boolean;
+  /**
+   * Widened cohort slot used only when the entry target is logistics in a
+   * critical freight shortage. Absent reads as the ordinary slot.
+   */
+  criticalLogisticsEntryEligible?: boolean;
+  /** Same widened slot, minus autopilot corporations, which never borrow. */
+  criticalLogisticsShortageEligible?: boolean;
   strategyLoopEnabled?: boolean;
   /**
    * Capped frontier-entry experiment state (issue #991), supplied by the turn
@@ -170,6 +178,14 @@ export interface NppPlantsContext {
   preset: string | undefined;
   primeRateOf: (countryId: string) => number;
   costOfLivingOf: (stateId: string) => number | null;
+  /**
+   * World demand (units/day) for a commodity, from the lagged price book, or
+   * null when unknown. Feeds the commodity-level build toll so an NPP prices
+   * capacity the way a player does.
+   */
+  commodityDemandOf?: (commodity: CommodityType) => number | null;
+  /** `gameConfig.commandEconomyEnabled`, for the planned-economy output remap. */
+  commandEconomyEnabled?: boolean;
   /** Aggregate corporation share of one (country, sectorType) market. */
   nationalShareOf?: (
     corporationId: ObjectId,

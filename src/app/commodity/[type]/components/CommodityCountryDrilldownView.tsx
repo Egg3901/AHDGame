@@ -14,6 +14,7 @@ import CommodityRegionMap from "./CommodityRegionMap";
 import CommodityMapModeToggle, { type MapMode } from "./CommodityMapModeToggle";
 import CommodityMapLegend from "./CommodityMapLegend";
 import { formatUnits } from "../lib/helpers";
+import { postImportBalance } from "@/lib/trade/postImportGap";
 
 interface CommodityCountryDrilldownViewProps {
   countryId: CountryId;
@@ -27,6 +28,8 @@ interface CommodityCountryDrilldownViewProps {
   statePrices: Record<string, number>;
   stateCountryMap: Record<string, string>;
   capacityByState?: Record<string, number>;
+  /** Imports attributed to each state; empty when imports are unknown. */
+  stateImports?: Record<string, number>;
   forexEnabled: boolean;
   exchangeRates: Partial<Record<CurrencyCode, number>>;
   onBack: () => void;
@@ -44,6 +47,7 @@ export default function CommodityCountryDrilldownView({
   statePrices,
   stateCountryMap,
   capacityByState,
+  stateImports,
   forexEnabled,
   exchangeRates,
   onBack,
@@ -160,14 +164,22 @@ export default function CommodityCountryDrilldownView({
                 </th>
                 <th className="px-4 py-2 text-right">Supply</th>
                 <th className="px-4 py-2 text-right">Demand</th>
-                <th className="px-4 py-2 text-right">Balance</th>
+                <th className="px-4 py-2 text-right">
+                  {stateImports && Object.keys(stateImports).length > 0
+                    ? "Balance after imports"
+                    : "Balance"}
+                </th>
               </tr>
             </thead>
             <tbody>
               {sortedRegions.map((stateId) => {
                 const supply = stateSupply[stateId] ?? 0;
                 const demand = stateDemand[stateId] ?? 0;
-                const balance = supply - demand;
+                const stateImportUnits = stateImports?.[stateId];
+                const balance =
+                  stateImportUnits === undefined
+                    ? supply - demand
+                    : postImportBalance(supply, demand, stateImportUnits).balance;
                 const stateTotal = supply + demand;
                 const supplyPct = stateTotal > 0 ? (supply / stateTotal) * 100 : 50;
                 const deposits = capacityByState?.[stateId] ?? 0;

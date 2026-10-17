@@ -32,6 +32,7 @@ import {
   type MediaDiscriminator,
 } from "./corporations";
 import { NEUTRAL_STAT } from "@/lib/stats/statsConstants";
+import { commodityDominanceMultiplier as commodityMultiplier } from "@/lib/corporations/rules/commodityDominanceRamp";
 import { COMMODITY_BASE_PRICES, type CommodityType } from "./commodities";
 import {
   SECTOR_STRATEGIES,
@@ -574,6 +575,30 @@ export const MOTHBALL_UPKEEP_FRACTION = COLD_CAPACITY_UPKEEP_FRACTION;
  */
 export const IDLE_UPKEEP_FRACTION = 0.3;
 
+/**
+ * Smallest share of active nameplate a plant is staffed and paid for, however
+ * hard the demand throttle and input throughput cut the run. A plant is never
+ * staffed at zero. Tunable: the worldsim lever for how much a glutted plant
+ * still pays in wages.
+ */
+export const PLANT_CREW_FLOOR_SHARE = 0.25;
+
+/**
+ * Largest drop in a plant's crew share in one turn, as a share of nameplate.
+ * Owner, 2026-10-16: applied at once the rule would cut about 11% of plant jobs
+ * in a single turn; at 0.02 a turn the cut lands over several turns, so the
+ * labour market and household demand can absorb it. Rehiring is immediate.
+ */
+export const PLANT_CREW_MAX_DROP_PER_TURN = 0.02;
+
+/**
+ * Share of today's idle upkeep still charged on capacity the demand throttle
+ * idled (as opposed to capacity the owner idled with the production slider).
+ * Not zero, so overbuilding still costs something. Tunable alongside
+ * {@link PLANT_CREW_FLOOR_SHARE}.
+ */
+export const THROTTLE_IDLE_UPKEEP_SHARE = 0.33;
+
 /** Legacy first-plant discount. The qualified 1991 preset pays the full basis. */
 export const CAPACITY_FOUNDING_DISCOUNT = 0.1;
 
@@ -741,6 +766,13 @@ export interface BuildCostInputs {
    * that has not resolved density must not accidentally hand out a discount.
    */
   competitorCount?: number;
+  /**
+   * The firm's potential output (owned operating capacity plus queued builds,
+   * including this order) of the worst commodity this sector makes, over world
+   * demand for it. Drives the commodity-level toll, which is NOT discounted by
+   * rival density or the tech shield. Absent ⇒ no commodity toll.
+   */
+  commodityDominanceRatio?: number;
   /** Host country's prime rate (%), for the financing multiplier. */
   primeRate?: number;
   /** CEO Business Acumen; neutral when absent (NPP / vacant CEO). */
@@ -773,6 +805,12 @@ export interface BuildCostBreakdown {
   unitPriceAnchor: number;
   /** Dominance penalty multiplier (1 below the dominance threshold). */
   dominanceMultiplier: number;
+  /**
+   * The commodity-level part of {@link dominanceMultiplier}: 1 unless the firm's
+   * potential output exceeds half of world demand for a commodity it makes.
+   * `dominanceMultiplier` is the larger of the local/national toll and this.
+   */
+  commodityDominanceMultiplier: number;
   /** Prime-rate financing multiplier, acumen-dampened (1 at prime 0). */
   rateMultiplier: number;
   /** CEO Business Acumen flat discount multiplier (1 at neutral acumen). */
@@ -857,6 +895,7 @@ export function computeBuildCost(inputs: BuildCostInputs): BuildCostBreakdown {
     marketSharePercent = 0,
     nationalMarketSharePercent = 0,
     competitorCount,
+    commodityDominanceRatio: commodityRatio = 0,
     primeRate = 0,
     acumen = NEUTRAL_STAT,
     founding = false,
@@ -896,8 +935,14 @@ export function computeBuildCost(inputs: BuildCostInputs): BuildCostBreakdown {
     Number.isFinite(techDominanceShield) && techDominanceShield > 0
       ? Math.min(0.95, techDominanceShield)
       : 0;
-  const dominanceMultiplier =
+  const localDominanceMultiplier =
     1 + (rawDominance - 1) * dominanceDensityFactor(competitorCount) * (1 - dominanceShield);
+  // Commodity-level toll: potential output of a commodity over what the world
+  // wants of it. Deliberately undiscounted by rival density or the shield, which
+  // exist for thin local markets, not for owning several worlds' worth of one
+  // good. The harsher of the two tolls prices the build.
+  const commodityDominanceMultiplier = commodityMultiplier(commodityRatio);
+  const dominanceMultiplier = Math.max(localDominanceMultiplier, commodityDominanceMultiplier);
   const rateMultiplier = Math.max(
     0.5,
     1 + ((Number.isFinite(primeRate) ? primeRate : 0) / 10) * acumenRateSensitivity(acumen)
@@ -930,6 +975,7 @@ export function computeBuildCost(inputs: BuildCostInputs): BuildCostBreakdown {
   return {
     unitPriceAnchor,
     dominanceMultiplier,
+    commodityDominanceMultiplier,
     rateMultiplier,
     acumenMultiplier,
     techMultiplier,

@@ -255,4 +255,46 @@ describe("marketing budget scope", () => {
   it("keeps budgets absent before the heavy payload arrives", () => {
     expect(buildCommodityMarketScope(makeCommodityDetail(), "US").marketingBudgets).toBeUndefined();
   });
+
+  describe("imports", () => {
+    const book = (imports: number) => ({
+      supply: 0,
+      demand: 0,
+      domesticDemand: 0,
+      imports,
+      exports: 0,
+      blockedSupply: 0,
+      untradedSupply: 0,
+    });
+
+    it("is null for the global view and for worlds without reachable books", () => {
+      expect(buildCommodityMarketScope(makeCommodityDetail(), null).imports).toBeNull();
+      expect(buildCommodityMarketScope(makeCommodityDetail(), "DE").imports).toBeNull();
+    });
+
+    it("carries the country's booked imports and leaves the raw balance alone", () => {
+      const scope = buildCommodityMarketScope(
+        makeCommodityDetail({ reachableBooks: { DE: book(90) } }),
+        "DE"
+      );
+      expect(scope.imports).toBe(90);
+      expect(scope.balance).toBe(200 - 290);
+    });
+
+    it("attributes imports to states by deficit share, none to a surplus state", () => {
+      const data = makeCommodityDetail({ reachableBooks: { DE: book(45) } });
+      const country = buildCommodityMarketScope(data, "DE");
+      // DE deficit 90, imports 45: half of each state deficit (BRE 60, BAY 30).
+      expect(country.stateImports.BRE).toBeCloseTo(30);
+      expect(country.stateImports.BAY).toBeCloseTo(15);
+      const state = buildCommodityMarketScope(data, "DE", "BRE");
+      expect(state.imports).toBeCloseTo(30);
+      const surplusState = buildCommodityMarketScope(
+        makeCommodityDetail({ reachableBooks: { US: book(10) } }),
+        "US",
+        "CA"
+      );
+      expect(surplusState.imports).toBe(0);
+    });
+  });
 });

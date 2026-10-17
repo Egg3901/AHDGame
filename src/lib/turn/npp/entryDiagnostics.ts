@@ -75,14 +75,18 @@ export function initialNppMarketEntryReason(args: {
   hasCandidate: boolean;
   hasLogisticsCapacity: boolean;
   cohortEligible: boolean;
+  /** Critical shortage bypasses the profit and margin screens, so they never bind. */
+  criticalShortage?: boolean;
   retailBlocked?: boolean;
   targetGlutted?: boolean;
   entryCapReached?: boolean;
   candidateExclusions?: NppCandidateExclusions;
 }): NppMarketEntryReason {
   if (!args.strategyAllowsExpansion) return "strategy_disallowed";
-  if (!args.profitable) return "unprofitable";
-  if (args.marginPct < args.marginFloorPct) return "margin_below_floor";
+  if (args.criticalShortage !== true) {
+    if (!args.profitable) return "unprofitable";
+    if (args.marginPct < args.marginFloorPct) return "margin_below_floor";
+  }
   if (!args.hasCandidate) {
     const exclusions = args.candidateExclusions;
     const otherExcluded =
@@ -130,6 +134,7 @@ export function buildNppMarketEntryDiagnostic(args: {
   cohortEligible: boolean;
   strategyAllowsExpansion: boolean;
   hasLogisticsCapacity: boolean;
+  criticalShortage?: boolean;
   target?: {
     stateId: string;
     sectorType: CorporationType;
@@ -150,6 +155,7 @@ export function buildNppMarketEntryDiagnostic(args: {
     hasCandidate: args.target != null,
     hasLogisticsCapacity: args.hasLogisticsCapacity,
     cohortEligible: args.cohortEligible,
+    criticalShortage: args.criticalShortage,
     retailBlocked: args.retailBlocked,
     targetGlutted: args.targetGlutted,
     entryCapReached: args.entryCapReached,

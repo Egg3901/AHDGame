@@ -97,6 +97,27 @@ describe("initialNppMarketEntryReason", () => {
     expect(initialNppMarketEntryReason(open)).toBe("cash_floor");
   });
 
+  it("skips the profit and margin labels for a critical shortage", () => {
+    const critical = { ...open, criticalShortage: true };
+    expect(initialNppMarketEntryReason({ ...critical, profitable: false })).toBe("cash_floor");
+    expect(initialNppMarketEntryReason({ ...critical, marginPct: 10, marginFloorPct: 15 })).toBe(
+      "cash_floor"
+    );
+    expect(
+      initialNppMarketEntryReason({ ...critical, profitable: false, cohortEligible: false })
+    ).toBe("cohort_ineligible");
+    expect(
+      initialNppMarketEntryReason({
+        ...critical,
+        strategyAllowsExpansion: false,
+        profitable: false,
+      })
+    ).toBe("strategy_disallowed");
+    expect(
+      initialNppMarketEntryReason({ ...open, criticalShortage: false, profitable: false })
+    ).toBe("unprofitable");
+  });
+
   it("reports state_controlled when nationalized buckets are the only block", () => {
     expect(
       initialNppMarketEntryReason({

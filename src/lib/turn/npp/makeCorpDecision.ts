@@ -3,6 +3,14 @@
  * makeNppCorpDecision uses the corporation, market signals and CEO strategy to
  * return planned sector and cash changes for the turn processor to apply.
  */
+import {
+  sectorOutputCommodities,
+  toDominanceSector,
+} from "@/lib/corporations/commodityDominanceContext";
+import {
+  commodityDominanceRatio,
+  type CommodityDominanceSector,
+} from "@/lib/corporations/rules/commodityDominance";
 import { groupOperator } from "@/lib/corporations/groups/operator";
 import {
   activeGroupDirection,
@@ -194,6 +202,31 @@ export function makeNppCorpDecision(
       industryModel,
       mediaDiscriminator as "entertainment" | null | undefined
     ) ?? 0;
+  // Commodity-level build toll, priced exactly as a player's build is: this
+  // corp's potential output (owned plus queued plus the order) of each
+  // commodity the sector makes, over world demand. 0 when demand is unknown.
+  let dominanceSectorsCache: CommodityDominanceSector[] | undefined;
+  const commodityRatioFor = (sector: CorporateSector, extraUnits: number): number => {
+    const demandOf = plants?.commodityDemandOf;
+    if (!plants || !demandOf) return 0;
+    dominanceSectorsCache ??= sectors.map((s) => toDominanceSector(s, ctx.turn));
+    return commodityDominanceRatio({
+      sectors: dominanceSectorsCache,
+      commodities: sectorOutputCommodities(
+        sector,
+        ctx.turn,
+        plants.year,
+        plants.commandEconomyEnabled === true
+      ),
+      demandOf,
+      targetSectorId: sector._id.toString(),
+      extraUnits,
+      isNatcorp: !!corp.countryOwnerId,
+      turn: ctx.turn,
+      currentYear: plants.year,
+      commandEconomyEnabled: plants.commandEconomyEnabled === true,
+    }).ratio;
+  };
   const capacityObservations: CapacityDecisionObservation[] = [];
   // Which of the four operator decision legs bound this corp this turn (#2122);
   // sections below flag the branch they take and the resolver picks the first.
@@ -777,6 +810,8 @@ export function makeNppCorpDecision(
     allowExpansion: levers.allowExpansion,
     ordinaryEntryEligible: ctx.ordinaryEntryEligible,
     shortageEntryEligible: ctx.shortageEntryEligible,
+    criticalLogisticsEntryEligible: ctx.criticalLogisticsEntryEligible,
+    criticalLogisticsShortageEligible: ctx.criticalLogisticsShortageEligible,
     retailExpansionPaused: ctx.retailExpansionPaused,
     entryCapReached: newSectors.length >= NPP_SHORTAGE_ENTRIES_PER_TURN,
   });
@@ -785,6 +820,8 @@ export function makeNppCorpDecision(
     expansion,
     hasLogisticsCapacity,
     marketEntryEligible,
+    criticalShortage: entryCriticalShortage,
+    allowExpansion: entryAllowsExpansion,
     exceptionalShortageEntry,
     ordinaryEntryTargetGlutted,
     ordinaryEntry,
@@ -807,7 +844,7 @@ export function makeNppCorpDecision(
     diagnostic: entryDiagnostic,
     placementSignals,
     gates: {
-      allowExpansion: levers.allowExpansion,
+      allowExpansion: entryAllowsExpansion,
       hasLogisticsCapacity,
       marketEntryEligible,
       retailBlocked: ctx.retailExpansionPaused === true && entryCandidate?.sectorType === "retail",
@@ -1094,10 +1131,10 @@ export function makeNppCorpDecision(
     outcome: foundingOutcome,
     fallbackCashHeadroomAnchor: cashToAnchor(cashLocal - effectiveCashFloor),
     gates: {
-      allowExpansion: levers.allowExpansion,
-      isProfitable,
+      allowExpansion: entryAllowsExpansion,
+      isProfitable: isProfitable || entryCriticalShortage,
       corpMargin,
-      minMargin: effectiveExpansionMinMargin,
+      minMargin: entryCriticalShortage ? Number.NEGATIVE_INFINITY : effectiveExpansionMinMargin,
       entryCandidate: entryCandidate
         ? { stateId: entryCandidate.stateId, sectorType: entryCandidate.sectorType }
         : null,
@@ -1398,6 +1435,7 @@ export function makeNppCorpDecision(
                 sector.mediaDiscriminator
               ),
               primeRate: plants.primeRateOf(sectorCountryId),
+              commodityDominanceRatio: commodityRatioFor(sector, 1),
               acumen: NEUTRAL_STAT,
               hostCostOfLivingIndex: plants.costOfLivingOf(sector.stateId),
               founding: false,
@@ -1542,6 +1580,9 @@ export function makeNppCorpDecision(
           sector.industryModel,
           sector.mediaDiscriminator
         ),
+        // Replacement units re-lay capacity that is wearing out; only the
+        // growth part raises the firm's potential output.
+        commodityDominanceRatio: commodityRatioFor(sector, candidate.growthUnits),
         primeRate: plants.primeRateOf(sector.countryId ?? corp.countryId),
         // An NPP CEO is an NPP, not a Character — no Business Acumen to read.
         acumen: NEUTRAL_STAT,

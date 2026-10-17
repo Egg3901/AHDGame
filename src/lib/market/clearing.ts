@@ -1,4 +1,8 @@
 import { offerPriceFactor } from "./rules/offerPricing";
+import {
+  guardedPricingPosture,
+  isDumpingGuarded,
+} from "@/lib/corporations/rules/commodityDominanceRamp";
 import type { GroupForecastBasis } from "@/lib/corporations/groups/rules/forecast";
 import {
   coordinateGroupMarket,
@@ -299,6 +303,8 @@ export interface SectorClearingInput {
   productProjectId?: string;
   /** Turn that produced the project-owned offer. */
   productOutputTurn?: number;
+  /** Owning corporation id, for the dumping guard. Absent ⇒ never guarded. */
+  corporationId?: string;
   /** Posted posture (player-set), or null to auto-position (NPP/unowned). */
   posture: number | null;
   /** Flag-gated input basket index for cost-plus pricing, otherwise absent. */
@@ -769,6 +775,35 @@ export function computeClearingFactors(args: {
             : {}),
         },
       ]);
+    }
+  }
+
+  // 1b) Dumping guard. A firm whose sold share of a commodity's world supply is
+  //     above DUMPING_GUARD_SOLD_SHARE cannot undercut the market in it: its
+  //     negative posture is floored at 0, whether a player set it or autoPosture
+  //     chose it. Measured on lagged sold units (offer x last sold fraction)
+  //     against the lagged world supply, plants tier only, where offers are
+  //     real measured output rather than a revenue proxy.
+  if (args.plantsEnabled) {
+    for (const [commodity, sellers] of sellersByCommodity) {
+      const worldSupply = balances.get(commodity)?.supply ?? 0;
+      if (!(worldSupply > 0)) continue;
+      const soldByCorp = new Map<string, number>();
+      for (const seller of sellers) {
+        const source = sourceBySector.get(seller.id);
+        if (!source?.corporationId) continue;
+        const sold = seller.units * (source.lastSoldFraction ?? 1);
+        soldByCorp.set(source.corporationId, (soldByCorp.get(source.corporationId) ?? 0) + sold);
+      }
+      for (const seller of sellers) {
+        const corpId = sourceBySector.get(seller.id)?.corporationId;
+        if (!corpId || !isDumpingGuarded(soldByCorp.get(corpId) ?? 0, worldSupply)) continue;
+        seller.posture = guardedPricingPosture(seller.posture, true);
+        if (seller.quotedPosture !== undefined) {
+          seller.quotedPosture = guardedPricingPosture(seller.quotedPosture, true);
+        }
+        postureBySector.set(seller.id, seller.posture);
+      }
     }
   }
 

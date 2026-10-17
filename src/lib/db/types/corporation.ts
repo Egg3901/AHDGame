@@ -1077,6 +1077,11 @@ export interface CorporateSector {
    * retirement; 0 resets it. See `rules/idleCapacityRetirement`.
    */
   demandIdleTurns?: number;
+  /**
+   * Plants tier: share of active nameplate staffed and paid last turn (1 = full
+   * crew). Carried so layoffs are gradual; see `rules/plantRunShare`.
+   */
+  plantCrewShare?: number;
   /** Owned capacity units retired last turn because the market would not buy them. */
   idleCapacityRetiredUnits?: number;
   /**

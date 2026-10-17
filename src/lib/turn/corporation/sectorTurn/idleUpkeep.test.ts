@@ -1,6 +1,10 @@
 import { describe, it, expect } from "vitest";
 import { computeIdleUpkeep, type IdleUpkeepInput } from "./idleUpkeep";
-import { IDLE_UPKEEP_FRACTION, MOTHBALL_UPKEEP_FRACTION } from "@/lib/constants/capacityEconomy";
+import {
+  IDLE_UPKEEP_FRACTION,
+  MOTHBALL_UPKEEP_FRACTION,
+  THROTTLE_IDLE_UPKEEP_SHARE,
+} from "@/lib/constants/capacityEconomy";
 
 function input(over: Partial<IdleUpkeepInput> = {}): IdleUpkeepInput {
   return {
@@ -138,5 +142,47 @@ describe("computeIdleUpkeep — P3a idle/mothball upkeep (#588)", () => {
       const b = computeIdleUpkeep(input({ mothballed: true, producedUnits: 900 }));
       expect(a.plantsUpkeepCost).toBeCloseTo(b.plantsUpkeepCost, 10);
     });
+  });
+});
+
+describe("computeIdleUpkeep: capacity idled by the demand throttle", () => {
+  it("is byte-for-byte unchanged when the throttle does not bind", () => {
+    const legacy = computeIdleUpkeep(input({ producedUnits: 500 }));
+    expect(computeIdleUpkeep(input({ producedUnits: 500, demandThrottleFactor: 1 }))).toEqual(
+      legacy
+    );
+  });
+
+  it("charges a share of the legacy idle charge when the throttle idled the capacity", () => {
+    // Capacity 1000 runs 100 units: the throttle (0.1) alone idled 900.
+    const legacy = computeIdleUpkeep(input({ producedUnits: 100 })).plantsUpkeepCost;
+    const throttled = computeIdleUpkeep(
+      input({ producedUnits: 100, demandThrottleFactor: 0.1 })
+    ).plantsUpkeepCost;
+    expect(throttled).toBeCloseTo(legacy * THROTTLE_IDLE_UPKEEP_SHARE, 8);
+    expect(throttled).toBeGreaterThan(0);
+  });
+
+  it("keeps full upkeep on capacity the owner idled with the production slider", () => {
+    // The 0.6 slider alone would produce 600 of 1000. The throttle (0.5) takes
+    // that to 300: the 400 slider-idled units are billed in full, the 300
+    // throttle-idled units at the reduced share.
+    const legacy = computeIdleUpkeep(input({ producedUnits: 300 })).plantsUpkeepCost;
+    const perUnit = legacy / (700 * IDLE_UPKEEP_FRACTION);
+    const throttled = computeIdleUpkeep(
+      input({ producedUnits: 300, demandThrottleFactor: 0.5 })
+    ).plantsUpkeepCost;
+    // Without the throttle the plant would make 600, so 400 units stay owner-idle.
+    expect(throttled).toBeCloseTo(
+      perUnit * IDLE_UPKEEP_FRACTION * (400 + 300 * THROTTLE_IDLE_UPKEEP_SHARE),
+      6
+    );
+  });
+
+  it("leaves mothballed capacity on its existing rule", () => {
+    const base = input({ mothballed: true, producedUnits: 0 });
+    expect(computeIdleUpkeep({ ...base, demandThrottleFactor: 0.2 })).toEqual(
+      computeIdleUpkeep(base)
+    );
   });
 });

@@ -665,6 +665,17 @@ export interface PlantsData {
     unitPriceAnchor: number;
     expansionMultiplier?: number;
     dominanceMultiplier: number;
+    /** The part of {@link dominanceMultiplier} that comes from market share alone. */
+    localDominanceMultiplier?: number;
+    /**
+     * Commodity-level toll inputs: what the firm could make of each commodity
+     * this sector produces against world demand. The dialog re-prices order
+     * sizes from these with the shared ramp.
+     */
+    commodityToll?: {
+      models: import("@/lib/corporations/rules/commodityDominanceRamp").CommodityTollModel[];
+      ratioNow: number;
+    };
     rateMultiplier: number;
     acumenMultiplier: number;
     techMultiplier: number;
