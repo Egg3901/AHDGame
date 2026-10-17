@@ -21,7 +21,9 @@
  * returns null, which never blocks.
  */
 
+import type { CommodityType } from "@/lib/constants/commodities";
 import { bucketKey } from "@/lib/nationalization/stateControlledBuckets";
+import { sectorDemandGapUnits } from "@/lib/market/sectorDemandGap";
 
 /**
  * A cell has room for another plant only when its plants run, capacity-weighted,
@@ -145,4 +147,35 @@ export function isMarketSaturated(level: number | null | undefined): boolean {
   return (
     typeof level === "number" && Number.isFinite(level) && level < NPP_SATURATED_MARKET_THROTTLE
   );
+}
+
+/**
+ * Share of a cell's measured unmet demand one AI founding may build for. The
+ * entrant was sized off the unowned pool's headroom, which overstates what a
+ * market still wants: on live turn 257, 47 of 54 AI foundings entered cells
+ * whose plants sold out, and the young AI plants then made up 141 of the 263
+ * plants running under a fifth of capacity, because a sold-out market that is
+ * only slightly short cannot absorb a full-size new plant. Half leaves room for
+ * a second entrant and for the incumbents' own probe.
+ */
+export const NPP_FOUNDING_UNMET_SHARE = 0.5;
+
+/**
+ * Unmet demand for one cell in sector output units: the output mix's
+ * rate-weighted mean gap (sectorDemandGapUnits, the same helper the player build
+ * preview uses), reading the state book for local services and the national
+ * book for everything else. Null when no gap can be read, which never caps.
+ */
+export function cellUnmetDemandUnits(args: {
+  supplyMix: Partial<Record<CommodityType, number>>;
+  gapFor: (commodity: CommodityType) => number | null;
+}): number | null {
+  let readable = false;
+  const units = sectorDemandGapUnits(args.supplyMix, (commodity) => {
+    const gap = args.gapFor(commodity);
+    if (gap == null) return 0;
+    readable = true;
+    return gap;
+  });
+  return readable ? units : null;
 }

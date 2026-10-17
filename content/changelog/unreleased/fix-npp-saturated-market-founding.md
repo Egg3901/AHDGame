@@ -11,3 +11,4 @@ areas: [engine]
 - A high price no longer lets an AI-run plant grow past the usual "run your current plant first" rule when the plants around it sit mostly idle.
 - AI-run plants that have been held under a quarter of their capacity for 12 turns in a row are mothballed. A mothballed AI plant only restarts when the plants still running in that market have room to grow.
 - Any plant, player or AI, that demand has held under a quarter of its capacity for 6 turns in a row now lets surplus crew go at up to 8% of the plant a turn, instead of 2%. Every other plant keeps the 2% limit.
+- A new AI plant is sized to what its market is still short of. It builds for at most half of the unmet demand it can see, and skips the market when that would not fill one facility.

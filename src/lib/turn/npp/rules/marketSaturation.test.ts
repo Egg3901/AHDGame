@@ -6,6 +6,8 @@ import {
   marketSaturationOf,
   NPP_FLOOR_MOTHBALL_TURNS,
   NPP_SATURATED_MARKET_THROTTLE,
+  cellUnmetDemandUnits,
+  NPP_FOUNDING_UNMET_SHARE,
 } from "./marketSaturation";
 import { NPP_GROWTH_MIN_THROTTLE } from "../nppCorporationTuning";
 
@@ -109,5 +111,27 @@ describe("isStuckAtThrottleFloor", () => {
     ).toBe(false);
     expect(isStuckAtThrottleFloor({ demandThrottleFactor: 0.3, demandIdleTurns: 50 })).toBe(false);
     expect(isStuckAtThrottleFloor({ demandThrottleFactor: 0.1 })).toBe(false);
+  });
+});
+
+describe("cellUnmetDemandUnits", () => {
+  it("reads the gap in sector units across the output mix", () => {
+    const units = cellUnmetDemandUnits({
+      supplyMix: { advertising: 1 },
+      gapFor: () => 400,
+    });
+    expect(units).toBeCloseTo(400, 6);
+  });
+
+  it("is zero for a balanced or glutted cell", () => {
+    expect(cellUnmetDemandUnits({ supplyMix: { advertising: 1 }, gapFor: () => 0 })).toBe(0);
+  });
+
+  it("is null when no leg can be read, so it never caps", () => {
+    expect(cellUnmetDemandUnits({ supplyMix: { advertising: 1 }, gapFor: () => null })).toBeNull();
+  });
+
+  it("founding share leaves room for a second entrant", () => {
+    expect(NPP_FOUNDING_UNMET_SHARE).toBeLessThan(1);
   });
 });

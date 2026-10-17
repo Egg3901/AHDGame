@@ -67,7 +67,7 @@ import {
   resolveCapacityCohort,
 } from "@/lib/turn/npp/capacityDecisionTelemetry";
 import { glutStaggerEligible } from "@/lib/turn/npp/cohort";
-import { isMarketSaturated } from "@/lib/turn/npp/rules/marketSaturation";
+import { isMarketSaturated, NPP_FOUNDING_UNMET_SHARE } from "@/lib/turn/npp/rules/marketSaturation";
 import type {
   NppCorpDecision,
   NppCorpDecisionContext,
@@ -936,9 +936,19 @@ export function makeNppCorpDecision(
       // construction). Cash and a per-mine facility ceiling bound it instead;
       // the state deposit haircut caps real output and the reinvestment growth
       // leg deepens it over turns. Demand-side sectors keep the headroom cap.
+      // Demand-side entrants are also capped by what the cell still wants:
+      // the unowned pool's headroom overstates it (rules/marketSaturation).
+      const unmetUnits = isExtraction
+        ? null
+        : (placementSignals?.unmetDemandUnitsOf?.(foundingTarget) ?? null);
       const sizeCap = isExtraction
         ? starterUnits * NPP_EXTRACTION_FOUNDING_MAX_FACILITIES
-        : headroomUnits * NPP_FOUNDING_HEADROOM_SHARE;
+        : Math.min(
+            headroomUnits * NPP_FOUNDING_HEADROOM_SHARE,
+            unmetUnits == null ? Number.POSITIVE_INFINITY : unmetUnits * NPP_FOUNDING_UNMET_SHARE
+          );
+      // A cell whose unmet demand cannot fill one facility gets no new plant.
+      const unmetBlocksEntry = unmetUnits != null && unmetUnits < starterUnits;
       const buildUnits =
         starterUnits > 0
           ? Math.max(
@@ -968,15 +978,17 @@ export function makeNppCorpDecision(
       noteFoundingCapacityOutcome(foundingOutcome, {
         affordable:
           buildUnits > 0 &&
+          !unmetBlocksEntry &&
           (isExtraction || headroomUnits >= buildUnits) &&
           entryCapital - foundingCost >= effectiveCashFloor,
         creditPath:
           exceptionalShortageEntry &&
           starterUnits > 0 &&
           headroomUnits >= starterUnits &&
+          !unmetBlocksEntry &&
           !isStateOwned(corp) &&
           !corp.imfBailoutActive,
-        sizeBlocked: starterUnits <= 0 || headroomUnits < starterUnits,
+        sizeBlocked: starterUnits <= 0 || headroomUnits < starterUnits || unmetBlocksEntry,
         quote: {
           unitPriceAnchor: perUnitFoundingAnchor,
           dominanceMultiplier: foundingUnitQuote?.dominanceMultiplier ?? 1,
