@@ -1469,9 +1469,10 @@ export function buildSectorPlantsSection(args: {
   // The local/national toll alone, then the full quote for one unit. The
   // commodity toll reads the ratio after the order lands, so the dialog
   // re-prices quantities from `commodityToll` instead of scaling this linearly.
-  const localQuote = computeBuildCost(oneUnitInputs);
+  const localQuote = computeBuildCost({ ...oneUnitInputs, strategyId: oneUnitInputs.strategyId });
   const oneUnit = computeBuildCost({
     ...oneUnitInputs,
+    strategyId: oneUnitInputs.strategyId,
     commodityDominanceRatio: worstTollRatioForOrder(tollModels, 1),
   });
   const perUnitAnchor = oneUnit.totalAnchor;
